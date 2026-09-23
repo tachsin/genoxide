@@ -144,13 +144,14 @@ fn run_nqueens(args: &Args, seed: u64) -> Result<()> {
 const RASTRIGIN_TARGET: f64 = 0.01;
 
 fn run_rastrigin(args: &Args, seed: u64) -> Result<()> {
-    // the settings of examples/rastrigin.rs, single-threaded like every adapter
+    // the settings of examples/rastrigin.rs (polynomial mutation), single-threaded like every
+    // adapter
     let (outcome, time_s) = timed(|| {
         let ga = Ga::builder(Real::uniform(args.size, -5.12..=5.12)?)
-            .population_size(200)
-            .select(Tournament::new(4)?)
+            .population_size(100)
+            .select(Tournament::new(3)?)
             .crossover(UniformCrossover::new())
-            .mutate(UniformMutation::count(1)?)
+            .mutate(PolynomialMutation::per_gene(0.1, 20.0)?)
             .scheme(Scheme::Generational { elitism: 2 })
             .minimize()
             .seed(seed)

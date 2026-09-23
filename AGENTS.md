@@ -40,7 +40,7 @@ fn main() -> genoxide::Result<()> {
 |---|---|---|---|---|
 | Yes / no decisions (subset, knapsack, feature selection) | `Binary::new(len)` | `Bits` | `UniformCrossover`, `PointCrossover` | `BitFlip` |
 | Whole numbers in ranges (counts, choices, schedules) | `Integer::new([lo..=hi, ...])`, `Integer::uniform(len, lo..=hi)` | `Integers` (derefs to `[i64]`) | `UniformCrossover`, `PointCrossover` | `UniformMutation` |
-| Real numbers in ranges (parameters, continuous functions) | `Real::new([lo..=hi, ...])`, `Real::uniform(len, lo..=hi)` | `Reals` (derefs to `[f64]`) | `UniformCrossover`, `PointCrossover` | `UniformMutation` |
+| Real numbers in ranges (parameters, continuous functions) | `Real::new([lo..=hi, ...])`, `Real::uniform(len, lo..=hi)` | `Reals` (derefs to `[f64]`) | `UniformCrossover`, `PointCrossover` | `PolynomialMutation` (η 20), `GaussianMutation` (σ ≈ 0.03), `UniformMutation` |
 | An order of `0..n` (tours, sequencing, assignment) | `Permutation::new(n)` | `Order` (derefs to `[usize]`) | `NoCrossover` (permutation crossovers come in 0.2) | `SwapMutation` |
 
 Selection works with every representation. `Tournament::new(2..=5)?` is the usual choice.
@@ -84,6 +84,8 @@ Selection works with every representation. `Tournament::new(2..=5)?` is the usua
 | `NoCrossover` | any representation |
 | `BitFlip::per_gene(rate)?`, `BitFlip::count(n)?` | 0 < rate ≤ 1; n ≥ 1 |
 | `UniformMutation::per_gene(rate)?`, `UniformMutation::count(n)?` | 0 < rate ≤ 1; n ≥ 1 |
+| `GaussianMutation::per_gene(rate, sigma)?`, `GaussianMutation::count(n, sigma)?` | sigma > 0, a fraction of each gene's range; mirrored at the bounds |
+| `PolynomialMutation::per_gene(rate, eta)?`, `PolynomialMutation::count(n, eta)?` | eta ≥ 0: larger means smaller steps; 20 is common |
 | `SwapMutation::new()`, `SwapMutation::count(n)?` | n ≥ 1 |
 
 Every mutation changes the genome: `per_gene` changes one random gene if none was picked.
@@ -183,7 +185,7 @@ fn main() -> genoxide::Result<()> {
         .population_size(50)
         .select(Tournament::new(3)?)
         .crossover(UniformCrossover::new())
-        .mutate(UniformMutation::per_gene(0.3)?)
+        .mutate(PolynomialMutation::per_gene(0.3, 20.0)?)
         .minimize()
         .seed(3)
         .build()?;
@@ -314,6 +316,7 @@ fn main() -> genoxide::Result<()> {
 | `Error::InvalidGenome { reason }` | An initial genome doesn't fit the representation | Match its length and bounds |
 | `Error::NanFitness` | The fitness function returned NaN with `NanPolicy::Error` | Fix the fitness function, or keep the default `NanPolicy::Invalid` |
 | `Error::TellWithoutAsk` / `Error::FitnessCount` | Ask / tell out of step | One `tell` per `ask`, with one fitness per asked genome, in order |
+| Real-valued search stalls in a local minimum | Steps too small to leave its basin (e.g. `GaussianMutation` with a tiny sigma) | `PolynomialMutation` with eta 20, or a larger sigma; on Rastrigin, sigma 0.03 of the range works and 0.01 stalls |
 | The best fitness stops improving early | Too little diversity | A larger population, a smaller tournament, a higher mutation rate, or `Stop::stagnation` with restarts |
 | Slow runs with a cheap fitness function | Debug build, or parallel overhead | Build with `--release`; use `.parallel(true)` only for expensive fitness functions |
 

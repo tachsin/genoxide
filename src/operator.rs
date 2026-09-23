@@ -8,7 +8,7 @@ pub mod mutate;
 pub mod select;
 
 pub use crossover::{NoCrossover, PointCrossover, UniformCrossover};
-pub use mutate::{BitFlip, SwapMutation, UniformMutation};
+pub use mutate::{BitFlip, GaussianMutation, PolynomialMutation, SwapMutation, UniformMutation};
 pub use select::{
     RandomSelection, Rank, Roulette, StochasticUniversalSampling, Tournament, Truncation,
 };
@@ -58,7 +58,7 @@ pub trait Crossover<R: Representation>: Clone + Debug + Send + Sync {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a mutation for `{R}`",
     label = "not a mutation for `{R}`",
-    note = "set the mutation with `.mutate(...)`: `BitFlip` for `Binary`, `UniformMutation` for `Integer` and `Real`, `SwapMutation` for `Permutation`"
+    note = "set the mutation with `.mutate(...)`: `BitFlip` for `Binary`, `UniformMutation` for `Integer`, `GaussianMutation`, `PolynomialMutation` or `UniformMutation` for `Real`, `SwapMutation` for `Permutation`"
 )]
 pub trait Mutate<R: Representation>: Clone + Debug + Send + Sync {
     /// Mutates `genome`. The genome always changes (unless its space has a single genome).

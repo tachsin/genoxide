@@ -1,5 +1,6 @@
 //! Portable, seedable random number generation with independent streams.
 
+use crate::math::log;
 use rand::{Rng, SeedableRng, TryRng};
 use rand_chacha::ChaCha8Rng;
 use std::convert::Infallible;
@@ -95,6 +96,21 @@ impl StreamRng {
     /// A uniformly random `f64` in `[0, 1)`, with 53 random bits.
     pub(crate) fn unit_f64(&mut self) -> f64 {
         (self.next_u64() >> 11) as f64 * (1.0 / (1u64 << 53) as f64)
+    }
+
+    /// A standard normal random number (mean 0, standard deviation 1).
+    ///
+    /// Marsaglia's polar method: only `ln` and `sqrt`, no trigonometry, so the same on every
+    /// platform.
+    pub(crate) fn normal(&mut self) -> f64 {
+        loop {
+            let u = 2.0 * self.unit_f64() - 1.0;
+            let v = 2.0 * self.unit_f64() - 1.0;
+            let s = u * u + v * v;
+            if s > 0.0 && s < 1.0 {
+                return u * (-2.0 * log(s) / s).sqrt();
+            }
+        }
     }
 
     /// `true` with probability `chance`.
@@ -226,77 +242,6 @@ impl Chance {
         } else {
             Chance::Threshold(threshold())
         }
-    }
-}
-
-/// The natural logarithm of `x`, for finite `x > 0`, the same on every platform.
-///
-/// The platform `ln` can differ in the last bit between systems, which would change the random
-/// choices made with it. This is fdlibm's `__ieee754_log` (the basis of most libm
-/// implementations), which only uses basic floating point operations: IEEE 754 makes their results
-/// exact to the bit, so this gives the same result everywhere, within 1 ulp of the true logarithm.
-fn log(x: f64) -> f64 {
-    // fdlibm's constants, by their exact bits
-    const LN2_HI: f64 = f64::from_bits(0x3fe6_2e42_fee0_0000); // 6.93147180369123816490e-1
-    const LN2_LO: f64 = f64::from_bits(0x3dea_39ef_3579_3c76); // 1.90821492927058770002e-10
-    const TWO54: f64 = f64::from_bits(0x4350_0000_0000_0000); // 1.80143985094819840000e16
-    const LG1: f64 = f64::from_bits(0x3fe5_5555_5555_5593); // 6.666666666666735130e-1
-    const LG2: f64 = f64::from_bits(0x3fd9_9999_9997_fa04); // 3.999999999940941908e-1
-    const LG3: f64 = f64::from_bits(0x3fd2_4924_9422_9359); // 2.857142874366239149e-1
-    const LG4: f64 = f64::from_bits(0x3fcc_71c5_1d8e_78af); // 2.222219843214978396e-1
-    const LG5: f64 = f64::from_bits(0x3fc7_4664_96cb_03de); // 1.818357216161805012e-1
-    const LG6: f64 = f64::from_bits(0x3fc3_9a09_d078_c69f); // 1.531383769920937332e-1
-    const LG7: f64 = f64::from_bits(0x3fc2_f112_df3e_5244); // 1.479819860511658591e-1
-    debug_assert!(x > 0.0 && x.is_finite(), "log({x})");
-
-    let mut x = x;
-    let mut high = (x.to_bits() >> 32) as i32;
-    let mut k: i32 = 0;
-    if high < 0x0010_0000 {
-        // subnormal: scale up
-        k -= 54;
-        x *= TWO54;
-        high = (x.to_bits() >> 32) as i32;
-    }
-    k += (high >> 20) - 1023;
-    high &= 0x000f_ffff;
-    let i = (high + 0x95f64) & 0x10_0000;
-    // normalize x or x / 2 into [sqrt(2) / 2, sqrt(2))
-    let normalized_high = (high | (i ^ 0x3ff0_0000)) as u32;
-    x = f64::from_bits((u64::from(normalized_high) << 32) | (x.to_bits() & 0xffff_ffff));
-    k += i >> 20;
-    let f = x - 1.0;
-    let dk = f64::from(k);
-    if (0x000f_ffff & (2 + high)) < 3 {
-        // |f| < 2^-20
-        if f == 0.0 {
-            return dk * LN2_HI + dk * LN2_LO;
-        }
-        let r = f * f * (0.5 - (1.0 / 3.0) * f);
-        return if k == 0 {
-            f - r
-        } else {
-            dk * LN2_HI - ((r - dk * LN2_LO) - f)
-        };
-    }
-    let s = f / (2.0 + f);
-    let z = s * s;
-    let w = z * z;
-    let t1 = w * (LG2 + w * (LG4 + w * LG6));
-    let t2 = z * (LG1 + w * (LG3 + w * (LG5 + w * LG7)));
-    let r = t2 + t1;
-    let i = (high - 0x6147a) | (0x6b851 - high);
-    if i > 0 {
-        let hfsq = 0.5 * f * f;
-        if k == 0 {
-            f - (hfsq - s * (hfsq + r))
-        } else {
-            dk * LN2_HI - ((hfsq - (s * (hfsq + r) + dk * LN2_LO)) - f)
-        }
-    } else if k == 0 {
-        f - s * (f - r)
-    } else {
-        dk * LN2_HI - ((s * (f - r) - dk * LN2_LO) - f)
     }
 }
 
@@ -460,33 +405,28 @@ mod tests {
     }
 
     #[test]
-    fn log_is_within_one_ulp_of_std() {
+    fn normal_is_standard() {
         let mut rng = StreamRng::seed_from_u64(0);
-        let mut values = vec![
-            1.0,
-            0.5,
-            2.0,
-            0.999,
-            1.0 - 1e-12,
-            1.0 + 1e-12,
-            1e-300,
-            f64::MIN_POSITIVE,
-            5e-324,
-            f64::MAX,
-        ];
-        // (0, 1], as used by the sampler
-        values.extend((0..20_000).map(|_| 1.0 - rng.unit_f64()));
-        // any positive finite value, subnormals included
-        values.extend(
-            (0..20_000)
-                .map(|_| f64::from_bits(rng.next_u64() % 0x7ff0_0000_0000_0000))
-                .filter(|&x| x > 0.0),
+        let samples: Vec<f64> = (0..200_000).map(|_| rng.normal()).collect();
+        let count = samples.len() as f64;
+        let mean = samples.iter().sum::<f64>() / count;
+        let variance = samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / count;
+        let within_one = samples.iter().filter(|x| x.abs() < 1.0).count() as f64 / count;
+        assert!(mean.abs() < 0.01, "mean {mean}");
+        assert!((variance - 1.0).abs() < 0.01, "variance {variance}");
+        // P(|X| < 1) of a standard normal
+        assert!((within_one - 0.6827).abs() < 0.005, "{within_one}");
+        let mut rng = StreamRng::seed_from_u64(42);
+        let values = [rng.normal(), rng.normal(), rng.normal()];
+        assert_eq!(
+            values.map(f64::to_bits),
+            [
+                4593777358611831395,  // 0.12793483831474636
+                13830986477247399585, // -1.095928063849364
+                13825395772567733866, // -0.46363556300011644
+            ],
+            "normal numbers changed, which breaks reproducibility"
         );
-        for x in values {
-            let (ours, std) = (log(x), x.ln());
-            let ulps = (ours.to_bits() as i64).abs_diff(std.to_bits() as i64);
-            assert!(ulps <= 1, "log({x:e}) = {ours:e}, std {std:e}");
-        }
     }
 
     // (number chosen per run, all chosen indices) over `runs` runs
