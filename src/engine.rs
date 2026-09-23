@@ -15,13 +15,14 @@ use std::time::{Duration, Instant};
 
 /// A fitness function: scores a genome.
 ///
-/// Closures `|genome: &G| -> T` are fitness functions, where `T` is `f64`, [`Fitness`] or
-/// `Option<f64>` (`None` for an invalid solution), see [`IntoFitness`]. Fitness functions must be
+/// Closures `|genome: &G| -> T` are fitness functions, where `T` is `f64`, [`Fitness`],
+/// `Option<f64>` (`None` for an invalid solution) or `(f64, f64)` (a score and a constraint
+/// violation, see [`Fitness::constrained`]), see [`IntoFitness`]. Fitness functions must be
 /// deterministic: the same genome always gets the same fitness.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a fitness function for `{G}`",
     label = "not a fitness function for `{G}`",
-    note = "a fitness function is a closure `|genome: &{G}| ...` returning `f64`, `Fitness` or `Option<f64>`, or a type implementing `FitnessFunction<{G}>`"
+    note = "a fitness function is a closure `|genome: &{G}| ...` returning `f64`, `Fitness`, `Option<f64>` or `(f64, f64)` (a score and a constraint violation), or a type implementing `FitnessFunction<{G}>`"
 )]
 pub trait FitnessFunction<G>: Sync {
     /// The type of a score.
@@ -46,7 +47,7 @@ where
 /// A value that converts to a [`Fitness`]: the result of a [`FitnessFunction`].
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a fitness value",
-    label = "a fitness function must return `f64`, `Fitness` or `Option<f64>`",
+    label = "a fitness function must return `f64`, `Fitness`, `Option<f64>` or `(f64, f64)`",
     note = "convert other numbers with `as f64`"
 )]
 pub trait IntoFitness {
@@ -66,6 +67,13 @@ impl IntoFitness for f64 {
     }
 }
 
+impl IntoFitness for (f64, f64) {
+    /// A score and a constraint violation, see [`Fitness::try_constrained`].
+    fn into_fitness(self) -> Result<Fitness> {
+        Fitness::try_constrained(self.0, self.1)
+    }
+}
+
 impl IntoFitness for Option<f64> {
     /// `None` is [`Fitness::invalid`].
     fn into_fitness(self) -> Result<Fitness> {
@@ -79,7 +87,7 @@ pub enum NanPolicy {
     /// The solution gets [`Fitness::invalid`] (the default).
     #[default]
     Invalid,
-    /// The run stops with [`Error::NanFitness`].
+    /// The run stops with [`Error::NanFitness`] (also for a NaN constraint violation).
     Error,
 }
 

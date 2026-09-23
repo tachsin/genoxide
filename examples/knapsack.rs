@@ -1,8 +1,9 @@
 //! 0/1 knapsack: choose items with the highest total value that fit in the knapsack.
 //!
-//! Shows constraints as invalid solutions (a fitness function returning `Option<f64>`), seeding
-//! the initial population with a known valid solution, and a hall of fame. The result is checked
-//! against the optimum found by brute force.
+//! Shows a constraint with Deb's feasibility rules: the fitness function returns the value and how
+//! far the weight exceeds the capacity, so overweight selections still guide the search towards
+//! the feasible ones. Also a hall of fame. The result is checked against the optimum found by
+//! brute force.
 //!
 //! ```text
 //! cargo run --release --example knapsack
@@ -35,8 +36,8 @@ const ITEMS: [(u32, u32); 20] = [
 ];
 const CAPACITY: u32 = 400;
 
-// the total value, or `None` (invalid) if the items don't fit
-fn value(selection: &Bits) -> Option<f64> {
+// the total value, and how much the weight exceeds the capacity (0 if the items fit)
+fn value(selection: &Bits) -> (f64, f64) {
     let (mut weight, mut value) = (0, 0);
     for (item, selected) in selection.iter().enumerate() {
         if selected {
@@ -44,14 +45,18 @@ fn value(selection: &Bits) -> Option<f64> {
             value += ITEMS[item].1;
         }
     }
-    (weight <= CAPACITY).then_some(f64::from(value))
+    (
+        f64::from(value),
+        constraint::at_most(f64::from(weight), f64::from(CAPACITY)),
+    )
 }
 
-// the best value over all 2^20 selections
+// the best value of the selections that fit, over all 2^20 selections
 fn optimum() -> f64 {
     (0u32..1 << ITEMS.len())
-        .filter_map(|mask| value(&(0..ITEMS.len()).map(|item| mask >> item & 1 == 1).collect()))
-        .fold(0.0, f64::max)
+        .map(|mask| value(&(0..ITEMS.len()).map(|item| mask >> item & 1 == 1).collect()))
+        .filter(|&(_, violation)| violation == 0.0)
+        .fold(0.0, |best, (value, _)| f64::max(best, value))
 }
 
 fn main() -> Result<()> {
@@ -60,8 +65,6 @@ fn main() -> Result<()> {
         .select(Tournament::new(3)?)
         .crossover(PointCrossover::two_point())
         .mutate(BitFlip::per_gene(1.0 / ITEMS.len() as f64)?)
-        // the empty knapsack is valid, so the search never starts from invalid solutions only
-        .initial_genomes([Bits::zeros(ITEMS.len())])
         .seed(7)
         .build()?;
 

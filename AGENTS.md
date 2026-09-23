@@ -113,13 +113,15 @@ Stop conditions: `Stop::target(score)`, `Stop::generations(n)`, `Stop::evaluatio
 
 - A closure `|genome: &G| -> T`, where `T` is `f64`, `Fitness` or `Option<f64>`, or a type implementing `FitnessFunction<G>`.
 - It must be deterministic: a child identical to its parent inherits the parent's fitness without being evaluated again.
-- `None` or `Fitness::invalid()` marks a solution that violates a hard constraint. Invalid is worse than every score.
+- Constraints: return `(score, violation)`, where the violation is 0 for a feasible solution and otherwise how far it is from feasible (add up `constraint::at_most(value, limit)`, `at_least` and `equal(value, target, tolerance)`). Deb's feasibility rules then apply everywhere: feasible beats infeasible, feasible solutions compete by score, infeasible ones by violation. With constraints, use `Tournament` or `Rank` selection: roulette and SUS ignore infeasible solutions.
+- `None` or `Fitness::invalid()` marks a solution that can't be scored at all. Invalid is worse than everything else. Prefer a violation for constraints: it tells the search how close a solution is.
+- `Penalty::new(weight)?.fitness(objective, score, violation)` is a static penalty function instead of Deb's rules; the weight needs tuning.
 - NaN becomes invalid by default, or an error with `NanPolicy::Error`.
 - Maximize is the default. Call `.minimize()` on the builder for costs and errors; don't negate scores.
 
 ## Templates
 
-### Constraints as invalid solutions, with a hall of fame
+### Constraints, with a hall of fame
 
 ```rust
 use genoxide::prelude::*;
@@ -128,7 +130,8 @@ const WEIGHTS: [u32; 6] = [12, 7, 11, 8, 9, 5];
 const VALUES: [u32; 6] = [24, 13, 23, 15, 16, 8];
 const CAPACITY: u32 = 26;
 
-fn value(selection: &Bits) -> Option<f64> {
+// the value, and how much the weight exceeds the capacity (Deb's feasibility rules)
+fn value(selection: &Bits) -> (f64, f64) {
     let (mut weight, mut value) = (0, 0);
     for (item, selected) in selection.iter().enumerate() {
         if selected {
@@ -136,7 +139,10 @@ fn value(selection: &Bits) -> Option<f64> {
             value += VALUES[item];
         }
     }
-    (weight <= CAPACITY).then_some(f64::from(value))
+    (
+        f64::from(value),
+        constraint::at_most(f64::from(weight), f64::from(CAPACITY)),
+    )
 }
 
 fn main() -> genoxide::Result<()> {
@@ -145,8 +151,6 @@ fn main() -> genoxide::Result<()> {
         .select(Tournament::new(3)?)
         .crossover(PointCrossover::two_point())
         .mutate(BitFlip::count(1)?)
-        // a known valid solution, so the search never starts from invalid solutions only
-        .initial_genomes([Bits::zeros(6)])
         .seed(1)
         .build()?;
 
@@ -157,6 +161,7 @@ fn main() -> genoxide::Result<()> {
         .run()?;
 
     assert_eq!(outcome.best_fitness(), Fitness::new(51.0));
+    assert!(outcome.best_fitness().is_feasible());
     for individual in hall_of_fame.individuals() {
         println!("{} {:?}", individual.genome(), individual.fitness());
     }
@@ -361,7 +366,9 @@ fn main() -> genoxide::Result<()> {
 | `Error::MissingSetting { setting: "stop_when" }` | The engine has no stop condition | `.stop_when(Stop::generations(n))`, or an abort flag |
 | `Error::InvalidSetting { setting, reason }` | A value is out of range | Read `reason`; see [Settings](#settings) |
 | `Error::InvalidGenome { reason }` | An initial genome doesn't fit the representation | Match its length and bounds |
-| `Error::NanFitness` | The fitness function returned NaN with `NanPolicy::Error` | Fix the fitness function, or keep the default `NanPolicy::Invalid` |
+| `Error::NanFitness` | The fitness function returned NaN (a score or a violation) with `NanPolicy::Error` | Fix the fitness function, or keep the default `NanPolicy::Invalid` |
+| `Error::InvalidFitness` | A negative constraint violation | A violation is 0 or more: use `constraint::at_most` and friends |
+| The best solution is infeasible | No feasible solution found yet | Run longer, check the constraints can be met, or start from a feasible solution with `.initial_genomes(...)` |
 | `Error::TellWithoutAsk` / `Error::FitnessCount` | Ask / tell out of step | One `tell` per `ask`, with one fitness per asked genome, in order |
 | Hill climbing (`Acceptance::Improving` or `NotWorse`) stops improving | A local optimum | `.restart(patience, kicks)` (iterated local search), `Acceptance::Tabu { tenure }` with several neighbors, or `Acceptance::Annealing` with an initial temperature about the size of typical fitness differences and `cooling` close to 1 (e.g. 0.999) |
 | Real-valued search stalls in a local minimum | Steps too small to leave its basin (e.g. `GaussianMutation` with a tiny sigma) | `PolynomialMutation` with eta 20, or a larger sigma; on Rastrigin, sigma 0.03 of the range works and 0.01 stalls |

@@ -317,3 +317,50 @@ fn memetic_ga_solves_a_tour() {
         .unwrap();
     assert_eq!(outcome.stop_reason(), StopReason::Target);
 }
+
+#[test]
+fn feasibility_rules_solve_a_knapsack() {
+    // 18 items; the optimum by brute force
+    use rand::RngExt;
+    let mut rng = StreamRng::seed_from_u64(5);
+    let items: Vec<(f64, f64)> = (0..18)
+        .map(|_| {
+            (
+                rng.random_range(1..30) as f64,
+                rng.random_range(1..40) as f64,
+            )
+        })
+        .collect();
+    let capacity = items.iter().map(|item| item.0).sum::<f64>() / 3.0;
+    let totals = |chosen: &dyn Fn(usize) -> bool| {
+        (0..items.len())
+            .filter(|&item| chosen(item))
+            .fold((0.0, 0.0), |(weight, value), item| {
+                (weight + items[item].0, value + items[item].1)
+            })
+    };
+    let optimum = (0u32..1 << items.len())
+        .map(|mask| totals(&|item| mask >> item & 1 == 1))
+        .filter(|&(weight, _)| weight <= capacity)
+        .map(|(_, value)| value)
+        .fold(0.0, f64::max);
+    let ga = Ga::builder(Binary::new(items.len()).unwrap())
+        .population_size(60)
+        .select(Tournament::new(3).unwrap())
+        .crossover(UniformCrossover::new())
+        .mutate(BitFlip::per_gene(1.0 / 18.0).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    // (value, how much the weight exceeds the capacity)
+    let fitness = |genome: &Bits| {
+        let (weight, value) = totals(&|item| genome.get(item) == Some(true));
+        (value, constraint::at_most(weight, capacity))
+    };
+    let outcome = Engine::new(ga, fitness)
+        .stop_when(Stop::target(optimum).or(Stop::generations(2_000)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    assert!(outcome.best_fitness().is_feasible());
+}

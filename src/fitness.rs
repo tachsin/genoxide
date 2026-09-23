@@ -18,8 +18,14 @@ pub enum Objective {
 impl Objective {
     /// Compares two fitness values: [`Ordering::Greater`] if `a` is better than `b`.
     ///
-    /// This is a total order. [`Fitness::invalid`] is worse than every score, for both
-    /// objectives, and equal to another invalid fitness.
+    /// This is a total order, with Deb's feasibility rules for [constrained](Fitness::constrained)
+    /// fitness values:
+    ///
+    /// 1. [`Fitness::invalid`] is worse than everything else, for both objectives, and equal to
+    ///    another invalid fitness.
+    /// 2. A feasible fitness (no constraint violation) is better than an infeasible one.
+    /// 3. Between feasible fitness values, the better score wins.
+    /// 4. Between infeasible ones, the smaller violation wins; the score breaks ties.
     ///
     /// ```
     /// use genoxide::{Fitness, Objective};
@@ -32,10 +38,18 @@ impl Objective {
     /// ```
     pub fn compare(self, a: Fitness, b: Fitness) -> Ordering {
         match (a.score, b.score) {
-            (Some(a), Some(b)) => match self {
-                Objective::Maximize => a.total_cmp(&b),
-                Objective::Minimize => b.total_cmp(&a),
-            },
+            (Some(x), Some(y)) => {
+                let scores = match self {
+                    Objective::Maximize => x.total_cmp(&y),
+                    Objective::Minimize => y.total_cmp(&x),
+                };
+                match (a.violation == 0.0, b.violation == 0.0) {
+                    (true, true) => scores,
+                    (true, false) => Ordering::Greater,
+                    (false, true) => Ordering::Less,
+                    (false, false) => b.violation.total_cmp(&a.violation).then(scores),
+                }
+            }
             (Some(_), None) => Ordering::Greater,
             (None, Some(_)) => Ordering::Less,
             (None, None) => Ordering::Equal,
@@ -48,12 +62,16 @@ impl Objective {
     }
 }
 
-/// The fitness of a solution: a score, or invalid.
+/// The fitness of a solution: a score, optionally with a constraint violation, or invalid.
 ///
 /// A score is any `f64` except NaN (infinities are allowed), and `-0.0` is the same as `0.0`.
-/// An invalid fitness marks a solution that can't be scored, e.g. one that violates a hard
-/// constraint. Invalid is worse than every score, for both objectives, and it's a result of its
-/// own, not "not evaluated yet".
+///
+/// - A [constrained](Fitness::constrained) fitness also has a constraint violation: 0 for a
+///   feasible solution, and how far it is from feasible otherwise. Feasible solutions are better
+///   than infeasible ones, and infeasible ones are ranked by their violation (Deb's feasibility
+///   rules, see [`Objective::compare`]), so the search is guided towards the feasible region.
+/// - An invalid fitness marks a solution that can't be scored at all. Invalid is worse than every
+///   other fitness, for both objectives, and it's a result of its own, not "not evaluated yet".
 ///
 /// Fitness values are compared through the [`Objective`], so "better" always takes maximizing or
 /// minimizing into account.
@@ -69,6 +87,8 @@ impl Objective {
 pub struct Fitness {
     // never NaN, never -0.0
     score: Option<f64>,
+    // 0 when feasible or invalid, otherwise positive (possibly infinite); never NaN or -0.0
+    violation: f64,
 }
 
 impl Fitness {
@@ -86,13 +106,58 @@ impl Fitness {
             // + 0.0 turns -0.0 into 0.0 and leaves every other value unchanged
             Ok(Self {
                 score: Some(score + 0.0),
+                violation: 0.0,
             })
         }
     }
 
+    /// A fitness with this score and constraint violation: 0 for a feasible solution, positive
+    /// for how far it is from feasible (e.g. the sum of the amounts by which its constraints are
+    /// exceeded, see [`constraint`](crate::constraint)).
+    ///
+    /// A NaN score or violation, or a negative violation, gives an invalid fitness; see
+    /// [`try_constrained`](Fitness::try_constrained) to get an error instead.
+    ///
+    /// ```
+    /// use genoxide::{Fitness, Objective};
+    ///
+    /// let feasible = Fitness::constrained(10.0, 0.0);
+    /// let slightly_off = Fitness::constrained(50.0, 0.1);
+    /// let far_off = Fitness::constrained(90.0, 3.0);
+    /// // feasible first, then by violation, whatever the scores
+    /// assert!(Objective::Maximize.is_better(feasible, slightly_off));
+    /// assert!(Objective::Maximize.is_better(slightly_off, far_off));
+    /// assert_eq!(slightly_off.to_string(), "50 (violation 0.1)");
+    /// ```
+    pub fn constrained(score: f64, violation: f64) -> Self {
+        Self::try_constrained(score, violation).unwrap_or(Self::invalid())
+    }
+
+    /// A fitness with this score and constraint violation, or [`Error::NanFitness`] for a NaN
+    /// score or violation, and [`Error::InvalidFitness`] for a negative violation.
+    pub fn try_constrained(score: f64, violation: f64) -> Result<Self> {
+        if violation.is_nan() {
+            return Err(Error::NanFitness);
+        }
+        if violation < 0.0 {
+            return Err(Error::InvalidFitness {
+                reason: format!("a constraint violation can't be negative, got {violation}"),
+            });
+        }
+        let fitness = Self::try_new(score)?;
+        Ok(Self {
+            // + 0.0 turns -0.0 into 0.0
+            violation: violation + 0.0,
+            ..fitness
+        })
+    }
+
     /// The fitness of a solution that can't be scored.
     pub fn invalid() -> Self {
-        Self { score: None }
+        Self {
+            score: None,
+            violation: 0.0,
+        }
     }
 
     /// The score, or `None` for an invalid fitness.
@@ -103,6 +168,16 @@ impl Fitness {
     /// Whether this fitness has a score.
     pub fn is_valid(self) -> bool {
         self.score.is_some()
+    }
+
+    /// The constraint violation: 0 for a feasible solution (and for an invalid one).
+    pub fn violation(self) -> f64 {
+        self.violation
+    }
+
+    /// Whether this fitness has a score and no constraint violation.
+    pub fn is_feasible(self) -> bool {
+        self.score.is_some() && self.violation == 0.0
     }
 }
 
@@ -117,7 +192,13 @@ impl fmt::Display for Fitness {
     /// ```
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.score {
-            Some(score) => fmt::Display::fmt(&score, f),
+            Some(score) => {
+                fmt::Display::fmt(&score, f)?;
+                if self.violation > 0.0 {
+                    write!(f, " (violation {})", self.violation)?;
+                }
+                Ok(())
+            }
             None => f.pad("invalid"),
         }
     }
@@ -134,6 +215,7 @@ impl Eq for Fitness {}
 impl Hash for Fitness {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.score.map(f64::to_bits).hash(state);
+        self.violation.to_bits().hash(state);
     }
 }
 
@@ -169,7 +251,54 @@ mod tests {
             1 => Just(Fitness::new(f64::INFINITY)),
             1 => Just(Fitness::new(f64::NEG_INFINITY)),
             10 => any::<f64>().prop_map(Fitness::new),
+            // constrained: small sets of scores and violations, to get ties
+            10 => ((-2i32..2), (0i32..3)).prop_map(|(score, violation)| {
+                Fitness::constrained(f64::from(score), f64::from(violation) / 2.0)
+            }),
+            2 => Just(Fitness::constrained(1.0, f64::INFINITY)),
         ]
+    }
+
+    #[test]
+    fn deb_feasibility_rules() {
+        let objective = Objective::Minimize;
+        let feasible = Fitness::constrained(100.0, 0.0);
+        let barely = Fitness::constrained(1.0, 0.5);
+        let far = Fitness::constrained(-100.0, 2.0);
+        assert!(objective.is_better(feasible, barely));
+        assert!(objective.is_better(barely, far));
+        assert!(objective.is_better(far, Fitness::invalid()));
+        // equal violations: the score decides
+        assert!(objective.is_better(
+            Fitness::constrained(1.0, 0.5),
+            Fitness::constrained(2.0, 0.5)
+        ));
+        // a zero violation is just a score
+        assert_eq!(Fitness::constrained(3.0, 0.0), Fitness::new(3.0));
+        assert_eq!(Fitness::constrained(3.0, -0.0), Fitness::new(3.0));
+        assert!(barely.is_valid() && !barely.is_feasible() && feasible.is_feasible());
+        assert!(!Fitness::invalid().is_feasible());
+    }
+
+    #[test]
+    fn invalid_constraint_violations() {
+        assert_eq!(
+            Fitness::try_constrained(1.0, f64::NAN),
+            Err(Error::NanFitness)
+        );
+        assert_eq!(
+            Fitness::try_constrained(f64::NAN, 1.0),
+            Err(Error::NanFitness)
+        );
+        assert!(matches!(
+            Fitness::try_constrained(1.0, -1.0),
+            Err(Error::InvalidFitness { .. })
+        ));
+        assert_eq!(Fitness::constrained(1.0, -1.0), Fitness::invalid());
+        assert_eq!(
+            Fitness::constrained(1.0, f64::INFINITY).violation(),
+            f64::INFINITY
+        );
     }
 
     fn any_objective() -> impl Strategy<Value = Objective> {
@@ -203,10 +332,16 @@ mod tests {
         #[test]
         fn minimize_mirrors_maximize(a in any_fitness(), b in any_fitness()) {
             if a.is_valid() && b.is_valid() {
-                prop_assert_eq!(
-                    Objective::Minimize.compare(a, b),
-                    Objective::Maximize.compare(a, b).reverse()
-                );
+                if a.violation() == b.violation() {
+                    // the scores decide, in opposite directions
+                    prop_assert_eq!(
+                        Objective::Minimize.compare(a, b),
+                        Objective::Maximize.compare(a, b).reverse()
+                    );
+                } else {
+                    // the violations decide, whatever the objective
+                    prop_assert_eq!(Objective::Minimize.compare(a, b), Objective::Maximize.compare(a, b));
+                }
             }
         }
 

@@ -337,3 +337,27 @@ fn hall_of_fame_sees_every_evaluated_individual() {
         assert_eq!(found, expected, "{scheme:?}");
     }
 }
+
+#[test]
+fn constrained_fitness_functions() {
+    // (score, violation): the NaN policy applies to the violation too
+    let nan_violation = |_: &Bits| (1.0, f64::NAN);
+    let result = Engine::new(ga(8, Scheme::default(), 0), nan_violation)
+        .stop_when(Stop::generations(0))
+        .nan_policy(NanPolicy::Error)
+        .run();
+    assert_eq!(result, Err(Error::NanFitness));
+    // a negative violation is a bug in the fitness function
+    let negative = |_: &Bits| (1.0, -1.0);
+    let result = Engine::new(ga(8, Scheme::default(), 0), negative)
+        .stop_when(Stop::generations(0))
+        .run();
+    assert!(matches!(result, Err(Error::InvalidFitness { .. })));
+    // a target is only reached by a feasible solution
+    let infeasible = |genome: &Bits| (genome.count_ones() as f64, 1.0);
+    let outcome = Engine::new(ga(8, Scheme::default(), 0), infeasible)
+        .stop_when(Stop::target(0.0).or(Stop::generations(5)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Generations);
+}

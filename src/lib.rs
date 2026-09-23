@@ -28,7 +28,8 @@
 //!
 //! - [`Error`]: all errors, no panics in library code
 //! - [`StreamRng`]: portable, seedable random numbers with independent streams
-//! - [`Fitness`] and [`Objective`]: totally ordered fitness values, with an invalid state
+//! - [`Fitness`] and [`Objective`]: totally ordered fitness values, with an invalid state and
+//!   constraint violations ([`constraint`], Deb's feasibility rules)
 //! - [`genome`]: genomes and the spaces they live in, e.g. bit-packed [`Binary`](genome::Binary)
 //! - [`Individual`] and [`Population`]: genomes with their fitness and age
 //! - [`operator`]: selection, crossover and mutation
@@ -42,6 +43,7 @@
 #![warn(missing_docs)]
 
 pub mod algorithm;
+pub mod constraint;
 pub mod engine;
 pub mod error;
 pub mod fitness;
