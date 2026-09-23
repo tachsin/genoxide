@@ -59,6 +59,11 @@ pub trait Representation: Clone + Debug + Send + Sync {
 /// representation, which point and uniform crossover need.
 ///
 /// Permutations don't implement it: exchanging genes by position would create duplicates.
+#[diagnostic::on_unimplemented(
+    message = "the genes of `{Self}` can't be exchanged by position",
+    label = "point and uniform crossover need `SwapGenes`",
+    note = "for a permutation, exchanging genes by position would duplicate genes: use `NoCrossover` (permutation crossovers are planned for 0.2)"
+)]
 pub trait SwapGenes: Genome {
     /// Exchanges the genes in `range` with `other`.
     ///

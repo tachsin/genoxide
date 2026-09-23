@@ -119,9 +119,9 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Hall of fame (top-k unique)
 
 #### Docs and examples
-- [ ] API docs for everything public, with doctests
-- [ ] Examples: OneMax, knapsack, N-Queens, Rastrigin
-- [ ] AGENTS.md (guide for AI coding assistants)
+- [x] API docs for everything public, with doctests
+- [x] Examples: OneMax, knapsack, N-Queens, Rastrigin
+- [x] AGENTS.md (guide for AI coding assistants)
 
 #### Performance
 - [ ] criterion benchmarks for the hot paths
