@@ -221,3 +221,62 @@ fn simulated_annealing_with_two_opt_solves_a_tour() {
         outcome.best().fitness()
     );
 }
+
+#[test]
+fn tabu_search_solves_n_queens() {
+    let conflicts = |order: &Order| {
+        let n = order.len();
+        let mut count = 0;
+        for i in 0..n {
+            for j in i + 1..n {
+                count += usize::from(order[i].abs_diff(order[j]) == j - i);
+            }
+        }
+        count as f64
+    };
+    let search = LocalSearch::builder(Permutation::new(32).unwrap())
+        .neighbor(SwapMutation::new())
+        .neighbors(16)
+        .acceptance(Acceptance::Tabu { tenure: 20 })
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(search, conflicts)
+        .stop_when(Stop::target(0.0).or(Stop::generations(20_000)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+}
+
+#[test]
+fn iterated_local_search_solves_a_tour() {
+    // 40 cities on a circle: the shortest tour visits them in circle order
+    const CITIES: usize = 40;
+    let position = |city: usize| {
+        let angle = std::f64::consts::TAU * city as f64 / CITIES as f64;
+        (angle.cos(), angle.sin())
+    };
+    let length = |tour: &Order| {
+        (0..CITIES)
+            .map(|i| {
+                let (a, b) = (position(tour[i]), position(tour[(i + 1) % CITIES]));
+                ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
+            })
+            .sum::<f64>()
+    };
+    let optimum = length(&Order::identity(CITIES));
+    let search = LocalSearch::builder(Permutation::new(CITIES).unwrap())
+        .neighbor(InversionMutation)
+        .neighbors(8)
+        .restart(100, 3)
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(search, length)
+        .stop_when(Stop::target(optimum + 1e-9).or(Stop::generations(50_000)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+}

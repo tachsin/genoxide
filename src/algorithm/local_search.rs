@@ -7,6 +7,7 @@ use crate::math::exp;
 use crate::operator::Mutate;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
+use std::collections::{HashSet, VecDeque};
 
 /// When a [`LocalSearch`] moves to a neighbor.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -26,6 +27,14 @@ pub enum Acceptance {
         /// The factor the temperature is multiplied by after every step, greater than 0 and at
         /// most 1, e.g. 0.999.
         cooling: f64,
+    },
+    /// Tabu search: to the best neighbor that isn't one of the last `tenure` solutions, even if
+    /// it's worse, so the search walks out of a local optimum instead of cycling back into it. A
+    /// tabu neighbor is still allowed if it's better than the best solution so far (aspiration).
+    /// If every neighbor is tabu, the search stays. Use it with several neighbors per step.
+    Tabu {
+        /// The number of recent solutions that are tabu, at least 1.
+        tenure: usize,
     },
 }
 
@@ -56,17 +65,28 @@ impl Acceptance {
                 });
             }
         }
+        if let Acceptance::Tabu { tenure: 0 } = self {
+            return Err(Error::InvalidSetting {
+                setting: "tenure",
+                reason: "must be at least 1".to_string(),
+            });
+        }
         Ok(())
     }
 }
 
-/// Local search, as an ask / tell [`Algorithm`]: hill climbing or simulated annealing.
+/// Local search, as an ask / tell [`Algorithm`]: hill climbing, simulated annealing, tabu search,
+/// and iterated local search on top of any of them.
 ///
 /// It keeps one current solution. Every step, it evaluates `neighbors` random neighbors of it,
 /// made by the neighbor operator (any [`Mutate`] of the representation), and moves to the best of
 /// them if the [`Acceptance`] allows. With one neighbor per step this is first-improvement hill
 /// climbing, with more it's best-of-k. The best solution found is kept whether or not it's the
 /// current one.
+///
+/// With [`restart`](LocalSearchBuilder::restart), it's iterated local search: after `patience`
+/// steps without a new best, the search restarts from the best solution changed by `kicks` random
+/// neighbor moves. A restart is a step of its own, with a single evaluation.
 ///
 /// Built with [`LocalSearch::builder`]. Run it with an [`Engine`](crate::Engine) like any
 /// algorithm; its population is the current solution.
@@ -119,6 +139,14 @@ pub struct LocalSearch<R: Representation, M> {
     evaluations: u64,
     best: Option<Individual<R::Genome>>,
     best_generation: u64,
+    // the recent solutions of tabu search, in order and for lookups
+    tabu: VecDeque<R::Genome>,
+    tabu_set: HashSet<R::Genome>,
+    // iterated local search: (patience, kicks)
+    restart: Option<(u64, usize)>,
+    restarting: bool,
+    last_restart: u64,
+    restarts: u64,
 }
 
 impl<R: Representation> LocalSearch<R, Unset> {
@@ -132,6 +160,7 @@ impl<R: Representation> LocalSearch<R, Unset> {
             acceptance: Acceptance::default(),
             seed: None,
             initial_genome: None,
+            restart: None,
         }
     }
 }
@@ -167,12 +196,41 @@ impl<R: Representation, M> LocalSearch<R, M> {
         self.seed
     }
 
+    /// The number of restarts of iterated local search so far.
+    pub fn restarts(&self) -> u64 {
+        self.restarts
+    }
+
+    // whether iterated local search restarts now: `patience` steps without a new best, since the
+    // last restart
+    fn restart_due(&self) -> bool {
+        self.restart.is_some_and(|(patience, _)| {
+            self.generation - self.best_generation.max(self.last_restart) >= patience
+        })
+    }
+
+    // records `genome` as the newest tabu solution, forgetting the oldest beyond the tenure
+    fn remember(&mut self, genome: &R::Genome) {
+        if let Acceptance::Tabu { tenure } = self.acceptance {
+            if self.tabu_set.insert(genome.clone()) {
+                self.tabu.push_back(genome.clone());
+            }
+            while self.tabu.len() > tenure {
+                if let Some(oldest) = self.tabu.pop_front() {
+                    self.tabu_set.remove(&oldest);
+                }
+            }
+        }
+    }
+
     // whether to move from `current` to a neighbor with fitness `candidate`
     fn accepts(&mut self, current: Fitness, candidate: Fitness) -> bool {
         let objective = self.objective;
         match self.acceptance {
             Acceptance::Improving => objective.is_better(candidate, current),
             Acceptance::NotWorse => !objective.is_better(current, candidate),
+            // tabu search chooses among the neighbors itself, and always moves
+            Acceptance::Tabu { .. } => true,
             Acceptance::Annealing { .. } => {
                 if !objective.is_better(current, candidate) {
                     return true;
@@ -201,7 +259,20 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
     fn ask(&mut self) -> Candidates<'_, R::Genome> {
         if !self.asked {
             self.pending.clear();
-            if self.started {
+            if self.started && self.restart_due() {
+                // iterated local search: kick the best solution
+                let (_, kicks) = self.restart.expect("a restart is due");
+                let best = self.best.as_ref().expect("best after the first tell");
+                let mut genome = best.genome().clone();
+                for _ in 0..kicks {
+                    self.neighbor
+                        .mutate(&self.representation, &mut genome, &mut self.rng);
+                }
+                self.candidates.clear();
+                self.candidates.push(Individual::new(genome));
+                self.pending.push(0);
+                self.restarting = true;
+            } else if self.started {
                 let current = self.current[0].genome();
                 self.candidates.clear();
                 for _ in 0..self.neighbors {
@@ -240,6 +311,8 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
             self.current[0].set_fitness(fitness[0]);
             self.best = Some(self.current[0].clone());
             self.started = true;
+            let initial = self.current[0].genome().clone();
+            self.remember(&initial);
             return Ok(());
         }
         for (candidate, &fitness) in self.candidates.iter_mut().zip(fitness) {
@@ -249,10 +322,10 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
 
         // the best neighbor, the first one on ties
         let objective = self.objective;
-        let mut chosen = 0;
+        let mut best_neighbor = 0;
         for index in 1..fitness.len() {
-            if objective.is_better(fitness[index], fitness[chosen]) {
-                chosen = index;
+            if objective.is_better(fitness[index], fitness[best_neighbor]) {
+                best_neighbor = index;
             }
         }
         // both are evaluated: the current solution since the first tell, the best since then too
@@ -262,16 +335,49 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
             .as_ref()
             .and_then(Individual::fitness)
             .unwrap_or(Fitness::invalid());
-        if objective.is_better(fitness[chosen], best_fitness) {
-            self.best = Some(self.candidates[chosen].clone());
+        if objective.is_better(fitness[best_neighbor], best_fitness) {
+            self.best = Some(self.candidates[best_neighbor].clone());
             self.best_generation = self.generation;
         }
-        let accepted = self.accepts(current_fitness, fitness[chosen]);
+
+        if self.restarting {
+            // the kicked solution is the new current solution, whatever its fitness
+            self.restarting = false;
+            self.last_restart = self.generation;
+            self.restarts += 1;
+            let kicked = self.candidates.swap_remove(0);
+            self.remember(kicked.genome());
+            self.current = Population::new(vec![kicked]);
+            self.discarded.clear();
+            return Ok(());
+        }
+
+        // tabu search moves to the best neighbor that isn't tabu, unless it beats the best so far
+        let chosen = if let Acceptance::Tabu { .. } = self.acceptance {
+            let allowed = |index: usize| {
+                !self.tabu_set.contains(self.candidates[index].genome())
+                    || objective.is_better(fitness[index], best_fitness)
+            };
+            (0..fitness.len())
+                .filter(|&index| allowed(index))
+                .reduce(|chosen, index| {
+                    if objective.is_better(fitness[index], fitness[chosen]) {
+                        index
+                    } else {
+                        chosen
+                    }
+                })
+        } else {
+            Some(best_neighbor)
+        };
+        let accepted = chosen.is_some_and(|chosen| self.accepts(current_fitness, fitness[chosen]));
+        let chosen = chosen.unwrap_or(best_neighbor);
 
         self.discarded.clear();
         let mut candidates = std::mem::take(&mut self.candidates);
         if accepted {
             let next = candidates.swap_remove(chosen);
+            self.remember(next.genome());
             self.current = Population::new(vec![next]);
         } else {
             self.current[0].increment_age();
@@ -325,6 +431,7 @@ pub struct LocalSearchBuilder<R: Representation, M = Unset> {
     acceptance: Acceptance,
     seed: Option<u64>,
     initial_genome: Option<R::Genome>,
+    restart: Option<(u64, usize)>,
 }
 
 impl<R: Representation, M> LocalSearchBuilder<R, M> {
@@ -339,6 +446,7 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
             acceptance: self.acceptance,
             seed: self.seed,
             initial_genome: self.initial_genome,
+            restart: self.restart,
         }
     }
 
@@ -377,6 +485,15 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
         self
     }
 
+    /// Iterated local search: after `patience` steps (at least 1) without a new best solution, the
+    /// search restarts from the best solution, changed by `kicks` (at least 1) random neighbor
+    /// moves. Strong enough kicks leave the basin of the local optimum, weak enough ones keep most
+    /// of what was found; for a tour with 2-opt, 3 to 10 kicks are common. Off by default.
+    pub fn restart(mut self, patience: u64, kicks: usize) -> Self {
+        self.restart = Some((patience, kicks));
+        self
+    }
+
     /// The solution to start from, e.g. one from a greedy heuristic. Random by default.
     pub fn initial_genome(mut self, genome: R::Genome) -> Self {
         self.initial_genome = Some(genome);
@@ -387,7 +504,8 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
     ///
     /// # Errors
     ///
-    /// - [`Error::InvalidSetting`] for 0 neighbors or invalid annealing settings.
+    /// - [`Error::InvalidSetting`] for 0 neighbors, invalid annealing settings, a tabu tenure of
+    ///   0, or a restart patience or kicks of 0.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<LocalSearch<R, M>>
     where
@@ -400,6 +518,16 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
             });
         }
         self.acceptance.validate()?;
+        if let Some((patience, kicks)) = self.restart {
+            if patience == 0 || kicks == 0 {
+                return Err(Error::InvalidSetting {
+                    setting: "restart",
+                    reason: format!(
+                        "patience and kicks must be at least 1, got {patience} and {kicks}"
+                    ),
+                });
+            }
+        }
         if let Some(genome) = &self.initial_genome {
             self.representation.validate(genome)?;
         }
@@ -437,6 +565,12 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
             evaluations: 0,
             best: None,
             best_generation: 0,
+            tabu: VecDeque::new(),
+            tabu_set: HashSet::new(),
+            restart: self.restart,
+            restarting: false,
+            last_restart: 0,
+            restarts: 0,
         })
     }
 }
@@ -601,6 +735,113 @@ mod tests {
         let scores = trajectory(&mut search, 300, ones);
         let best = scores.iter().copied().fold(f64::MIN, f64::max);
         assert_eq!(search.best().unwrap().fitness(), Some(Fitness::new(best)));
+    }
+
+    #[test]
+    fn tabu_and_restart_validation() {
+        let builder =
+            || LocalSearch::builder(Binary::new(8).unwrap()).neighbor(BitFlip::count(1).unwrap());
+        assert!(
+            builder()
+                .acceptance(Acceptance::Tabu { tenure: 0 })
+                .build()
+                .is_err()
+        );
+        assert!(builder().restart(0, 2).build().is_err());
+        assert!(builder().restart(5, 0).build().is_err());
+        assert!(
+            builder()
+                .acceptance(Acceptance::Tabu { tenure: 1 })
+                .restart(5, 2)
+                .build()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn tabu_never_returns_to_recent_solutions() {
+        for seed in 0..5 {
+            let tenure = 6;
+            let mut search = search(Acceptance::Tabu { tenure }, 4, seed);
+            let mut visited: Vec<Bits> = Vec::new();
+            let mut best = f64::MIN;
+            for step in 0..300 {
+                let values: Vec<Fitness> = search
+                    .ask()
+                    .iter()
+                    // a rugged landscape, so the search meets local optima
+                    .map(|genome| Fitness::new(((genome.count_ones() * 7) % 11) as f64))
+                    .collect();
+                search.tell(&values).unwrap();
+                let current = search.population()[0].clone();
+                let score = current.fitness().unwrap().score().unwrap();
+                let recent = &visited[visited.len().saturating_sub(tenure)..];
+                if step > 0 && current.genome() != &visited[visited.len() - 1] {
+                    // a move: not to a recent solution, unless it beats the best so far
+                    assert!(
+                        !recent.contains(current.genome()) || score > best,
+                        "seed {seed}, step {step}"
+                    );
+                }
+                best = best.max(score);
+                visited.push(current.genome().clone());
+            }
+        }
+    }
+
+    #[test]
+    fn tabu_moves_on_from_a_local_optimum() {
+        // at all ones, every neighbor of OneMax is worse: hill climbing stays, tabu moves on
+        let at_optimum = |acceptance| {
+            LocalSearch::builder(Binary::new(16).unwrap())
+                .neighbor(BitFlip::count(1).unwrap())
+                .neighbors(4)
+                .acceptance(acceptance)
+                .initial_genome(Bits::ones(16))
+                .seed(0)
+                .build()
+                .unwrap()
+        };
+        let mut hill_climbing = at_optimum(Acceptance::NotWorse);
+        let scores = trajectory(&mut hill_climbing, 5, ones);
+        assert!(scores.iter().all(|&score| score == 16.0));
+        let mut tabu = at_optimum(Acceptance::Tabu { tenure: 3 });
+        let scores = trajectory(&mut tabu, 5, ones);
+        assert!(scores[1..].iter().any(|&score| score < 16.0), "{scores:?}");
+        assert_eq!(tabu.best().unwrap().fitness(), Some(Fitness::new(16.0)));
+    }
+
+    #[test]
+    fn restarts_kick_the_best_after_patience() {
+        let mut search = LocalSearch::builder(Binary::new(32).unwrap())
+            .neighbor(BitFlip::count(1).unwrap())
+            .acceptance(Acceptance::Improving)
+            .restart(5, 3)
+            .seed(0)
+            .build()
+            .unwrap();
+        // a flat landscape never improves: a restart every 5 steps, plus the restart step itself
+        trajectory(&mut search, 30, |_| 1.0);
+        assert_eq!(search.restarts(), 5);
+        // the kicked solution is within 3 flips of the best
+        let mut search = LocalSearch::builder(Binary::new(32).unwrap())
+            .neighbor(BitFlip::count(1).unwrap())
+            .acceptance(Acceptance::Improving)
+            .restart(1, 3)
+            .seed(1)
+            .build()
+            .unwrap();
+        for _ in 0..10 {
+            trajectory(&mut search, 0, |_| 1.0);
+            let best = search.best().unwrap().genome().clone();
+            let current = search.population()[0].genome();
+            let distance = best
+                .iter()
+                .zip(current.iter())
+                .filter(|(a, b)| a != b)
+                .count();
+            assert!(distance <= 3, "{distance}");
+        }
     }
 
     #[test]
