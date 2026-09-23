@@ -32,7 +32,8 @@
 //! - [`genome`]: genomes and the spaces they live in, e.g. bit-packed [`Binary`](genome::Binary)
 //! - [`Individual`] and [`Population`]: genomes with their fitness and age
 //! - [`operator`]: selection, crossover and mutation
-//! - [`algorithm`]: algorithms as ask / tell state machines, e.g. the genetic algorithm [`Ga`]
+//! - [`algorithm`]: algorithms as ask / tell state machines: the genetic algorithm [`Ga`] and
+//!   [`LocalSearch`](algorithm::LocalSearch) (hill climbing, simulated annealing)
 //! - [`Engine`]: runs an algorithm with stop conditions, parallel evaluation and cancellation
 //! - [`observer`]: statistics, hall of fame and custom callbacks
 //! - [`prelude`]: everything above in one import

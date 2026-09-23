@@ -181,3 +181,43 @@ fn permutation_operators_solve_a_tour() {
         assert_eq!(outcome.stop_reason(), StopReason::Target, "seed {seed}");
     }
 }
+
+#[test]
+fn simulated_annealing_with_two_opt_solves_a_tour() {
+    // 30 cities on a circle: the shortest tour visits them in circle order
+    const CITIES: usize = 30;
+    let position = |city: usize| {
+        let angle = std::f64::consts::TAU * city as f64 / CITIES as f64;
+        (angle.cos(), angle.sin())
+    };
+    let length = |tour: &Order| {
+        (0..CITIES)
+            .map(|i| {
+                let (a, b) = (position(tour[i]), position(tour[(i + 1) % CITIES]));
+                ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
+            })
+            .sum::<f64>()
+    };
+    let optimum = length(&Order::identity(CITIES));
+    let search = LocalSearch::builder(Permutation::new(CITIES).unwrap())
+        .neighbor(InversionMutation)
+        .acceptance(Acceptance::Annealing {
+            initial_temperature: 1.0,
+            cooling: 0.999,
+        })
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    let mut hall_of_fame = HallOfFame::new(5).unwrap();
+    let outcome = Engine::new(search, length)
+        .stop_when(Stop::target(optimum + 1e-9).or(Stop::generations(50_000)))
+        .observe(&mut hall_of_fame)
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    assert_eq!(
+        hall_of_fame.best().unwrap().fitness(),
+        outcome.best().fitness()
+    );
+}

@@ -28,8 +28,10 @@
 //! ```
 
 pub mod ga;
+pub mod local_search;
 
 pub use ga::{Ga, GaBuilder, Scheme, Unset};
+pub use local_search::{Acceptance, LocalSearch, LocalSearchBuilder};
 
 use crate::genome::Genome;
 use crate::{Fitness, Individual, Objective, Population, Result};

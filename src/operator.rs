@@ -66,7 +66,7 @@ pub trait Crossover<R: Representation>: Clone + Debug + Send + Sync {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a mutation for `{R}`",
     label = "not a mutation for `{R}`",
-    note = "set the mutation with `.mutate(...)`: `BitFlip` for `Binary`, `UniformMutation` for `Integer`, `GaussianMutation`, `PolynomialMutation` or `UniformMutation` for `Real`, `SwapMutation`, `InversionMutation`, `InsertionMutation` or `ScrambleMutation` for `Permutation`"
+    note = "set the mutation with `.mutate(...)` (`.neighbor(...)` for local search): `BitFlip` for `Binary`, `UniformMutation` for `Integer`, `GaussianMutation`, `PolynomialMutation` or `UniformMutation` for `Real`, `SwapMutation`, `InversionMutation`, `InsertionMutation` or `ScrambleMutation` for `Permutation`"
 )]
 pub trait Mutate<R: Representation>: Clone + Debug + Send + Sync {
     /// Mutates `genome`. The genome always changes (unless its space has a single genome).

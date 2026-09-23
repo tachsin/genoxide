@@ -4,7 +4,7 @@
 //! use genoxide::prelude::*;
 //! ```
 
-pub use crate::algorithm::{Algorithm, Ga, Scheme};
+pub use crate::algorithm::{Acceptance, Algorithm, Ga, LocalSearch, Scheme};
 pub use crate::engine::{Engine, FitnessFunction, NanPolicy, Outcome, Stop, StopReason};
 pub use crate::genome::{
     Binary, Bits, Genome, Integer, Integers, Order, Permutation, Real, Reals, Representation,
