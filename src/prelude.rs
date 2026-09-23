@@ -11,9 +11,11 @@ pub use crate::genome::{
 };
 pub use crate::observer::{HallOfFame, Observer, Statistics};
 pub use crate::operator::{
-    ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, GaussianMutation, Mutate, NoCrossover,
-    PointCrossover, PolynomialMutation, RandomSelection, Rank, Roulette, Select,
-    SimulatedBinaryCrossover, StochasticUniversalSampling, SwapMutation, Tournament, Truncation,
-    UniformCrossover, UniformMutation,
+    ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, CycleCrossover,
+    EdgeRecombinationCrossover, GaussianMutation, InsertionMutation, InversionMutation, Mutate,
+    NoCrossover, OrderCrossover, PartiallyMappedCrossover, PointCrossover, PolynomialMutation,
+    RandomSelection, Rank, Roulette, ScrambleMutation, Select, SimulatedBinaryCrossover,
+    StochasticUniversalSampling, SwapMutation, Tournament, Truncation, UniformCrossover,
+    UniformMutation,
 };
 pub use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};

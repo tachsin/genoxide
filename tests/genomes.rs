@@ -145,3 +145,39 @@ fn sbx_and_polynomial_mutation_solve_rastrigin() {
         .unwrap();
     assert_eq!(outcome.stop_reason(), StopReason::Target);
 }
+
+#[test]
+fn permutation_operators_solve_a_tour() {
+    // 20 cities on a circle: the shortest tour visits them in circle order
+    const CITIES: usize = 20;
+    let position = |city: usize| {
+        let angle = std::f64::consts::TAU * city as f64 / CITIES as f64;
+        (angle.cos(), angle.sin())
+    };
+    let length = |tour: &Order| {
+        (0..CITIES)
+            .map(|i| {
+                let (a, b) = (position(tour[i]), position(tour[(i + 1) % CITIES]));
+                ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
+            })
+            .sum::<f64>()
+    };
+    let optimum = length(&Order::identity(CITIES));
+    for seed in 0..3 {
+        let ga = Ga::builder(Permutation::new(CITIES).unwrap())
+            .population_size(50)
+            .select(Tournament::new(3).unwrap())
+            .crossover(EdgeRecombinationCrossover)
+            .mutate(InversionMutation)
+            .mutation_rate(0.3)
+            .minimize()
+            .seed(seed)
+            .build()
+            .unwrap();
+        let outcome = Engine::new(ga, length)
+            .stop_when(Stop::target(optimum + 1e-9).or(Stop::generations(1_000)))
+            .run()
+            .unwrap();
+        assert_eq!(outcome.stop_reason(), StopReason::Target, "seed {seed}");
+    }
+}

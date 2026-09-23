@@ -62,6 +62,20 @@ impl Order {
     pub fn into_vec(self) -> Vec<usize> {
         self.genes
     }
+
+    // an ordering from genes that are known to be a permutation
+    pub(crate) fn from_permutation(genes: Vec<usize>) -> Self {
+        debug_assert!(
+            Self::new(genes.clone()).is_ok(),
+            "not a permutation: {genes:?}"
+        );
+        Self { genes }
+    }
+
+    // the genes, for changes that keep them a permutation (reverse, rotate, shuffle)
+    pub(crate) fn genes_mut(&mut self) -> &mut [usize] {
+        &mut self.genes
+    }
 }
 
 impl Deref for Order {
@@ -81,8 +95,9 @@ impl Genome for Order {
 /// Permutation genomes ([`Order`]) of `0..len`.
 ///
 /// Point and uniform crossover don't apply: exchanging genes by position would create
-/// duplicates. Use [`NoCrossover`](crate::operator::NoCrossover) with
-/// [`SwapMutation`](crate::operator::SwapMutation) until permutation crossovers arrive.
+/// duplicates. The [`permutation`](crate::operator::permutation) operators keep every child a
+/// permutation, e.g. [`OrderCrossover`](crate::operator::OrderCrossover) with
+/// [`InversionMutation`](crate::operator::InversionMutation).
 ///
 /// ```
 /// use genoxide::genome::{Permutation, Representation};
