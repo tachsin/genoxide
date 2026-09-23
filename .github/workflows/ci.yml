@@ -75,6 +75,9 @@ jobs:
           fi
           git checkout --quiet ${{ github.sha }}
       - name: Instruction counts
+        env:
+          # plain text for the job summary
+          GUNGRAUN_COLOR: never
         run: |
           set -o pipefail
           cargo bench --bench instructions -- $BASELINE | tee instructions.txt
