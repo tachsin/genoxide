@@ -1,7 +1,9 @@
 //! Crossover: recombining two genomes.
 
 use super::{Crossover, check_rate};
-use crate::genome::{Genome, Representation, SwapGenes};
+use crate::genome::{Genome, Real, Reals, Representation, SwapGenes};
+use crate::math::pow;
+use crate::rng::Chance;
 use crate::{Error, Result, StreamRng};
 
 /// k-point crossover: the genomes are cut at `k` random points and every other segment is
@@ -143,6 +145,175 @@ impl<R: Representation> Crossover<R> for NoCrossover {
     }
 }
 
+/// Simulated binary crossover (SBX) for [`Real`] genomes: Deb and Agrawal's bounded version, as in
+/// NSGA-II and pymoo.
+///
+/// Each gene is recombined with probability one half. The two child values are spread
+/// symmetrically around the parents' mean, like one-point crossover spreads bit strings, with the
+/// distribution index `eta` setting how far: the larger, the closer the children to their
+/// parents. Common values are 15 to 20 (and 20 for polynomial mutation, its usual partner). The
+/// children always stay within the bounds, and then each gene goes to either child with probability
+/// one half.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SimulatedBinaryCrossover {
+    eta: f64,
+}
+
+impl SimulatedBinaryCrossover {
+    /// SBX with distribution index `eta`, 0 or more and finite.
+    pub fn new(eta: f64) -> Result<Self> {
+        if eta >= 0.0 && eta.is_finite() {
+            Ok(Self { eta })
+        } else {
+            Err(Error::InvalidSetting {
+                setting: "sbx_eta",
+                reason: format!("must be 0 or more and finite, got {eta}"),
+            })
+        }
+    }
+
+    /// The distribution index.
+    pub fn eta(&self) -> f64 {
+        self.eta
+    }
+}
+
+// the spread factor of SBX for one side, from `beta` (1 or more) and a random number in [0, 1)
+fn sbx_spread(beta: f64, random: f64, eta: f64) -> f64 {
+    let alpha = 2.0 - pow(beta, -(eta + 1.0));
+    if random <= 1.0 / alpha {
+        pow(random * alpha, 1.0 / (eta + 1.0))
+    } else {
+        pow(1.0 / (2.0 - random * alpha), 1.0 / (eta + 1.0))
+    }
+}
+
+impl Crossover<Real> for SimulatedBinaryCrossover {
+    fn crossover(&self, representation: &Real, a: &mut Reals, b: &mut Reals, rng: &mut StreamRng) {
+        for (gene, range) in representation.bounds().iter().enumerate() {
+            if !rng.chance(Chance::Half) {
+                continue;
+            }
+            let (x, y) = (a[gene], b[gene]);
+            // equal genes have nothing to spread
+            if (x - y).abs() <= 1e-14 {
+                continue;
+            }
+            let (low, high) = (x.min(y), x.max(y));
+            let (start, end) = (*range.start(), *range.end());
+            let random = rng.unit_f64();
+            let spread_low = sbx_spread(1.0 + 2.0 * (low - start) / (high - low), random, self.eta);
+            let spread_high = sbx_spread(1.0 + 2.0 * (end - high) / (high - low), random, self.eta);
+            let first = (0.5 * ((low + high) - spread_low * (high - low))).clamp(start, end);
+            let second = (0.5 * ((low + high) + spread_high * (high - low))).clamp(start, end);
+            if rng.chance(Chance::Half) {
+                (a[gene], b[gene]) = (second, first);
+            } else {
+                (a[gene], b[gene]) = (first, second);
+            }
+        }
+    }
+}
+
+/// Blend crossover (BLX-α) for [`Real`] genomes: each child gene is uniformly random in the
+/// interval of the parents' genes, widened by `alpha` times its width on each side and limited to
+/// the bounds.
+///
+/// With `alpha` 0 the children stay between their parents, which narrows the population; 0.5 is
+/// the common choice, and keeps its spread on average.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BlendCrossover {
+    alpha: f64,
+}
+
+impl BlendCrossover {
+    /// BLX-α with `alpha`, 0 or more and finite.
+    pub fn new(alpha: f64) -> Result<Self> {
+        if alpha >= 0.0 && alpha.is_finite() {
+            Ok(Self { alpha })
+        } else {
+            Err(Error::InvalidSetting {
+                setting: "blend_alpha",
+                reason: format!("must be 0 or more and finite, got {alpha}"),
+            })
+        }
+    }
+
+    /// How far the interval is widened, as a fraction of its width.
+    pub fn alpha(&self) -> f64 {
+        self.alpha
+    }
+}
+
+impl Crossover<Real> for BlendCrossover {
+    fn crossover(&self, representation: &Real, a: &mut Reals, b: &mut Reals, rng: &mut StreamRng) {
+        for (gene, range) in representation.bounds().iter().enumerate() {
+            let (x, y) = (a[gene], b[gene]);
+            let widening = self.alpha * (x - y).abs();
+            let low = (x.min(y) - widening).max(*range.start());
+            let high = (x.max(y) + widening).min(*range.end());
+            let interval = low..=high;
+            a[gene] = crate::genome::real::random_in(&interval, rng);
+            b[gene] = crate::genome::real::random_in(&interval, rng);
+        }
+    }
+}
+
+/// Arithmetic (whole) crossover for [`Real`] genomes: the children are weighted averages of their
+/// parents, `w a + (1 - w) b` and `(1 - w) a + w b`.
+///
+/// The weight is random for every crossover by default, or fixed. The children are always between
+/// their parents, so this narrows the population: pair it with a mutation that explores.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ArithmeticCrossover {
+    weight: Option<f64>,
+}
+
+impl ArithmeticCrossover {
+    /// Arithmetic crossover with a random weight in [0, 1) for every crossover.
+    pub fn new() -> Self {
+        Self { weight: None }
+    }
+
+    /// Arithmetic crossover with a fixed `weight`, greater than 0 and less than 1, but not 0.5,
+    /// which would give two identical children.
+    pub fn with_weight(weight: f64) -> Result<Self> {
+        if weight > 0.0 && weight < 1.0 && weight != 0.5 {
+            Ok(Self {
+                weight: Some(weight),
+            })
+        } else {
+            Err(Error::InvalidSetting {
+                setting: "arithmetic_weight",
+                reason: format!("must be greater than 0, less than 1 and not 0.5, got {weight}"),
+            })
+        }
+    }
+
+    /// The fixed weight, or `None` for a random one.
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+}
+
+impl Default for ArithmeticCrossover {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Crossover<Real> for ArithmeticCrossover {
+    fn crossover(&self, representation: &Real, a: &mut Reals, b: &mut Reals, rng: &mut StreamRng) {
+        let weight = self.weight.unwrap_or_else(|| rng.unit_f64());
+        for (gene, range) in representation.bounds().iter().enumerate() {
+            let (x, y) = (a[gene], b[gene]);
+            // rounding can leave a convex combination a hair outside the bounds
+            a[gene] = (weight * x + (1.0 - weight) * y).clamp(*range.start(), *range.end());
+            b[gene] = ((1.0 - weight) * x + weight * y).clamp(*range.start(), *range.end());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,6 +342,44 @@ mod tests {
     }
 
     #[test]
+    fn real_crossover_validation() {
+        assert!(SimulatedBinaryCrossover::new(-1.0).is_err());
+        assert!(SimulatedBinaryCrossover::new(f64::NAN).is_err());
+        assert!(BlendCrossover::new(-0.1).is_err());
+        assert!(ArithmeticCrossover::with_weight(0.5).is_err());
+        assert!(ArithmeticCrossover::with_weight(1.0).is_err());
+        assert!(ArithmeticCrossover::with_weight(0.3).is_ok());
+    }
+
+    #[test]
+    fn sbx_spread_shrinks_with_eta() {
+        // the average distance of a child gene from its nearest parent gene
+        let distance = |eta| {
+            let real = Real::uniform(1, -100.0..=100.0).unwrap();
+            let crossover = SimulatedBinaryCrossover::new(eta).unwrap();
+            let mut rng = StreamRng::seed_from_u64(0);
+            let mut total = 0.0;
+            for _ in 0..20_000 {
+                let (mut a, mut b) = (Reals::from(vec![-1.0]), Reals::from(vec![1.0]));
+                crossover.crossover(&real, &mut a, &mut b, &mut rng);
+                total += (a[0].abs() - 1.0).abs() + (b[0].abs() - 1.0).abs();
+            }
+            total / 40_000.0
+        };
+        let distances = [
+            distance(0.0),
+            distance(2.0),
+            distance(20.0),
+            distance(200.0),
+        ];
+        assert!(
+            distances.windows(2).all(|pair| pair[0] > pair[1]),
+            "{distances:?}"
+        );
+        assert!(distances[3] < 0.01, "{distances:?}");
+    }
+
+    #[test]
     fn uniform_rate() {
         let binary = Binary::new(1_000).unwrap();
         let mut rng = StreamRng::seed_from_u64(0);
@@ -190,7 +399,53 @@ mod tests {
         }
     }
 
+    fn real_parents(len: usize, seed: u64) -> (Real, Reals, Reals, StreamRng) {
+        let real = Real::new((0..len).map(|gene| -(gene as f64)..=gene as f64 + 1.0)).unwrap();
+        let mut rng = StreamRng::seed_from_u64(seed);
+        let a = real.random_genome(&mut rng);
+        let b = real.random_genome(&mut rng);
+        (real, a, b, rng)
+    }
+
     proptest! {
+        #[test]
+        fn real_crossovers_stay_in_bounds(len in 1usize..30, eta in 0.0..100.0f64, alpha in 0.0..2.0f64, seed: u64) {
+            let (real, a, b, mut rng) = real_parents(len, seed);
+            let (mut x, mut y) = (a.clone(), b.clone());
+            SimulatedBinaryCrossover::new(eta).unwrap().crossover(&real, &mut x, &mut y, &mut rng);
+            prop_assert!(real.validate(&x).is_ok() && real.validate(&y).is_ok());
+            // genes are only recombined per gene: each child gene is between the bounds, and equal
+            // parent genes stay
+            let (mut x, mut y) = (a.clone(), a.clone());
+            SimulatedBinaryCrossover::new(eta).unwrap().crossover(&real, &mut x, &mut y, &mut rng);
+            prop_assert_eq!(&x, &a);
+            prop_assert_eq!(&y, &a);
+
+            let (mut x, mut y) = (a.clone(), b.clone());
+            BlendCrossover::new(alpha).unwrap().crossover(&real, &mut x, &mut y, &mut rng);
+            prop_assert!(real.validate(&x).is_ok() && real.validate(&y).is_ok());
+            for gene in 0..len {
+                let widening = alpha * (a[gene] - b[gene]).abs();
+                for child in [x[gene], y[gene]] {
+                    prop_assert!(child >= a[gene].min(b[gene]) - widening);
+                    prop_assert!(child <= a[gene].max(b[gene]) + widening);
+                }
+            }
+
+            let (mut x, mut y) = (a.clone(), b.clone());
+            ArithmeticCrossover::new().crossover(&real, &mut x, &mut y, &mut rng);
+            prop_assert!(real.validate(&x).is_ok() && real.validate(&y).is_ok());
+            for gene in 0..len {
+                // the children are between the parents, and keep their sum
+                for child in [x[gene], y[gene]] {
+                    // up to rounding
+                    prop_assert!(child >= a[gene].min(b[gene]) - 1e-12);
+                    prop_assert!(child <= a[gene].max(b[gene]) + 1e-12);
+                }
+                prop_assert!((x[gene] + y[gene] - a[gene] - b[gene]).abs() < 1e-9);
+            }
+        }
+
         #[test]
         fn point_crossover(len in 1usize..200, points in 1usize..6, seed: u64) {
             let binary = Binary::new(len).unwrap();

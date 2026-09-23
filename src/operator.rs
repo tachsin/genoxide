@@ -7,7 +7,10 @@ pub mod crossover;
 pub mod mutate;
 pub mod select;
 
-pub use crossover::{NoCrossover, PointCrossover, UniformCrossover};
+pub use crossover::{
+    ArithmeticCrossover, BlendCrossover, NoCrossover, PointCrossover, SimulatedBinaryCrossover,
+    UniformCrossover,
+};
 pub use mutate::{BitFlip, GaussianMutation, PolynomialMutation, SwapMutation, UniformMutation};
 pub use select::{
     RandomSelection, Rank, Roulette, StochasticUniversalSampling, Tournament, Truncation,
@@ -41,7 +44,7 @@ pub trait Select: Clone + Debug + Send + Sync {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a crossover for `{R}`",
     label = "not a crossover for `{R}`",
-    note = "set the crossover with `.crossover(...)`; point and uniform crossover need genomes that implement `SwapGenes`, and `NoCrossover` fits every genome"
+    note = "set the crossover with `.crossover(...)`; point and uniform crossover need genomes that implement `SwapGenes`, SBX, blend and arithmetic crossover are for `Real`, and `NoCrossover` fits every genome"
 )]
 pub trait Crossover<R: Representation>: Clone + Debug + Send + Sync {
     /// Recombines `a` and `b`, which become the two children.
