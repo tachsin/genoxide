@@ -71,9 +71,10 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 
 #### Project
 - [ ] CI: build, test, clippy, fmt, rustdoc (`-D warnings`) on Linux, macOS, Windows; MSRV job; single-thread rayon job
-- [ ] `#![forbid(unsafe_code)]`, `#![warn(missing_docs)]`
+- [x] `#![forbid(unsafe_code)]`, `#![warn(missing_docs)]`
 - [ ] Benchmark suite in [`benchmarks/`](benchmarks/) (DEAP, pymoo, PyGAD, genetic_algorithm)
-- [ ] Contributing guide, issue and PR templates
+- [x] Contributing guide, issue and PR templates
+- [x] Versioning policy and automated releases (release-plz, cargo-semver-checks, changelog from PR titles)
 
 #### Core types
 - [ ] Error enum (`thiserror`-style, no panics in library code)

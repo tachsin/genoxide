@@ -1,0 +1,21 @@
+name: Feature request
+description: An algorithm, operator or improvement you'd like to see
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Use case
+      description: What are you trying to do, and what's missing or hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How it could work, references (papers, other libraries) welcome.
+  - type: input
+    id: roadmap
+    attributes:
+      label: Roadmap item
+      description: The related ROADMAP.md item, if any.

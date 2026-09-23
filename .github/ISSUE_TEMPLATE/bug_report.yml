@@ -1,0 +1,26 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: A small code example, including the seed if randomness is involved.
+      render: rust
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: genoxide version
+      placeholder: e.g. 0.1.0 or a commit hash
+    validations:
+      required: true

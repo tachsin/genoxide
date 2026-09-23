@@ -89,7 +89,7 @@ genoxide's own performance will be guarded in CI with [iai-callgrind](https://gi
 
 ## Contributing
 
-genoxide is at the design stage, which is the best time to shape it. Open an issue for ideas, use cases or API feedback.
+genoxide is at the design stage, which is the best time to shape it. Open an issue for ideas, use cases or API feedback, and see [CONTRIBUTING.md](CONTRIBUTING.md) for pull requests, versioning and releases.
 
 ## License
 

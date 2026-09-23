@@ -1,0 +1,29 @@
+# Releases: see CONTRIBUTING.md ("Versioning and releases")
+[workspace]
+# versions come from git tags until genoxide is published on crates.io (switch at 0.1)
+git_only = true
+publish = false
+# cargo-semver-checks: a breaking public API change requires a breaking version bump
+semver_check = true
+changelog_update = true
+git_release_enable = true
+pr_labels = ["release"]
+# only release when the release PR is merged
+release_always = false
+
+[changelog]
+protect_breaking_commits = true
+sort_commits = "oldest"
+# link "(#12)" of squash merged PRs, in the CHANGELOG.md file as well
+commit_preprocessors = [
+  { pattern = '\(#([0-9]+)\)', replace = "([#${1}](https://github.com/tachsin/genoxide/pull/${1}))" },
+]
+commit_parsers = [
+  { message = "^feat", group = "Added" },
+  { message = "^fix", group = "Fixed" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Changed" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^(test|ci|build|chore|style)", skip = true },
+  { message = ".*", group = "Other" },
+]
