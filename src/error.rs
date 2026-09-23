@@ -23,6 +23,11 @@ pub enum Error {
     },
     /// A fitness value is NaN, see [`Fitness::try_new`](crate::Fitness::try_new).
     NanFitness,
+    /// A genome doesn't belong to its representation, e.g. a seed of the wrong length.
+    InvalidGenome {
+        /// Why the genome is invalid, e.g. `"expected 10 bits, got 9"`.
+        reason: String,
+    },
 }
 
 impl fmt::Display for Error {
@@ -33,6 +38,7 @@ impl fmt::Display for Error {
                 write!(f, "invalid setting `{setting}`: {reason}")
             }
             Error::NanFitness => write!(f, "fitness value is NaN"),
+            Error::InvalidGenome { reason } => write!(f, "invalid genome: {reason}"),
         }
     }
 }
@@ -64,6 +70,13 @@ mod tests {
             "invalid setting `crossover_rate`: must be between 0 and 1, got 1.5"
         );
         assert_eq!(Error::NanFitness.to_string(), "fitness value is NaN");
+        assert_eq!(
+            Error::InvalidGenome {
+                reason: "expected 10 bits, got 9".to_string()
+            }
+            .to_string(),
+            "invalid genome: expected 10 bits, got 9"
+        );
     }
 
     #[test]

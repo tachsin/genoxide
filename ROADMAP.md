@@ -80,11 +80,11 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Error enum (no panics in library code)
 - [x] Rng: portable, seedable generator (same results on every platform) with derived streams per run / island / worker
 - [x] Fitness: `f64` with a total ordering, `Invalid` state, NaN policy, maximize / minimize
-- [ ] Individual (genome, fitness, age) and Population
+- [x] Individual (genome, fitness, age) and Population
 
 #### Genomes
-- [ ] `Genome` trait
-- [ ] Binary, bit-packed
+- [x] `Genome` trait
+- [x] Binary, bit-packed
 - [ ] Integer, bounded per gene
 - [ ] Real, bounded per gene
 - [ ] Permutation
