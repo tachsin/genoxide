@@ -364,3 +364,43 @@ fn feasibility_rules_solve_a_knapsack() {
     assert_eq!(outcome.stop_reason(), StopReason::Target);
     assert!(outcome.best_fitness().is_feasible());
 }
+
+#[test]
+fn self_adaptation_fine_tunes_where_a_fixed_step_cannot() {
+    let sphere = |x: &[f64]| x.iter().map(|xi| xi * xi).sum::<f64>();
+    // a (15,100)-ES with self-adaptation
+    let es = Ga::builder(AdaptiveReal::new(Real::uniform(10, -5.0..=5.0).unwrap(), 0.3).unwrap())
+        .population_size(15)
+        .select(Tournament::new(2).unwrap())
+        .crossover(NoCrossover)
+        .mutate(SelfAdaptiveMutation::new())
+        .scheme(Scheme::MuCommaLambda { lambda: 100 })
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(es, |genome: &AdaptiveReals| sphere(genome))
+        .stop_when(Stop::target(1e-8).or(Stop::evaluations(50_000)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    // the step size shrank by itself, from 0.3
+    assert!(outcome.best_genome().step() < 1e-4);
+
+    // the same with a fixed step: stuck far from 1e-8
+    let fixed = Ga::builder(Real::uniform(10, -5.0..=5.0).unwrap())
+        .population_size(15)
+        .select(Tournament::new(2).unwrap())
+        .crossover(NoCrossover)
+        .mutate(GaussianMutation::per_gene(1.0, 0.03).unwrap())
+        .scheme(Scheme::MuCommaLambda { lambda: 100 })
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(fixed, |genome: &Reals| sphere(genome))
+        .stop_when(Stop::target(1e-8).or(Stop::evaluations(50_000)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Evaluations);
+}

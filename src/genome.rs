@@ -10,12 +10,15 @@
 //! | [`Integer`] | [`Integers`] | `i64`, inclusive bounds per gene |
 //! | [`Real`] | [`Reals`] | `f64`, inclusive finite bounds per gene |
 //! | [`Permutation`] | [`Order`] | an ordering of `0..n` |
+//! | [`AdaptiveReal`] | [`AdaptiveReals`] | `f64` like [`Real`], plus a mutation step size |
 
+pub mod adaptive;
 pub mod binary;
 pub mod integer;
 pub mod permutation;
 pub mod real;
 
+pub use adaptive::{AdaptiveReal, AdaptiveReals};
 pub use binary::{Binary, Bits};
 pub use integer::{Integer, Integers};
 pub use permutation::{Order, Permutation};
