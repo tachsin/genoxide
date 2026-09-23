@@ -119,28 +119,19 @@ They all use the same problems, the same fitness functions and the same evaluati
 
 genoxide's own performance is guarded in CI with [gungraun](https://github.com/gungraun/gungraun) (formerly iai-callgrind) instruction-count benchmarks: every PR shows its effect on the hot paths, and more than 5% more instructions fails CI.
 
-### First results (preliminary)
+### Results
 
-A first, small run: the quick scenarios, 3 seeds, one Windows machine, single-threaded. The full suite on Linux, with Callgrind instruction counts, comes next. The code and the commands are in [`benchmarks/`](benchmarks/).
+Linux, Intel Core Ultra 7 265K, single-threaded, 10 seeds per scenario, genoxide at the 0.2 development version. Every library runs with the same fitness functions and evaluation budgets, in the configurations described in [`benchmarks/`](benchmarks/): "matched" as equal as the libraries allow, "idiomatic" as each library recommends. The numbers behind the charts are in [docs/benchmarks/results.md](docs/benchmarks/results.md).
 
-| Scenario | Library / solver | Success | Median time to target | Median evaluations | Evaluations/s |
-|---|---|---|---|---|---|
-| OneMax 100, matched | **genoxide** / GA | 3/3 | **1.4 ms** | 5,202 | **3.9 M** |
-| | genetic_algorithm / evolve | 3/3 | 3.9 ms | 9,856 | 2.6 M |
-| | DEAP / GA | 3/3 | 224 ms | 7,035 | 31 k |
-| | pymoo / GA | 3/3 | 198 ms | 10,500 | 52 k |
-| | PyGAD / GA | 3/3 | 143 ms | 6,900 | 49 k |
-| OneMax 100, idiomatic | **genoxide** / GA | 3/3 | 1.2 ms | 4,650 | **3.8 M** |
-| | genetic_algorithm / evolve | 3/3 | **0.5 ms** | 1,939 | 3.7 M |
-| | DEAP / GA | 3/3 | 290 ms | 9,030 | 31 k |
-| N-Queens 32 | **genoxide** / GA | 3/3 | 0.50 ms | 1,998 | 3.9 M |
-| | genetic_algorithm / hill climb | 3/3 | **0.43 ms** | 1,848 | **4.2 M** |
-| | DEAP / GA | 3/3 | 867 ms | 40,113 | 47 k |
-| Rastrigin 10 (≤ 0.01) | **genoxide** / GA | 0/3 (0.030) | - | 500,150 | 4.3 M |
-| | genetic_algorithm / evolve | 3/3 | **10 ms** | 47,526 | **5.0 M** |
-| | DEAP / CMA-ES | 3/3 | 67 ms | 15,200 | 222 k |
+![CPU instructions per evaluation](docs/benchmarks/instructions.svg)
 
-genoxide has the highest throughput on OneMax and is close to genetic_algorithm elsewhere, with 45 to 130 times more evaluations per second than the Python GAs. Its 0.1 real-valued operators are basic: uniform mutation finds the right basin but doesn't fine-tune, so it misses the Rastrigin target. The Gaussian and polynomial mutations of 0.2 are meant to fix that.
+![Median time to target](docs/benchmarks/time_to_target.svg)
+
+![Evaluations per second](docs/benchmarks/throughput.svg)
+
+- **Cost per evaluation:** genoxide needs about 3,400 CPU instructions per OneMax 1000 evaluation, fitness function included: 2.6 times fewer than genetic_algorithm, and 300 to 1,300 times fewer than pymoo, PyGAD and DEAP.
+- **Time to target:** genoxide is the fastest on OneMax (matched), on N-Queens, where its local search beats every other solver, and on Rastrigin 30: 0.5 s, against 1.7 s for pymoo's GA. It's second on OneMax (idiomatic) and Rastrigin 10, after genetic_algorithm. On Rastrigin 30 it reaches the target on 9 of 10 seeds.
+- **Where it's weaker:** search efficiency on real-valued problems. pymoo's GA needs 16 times fewer evaluations on Rastrigin 10 (11,700 against 193,000); genoxide is faster than it there only because each evaluation is so cheap. With an expensive fitness function, the evaluations count more than the framework's speed. Evolution strategies and better real-valued defaults are next on the [roadmap](ROADMAP.md).
 
 ## Contributing
 

@@ -322,7 +322,8 @@ def draw_charts(results, out_dir):
             axis.set_yticks(list(positions), labels)
             axis.set_xscale("log")
             if present:
-                axis.set_xlim(min(present) / 3, max(present) * 12)
+                # room on the right for the labels
+                axis.set_xlim(min(present) / 3, max(present) * 60)
             for position, row, v in zip(positions, group, values):
                 text = formatter(v) if v else missing(row)
                 if v and row["success_rate"] < 1 and name == "time_to_target":
@@ -495,7 +496,8 @@ def main():
     header = [f"# Results {timestamp}", "", f"Seeds per scenario: {seeds}, wall time cap per run: {max_seconds} s", platform, ""]
     header += [f"- {name} {version}" for name, version in versions.items()] + [""]
     table = markdown_table(rows)
-    (results / "latest.md").write_text("\n".join(header) + table + "\n", encoding="utf-8")
+    # a blank line between the list and the table, or the table becomes part of the list
+    (results / "latest.md").write_text("\n".join(header) + "\n" + table + "\n", encoding="utf-8")
     print()
     print(table)
     draw_charts_of(results_file, args.charts)
