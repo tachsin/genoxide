@@ -28,6 +28,17 @@ pub enum Error {
         /// Why the genome is invalid, e.g. `"expected 10 bits, got 9"`.
         reason: String,
     },
+    /// [`tell`](crate::algorithm::Algorithm::tell) was called without a preceding
+    /// [`ask`](crate::algorithm::Algorithm::ask).
+    TellWithoutAsk,
+    /// [`tell`](crate::algorithm::Algorithm::tell) got a different number of fitness values than
+    /// [`ask`](crate::algorithm::Algorithm::ask) gave genomes.
+    FitnessCount {
+        /// The number of genomes asked for.
+        expected: usize,
+        /// The number of fitness values told.
+        got: usize,
+    },
 }
 
 impl fmt::Display for Error {
@@ -39,6 +50,10 @@ impl fmt::Display for Error {
             }
             Error::NanFitness => write!(f, "fitness value is NaN"),
             Error::InvalidGenome { reason } => write!(f, "invalid genome: {reason}"),
+            Error::TellWithoutAsk => write!(f, "`tell` was called without a preceding `ask`"),
+            Error::FitnessCount { expected, got } => {
+                write!(f, "expected {expected} fitness values, got {got}")
+            }
         }
     }
 }
@@ -76,6 +91,14 @@ mod tests {
             }
             .to_string(),
             "invalid genome: expected 10 bits, got 9"
+        );
+        assert_eq!(
+            Error::FitnessCount {
+                expected: 3,
+                got: 2
+            }
+            .to_string(),
+            "expected 3 fitness values, got 2"
         );
     }
 

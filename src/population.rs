@@ -63,6 +63,11 @@ impl<G: Genome> Population<G> {
         self.individuals.push(individual);
     }
 
+    /// Keeps the first `len` individuals and drops the rest. No effect if there are fewer.
+    pub fn truncate(&mut self, len: usize) {
+        self.individuals.truncate(len);
+    }
+
     /// The individuals as a slice.
     pub fn as_slice(&self) -> &[Individual<G>] {
         &self.individuals
@@ -109,6 +114,19 @@ impl<G: Genome> Population<G> {
                 (None, Some(_)) => Ordering::Greater,
                 (None, None) => Ordering::Equal,
             });
+    }
+}
+
+impl<G: Genome> Default for Population<G> {
+    /// An empty population.
+    fn default() -> Self {
+        Self::new(Vec::new())
+    }
+}
+
+impl<G: Genome> Extend<Individual<G>> for Population<G> {
+    fn extend<I: IntoIterator<Item = Individual<G>>>(&mut self, iter: I) {
+        self.individuals.extend(iter);
     }
 }
 

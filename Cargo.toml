@@ -16,6 +16,12 @@ publish = false
 [dependencies]
 rand = "0.10"
 rand_chacha = "0.10"
+rayon = { version = "1.12", optional = true }
+
+[features]
+default = ["parallel"]
+# parallel fitness evaluation with rayon
+parallel = ["dep:rayon"]
 
 [dev-dependencies]
 proptest = "1"

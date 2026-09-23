@@ -70,7 +70,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 ### 0.1: Foundations
 
 #### Project
-- [ ] CI: build, test, clippy, fmt, rustdoc (`-D warnings`) on Linux, macOS, Windows; MSRV job; single-thread rayon job
+- [x] CI: build, test, clippy, fmt, rustdoc (`-D warnings`) on Linux, macOS, Windows; MSRV job; single-thread rayon job
 - [x] `#![forbid(unsafe_code)]`, `#![warn(missing_docs)]`
 - [ ] Benchmark suite in [`benchmarks/`](benchmarks/) (DEAP, pymoo, PyGAD, genetic_algorithm)
 - [x] Contributing guide, issue and PR templates
@@ -106,17 +106,17 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [ ] Swap (permutation)
 
 #### Engine
-- [ ] Ask / tell core
-- [ ] Generational GA, steady-state GA, (μ+λ) and (μ,λ)
-- [ ] Elitism
-- [ ] Termination: target, generations, evaluations, time, stagnation, custom, combinations
-- [ ] Parallel evaluation (rayon), deterministic regardless of thread count
-- [ ] Cancellation (abort flag)
-- [ ] Builder with validation (every invalid configuration is an error)
+- [x] Ask / tell core
+- [x] Generational GA, steady-state GA, (μ+λ) and (μ,λ)
+- [x] Elitism
+- [x] Termination: target, generations, evaluations, time, stagnation, custom, combinations
+- [x] Parallel evaluation (rayon), deterministic regardless of thread count
+- [x] Cancellation (abort flag)
+- [x] Builder with validation (every invalid configuration is an error)
 
 #### Observers
-- [ ] Statistics per generation (best, mean, stddev, diversity, timings)
-- [ ] Hall of fame (top-k unique)
+- [x] Statistics per generation (best, mean, stddev, diversity, timings)
+- [x] Hall of fame (top-k unique)
 
 #### Docs and examples
 - [ ] API docs for everything public, with doctests

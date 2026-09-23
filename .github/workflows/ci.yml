@@ -23,6 +23,19 @@ jobs:
       - run: cargo build --all-targets
       - run: cargo test
 
+  features:
+    name: Features and single thread
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --no-default-features
+      # parallel code must not rely on having more than one thread
+      - run: cargo test
+        env:
+          RAYON_NUM_THREADS: 1
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
