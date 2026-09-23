@@ -70,9 +70,27 @@ fn proportional_weights<G: Genome>(
     population: &Population<G>,
     objective: Objective,
 ) -> Option<Vec<f64>> {
-    let scores: Vec<Option<f64>> = (0..population.len())
+    let mut scores: Vec<Option<f64>> = (0..population.len())
         .map(|index| fitness_of(population, index).score())
         .collect();
+    // Huge finite scores could make a difference to the worst, or the sum of the weights,
+    // overflow. Scaling every score by a power of two keeps their proportions exact and makes
+    // both impossible: each weight is then at most twice the largest score.
+    let limit = f64::MAX / (4.0 * population.len() as f64);
+    let largest = scores
+        .iter()
+        .flatten()
+        .filter(|score| score.is_finite())
+        .fold(0.0, |largest: f64, score| largest.max(score.abs()));
+    if largest >= limit {
+        let mut scale = 1.0;
+        while largest * scale >= limit {
+            scale *= 1.0 / (1u64 << 32) as f64;
+        }
+        for score in scores.iter_mut().flatten() {
+            *score *= scale;
+        }
+    }
     let worst = scores.iter().flatten().copied().reduce(|a, b| {
         if objective.is_better(Fitness::new(a), Fitness::new(b)) {
             b
@@ -473,6 +491,25 @@ mod tests {
             1_000,
         );
         assert_eq!(counts, vec![0, 1_000, 0]);
+    }
+
+    #[test]
+    fn huge_finite_scores_keep_their_proportions() {
+        // weights 2 * MAX and MAX would overflow without scaling
+        let scores = [Some(f64::MAX), Some(-f64::MAX), Some(0.0)];
+        for select in [
+            counts(&Roulette, &scores, Objective::Maximize, 30_000),
+            counts(
+                &StochasticUniversalSampling,
+                &scores,
+                Objective::Maximize,
+                30_000,
+            ),
+        ] {
+            assert_eq!(select[1], 0);
+            assert!((19_500..20_500).contains(&select[0]), "{select:?}");
+            assert!((9_500..10_500).contains(&select[2]), "{select:?}");
+        }
     }
 
     #[test]
