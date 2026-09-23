@@ -126,26 +126,53 @@ A review of existing libraries found bugs that genoxide must rule out by design 
 - **CI:** Linux, macOS and Windows; stable plus MSRV; clippy, fmt and rustdoc with `-D warnings`; a single-thread rayon job.
 - **Property-based tests (proptest)** for every operator: validity, e.g. permutations stay permutations; bounds; no no-op; exact rates.
 - **Fuzzing** of builders and the configuration file format.
-- **Performance:** criterion benchmarks, with regression gating in CI.
+- **Performance:** from 0.1 on, every hot path has benchmarks, in two forms:
+  - criterion benchmarks for wall time
+  - iai-callgrind for exact instruction counts, which are noise-free and fail CI on regressions
+- **Safety:** `#![forbid(unsafe_code)]` by default. Any `unsafe` for SIMD or bit tricks goes behind a feature, with a `SAFETY` comment and Miri tests.
 - **Docs:** doctests for all examples, including the AI-agent guide.
 
 ## Benchmarks
 
-A separate, public benchmark suite runs every library on the same problems, with the same fitness functions and budgets:
+The benchmark suite (`ga-benchmarks`) runs every library on the same problems, with identical fitness functions and evaluation budgets. It is the main way to show Rust's advantages, so it is published and kept up to date for every release.
+
+### Problems
 
 - **Binary:** OneMax, LeadingOnes, deceptive trap, NK landscapes, knapsack.
 - **Permutation:** N-Queens, TSPLIB, QAP, flow shop.
 - **Continuous:** BBOB / COCO functions (Rastrigin, Rosenbrock, Ackley, …) in 10–100 dimensions.
 - **Multi-objective:** ZDT, DTLZ, WFG.
 
-**Libraries:** DEAP, pymoo, PyGAD, EvoX, Nevergrad, pycma, Jenetics, pagmo, and in Rust radiate, moors and genetic_algorithm.
+### Libraries
 
-**Metrics:**
-- success rate
-- time and evaluations to target
-- quality at a fixed budget
-- evaluations per second
-- peak memory
+| Language | Libraries |
+|---|---|
+| Python | DEAP, pymoo, PyGAD, EvoX, Nevergrad, pycma, geatpy |
+| Java | Jenetics, jMetal, MOEA Framework |
+| C++ | pagmo2, openGA, ParadisEO |
+| C# | GeneticSharp |
+| Julia | Evolutionary.jl, Metaheuristics.jl |
+| Rust | radiate, moors, genetic_algorithm, genevo, oxigen |
+
+### Measurements
+
+- **Success rate and time to target:** the user-facing result.
+- **Evaluations to target:** search efficiency, independent of language.
+- **Evaluations per second:** framework throughput.
+- **Instructions per evaluation:** measured with Callgrind as (I(2N) − I(N)) / N, so interpreter startup and setup cancel out. Exact and repeatable across languages.
+- **Peak memory**, and scaling with population size, genome size and threads (parallel speedup).
+
+### Two modes
+
+- **matched:** configurations as equal as the libraries allow, to measure framework cost.
+- **idiomatic:** each library's recommended setup, to measure what users actually get.
+
+### Output
+
+Every run records the library versions. It writes:
+- raw JSON
+- a markdown table
+- graphs: time to target on a log scale, evaluations per second, instructions per evaluation, success rate, convergence curves
 
 ## Not planned (for now)
 
