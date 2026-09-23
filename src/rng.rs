@@ -74,10 +74,14 @@ const DERIVE_WORD_POS: u128 = 1 << 64;
 // Sampling used by genoxide itself. Only integer arithmetic and exact conversions, so the results
 // are the same on every platform, and don't change when rand changes its sampling algorithms.
 impl StreamRng {
-    /// A uniformly random integer in `0..n` (Lemire's method, unbiased). `n` must not be 0.
+    /// A uniformly random integer in `0..n`. `n` must not be 0.
     pub(crate) fn below(&mut self, n: usize) -> usize {
+        self.below_u64(n as u64) as usize
+    }
+
+    /// A uniformly random integer in `0..n` (Lemire's method, unbiased). `n` must not be 0.
+    pub(crate) fn below_u64(&mut self, n: u64) -> u64 {
         debug_assert!(n > 0, "below(0)");
-        let n = n as u64;
         let mut product = u128::from(self.next_u64()) * u128::from(n);
         if (product as u64) < n {
             let threshold = n.wrapping_neg() % n;
@@ -85,7 +89,7 @@ impl StreamRng {
                 product = u128::from(self.next_u64()) * u128::from(n);
             }
         }
-        (product >> 64) as usize
+        (product >> 64) as u64
     }
 
     /// A uniformly random `f64` in `[0, 1)`, with 53 random bits.
