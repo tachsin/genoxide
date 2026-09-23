@@ -4,8 +4,8 @@
 
 Genetic algorithms, evolution strategies, multi-objective optimization, swarm and local search, all in one library.
 
-> **🚧 Pre-alpha.** There is nothing to install yet. We're designing the API in the open.
-> See the [roadmap](ROADMAP.md) and share your ideas in the issues.
+> **🚧 Pre-alpha.** Not on crates.io yet: 0.1 is being built in the open, and the API will
+> change. See the [roadmap](ROADMAP.md) and share your ideas in the issues.
 
 ## Why genoxide?
 
@@ -32,31 +32,56 @@ genoxide is built to show what Rust brings to evolutionary computation. Every cl
 
 ## A first look
 
-This is the planned API, and it will change:
-
 ```rust
 use genoxide::prelude::*;
 
-let result = Ga::builder()
-    .genome(Binary::new(100))
-    .fitness(|genes: &Bits| genes.count_ones() as f64)
-    .maximize()
-    .population(200)
-    .select(Tournament::new(3))
-    .crossover(Uniform::new(0.5))
-    .mutate(BitFlip::per_gene(0.01))
-    .stop_when(Target(100.0).or(Generations(1_000)))
-    .seed(42)
-    .run()?;
+fn main() -> genoxide::Result<()> {
+    // OneMax: find the 100-bit string with the most ones
+    let ga = Ga::builder(Binary::new(100)?)
+        .population_size(100)
+        .select(Tournament::new(3)?)
+        .crossover(UniformCrossover::new())
+        .mutate(BitFlip::per_gene(0.01)?)
+        .seed(42)
+        .build()?;
 
-println!("best: {} after {} generations", result.best_fitness(), result.generations());
+    let outcome = Engine::new(ga, |genome: &Bits| genome.count_ones() as f64)
+        .stop_when(Stop::target(100.0).or(Stop::generations(1_000)))
+        .run()?;
+
+    println!("best: {} after {} generations", outcome.best_fitness(), outcome.generations());
+    Ok(())
+}
 ```
+
+A missing operator, or one that doesn't fit the genome, is a compile error that says what to set. Invalid settings are errors from `build()`, before anything runs.
+
+### What's there so far
+
+- **Genomes:** binary (bit-packed), integer and real (bounded per gene), permutation
+- **Selection:** tournament, roulette, stochastic universal sampling, rank, truncation, random
+- **Crossover:** one-point, two-point, k-point, uniform
+- **Mutation:** bit-flip, uniform, swap (every mutation changes the genome)
+- **Schemes:** generational with elitism, steady-state, (μ+λ), (μ,λ)
+- **Engine:** ask / tell core, stop conditions (target, generations, evaluations, time, stagnation, custom, combined), parallel evaluation with the same results as sequential, abort flag, NaN policy
+- **Observers:** statistics per generation, hall of fame, closures
+
+### Examples
+
+```text
+cargo run --release --example one_max     # binary, statistics
+cargo run --release --example knapsack    # constraints as invalid solutions, hall of fame
+cargo run --release --example n_queens    # permutation, (μ+λ)
+cargo run --release --example rastrigin   # real-valued, parallel evaluation
+```
+
+Using an AI coding assistant? Point it to [AGENTS.md](AGENTS.md): it has the decision tables, settings, templates and fixes for common errors.
 
 ## Status
 
 | Milestone | Scope | Status |
 |---|---|---|
-| 0.1 Foundations | Core engine, representations, classic operators, statistics | 🔜 next |
+| 0.1 Foundations | Core engine, representations, classic operators, statistics | 🚧 in progress |
 | 0.2 Real-valued & permutations | SBX, polynomial, PMX, OX, 2-opt, local search, memetic | planned |
 | 0.3 Evolution strategies & swarm | CMA-ES, DE (JADE, SHADE), PSO, (μ,λ) and (μ+λ)-ES | planned |
 | 0.4 Multi-objective | NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA, hypervolume | planned |
@@ -89,7 +114,7 @@ genoxide's own performance will be guarded in CI with [iai-callgrind](https://gi
 
 ## Contributing
 
-genoxide is at the design stage, which is the best time to shape it. Open an issue for ideas, use cases or API feedback, and see [CONTRIBUTING.md](CONTRIBUTING.md) for pull requests, versioning and releases.
+genoxide is at an early stage, which is the best time to shape it. Open an issue for ideas, use cases or API feedback, and see [CONTRIBUTING.md](CONTRIBUTING.md) for pull requests, versioning and releases.
 
 ## License
 

@@ -2,6 +2,7 @@
 
 use crate::error::{Error, Result};
 use std::cmp::Ordering;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 
 /// Whether a higher or a lower fitness score is better.
@@ -102,6 +103,23 @@ impl Fitness {
     /// Whether this fitness has a score.
     pub fn is_valid(self) -> bool {
         self.score.is_some()
+    }
+}
+
+impl fmt::Display for Fitness {
+    /// The score, formatted like an `f64` (precision and width apply), or `invalid`.
+    ///
+    /// ```
+    /// use genoxide::Fitness;
+    ///
+    /// assert_eq!(format!("{:.2}", Fitness::new(1.0 / 3.0)), "0.33");
+    /// assert_eq!(Fitness::invalid().to_string(), "invalid");
+    /// ```
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.score {
+            Some(score) => fmt::Display::fmt(&score, f),
+            None => f.pad("invalid"),
+        }
     }
 }
 

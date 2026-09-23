@@ -36,6 +36,18 @@ jobs:
         env:
           RAYON_NUM_THREADS: 1
 
+  examples:
+    name: Examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: |
+          for example in one_max knapsack n_queens rastrigin; do
+            cargo run --release --example "$example"
+          done
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

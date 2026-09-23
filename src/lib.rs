@@ -60,3 +60,13 @@ pub use fitness::{Fitness, Objective};
 pub use individual::Individual;
 pub use population::Population;
 pub use rng::StreamRng;
+
+// the Rust code in the README and the guide for AI assistants runs as doctests, so it can't drift
+// from the API
+#[cfg(all(doctest, feature = "parallel"))]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
+#[cfg(all(doctest, feature = "parallel"))]
+#[doc = include_str!("../AGENTS.md")]
+struct AgentsDoctests;

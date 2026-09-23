@@ -44,6 +44,11 @@ where
 }
 
 /// A value that converts to a [`Fitness`]: the result of a [`FitnessFunction`].
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a fitness value",
+    label = "a fitness function must return `f64`, `Fitness` or `Option<f64>`",
+    note = "convert other numbers with `as f64`"
+)]
 pub trait IntoFitness {
     /// The fitness, or [`Error::NanFitness`] for NaN.
     fn into_fitness(self) -> Result<Fitness>;

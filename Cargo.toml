@@ -25,3 +25,7 @@ parallel = ["dep:rayon"]
 
 [dev-dependencies]
 proptest = "1"
+
+[[example]]
+name = "rastrigin"
+required-features = ["parallel"]
