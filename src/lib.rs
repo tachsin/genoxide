@@ -11,6 +11,7 @@
 //! - [`Fitness`] and [`Objective`]: totally ordered fitness values, with an invalid state
 //! - [`genome`]: genomes and the spaces they live in, e.g. bit-packed [`Binary`](genome::Binary)
 //! - [`Individual`] and [`Population`]: genomes with their fitness and age
+//! - [`operator`]: selection, crossover and mutation
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -19,6 +20,7 @@ pub mod error;
 pub mod fitness;
 pub mod genome;
 pub mod individual;
+pub mod operator;
 pub mod population;
 pub mod rng;
 

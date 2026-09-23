@@ -11,6 +11,7 @@ pub use binary::{Binary, Bits};
 use crate::{Result, StreamRng};
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::ops::Range;
 
 /// An encoded solution: the value that evolves.
 ///
@@ -39,4 +40,37 @@ pub trait Representation: Clone + Debug + Send + Sync {
 
     /// Checks that a genome belongs to this space, e.g. a genome provided as a seed.
     fn validate(&self, genome: &Self::Genome) -> Result<()>;
+}
+
+/// Genomes whose genes can be exchanged position by position with another genome of the same
+/// representation, which point and uniform crossover need.
+///
+/// Permutations don't implement it: exchanging genes by position would create duplicates.
+pub trait SwapGenes: Genome {
+    /// Exchanges the genes in `range` with `other`.
+    ///
+    /// # Panics
+    ///
+    /// If the genomes have different lengths or the range is out of bounds.
+    fn swap_range(&mut self, other: &mut Self, range: Range<usize>);
+
+    /// Exchanges the gene at `index` with `other`.
+    ///
+    /// # Panics
+    ///
+    /// If the genomes have different lengths or the index is out of bounds.
+    fn swap_gene(&mut self, other: &mut Self, index: usize) {
+        self.swap_range(other, index..index + 1);
+    }
+
+    /// Exchanges each gene with `other` with probability `rate` (uniform crossover). `rate` is in
+    /// `[0, 1]`.
+    fn swap_uniform(&mut self, other: &mut Self, rate: f64, rng: &mut StreamRng) {
+        let chance = crate::rng::Chance::new(rate);
+        for index in 0..self.len() {
+            if rng.chance(chance) {
+                self.swap_gene(other, index);
+            }
+        }
+    }
 }

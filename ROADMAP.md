@@ -90,18 +90,18 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [ ] Permutation
 
 #### Selection
-- [ ] Tournament
-- [ ] Roulette wheel and stochastic universal sampling
-- [ ] Rank
-- [ ] Truncation
-- [ ] Random
+- [x] Tournament
+- [x] Roulette wheel and stochastic universal sampling
+- [x] Rank
+- [x] Truncation
+- [x] Random
 
 #### Crossover
-- [ ] One-point, two-point, k-point (points between genes only)
-- [ ] Uniform (exactly 50% per gene, or a given rate)
+- [x] One-point, two-point, k-point (points between genes only)
+- [x] Uniform (exactly 50% per gene, or a given rate)
 
 #### Mutation (always changes the genome)
-- [ ] Bit-flip (per gene rate, or exactly n genes)
+- [x] Bit-flip (per gene rate, or exactly n genes)
 - [ ] Uniform (integer / real)
 - [ ] Swap (permutation)
 
