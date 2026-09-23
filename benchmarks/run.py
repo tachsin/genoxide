@@ -393,6 +393,19 @@ def describe_platform():
     return f"{platform.system()}, {processor}".rstrip(", ")
 
 
+def draw_charts_of(results_file, out_dir):
+    """Draws the charts of a results file, with the .venv's matplotlib if this Python has none."""
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        subprocess.run(
+            [str(VENV_PYTHON), str(ROOT / "run.py"), "chart", "--results", str(results_file), "--charts", str(out_dir)],
+            check=True,
+        )
+        return
+    draw_charts(json.loads(Path(results_file).read_text(encoding="utf-8")), out_dir)
+
+
 def latest_results():
     files = sorted((ROOT / "results").glob("*.json"))
     if not files:
@@ -422,7 +435,7 @@ def main():
         return
     if args.command == "chart":
         results_file = args.results or latest_results()
-        draw_charts(json.loads(results_file.read_text(encoding="utf-8")), args.charts)
+        draw_charts_of(results_file, args.charts)
         print(f"charts of {results_file.name} in {args.charts}")
         return
     if not VENV_PYTHON.exists():
@@ -477,14 +490,15 @@ def main():
     platform = describe_platform()
     report = {"versions": versions, "seeds": seeds, "max_seconds": max_seconds, "platform": platform,
               "runs": runs, "summary": rows, "instructions": instructions}
-    (results / f"{timestamp}.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    draw_charts(report, args.charts)
+    results_file = results / f"{timestamp}.json"
+    results_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
     header = [f"# Results {timestamp}", "", f"Seeds per scenario: {seeds}, wall time cap per run: {max_seconds} s", platform, ""]
     header += [f"- {name} {version}" for name, version in versions.items()] + [""]
     table = markdown_table(rows)
     (results / "latest.md").write_text("\n".join(header) + table + "\n", encoding="utf-8")
     print()
     print(table)
+    draw_charts_of(results_file, args.charts)
 
 
 if __name__ == "__main__":
