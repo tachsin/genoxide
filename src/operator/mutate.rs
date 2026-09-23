@@ -5,7 +5,7 @@ use crate::genome::{Binary, Bits, Integer, Integers, Order, Permutation, Real, R
 use crate::rng::Chance;
 use crate::{Error, Result, StreamRng};
 
-/// Which genes a mutation changes: each with a probability, or exactly `n`.
+/// Which genes a mutation changes: each with a probability, or `n` (all if there are fewer).
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Mode {
     PerGene { chance: Chance },
@@ -63,8 +63,8 @@ impl Mode {
     }
 }
 
-/// Bit-flip mutation for [`Binary`] genomes: flips each bit with a probability, or exactly `n`
-/// bits. The genome always changes.
+/// Bit-flip mutation for [`Binary`] genomes: flips each bit with a probability, or `n` bits. The
+/// genome always changes.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BitFlip {
     mode: Mode,
@@ -79,7 +79,8 @@ impl BitFlip {
         })
     }
 
-    /// Flips exactly `count` distinct random bits (at least 1, at most the genome length).
+    /// Flips `count` distinct random bits, `count` at least 1. A genome with fewer bits has all of
+    /// them flipped: the operator doesn't know the genome length when it's created.
     pub fn count(count: usize) -> Result<Self> {
         Ok(Self {
             mode: Mode::count("bit_flip_count", count)?,
@@ -95,8 +96,7 @@ impl Mutate<Binary> for BitFlip {
 }
 
 /// Uniform mutation for [`Integer`] and [`Real`] genomes: gives genes a new random value within
-/// their bounds, different from the current one. Each gene with a probability, or exactly `n`
-/// genes.
+/// their bounds, different from the current one. Each gene with a probability, or `n` genes.
 ///
 /// The genome always changes. Genes whose bounds allow a single value are never changed.
 ///
@@ -126,8 +126,8 @@ impl UniformMutation {
         })
     }
 
-    /// Changes exactly `count` distinct random genes (at least 1, at most the number of genes
-    /// that can change).
+    /// Changes `count` distinct random genes, `count` at least 1. If fewer genes can change, all
+    /// of them are changed: the operator doesn't know the representation when it's created.
     pub fn count(count: usize) -> Result<Self> {
         Ok(Self {
             mode: Mode::count("uniform_mutation_count", count)?,
