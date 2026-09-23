@@ -77,9 +77,9 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Versioning policy and automated releases (release-plz, cargo-semver-checks, changelog from PR titles)
 
 #### Core types
-- [ ] Error enum (`thiserror`-style, no panics in library code)
-- [ ] Rng: portable, seedable generator (same results on every platform) with derived streams per run / island / worker
-- [ ] Fitness: `f64` with a total ordering, `Invalid` state, NaN policy, maximize / minimize
+- [x] Error enum (no panics in library code)
+- [x] Rng: portable, seedable generator (same results on every platform) with derived streams per run / island / worker
+- [x] Fitness: `f64` with a total ordering, `Invalid` state, NaN policy, maximize / minimize
 - [ ] Individual (genome, fitness, age) and Population
 
 #### Genomes
