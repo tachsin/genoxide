@@ -85,9 +85,9 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 #### Genomes
 - [x] `Genome` trait
 - [x] Binary, bit-packed
-- [ ] Integer, bounded per gene
-- [ ] Real, bounded per gene
-- [ ] Permutation
+- [x] Integer, bounded per gene
+- [x] Real, bounded per gene
+- [x] Permutation
 
 #### Selection
 - [x] Tournament
@@ -102,8 +102,8 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 
 #### Mutation (always changes the genome)
 - [x] Bit-flip (per gene rate, or exactly n genes)
-- [ ] Uniform (integer / real)
-- [ ] Swap (permutation)
+- [x] Uniform (integer / real)
+- [x] Swap (permutation)
 
 #### Engine
 - [x] Ask / tell core

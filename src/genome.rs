@@ -3,10 +3,23 @@
 //! - A [`Genome`] is the value that evolves, e.g. [`Bits`].
 //! - A [`Representation`] describes the space of genomes, e.g. [`Binary`] with a length. It
 //!   creates random genomes and validates genomes provided by users (e.g. seeds).
+//!
+//! | Representation | Genome | Genes |
+//! |---|---|---|
+//! | [`Binary`] | [`Bits`] | bits, packed 64 per word |
+//! | [`Integer`] | [`Integers`] | `i64`, inclusive bounds per gene |
+//! | [`Real`] | [`Reals`] | `f64`, inclusive finite bounds per gene |
+//! | [`Permutation`] | [`Order`] | an ordering of `0..n` |
 
 pub mod binary;
+pub mod integer;
+pub mod permutation;
+pub mod real;
 
 pub use binary::{Binary, Bits};
+pub use integer::{Integer, Integers};
+pub use permutation::{Order, Permutation};
+pub use real::{Real, Reals};
 
 use crate::{Result, StreamRng};
 use std::fmt::Debug;
