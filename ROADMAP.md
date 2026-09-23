@@ -60,66 +60,132 @@ A review of existing libraries found bugs that genoxide must rule out by design 
 
 ## Milestones
 
+Progress is tracked with the checklists below. Every item is done when it's implemented, documented, tested (including property tests for operators) and covered by the benchmarks where relevant.
+
+### 0.0: Project setup ✅
+- [x] Name, repository, dual MIT / Apache-2.0 license
+- [x] README (homepage) and this roadmap
+- [x] Crate skeleton (edition 2024, MSRV 1.85)
+
 ### 0.1: Foundations
-- **Engine:** generational, steady-state and (μ+λ)/(μ,λ) GA loops on the ask / tell core.
-- **Genomes:** bit-packed binary, bounded integers, bounded reals, permutations.
-- **Selection:** tournament, roulette, stochastic universal sampling, rank, truncation, random.
-- **Crossover:** one-point, two-point, k-point, uniform (exact 50% per gene).
-- **Mutation:** bit-flip, uniform, swap.
-- **Run control:**
-  - termination: target, generations, evaluations, time, stagnation, custom
-  - elitism
-  - seeded determinism
-  - parallel evaluation (rayon, deterministic)
-  - cancellation
-- **Observers:** statistics collection and hall of fame.
-- **Project:** typed errors; docs, examples, AGENTS.md; CI and the benchmark harness from day one.
+
+#### Project
+- [ ] CI: build, test, clippy, fmt, rustdoc (`-D warnings`) on Linux, macOS, Windows; MSRV job; single-thread rayon job
+- [ ] `#![forbid(unsafe_code)]`, `#![warn(missing_docs)]`
+- [ ] Benchmark suite in [`benchmarks/`](benchmarks/) (DEAP, pymoo, PyGAD, genetic_algorithm)
+- [ ] Contributing guide, issue and PR templates
+
+#### Core types
+- [ ] Error enum (`thiserror`-style, no panics in library code)
+- [ ] Rng: portable, seedable generator (same results on every platform) with derived streams per run / island / worker
+- [ ] Fitness: `f64` with a total ordering, `Invalid` state, NaN policy, maximize / minimize
+- [ ] Individual (genome, fitness, age) and Population
+
+#### Genomes
+- [ ] `Genome` trait
+- [ ] Binary, bit-packed
+- [ ] Integer, bounded per gene
+- [ ] Real, bounded per gene
+- [ ] Permutation
+
+#### Selection
+- [ ] Tournament
+- [ ] Roulette wheel and stochastic universal sampling
+- [ ] Rank
+- [ ] Truncation
+- [ ] Random
+
+#### Crossover
+- [ ] One-point, two-point, k-point (points between genes only)
+- [ ] Uniform (exactly 50% per gene, or a given rate)
+
+#### Mutation (always changes the genome)
+- [ ] Bit-flip (per gene rate, or exactly n genes)
+- [ ] Uniform (integer / real)
+- [ ] Swap (permutation)
+
+#### Engine
+- [ ] Ask / tell core
+- [ ] Generational GA, steady-state GA, (μ+λ) and (μ,λ)
+- [ ] Elitism
+- [ ] Termination: target, generations, evaluations, time, stagnation, custom, combinations
+- [ ] Parallel evaluation (rayon), deterministic regardless of thread count
+- [ ] Cancellation (abort flag)
+- [ ] Builder with validation (every invalid configuration is an error)
+
+#### Observers
+- [ ] Statistics per generation (best, mean, stddev, diversity, timings)
+- [ ] Hall of fame (top-k unique)
+
+#### Docs and examples
+- [ ] API docs for everything public, with doctests
+- [ ] Examples: OneMax, knapsack, N-Queens, Rastrigin
+- [ ] AGENTS.md (guide for AI coding assistants)
+
+#### Performance
+- [ ] criterion benchmarks for the hot paths
+- [ ] iai-callgrind instruction count benchmarks in CI
+- [ ] genoxide adapter in the benchmark suite, first published results
 
 ### 0.2: Real-valued and permutation excellence
-- **Real-valued:** SBX, BLX-α, arithmetic crossover; Gaussian (fixed and self-adaptive) and polynomial mutation.
-- **Permutations:** PMX, OX1, CX, edge recombination; inversion (2-opt), insertion and scramble mutation.
-- **Local search:** hill climbing (first/best improvement), simulated annealing, tabu search, iterated local search.
-- **Hybrid:** memetic / Lamarckian hybrid (GA with local search on elites).
-- **Constraints:** handling via Deb's feasibility rules and penalty functions.
+- [ ] Real-valued crossover: SBX, BLX-α, arithmetic
+- [ ] Real-valued mutation: Gaussian (fixed and self-adaptive), polynomial
+- [ ] Permutation crossover: PMX, OX1, CX, edge recombination
+- [ ] Permutation mutation: inversion (2-opt), insertion, scramble
+- [ ] Local search: hill climbing (first / best improvement), simulated annealing, tabu search, iterated local search
+- [ ] Memetic / Lamarckian hybrid (GA with local search on elites)
+- [ ] Constraint handling: Deb's feasibility rules, penalty functions
 
 ### 0.3: Evolution strategies and swarm
-- **CMA-ES**, with IPOP / BIPOP restarts and sep-CMA-ES for high dimensions.
-- **Differential evolution:** rand/1, best/1, current-to-pbest; JADE, SHADE, L-SHADE.
-- **Particle swarm:** global and local topologies.
-- **(μ/ρ +, λ)-ES** with self-adaptation.
+- [ ] CMA-ES, with IPOP / BIPOP restarts
+- [ ] sep-CMA-ES for high dimensions
+- [ ] Differential evolution: rand/1, best/1, current-to-pbest
+- [ ] Adaptive DE: JADE, SHADE, L-SHADE
+- [ ] Particle swarm: global and local topologies
+- [ ] (μ/ρ +, λ)-ES with self-adaptation
 
 ### 0.4: Multi-objective
-- **Algorithms:** NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA.
-- **Pareto archive:** non-dominated sorting (fast and log variants), crowding distance, reference points.
-- **Indicators:** hypervolume, IGD / IGD+, spread.
-- **Constraints:** constrained dominance.
+- [ ] Non-dominated sorting (fast and log variants), crowding distance
+- [ ] NSGA-II
+- [ ] NSGA-III (reference points)
+- [ ] SPEA2
+- [ ] MOEA/D
+- [ ] SMS-EMOA
+- [ ] Pareto archive
+- [ ] Indicators: hypervolume, IGD / IGD+, spread
+- [ ] Constrained dominance
 
 ### 0.5: Scale and operations
-- **Island model:** migration topologies (ring, fully connected, random), deterministic and parallel.
-- **Evaluation:** asynchronous / steady-state for expensive fitness; batch evaluation hook (SIMD, GPU, remote) with a GPU example.
-- **Checkpoint and resume:** `serde` feature.
-- **Configuration:** runs described in TOML/JSON, with a small CLI.
-- **Observability:** `tracing` integration and progress reporting.
+- [ ] Island model: ring, fully connected and random topologies; deterministic and parallel
+- [ ] Asynchronous / steady-state evaluation for expensive fitness
+- [ ] Batch evaluation hook (SIMD, GPU, remote), with a GPU example
+- [ ] Checkpoint and resume (`serde` feature)
+- [ ] Runs described in TOML / JSON, with a small CLI
+- [ ] `tracing` integration and progress reporting
 
 ### 0.6: Python
-- **Package:** `pip install genoxide` via PyO3 / maturin, with wheels for Linux, macOS and Windows.
-- **Fitness:** plain Python functions or vectorized numpy batch fitness; zero-copy numpy genomes.
-- **API:** Pythonic builders, and parity examples with DEAP / pymoo tutorials.
+- [ ] `pip install genoxide` via PyO3 / maturin, wheels for Linux, macOS and Windows
+- [ ] Python fitness functions and vectorized numpy batch fitness
+- [ ] Zero-copy numpy genomes
+- [ ] Pythonic builders
+- [ ] Parity examples with the DEAP / pymoo tutorials
 
 ### 0.7: Genetic programming and neuroevolution
-- **Tree GP:** typed (strongly typed GP), with subtree crossover, point / subtree / hoist mutation and bloat control.
-- **Symbolic regression:** examples.
-- **Neuroevolution:** NEAT (speciation, innovation numbers), plus an evolution-strategies route for neural networks.
+- [ ] Tree GP, strongly typed
+- [ ] Subtree crossover; point, subtree and hoist mutation; bloat control
+- [ ] Symbolic regression examples
+- [ ] NEAT (speciation, innovation numbers)
+- [ ] Neuroevolution with evolution strategies
 
 ### 0.8: Frontier
-- **Quality-diversity:** MAP-Elites, CMA-ME, novelty search.
-- **LLM-guided evolution:** async operators that call a language model to propose mutations and crossovers.
-- **Tuning:** adaptive operator selection and automatic parameter tuning.
+- [ ] Quality-diversity: MAP-Elites, CMA-ME, novelty search
+- [ ] LLM-guided evolution: async operators that call a language model
+- [ ] Adaptive operator selection and automatic parameter tuning
 
 ### 1.0: Stable
-- **Stability:** API review and stabilization, semver guarantees and an MSRV policy.
-- **Benchmarks:** a published benchmark report (see below).
-- **Documentation:** a book (mdBook) with a guide per problem type.
+- [ ] API review and stabilization, semver guarantees, MSRV policy
+- [ ] Published benchmark report
+- [ ] Book (mdBook) with a guide per problem type
 
 ## Quality
 
@@ -134,7 +200,7 @@ A review of existing libraries found bugs that genoxide must rule out by design 
 
 ## Benchmarks
 
-The benchmark suite (`ga-benchmarks`) runs every library on the same problems, with identical fitness functions and evaluation budgets. It is the main way to show Rust's advantages, so it is published and kept up to date for every release.
+The benchmark suite ([`benchmarks/`](benchmarks/)) runs every library on the same problems, with identical fitness functions and evaluation budgets. It is the main way to show Rust's advantages, so it is published and kept up to date for every release.
 
 ### Problems
 

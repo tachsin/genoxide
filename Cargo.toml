@@ -7,6 +7,7 @@ description = "Evolutionary computation for Rust: genetic algorithms, evolution 
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tachsin/genoxide"
 readme = "README.md"
+exclude = ["benchmarks/"]
 keywords = ["genetic-algorithm", "evolutionary", "optimization", "metaheuristics", "nsga2"]
 categories = ["algorithms", "science", "mathematics"]
 # pre-alpha: remove on the first real release (no placeholder crates on crates.io)

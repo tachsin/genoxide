@@ -1,0 +1,6 @@
+# Python libraries in the benchmarks, pinned for reproducible results
+deap==1.4.4
+pymoo==0.6.2
+pygad==3.7.0
+cma==4.5.0
+numpy>=2
