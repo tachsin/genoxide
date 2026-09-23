@@ -6,14 +6,19 @@ Usage:
     python run.py --quick                    # small scenarios, 3 seeds
     python run.py --seeds 5 --scenarios onemax-100-matched nqueens-32-idiomatic
     python run.py --libraries deap genetic_algorithm
+    python run.py chart                      # redraw the charts of the latest results
 
-Results are written to results/<timestamp>.json (all runs) and results/latest.md (table).
+Results are written to results/<timestamp>.json (all runs), results/latest.md (table) and
+results/charts/*.svg (charts). On Linux with Valgrind, a run also measures instructions per
+evaluation with Callgrind.
 """
 
 import argparse
 import datetime
 import json
 import os
+import re
+import shutil
 import statistics
 import subprocess
 import sys
@@ -76,11 +81,18 @@ def scenario_name(problem, size, mode):
 
 def setup():
     """Create .venv with the pinned Python libraries from requirements.txt."""
+    requirements = str(ROOT / "requirements.txt")
+    if shutil.which("uv"):
+        # uv doesn't need pip or ensurepip, which some system Pythons leave out
+        if not VENV_PYTHON.exists():
+            subprocess.run(["uv", "venv", str(VENV)], check=True)
+        subprocess.run(["uv", "pip", "install", "--python", str(VENV_PYTHON), "-r", requirements], check=True)
+        return
     if not VENV_PYTHON.exists():
         print(f"creating {VENV} ...", flush=True)
         venv.create(VENV, with_pip=True)
     subprocess.run([str(VENV_PYTHON), "-m", "pip", "install", "--upgrade", "pip"], check=True)
-    subprocess.run([str(VENV_PYTHON), "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")], check=True)
+    subprocess.run([str(VENV_PYTHON), "-m", "pip", "install", "-r", requirements], check=True)
 
 
 def library_version(kind, package, adapter=None):
@@ -112,6 +124,45 @@ def run_adapter(adapter, problem, size, mode, seeds, max_evaluations, max_second
         print(completed.stderr, file=sys.stderr)
         raise SystemExit(f"adapter failed: {' '.join(command)}")
     return [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+
+
+# Instructions per evaluation, with Callgrind: each adapter runs with a budget of N and of 2N
+# evaluations, and (I(2N) - I(N)) / (E(2N) - E(N)) cancels the startup, imports and setup. The
+# matched OneMax configurations make it a comparison of framework cost; no library reaches the
+# target of OneMax 1000 within 2N evaluations.
+INSTRUCTIONS_SCENARIO = ("onemax", 1000, "matched")
+INSTRUCTIONS_EVALUATIONS = 3_000
+
+
+def count_instructions(adapter, evaluations):
+    """(instructions, {solver: evaluations}) of one run under Callgrind."""
+    problem, size, mode = INSTRUCTIONS_SCENARIO
+    command = ["valgrind", "--tool=callgrind", "--callgrind-out-file=/dev/null"] + adapter["command"] + [
+        problem, str(size), mode, "0", "0", str(evaluations), "36000",
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
+    match = re.search(r"Collected\s*:\s*(\d+)", completed.stderr)
+    if completed.returncode != 0 or not match:
+        print(completed.stderr[-2000:], file=sys.stderr)
+        raise SystemExit(f"callgrind failed: {' '.join(command)}")
+    runs = [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+    return int(match.group(1)), {run["solver"]: run["evaluations"] for run in runs}
+
+
+def measure_instructions(libraries):
+    """Instructions per evaluation of each library in the instructions scenario."""
+    rows = []
+    for name in libraries:
+        print(f"instructions: {name} (callgrind) ...", flush=True)
+        low, low_evaluations = count_instructions(ADAPTERS[name], INSTRUCTIONS_EVALUATIONS)
+        high, high_evaluations = count_instructions(ADAPTERS[name], 2 * INSTRUCTIONS_EVALUATIONS)
+        for solver, evaluations in high_evaluations.items():
+            rows.append({
+                "library": name,
+                "solver": solver,
+                "instructions_per_evaluation": (high - low) / (evaluations - low_evaluations[solver]),
+            })
+    return rows
 
 
 def median(values):
@@ -192,19 +243,181 @@ def markdown_table(rows):
     return "\n".join(lines)
 
 
+LIBRARY_NAMES = {"genoxide": "genoxide", "genetic_algorithm": "genetic_algorithm", "deap": "DEAP",
+                 "pygad": "PyGAD", "pymoo": "pymoo"}
+SOLVER_NAMES = {"ga": "GA", "evolve": "GA", "hill_climb": "hill climbing", "cma_es": "CMA-ES", "de": "DE"}
+PROBLEM_NAMES = {"onemax": "OneMax", "nqueens": "N-Queens", "rastrigin": "Rastrigin"}
+GENOXIDE_COLOR = "#ce422b"
+OTHER_COLOR = "#8a9bb0"
+
+
+def label(library, solver):
+    return f"{LIBRARY_NAMES.get(library, library)} {SOLVER_NAMES.get(solver, solver)}"
+
+
+def scenario_title(scenario):
+    problem, size, mode = scenario.split("-")
+    return f"{PROBLEM_NAMES.get(problem, problem)} {size} ({mode})"
+
+
+def draw_charts(results, out_dir):
+    """Bar charts of a results file, as SVG: time to target, throughput and instructions."""
+    import matplotlib
+    matplotlib.use("svg")
+    import matplotlib.pyplot as plt
+
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "font.size": 10,
+        # text as text, and the same file for the same results
+        "svg.fonttype": "none",
+        "svg.hashsalt": "genoxide-benchmarks",
+    })
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = results["summary"]
+    # in the order of SCENARIOS
+    order = {scenario_name(*scenario[:3]): index for index, scenario in enumerate(SCENARIOS)}
+    scenarios = sorted({row["scenario"] for row in rows}, key=lambda s: (order.get(s, len(order)), s))
+    footnote = f"{results['seeds']} seeds per scenario, single-threaded; {results.get('platform', '')}".rstrip("; ")
+
+    from matplotlib.ticker import FuncFormatter
+
+    def short_number(value, _position=None):
+        for limit, suffix in ((1e9, "G"), (1e6, "M"), (1e3, "k")):
+            if value >= limit:
+                return f"{value / limit:.3g}{suffix}"
+        return f"{value:.3g}"
+
+    tick_formatters = {
+        "time_to_target": FuncFormatter(lambda value, _position: format_seconds(value).replace(".0 ", " ")),
+        "throughput": FuncFormatter(lambda value, _position: short_number(value) + "/s"),
+    }
+
+    def small_multiples(name, title, value, formatter, missing):
+        columns = 2
+        lines = (len(scenarios) + columns - 1) // columns
+        bars = [len([row for row in rows if row["scenario"] == s]) for s in scenarios]
+        # each line of charts is as high as its tallest chart
+        tallest = [max(bars[start:start + columns]) for start in range(0, len(bars), columns)]
+        figure, axes = plt.subplots(
+            lines, columns, figsize=(11, 1.0 + sum(tallest) * 0.3 + lines * 0.8), squeeze=False,
+        )
+        figure.patch.set_facecolor("white")
+        for axis in axes.flat[len(scenarios):]:
+            axis.set_visible(False)
+        for axis, scenario in zip(axes.flat, scenarios):
+            group = [row for row in rows if row["scenario"] == scenario]
+            # best first; missing values (e.g. never reached the target) last
+            group.sort(key=lambda row: (value(row) is None, value(row) or 0) if name == "time_to_target"
+                       else (value(row) is None, -(value(row) or 0)))
+            labels = [label(row["library"], row["solver"]) for row in group]
+            values = [value(row) for row in group]
+            positions = range(len(group))[::-1]
+            colors = [GENOXIDE_COLOR if row["library"] == "genoxide" else OTHER_COLOR for row in group]
+            present = [v for v in values if v]
+            axis.barh(list(positions), [v or 0 for v in values], color=colors, height=0.7)
+            axis.set_yticks(list(positions), labels)
+            axis.set_xscale("log")
+            if present:
+                axis.set_xlim(min(present) / 3, max(present) * 12)
+            for position, row, v in zip(positions, group, values):
+                text = formatter(v) if v else missing(row)
+                if v and row["success_rate"] < 1 and name == "time_to_target":
+                    text += f"  ({row['success_rate'] * row['runs']:.0f}/{row['runs']} reached)"
+                x = v if v else (min(present) / 3 if present else 1)
+                axis.text(x * 1.1, position, text, va="center", fontsize=8.5,
+                          color="#222" if v else "#777")
+            axis.set_title(scenario_title(scenario), fontsize=10.5, loc="left")
+            axis.tick_params(axis="x", labelsize=8)
+            axis.xaxis.set_major_formatter(tick_formatters[name])
+            axis.spines[["top", "right"]].set_visible(False)
+        figure.suptitle(title, x=0.01, ha="left", fontsize=13, fontweight="bold")
+        figure.text(0.01, 0.005, footnote, fontsize=8, color="#555")
+        figure.tight_layout(rect=(0, 0.02, 1, 0.97))
+        figure.savefig(out_dir / f"{name}.svg", metadata={"Date": None})
+        plt.close(figure)
+
+    small_multiples(
+        "time_to_target", "Median time to target (lower is better)",
+        lambda row: row["time_to_target"], format_seconds,
+        lambda row: "did not reach the target",
+    )
+    small_multiples(
+        "throughput", "Evaluations per second (higher is better)",
+        lambda row: row["evaluations_per_second"], lambda v: f"{short_number(v)}/s",
+        lambda row: "-",
+    )
+
+    instructions = results.get("instructions")
+    if instructions:
+        instructions = sorted(instructions, key=lambda row: row["instructions_per_evaluation"])
+        figure, axis = plt.subplots(figsize=(11, 0.9 + 0.4 * len(instructions)))
+        figure.patch.set_facecolor("white")
+        positions = range(len(instructions))[::-1]
+        values = [row["instructions_per_evaluation"] for row in instructions]
+        axis.barh(list(positions), values, height=0.7,
+                  color=[GENOXIDE_COLOR if row["library"] == "genoxide" else OTHER_COLOR for row in instructions])
+        axis.set_yticks(list(positions), [label(row["library"], row["solver"]) for row in instructions])
+        axis.set_xscale("log")
+        axis.set_xlim(min(values) / 3, max(values) * 12)
+        for position, v in zip(positions, values):
+            axis.text(v * 1.1, position, short_number(v), va="center", fontsize=8.5)
+        axis.spines[["top", "right"]].set_visible(False)
+        axis.tick_params(axis="x", labelsize=8)
+        axis.xaxis.set_major_formatter(FuncFormatter(short_number))
+        problem, size, mode = INSTRUCTIONS_SCENARIO
+        axis.set_title(
+            f"CPU instructions per evaluation, {PROBLEM_NAMES[problem]} {size} ({mode}), "
+            "counted by Callgrind (lower is better)",
+            fontsize=12, fontweight="bold", loc="left",
+        )
+        figure.text(0.01, 0.01, "Framework and fitness function together; startup and imports excluded.",
+                    fontsize=8, color="#555")
+        figure.tight_layout(rect=(0, 0.04, 1, 1))
+        figure.savefig(out_dir / "instructions.svg", metadata={"Date": None})
+        plt.close(figure)
+
+
+def describe_platform():
+    """The operating system and processor, for the charts."""
+    import platform
+    processor = platform.processor()
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as cpuinfo:
+            processor = next(line.split(":", 1)[1].strip() for line in cpuinfo if line.startswith("model name"))
+    except (OSError, StopIteration):
+        pass
+    return f"{platform.system()}, {processor}".rstrip(", ")
+
+
+def latest_results():
+    files = sorted((ROOT / "results").glob("*.json"))
+    if not files:
+        raise SystemExit("no results yet: run `python run.py` first")
+    return files[-1]
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", nargs="?", choices=["run", "setup"], default="run")
+    parser.add_argument("command", nargs="?", choices=["run", "setup", "chart"], default="run")
     parser.add_argument("--seeds", type=int, default=10)
     parser.add_argument("--max-seconds", type=float, default=60.0, help="wall time cap per run")
     parser.add_argument("--quick", action="store_true", help="small scenarios, 3 seeds")
     parser.add_argument("--scenarios", nargs="*", help="scenario names, e.g. onemax-100-matched (default all)")
     parser.add_argument("--libraries", nargs="*", default=list(ADAPTERS), choices=list(ADAPTERS))
+    parser.add_argument("--results", type=Path, help="results file to chart (default: the latest)")
+    parser.add_argument("--charts", type=Path, default=ROOT / "results" / "charts", help="folder for the charts")
+    parser.add_argument("--no-instructions", action="store_true", help="skip the Callgrind measurement")
     args = parser.parse_args()
 
     if args.command == "setup":
         setup()
+        return
+    if args.command == "chart":
+        results_file = args.results or latest_results()
+        draw_charts(json.loads(results_file.read_text(encoding="utf-8")), args.charts)
+        print(f"charts of {results_file.name} in {args.charts}")
         return
     if not VENV_PYTHON.exists():
         raise SystemExit("run `python run.py setup` first")
@@ -231,14 +444,19 @@ def main():
             print(f"{scenario_name(problem, size, mode)}: {name} ({seeds} seeds) ...", flush=True)
             runs += run_adapter(ADAPTERS[name], problem, size, mode, seeds, max_evaluations, args.max_seconds)
 
+    instructions = None
+    if shutil.which("valgrind") and not args.no_instructions:
+        instructions = measure_instructions(args.libraries)
+
     rows = summarize(runs)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     results = ROOT / "results"
     results.mkdir(exist_ok=True)
-    (results / f"{timestamp}.json").write_text(
-        json.dumps({"versions": versions, "seeds": seeds, "runs": runs, "summary": rows}, indent=2),
-        encoding="utf-8",
-    )
+    platform = describe_platform()
+    report = {"versions": versions, "seeds": seeds, "platform": platform, "runs": runs, "summary": rows,
+              "instructions": instructions}
+    (results / f"{timestamp}.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    draw_charts(report, args.charts)
     header = [f"# Results {timestamp}", "", f"Seeds per scenario: {seeds}, wall time cap per run: {args.max_seconds} s", ""]
     header += [f"- {name} {version}" for name, version in versions.items()] + [""]
     table = markdown_table(rows)
