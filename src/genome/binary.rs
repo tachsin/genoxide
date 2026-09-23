@@ -1,9 +1,10 @@
 //! Binary genomes: fixed length bit strings, bit-packed.
 
-use super::{Genome, Representation};
+use super::{Genome, Representation, SwapGenes};
 use crate::{Error, Result, StreamRng};
 use rand::Rng;
 use std::fmt;
+use std::ops::Range;
 
 const WORD_BITS: usize = u64::BITS as usize;
 
@@ -156,6 +157,72 @@ impl Genome for Bits {
     }
 }
 
+impl Bits {
+    /// Exchanges the bits selected by `mask` in word `word` with `other`.
+    pub(crate) fn swap_word_bits(&mut self, other: &mut Self, word: usize, mask: u64) {
+        let difference = (self.words[word] ^ other.words[word]) & mask;
+        self.words[word] ^= difference;
+        other.words[word] ^= difference;
+    }
+
+    /// The number of words.
+    pub(crate) fn word_count(&self) -> usize {
+        self.words.len()
+    }
+
+    /// The mask of the used bits in word `word`.
+    pub(crate) fn used_bits(&self, word: usize) -> u64 {
+        let end = ((word + 1) * WORD_BITS).min(self.len);
+        mask(word * WORD_BITS, end, word)
+    }
+}
+
+// the bits of word `word` that are in `start..end`
+fn mask(start: usize, end: usize, word: usize) -> u64 {
+    let word_start = word * WORD_BITS;
+    let from = start.max(word_start) - word_start;
+    let to = end.min(word_start + WORD_BITS) - word_start;
+    if from >= to {
+        0
+    } else if to - from == WORD_BITS {
+        u64::MAX
+    } else {
+        ((1u64 << (to - from)) - 1) << from
+    }
+}
+
+impl SwapGenes for Bits {
+    fn swap_range(&mut self, other: &mut Self, range: Range<usize>) {
+        assert_eq!(self.len, other.len, "genomes of different lengths");
+        assert!(
+            range.start <= range.end && range.end <= self.len,
+            "range {range:?} out of bounds for length {}",
+            self.len
+        );
+        if range.is_empty() {
+            return;
+        }
+        for word in range.start / WORD_BITS..range.end.div_ceil(WORD_BITS) {
+            self.swap_word_bits(other, word, mask(range.start, range.end, word));
+        }
+    }
+
+    fn swap_uniform(&mut self, other: &mut Self, rate: f64, rng: &mut StreamRng) {
+        assert_eq!(self.len, other.len, "genomes of different lengths");
+        let chance = crate::rng::Chance::new(rate);
+        for word in 0..self.word_count() {
+            let random = if rate == 0.5 {
+                // every bit of a random word is 1 with probability exactly 0.5
+                rng.next_u64()
+            } else {
+                (0..WORD_BITS).fold(0, |mask, bit| mask | (u64::from(rng.chance(chance)) << bit))
+            };
+            let mask = random & self.used_bits(word);
+            self.swap_word_bits(other, word, mask);
+        }
+    }
+}
+
 /// Binary genomes ([`Bits`]) of a fixed length.
 ///
 /// ```
@@ -219,6 +286,8 @@ impl Representation for Binary {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+    // explicit, as the proptest prelude also exports an `Rng`
+    use rand::Rng;
 
     fn bools() -> impl Strategy<Value = Vec<bool>> {
         prop::collection::vec(any::<bool>(), 0..300)
@@ -314,6 +383,34 @@ mod tests {
             prop_assert_eq!(bits.get(index), Some(value));
             prop_assert_eq!(bits.get(values.len()), None);
             prop_assert!(tail_is_clear(&bits));
+        }
+
+        #[test]
+        fn swap_range_matches_bool_swap(
+            a in prop::collection::vec(any::<bool>(), 1..300),
+            b_seed: u64,
+            start in any::<prop::sample::Index>(),
+            end in any::<prop::sample::Index>(),
+        ) {
+            let len = a.len();
+            let b: Vec<bool> = {
+                let mut rng = StreamRng::seed_from_u64(b_seed);
+                (0..len).map(|_| rng.next_u64() & 1 == 1).collect()
+            };
+            let (start, end) = {
+                let (x, y) = (start.index(len + 1), end.index(len + 1));
+                (x.min(y), x.max(y))
+            };
+            let mut bits_a: Bits = a.iter().copied().collect();
+            let mut bits_b: Bits = b.iter().copied().collect();
+            bits_a.swap_range(&mut bits_b, start..end);
+            let (mut expected_a, mut expected_b) = (a.clone(), b.clone());
+            for i in start..end {
+                std::mem::swap(&mut expected_a[i], &mut expected_b[i]);
+            }
+            prop_assert_eq!(bits_a.iter().collect::<Vec<_>>(), expected_a);
+            prop_assert_eq!(bits_b.iter().collect::<Vec<_>>(), expected_b);
+            prop_assert!(tail_is_clear(&bits_a) && tail_is_clear(&bits_b));
         }
 
         #[test]

@@ -71,6 +71,78 @@ impl StreamRng {
 // 2^64 words (of 32 bits) into a stream: unreachable by normal use of a generator
 const DERIVE_WORD_POS: u128 = 1 << 64;
 
+// Sampling used by genoxide itself. Only integer arithmetic and exact conversions, so the results
+// are the same on every platform, and don't change when rand changes its sampling algorithms.
+impl StreamRng {
+    /// A uniformly random integer in `0..n` (Lemire's method, unbiased). `n` must not be 0.
+    pub(crate) fn below(&mut self, n: usize) -> usize {
+        debug_assert!(n > 0, "below(0)");
+        let n = n as u64;
+        let mut product = u128::from(self.next_u64()) * u128::from(n);
+        if (product as u64) < n {
+            let threshold = n.wrapping_neg() % n;
+            while (product as u64) < threshold {
+                product = u128::from(self.next_u64()) * u128::from(n);
+            }
+        }
+        (product >> 64) as usize
+    }
+
+    /// A uniformly random `f64` in `[0, 1)`, with 53 random bits.
+    pub(crate) fn unit_f64(&mut self) -> f64 {
+        (self.next_u64() >> 11) as f64 * (1.0 / (1u64 << 53) as f64)
+    }
+
+    /// `true` with probability `chance`.
+    pub(crate) fn chance(&mut self, chance: Chance) -> bool {
+        match chance {
+            Chance::Never => false,
+            Chance::Always => true,
+            Chance::Threshold(threshold) => self.next_u64() < threshold,
+        }
+    }
+
+    /// `k` distinct integers from `0..n`, in ascending order (Floyd's algorithm). `k <= n`.
+    pub(crate) fn sample_distinct(&mut self, k: usize, n: usize) -> Vec<usize> {
+        debug_assert!(k <= n, "sample_distinct({k}, {n})");
+        let mut selected = std::collections::BTreeSet::new();
+        for j in (n - k)..n {
+            let candidate = self.below(j + 1);
+            if !selected.insert(candidate) {
+                selected.insert(j);
+            }
+        }
+        selected.into_iter().collect()
+    }
+}
+
+/// A probability as an integer threshold, for Bernoulli trials without floating point.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Chance {
+    Never,
+    Always,
+    // true when a random u64 is below it
+    Threshold(u64),
+}
+
+impl Chance {
+    /// The chance of `probability`, which must be in `[0, 1]` (checked by the callers).
+    pub(crate) fn new(probability: f64) -> Self {
+        debug_assert!(
+            (0.0..=1.0).contains(&probability),
+            "probability {probability}"
+        );
+        if probability <= 0.0 {
+            Chance::Never
+        } else if probability >= 1.0 {
+            Chance::Always
+        } else {
+            // exact: the product is below 2^64, and the conversion truncates
+            Chance::Threshold((probability * 18_446_744_073_709_551_616.0) as u64)
+        }
+    }
+}
+
 impl TryRng for StreamRng {
     type Error = Infallible;
 
@@ -167,6 +239,70 @@ mod tests {
     }
 
     #[test]
+    fn portable_sampling_values() {
+        let mut rng = StreamRng::seed_from_u64(42);
+        let values = (
+            rng.below(10),
+            rng.below(1_000_000),
+            rng.unit_f64(),
+            rng.chance(Chance::new(0.5)),
+            rng.sample_distinct(3, 10),
+        );
+        let expected = (6, 950275, 0.4275164028565197, false, vec![1, 2, 3]);
+        assert_eq!(
+            values, expected,
+            "sampling changed, which breaks reproducibility"
+        );
+    }
+
+    #[test]
+    fn sample_distinct_is_uniform() {
+        let mut rng = StreamRng::seed_from_u64(0);
+        let mut counts = [0usize; 10];
+        for _ in 0..30_000 {
+            for index in rng.sample_distinct(3, 10) {
+                counts[index] += 1;
+            }
+        }
+        // each index is selected with probability 3/10: 9000 times
+        assert!(
+            counts.iter().all(|&c| (8_600..9_400).contains(&c)),
+            "{counts:?}"
+        );
+    }
+
+    #[test]
+    fn chance_edges() {
+        let mut rng = StreamRng::seed_from_u64(0);
+        assert_eq!(Chance::new(0.0), Chance::Never);
+        assert_eq!(Chance::new(1.0), Chance::Always);
+        assert!((0..1000).all(|_| !rng.chance(Chance::new(0.0))));
+        assert!((0..1000).all(|_| rng.chance(Chance::new(1.0))));
+    }
+
+    #[test]
+    fn chance_frequency() {
+        let mut rng = StreamRng::seed_from_u64(0);
+        let hits = (0..100_000)
+            .filter(|_| rng.chance(Chance::new(0.3)))
+            .count();
+        assert!((29_000..31_000).contains(&hits), "hits {hits}");
+    }
+
+    #[test]
+    fn below_is_uniform() {
+        let mut rng = StreamRng::seed_from_u64(0);
+        let mut counts = [0usize; 7];
+        for _ in 0..70_000 {
+            counts[rng.below(7)] += 1;
+        }
+        assert!(
+            counts.iter().all(|&c| (9_500..10_500).contains(&c)),
+            "{counts:?}"
+        );
+    }
+
+    #[test]
     fn from_entropy_differs() {
         assert_ne!(
             first_u64s(StreamRng::from_entropy()),
@@ -185,6 +321,19 @@ mod tests {
                 first_u64s(StreamRng::seed_from_u64(seed).derive(id)),
                 first_u64s(StreamRng::seed_from_u64(seed).derive(id))
             );
+        }
+
+        #[test]
+        fn sampling_is_in_range(seed: u64, n in 1usize..1000, k_fraction in 0.0..=1.0f64) {
+            let mut rng = StreamRng::seed_from_u64(seed);
+            prop_assert!(rng.below(n) < n);
+            let unit = rng.unit_f64();
+            prop_assert!((0.0..1.0).contains(&unit));
+            let k = (k_fraction * n as f64) as usize;
+            let sample = rng.sample_distinct(k, n);
+            prop_assert_eq!(sample.len(), k);
+            prop_assert!(sample.windows(2).all(|pair| pair[0] < pair[1]));
+            prop_assert!(sample.iter().all(|&i| i < n));
         }
 
         #[test]
