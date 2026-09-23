@@ -67,7 +67,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] README (homepage) and this roadmap
 - [x] Crate skeleton (edition 2024, MSRV 1.86)
 
-### 0.1: Foundations
+### 0.1: Foundations ✅
 
 #### Project
 - [x] CI: build, test, clippy, fmt, rustdoc (`-D warnings`) on Linux, macOS, Windows; MSRV job; single-thread rayon job

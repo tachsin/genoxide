@@ -4,8 +4,13 @@
 
 Genetic algorithms, evolution strategies, multi-objective optimization, swarm and local search, all in one library.
 
-> **🚧 Pre-alpha.** Not on crates.io yet: 0.1 is being built in the open, and the API will
-> change. See the [roadmap](ROADMAP.md) and share your ideas in the issues.
+> **🚧 Early days.** 0.1 is out: the foundations and the genetic algorithm. The API will
+> change between 0.x versions. See the [roadmap](ROADMAP.md) and share your ideas in the issues.
+
+```toml
+[dependencies]
+genoxide = "0.1"
+```
 
 ## Why genoxide?
 
@@ -81,8 +86,8 @@ Using an AI coding assistant? Point it to [AGENTS.md](AGENTS.md): it has the dec
 
 | Milestone | Scope | Status |
 |---|---|---|
-| 0.1 Foundations | Core engine, representations, classic operators, statistics | 🚧 in progress |
-| 0.2 Real-valued & permutations | SBX, polynomial, PMX, OX, 2-opt, local search, memetic | planned |
+| 0.1 Foundations | Core engine, representations, classic operators, statistics | ✅ released |
+| 0.2 Real-valued & permutations | SBX, polynomial, PMX, OX, 2-opt, local search, memetic | 🔜 next |
 | 0.3 Evolution strategies & swarm | CMA-ES, DE (JADE, SHADE), PSO, (μ,λ) and (μ+λ)-ES | planned |
 | 0.4 Multi-objective | NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA, hypervolume | planned |
 | 0.5 Scale | Island model, checkpointing, batch/GPU evaluation | planned |
