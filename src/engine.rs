@@ -354,7 +354,12 @@ where
                 best_generation: self.algorithm.best_generation(),
             };
             if !self.observers.is_empty() {
-                let snapshot = Snapshot::new(self.algorithm.population(), best, &progress);
+                let snapshot = Snapshot::new(
+                    self.algorithm.population(),
+                    self.algorithm.discarded(),
+                    best,
+                    &progress,
+                );
                 for observer in &mut self.observers {
                     observer.observe(&snapshot);
                 }

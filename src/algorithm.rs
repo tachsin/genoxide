@@ -72,6 +72,13 @@ pub trait Algorithm {
     /// [`Engine`](crate::Engine) relies on it.
     fn best(&self) -> Option<&Individual<Self::Genome>>;
 
+    /// The individuals evaluated in the last generation that didn't survive into the population,
+    /// e.g. the offspring rejected by (μ,λ) selection. Observers such as a hall of fame use them
+    /// to see every evaluated individual. Empty by default.
+    fn discarded(&self) -> &[Individual<Self::Genome>] {
+        &[]
+    }
+
     /// The number of completed generations after the initial one: 0 once the initial population
     /// is evaluated.
     fn generation(&self) -> u64;

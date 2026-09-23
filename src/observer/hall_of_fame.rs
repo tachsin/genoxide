@@ -6,8 +6,9 @@ use crate::{Error, Individual, Objective, Result};
 
 /// The best `capacity` individuals with distinct genomes seen during a run, best first.
 ///
-/// It's updated from the population after every generation. On ties, the individual seen first
-/// comes first.
+/// After every generation, it's offered the population and the individuals evaluated but not
+/// kept (e.g. the offspring rejected by (μ,λ) selection), so it sees every evaluated individual.
+/// On ties, the individual seen first comes first.
 ///
 /// ```
 /// use genoxide::prelude::*;
@@ -99,7 +100,7 @@ impl<G: Genome> HallOfFame<G> {
 impl<G: Genome> Observer<G> for HallOfFame<G> {
     fn observe(&mut self, snapshot: &Snapshot<'_, G>) {
         let objective = snapshot.progress().objective();
-        for individual in snapshot.population() {
+        for individual in snapshot.population().iter().chain(snapshot.discarded()) {
             self.offer(individual, objective);
         }
     }

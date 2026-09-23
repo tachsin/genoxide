@@ -29,6 +29,7 @@ impl<G: Genome, O: Observer<G> + ?Sized> Observer<G> for &mut O {
 #[derive(Debug)]
 pub struct Snapshot<'a, G: Genome> {
     population: &'a Population<G>,
+    discarded: &'a [Individual<G>],
     best: &'a Individual<G>,
     progress: &'a Progress,
 }
@@ -36,11 +37,13 @@ pub struct Snapshot<'a, G: Genome> {
 impl<'a, G: Genome> Snapshot<'a, G> {
     pub(crate) fn new(
         population: &'a Population<G>,
+        discarded: &'a [Individual<G>],
         best: &'a Individual<G>,
         progress: &'a Progress,
     ) -> Self {
         Self {
             population,
+            discarded,
             best,
             progress,
         }
@@ -49,6 +52,12 @@ impl<'a, G: Genome> Snapshot<'a, G> {
     /// The population after the generation.
     pub fn population(&self) -> &'a Population<G> {
         self.population
+    }
+
+    /// The individuals evaluated in this generation that didn't survive into the population, e.g.
+    /// the offspring rejected by (μ,λ) selection.
+    pub fn discarded(&self) -> &'a [Individual<G>] {
+        self.discarded
     }
 
     /// The best individual found so far.

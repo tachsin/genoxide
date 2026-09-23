@@ -148,7 +148,7 @@ mod tests {
             .collect();
         let progress = Progress::for_test(4, Objective::Minimize);
         let mut statistics = Statistics::new();
-        statistics.observe(&Snapshot::new(&population, &population[0], &progress));
+        statistics.observe(&Snapshot::new(&population, &[], &population[0], &progress));
         let record = statistics.last().unwrap();
         assert_eq!(record.generation, 4);
         assert_eq!(record.best, Some(Fitness::new(1.0)));

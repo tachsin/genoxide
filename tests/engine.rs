@@ -290,3 +290,50 @@ fn observers_see_every_generation() {
         outcome.best().fitness()
     );
 }
+
+#[test]
+fn hall_of_fame_sees_every_evaluated_individual() {
+    // the bits as a number: every genome has its own fitness
+    fn number(genome: &Bits) -> f64 {
+        genome
+            .iter()
+            .fold(0.0, |value, bit| 2.0 * value + f64::from(u8::from(bit)))
+    }
+    // (μ,λ) and (μ+λ) with a tiny μ reject most offspring, including ones in the top k
+    for scheme in [
+        Scheme::MuCommaLambda { lambda: 20 },
+        Scheme::MuPlusLambda { lambda: 20 },
+    ] {
+        let ga = Ga::builder(Binary::new(24).unwrap())
+            .population_size(2)
+            .select(Tournament::new(2).unwrap())
+            .crossover(UniformCrossover::new())
+            .mutate(BitFlip::per_gene(0.1).unwrap())
+            .scheme(scheme)
+            .seed(0)
+            .build()
+            .unwrap();
+        let evaluated = std::sync::Mutex::new(Vec::new());
+        let mut hall_of_fame = HallOfFame::new(10).unwrap();
+        Engine::new(ga, |genome: &Bits| {
+            let value = number(genome);
+            evaluated.lock().unwrap().push(value);
+            value
+        })
+        .stop_when(Stop::generations(10))
+        .observe(&mut hall_of_fame)
+        .run()
+        .unwrap();
+
+        let mut expected = evaluated.into_inner().unwrap();
+        expected.sort_by(|a, b| b.total_cmp(a));
+        expected.dedup();
+        expected.truncate(10);
+        let found: Vec<f64> = hall_of_fame
+            .individuals()
+            .iter()
+            .map(|individual| individual.fitness().unwrap().score().unwrap())
+            .collect();
+        assert_eq!(found, expected, "{scheme:?}");
+    }
+}

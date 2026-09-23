@@ -132,6 +132,8 @@ pub struct Ga<R: Representation, S, C, M> {
     rng: StreamRng,
     population: Population<R::Genome>,
     offspring: Vec<Individual<R::Genome>>,
+    // offspring evaluated in the last generation that didn't survive
+    discarded: Vec<Individual<R::Genome>>,
     phase: Phase,
     asked: bool,
     // positions in the population (initial phase) or the offspring of the genomes asked for
@@ -265,6 +267,7 @@ where
     // forms the next population from the evaluated offspring
     fn survive(&mut self) {
         let size = self.population_size;
+        self.discarded.clear();
         match self.scheme {
             Scheme::Generational { elitism } => {
                 self.keep_best_parents(elitism);
@@ -275,11 +278,15 @@ where
             Scheme::MuPlusLambda { .. } => {
                 let mut all = mem::take(&mut self.offspring);
                 all.extend(mem::take(&mut self.population).into_iter().map(aged));
-                self.population = best_of(all, size, self.objective);
+                let (population, rest) = best_of(all, size, self.objective);
+                self.population = population;
+                // the parents were seen before, only the offspring are new: parents have been aged
+                self.discarded
+                    .extend(rest.into_iter().filter(|individual| individual.age() == 0));
             }
             Scheme::MuCommaLambda { .. } => {
                 let offspring = mem::take(&mut self.offspring);
-                self.population = best_of(offspring, size, self.objective);
+                (self.population, self.discarded) = best_of(offspring, size, self.objective);
             }
         }
     }
@@ -300,16 +307,17 @@ fn aged<G: Genome>(mut individual: Individual<G>) -> Individual<G> {
     individual
 }
 
-// the `count` best individuals, the earlier ones first on ties
+// the `count` best individuals (the earlier ones first on ties), and the rest
 fn best_of<G: Genome>(
     individuals: Vec<Individual<G>>,
     count: usize,
     objective: Objective,
-) -> Population<G> {
+) -> (Population<G>, Vec<Individual<G>>) {
     let mut population = Population::new(individuals);
     population.sort_best_first(objective);
-    population.truncate(count);
-    population
+    let mut best = population.into_vec();
+    let rest = best.split_off(count.min(best.len()));
+    (Population::new(best), rest)
 }
 
 // replaces `best` by the first individual that is strictly better; true if it did
@@ -415,6 +423,10 @@ where
 
     fn best(&self) -> Option<&Individual<R::Genome>> {
         self.best.as_ref()
+    }
+
+    fn discarded(&self) -> &[Individual<R::Genome>] {
+        &self.discarded
     }
 
     fn generation(&self) -> u64 {
@@ -635,6 +647,7 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
             rng,
             population: Population::from_genomes(genomes),
             offspring: Vec::new(),
+            discarded: Vec::new(),
             phase: Phase::Initial,
             asked: false,
             pending: Vec::new(),
@@ -829,6 +842,38 @@ mod tests {
             let ages: Vec<u32> = ga.population().iter().map(Individual::age).collect();
             assert!(ages[0] >= 1 && ages[0] <= generation);
             assert!(ages[1..].iter().all(|&age| age == 0));
+        }
+    }
+
+    #[test]
+    fn discarded_offspring() {
+        let objective = Objective::Maximize;
+        for scheme in [
+            Scheme::MuCommaLambda { lambda: 25 },
+            Scheme::MuPlusLambda { lambda: 25 },
+            Scheme::Generational { elitism: 2 },
+        ] {
+            let mut ga = builder(16).scheme(scheme).build().unwrap();
+            step(&mut ga);
+            assert!(ga.discarded().is_empty());
+            for _ in 0..5 {
+                step(&mut ga);
+                let worst_survivor = ga
+                    .population()
+                    .iter()
+                    .filter_map(Individual::fitness)
+                    .min_by(|a, b| objective.compare(*a, *b))
+                    .unwrap();
+                for individual in ga.discarded() {
+                    assert_eq!(individual.age(), 0);
+                    assert!(!objective.is_better(individual.fitness().unwrap(), worst_survivor));
+                }
+                match scheme {
+                    Scheme::MuCommaLambda { .. } => assert_eq!(ga.discarded().len(), 15),
+                    Scheme::Generational { .. } => assert!(ga.discarded().is_empty()),
+                    _ => assert!(ga.discarded().len() <= 25),
+                }
+            }
         }
     }
 
