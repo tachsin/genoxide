@@ -27,8 +27,11 @@ genoxide follows [Semantic Versioning](https://semver.org/). Before 1.0, Cargo's
 | Change | Before 1.0 | From 1.0 |
 |---|---|---|
 | Breaking change to the public API | minor: 0.1.x → 0.2.0 | major: 1.x → 2.0.0 |
+| Different results for the same seed and settings | minor: 0.1.x → 0.2.0 | major: 1.x → 2.0.0 |
 | New functionality, backwards compatible | patch: 0.1.0 → 0.1.1 | minor: 1.0 → 1.1.0 |
 | Bug fix | patch | patch |
+
+Reproducibility is part of the API: a seeded run gives the same results in every patch release. A change to the random choices, even an equally good one, is marked breaking (`feat!:`, `perf!:`, …).
 
 Releases are automated with [release-plz](https://release-plz.dev/):
 

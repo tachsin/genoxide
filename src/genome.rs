@@ -85,10 +85,6 @@ pub trait SwapGenes: Genome {
     /// `[0, 1]`.
     fn swap_uniform(&mut self, other: &mut Self, rate: f64, rng: &mut StreamRng) {
         let chance = crate::rng::Chance::new(rate);
-        for index in 0..self.len() {
-            if rng.chance(chance) {
-                self.swap_gene(other, index);
-            }
-        }
+        rng.chosen(chance, self.len(), |_, index| self.swap_gene(other, index));
     }
 }
