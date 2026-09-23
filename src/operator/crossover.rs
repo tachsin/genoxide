@@ -127,6 +127,22 @@ where
     }
 }
 
+/// No crossover: the children are copies of their parents, for algorithms that only mutate,
+/// e.g. (μ+λ). It fits every representation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NoCrossover;
+
+impl<R: Representation> Crossover<R> for NoCrossover {
+    fn crossover(
+        &self,
+        _representation: &R,
+        _a: &mut R::Genome,
+        _b: &mut R::Genome,
+        _rng: &mut StreamRng,
+    ) {
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
