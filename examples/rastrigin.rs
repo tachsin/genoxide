@@ -28,7 +28,8 @@ fn main() -> Result<()> {
         .population_size(100)
         .select(Tournament::new(3)?)
         .crossover(UniformCrossover::new())
-        .mutate(PolynomialMutation::per_gene(0.1, 20.0)?)
+        // the usual rate: one gene per genome on average
+        .mutate(PolynomialMutation::per_gene(1.0 / DIMENSIONS as f64, 20.0)?)
         .scheme(Scheme::Generational { elitism: 2 })
         .minimize()
         .seed(3)

@@ -7,6 +7,8 @@ Usage:
     python run.py --seeds 5 --scenarios onemax-100-matched nqueens-32-idiomatic
     python run.py --libraries deap genetic_algorithm
     python run.py chart                      # redraw the charts of the latest results
+    python run.py --libraries genoxide --update results/<file>.json
+                                             # rerun one library, keep the others' results
 
 Results are written to results/<timestamp>.json (all runs), results/latest.md (table) and
 results/charts/*.svg (charts). On Linux with Valgrind, a run also measures instructions per
@@ -245,7 +247,8 @@ def markdown_table(rows):
 
 LIBRARY_NAMES = {"genoxide": "genoxide", "genetic_algorithm": "genetic_algorithm", "deap": "DEAP",
                  "pygad": "PyGAD", "pymoo": "pymoo"}
-SOLVER_NAMES = {"ga": "GA", "evolve": "GA", "hill_climb": "hill climbing", "cma_es": "CMA-ES", "de": "DE"}
+SOLVER_NAMES = {"ga": "GA", "evolve": "GA", "hill_climb": "hill climbing", "local_search": "local search",
+                "cma_es": "CMA-ES", "de": "DE"}
 PROBLEM_NAMES = {"onemax": "OneMax", "nqueens": "N-Queens", "rastrigin": "Rastrigin"}
 GENOXIDE_COLOR = "#ce422b"
 OTHER_COLOR = "#8a9bb0"
@@ -409,6 +412,9 @@ def main():
     parser.add_argument("--results", type=Path, help="results file to chart (default: the latest)")
     parser.add_argument("--charts", type=Path, default=ROOT / "results" / "charts", help="folder for the charts")
     parser.add_argument("--no-instructions", action="store_true", help="skip the Callgrind measurement")
+    parser.add_argument("--update", type=Path,
+                        help="rerun only --libraries, with the seeds and scenarios of this results file, "
+                             "and keep its results of the other libraries")
     args = parser.parse_args()
 
     if args.command == "setup":
@@ -422,11 +428,19 @@ def main():
     if not VENV_PYTHON.exists():
         raise SystemExit("run `python run.py setup` first")
 
-    seeds = 3 if args.quick and args.seeds == 10 else args.seeds
+    previous = None
+    if args.update:
+        if set(args.libraries) == set(ADAPTERS):
+            raise SystemExit("--update needs --libraries: the ones to rerun")
+        previous = json.loads(args.update.read_text(encoding="utf-8"))
+    seeds = previous["seeds"] if previous else 3 if args.quick and args.seeds == 10 else args.seeds
+    max_seconds = previous.get("max_seconds", args.max_seconds) if previous else args.max_seconds
+    previous_scenarios = {scenario_name(r["problem"], r["size"], r["mode"]) for r in previous["runs"]} if previous else None
     scenarios = [
         scenario for scenario in SCENARIOS
         if (not args.quick or scenario_name(*scenario[:3]) in QUICK_SCENARIOS)
         and (not args.scenarios or scenario_name(*scenario[:3]) in args.scenarios)
+        and (previous_scenarios is None or scenario_name(*scenario[:3]) in previous_scenarios)
     ]
 
     versions = {}
@@ -442,22 +456,30 @@ def main():
     for problem, size, mode, max_evaluations in scenarios:
         for name in args.libraries:
             print(f"{scenario_name(problem, size, mode)}: {name} ({seeds} seeds) ...", flush=True)
-            runs += run_adapter(ADAPTERS[name], problem, size, mode, seeds, max_evaluations, args.max_seconds)
+            runs += run_adapter(ADAPTERS[name], problem, size, mode, seeds, max_evaluations, max_seconds)
 
     instructions = None
     if shutil.which("valgrind") and not args.no_instructions:
         instructions = measure_instructions(args.libraries)
+
+    if previous:
+        # the other libraries' results, as they were
+        runs = [run for run in previous["runs"] if run["library"] not in args.libraries] + runs
+        versions = {**previous["versions"], **versions}
+        if previous.get("instructions") is not None or instructions is not None:
+            kept = [row for row in previous.get("instructions") or [] if row["library"] not in args.libraries]
+            instructions = kept + (instructions or [])
 
     rows = summarize(runs)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     results = ROOT / "results"
     results.mkdir(exist_ok=True)
     platform = describe_platform()
-    report = {"versions": versions, "seeds": seeds, "platform": platform, "runs": runs, "summary": rows,
-              "instructions": instructions}
+    report = {"versions": versions, "seeds": seeds, "max_seconds": max_seconds, "platform": platform,
+              "runs": runs, "summary": rows, "instructions": instructions}
     (results / f"{timestamp}.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     draw_charts(report, args.charts)
-    header = [f"# Results {timestamp}", "", f"Seeds per scenario: {seeds}, wall time cap per run: {args.max_seconds} s", ""]
+    header = [f"# Results {timestamp}", "", f"Seeds per scenario: {seeds}, wall time cap per run: {max_seconds} s", platform, ""]
     header += [f"- {name} {version}" for name, version in versions.items()] + [""]
     table = markdown_table(rows)
     (results / "latest.md").write_text("\n".join(header) + table + "\n", encoding="utf-8")
