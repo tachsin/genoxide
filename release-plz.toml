@@ -17,12 +17,14 @@ sort_commits = "oldest"
 commit_preprocessors = [
   { pattern = '\(#([0-9]+)\)', replace = "([#${1}](https://github.com/tachsin/genoxide/pull/${1}))" },
 ]
+# groups are sorted by name: the invisible <!-- n --> comments set their order
 commit_parsers = [
-  { message = "^feat", group = "Added" },
-  { message = "^fix", group = "Fixed" },
-  { message = "^perf", group = "Performance" },
-  { message = "^refactor", group = "Changed" },
-  { message = "^docs", group = "Documentation" },
+  { message = "^feat", group = "<!-- 0 -->Added" },
+  { message = "^fix", group = "<!-- 1 -->Fixed" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^refactor", group = "<!-- 3 -->Changed" },
+  { message = "^docs", group = "<!-- 4 -->Documentation" },
   { message = "^(test|ci|build|chore|style)", skip = true },
-  { message = ".*", group = "Other" },
+  # PR titles are checked, so only the commits from before the checks end up here
+  { message = ".*", group = "<!-- 5 -->Project setup" },
 ]
