@@ -48,6 +48,41 @@ jobs:
             cargo run --release --example "$example"
           done
 
+  instructions:
+    name: Instruction counts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y valgrind
+      - uses: taiki-e/install-action@v2
+        with:
+          # the same version as the gungraun dev-dependency
+          tool: gungraun-runner@0.19.4
+      # on pull requests, the counts of the base branch are the baseline: more than 5% more
+      # instructions in any benchmark fails the job
+      - name: Baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          git checkout --quiet ${{ github.event.pull_request.base.sha }}
+          if cargo bench --bench instructions -- --save-baseline=base; then
+            echo "BASELINE=--baseline=base --callgrind-limits=ir=5%" >> "$GITHUB_ENV"
+          else
+            echo "no instruction benchmarks on the base branch"
+          fi
+          git checkout --quiet ${{ github.sha }}
+      - name: Instruction counts
+        env:
+          # plain text for the job summary
+          GUNGRAUN_COLOR: never
+        run: |
+          set -o pipefail
+          cargo bench --bench instructions -- $BASELINE | tee instructions.txt
+          { echo '```text'; cat instructions.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -64,10 +99,10 @@ jobs:
           RUSTDOCFLAGS: -D warnings
 
   msrv:
-    name: MSRV (1.85)
+    name: MSRV (1.86)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.86
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --all-targets

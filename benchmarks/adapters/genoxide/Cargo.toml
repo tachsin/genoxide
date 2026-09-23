@@ -1,0 +1,13 @@
+[package]
+name = "ga_bench_genoxide"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# the genoxide of this repository
+genoxide = { path = "../../..", default-features = false }
+
+[profile.release]
+codegen-units = 1
+lto = "thin"

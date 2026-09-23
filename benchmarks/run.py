@@ -24,14 +24,21 @@ ROOT = Path(__file__).resolve().parent
 VENV = ROOT / ".venv"
 VENV_PYTHON = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 RUST_ADAPTER = ROOT / "adapters" / "genetic_algorithm"
+GENOXIDE_ADAPTER = ROOT / "adapters" / "genoxide"
 
 # Each adapter prints one JSON line per solver per seed, with the same command line:
 #   <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
 ADAPTERS = {
+    "genoxide": {
+        "build": ["cargo", "build", "--release", "--quiet", "--manifest-path", str(GENOXIDE_ADAPTER / "Cargo.toml")],
+        "command": [str(GENOXIDE_ADAPTER / "target" / "release" / "ga_bench_genoxide")],
+        # the genoxide of this repository: its version and commit
+        "version": ("cargo", "genoxide", GENOXIDE_ADAPTER),
+    },
     "genetic_algorithm": {
         "build": ["cargo", "build", "--release", "--quiet", "--manifest-path", str(RUST_ADAPTER / "Cargo.toml")],
         "command": [str(RUST_ADAPTER / "target" / "release" / "ga_bench_genetic_algorithm")],
-        "version": ("cargo", "genetic_algorithm"),
+        "version": ("cargo", "genetic_algorithm", RUST_ADAPTER),
     },
     "deap": {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "deap" / "bench.py")],
@@ -76,17 +83,23 @@ def setup():
     subprocess.run([str(VENV_PYTHON), "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")], check=True)
 
 
-def library_version(kind, package):
+def library_version(kind, package, adapter=None):
     if kind == "python":
         return subprocess.run(
             [str(VENV_PYTHON), "-c", f"import importlib.metadata as m; print(m.version('{package}'))"],
             capture_output=True, text=True, check=True, cwd=ROOT,
         ).stdout.strip()
     metadata = json.loads(subprocess.run(
-        ["cargo", "metadata", "--format-version", "1", "--manifest-path", str(RUST_ADAPTER / "Cargo.toml")],
+        ["cargo", "metadata", "--format-version", "1", "--manifest-path", str(adapter / "Cargo.toml")],
         capture_output=True, text=True, check=True,
     ).stdout)
-    return next(p["version"] for p in metadata["packages"] if p["name"] == package)
+    version = next(p["version"] for p in metadata["packages"] if p["name"] == package)
+    if package == "genoxide":
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT,
+        ).stdout.strip()
+        version = f"{version}+{commit}" if commit else version
+    return version
 
 
 def run_adapter(adapter, problem, size, mode, seeds, max_evaluations, max_seconds):
