@@ -136,7 +136,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Permutation mutation: inversion (2-opt), insertion, scramble
 - [x] Local search: hill climbing (first improvement, or the best of k random neighbors), simulated annealing
 - [x] Local search: tabu search, iterated local search
-- [ ] Memetic / Lamarckian hybrid (GA with local search on elites)
+- [x] Memetic / Lamarckian hybrid (GA with local search on elites)
 - [ ] Constraint handling: Deb's feasibility rules, penalty functions
 
 ### 0.3: Evolution strategies and swarm

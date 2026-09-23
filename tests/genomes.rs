@@ -280,3 +280,39 @@ fn iterated_local_search_solves_a_tour() {
         .unwrap();
     assert_eq!(outcome.stop_reason(), StopReason::Target);
 }
+
+#[test]
+fn memetic_ga_solves_a_tour() {
+    // 40 cities on a circle: the shortest tour visits them in circle order
+    const CITIES: usize = 40;
+    let position = |city: usize| {
+        let angle = std::f64::consts::TAU * city as f64 / CITIES as f64;
+        (angle.cos(), angle.sin())
+    };
+    let length = |tour: &Order| {
+        (0..CITIES)
+            .map(|i| {
+                let (a, b) = (position(tour[i]), position(tour[(i + 1) % CITIES]));
+                ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
+            })
+            .sum::<f64>()
+    };
+    let optimum = length(&Order::identity(CITIES));
+    let ga = Ga::builder(Permutation::new(CITIES).unwrap())
+        .population_size(30)
+        .select(Tournament::new(3).unwrap())
+        .crossover(OrderCrossover)
+        .mutate(InversionMutation)
+        .mutation_rate(0.2)
+        // the 2 best parents try 8 2-opt moves each, every generation
+        .memetic(2, 8)
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(ga, length)
+        .stop_when(Stop::target(optimum + 1e-9).or(Stop::generations(3_000)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+}

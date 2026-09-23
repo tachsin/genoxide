@@ -68,6 +68,7 @@ Selection works with every representation. `Tournament::new(2..=5)?` is the usua
 | `.scheme(s)` | no | generational, elitism 1 | elitism < population size; 1 ≤ replacements ≤ population size; lambda ≥ 1 for (μ+λ); lambda ≥ population size for (μ,λ) |
 | `.seed(u64)` | no | random | |
 | `.initial_genomes(iter)` | no | none | at most the population size, each valid for the representation |
+| `.memetic(parents, neighbors)` | no | off | 1 ≤ parents ≤ population size, neighbors ≥ 1: the best parents each try neighbors made by the mutation operator, and take the best one if not worse (Lamarckian) |
 
 `.build()?` validates everything and returns `Error::MissingSetting` or `Error::InvalidSetting` naming the setting.
 
