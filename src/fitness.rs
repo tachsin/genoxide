@@ -36,27 +36,27 @@ impl Objective {
     /// assert_eq!(Objective::Minimize.compare(high, low), Ordering::Less);
     /// assert_eq!(Objective::Minimize.compare(low, Fitness::invalid()), Ordering::Greater);
     /// ```
+    #[inline]
     pub fn compare(self, a: Fitness, b: Fitness) -> Ordering {
-        match (a.score, b.score) {
-            (Some(x), Some(y)) => {
-                let scores = match self {
-                    Objective::Maximize => x.total_cmp(&y),
-                    Objective::Minimize => y.total_cmp(&x),
-                };
-                match (a.violation == 0.0, b.violation == 0.0) {
-                    (true, true) => scores,
-                    (true, false) => Ordering::Greater,
-                    (false, true) => Ordering::Less,
-                    (false, false) => b.violation.total_cmp(&a.violation).then(scores),
-                }
-            }
-            (Some(_), None) => Ordering::Greater,
-            (None, Some(_)) => Ordering::Less,
-            (None, None) => Ordering::Equal,
+        // invalid (a NaN score) is the worst
+        match (a.score.is_nan(), b.score.is_nan()) {
+            (false, false) => {}
+            (true, true) => return Ordering::Equal,
+            (true, false) => return Ordering::Less,
+            (false, true) => return Ordering::Greater,
+        }
+        // a smaller violation is better, and feasible (0) beats every infeasible fitness
+        if a.violation != b.violation {
+            return b.violation.total_cmp(&a.violation);
+        }
+        match self {
+            Objective::Maximize => a.score.total_cmp(&b.score),
+            Objective::Minimize => b.score.total_cmp(&a.score),
         }
     }
 
     /// Whether `a` is strictly better than `b`.
+    #[inline]
     pub fn is_better(self, a: Fitness, b: Fitness) -> bool {
         self.compare(a, b) == Ordering::Greater
     }
@@ -83,10 +83,11 @@ impl Objective {
 /// assert!(!Fitness::new(f64::NAN).is_valid()); // NaN is invalid
 /// assert_eq!(Fitness::try_new(f64::NAN), Err(Error::NanFitness)); // or an error
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Fitness {
-    // never NaN, never -0.0
-    score: Option<f64>,
+    // f64::NAN for an invalid fitness, otherwise never NaN and never -0.0; with the violation, the
+    // fitness is 16 bytes, like a score alone, which keeps comparisons and copies cheap
+    score: f64,
     // 0 when feasible or invalid, otherwise positive (possibly infinite); never NaN or -0.0
     violation: f64,
 }
@@ -105,7 +106,7 @@ impl Fitness {
         } else {
             // + 0.0 turns -0.0 into 0.0 and leaves every other value unchanged
             Ok(Self {
-                score: Some(score + 0.0),
+                score: score + 0.0,
                 violation: 0.0,
             })
         }
@@ -155,19 +156,19 @@ impl Fitness {
     /// The fitness of a solution that can't be scored.
     pub fn invalid() -> Self {
         Self {
-            score: None,
+            score: f64::NAN,
             violation: 0.0,
         }
     }
 
     /// The score, or `None` for an invalid fitness.
     pub fn score(self) -> Option<f64> {
-        self.score
+        (!self.score.is_nan()).then_some(self.score)
     }
 
     /// Whether this fitness has a score.
     pub fn is_valid(self) -> bool {
-        self.score.is_some()
+        !self.score.is_nan()
     }
 
     /// The constraint violation: 0 for a feasible solution (and for an invalid one).
@@ -177,7 +178,19 @@ impl Fitness {
 
     /// Whether this fitness has a score and no constraint violation.
     pub fn is_feasible(self) -> bool {
-        self.score.is_some() && self.violation == 0.0
+        self.is_valid() && self.violation == 0.0
+    }
+}
+
+impl fmt::Debug for Fitness {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.score() {
+            None => write!(f, "Fitness(invalid)"),
+            Some(score) if self.violation > 0.0 => {
+                write!(f, "Fitness({score:?}, violation {:?})", self.violation)
+            }
+            Some(score) => write!(f, "Fitness({score:?})"),
+        }
     }
 }
 
@@ -191,7 +204,7 @@ impl fmt::Display for Fitness {
     /// assert_eq!(Fitness::invalid().to_string(), "invalid");
     /// ```
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.score {
+        match self.score() {
             Some(score) => {
                 fmt::Display::fmt(&score, f)?;
                 if self.violation > 0.0 {
@@ -214,7 +227,8 @@ impl Eq for Fitness {}
 
 impl Hash for Fitness {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.score.map(f64::to_bits).hash(state);
+        // every invalid fitness has the same NaN
+        self.score.to_bits().hash(state);
         self.violation.to_bits().hash(state);
     }
 }
@@ -257,6 +271,17 @@ mod tests {
             }),
             2 => Just(Fitness::constrained(1.0, f64::INFINITY)),
         ]
+    }
+
+    #[test]
+    fn compact() {
+        assert_eq!(std::mem::size_of::<Fitness>(), 16);
+        assert_eq!(format!("{:?}", Fitness::invalid()), "Fitness(invalid)");
+        assert_eq!(format!("{:?}", Fitness::new(1.5)), "Fitness(1.5)");
+        assert_eq!(
+            format!("{:?}", Fitness::constrained(1.0, 0.5)),
+            "Fitness(1.0, violation 0.5)"
+        );
     }
 
     #[test]
