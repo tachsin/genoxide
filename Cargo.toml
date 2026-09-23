@@ -1,17 +1,18 @@
 [package]
 name = "genoxide"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.86"
 description = "Evolutionary computation for Rust: genetic algorithms, evolution strategies, multi-objective optimization and more"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tachsin/genoxide"
 readme = "README.md"
-exclude = ["benchmarks/"]
-keywords = ["genetic-algorithm", "evolutionary", "optimization", "metaheuristics", "nsga2"]
+exclude = [".github/", "benchmarks/", "release-plz.toml"]
+keywords = ["genetic-algorithm", "evolutionary", "optimization", "metaheuristics", "ga"]
 categories = ["algorithms", "science", "mathematics"]
-# pre-alpha: remove on the first real release (no placeholder crates on crates.io)
-publish = false
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 rand = "0.10"

@@ -1,8 +1,7 @@
 # Releases: see CONTRIBUTING.md ("Versioning and releases")
 [workspace]
-# versions come from git tags until genoxide is published on crates.io (switch at 0.1)
-git_only = true
-publish = false
+# released versions come from crates.io, and merging a release PR publishes there
+publish = true
 # cargo-semver-checks: a breaking public API change requires a breaking version bump
 semver_check = true
 changelog_update = true
