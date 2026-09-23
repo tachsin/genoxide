@@ -129,7 +129,7 @@ Linux, Intel Core Ultra 7 265K, single-threaded, 10 seeds per scenario, genoxide
 
 ![Evaluations per second](docs/benchmarks/throughput.svg)
 
-- **Cost per evaluation:** genoxide needs about 3,400 CPU instructions per OneMax 1000 evaluation, fitness function included: 2.6 times fewer than genetic_algorithm, and 300 to 1,300 times fewer than pymoo, PyGAD and DEAP.
+- **Cost per evaluation:** genoxide needs about 3,200 CPU instructions per OneMax 1000 evaluation, fitness function included: 2.8 times fewer than genetic_algorithm, and 300 to 1,400 times fewer than pymoo, PyGAD and DEAP.
 - **Time to target:** genoxide is the fastest on OneMax (matched), on N-Queens, where its local search beats every other solver, and on Rastrigin 30: 0.5 s, against 1.7 s for pymoo's GA. It's second on OneMax (idiomatic) and Rastrigin 10, after genetic_algorithm. On Rastrigin 30 it reaches the target on 9 of 10 seeds.
 - **Where it's weaker:** search efficiency on real-valued problems. pymoo's GA needs 16 times fewer evaluations on Rastrigin 10 (11,700 against 193,000); genoxide is faster than it there only because each evaluation is so cheap. With an expensive fitness function, the evaluations count more than the framework's speed. Evolution strategies and better real-valued defaults are next on the [roadmap](ROADMAP.md).
 
