@@ -65,14 +65,14 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 ### 0.0: Project setup ✅
 - [x] Name, repository, dual MIT / Apache-2.0 license
 - [x] README (homepage) and this roadmap
-- [x] Crate skeleton (edition 2024, MSRV 1.85)
+- [x] Crate skeleton (edition 2024, MSRV 1.86)
 
 ### 0.1: Foundations
 
 #### Project
 - [x] CI: build, test, clippy, fmt, rustdoc (`-D warnings`) on Linux, macOS, Windows; MSRV job; single-thread rayon job
 - [x] `#![forbid(unsafe_code)]`, `#![warn(missing_docs)]`
-- [ ] Benchmark suite in [`benchmarks/`](benchmarks/) (DEAP, pymoo, PyGAD, genetic_algorithm)
+- [x] Benchmark suite in [`benchmarks/`](benchmarks/) (DEAP, pymoo, PyGAD, genetic_algorithm)
 - [x] Contributing guide, issue and PR templates
 - [x] Versioning policy and automated releases (release-plz, cargo-semver-checks, changelog from PR titles)
 
@@ -124,9 +124,9 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] AGENTS.md (guide for AI coding assistants)
 
 #### Performance
-- [ ] criterion benchmarks for the hot paths
-- [ ] iai-callgrind instruction count benchmarks in CI
-- [ ] genoxide adapter in the benchmark suite, first published results
+- [x] criterion benchmarks for the hot paths
+- [x] Instruction count benchmarks in CI (gungraun, formerly iai-callgrind)
+- [x] genoxide adapter in the benchmark suite, first published results
 
 ### 0.2: Real-valued and permutation excellence
 - [ ] Real-valued crossover: SBX, BLX-α, arithmetic
@@ -195,7 +195,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - **Fuzzing** of builders and the configuration file format.
 - **Performance:** from 0.1 on, every hot path has benchmarks, in two forms:
   - criterion benchmarks for wall time
-  - iai-callgrind for exact instruction counts, which are noise-free and fail CI on regressions
+  - gungraun (formerly iai-callgrind) for exact instruction counts, which are noise-free and fail CI on regressions
 - **Safety:** `#![forbid(unsafe_code)]` by default. Any `unsafe` for SIMD or bit tricks goes behind a feature, with a `SAFETY` comment and Miri tests.
 - **Docs:** doctests for all examples, including the AI-agent guide.
 

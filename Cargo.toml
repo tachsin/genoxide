@@ -2,7 +2,7 @@
 name = "genoxide"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.86"
 description = "Evolutionary computation for Rust: genetic algorithms, evolution strategies, multi-objective optimization and more"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tachsin/genoxide"
@@ -24,8 +24,18 @@ default = ["parallel"]
 parallel = ["dep:rayon"]
 
 [dev-dependencies]
+criterion = "0.8"
+gungraun = "0.19.4"
 proptest = "1"
 
 [[example]]
 name = "rastrigin"
 required-features = ["parallel"]
+
+[[bench]]
+name = "hot_paths"
+harness = false
+
+[[bench]]
+name = "instructions"
+harness = false

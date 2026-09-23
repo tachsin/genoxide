@@ -110,7 +110,30 @@ They all use the same problems, the same fitness functions and the same evaluati
 - **Instructions per evaluation (Callgrind):** exact, noise-free framework cost, comparable across languages.
 - **Peak memory**
 
-genoxide's own performance will be guarded in CI with [iai-callgrind](https://github.com/iai-callgrind/iai-callgrind) instruction-count benchmarks, so every PR shows whether it made things faster or slower.
+genoxide's own performance is guarded in CI with [gungraun](https://github.com/gungraun/gungraun) (formerly iai-callgrind) instruction-count benchmarks: every PR shows its effect on the hot paths, and more than 5% more instructions fails CI.
+
+### First results (preliminary)
+
+A first, small run: the quick scenarios, 3 seeds, one Windows machine, single-threaded. The full suite on Linux, with Callgrind instruction counts, comes next. The code and the commands are in [`benchmarks/`](benchmarks/).
+
+| Scenario | Library / solver | Success | Median time to target | Median evaluations | Evaluations/s |
+|---|---|---|---|---|---|
+| OneMax 100, matched | **genoxide** / GA | 3/3 | **1.4 ms** | 5,202 | **3.9 M** |
+| | genetic_algorithm / evolve | 3/3 | 3.9 ms | 9,856 | 2.6 M |
+| | DEAP / GA | 3/3 | 224 ms | 7,035 | 31 k |
+| | pymoo / GA | 3/3 | 198 ms | 10,500 | 52 k |
+| | PyGAD / GA | 3/3 | 143 ms | 6,900 | 49 k |
+| OneMax 100, idiomatic | **genoxide** / GA | 3/3 | 1.2 ms | 4,650 | **3.8 M** |
+| | genetic_algorithm / evolve | 3/3 | **0.5 ms** | 1,939 | 3.7 M |
+| | DEAP / GA | 3/3 | 290 ms | 9,030 | 31 k |
+| N-Queens 32 | **genoxide** / GA | 3/3 | 0.50 ms | 1,998 | 3.9 M |
+| | genetic_algorithm / hill climb | 3/3 | **0.43 ms** | 1,848 | **4.2 M** |
+| | DEAP / GA | 3/3 | 867 ms | 40,113 | 47 k |
+| Rastrigin 10 (≤ 0.01) | **genoxide** / GA | 0/3 (0.030) | - | 500,150 | 4.3 M |
+| | genetic_algorithm / evolve | 3/3 | **10 ms** | 47,526 | **5.0 M** |
+| | DEAP / CMA-ES | 3/3 | 67 ms | 15,200 | 222 k |
+
+genoxide has the highest throughput on OneMax and is close to genetic_algorithm elsewhere, with 45 to 130 times more evaluations per second than the Python GAs. Its 0.1 real-valued operators are basic: uniform mutation finds the right basin but doesn't fine-tune, so it misses the Rastrigin target. The Gaussian and polynomial mutations of 0.2 are meant to fix that.
 
 ## Contributing
 

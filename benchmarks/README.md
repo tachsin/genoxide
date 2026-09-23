@@ -4,12 +4,11 @@ Evolutionary computation libraries on the same problems, with identical fitness 
 
 | Library | Language | Version |
 |---|---|---|
+| genoxide | Rust | this repository |
 | [genetic_algorithm](https://crates.io/crates/genetic_algorithm) | Rust | 0.27.3 |
 | [DEAP](https://github.com/DEAP/deap) | Python | 1.4.4 |
 | [pymoo](https://github.com/anyoptimization/pymoo) | Python | 0.6.2 |
 | [PyGAD](https://github.com/ahmedfgad/GeneticAlgorithmPython) | Python | 3.7.0 |
-
-genoxide itself will be added as soon as it can run the scenarios.
 
 ## Running
 
