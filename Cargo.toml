@@ -1,0 +1,15 @@
+[package]
+name = "genoxide"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Evolutionary computation for Rust: genetic algorithms, evolution strategies, multi-objective optimization and more"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tachsin/genoxide"
+readme = "README.md"
+keywords = ["genetic-algorithm", "evolutionary", "optimization", "metaheuristics", "nsga2"]
+categories = ["algorithms", "science", "mathematics"]
+# pre-alpha: remove on the first real release (no placeholder crates on crates.io)
+publish = false
+
+[dependencies]
