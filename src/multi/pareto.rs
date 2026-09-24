@@ -243,12 +243,14 @@ pub fn crowding_distance<const M: usize>(scores: &[Scores<M>], front: &[usize]) 
         let value = |position: usize| scores[front[position]].raw()[objective];
         order.sort_by(|&a, &b| value(a).total_cmp(&value(b)).then(a.cmp(&b)));
         let (first, last) = (order[0], order[order.len() - 1]);
-        distances[first] = f64::INFINITY;
-        distances[last] = f64::INFINITY;
         let range = value(last) - value(first);
+        // a flat objective has no ends: with every value equal, the first and last in the order
+        // would be arbitrary
         if !(range > 0.0 && range.is_finite()) {
             continue;
         }
+        distances[first] = f64::INFINITY;
+        distances[last] = f64::INFINITY;
         for window in order.windows(3) {
             let (previous, middle, next) = (window[0], window[1], window[2]);
             distances[middle] += (value(next) - value(previous)) / range;
@@ -389,6 +391,16 @@ mod tests {
         // only the front's members count, in its order
         let distances = crowding_distance(&flat, &[3, 1, 0]);
         assert_eq!(distances, [f64::INFINITY, 1.0, f64::INFINITY]);
+        // a flat objective, unsorted: the ends of the other objectives are the only infinite ones
+        let flat = [
+            Scores::new([1.0, 3.0, 7.0]),
+            Scores::new([0.0, 4.0, 7.0]),
+            Scores::new([4.0, 0.0, 7.0]),
+            Scores::new([3.0, 1.0, 7.0]),
+            Scores::new([2.0, 2.0, 7.0]),
+        ];
+        let distances = crowding_distance(&flat, &[0, 1, 2, 3, 4]);
+        assert_eq!(distances, [1.0, f64::INFINITY, f64::INFINITY, 1.0, 1.0]);
         let invalid = [Scores::<2>::invalid(); 4];
         assert_eq!(crowding_distance(&invalid, &[0, 1, 2, 3]), [0.0; 4]);
         // an infinite value makes the range infinite: that objective adds nothing
