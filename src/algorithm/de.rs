@@ -505,6 +505,9 @@ impl super::Migrate for De {
         if self.asked || !self.started {
             return Err(Error::MigrationOutOfTurn);
         }
+        for migrant in &migrants {
+            self.real.validate(migrant.genome())?;
+        }
         let objective = self.objective;
         // the worst positions, the later one first on ties
         let mut order: Vec<usize> = (0..self.population.len()).collect();
@@ -529,6 +532,10 @@ impl super::Migrate for De {
             self.best_generation = self.generation;
         }
         Ok(())
+    }
+
+    fn same_representation(&self, other: &Self) -> bool {
+        self.real == other.real
     }
 }
 

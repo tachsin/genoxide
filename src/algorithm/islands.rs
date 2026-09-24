@@ -14,8 +14,13 @@ pub trait Migrate: Algorithm {
     /// # Errors
     ///
     /// [`Error::MigrationOutOfTurn`] before the first [`tell`](Algorithm::tell), or between an
-    /// [`ask`](Algorithm::ask) and its tell. The population doesn't change on errors.
+    /// [`ask`](Algorithm::ask) and its tell, and [`Error::InvalidGenome`] for a migrant that
+    /// doesn't fit the representation. The population doesn't change on errors.
     fn immigrate(&mut self, migrants: Vec<Individual<Self::Genome>>) -> Result<()>;
+
+    /// Whether `other` has the same representation (the same genome length, bounds, ...), so its
+    /// individuals fit here. [`Islands`] checks it when built.
+    fn same_representation(&self, other: &Self) -> bool;
 }
 
 /// Where the migrants of [`Islands`] go.
@@ -241,6 +246,8 @@ impl<A: Migrate> Algorithm for Islands<A> {
             island.tell(own)?;
             rest = others;
         }
+        // the copies are told: drop them
+        self.candidates.clear();
         if self.started {
             self.generation += 1;
             if self.generation % self.interval == 0 {
@@ -350,6 +357,18 @@ impl<A: Migrate> IslandsBuilder<A> {
         {
             return invalid("islands", "the islands must share an objective".to_string());
         }
+        if let Some(index) = self
+            .islands
+            .iter()
+            .position(|island| !island.same_representation(&self.islands[0]))
+        {
+            return invalid(
+                "islands",
+                format!(
+                    "the islands must share a representation, so migrants fit: island {index} has another one than island 0"
+                ),
+            );
+        }
         if self.islands.iter().any(|island| island.evaluations() > 0) {
             return invalid("islands", "the islands must not have run yet".to_string());
         }
@@ -449,6 +468,64 @@ mod tests {
             setting(Islands::builder(vec![ga(0), minimizing]).build()),
             "islands"
         );
+        // a different representation: migrants wouldn't fit
+        let longer = Ga::builder(Binary::new(64).unwrap())
+            .population_size(10)
+            .select(Tournament::new(2).unwrap())
+            .crossover(UniformCrossover::new())
+            .mutate(BitFlip::per_gene(1.0 / 64.0).unwrap())
+            .build()
+            .unwrap();
+        assert_eq!(
+            setting(Islands::builder(vec![ga(0), ga(1), longer]).build()),
+            "islands"
+        );
+        let de = |bounds: std::ops::RangeInclusive<f64>| {
+            De::builder(Real::uniform(2, bounds).unwrap())
+                .population_size(5)
+                .build()
+                .unwrap()
+        };
+        assert_eq!(
+            setting(Islands::builder(vec![de(0.0..=1.0), de(100.0..=101.0)]).build()),
+            "islands"
+        );
+        assert!(
+            Islands::builder(vec![de(0.0..=1.0), de(0.0..=1.0)])
+                .build()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn migrants_that_dont_fit_are_errors() {
+        let mut island = ga(0);
+        step(&mut island);
+        let before = island.population().clone();
+        let mut fits = Individual::new(Bits::ones(32));
+        fits.set_fitness(Fitness::new(32.0));
+        let mut longer = Individual::new(Bits::ones(64));
+        longer.set_fitness(Fitness::new(64.0));
+        assert!(matches!(
+            island.immigrate(vec![fits, longer]),
+            Err(Error::InvalidGenome { .. })
+        ));
+        assert_eq!(island.population(), &before);
+        let mut de = De::builder(Real::uniform(2, 0.0..=1.0).unwrap())
+            .population_size(5)
+            .seed(0)
+            .build()
+            .unwrap();
+        let fitness: Vec<Fitness> = de.ask().iter().map(|x| Fitness::new(x[0])).collect();
+        de.tell(&fitness).unwrap();
+        let before = de.population().clone();
+        let mut outside = Individual::new(Reals::from(vec![5.0, 0.5]));
+        outside.set_fitness(Fitness::new(5.0));
+        assert!(matches!(
+            de.immigrate(vec![outside]),
+            Err(Error::InvalidGenome { .. })
+        ));
+        assert_eq!(de.population(), &before);
     }
 
     #[test]

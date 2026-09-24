@@ -444,7 +444,7 @@ fn update_best<G: Genome>(
 
 impl<R, S, C, M> super::Migrate for Ga<R, S, C, M>
 where
-    R: Representation,
+    R: Representation + PartialEq,
     S: Select,
     C: Crossover<R>,
     M: Mutate<R>,
@@ -452,6 +452,9 @@ where
     fn immigrate(&mut self, migrants: Vec<Individual<R::Genome>>) -> Result<()> {
         if self.asked || self.phase == Phase::Initial {
             return Err(Error::MigrationOutOfTurn);
+        }
+        for migrant in &migrants {
+            self.representation.validate(migrant.genome())?;
         }
         let count = migrants.len().min(self.population.len());
         let size = self.population.len();
@@ -466,6 +469,10 @@ where
             self.best_generation = self.generation;
         }
         Ok(())
+    }
+
+    fn same_representation(&self, other: &Self) -> bool {
+        self.representation == other.representation
     }
 }
 

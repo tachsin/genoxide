@@ -462,6 +462,8 @@ fn main() -> genoxide::Result<()> {
 
 The engine evaluates the candidates of all islands together (in parallel with `.parallel(true)`); breeding and migration are sequential, so a seed gives the same run with any number of threads.
 
+The islands must share the objective and the representation (the same genome length and bounds), so migrants fit: `build` checks both. Each island counts only its own evaluations, so give an L-SHADE island (`De::l_shade(real, budget)`) its share of the budget, not the whole.
+
 ### Multi-objective optimization
 
 When several objectives conflict (cost against quality, speed against accuracy), there is no single best solution but a front of trade-offs. The fitness function returns an array with one value per objective (or `(values, violation)` with a constraint violation, or `Option<[f64; M]>`); the algorithm takes the direction of each objective, and `MultiEngine` runs it. The outcome is the Pareto front.
