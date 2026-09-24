@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/tachsin/genoxide/compare/v0.3.0...v0.4.0) - 2026-09-24
+
+### <!-- 0 -->Added
+
+- add multi-objective scores, constrained dominance and non-dominated sorting ([#58](https://github.com/tachsin/genoxide/pull/58))
+- add the multi-objective engine and NSGA-II ([#60](https://github.com/tachsin/genoxide/pull/60))
+- add multi-objective indicators: hypervolume, IGD, IGD+, GD and spread ([#62](https://github.com/tachsin/genoxide/pull/62))
+- add a Pareto archive of non-dominated solutions ([#64](https://github.com/tachsin/genoxide/pull/64))
+- add the ZDT and DTLZ test problems and Das-Dennis reference points ([#66](https://github.com/tachsin/genoxide/pull/66))
+- add NSGA-III with reference directions ([#68](https://github.com/tachsin/genoxide/pull/68))
+- add SPEA2, the strength Pareto evolutionary algorithm 2 ([#72](https://github.com/tachsin/genoxide/pull/72))
+- add MOEA/D with Tchebycheff and PBI decomposition ([#74](https://github.com/tachsin/genoxide/pull/74))
+- add SMS-EMOA and exclusive hypervolume contributions ([#76](https://github.com/tachsin/genoxide/pull/76))
+
+### <!-- 1 -->Fixed
+
+- [**breaking**] mutate each gene independently at the per-gene rate ([#70](https://github.com/tachsin/genoxide/pull/70))
+
+### <!-- 4 -->Documentation
+
+- benchmark multi-objective algorithms against pymoo and DEAP ([#77](https://github.com/tachsin/genoxide/pull/77))
+
 ## [0.3.0](https://github.com/tachsin/genoxide/compare/v0.2.0...v0.3.0) - 2026-09-24
 
 ### <!-- 0 -->Added
