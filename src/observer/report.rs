@@ -7,8 +7,8 @@ use crate::{Error, Result};
 use std::io::{self, Write};
 use std::time::Duration;
 
-/// Prints a line of progress now and then: after the initial population, then once a second by
-/// default, to stderr by default.
+/// Prints a line of progress now and then: after the initial population (or the first generation
+/// of a run that continues), then once a second by default, to stderr by default.
 ///
 /// ```text
 /// generation 0: 50 evaluations, best 29 (generation 0), 0.000 s
@@ -133,6 +133,8 @@ impl<W: Write> Report<W> {
     pub fn update(&mut self, progress: &Progress) {
         let due = match (self.last, self.every) {
             (None, _) => true,
+            // a new run, e.g. `Engine::run` called again: its time starts again
+            (Some((_, last)), _) if progress.elapsed() < last => true,
             (Some((_, last)), Every::Time(interval)) => {
                 let interval = interval.as_nanos();
                 interval == 0
@@ -230,6 +232,24 @@ mod tests {
                 "generation 2",
                 "generation 4",
                 "generation 5"
+            ]
+        );
+        // a run that continues starts with a line, and its own schedule
+        let mut report = Report::every(Duration::from_millis(100)).to(Vec::new());
+        for (generation, millis) in [(0, 0), (5, 400), (6, 10), (7, 60), (8, 120)] {
+            report.update(&progress(generation, millis));
+        }
+        let generations: Vec<String> = lines(report)
+            .iter()
+            .map(|line| line.split(':').next().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            generations,
+            [
+                "generation 0",
+                "generation 5",
+                "generation 6",
+                "generation 8"
             ]
         );
         // every generation
