@@ -292,7 +292,8 @@ where
         for individual in self.population.iter_mut() {
             individual.increment_age();
         }
-        let mut used = vec![false; size];
+        // the child in each slot, if a child replaced its solution
+        let mut holders: Vec<Option<usize>> = vec![None; size];
         for subproblem in order {
             let child = &children[subproblem];
             let scores = child.fitness().unwrap_or(Scores::invalid());
@@ -310,15 +311,20 @@ where
                     .unwrap_or(Scores::invalid());
                 if self.improves(&scores, &current, neighbor) {
                     self.population[neighbor] = child.clone();
-                    used[subproblem] = true;
+                    holders[neighbor] = Some(subproblem);
                     replaced += 1;
                 }
             }
         }
+        // the children that aren't in the population: never placed, or replaced by later children
+        let mut kept = vec![false; size];
+        for holder in holders.into_iter().flatten() {
+            kept[holder] = true;
+        }
         self.discarded = children
             .into_iter()
-            .zip(used)
-            .filter(|(_, used)| !used)
+            .zip(kept)
+            .filter(|(_, kept)| !kept)
             .map(|(child, _)| child)
             .collect();
     }
@@ -811,6 +817,23 @@ mod tests {
             assert_eq!(moead.population().len(), 10);
         }
         assert_eq!(moead.generation(), 5);
+    }
+
+    #[test]
+    fn every_child_is_kept_or_discarded() {
+        // without a replacement limit, later children often overwrite earlier ones
+        let mut moead = builder(19, 1).max_replacements(20).build().unwrap();
+        let f = |x: &Reals| Scores::new([x[0], 1.0 - x[0] + x[1] + x[2]]);
+        step(&mut moead, f);
+        for _ in 0..10 {
+            let children: Vec<Reals> = moead.ask().iter().cloned().collect();
+            step(&mut moead, f);
+            let present = |genome: &Reals| {
+                moead.population().iter().any(|x| x.genome() == genome)
+                    || moead.discarded().iter().any(|x| x.genome() == genome)
+            };
+            assert!(children.iter().all(present));
+        }
     }
 
     #[test]
