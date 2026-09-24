@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Runs an [`Incremental`] algorithm, such as a [`SteadyGa`](crate::algorithm::SteadyGa), with
 /// asynchronous evaluation on worker threads: each worker gets a new genome as soon as it's done,
@@ -30,8 +30,9 @@ use std::time::Instant;
 ///   (`population_size` results) is evaluated, like with [`Engine`](super::Engine). Then no new
 ///   genome is proposed, and the run returns once the evaluations in flight are done; their
 ///   results count.
-///   [`Stop::evaluations`] stops proposing once the evaluations done and in flight reach the
-///   limit, so the run ends on it exactly.
+///   [`Stop::evaluations`] and [`Stop::generations`] stop proposing once the evaluations done and
+///   in flight reach the limit, so the run ends on it exactly. The generations that the results in
+///   flight complete are observed and checkpointed too.
 /// - A panic in the fitness function stops the run once the other evaluations in flight are done,
 ///   and then continues on the calling thread.
 ///
@@ -187,6 +188,27 @@ where
             notified: None,
             discarded: Vec::new(),
         };
+        // a run that continues: its stop condition may already be met
+        if driver.algorithm.evaluations() >= driver.size {
+            let progress = driver.progress();
+            let aborted = driver
+                .abort
+                .is_some_and(|flag| flag.load(Ordering::Relaxed));
+            let reason = if aborted {
+                Some(StopReason::Aborted)
+            } else {
+                driver.stop.and_then(|stop| stop.check(&progress))
+            };
+            if let (Some(stop_reason), Some(best)) = (reason, driver.algorithm.best()) {
+                return Ok(Outcome {
+                    best: best.clone(),
+                    generations: progress.generation,
+                    evaluations: progress.evaluations,
+                    elapsed: Duration::ZERO,
+                    stop_reason,
+                });
+            }
+        }
         let (jobs, job_queue) = mpsc::channel::<A::Genome>();
         let job_queue = Mutex::new(job_queue);
         let (done, results) = mpsc::channel::<Done<A::Genome>>();
@@ -206,7 +228,18 @@ where
                         };
                         let Ok(genome) = job else { return };
                         let evaluated = panic::catch_unwind(AssertUnwindSafe(|| {
-                            fitness.evaluate(&genome).into_fitness()
+                            if !fitness.is_batch() {
+                                return fitness.evaluate(&genome).into_fitness();
+                            }
+                            // a batch of one, which must give one score
+                            let mut scores = fitness.evaluate_batch(&[&genome]);
+                            match (scores.pop(), scores.len()) {
+                                (Some(score), 0) => score.into_fitness(),
+                                (score, rest) => Err(Error::FitnessCount {
+                                    expected: 1,
+                                    got: rest + usize::from(score.is_some()),
+                                }),
+                            }
                         }));
                         if done.send((genome, evaluated)).is_err() {
                             return;
@@ -242,6 +275,9 @@ where
                 }
                 // while stopping, the results in flight count, and nothing more is proposed
                 if stop_reason.is_some() {
+                    if let Err(error) = driver.after_late_result() {
+                        failure = Some(error);
+                    }
                     continue;
                 }
                 match driver.after_result() {
@@ -375,9 +411,21 @@ impl<A: Incremental> Driver<'_, '_, A> {
         let Some(stop) = self.stop else {
             return false;
         };
-        let mut ahead = self.progress();
-        ahead.evaluations += in_flight as u64;
-        ahead.evaluations > 0 && stop.check(&ahead) == Some(StopReason::Evaluations)
+        let evaluations = self.algorithm.evaluations() + in_flight as u64;
+        // generation g is complete after (g + 1) * size evaluations
+        let generation = (evaluations / self.size).checked_sub(1);
+        evaluations > 0 && stop.limit_reached(evaluations, generation)
+    }
+
+    // a generation's observers, trace and checkpoint for a result that arrives while stopping
+    fn after_late_result(&mut self) -> Result<()> {
+        let progress = self.progress();
+        if progress.evaluations % self.size == 0 {
+            trace::generation(&progress, None);
+            self.notify(&progress);
+            checkpoint(self.save, &*self.algorithm, progress.generation, false)?;
+        }
+        Ok(())
     }
 }
 

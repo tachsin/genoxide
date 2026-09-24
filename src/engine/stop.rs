@@ -146,6 +146,23 @@ impl Stop {
         }
     }
 
+    // whether a limit of evaluations or generations is reached after `evaluations` and `generation`
+    // (`None` before the initial population is complete): for `or`, one of its conditions; for
+    // `and`, all of them, and only if they're all limits (the others can't be foreseen)
+    pub(crate) fn limit_reached(&self, evaluations: u64, generation: Option<u64>) -> bool {
+        match &self.condition {
+            Condition::Generations(generations) => generation.is_some_and(|g| g >= *generations),
+            Condition::Evaluations(limit) => evaluations >= *limit,
+            Condition::Any(stops) => stops
+                .iter()
+                .any(|stop| stop.limit_reached(evaluations, generation)),
+            Condition::All(stops) => stops
+                .iter()
+                .all(|stop| stop.limit_reached(evaluations, generation)),
+            _ => false,
+        }
+    }
+
     /// Why to stop now, or `None` to go on. For [`or`](Stop::or), the first condition that is
     /// met; for [`and`](Stop::and), the last one.
     pub fn check(&self, progress: &Progress) -> Option<StopReason> {

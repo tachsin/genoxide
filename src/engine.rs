@@ -319,7 +319,10 @@ impl<G: Genome> Outcome<G> {
 /// flag. With parallel evaluation, the results are identical to sequential evaluation, for any
 /// number of threads.
 ///
-/// [`run`](Engine::run) can be called again to continue, e.g. with a new stop condition.
+/// [`run`](Engine::run) can be called again, e.g. after an abort. To continue with another stop
+/// condition, run the algorithm in a new engine: `Engine::new(engine.into_algorithm(), fitness)`.
+/// Stop conditions count from the algorithm's start, so a run whose condition is already met
+/// returns at once.
 ///
 /// ```
 /// use genoxide::prelude::*;
@@ -494,6 +497,11 @@ where
     ///   violation) with [`NanPolicy::Error`].
     /// - [`Error::InvalidFitness`] if the fitness function returns a negative constraint violation,
     ///   with any [`NanPolicy`]: that's a bug in the fitness function, not a result.
+    /// - [`Error::FitnessCount`] if a [`Batch`] returns a different number of scores than genomes.
+    /// - The errors of the algorithm's [`tell`](Algorithm::tell) and of the checkpoint closure.
+    ///
+    /// If the algorithm has run before and a stop condition is already met, it returns that
+    /// outcome without another generation.
     pub fn run(&mut self) -> Result<Outcome<A::Genome>> {
         if self.stop.is_none() && self.abort.is_none() {
             return Err(Error::MissingSetting {
@@ -505,6 +513,35 @@ where
         }
         validate_checkpoint(&self.checkpoint)?;
         let _span = trace::run::<A>();
+        if let Some(best) = self.algorithm.best() {
+            // a run that continues: its stop condition may already be met
+            let progress = Progress {
+                generation: self.algorithm.generation(),
+                evaluations: self.algorithm.evaluations(),
+                elapsed: Duration::ZERO,
+                best: best.fitness(),
+                objective: self.algorithm.objective(),
+                best_generation: self.algorithm.best_generation(),
+            };
+            let aborted = self
+                .abort
+                .as_ref()
+                .is_some_and(|flag| flag.load(Ordering::Relaxed));
+            let reason = if aborted {
+                Some(StopReason::Aborted)
+            } else {
+                self.stop.as_ref().and_then(|stop| stop.check(&progress))
+            };
+            if let Some(stop_reason) = reason {
+                return Ok(Outcome {
+                    best: best.clone(),
+                    generations: progress.generation,
+                    evaluations: progress.evaluations,
+                    elapsed: Duration::ZERO,
+                    stop_reason,
+                });
+            }
+        }
         let start = Instant::now();
         loop {
             self.evaluate()?;

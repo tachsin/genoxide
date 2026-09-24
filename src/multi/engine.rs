@@ -371,6 +371,33 @@ where
         }
         validate_checkpoint(&self.checkpoint)?;
         let _span = trace::run::<A>();
+        if self.algorithm.evaluations() > 0 {
+            // a run that continues: its stop condition may already be met
+            let progress = Progress::multi_objective(
+                self.algorithm.generation(),
+                self.algorithm.evaluations(),
+                Duration::ZERO,
+                self.algorithm.front_generation(),
+            );
+            let aborted = self
+                .abort
+                .as_ref()
+                .is_some_and(|flag| flag.load(Ordering::Relaxed));
+            let reason = if aborted {
+                Some(StopReason::Aborted)
+            } else {
+                self.stop.as_ref().and_then(|stop| stop.check(&progress))
+            };
+            if let Some(stop_reason) = reason {
+                return Ok(MultiOutcome {
+                    front: self.algorithm.front().to_vec(),
+                    generations: progress.generation(),
+                    evaluations: progress.evaluations(),
+                    elapsed: Duration::ZERO,
+                    stop_reason,
+                });
+            }
+        }
         let start = Instant::now();
         loop {
             self.evaluate()?;

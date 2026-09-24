@@ -438,3 +438,72 @@ fn batch_with_a_wrong_number_of_scores_is_an_error() {
         .unwrap();
     assert_eq!(outcome.stop_reason(), StopReason::Target);
 }
+
+#[test]
+fn a_run_whose_stop_condition_is_met_returns_at_once() {
+    let mut engine =
+        Engine::new(ga(32, Scheme::default(), 0), one_max).stop_when(Stop::generations(5));
+    assert_eq!(engine.run().unwrap().generations(), 5);
+    // again: no sixth generation
+    let outcome = engine.run().unwrap();
+    assert_eq!(outcome.generations(), 5);
+    assert_eq!(outcome.stop_reason(), StopReason::Generations);
+    assert_eq!(engine.algorithm().generation(), 5);
+    // a new engine continues with a new stop condition
+    let mut engine = Engine::new(engine.into_algorithm(), one_max).stop_when(Stop::generations(8));
+    assert_eq!(engine.run().unwrap().generations(), 8);
+}
+
+#[test]
+fn islands_show_the_individuals_migrants_replace() {
+    // every genome has its own fitness, so the top ones of a hall of fame are known
+    fn number(genome: &Bits) -> f64 {
+        genome
+            .iter()
+            .fold(0.0, |value, bit| 2.0 * value + f64::from(u8::from(bit)))
+    }
+    let islands = Islands::builder((0..3).map(|seed| ga(16, Scheme::default(), seed)).collect())
+        .interval(1)
+        .migrants(5)
+        .seed(1)
+        .build()
+        .unwrap();
+    let evaluated = std::sync::Mutex::new(std::collections::HashSet::new());
+    let mut hall_of_fame = HallOfFame::new(100_000).unwrap();
+    Engine::new(islands, |genome: &Bits| {
+        evaluated.lock().unwrap().insert(genome.clone());
+        number(genome)
+    })
+    .stop_when(Stop::generations(12))
+    .observe(&mut hall_of_fame)
+    .run()
+    .unwrap();
+    let seen: std::collections::HashSet<Bits> = hall_of_fame
+        .individuals()
+        .iter()
+        .map(|individual| individual.genome().clone())
+        .collect();
+    // before, the ones migrants replaced in the generation they were made were never seen
+    assert_eq!(seen, evaluated.into_inner().unwrap());
+}
+
+#[test]
+fn statistics_of_huge_finite_scores() {
+    let ga = Ga::builder(Binary::new(8).unwrap())
+        .population_size(10)
+        .select(Tournament::new(2).unwrap())
+        .crossover(UniformCrossover::new())
+        .mutate(BitFlip::count(1).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    let mut statistics = Statistics::new();
+    Engine::new(ga, |_: &Bits| 1e308)
+        .stop_when(Stop::generations(1))
+        .observe(&mut statistics)
+        .run()
+        .unwrap();
+    let record = statistics.last().unwrap();
+    assert_eq!(record.mean, Some(1e308));
+    assert_eq!(record.std_dev, Some(0.0));
+}
