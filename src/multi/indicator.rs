@@ -172,51 +172,43 @@ fn contributions_of(points: &[Vec<f64>], reference: &[f64]) -> Vec<f64> {
             contributions[best] = next - points[best][0];
         }
         2 => {
-            // the staircase of the non-dominated points: x increasing, y decreasing; a step's
-            // rectangle reaches to the next x and the previous y, and its exclusive part is what
-            // the points it dominates (duplicates included) leave uncovered
             let mut order: Vec<usize> = (0..n).collect();
             order.sort_by(|&a, &b| {
-                points[a][0]
-                    .total_cmp(&points[b][0])
-                    .then(points[a][1].total_cmp(&points[b][1]))
+                lexicographic(&[points[a][0], points[a][1]], &[points[b][0], points[b][1]])
             });
-            // positions in `order` of the steps
-            let mut stairs: Vec<usize> = Vec::new();
-            for (position, &i) in order.iter().enumerate() {
-                if stairs
-                    .last()
-                    .is_none_or(|&last| points[i][1] < points[order[last]][1])
-                {
-                    stairs.push(position);
-                }
+            let sorted: Vec<[f64; 2]> = order
+                .iter()
+                .map(|&i| [points[i][0], points[i][1]])
+                .collect();
+            let mut slab = vec![0.0; n];
+            staircase_contributions(&sorted, [reference[0], reference[1]], &mut slab);
+            for (&i, contribution) in order.iter().zip(slab) {
+                contributions[i] = contribution;
             }
-            for (step, &position) in stairs.iter().enumerate() {
-                let p = order[position];
-                let end = stairs.get(step + 1).copied().unwrap_or(n);
-                let right = stairs
-                    .get(step + 1)
-                    .map_or(reference[0], |&next| points[order[next]][0]);
-                let above = if step == 0 {
-                    reference[1]
-                } else {
-                    points[order[stairs[step - 1]]][1]
-                };
-                // the other points from this step to the next have x >= this step's x; those
-                // inside the rectangle cover part of it
-                let covering: Vec<Vec<f64>> = order[position + 1..end]
-                    .iter()
-                    .map(|&q| &points[q])
-                    .filter(|q| q[0] < right && q[1] < above)
-                    .cloned()
-                    .collect();
-                let area = (right - points[p][0]) * (above - points[p][1]);
-                let covered = if covering.is_empty() {
-                    0.0
-                } else {
-                    hypervolume_of(covering, &[right, above])
-                };
-                contributions[p] = area - covered;
+        }
+        3 => {
+            // slabs along the third objective, with the points below kept sorted in the first two
+            let mut order: Vec<usize> = (0..n).collect();
+            order.sort_by(|&a, &b| points[a][2].total_cmp(&points[b][2]));
+            let mut below: Vec<[f64; 2]> = Vec::with_capacity(n);
+            let mut members: Vec<usize> = Vec::with_capacity(n);
+            let mut slab = vec![0.0; n];
+            for (position, &i) in order.iter().enumerate() {
+                let point = [points[i][0], points[i][1]];
+                let at = below.partition_point(|other| lexicographic(other, &point).is_le());
+                below.insert(at, point);
+                members.insert(at, i);
+                let top = order
+                    .get(position + 1)
+                    .map_or(reference[2], |&next| points[next][2]);
+                let thickness = top - points[i][2];
+                if thickness > 0.0 {
+                    let slab = &mut slab[..below.len()];
+                    staircase_contributions(&below, [reference[0], reference[1]], slab);
+                    for (&member, contribution) in members.iter().zip(slab.iter()) {
+                        contributions[member] += thickness * contribution;
+                    }
+                }
             }
         }
         _ => {
@@ -245,6 +237,44 @@ fn contributions_of(points: &[Vec<f64>], reference: &[f64]) -> Vec<f64> {
         }
     }
     contributions
+}
+
+fn lexicographic(a: &[f64; 2], b: &[f64; 2]) -> std::cmp::Ordering {
+    a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1]))
+}
+
+// the exclusive contributions of 2-dimensional minimized points, sorted by the first objective
+// and then the second, into `contributions`: the staircase of the non-dominated points, x
+// increasing and y decreasing; a step's rectangle reaches to the next step's x and the previous
+// step's y, and its exclusive part is what the points it dominates (duplicates included) leave
+// uncovered; those come right after it in the order
+fn staircase_contributions(points: &[[f64; 2]], reference: [f64; 2], contributions: &mut [f64]) {
+    contributions.fill(0.0);
+    let mut step = 0;
+    let mut above = reference[1];
+    while step < points.len() {
+        // the next step: the first later point strictly below this one
+        let mut next = step + 1;
+        while next < points.len() && points[next][1] >= points[step][1] {
+            next += 1;
+        }
+        let right = points.get(next).map_or(reference[0], |point| point[0]);
+        let [x, y] = points[step];
+        let mut covered = 0.0;
+        let mut ceiling = above;
+        for &[qx, qy] in &points[step + 1..next] {
+            if qx >= right {
+                break;
+            }
+            if qy < ceiling {
+                covered += (right - qx) * (ceiling - qy);
+                ceiling = qy;
+            }
+        }
+        contributions[step] = (right - x) * (above - y) - covered;
+        above = y;
+        step = next;
+    }
 }
 
 /// The inverted generational distance: the mean distance from each point of the reference front
