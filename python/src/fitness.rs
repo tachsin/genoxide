@@ -6,9 +6,9 @@
 //! raises the exception when it returns.
 
 use crate::genes::{self, Genes};
+use genoxide::Fitness;
 use genoxide::engine::{FitnessFunction, IntoFitness};
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
-use genoxide::Fitness;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;

@@ -71,9 +71,9 @@ An exception in the fitness function stops the run and is raised by `run`, and s
 |---|---|---|
 | `Ga` | all | `population_size`, `select`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1), `scheme` |
 | `LocalSearch` | all | `neighbor` (a mutation), `neighbors` (1), `acceptance`, `restart=(patience, kicks)` |
-| `De` | real | `population_size`, `l_shade` (a budget of evaluations, for L-SHADE) |
+| `De` | real | `population_size` (needed without `l_shade`), `l_shade` (a budget of evaluations, for L-SHADE) |
 | `Cmaes` | real | `population_size`, `restarts` (`"ipop"`, `"bipop"`), `initial_step` |
-| `Pso` | real | `population_size`, `ring` (neighbors on each side) |
+| `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
 | `Nsga2` | all | `objectives`, `population_size`, `crossover`, `mutation`, `crossover_rate` |
 
 Single-objective algorithms maximize, or minimize with `objective="minimize"`. `Nsga2` takes `objectives=["minimize", "maximize", ...]`, 2 to 6 of them. Its fitness function returns a sequence of objective values, and its result is the final non-dominated front: `front_genomes`, `front_objectives` and `front_violations`.

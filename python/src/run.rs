@@ -22,7 +22,10 @@ use std::time::Duration;
 type Result<T> = std::result::Result<T, String>;
 
 fn setting<T>(result: genoxide::Result<T>) -> Result<T> {
-    result.map_err(|error| error.to_string())
+    result.map_err(|error| match error {
+        genoxide::Error::MissingSetting { setting } => format!("`{setting}` is needed"),
+        error => error.to_string(),
+    })
 }
 
 /// Runs the optimization that `config` (JSON, from the Python package) describes, with

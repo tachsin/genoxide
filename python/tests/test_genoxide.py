@@ -16,15 +16,14 @@ def rastrigin_batch(x):
 
 
 def onemax_ga(**settings):
-    return gx.Ga(
-        gx.Binary(64),
-        population_size=40,
-        select=gx.Tournament(3),
-        crossover=gx.UniformCrossover(),
-        mutation=gx.BitFlip(rate=1 / 64),
-        seed=7,
-        **settings,
-    )
+    defaults = {
+        "population_size": 40,
+        "select": gx.Tournament(3),
+        "crossover": gx.UniformCrossover(),
+        "mutation": gx.BitFlip(rate=1 / 64),
+        "seed": 7,
+    }
+    return gx.Ga(gx.Binary(64), **{**defaults, **settings})
 
 
 def test_onemax_reaches_the_target():
@@ -74,10 +73,10 @@ def test_the_batch_function_gets_a_generation():
 @pytest.mark.parametrize(
     "algorithm",
     [
-        gx.De(gx.Real((-5.12, 5.12), length=5), objective="minimize", seed=1),
+        gx.De(gx.Real((-5.12, 5.12), length=5), population_size=50, objective="minimize", seed=1),
         gx.De(gx.Real((-5.12, 5.12), length=5), l_shade=40_000, objective="minimize", seed=1),
         gx.Cmaes(gx.Real((-5.12, 5.12), length=5), restarts="ipop", objective="minimize", seed=1),
-        gx.Pso(gx.Real((-5.12, 5.12), length=5), ring=2, objective="minimize", seed=1),
+        gx.Pso(gx.Real((-5.12, 5.12), length=5), population_size=40, ring=2, objective="minimize", seed=1),
         gx.Ga(
             gx.Real((-5.12, 5.12), length=5),
             population_size=60,
@@ -214,7 +213,9 @@ def test_batch_constraint_violations():
     def fitness(x):
         return -x[:, 0], np.maximum(0.0, 0.5 - x[:, 0])
 
-    result = gx.De(gx.Real((0.0, 1.0), length=1), seed=9).run(fitness, generations=40, batch=True)
+    result = gx.De(gx.Real((0.0, 1.0), length=1), population_size=20, seed=9).run(
+        fitness, generations=40, batch=True
+    )
     assert result.violation == 0
     assert result.best_genome[0] == pytest.approx(0.5, abs=0.01)
 
@@ -320,6 +321,8 @@ def test_settings_errors():
             crossover=gx.OrderCrossover(),
             mutation=gx.BitFlip(count=1),
         ).run(lambda bits: 0.0, generations=1)
+    with pytest.raises(ValueError, match="`population_size` is needed"):
+        gx.De(gx.Real((0.0, 1.0), length=2)).run(lambda x: 0.0, generations=1)
     with pytest.raises(ValueError, match="Real genome"):
         gx.Cmaes(gx.Binary(8)).run(lambda bits: 0.0, generations=1)
     with pytest.raises(ValueError, match="rate"):

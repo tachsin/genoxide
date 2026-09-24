@@ -766,7 +766,8 @@ class Ga(_SingleObjective):
 class De(_SingleObjective):
     """Differential evolution. Real genomes.
 
-    By default DE/rand/1/bin with F 0.5 and CR 0.9. With ``l_shade``, L-SHADE (Tanabe and
+    By default DE/rand/1/bin with F 0.5 and CR 0.9, and ``population_size`` is needed, e.g. 10
+    times the number of genes. With ``l_shade``, L-SHADE (Tanabe and
     Fukunaga, 2014) for a budget of that many evaluations: current-to-pbest/1, F and CR adapted
     during the run, and a population that shrinks linearly from 18 times the number of genes to 4.
     Stop the run at the same number of evaluations.
@@ -832,7 +833,7 @@ class Cmaes(_SingleObjective):
 
 
 class Pso(_SingleObjective):
-    """Particle swarm optimization. Real genomes.
+    """Particle swarm optimization. Real genomes. ``population_size`` is needed, e.g. 40.
 
     ``ring``: each particle follows the best of its ``ring`` neighbors on each side, instead of
     the whole swarm's best, for multimodal functions.
