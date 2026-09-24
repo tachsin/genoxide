@@ -339,6 +339,23 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+When `F` and `CR` are unknown, let them adapt: `.control(de::Control::Jade { c: 0.1 })`, `.control(de::Control::Shade { memory: 6 })`, or the whole L-SHADE setup for a known evaluation budget:
+
+```rust
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    let budget = 60_000;
+    // L-SHADE: 18 × genes individuals, shrinking to 4 over the budget
+    let de = De::l_shade(Real::uniform(6, -5.0..=5.0)?, budget).minimize().seed(1).build()?;
+    let outcome = Engine::new(de, |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>())
+        .stop_when(Stop::target(1e-8).or(Stop::evaluations(budget)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    Ok(())
+}
+```
+
 | `de::Strategy` | When |
 |---|---|
 | `Rand1` (default) | Robust; explores well |

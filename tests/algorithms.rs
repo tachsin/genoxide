@@ -59,3 +59,40 @@ fn differential_evolution_runs_in_parallel_with_the_same_results() {
     };
     assert_eq!(run(true), run(false));
 }
+
+#[test]
+fn adaptive_differential_evolution_solves_rastrigin_without_tuning() {
+    // JADE and SHADE learn a crossover rate that suits the problem
+    for control in [
+        de::Control::Jade { c: 0.1 },
+        de::Control::Shade { memory: 6 },
+    ] {
+        let de = De::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+            .population_size(100)
+            .strategy(de::Strategy::CurrentToPBest {
+                p: 0.1,
+                archive: 1.0,
+            })
+            .control(control)
+            .minimize()
+            .seed(0)
+            .build()
+            .unwrap();
+        let outcome = Engine::new(de, rastrigin)
+            .stop_when(Stop::target(0.01).or(Stop::evaluations(100_000)))
+            .run()
+            .unwrap();
+        assert_eq!(outcome.stop_reason(), StopReason::Target, "{control:?}");
+    }
+    let budget = 100_000;
+    let de = De::l_shade(Real::uniform(10, -5.12..=5.12).unwrap(), budget)
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(de, rastrigin)
+        .stop_when(Stop::target(0.01).or(Stop::evaluations(budget)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+}

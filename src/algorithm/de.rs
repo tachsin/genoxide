@@ -52,6 +52,26 @@ pub enum Control {
         /// The probability that a gene comes from the mutant vector, between 0 and 1.
         cr: f64,
     },
+    /// JADE's adaptation: each trial draws `F` from a Cauchy distribution (scale 0.1, redrawn
+    /// until positive, at most 1) and `CR` from a normal distribution (standard deviation 0.1,
+    /// clamped to 0..=1), around means that start at 0.5. After every generation, the means move
+    /// by the fraction `c` toward the values of the trials that improved on their parents: the
+    /// Lehmer mean of their `F`, the arithmetic mean of their `CR`.
+    Jade {
+        /// How fast the means adapt, greater than 0 and at most 1; 0.1 is common.
+        c: f64,
+    },
+    /// SHADE's adaptation: a memory of `memory` (`F`, `CR`) pairs, starting at 0.5. Each trial
+    /// picks a random pair and draws `F` and `CR` around it like JADE. After every generation, one
+    /// memory slot (in turn) takes the means of the successful values, weighted by how much each
+    /// trial improved: the weighted Lehmer mean of `F` and the weighted arithmetic mean of `CR`
+    /// (as in SHADE), with a `CR` that stays 0 once the successes only had `CR` 0 (as in L-SHADE).
+    Shade {
+        /// The number of (`F`, `CR`) pairs remembered, at least 1. Small memories adapt faster:
+        /// 5 to 10 is a good choice (L-SHADE uses 6). Each slot is updated once every `memory`
+        /// generations.
+        memory: usize,
+    },
 }
 
 impl Default for Control {
@@ -96,7 +116,15 @@ pub struct De {
     rng: StreamRng,
     population: Population<Reals>,
     trials: Vec<Individual<Reals>>,
+    // the scale factor and crossover rate of each trial
+    parameters: Vec<(f64, f64)>,
     archive: Vec<Reals>,
+    // JADE: the means of F and CR; SHADE: the memory of (F, CR), CR NaN for "stays 0"
+    means: (f64, f64),
+    memory: Vec<(f64, f64)>,
+    memory_slot: usize,
+    // L-SHADE: (initial size, minimum size, evaluations)
+    reduction: Option<(usize, usize, u64)>,
     discarded: Vec<Individual<Reals>>,
     started: bool,
     asked: bool,
@@ -118,6 +146,50 @@ impl De {
             objective: Objective::default(),
             seed: None,
             initial_genomes: Vec::new(),
+            reduction: None,
+        }
+    }
+
+    /// A builder with the settings of L-SHADE (Tanabe and Fukunaga, 2014), for a run of
+    /// `max_evaluations` evaluations: a population of 18 times the number of genes, shrinking
+    /// linearly to 4; current-to-pbest/1 with `p` 0.11 and an archive of 2.6 times the population;
+    /// SHADE with a memory of 6. Set the objective, and stop the run at `max_evaluations`.
+    ///
+    /// Unlike the paper, the `CR` memory takes the weighted arithmetic mean of SHADE (see
+    /// [`Control::Shade`]), `pbest` can come from the best individual alone when `p` times the
+    /// population rounds to 1, and a target replaced by an equally good trial is archived too.
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let budget = 50_000;
+    /// let de = De::l_shade(Real::uniform(5, -5.0..=5.0)?, budget).minimize().seed(1).build()?;
+    /// let sphere = |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>();
+    /// let outcome = Engine::new(de, sphere)
+    ///     .stop_when(Stop::target(1e-8).or(Stop::evaluations(budget)))
+    ///     .run()?;
+    /// assert_eq!(outcome.stop_reason(), StopReason::Target);
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    pub fn l_shade(real: Real, max_evaluations: u64) -> DeBuilder {
+        let size = (18 * real.genome_len()).max(4);
+        De::builder(real)
+            .population_size(size)
+            .strategy(Strategy::CurrentToPBest {
+                p: 0.11,
+                archive: 2.6,
+            })
+            .control(Control::Shade { memory: 6 })
+            .linear_reduction(4, max_evaluations)
+    }
+
+    /// The means of `F` and `CR` of [`Control::Jade`], or the memory of (`F`, `CR`) pairs of
+    /// [`Control::Shade`] (a `CR` of NaN stays 0); empty for the other controls.
+    pub fn adapted(&self) -> Vec<(f64, f64)> {
+        match self.control {
+            Control::Jade { .. } => vec![self.means],
+            Control::Shade { .. } => self.memory.clone(),
+            _ => Vec::new(),
         }
     }
 
@@ -158,6 +230,104 @@ impl De {
             Control::Fixed { f, cr } => (f, cr),
             Control::Dither { min_f, max_f, cr } => {
                 (min_f + (max_f - min_f) * self.rng.unit_f64(), cr)
+            }
+            Control::Jade { .. } => {
+                let (mean_f, mean_cr) = self.means;
+                (self.adaptive_f(mean_f), self.adaptive_cr(mean_cr))
+            }
+            Control::Shade { .. } => {
+                let (mean_f, mean_cr) = self.memory[self.rng.below(self.memory.len())];
+                let f = self.adaptive_f(mean_f);
+                // a CR that stays 0
+                let cr = if mean_cr.is_nan() {
+                    0.0
+                } else {
+                    self.adaptive_cr(mean_cr)
+                };
+                (f, cr)
+            }
+        }
+    }
+
+    // F from a Cauchy distribution around `mean`, scale 0.1, redrawn until positive, at most 1
+    fn adaptive_f(&mut self, mean: f64) -> f64 {
+        loop {
+            let f = cauchy(&mut self.rng, mean, 0.1);
+            if f > 0.0 {
+                return f.min(1.0);
+            }
+        }
+    }
+
+    // CR from a normal distribution around `mean`, standard deviation 0.1, clamped to 0..=1
+    fn adaptive_cr(&mut self, mean: f64) -> f64 {
+        (mean + 0.1 * self.rng.normal()).clamp(0.0, 1.0)
+    }
+
+    // adapts JADE's means or SHADE's memory to the successful (F, CR, improvement) of a generation
+    fn adapt(&mut self, successes: &[(f64, f64, f64)]) {
+        if successes.is_empty() {
+            return;
+        }
+        let f: Vec<f64> = successes.iter().map(|success| success.0).collect();
+        let cr: Vec<f64> = successes.iter().map(|success| success.1).collect();
+        match self.control {
+            Control::Jade { c } => {
+                let equal = vec![1.0; successes.len()];
+                let (mean_f, mean_cr) = self.means;
+                self.means = (
+                    (1.0 - c) * mean_f + c * lehmer_mean(&f, &equal),
+                    (1.0 - c) * mean_cr + c * cr.iter().sum::<f64>() / cr.len() as f64,
+                );
+            }
+            Control::Shade { .. } => {
+                let improvements: Vec<f64> = successes.iter().map(|success| success.2).collect();
+                // weights proportional to the improvements; equal if those aren't usable
+                let total: f64 = improvements.iter().sum();
+                let weights = if total > 0.0 && total.is_finite() {
+                    improvements
+                } else {
+                    vec![1.0; successes.len()]
+                };
+                let slot = self.memory_slot;
+                let (_, previous_cr) = self.memory[slot];
+                let new_cr = if previous_cr.is_nan() || cr.iter().all(|&cr| cr == 0.0) {
+                    f64::NAN
+                } else {
+                    // the weighted arithmetic mean
+                    cr.iter().zip(&weights).map(|(cr, w)| cr * w).sum::<f64>()
+                        / weights.iter().sum::<f64>()
+                };
+                self.memory[slot] = (lehmer_mean(&f, &weights), new_cr);
+                self.memory_slot = (slot + 1) % self.memory.len();
+            }
+            _ => {}
+        }
+    }
+
+    // L-SHADE: the population shrinks linearly with the evaluations, the worst first
+    fn reduce(&mut self) {
+        let Some((initial, minimum, max_evaluations)) = self.reduction else {
+            return;
+        };
+        let used = self.evaluations.min(max_evaluations) as f64 / max_evaluations as f64;
+        let size = (initial as f64 + (minimum as f64 - initial as f64) * used).round() as usize;
+        let size = size.clamp(minimum, self.population.len());
+        if size < self.population.len() {
+            self.population.sort_best_first(self.objective);
+            // the trials of this generation (age 0) that are dropped are discarded
+            let dropped = self.population.as_slice()[size..]
+                .iter()
+                .filter(|individual| individual.age() == 0)
+                .cloned();
+            self.discarded.extend(dropped);
+            self.population.truncate(size);
+            if let Strategy::CurrentToPBest { archive, .. } = self.strategy {
+                let archive_size = (archive * size as f64).round() as usize;
+                while self.archive.len() > archive_size {
+                    let random = self.rng.below(self.archive.len());
+                    self.archive.swap_remove(random);
+                }
             }
         }
     }
@@ -238,10 +408,12 @@ impl De {
         let mut order: Vec<usize> = (0..size).collect();
         order.sort_by(|&a, &b| objective.compare(self.fitness(b), self.fitness(a)));
         self.trials.clear();
+        self.parameters.clear();
         for target in 0..size {
             let (f, cr) = self.next_parameters();
             let trial = self.trial(target, f, cr, &order);
             self.trials.push(Individual::new(trial));
+            self.parameters.push((f, cr));
         }
     }
 
@@ -256,12 +428,18 @@ impl De {
         };
         self.discarded.clear();
         let trials = std::mem::take(&mut self.trials);
+        let mut successes = Vec::new();
         for (target, trial) in trials.into_iter().enumerate() {
             let trial_fitness = trial.fitness().unwrap_or(Fitness::invalid());
-            if objective.is_better(self.fitness(target), trial_fitness) {
+            let target_fitness = self.fitness(target);
+            if objective.is_better(target_fitness, trial_fitness) {
                 self.population[target].increment_age();
                 self.discarded.push(trial);
                 continue;
+            }
+            if objective.is_better(trial_fitness, target_fitness) {
+                let (f, cr) = self.parameters[target];
+                successes.push((f, cr, improvement(target_fitness, trial_fitness)));
             }
             let replaced = std::mem::replace(&mut self.population[target], trial);
             if archive_size > 0 {
@@ -272,6 +450,43 @@ impl De {
                 self.archive.push(replaced.into_genome());
             }
         }
+        self.adapt(&successes);
+        self.reduce();
+    }
+}
+
+// a Cauchy random number: `location + scale · Z1 / Z2` for standard normal Z1 and Z2, which only
+// needs portable math (no tangent)
+fn cauchy(rng: &mut StreamRng, location: f64, scale: f64) -> f64 {
+    loop {
+        let (numerator, denominator) = (rng.normal(), rng.normal());
+        if denominator != 0.0 {
+            return location + scale * numerator / denominator;
+        }
+    }
+}
+
+// the weighted Lehmer mean `Σ w x² / Σ w x`, which leans toward the larger values
+fn lehmer_mean(values: &[f64], weights: &[f64]) -> f64 {
+    let squares: f64 = values.iter().zip(weights).map(|(x, w)| w * x * x).sum();
+    let sum: f64 = values.iter().zip(weights).map(|(x, w)| w * x).sum();
+    if sum > 0.0 { squares / sum } else { 0.0 }
+}
+
+// how much `better` improves on `worse`: the score difference between feasible fitness values,
+// the violation difference between infeasible ones, and 1 otherwise
+fn improvement(worse: Fitness, better: Fitness) -> f64 {
+    let difference = match (worse.score(), better.score()) {
+        (Some(a), Some(b)) if worse.is_feasible() && better.is_feasible() => (a - b).abs(),
+        (Some(_), Some(_)) if !worse.is_feasible() && !better.is_feasible() => {
+            (worse.violation() - better.violation()).abs()
+        }
+        _ => 1.0,
+    };
+    if difference.is_finite() {
+        difference
+    } else {
+        1.0
     }
 }
 
@@ -400,6 +615,7 @@ pub struct DeBuilder {
     objective: Objective,
     seed: Option<u64>,
     initial_genomes: Vec<Reals>,
+    reduction: Option<(usize, u64)>,
 }
 
 impl DeBuilder {
@@ -440,6 +656,15 @@ impl DeBuilder {
     /// The seed of the random numbers, for a reproducible run. Random by default.
     pub fn seed(mut self, seed: u64) -> Self {
         self.seed = Some(seed);
+        self
+    }
+
+    /// Linear population size reduction (L-SHADE): after every generation, the population
+    /// shrinks to the size on the line from the initial size to `min_size` (at least 4) over
+    /// `max_evaluations` evaluations, dropping the worst individuals. Stop the run at
+    /// `max_evaluations` too. Off by default.
+    pub fn linear_reduction(mut self, min_size: usize, max_evaluations: u64) -> Self {
+        self.reduction = Some((min_size, max_evaluations));
         self
     }
 
@@ -502,7 +727,32 @@ impl DeBuilder {
                 }
                 cr
             }
+            Control::Jade { c } => {
+                if !(c > 0.0 && c <= 1.0) {
+                    return invalid(
+                        "c",
+                        format!("must be greater than 0 and at most 1, got {c}"),
+                    );
+                }
+                0.5
+            }
+            Control::Shade { memory } => {
+                if memory == 0 {
+                    return invalid("memory", "must be at least 1".to_string());
+                }
+                0.5
+            }
         };
+        if let Some((min_size, max_evaluations)) = self.reduction {
+            if min_size < 4 || min_size > size || max_evaluations == 0 {
+                return invalid(
+                    "linear_reduction",
+                    format!(
+                        "the minimum size must be between 4 and the population size {size}, and the evaluations at least 1; got {min_size} and {max_evaluations}"
+                    ),
+                );
+            }
+        }
         if !(0.0..=1.0).contains(&cr) {
             return invalid("cr", format!("must be between 0 and 1, got {cr}"));
         }
@@ -534,7 +784,17 @@ impl DeBuilder {
             rng,
             population: Population::from_genomes(genomes),
             trials: Vec::new(),
+            parameters: Vec::new(),
             archive: Vec::new(),
+            means: (0.5, 0.5),
+            memory: match self.control {
+                Control::Shade { memory } => vec![(0.5, 0.5); memory],
+                _ => Vec::new(),
+            },
+            memory_slot: 0,
+            reduction: self
+                .reduction
+                .map(|(min_size, max_evaluations)| (size, min_size, max_evaluations)),
             discarded: Vec::new(),
             started: false,
             asked: false,
@@ -695,6 +955,146 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_validation() {
+        let real = || Real::uniform(2, 0.0..=1.0).unwrap();
+        let with = |control| {
+            De::builder(real())
+                .population_size(10)
+                .control(control)
+                .build()
+        };
+        assert_eq!(setting(with(Control::Jade { c: 0.0 })), "c");
+        assert_eq!(setting(with(Control::Jade { c: 1.5 })), "c");
+        assert_eq!(setting(with(Control::Shade { memory: 0 })), "memory");
+        assert!(with(Control::Jade { c: 1.0 }).is_ok());
+        let reduction = |min, evaluations| {
+            De::builder(real())
+                .population_size(10)
+                .linear_reduction(min, evaluations)
+                .build()
+        };
+        assert_eq!(setting(reduction(3, 100)), "linear_reduction");
+        assert_eq!(setting(reduction(11, 100)), "linear_reduction");
+        assert_eq!(setting(reduction(4, 0)), "linear_reduction");
+        assert!(reduction(10, 100).is_ok());
+    }
+
+    #[test]
+    fn cauchy_is_centered_with_its_scale() {
+        let mut rng = StreamRng::seed_from_u64(0);
+        let mut samples: Vec<f64> = (0..40_000).map(|_| cauchy(&mut rng, 0.5, 0.1)).collect();
+        samples.sort_by(f64::total_cmp);
+        // the median is the location, and half of the mass is within one scale of it
+        let median = samples[samples.len() / 2];
+        let within = samples.iter().filter(|x| (*x - 0.5).abs() < 0.1).count() as f64 / 40_000.0;
+        assert!((median - 0.5).abs() < 0.005, "median {median}");
+        assert!((within - 0.5).abs() < 0.01, "within {within}");
+    }
+
+    #[test]
+    fn means() {
+        assert!((lehmer_mean(&[1.0, 2.0, 3.0], &[1.0; 3]) - 14.0 / 6.0).abs() < 1e-12);
+        assert!((lehmer_mean(&[1.0, 3.0], &[3.0, 1.0]) - 12.0 / 6.0).abs() < 1e-12);
+        assert_eq!(lehmer_mean(&[0.0, 0.0], &[1.0, 1.0]), 0.0);
+        let (worse, better) = (Fitness::new(5.0), Fitness::new(3.5));
+        assert_eq!(improvement(worse, better), 1.5);
+        let (worse, better) = (
+            Fitness::constrained(0.0, 2.0),
+            Fitness::constrained(9.0, 0.5),
+        );
+        assert_eq!(improvement(worse, better), 1.5);
+        assert_eq!(improvement(Fitness::invalid(), Fitness::new(1.0)), 1.0);
+    }
+
+    #[test]
+    fn jade_means_move_toward_the_successes() {
+        let mut de = builder(Strategy::Rand1, 0)
+            .control(Control::Jade { c: 0.5 })
+            .build()
+            .unwrap();
+        assert_eq!(de.adapted(), [(0.5, 0.5)]);
+        de.adapt(&[(0.9, 0.1, 1.0), (0.9, 0.3, 5.0)]);
+        // F: the Lehmer mean 0.9; CR: the mean 0.2
+        let (f, cr) = de.adapted()[0];
+        assert!(
+            (f - 0.7).abs() < 1e-12 && (cr - 0.35).abs() < 1e-12,
+            "{f} {cr}"
+        );
+        de.adapt(&[]);
+        assert_eq!(de.adapted()[0], (f, cr));
+    }
+
+    #[test]
+    fn shade_memory_takes_the_weighted_means_in_turn() {
+        let mut de = builder(Strategy::Rand1, 0)
+            .control(Control::Shade { memory: 2 })
+            .build()
+            .unwrap();
+        // weights 1 and 3
+        de.adapt(&[(0.2, 0.2, 1.0), (0.6, 0.6, 3.0)]);
+        let memory = de.adapted();
+        let lehmer = (0.04 + 3.0 * 0.36) / (0.2 + 3.0 * 0.6);
+        assert!((memory[0].0 - lehmer).abs() < 1e-12);
+        assert!((memory[0].1 - 0.5).abs() < 1e-12);
+        assert_eq!(memory[1], (0.5, 0.5));
+        // the next slot; successes with CR 0 make the CR stay 0
+        de.adapt(&[(0.5, 0.0, 1.0)]);
+        assert!(de.adapted()[1].1.is_nan());
+        // back to the first slot
+        de.adapt(&[(0.5, 0.4, 1.0)]);
+        assert!((de.adapted()[0].1 - 0.4).abs() < 1e-12);
+    }
+
+    #[test]
+    fn linear_reduction_shrinks_the_population_on_schedule() {
+        let mut de = builder(
+            Strategy::CurrentToPBest {
+                p: 0.1,
+                archive: 2.0,
+            },
+            0,
+        )
+        .population_size(40)
+        .control(Control::Shade { memory: 6 })
+        .linear_reduction(4, 2_000)
+        .build()
+        .unwrap();
+        step(&mut de);
+        let mut previous = de.population().len();
+        while de.evaluations() < 2_000 {
+            step(&mut de);
+            // every trial survived (age 0) or was discarded, also when the population shrank
+            let survived = de.population().iter().filter(|x| x.age() == 0).count();
+            assert_eq!(survived + de.discarded().len(), previous);
+            let size = de.population().len();
+            let expected =
+                (40.0 + (4.0 - 40.0) * de.evaluations().min(2_000) as f64 / 2_000.0).round();
+            assert!(size <= previous);
+            assert_eq!(size, (expected as usize).clamp(4, previous));
+            assert!(de.archive().len() <= 2 * size);
+            previous = size;
+        }
+        assert_eq!(de.population().len(), 4);
+    }
+
+    #[test]
+    fn l_shade_preset() {
+        let de = De::l_shade(Real::uniform(10, -1.0..=1.0).unwrap(), 100_000)
+            .build()
+            .unwrap();
+        assert_eq!(de.population().len(), 180);
+        assert_eq!(
+            de.strategy(),
+            Strategy::CurrentToPBest {
+                p: 0.11,
+                archive: 2.6
+            }
+        );
+        assert_eq!(de.control(), Control::Shade { memory: 6 });
+        assert_eq!(de.adapted().len(), 6);
+    }
+
+    #[test]
     fn same_seed_same_run() {
         let run = |seed| {
             let mut de = builder(
@@ -721,7 +1121,7 @@ mod tests {
             strategy in prop::sample::select(STRATEGIES.to_vec()),
             f in 0.01..=2.0f64,
             cr in 0.0..=1.0f64,
-            dither: bool,
+            kind in 0usize..4,
             seed: u64,
         ) {
             // one fixed gene, bounds of different widths, and bounds near the largest numbers
@@ -730,7 +1130,12 @@ mod tests {
             let mut de = De::builder(real.clone())
                 .population_size(8)
                 .strategy(strategy)
-                .control(if dither { Control::Dither { min_f: f / 2.0, max_f: f, cr } } else { Control::Fixed { f, cr } })
+                .control(match kind {
+                    0 => Control::Fixed { f, cr },
+                    1 => Control::Dither { min_f: f / 2.0, max_f: f, cr },
+                    2 => Control::Jade { c: 0.1 },
+                    _ => Control::Shade { memory: 3 },
+                })
                 .minimize()
                 .seed(seed)
                 .build()
