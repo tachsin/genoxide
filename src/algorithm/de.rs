@@ -384,7 +384,12 @@ impl De {
         };
         // binomial crossover, with at least one gene from the mutant, and bounce-back at the bounds
         let bounds = self.real.bounds();
-        let forced = self.rng.below(x.len());
+        // one of the genes that can change: a fixed one would leave the trial a copy
+        let variable = self.real.variable_genes();
+        let forced = match variable.len() {
+            0 => usize::MAX,
+            len => variable[self.rng.below(len)],
+        };
         (0..x.len())
             .map(|j| {
                 let from_mutant = j == forced || self.rng.unit_f64() < cr;

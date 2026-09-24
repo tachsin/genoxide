@@ -367,3 +367,61 @@ fn islands_run_in_parallel_with_the_same_results() {
     };
     assert_eq!(run(true), run(false));
 }
+
+#[test]
+fn de_trials_change_a_gene_that_can_change() {
+    // 9 fixed genes and 1 free one: with CR 0, every trial changes the free gene
+    let bounds = (0..9).map(|_| 1.0..=1.0).chain(std::iter::once(-5.0..=5.0));
+    let de = De::builder(Real::new(bounds).unwrap())
+        .population_size(20)
+        .control(de::Control::Fixed { f: 0.5, cr: 0.0 })
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    let copies = std::sync::Mutex::new((0, 0));
+    let mut de = de;
+    // the initial population first
+    let fitness: Vec<Fitness> = de.ask().iter().map(|x| Fitness::new(x[9] * x[9])).collect();
+    de.tell(&fitness).unwrap();
+    for _ in 0..20 {
+        let population: Vec<Reals> = de.population().iter().map(|x| x.genome().clone()).collect();
+        let fitness: Vec<Fitness> = de
+            .ask()
+            .iter()
+            .map(|x| {
+                let mut counts = copies.lock().unwrap();
+                counts.0 += usize::from(population.contains(x));
+                counts.1 += 1;
+                Fitness::new(x[9] * x[9])
+            })
+            .collect();
+        de.tell(&fitness).unwrap();
+    }
+    let (copied, trials) = copies.into_inner().unwrap();
+    // before, about 9 in 10 were copies of their targets
+    assert_eq!(copied, 0, "{copied} of {trials} trials are copies");
+}
+
+#[test]
+fn a_huge_lambda_is_a_setting_error() {
+    for scheme in [
+        Scheme::MuPlusLambda { lambda: usize::MAX },
+        Scheme::MuCommaLambda { lambda: usize::MAX },
+    ] {
+        let result = Ga::builder(Binary::new(8).unwrap())
+            .population_size(4)
+            .select(Tournament::new(2).unwrap())
+            .crossover(UniformCrossover::new())
+            .mutate(BitFlip::count(1).unwrap())
+            .scheme(scheme)
+            .build();
+        assert!(matches!(
+            result,
+            Err(Error::InvalidSetting {
+                setting: "scheme",
+                ..
+            })
+        ));
+    }
+}

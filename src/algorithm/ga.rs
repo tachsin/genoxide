@@ -78,6 +78,11 @@ impl Scheme {
                 ))
             }
             Scheme::MuPlusLambda { lambda: 0 } => invalid("lambda must be at least 1".to_string()),
+            Scheme::MuPlusLambda { lambda } | Scheme::MuCommaLambda { lambda }
+                if lambda > u32::MAX as usize =>
+            {
+                invalid(format!("lambda must be at most {}, got {lambda}", u32::MAX))
+            }
             Scheme::MuCommaLambda { lambda } if lambda < size => invalid(format!(
                 "lambda must be at least the population size {size}, got {lambda}"
             )),
@@ -682,7 +687,8 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
         }
     }
 
-    /// The population size, μ, at least 1. Required.
+    /// The population size, μ, at least 1, or 2 with the default scheme (an elitism of 1).
+    /// Required.
     pub fn population_size(mut self, size: usize) -> Self {
         self.population_size = Some(size);
         self

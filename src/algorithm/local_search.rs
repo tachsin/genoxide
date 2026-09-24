@@ -20,7 +20,7 @@ pub enum Acceptance {
     NotWorse,
     /// Simulated annealing: to a better or equal neighbor, and to a neighbor that is worse by `Δ`
     /// with probability `exp(-Δ / T)`. The temperature `T` starts at `initial_temperature` and is
-    /// multiplied by `cooling` after every step.
+    /// multiplied by `cooling` after every step among neighbors; a restart doesn't cool it.
     Annealing {
         /// The starting temperature, positive, in units of fitness: a worse move by this much is
         /// accepted with probability 1/e at the start.
