@@ -30,6 +30,7 @@ use std::convert::Infallible;
 /// assert_ne!(run_0.random::<u64>(), run_1.random::<u64>());
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamRng {
     inner: ChaCha8Rng,
 }
@@ -197,6 +198,7 @@ impl StreamRng {
 /// A probability as an integer threshold, for Bernoulli trials without floating point, with what
 /// [`StreamRng::chosen`] needs to choose among many indices quickly.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) enum Chance {
     Never,
     Always,

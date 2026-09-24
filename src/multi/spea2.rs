@@ -53,8 +53,17 @@ use std::cmp::Ordering;
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "R: serde::Serialize, C: serde::Serialize, X: serde::Serialize, R::Genome: serde::Serialize",
+        deserialize = "R: serde::Deserialize<'de>, C: serde::Deserialize<'de>, X: serde::Deserialize<'de>, R::Genome: serde::Deserialize<'de>"
+    ))
+)]
 pub struct Spea2<R: Representation, C, X, const M: usize> {
     variation: Variation<R, C, X>,
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     objectives: [Objective; M],
     population_size: usize,
     crossover_rate: f64,

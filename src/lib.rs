@@ -50,11 +50,15 @@
 //! - `parallel` (default): parallel fitness evaluation with rayon
 //! - `tracing`: a span per run, an event per generation and one at the end, with the target
 //!   `genoxide`, from both engines
+//! - `serde`: `Serialize` and `Deserialize` for algorithms and their parts, and `checkpoint`, to
+//!   save a run and resume it exactly
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 pub mod algorithm;
+#[cfg(feature = "serde")]
+pub mod checkpoint;
 pub mod constraint;
 pub mod engine;
 pub mod error;
@@ -68,6 +72,8 @@ pub mod operator;
 pub mod population;
 pub mod prelude;
 pub mod rng;
+#[cfg(feature = "serde")]
+mod serde_arrays;
 
 pub use algorithm::{Algorithm, Ga};
 pub use engine::{Engine, Outcome, Stop, StopReason};
@@ -84,6 +90,6 @@ pub use rng::StreamRng;
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
-#[cfg(all(doctest, feature = "parallel"))]
+#[cfg(all(doctest, feature = "parallel", feature = "serde"))]
 #[doc = include_str!("../AGENTS.md")]
 struct AgentsDoctests;

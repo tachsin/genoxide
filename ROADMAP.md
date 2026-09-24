@@ -163,7 +163,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [ ] Asynchronous / steady-state evaluation for expensive fitness
 - [x] Batch evaluation hook (SIMD, GPU, remote)
 - [ ] GPU evaluation example
-- [ ] Checkpoint and resume (`serde` feature)
+- [x] Checkpoint and resume (`serde` feature)
 - [ ] Runs described in TOML / JSON, with a small CLI
 - [x] `tracing` integration and progress reporting
 

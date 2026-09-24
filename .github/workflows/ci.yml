@@ -20,8 +20,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --all-targets
-      - run: cargo test
+      - run: cargo build --all-targets --all-features
+      - run: cargo test --all-features
 
   features:
     name: Features and single thread
@@ -31,7 +31,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --no-default-features
-      - run: cargo test --all-features
       # parallel code must not rely on having more than one thread
       - run: cargo test
         env:

@@ -18,6 +18,7 @@ use std::ops::Deref;
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Order {
     genes: Vec<usize>,
 }
@@ -109,6 +110,7 @@ impl Genome for Order {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Permutation {
     len: usize,
 }
@@ -151,6 +153,38 @@ impl Representation for Permutation {
                 reason: format!("expected {} genes, got {}", self.len, genome.len()),
             })
         }
+    }
+}
+
+// validated like `new`
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Order {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename = "Order")]
+        struct Raw {
+            genes: Vec<usize>,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        Self::new(raw.genes).map_err(serde::de::Error::custom)
+    }
+}
+
+// validated like `new`
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Permutation {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename = "Permutation")]
+        struct Raw {
+            len: usize,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        Self::new(raw.len).map_err(serde::de::Error::custom)
     }
 }
 

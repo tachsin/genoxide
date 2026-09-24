@@ -470,6 +470,45 @@ The engine evaluates the candidates of all islands together (in parallel with `.
 
 The islands must share the objective and the representation (the same genome length and bounds), so migrants fit: `build` checks both. Each island counts only its own evaluations, so give an L-SHADE island (`De::l_shade(real, budget)`) its share of the budget, not the whole.
 
+### Checkpoints: resuming a long run
+
+With the `serde` feature (`genoxide = { version = "...", features = ["serde"] }`), `checkpoint_every` saves the algorithm every few generations and when the run stops. A run resumed from a checkpoint gives exactly the results of the uninterrupted run. Name the algorithm's type with an alias: loading needs it.
+
+```rust
+use genoxide::checkpoint;
+use genoxide::prelude::*;
+
+type OneMax = Ga<Binary, Tournament, UniformCrossover, BitFlip>;
+
+fn main() -> genoxide::Result<()> {
+    let path = std::env::temp_dir().join("genoxide-one-max.ckpt");
+    let one_max = |genome: &Bits| genome.count_ones() as f64;
+    let ga: OneMax = if path.exists() {
+        checkpoint::load_file(&path)? // resume
+    } else {
+        Ga::builder(Binary::new(200)?)
+            .population_size(50)
+            .select(Tournament::new(3)?)
+            .crossover(UniformCrossover::new())
+            .mutate(BitFlip::per_gene(1.0 / 200.0)?)
+            .seed(1)
+            .build()?
+    };
+    let outcome = Engine::new(ga, one_max)
+        .stop_when(Stop::target(200.0).or(Stop::generations(5_000)))
+        .checkpoint_every(100, |ga| checkpoint::save_file(ga, &path))
+        .run()?;
+    println!("{} after {} generations", outcome.best_fitness(), outcome.generations());
+    std::fs::remove_file(&path).ok(); // done: the next run starts afresh
+    Ok(())
+}
+```
+
+- `save_file` is atomic: it writes a temporary file and renames it, so a crash while saving keeps the previous checkpoint.
+- Generations, evaluations and stop conditions continue from the checkpoint; the time for `Stop::time` starts again. `MultiEngine` has `checkpoint_every` too.
+- A checkpoint loads with the same genoxide version that saved it. A corrupted, truncated or foreign file, or a different algorithm type, is `Error::Checkpoint`.
+- Every algorithm, genome, representation, operator and observer implements `Serialize` and `Deserialize`, for other formats. JSON can't store NaN or infinity (invalid fitness, crowding distances), so prefer `checkpoint` or a binary format.
+
 ### Multi-objective optimization
 
 When several objectives conflict (cost against quality, speed against accuracy), there is no single best solution but a front of trade-offs. The fitness function returns an array with one value per objective (or `(values, violation)` with a constraint violation, or `Option<[f64; M]>`); the algorithm takes the direction of each objective, and `MultiEngine` runs it. The outcome is the Pareto front.

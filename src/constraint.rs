@@ -77,6 +77,7 @@ pub fn equal(value: f64, target: f64, tolerance: f64) -> f64 {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Penalty {
     weight: f64,
 }

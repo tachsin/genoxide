@@ -34,8 +34,17 @@ use std::cmp::Ordering;
 /// (η 15 to 20, rate 0.9) and [`PolynomialMutation`](crate::operator::PolynomialMutation)
 /// (η 20, a rate of 1 / the number of genes).
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "R: serde::Serialize, C: serde::Serialize, X: serde::Serialize, R::Genome: serde::Serialize",
+        deserialize = "R: serde::Deserialize<'de>, C: serde::Deserialize<'de>, X: serde::Deserialize<'de>, R::Genome: serde::Deserialize<'de>"
+    ))
+)]
 pub struct Nsga2<R: Representation, C, X, const M: usize> {
     variation: Variation<R, C, X>,
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     objectives: [Objective; M],
     population_size: usize,
     crossover_rate: f64,

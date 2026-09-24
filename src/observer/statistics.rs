@@ -30,6 +30,7 @@ use std::time::Duration;
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Statistics {
     records: Vec<GenerationStatistics>,
 }
@@ -40,6 +41,7 @@ pub struct Statistics {
 /// violation). Infinite scores make them infinite or NaN.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GenerationStatistics {
     /// The generation, 0 for the initial population.
     pub generation: u64,

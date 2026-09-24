@@ -1,7 +1,10 @@
 //! Running a multi-objective algorithm.
 
 use super::{MultiObjectiveAlgorithm, Scores};
-use crate::engine::{Batch, NanPolicy, Progress, evaluate_all, evaluate_batch, trace};
+use crate::engine::{
+    Batch, Checkpoint, NanPolicy, Progress, checkpoint, evaluate_all, evaluate_batch, trace,
+    validate_checkpoint,
+};
 use crate::genome::Genome;
 use crate::{Error, Individual, Population, Result, Stop, StopReason};
 use std::fmt;
@@ -158,6 +161,7 @@ impl<'a, G: Genome, const M: usize> MultiSnapshot<'a, G, M> {
 
 /// The result of a multi-objective run.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MultiOutcome<G: Genome, const M: usize> {
     front: Vec<Individual<G, Scores<M>>>,
     generations: u64,
@@ -246,6 +250,7 @@ where
     abort: Option<Arc<AtomicBool>>,
     nan_policy: NanPolicy,
     parallel: bool,
+    checkpoint: Option<Checkpoint<'o, A>>,
     results: Vec<Result<Scores<M>>>,
     scores: Vec<Scores<M>>,
 }
@@ -265,6 +270,7 @@ where
             abort: None,
             nan_policy: NanPolicy::default(),
             parallel: false,
+            checkpoint: None,
             results: Vec::new(),
             scores: Vec::new(),
         }
@@ -305,6 +311,19 @@ where
         self
     }
 
+    /// Calls `save` with the algorithm every `generations` generations (when the algorithm's
+    /// generation is a multiple of it, so a resumed run keeps the schedule) and when the run
+    /// stops, e.g. to write a checkpoint with `genoxide::checkpoint::save_file` (the `serde`
+    /// feature). An error from `save` stops the run with that error. `generations` must be at
+    /// least 1.
+    pub fn checkpoint_every<C>(mut self, generations: u64, save: C) -> Self
+    where
+        C: FnMut(&A) -> Result<()> + 'o,
+    {
+        self.checkpoint = Some((generations, Box::new(save)));
+        self
+    }
+
     /// Evaluates each generation's genomes in parallel (with rayon), with the same results as
     /// sequentially. Worth it for expensive fitness functions. Off by default.
     #[cfg(feature = "parallel")]
@@ -328,7 +347,8 @@ where
     /// # Errors
     ///
     /// - [`Error::MissingSetting`] without a stop condition or abort flag.
-    /// - [`Error::InvalidSetting`] for an invalid stop condition, or [`Stop::target`].
+    /// - [`Error::InvalidSetting`] for an invalid stop condition, [`Stop::target`], or
+    ///   checkpoints every 0 generations.
     /// - [`Error::NanFitness`] for a NaN with [`NanPolicy::Error`], and
     ///   [`Error::InvalidFitness`] for a negative constraint violation.
     /// - The errors of the algorithm's [`tell`](MultiObjectiveAlgorithm::tell).
@@ -349,6 +369,7 @@ where
                 });
             }
         }
+        validate_checkpoint(&self.checkpoint)?;
         let _span = trace::run::<A>();
         let start = Instant::now();
         loop {
@@ -381,6 +402,12 @@ where
             } else {
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
             };
+            checkpoint(
+                &mut self.checkpoint,
+                &self.algorithm,
+                progress.generation(),
+                reason.is_some(),
+            )?;
             if let Some(stop_reason) = reason {
                 trace::finished(&progress, stop_reason, Some(self.algorithm.front().len()));
                 return Ok(MultiOutcome {

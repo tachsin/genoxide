@@ -25,6 +25,7 @@ use crate::genome::Genome;
 /// assert_eq!(individual.fitness(), None); // changed, so not evaluated
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Individual<G: Genome, F = Fitness> {
     genome: G,
     fitness: Option<F>,

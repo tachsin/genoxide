@@ -8,6 +8,7 @@ use crate::{Individual, Population, StreamRng};
 
 // the operators and rates of a genetic algorithm
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Variation<R, C, X> {
     pub(crate) representation: R,
     pub(crate) crossover: C,

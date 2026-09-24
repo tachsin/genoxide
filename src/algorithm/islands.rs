@@ -26,6 +26,7 @@ pub trait Migrate: Algorithm {
 /// Where the migrants of [`Islands`] go.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Topology {
     /// Each island sends to the next one, the last to the first (the default): good solutions
     /// spread slowly, which keeps the islands diverse.
@@ -76,6 +77,14 @@ pub enum Topology {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "A: serde::Serialize, A::Genome: serde::Serialize",
+        deserialize = "A: serde::Deserialize<'de>, A::Genome: serde::Deserialize<'de>"
+    ))
+)]
 pub struct Islands<A: Migrate> {
     islands: Vec<A>,
     topology: Topology,
@@ -89,7 +98,9 @@ pub struct Islands<A: Migrate> {
     pending: Vec<usize>,
     // the combined population and discarded individuals, built when first asked for: a run
     // without observers never copies them
+    #[cfg_attr(feature = "serde", serde(skip))]
     population: OnceLock<Population<A::Genome>>,
+    #[cfg_attr(feature = "serde", serde(skip))]
     discarded: OnceLock<Vec<Individual<A::Genome>>>,
     asked: bool,
     started: bool,

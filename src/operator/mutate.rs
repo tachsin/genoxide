@@ -11,6 +11,7 @@ use std::ops::RangeInclusive;
 
 /// Which genes a mutation changes: each with a probability, or `n` (all if there are fewer).
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 enum Mode {
     PerGene { chance: Chance },
     Count(usize),
@@ -63,6 +64,7 @@ impl Mode {
 /// A per-gene mutation changes no gene with probability `(1 − rate)^n`; in a genetic
 /// algorithm, such a child is a copy that inherits its parent's fitness without an evaluation.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BitFlip {
     mode: Mode,
 }
@@ -111,6 +113,7 @@ impl Mutate<Binary> for BitFlip {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct UniformMutation {
     mode: Mode,
 }
@@ -246,6 +249,7 @@ fn changed_gene(
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GaussianMutation {
     mode: Mode,
     sigma: f64,
@@ -307,6 +311,7 @@ impl Mutate<Real> for GaussianMutation {
 /// algorithm, such a child is a copy that inherits its parent's fitness without an evaluation. Genes whose bounds allow a
 /// single value are never changed.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PolynomialMutation {
     mode: Mode,
     eta: f64,
@@ -402,6 +407,7 @@ impl Mutate<Real> for PolynomialMutation {
 /// The step size stays between a minimum (1e-12 by default) and 10 ranges, and the genome always
 /// changes.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SelfAdaptiveMutation {
     learning_rate: Option<f64>,
     min_step: f64,
@@ -501,6 +507,7 @@ impl Mutate<AdaptiveReal> for SelfAdaptiveMutation {
 /// The pairs are disjoint, so the swaps never undo each other and the genome always changes
 /// (unless it has a single gene). At most `length / 2` pairs are swapped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SwapMutation {
     count: usize,
 }

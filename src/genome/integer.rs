@@ -17,6 +17,7 @@ use std::ops::{Deref, DerefMut, Range, RangeInclusive};
 /// assert_eq!(genome.iter().sum::<i64>(), 12);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Integers {
     genes: Vec<i64>,
 }
@@ -83,9 +84,11 @@ impl SwapGenes for Integers {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Integer {
     bounds: Vec<RangeInclusive<i64>>,
     // the genes with more than one possible value
+    #[cfg_attr(feature = "serde", serde(skip))]
     variable: Vec<usize>,
 }
 
@@ -206,6 +209,22 @@ impl Representation for Integer {
             }),
             None => Ok(()),
         }
+    }
+}
+
+// validated like `new`
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Integer {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename = "Integer")]
+        struct Raw {
+            bounds: Vec<RangeInclusive<i64>>,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        Self::new(raw.bounds).map_err(serde::de::Error::custom)
     }
 }
 

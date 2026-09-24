@@ -14,6 +14,7 @@ use rand::Rng;
 /// `z` (the best value of each objective so far), for a weight vector `w`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Decomposition {
     /// The weighted Tchebycheff distance `maxⱼ wⱼ |fⱼ − zⱼ|`: the default, for any front shape.
     Tchebycheff,
@@ -94,9 +95,19 @@ impl Decomposition {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "R: serde::Serialize, C: serde::Serialize, X: serde::Serialize, R::Genome: serde::Serialize",
+        deserialize = "R: serde::Deserialize<'de>, C: serde::Deserialize<'de>, X: serde::Deserialize<'de>, R::Genome: serde::Deserialize<'de>"
+    ))
+)]
 pub struct Moead<R: Representation, C, X, const M: usize> {
     variation: Variation<R, C, X>,
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     objectives: [Objective; M],
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::vec_of_arrays"))]
     weights: Vec<[f64; M]>,
     // the nearest weight vectors of each, itself first
     neighborhoods: Vec<Vec<usize>>,
@@ -112,6 +123,7 @@ pub struct Moead<R: Representation, C, X, const M: usize> {
     front: Vec<Individual<R::Genome, Scores<M>>>,
     discarded: Vec<Individual<R::Genome, Scores<M>>>,
     // the best feasible value of each objective so far, minimized
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     ideal: [f64; M],
     started: bool,
     asked: bool,

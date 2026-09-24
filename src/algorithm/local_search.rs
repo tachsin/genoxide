@@ -12,6 +12,7 @@ use std::collections::{HashSet, VecDeque};
 /// When a [`LocalSearch`] moves to a neighbor.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Acceptance {
     /// Only to a strictly better neighbor: hill climbing, which stops at the first local optimum.
     Improving,
@@ -119,6 +120,14 @@ impl Acceptance {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "R: serde::Serialize, M: serde::Serialize, R::Genome: serde::Serialize",
+        deserialize = "R: serde::Deserialize<'de>, M: serde::Deserialize<'de>, R::Genome: serde::Deserialize<'de>"
+    ))
+)]
 pub struct LocalSearch<R: Representation, M> {
     representation: R,
     neighbor: M,

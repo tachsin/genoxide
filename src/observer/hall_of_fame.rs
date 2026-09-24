@@ -29,6 +29,7 @@ use crate::{Error, Individual, Objective, Result};
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct HallOfFame<G: Genome> {
     capacity: usize,
     individuals: Vec<Individual<G>>,

@@ -10,6 +10,7 @@ use std::collections::VecDeque;
 /// Whether a [`Cmaes`] starts a new run when the current one has converged.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Restarts {
     /// No restarts: a converged run goes on sampling around the same point (the default). Stop
     /// it with a stop condition such as [`Stop::stagnation`](crate::Stop::stagnation).
@@ -31,6 +32,7 @@ pub enum Restarts {
 /// population's fitness and the search distribution in coordinates scaled to `0..=1` per gene.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Criterion {
     /// The best scores of the last `10 + ⌈30 n / λ⌉` generations, and all scores of the last
     /// generation, are within 1e-12.
@@ -55,6 +57,7 @@ pub enum Criterion {
 /// The covariance matrix of a [`Cmaes`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Covariance {
     /// A full covariance matrix, which learns the correlations between genes (the default). Each
     /// sample costs O(n²) and each eigendecomposition O(n³), for `n` genes: best up to a few
@@ -78,6 +81,7 @@ const RESAMPLES: usize = 100;
 // tutorial with positive recombination weights, and learning rates (n + 2) / 3 times larger for
 // a diagonal covariance matrix (Ros and Hansen, 2008)
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Parameters {
     lambda: usize,
     weights: Vec<f64>,
@@ -180,6 +184,7 @@ impl Parameters {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Cmaes {
     real: Real,
     // the indices of the genes with more than one value, the dimensions of the search

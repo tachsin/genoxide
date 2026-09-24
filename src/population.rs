@@ -26,6 +26,7 @@ use std::ops::{Index, IndexMut};
 /// The fitness type `F` is [`Fitness`] by default, and [`Scores`](crate::multi::Scores) in
 /// multi-objective optimization.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Population<G: Genome, F = Fitness> {
     individuals: Vec<Individual<G, F>>,
 }

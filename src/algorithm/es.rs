@@ -11,6 +11,7 @@ use rand::Rng;
 /// `rho` 1, an offspring is a mutated copy of one random parent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Recombination {
     /// Intermediate recombination (μ/ρ_I): the centroid of the parents' genes, and the geometric
     /// mean of their step sizes. Averages out the parents' errors: (μ/μ_I, λ) with all parents is
@@ -32,6 +33,7 @@ pub enum Recombination {
 /// Which individuals survive in an [`Es`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Selection {
     /// (μ,λ): the best μ offspring become the parents, which never survive. Forgets misadapted
     /// step sizes, so it suits self-adaptation best (the default). λ is at least μ.
@@ -45,6 +47,7 @@ pub enum Selection {
 /// The step sizes (mutation strengths) of each individual of an [`Es`], which evolve with it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum StepSizes {
     /// One step size for all genes, with the learning rate `τ = 1/√n` for `n` genes.
     One,
@@ -88,6 +91,7 @@ const MIN_STEP: f64 = f64::MIN_POSITIVE;
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Es {
     real: Real,
     mu: usize,
