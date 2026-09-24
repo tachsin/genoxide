@@ -7,7 +7,7 @@ description = "Evolutionary computation for Rust: genetic algorithms, evolution 
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tachsin/genoxide"
 readme = "README.md"
-exclude = [".github/", "benchmarks/", "release-plz.toml"]
+exclude = [".github/", "benchmarks/", "examples/gpu/", "release-plz.toml"]
 keywords = ["genetic-algorithm", "evolutionary", "optimization", "metaheuristics", "ga"]
 categories = ["algorithms", "science", "mathematics"]
 

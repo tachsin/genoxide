@@ -1,0 +1,12 @@
+[package]
+name = "genoxide-gpu-example"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Batch fitness evaluation on the GPU with wgpu"
+
+[dependencies]
+bytemuck = "1.25"
+genoxide = { path = "../.." }
+pollster = "1.0"
+wgpu = "30"
