@@ -4,14 +4,16 @@
 
 Genetic algorithms, evolution strategies, multi-objective optimization, swarm and local search, all in one library.
 
-> **🚧 Early days.** 0.4 is out: the genetic algorithm with operators for binary, integer,
+> **🚧 Early days.** 0.5 is out: the genetic algorithm with operators for binary, integer,
 > real-valued and permutation problems, local search, constraint handling, CMA-ES, differential
-> evolution, particle swarm, evolution strategies, and multi-objective optimization (NSGA-II,
-> NSGA-III, SPEA2, MOEA/D, SMS-EMOA). The API will change between 0.x versions. See the [roadmap](ROADMAP.md) and share your ideas in the issues.
+> evolution, particle swarm, evolution strategies, multi-objective optimization (NSGA-II,
+> NSGA-III, SPEA2, MOEA/D, SMS-EMOA), island models, batch and asynchronous evaluation,
+> checkpoints, and the `genoxide` program for runs described in TOML or JSON files. The API will
+> change between 0.x versions. See the [roadmap](ROADMAP.md) and share your ideas in the issues.
 
 ```toml
 [dependencies]
-genoxide = "0.4"
+genoxide = "0.5"
 ```
 
 ## Why genoxide?
@@ -114,8 +116,8 @@ Using an AI coding assistant? Point it to [AGENTS.md](AGENTS.md): it has the dec
 | 0.2 Real-valued & permutations | SBX, polynomial, PMX, OX, 2-opt, local search, memetic | ✅ released |
 | 0.3 Evolution strategies & swarm | CMA-ES, DE (JADE, SHADE), PSO, (μ,λ) and (μ+λ)-ES | ✅ released |
 | 0.4 Multi-objective | NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA, hypervolume | ✅ released |
-| 0.5 Scale | Island model, checkpointing, batch/GPU evaluation | 🔜 next |
-| 0.6 Python | PyO3 bindings with numpy support | planned |
+| 0.5 Scale | Island model, checkpointing, batch/GPU and asynchronous evaluation, CLI | ✅ released |
+| 0.6 Python | PyO3 bindings with numpy support | 🔜 next |
 | 0.7 GP & neuroevolution | Typed tree GP, NEAT | planned |
 | 0.8 Frontier | Quality-diversity (MAP-Elites), LLM-guided operators | planned |
 | 1.0 | Stable API and published benchmark report | planned |
