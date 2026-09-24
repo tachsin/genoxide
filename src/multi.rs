@@ -10,9 +10,11 @@
 
 mod algorithm;
 mod archive;
+mod breed;
 mod engine;
 pub mod indicator;
 pub mod nsga2;
+pub mod nsga3;
 mod pareto;
 pub mod problems;
 mod scores;
@@ -21,6 +23,7 @@ pub use algorithm::MultiObjectiveAlgorithm;
 pub use archive::ParetoArchive;
 pub use engine::{IntoScores, MultiEngine, MultiFitnessFunction, MultiOutcome, MultiSnapshot};
 pub use nsga2::{Nsga2, Nsga2Builder};
+pub use nsga3::{Nsga3, Nsga3Builder};
 pub use pareto::{crowding_distance, dominates, non_dominated_sort};
 pub use problems::das_dennis;
 pub use scores::Scores;
