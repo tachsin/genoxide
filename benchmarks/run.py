@@ -437,7 +437,9 @@ LIBRARY_NAMES = {"genoxide": "genoxide", "genetic_algorithm": "genetic_algorithm
 SOLVER_NAMES = {"ga": "GA", "evolve": "GA", "hill_climb": "hill climbing", "local_search": "local search",
                 "cma_es": "CMA-ES", "de": "DE", "pso": "PSO", "es": "ES", "nsga2": "NSGA-II", "nsga3": "NSGA-III",
                 "spea2": "SPEA2", "sms_emoa": "SMS-EMOA", "moead": "MOEA/D", "sade": "SaDE", "ngopt": "NGOpt",
-                "two_points_de": "TwoPointsDE", "ipop_cma_es": "IPOP-CMA-ES"}
+                "two_points_de": "TwoPointsDE", "ipop_cma_es": "IPOP-CMA-ES", "discrete_one_plus_one": "(1+1)",
+                "eca": "ECA", "age_moea": "AGE-MOEA", "ibea": "IBEA", "revea": "REVEA", "moea": "MOEA",
+                "smpso": "SMPSO", "nspso": "NSPSO"}
 PROBLEM_NAMES = {"onemax": "OneMax", "nqueens": "N-Queens", "rastrigin": "Rastrigin", "rosenbrock": "Rosenbrock",
                  "ackley": "Ackley", "zdt1": "ZDT1", "zdt2": "ZDT2", "zdt3": "ZDT3", "dtlz1": "DTLZ1", "dtlz2": "DTLZ2"}
 GENOXIDE_COLOR = "#ce422b"
@@ -572,10 +574,10 @@ def draw_charts(results, out_dir, formats=("svg",)):
         y = height - header
         for row in rows:
             y -= title_height + panel_height
-            usable = width - 2 * margin - 0.45 - gap * (len(row) - 1)
+            usable = width - 2 * margin - 0.65 - gap * (len(row) - 1)
             units = sum(count + 1.5 for _, count in row)
             unit = min(usable / units, 0.36)
-            x = margin + 0.45
+            x = margin + 0.65
             for key, count in row:
                 panel_width = (count + 1.5) * unit
                 axes[key] = figure.add_axes((x / width, y / height, panel_width / width, panel_height / height))
@@ -602,17 +604,28 @@ def draw_charts(results, out_dir, formats=("svg",)):
                 # room above the tallest bar for its label
                 axis.set_ylim(base, high * 22)
             elif zoom:
+                # zoomed on the values within 20% of the best, so that an outlier (e.g. a front with
+                # a hypervolume of 0) doesn't flatten the differences between the others
+                low = min(v for v in values if v >= high - abs(high) * 0.2)
                 spread = max(high - low, 1e-4)
                 base = low - spread * 0.3
                 axis.set_ylim(base, high + spread * 1.2)
             else:
                 axis.set_ylim(0, high * 1.6)
-            axis.bar(positions[:len(present)], [v - base for v in values] if zoom else values,
-                     bottom=base if zoom else None, width=0.74,
-                     color=[colors[row["library"]] for row in present], linewidth=0)
+            # a value below a zoomed axis is a hatched stub, with its value as its label
+            stub = (axis.get_ylim()[1] - base) * 0.04
+            heights = [max(v - base, stub) for v in values] if zoom else values
+            bars_drawn = axis.bar(positions[:len(present)], heights, bottom=base if zoom else None, width=0.74,
+                                  color=[colors[row["library"]] for row in present], linewidth=0)
+            if zoom:
+                for patch, v in zip(bars_drawn, values):
+                    if v < base:
+                        patch.set_hatch("////")
+                        patch.set_alpha(0.45)
             for position, row, v in zip(positions, present, values):
                 label_text = text(v) + (note(row) if note else "")
-                top = v * 1.15 if log else v + (axis.get_ylim()[1] - axis.get_ylim()[0]) * 0.015
+                top = (v * 1.15 if log else max(v, base + stub if zoom else v)
+                       + (axis.get_ylim()[1] - axis.get_ylim()[0]) * 0.015)
                 axis.text(position, top, label_text, rotation=90, ha="center", va="bottom", fontsize=6.2,
                           color="#222222")
         if missing:
