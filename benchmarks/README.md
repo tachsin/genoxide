@@ -12,13 +12,13 @@
 | [pygmo](https://github.com/esa/pygmo2) | C++ via Python | 2.19.8 | SGA, SaDE, CMA-ES, PSO; NSGA-II, MOEA/D, NSPSO |
 | [DEAP](https://github.com/DEAP/deap) | Python | 1.4.4 | GA, CMA-ES; NSGA-II/III |
 | [pymoo](https://github.com/anyoptimization/pymoo) | Python | 0.6.2 | GA, DE, CMA-ES; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
-| [PyGAD](https://github.com/ahmedfgad/GeneticAlgorithmPython) | Python | 3.7.0 | GA |
+| [PyGAD](https://github.com/ahmedfgad/GeneticAlgorithmPython) | Python | 3.7.0 | GA; NSGA-II |
 | [pycma](https://github.com/CMA-ES/pycma) | Python | 4.5.0 | IPOP-CMA-ES |
-| [Nevergrad](https://github.com/facebookresearch/nevergrad) | Python | 1.0.12 | NGOpt, CMA, DE, PSO, (1+1) |
+| [Nevergrad](https://github.com/facebookresearch/nevergrad) | Python | 1.0.12 | NGOpt, CMA, DE, PSO, (1+1); DE |
 | [SciPy](https://scipy.org/) | Python | 1.18.1 | `differential_evolution` |
 | [Jenetics](https://jenetics.io/) | Java | 9.1.0 | GA; NSGA-II, MOEA |
 | [jMetal](https://github.com/jMetal/jMetal) | Java | 7.5 | GA, DE, CMA-ES, PSO; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA, SMPSO |
-| [Evolutionary.jl](https://github.com/wildart/Evolutionary.jl) | Julia | 0.12.0 | GA, DE, CMA-ES, ES |
+| [Evolutionary.jl](https://github.com/wildart/Evolutionary.jl) | Julia | 0.12.0 | GA, DE, CMA-ES, ES; NSGA-II |
 | [Metaheuristics.jl](https://github.com/jmejia8/Metaheuristics.jl) | Julia | 3.5.0 | GA, ECA, DE, PSO; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
 
 Every adapter's source lists its settings, where its idiomatic settings come from, and how it differs from the others.
@@ -53,12 +53,12 @@ The fitness functions here are cheap, so the time charts mostly show framework a
 - **An expensive fitness function:** with a fitness function that takes a millisecond, the second factor would nearly vanish, and genoxide would be about 2× faster, not 1,000×.
 
 **Matched and idiomatic.**
-- **Matched:** configurations as equal as the libraries allow. This measures framework cost and algorithm implementations. They're close, not identical: the notes below list the differences.
+- **Matched:** configurations as equal as the libraries allow. This measures framework cost and algorithm implementations. They're close, not identical: the [notes](../docs/benchmarks/notes.md) list the differences.
 - **Idiomatic:** each library's recommended configuration, from its docs and examples. This measures what its users get. A library can run several solvers here.
 
 **Multi-objective quality.** These runs have no target: each one uses its evaluation budget. The adapter prints the objective values of its final non-dominated front. `run.py` computes the hypervolume of every front with the same exact code, so no library's own indicator is involved.
 
-**Bugs in the libraries** aren't worked around, except where noted below. When a library's own operator is wrong, its results show it. The notes below say so, with what the library reaches without the bug.
+**Bugs in the libraries** aren't worked around, except where the [notes](../docs/benchmarks/notes.md) say so. When a library's own operator is wrong, its results show it, and the notes list the bug with what the library reaches without it.
 
 ## Scenarios
 
@@ -89,51 +89,7 @@ They use the matched settings:
 
 ## Notes on the libraries
 
-- **genoxide:**
-  - A child identical to one of its parents inherits the parent's fitness, without an evaluation.
-  - Its OneMax genomes are bit-packed.
-- **genetic_algorithm:** it selects survivors from parents and offspring by tournament, without replacement.
-- **radiate:**
-  - Its `SimulatedBinaryCrossover` centres the child on (a − b)/2 instead of (a + b)/2.
-  - Its `PolynomialMutator` computes the new value from a bound instead of from the gene.
-  - Both bugs are in 1.3.1 and on master, and they lower its multi-objective hypervolumes. With textbook operators, its NSGA-II reaches pymoo's (ZDT1: 0.868 against 0.870). The benchmark uses radiate's own operators, as its users do.
-  - Its recommended settings don't reach the idiomatic OneMax, N-Queens and Rosenbrock targets.
-- **moors:**
-  - It evaluates the parents again every generation, so a budget buys it half the generations.
-  - Its AGE-MOEA crashes on ZDT2 and DTLZ1. Those runs count as failed, with a hypervolume of 0.
-  - It has no polynomial mutation, so the adapter implements Deb's.
-- **openGA:**
-  - In its single-objective survival, a new child survives only by taking an elite slot. So the matched OneMax runs make every slot elite: the best 300 of parents and children survive.
-  - It selects parents by a rank roulette.
-  - The idiomatic real-valued runs use its Rastrigin example's population of 10,000.
-- **pygmo:**
-  - pagmo's algorithms are C++, and they call the Python fitness function.
-  - It has no permutation genome, so it doesn't run N-Queens.
-  - Its SGA mutates a bit by drawing it again, which flips it half the time, so the matched rate is doubled. Its SGA keeps the best of parents and children, which can't be turned off.
-  - Its CMA-ES runs with `force_bounds`.
-- **DEAP:** its CMA-ES starts Rastrigin from its example's (5, …, 5) with σ 5. For the other problems, it starts from a random point with σ a quarter of the range.
-- **pymoo:**
-  - The survival of its GA is elitist: the best of parents and offspring survive.
-  - Its multi-objective algorithms eliminate duplicate children.
-- **pycma:** IPOP-CMA-ES through `fmin2`, with 9 restarts, each with twice the population.
-- **Nevergrad:**
-  - 1.0.12 crashes in its metamodel with NumPy 2.5. The adapter restores the old scalar conversion in that one module, which doesn't change the algorithm.
-  - NGOpt chooses from a portfolio of optimizers and costs about 10 ms per evaluation, so it reaches the 60-second limit after a few thousand evaluations.
-  - It has no GA with the matched operators and no permutations, and it runs no multi-objective scenarios.
-- **SciPy:** `differential_evolution` runs with its defaults. These include the L-BFGS-B polish at the end, whose evaluations count. Its default `maxiter` and `tol` often stop it before the budget.
-- **Jenetics:**
-  - Its `SimulatedBinaryCrossover` centres the child on (a − b)/2, like radiate's. With a corrected copy, its DTLZ2 hypervolume goes from 0.51 to 0.69; the benchmark uses its own.
-  - Its crossover probability is per individual, not per pair, so the matched runs use half the rate.
-  - It has no bit-flip or polynomial mutation, so the adapter adds them.
-- **jMetal:**
-  - Its CMA-ES starts at a random point in [0, 1)ⁿ, whatever the bounds, which is next to the shifted optimum. The adapter starts it at a random point within the bounds, like the other libraries.
-  - When its covariance degenerates, it can throw `ArrayIndexOutOfBoundsException` in `tql2`. The run ends there.
-- **Evolutionary.jl:**
-  - Its `NSGA2` reorders the population without its objective values, so from the second generation it selects by other individuals' values. It doesn't run the multi-objective scenarios.
-  - Its CMA-ES with the default σ of 0.5 doesn't reach the targets.
-- **Metaheuristics.jl:**
-  - It has no CMA-ES.
-  - With 3 objectives, its SMS-EMOA estimates the hypervolume by Monte Carlo, and reaches the 60-second limit before the budget.
+What each library doesn't run and why, the bugs found in the libraries, and how their settings differ are in [docs/benchmarks/notes.md](../docs/benchmarks/notes.md).
 
 ## Running
 

@@ -336,14 +336,16 @@ end
 # -------------------------------------------------------------------------------------------------
 # Multi-objective: NSGA-II with the matched settings
 #
-# NSGA2_BROKEN: the multi-objective problems print nothing (unsupported) unless the environment
-# variable EVOLUTIONARY_JL_NSGA2=1 is set, because NSGA2 of Evolutionary.jl 0.12.0 doesn't work:
-# update_state! (src/nsga2.jl) reorders the parents (`parents .= state.population[fitidx]`) but
-# not their objective values in `state.fitpop[:, 1:N]`, nor their ranks and crowding distances,
-# so from the second generation on it sorts and selects on the values of other individuals. With
-# the library's defaults (NSGA2(populationSize = 100)) on ZDT1, the recorded objective values of
-# its "fittest" differ from their genomes' by up to 3.7 after 250 generations, and the final
-# population has no point inside the reference point (1.1, 1.1): the hypervolume is 0.
+# NSGA2_BROKEN: NSGA2 of Evolutionary.jl 0.12.0 doesn't work: update_state! (src/nsga2.jl)
+# reorders the parents (`parents .= state.population[fitidx]`) but not their objective values in
+# `state.fitpop[:, 1:N]`, nor their ranks and crowding distances, so from the second generation on
+# it sorts and selects on the values of other individuals. With the library's defaults
+# (NSGA2(populationSize = 100)) on ZDT1, the recorded objective values of its "fittest" differ from
+# their genomes' by up to 3.7 after 250 generations, and the final population has no point inside
+# the reference point (1.1, 1.1): the hypervolume is 0.
+# The multi-objective scenarios run it anyway, as the library's users get it, and their results
+# show the bug. The bug isn't worked around; the front printed is the true objective values of the
+# final population. EVOLUTIONARY_JL_NSGA2=0 skips them (prints nothing).
 # -------------------------------------------------------------------------------------------------
 
 # the untimed warm-up run of every solver before the timed ones: a few generations, which compile
@@ -411,9 +413,10 @@ function main(args)
     max_evaluations, max_seconds = parse(Int, args[6]), parse(Float64, args[7])
 
     if haskey(FRONT_PROBLEMS, problem)
-        if get(ENV, "EVOLUTIONARY_JL_NSGA2", "") != "1"
-            # unsupported: NSGA2 of Evolutionary.jl 0.12.0 doesn't converge, see NSGA2_BROKEN
-            println(stderr, "evolutionary_jl: $problem skipped, set EVOLUTIONARY_JL_NSGA2=1 to run the broken NSGA2")
+        # NSGA2 of Evolutionary.jl 0.12.0 has a bug (see NSGA2_BROKEN): it runs anyway, and its
+        # results show the bug, unless EVOLUTIONARY_JL_NSGA2=0
+        if get(ENV, "EVOLUTIONARY_JL_NSGA2", "1") == "0"
+            println(stderr, "evolutionary_jl: $problem skipped (EVOLUTIONARY_JL_NSGA2=0)")
             return
         end
         # warm-up: compile with a tiny untimed run

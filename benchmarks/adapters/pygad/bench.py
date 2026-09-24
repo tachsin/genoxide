@@ -94,6 +94,64 @@ REAL_PROBLEMS = {
 }
 
 
+# multi-objective problems, minimized, all variables in [0, 1]
+def zdt_g(x):
+    return 1 + 9 * sum(x[1:]) / (len(x) - 1)
+
+
+def zdt1(x):
+    g = zdt_g(x)
+    return x[0], g * (1 - math.sqrt(x[0] / g))
+
+
+def zdt2(x):
+    g = zdt_g(x)
+    return x[0], g * (1 - (x[0] / g) ** 2)
+
+
+def zdt3(x):
+    g = zdt_g(x)
+    return x[0], g * (1 - math.sqrt(x[0] / g) - x[0] / g * math.sin(10 * math.pi * x[0]))
+
+
+def dtlz2(x, objectives=3):
+    g = sum((v - 0.5) ** 2 for v in x[objectives - 1:])
+    values = []
+    for m in range(objectives):
+        f = 1 + g
+        for v in x[:objectives - 1 - m]:
+            f *= math.cos(v * math.pi / 2)
+        if m > 0:
+            f *= math.sin(x[objectives - 1 - m] * math.pi / 2)
+        values.append(f)
+    return tuple(values)
+
+
+def dtlz1(x, objectives=3):
+    tail = x[objectives - 1:]
+    g = 100 * (len(tail) + sum((v - 0.5) ** 2 - math.cos(20 * math.pi * (v - 0.5)) for v in tail))
+    values = []
+    for m in range(objectives):
+        f = 0.5 * (1 + g)
+        for v in x[:objectives - 1 - m]:
+            f *= v
+        if m > 0:
+            f *= 1 - x[objectives - 1 - m]
+        values.append(f)
+    return tuple(values)
+
+
+# (fitness function, variables, objectives, population size)
+FRONT_PROBLEMS = {
+    "zdt1": (zdt1, lambda size: size, 2, 100),
+    "zdt2": (zdt2, lambda size: size, 2, 100),
+    "zdt3": (zdt3, lambda size: size, 2, 100),
+    # size: the number of objectives, with k = 10 (DTLZ2) and 5 (DTLZ1)
+    "dtlz2": (dtlz2, lambda size: size + 9, 3, 92),
+    "dtlz1": (dtlz1, lambda size: size + 4, 3, 92),
+}
+
+
 # -------------------------------------------------------------------------------------------------
 # Solvers
 # -------------------------------------------------------------------------------------------------
@@ -145,16 +203,171 @@ def config_for(problem, size, mode, seed):
     sys.exit(2)
 
 
+# -------------------------------------------------------------------------------------------------
+# Multi-objective: NSGA-II with the matched settings
+#
+# PyGAD 3.7.0 runs NSGA-II when the fitness function returns several values and
+# parent_selection_type is "nsga2" or "tournament_nsga2" (pygad/utils/parent_selection.py, nsga.py,
+# nsga2.py). A generation (utils/engine.py, run) selects parents from the population, crosses and
+# mutates them, and the next population is the `keep_elitism` best of the current population (by
+# PyGAD's NSGA-II sort: front, then crowding distance) followed by the offspring. With a population
+# of 2N, keep_elitism N and N offspring, the N elites of each generation are the best N of the
+# previous elites and their offspring, which is NSGA-II's survival. N is the matched 100 (92 with
+# 3 objectives).
+#
+# Differences from textbook NSGA-II (Deb et al. 2002) and from the other libraries' runs:
+# - Parents: PyGAD's binary tournament ("tournament_nsga2", K_tournament 2: the lower front wins,
+#   then the larger crowding distance, then a random one). It draws from the whole population of
+#   2N, the N survivors and the N offspring that won't all survive, not from the N survivors only,
+#   because PyGAD selects the parents before the elites. The two contestants are drawn with
+#   replacement.
+# - The initial population has 2N random individuals, so the first generation costs N more
+#   evaluations.
+# - PyGAD's crowding distance normalizes each objective by its range over the whole population,
+#   not over the front.
+# - An offspring identical to an elite or a parent of the previous generation takes its fitness
+#   without an evaluation (utils/engine.py, cal_pop_fitness). The evaluations printed are the true
+#   number of calls to the fitness function.
+# - Crossover: PyGAD's own "sbx" can't take the matched settings. It makes one child from two
+#   parents drawn at random among those that pass crossover_probability, so a pair isn't crossed
+#   with probability 0.9, and that child is always the one below the parents' midpoint
+#   (0.5 * ((y1 + y2) - beta_q * (y2 - y1)) with beta_q > 0, utils/crossover.py), which pulls every
+#   gene towards the lower bound, where ZDT's optimum is. So the crossover is sbx_crossover below,
+#   given to PyGAD as a crossover function: bounded SBX as DEAP's cxSimulatedBinaryBounded, η 15,
+#   each pair of parents with probability 0.9, each variable with probability 0.5.
+# - Mutation: PyGAD's own "polynomial" (utils/mutation.py, polynomial_mutation), which is Deb's
+#   bounded polynomial mutation: η 20, each gene with probability 1 / n (mutation_probability),
+#   within init_range_low and init_range_high.
+# - PyGAD maximizes, so the fitness function returns the negated objectives. The front is printed
+#   minimized.
+# - Its non-dominated sorting compares every pair of individuals in Python (utils/nsga.py), and it
+#   sorts the population three times per generation: for the tournament, for the elites and for
+#   best_solution. The time cap can stop a run before the budget.
+# The front printed is the non-dominated set of the final N elites, which PyGAD selects after the
+# last generation (last_generation_elitism_indices).
+# -------------------------------------------------------------------------------------------------
+
+SBX_ETA = 15.0
+SBX_PROBABILITY = 0.9
+POLYNOMIAL_ETA = 20.0
+
+
+def sbx_pair(a, b, low=0.0, high=1.0):
+    """Bounded SBX of two parents, as DEAP's cxSimulatedBinaryBounded: each variable crosses with
+    probability 0.5, and the two children swap sides with probability 0.5."""
+    y1, y2 = numpy.minimum(a, b), numpy.maximum(a, b)
+    crossed = (numpy.random.random(a.size) <= 0.5) & (y2 - y1 > 1e-14)
+    rand = numpy.random.random(a.size)
+    # 1 where a variable doesn't cross, to avoid dividing by 0; those values are discarded
+    delta = numpy.where(crossed, y2 - y1, 1.0)
+    power = 1.0 / (SBX_ETA + 1.0)
+
+    def child(beta, sign):
+        alpha = 2.0 - beta ** -(SBX_ETA + 1.0)
+        beta_q = numpy.where(rand <= 1.0 / alpha, (rand * alpha) ** power, (1.0 / (2.0 - rand * alpha)) ** power)
+        return numpy.clip(0.5 * (y1 + y2 + sign * beta_q * delta), low, high)
+
+    lower_child = child(1.0 + 2.0 * (y1 - low) / delta, -1.0)
+    upper_child = child(1.0 + 2.0 * (high - y2) / delta, 1.0)
+    swap = numpy.random.random(a.size) <= 0.5
+    first = numpy.where(crossed, numpy.where(swap, upper_child, lower_child), a)
+    second = numpy.where(crossed, numpy.where(swap, lower_child, upper_child), b)
+    return first, second
+
+
+def sbx_crossover(parents, offspring_size, ga):
+    """PyGAD's crossover function: the parents of the tournament in pairs, (0, 1), (2, 3), ...,
+    crossed by SBX with probability 0.9, else copied."""
+    count = offspring_size[0]
+    offspring = numpy.empty(offspring_size, dtype=float)
+    for k in range(0, count, 2):
+        a = numpy.array(parents[k % len(parents)], dtype=float)
+        b = numpy.array(parents[(k + 1) % len(parents)], dtype=float)
+        if numpy.random.random() <= SBX_PROBABILITY:
+            a, b = sbx_pair(a, b)
+        offspring[k] = a
+        if k + 1 < count:
+            offspring[k + 1] = b
+    return offspring
+
+
+def non_dominated(points):
+    """The points (minimized) that no other point dominates."""
+    return [
+        p for p in points
+        if not any(all(a <= b for a, b in zip(q, p)) and any(a < b for a, b in zip(q, p)) for q in points)
+    ]
+
+
+def run_fronts(problem, size, mode, seed_from, seed_to, max_evaluations, max_seconds):
+    function, variables, objectives, population_size = FRONT_PROBLEMS[problem]
+    n = variables(size)
+    for seed in range(seed_from, seed_to + 1):
+        random.seed(seed)
+        numpy.random.seed(seed)
+        budget = Budget(max_evaluations, max_seconds)
+
+        def fitness_func(ga, solution, solution_index):
+            budget.evaluations += 1
+            return [-float(v) for v in function(solution.tolist())]
+
+        def on_generation(ga):
+            if budget.exhausted():
+                return "stop"
+
+        ga = pygad.GA(
+            num_generations=10_000_000,
+            fitness_func=fitness_func,
+            on_generation=on_generation,
+            num_genes=n,
+            gene_type=float,
+            init_range_low=0.0,
+            init_range_high=1.0,
+            # N elites and N offspring per generation
+            sol_per_pop=2 * population_size,
+            keep_elitism=population_size,
+            num_parents_mating=population_size,
+            parent_selection_type="tournament_nsga2",
+            K_tournament=2,
+            crossover_type=sbx_crossover,
+            mutation_type="polynomial",
+            polynomial_mutation_eta=POLYNOMIAL_ETA,
+            mutation_probability=1.0 / n,
+            random_seed=seed,
+            suppress_warnings=True,
+        )
+        start = time.perf_counter()
+        ga.run()
+        elapsed = time.perf_counter() - start
+
+        # the final survivors: the N elites PyGAD selects from the last population
+        survivors = numpy.asarray(ga.last_generation_elitism_indices, dtype=int)
+        fitness = numpy.asarray(ga.last_generation_fitness, dtype=float)[survivors]
+        front = non_dominated([[-float(v) for v in row] for row in fitness])
+        print(json.dumps({
+            "library": "pygad",
+            "solver": "nsga2",
+            "problem": problem,
+            "size": size,
+            "mode": mode,
+            "seed": seed,
+            "time_s": round(elapsed, 6),
+            "generations": ga.generations_completed,
+            "evaluations": budget.evaluations,
+            "front": front,
+        }), flush=True)
+
+
 def main():
     if len(sys.argv) != 8:
         print(__doc__, file=sys.stderr)
         sys.exit(2)
     problem, size, mode = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-    if problem in {"zdt1", "zdt2", "zdt3", "dtlz1", "dtlz2"}:
-        # no multi-objective algorithm with SBX and polynomial mutation
-        return
     seed_from, seed_to = int(sys.argv[4]), int(sys.argv[5])
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
+    if problem in FRONT_PROBLEMS:
+        run_fronts(problem, size, mode, seed_from, seed_to, max_evaluations, max_seconds)
+        return
 
     for seed in range(seed_from, seed_to + 1):
         random.seed(seed)

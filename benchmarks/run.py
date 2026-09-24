@@ -409,6 +409,21 @@ def front_table(rows):
     return "\n".join(lines)
 
 
+def coverage_table(runs, libraries):
+    """Which library ran which scenario: a library missing from a scenario can't run it (see
+    docs/benchmarks/notes.md)."""
+    ran = {(run["library"], scenario_name(run["problem"], run["size"], run["mode"])) for run in runs}
+    scenarios = [scenario_name(*scenario[:3]) for scenario in SCENARIOS
+                 if any(scenario_name(*scenario[:3]) == name for _, name in ran)]
+    names = [name for name in list(ADAPTERS) + sorted(set(libraries) - set(ADAPTERS)) if name in libraries]
+    lines = ["| Library | " + " | ".join(scenario_title(scenario) for scenario in scenarios) + " |",
+             "|---|" + "---|" * len(scenarios)]
+    for name in names:
+        cells = ["✓" if (name, scenario) in ran else "–" for scenario in scenarios]
+        lines.append(f"| {LIBRARY_NAMES.get(name, name)} | " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
 def markdown_table(rows):
     lines = [
         "| Scenario | Library / solver | Success | Median time to target | Median evaluations | Median best | Evaluations/s | Throughput vs DEAP GA |",
@@ -667,7 +682,8 @@ def draw_charts(results, out_dir, formats=("svg",)):
         if not scenarios:
             break
         figure, axes = chart(
-            title, context + " · × never reached the target · k/n: reached in k of n runs",
+            title, context + " · × never reached the target · k/n: reached in k of n runs · a missing library can't "
+            "run the scenario: see notes.md",
             [(scenario, len([row for row in rows if row["scenario"] == scenario])) for scenario in scenarios],
             {row["library"] for row in rows})
         for scenario in scenarios:
@@ -706,7 +722,8 @@ def draw_charts(results, out_dir, formats=("svg",)):
         if not front_rows:
             break
         figure, axes = chart(
-            title, context + " · SBX and polynomial mutation, the same settings in every library",
+            title, context + " · the same settings in every library where it has them · a missing library can't "
+            "run the scenario: see notes.md",
             [(scenario, len([row for row in front_rows if row["scenario"] == scenario])) for scenario in front_scenarios],
             {row["library"] for row in front_rows})
         for scenario in front_scenarios:
@@ -860,6 +877,10 @@ def main():
     results_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
     header = [f"# Results {timestamp}", "", f"Seeds per scenario: {seeds}, wall time cap per run: {max_seconds} s", platform, ""]
     header += [f"- {name} {version}" for name, version in versions.items()] + [""]
+    coverage = coverage_table(runs, versions)
+    header += ["## Coverage", "",
+               "✓ ran, – can't run the scenario: why, and the bugs found in the libraries, in "
+               "[notes.md](notes.md).", "", coverage, "", "## Single-objective", ""]
     table = markdown_table(rows)
     if front_rows:
         table += "\n\n## Multi-objective\n\n" + front_table(front_rows)
