@@ -383,7 +383,6 @@ fn batch_matches_one_genome_at_a_time() {
         let mut batched = Statistics::new();
         let batch = Engine::new(ga(40, scheme, 4), Batch(batch_one_max))
             .stop_when(Stop::generations(30))
-            .parallel(true)
             .observe(&mut batched)
             .run()
             .unwrap();
