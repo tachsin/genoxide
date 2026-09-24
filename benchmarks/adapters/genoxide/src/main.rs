@@ -3,6 +3,9 @@
 //! Usage: ga_bench_genoxide <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
 //! Prints one JSON line per solver per seed, see ../../README.md for the fields.
 
+use genoxide::Objective::Minimize;
+use genoxide::multi::problems::{Dtlz2, TestProblem, Zdt1, Zdt3};
+use genoxide::multi::{Decomposition, Moead, Nsga3, SmsEmoa, Spea2, das_dennis};
 use genoxide::prelude::*;
 use std::f64::consts::PI;
 use std::time::{Duration, Instant};
@@ -166,7 +169,15 @@ fn run_rastrigin(args: &Args, seed: u64) -> Result<()> {
             .best_fitness()
             .score()
             .is_some_and(|best| best <= RASTRIGIN_TARGET);
-        print_result(args, seed, solver, &outcome, time_s, RASTRIGIN_TARGET, success);
+        print_result(
+            args,
+            seed,
+            solver,
+            &outcome,
+            time_s,
+            RASTRIGIN_TARGET,
+            success,
+        );
         Ok(())
     };
 
@@ -221,6 +232,144 @@ fn run_rastrigin(args: &Args, seed: u64) -> Result<()> {
     report("cma_es", outcome, time_s)
 }
 
+// multi-objective runs have a budget and no target: they print their final front, and run.py
+// computes its hypervolume the same way for every library
+fn print_front<G: Genome, const M: usize>(
+    args: &Args,
+    seed: u64,
+    solver: &str,
+    outcome: &genoxide::multi::MultiOutcome<G, M>,
+    time_s: f64,
+) {
+    let front: Vec<String> = outcome
+        .front_values()
+        .iter()
+        .map(|values| {
+            let values: Vec<String> = values.iter().map(|v| format!("{v:?}")).collect();
+            format!("[{}]", values.join(","))
+        })
+        .collect();
+    println!(
+        "{{\"library\":\"genoxide\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{},\"evaluations\":{},\"front\":[{}]}}",
+        args.problem,
+        args.size,
+        args.mode,
+        outcome.generations(),
+        outcome.evaluations(),
+        front.join(","),
+    );
+}
+
+// the matched settings of every library: SBX with η 15 at 0.9 and polynomial mutation with η 20
+// at 1 / n; MOEA/D and NSGA-III with their usual SBX (η 20 and 30 at 1)
+fn run_front_problem<P, const M: usize>(
+    args: &Args,
+    seed: u64,
+    problem: P,
+    population: usize,
+    divisions: usize,
+    solvers: &[&str],
+) -> Result<()>
+where
+    P: TestProblem<M> + Copy,
+{
+    let real = problem.real();
+    let rate = 1.0 / real.bounds().len() as f64;
+    let stop = || {
+        Stop::evaluations(args.max_evaluations)
+            .or(Stop::time(Duration::from_secs_f64(args.max_seconds)))
+    };
+    let objectives = [Minimize; M];
+    for &solver in solvers {
+        let start = Instant::now();
+        let outcome = match solver {
+            "nsga2" => {
+                let algorithm = Nsga2::builder(real.clone(), objectives)
+                    .population_size(population)
+                    .crossover(SimulatedBinaryCrossover::new(15.0)?)
+                    .mutate(PolynomialMutation::per_gene(rate, 20.0)?)
+                    .seed(seed)
+                    .build()?;
+                MultiEngine::new(algorithm, problem)
+                    .stop_when(stop())
+                    .run()?
+            }
+            "spea2" => {
+                let algorithm = Spea2::builder(real.clone(), objectives)
+                    .population_size(population)
+                    .crossover(SimulatedBinaryCrossover::new(15.0)?)
+                    .mutate(PolynomialMutation::per_gene(rate, 20.0)?)
+                    .seed(seed)
+                    .build()?;
+                MultiEngine::new(algorithm, problem)
+                    .stop_when(stop())
+                    .run()?
+            }
+            "sms_emoa" => {
+                let algorithm = SmsEmoa::builder(real.clone(), objectives)
+                    .population_size(population)
+                    .crossover(SimulatedBinaryCrossover::new(15.0)?)
+                    .mutate(PolynomialMutation::per_gene(rate, 20.0)?)
+                    .seed(seed)
+                    .build()?;
+                MultiEngine::new(algorithm, problem)
+                    .stop_when(stop())
+                    .run()?
+            }
+            "moead" => {
+                let decomposition = if M == 2 {
+                    Decomposition::Tchebycheff
+                } else {
+                    Decomposition::Pbi { theta: 5.0 }
+                };
+                let algorithm =
+                    Moead::builder(real.clone(), objectives, das_dennis::<M>(divisions))
+                        .decomposition(decomposition)
+                        .crossover(SimulatedBinaryCrossover::new(20.0)?)
+                        .mutate(PolynomialMutation::per_gene(rate, 20.0)?)
+                        .seed(seed)
+                        .build()?;
+                MultiEngine::new(algorithm, problem)
+                    .stop_when(stop())
+                    .run()?
+            }
+            "nsga3" => {
+                let algorithm =
+                    Nsga3::builder(real.clone(), objectives, das_dennis::<M>(divisions))
+                        .population_size(population)
+                        .crossover(SimulatedBinaryCrossover::new(30.0)?)
+                        .mutate(PolynomialMutation::per_gene(rate, 20.0)?)
+                        .seed(seed)
+                        .build()?;
+                MultiEngine::new(algorithm, problem)
+                    .stop_when(stop())
+                    .run()?
+            }
+            other => unreachable!("unknown solver {other}"),
+        };
+        print_front(args, seed, solver, &outcome, start.elapsed().as_secs_f64());
+    }
+    Ok(())
+}
+
+fn run_front(args: &Args, seed: u64) -> Result<()> {
+    let two = ["nsga2", "spea2", "sms_emoa", "moead"];
+    match args.problem.as_str() {
+        "zdt1" => run_front_problem(args, seed, Zdt1::new(args.size), 100, 99, &two),
+        "zdt3" => run_front_problem(args, seed, Zdt3::new(args.size), 100, 99, &two),
+        // size: the number of objectives
+        "dtlz2" => run_front_problem(
+            args,
+            seed,
+            Dtlz2::<3>::default(),
+            92,
+            12,
+            &["nsga2", "nsga3", "spea2", "sms_emoa", "moead"],
+        ),
+        other => unreachable!("unknown problem {other}"),
+    }
+}
+
 fn main() -> Result<()> {
     let raw: Vec<String> = std::env::args().skip(1).collect();
     if raw.len() != 7 {
@@ -243,6 +392,7 @@ fn main() -> Result<()> {
             "onemax" => run_onemax(&args, seed)?,
             "nqueens" => run_nqueens(&args, seed)?,
             "rastrigin" => run_rastrigin(&args, seed)?,
+            "zdt1" | "zdt3" | "dtlz2" => run_front(&args, seed)?,
             other => {
                 eprintln!("unknown problem {other}");
                 std::process::exit(2);

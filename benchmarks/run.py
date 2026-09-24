@@ -9,6 +9,8 @@ Usage:
     python run.py chart                      # redraw the charts of the latest results
     python run.py --libraries genoxide --update results/<file>.json
                                              # rerun one library, keep the others' results
+    python run.py --libraries genoxide pymoo deap --scenarios zdt1-30-matched --update results/<file>.json
+                                             # add a scenario to a results file
 
 Results are written to results/<timestamp>.json (all runs), results/latest.md (table) and
 results/charts/*.svg (charts). On Linux with Valgrind, a run also measures instructions per
@@ -73,8 +75,45 @@ SCENARIOS = [
     ("nqueens", 64, "idiomatic", 1_000_000),
     ("rastrigin", 10, "idiomatic", 500_000),
     ("rastrigin", 30, "idiomatic", 2_000_000),
+    # multi-objective: a budget and no target; the quality is the hypervolume of the final front
+    ("zdt1", 30, "matched", 25_000),
+    ("zdt3", 30, "matched", 25_000),
+    ("dtlz2", 3, "matched", 25_000),
 ]
-QUICK_SCENARIOS = {"onemax-100-matched", "onemax-100-idiomatic", "nqueens-32-idiomatic", "rastrigin-10-idiomatic"}
+QUICK_SCENARIOS = {"onemax-100-matched", "onemax-100-idiomatic", "nqueens-32-idiomatic", "rastrigin-10-idiomatic",
+                   "zdt1-30-matched"}
+
+# the multi-objective problems: the hypervolume's reference point, and the libraries that have
+# multi-objective algorithms with SBX and polynomial mutation
+FRONT_PROBLEMS = {"zdt1": (1.1, 1.1), "zdt3": (1.1, 1.1), "dtlz2": (1.1, 1.1, 1.1)}
+FRONT_LIBRARIES = {"genoxide", "pymoo", "deap"}
+
+
+def is_front(problem):
+    return problem in FRONT_PROBLEMS
+
+
+def hypervolume(points, reference):
+    """The exact hypervolume of points to minimize: a sweep in 2 dimensions, slices above."""
+    points = [p for p in points if all(x < r for x, r in zip(p, reference))]
+    if not points:
+        return 0.0
+    if len(reference) == 1:
+        return reference[0] - min(p[0] for p in points)
+    if len(reference) == 2:
+        volume, ceiling = 0.0, reference[1]
+        for x, y in sorted(points):
+            if y < ceiling:
+                volume += (reference[0] - x) * (ceiling - y)
+                ceiling = y
+        return volume
+    points = sorted(points, key=lambda p: p[-1])
+    volume = 0.0
+    for index, point in enumerate(points):
+        top = points[index + 1][-1] if index + 1 < len(points) else reference[-1]
+        if top > point[-1]:
+            volume += (top - point[-1]) * hypervolume([p[:-1] for p in points[:index + 1]], reference[:-1])
+    return volume
 
 
 def scenario_name(problem, size, mode):
@@ -125,7 +164,12 @@ def run_adapter(adapter, problem, size, mode, seeds, max_evaluations, max_second
     if completed.returncode != 0:
         print(completed.stderr, file=sys.stderr)
         raise SystemExit(f"adapter failed: {' '.join(command)}")
-    return [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+    runs = [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+    for run in runs:
+        if is_front(run["problem"]):
+            # the same hypervolume for every library; the front itself isn't kept
+            run["hypervolume"] = hypervolume(run.pop("front"), FRONT_PROBLEMS[run["problem"]])
+    return runs
 
 
 # Instructions per evaluation, with Callgrind: each adapter runs with a budget of N and of 2N
@@ -192,6 +236,8 @@ def format_number(value):
 def summarize(runs):
     groups = {}
     for run in runs:
+        if is_front(run["problem"]):
+            continue
         key = (scenario_name(run["problem"], run["size"], run["mode"]), run["library"], run["solver"])
         groups.setdefault(key, []).append(run)
 
@@ -225,6 +271,50 @@ def summarize(runs):
     return rows
 
 
+def summarize_fronts(runs):
+    """Median hypervolume and time of each multi-objective solver."""
+    groups = {}
+    for run in runs:
+        if is_front(run["problem"]):
+            key = (scenario_name(run["problem"], run["size"], run["mode"]), run["library"], run["solver"])
+            groups.setdefault(key, []).append(run)
+    rows = []
+    for (scenario, library, solver), group in groups.items():
+        volumes = sorted(run["hypervolume"] for run in group)
+        rows.append({
+            "scenario": scenario,
+            "library": library,
+            "solver": solver,
+            "runs": len(group),
+            "median_hypervolume": median(volumes),
+            "worst_hypervolume": volumes[0],
+            "best_hypervolume": volumes[-1],
+            "median_time": median([run["time_s"] for run in group]),
+            "median_evaluations": median([run["evaluations"] for run in group]),
+            "evaluations_per_second": sum(run["evaluations"] for run in group)
+            / max(sum(run["time_s"] for run in group), 1e-9),
+        })
+    rows.sort(key=lambda row: (row["scenario"], row["library"], row["solver"]))
+    return rows
+
+
+def front_table(rows):
+    lines = [
+        "| Scenario | Library / solver | Median hypervolume | Range | Median time | Median evaluations | Evaluations/s |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['scenario']} | {row['library']} / {row['solver']} "
+            f"| {row['median_hypervolume']:.4f} "
+            f"| {row['worst_hypervolume']:.4f} to {row['best_hypervolume']:.4f} "
+            f"| {format_seconds(row['median_time'])} "
+            f"| {format_number(round(row['median_evaluations']))} "
+            f"| {format_number(round(row['evaluations_per_second']))} |"
+        )
+    return "\n".join(lines)
+
+
 def markdown_table(rows):
     lines = [
         "| Scenario | Library / solver | Success | Median time to target | Median evaluations | Median best | Evaluations/s | Throughput vs DEAP GA |",
@@ -248,8 +338,10 @@ def markdown_table(rows):
 LIBRARY_NAMES = {"genoxide": "genoxide", "genetic_algorithm": "genetic_algorithm", "deap": "DEAP",
                  "pygad": "PyGAD", "pymoo": "pymoo"}
 SOLVER_NAMES = {"ga": "GA", "evolve": "GA", "hill_climb": "hill climbing", "local_search": "local search",
-                "cma_es": "CMA-ES", "de": "DE"}
-PROBLEM_NAMES = {"onemax": "OneMax", "nqueens": "N-Queens", "rastrigin": "Rastrigin"}
+                "cma_es": "CMA-ES", "de": "DE", "nsga2": "NSGA-II", "nsga3": "NSGA-III", "spea2": "SPEA2",
+                "sms_emoa": "SMS-EMOA", "moead": "MOEA/D"}
+PROBLEM_NAMES = {"onemax": "OneMax", "nqueens": "N-Queens", "rastrigin": "Rastrigin", "zdt1": "ZDT1",
+                 "zdt3": "ZDT3", "dtlz2": "DTLZ2"}
 GENOXIDE_COLOR = "#ce422b"
 OTHER_COLOR = "#8a9bb0"
 
@@ -260,6 +352,10 @@ def label(library, solver):
 
 def scenario_title(scenario):
     problem, size, mode = scenario.split("-")
+    if problem == "dtlz2":
+        return f"DTLZ2, {size} objectives"
+    if is_front(problem):
+        return f"{PROBLEM_NAMES.get(problem, problem)}, {size} variables"
     return f"{PROBLEM_NAMES.get(problem, problem)} {size} ({mode})"
 
 
@@ -277,7 +373,7 @@ def draw_charts(results, out_dir):
         "svg.hashsalt": "genoxide-benchmarks",
     })
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows = results["summary"]
+    rows = [row for row in results["summary"] if not is_front(row["scenario"].split("-")[0])]
     # in the order of SCENARIOS
     order = {scenario_name(*scenario[:3]): index for index, scenario in enumerate(SCENARIOS)}
     scenarios = sorted({row["scenario"] for row in rows}, key=lambda s: (order.get(s, len(order)), s))
@@ -351,6 +447,49 @@ def draw_charts(results, out_dir):
         lambda row: row["evaluations_per_second"], lambda v: f"{short_number(v)}/s",
         lambda row: "-",
     )
+
+    front_rows = results.get("front_summary") or []
+    front_scenarios = sorted({row["scenario"] for row in front_rows},
+                             key=lambda s: (order.get(s, len(order)), s))
+    if front_rows:
+        for name, title, value, text, scale in (
+            ("hypervolume", "Median hypervolume of the final front after 25,000 evaluations (higher is better)",
+             lambda row: row["median_hypervolume"], lambda v: f"{v:.4f}", "linear"),
+            ("front_time", "Median time for 25,000 evaluations (lower is better)",
+             lambda row: row["median_time"], format_seconds, "log"),
+        ):
+            bars = [len([row for row in front_rows if row["scenario"] == s]) for s in front_scenarios]
+            figure, axes = plt.subplots(len(front_scenarios), 1,
+                                        figsize=(11, 1.0 + sum(bars) * 0.3 + len(front_scenarios) * 0.8),
+                                        squeeze=False)
+            figure.patch.set_facecolor("white")
+            for axis, scenario in zip(axes.flat, front_scenarios):
+                group = [row for row in front_rows if row["scenario"] == scenario]
+                group.sort(key=lambda row: -value(row) if name == "hypervolume" else value(row))
+                positions = range(len(group))[::-1]
+                values = [value(row) for row in group]
+                axis.barh(list(positions), values, height=0.7,
+                          color=[GENOXIDE_COLOR if row["library"] == "genoxide" else OTHER_COLOR for row in group])
+                axis.set_yticks(list(positions), [label(row["library"], row["solver"]) for row in group])
+                axis.set_xscale(scale)
+                if name == "hypervolume":
+                    # the differences are in the last digits: zoom in on the range of the values
+                    low, high = min(values), max(values)
+                    axis.set_xlim(low - (high - low) * 0.6 - 1e-4, high + (high - low) * 0.9 + 1e-4)
+                else:
+                    axis.set_xlim(min(values) / 3, max(values) * 30)
+                    axis.xaxis.set_major_formatter(tick_formatters["time_to_target"])
+                for position, v in zip(positions, values):
+                    axis.text(v * (1.0005 if scale == "linear" else 1.1), position, text(v), va="center", fontsize=8.5)
+                axis.set_title(scenario_title(scenario), fontsize=10.5, loc="left")
+                axis.tick_params(axis="x", labelsize=8)
+                axis.spines[["top", "right"]].set_visible(False)
+            figure.suptitle(title, x=0.01, ha="left", fontsize=13, fontweight="bold")
+            figure.text(0.01, 0.005, footnote + "; SBX and polynomial mutation, the same settings in every library",
+                        fontsize=8, color="#555")
+            figure.tight_layout(rect=(0, 0.02, 1, 0.97))
+            figure.savefig(out_dir / f"{name}.svg", metadata={"Date": None})
+            plt.close(figure)
 
     instructions = results.get("instructions")
     if instructions:
@@ -454,7 +593,8 @@ def main():
         scenario for scenario in SCENARIOS
         if (not args.quick or scenario_name(*scenario[:3]) in QUICK_SCENARIOS)
         and (not args.scenarios or scenario_name(*scenario[:3]) in args.scenarios)
-        and (previous_scenarios is None or scenario_name(*scenario[:3]) in previous_scenarios)
+        # an update reruns the scenarios of its results file, or the ones named, which can be new
+        and (previous_scenarios is None or args.scenarios or scenario_name(*scenario[:3]) in previous_scenarios)
     ]
 
     versions = {}
@@ -469,6 +609,8 @@ def main():
     runs = []
     for problem, size, mode, max_evaluations in scenarios:
         for name in args.libraries:
+            if is_front(problem) and name not in FRONT_LIBRARIES:
+                continue
             print(f"{scenario_name(problem, size, mode)}: {name} ({seeds} seeds) ...", flush=True)
             runs += run_adapter(ADAPTERS[name], problem, size, mode, seeds, max_evaluations, max_seconds)
 
@@ -495,6 +637,7 @@ def main():
             instructions = kept + instructions
 
     rows = summarize(runs)
+    front_rows = summarize_fronts(runs)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     results = ROOT / "results"
     results.mkdir(exist_ok=True)
@@ -502,12 +645,14 @@ def main():
     if previous and previous.get("platform") not in (None, platform):
         platform = f"{previous['platform']}; {', '.join(args.libraries)} rerun on {platform}"
     report = {"versions": versions, "seeds": seeds, "max_seconds": max_seconds, "platform": platform,
-              "runs": runs, "summary": rows, "instructions": instructions}
+              "runs": runs, "summary": rows, "front_summary": front_rows, "instructions": instructions}
     results_file = results / f"{timestamp}.json"
     results_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
     header = [f"# Results {timestamp}", "", f"Seeds per scenario: {seeds}, wall time cap per run: {max_seconds} s", platform, ""]
     header += [f"- {name} {version}" for name, version in versions.items()] + [""]
     table = markdown_table(rows)
+    if front_rows:
+        table += "\n\n## Multi-objective\n\n" + front_table(front_rows)
     # a blank line between the list and the table, or the table becomes part of the list
     (results / "latest.md").write_text("\n".join(header) + "\n" + table + "\n", encoding="utf-8")
     print()
