@@ -27,11 +27,13 @@
 //! # Ok::<(), genoxide::Error>(())
 //! ```
 
+pub mod cmaes;
 pub mod de;
 pub mod ga;
 pub mod local_search;
 pub mod pso;
 
+pub use cmaes::{Cmaes, CmaesBuilder, Restarts};
 pub use de::{De, DeBuilder};
 pub use ga::{Ga, GaBuilder, Scheme, Unset};
 pub use local_search::{Acceptance, LocalSearch, LocalSearchBuilder};
