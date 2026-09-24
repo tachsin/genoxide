@@ -150,7 +150,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 ### 0.4: Multi-objective
 - [x] Non-dominated sorting (fast and log variants), crowding distance
 - [x] NSGA-II
-- [ ] NSGA-III (reference points)
+- [x] NSGA-III (reference points)
 - [ ] SPEA2
 - [ ] MOEA/D
 - [ ] SMS-EMOA

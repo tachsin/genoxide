@@ -1,5 +1,6 @@
 //! NSGA-II: the non-dominated sorting genetic algorithm.
 
+use super::breed::{Variation, scores_of};
 use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, crowding_distance, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
@@ -8,6 +9,7 @@ use crate::operator::{Crossover, Mutate, check_probability};
 use crate::rng::Chance;
 use crate::{Error, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
+use std::cmp::Ordering;
 
 /// NSGA-II (Deb et al., 2002): the classic multi-objective genetic algorithm, as an ask / tell
 /// [`MultiObjectiveAlgorithm`].
@@ -33,15 +35,11 @@ use rand::Rng;
 /// (η 20, a rate of 1 / the number of genes).
 #[derive(Clone, Debug)]
 pub struct Nsga2<R: Representation, C, X, const M: usize> {
-    representation: R,
-    crossover: C,
-    mutate: X,
+    variation: Variation<R, C, X>,
     objectives: [Objective; M],
     population_size: usize,
     crossover_rate: f64,
     mutation_rate: f64,
-    crossover_chance: Chance,
-    mutation_chance: Chance,
     seed: u64,
     rng: StreamRng,
     population: Population<R::Genome, Scores<M>>,
@@ -85,17 +83,17 @@ where
 {
     /// The representation.
     pub fn representation(&self) -> &R {
-        &self.representation
+        &self.variation.representation
     }
 
     /// The crossover operator.
     pub fn crossover(&self) -> &C {
-        &self.crossover
+        &self.variation.crossover
     }
 
     /// The mutation operator.
     pub fn mutate(&self) -> &X {
-        &self.mutate
+        &self.variation.mutate
     }
 
     /// The population size.
@@ -130,70 +128,15 @@ where
         self.seed
     }
 
-    // the winner of a binary tournament by the crowded comparison
-    fn tournament(&mut self) -> usize {
-        let size = self.population.len();
-        let a = self.rng.below(size);
-        let mut b = self.rng.below(size - 1);
-        if b >= a {
-            b += 1;
-        }
-        match self.ranks[a].cmp(&self.ranks[b]) {
-            std::cmp::Ordering::Less => a,
-            std::cmp::Ordering::Greater => b,
-            std::cmp::Ordering::Equal => {
-                if self.crowding[a] > self.crowding[b] {
-                    a
-                } else if self.crowding[b] > self.crowding[a] {
-                    b
-                } else if self.rng.below(2) == 0 {
-                    a
-                } else {
-                    b
-                }
-            }
-        }
-    }
-
     fn breed(&mut self) {
-        let count = self.population_size;
-        self.offspring.clear();
-        while self.offspring.len() < count {
-            let parents = [self.tournament(), self.tournament()];
-            let mut a = self.population[parents[0]].genome().clone();
-            let mut b = self.population[parents[1]].genome().clone();
-            if self.rng.chance(self.crossover_chance) {
-                self.crossover
-                    .crossover(&self.representation, &mut a, &mut b, &mut self.rng);
-            }
-            for mut genome in [a, b] {
-                if self.offspring.len() == count {
-                    break;
-                }
-                if self.rng.chance(self.mutation_chance) {
-                    self.mutate
-                        .mutate(&self.representation, &mut genome, &mut self.rng);
-                }
-                let inherited = parents
-                    .iter()
-                    .map(|&parent| &self.population[parent])
-                    .find(|parent| parent.genome() == &genome)
-                    .and_then(Individual::fitness);
-                let mut child = Individual::unevaluated(genome);
-                if let Some(scores) = inherited {
-                    child.set_fitness(scores);
-                }
-                self.offspring.push(child);
-            }
-        }
-    }
-
-    // the scores of individuals, invalid if not evaluated
-    fn scores(individuals: &[Individual<R::Genome, Scores<M>>]) -> Vec<Scores<M>> {
-        individuals
-            .iter()
-            .map(|individual| individual.fitness().unwrap_or(Scores::invalid()))
-            .collect()
+        let (ranks, crowding) = (&self.ranks, &self.crowding);
+        self.variation.breed(
+            &self.population,
+            self.population_size,
+            &mut self.rng,
+            |rng| crowded_tournament(ranks, crowding, rng),
+            &mut self.offspring,
+        );
     }
 
     // the next population from the parents and the offspring, and its ranks and crowding
@@ -202,7 +145,7 @@ where
         let parent_count = parents.len();
         let mut pool = parents;
         pool.append(&mut self.offspring);
-        let scores = Self::scores(&pool);
+        let scores = scores_of(&pool);
         let fronts = non_dominated_sort(&scores, &self.objectives);
         let mut chosen: Vec<(usize, usize, f64)> = Vec::with_capacity(self.population_size);
         for (rank, front) in fronts.iter().enumerate() {
@@ -258,7 +201,7 @@ where
 
     // the ranks and crowding of the initial population
     fn rank_initial(&mut self) {
-        let scores = Self::scores(self.population.as_slice());
+        let scores = scores_of(self.population.as_slice());
         let fronts = non_dominated_sort(&scores, &self.objectives);
         self.ranks = vec![0; scores.len()];
         self.crowding = vec![0.0; scores.len()];
@@ -281,13 +224,37 @@ where
             .map(|(individual, _)| individual.clone())
             .collect();
         if gains(
-            &Self::scores(&front),
-            &Self::scores(&self.front),
+            &scores_of(&front),
+            &scores_of(&self.front),
             &self.objectives,
         ) {
             self.front_generation = self.generation;
         }
         self.front = front;
+    }
+}
+
+// the winner of a binary tournament by the crowded comparison: the lower rank, then the larger
+// crowding distance, then a coin flip
+fn crowded_tournament(ranks: &[usize], crowding: &[f64], rng: &mut StreamRng) -> usize {
+    let size = ranks.len();
+    let a = rng.below(size);
+    let mut b = rng.below(size - 1);
+    if b >= a {
+        b += 1;
+    }
+    match ranks[a].cmp(&ranks[b]) {
+        Ordering::Less => a,
+        Ordering::Greater => b,
+        Ordering::Equal => {
+            if crowding[a] > crowding[b] {
+                a
+            } else if crowding[b] > crowding[a] || rng.below(2) != 0 {
+                b
+            } else {
+                a
+            }
+        }
     }
 }
 
@@ -512,15 +479,17 @@ impl<R: Representation, const M: usize, C, X> Nsga2Builder<R, M, C, X> {
         let mut genomes = self.initial_genomes;
         genomes.extend((0..random).map(|_| self.representation.random_genome(&mut rng)));
         Ok(Nsga2 {
-            representation: self.representation,
-            crossover: self.crossover,
-            mutate: self.mutate,
+            variation: Variation {
+                representation: self.representation,
+                crossover: self.crossover,
+                mutate: self.mutate,
+                crossover_chance: Chance::new(crossover_rate),
+                mutation_chance: Chance::new(mutation_rate),
+            },
             objectives: self.objectives,
             population_size: size,
             crossover_rate,
             mutation_rate,
-            crossover_chance: Chance::new(crossover_rate),
-            mutation_chance: Chance::new(mutation_rate),
             seed,
             rng,
             population: genomes.into_iter().map(Individual::unevaluated).collect(),

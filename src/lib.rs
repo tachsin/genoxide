@@ -38,7 +38,7 @@
 //!   evolution strategies [`Es`](algorithm::Es), CMA-ES [`Cmaes`](algorithm::Cmaes), differential
 //!   evolution [`De`](algorithm::De) and particle swarm optimization [`Pso`](algorithm::Pso)
 //! - [`Engine`]: runs an algorithm with stop conditions, parallel evaluation and cancellation
-//! - [`multi`]: multi-objective optimization: NSGA-II, the [`MultiEngine`](multi::MultiEngine), Pareto
+//! - [`multi`]: multi-objective optimization: NSGA-II, NSGA-III, the [`MultiEngine`](multi::MultiEngine), Pareto
 //!   dominance and non-dominated sorting
 //! - [`observer`]: statistics, hall of fame and custom callbacks
 //! - [`prelude`]: everything above in one import

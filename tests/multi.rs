@@ -255,3 +255,26 @@ fn nsga2_runs_in_parallel_with_the_same_results() {
     };
     assert_eq!(run(true), run(false));
 }
+
+#[test]
+fn nsga3_spreads_a_three_objective_front() {
+    use genoxide::multi::indicator::igd;
+    use genoxide::multi::problems::{Dtlz2, TestProblem};
+    use genoxide::multi::{Nsga3, das_dennis};
+    // DTLZ2 with 91 reference directions (Deb and Jain's settings): pymoo reaches an IGD of
+    // about 0.001 to the 91 optimal points, genoxide about 0.003
+    let problem = Dtlz2::<3>::default();
+    let nsga3 = Nsga3::builder(problem.real(), [Minimize; 3], das_dennis::<3>(12))
+        .population_size(92)
+        .crossover(SimulatedBinaryCrossover::new(30.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / 12.0, 20.0).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = MultiEngine::new(nsga3, problem)
+        .stop_when(Stop::generations(249))
+        .run()
+        .unwrap();
+    let distance = igd(&outcome.front_values(), &problem.optimal_front(91));
+    assert!(distance < 0.004, "{distance}");
+}
