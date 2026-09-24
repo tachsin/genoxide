@@ -15,6 +15,7 @@ use std::mem;
 /// the algorithm whether or not it survives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Scheme {
     /// μ − `elitism` offspring per generation. The next population is the `elitism` best parents
     /// followed by the offspring. `elitism` is less than μ.
@@ -119,6 +120,14 @@ impl Scheme {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "R: serde::Serialize, S: serde::Serialize, C: serde::Serialize, M: serde::Serialize, R::Genome: serde::Serialize",
+        deserialize = "R: serde::Deserialize<'de>, S: serde::Deserialize<'de>, C: serde::Deserialize<'de>, M: serde::Deserialize<'de>, R::Genome: serde::Deserialize<'de>"
+    ))
+)]
 pub struct Ga<R: Representation, S, C, M> {
     representation: R,
     select: S,
@@ -152,6 +161,7 @@ pub struct Ga<R: Representation, S, C, M> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 enum Phase {
     // the initial population is not evaluated yet
     Initial,

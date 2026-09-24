@@ -12,6 +12,7 @@ use std::collections::{HashSet, VecDeque};
 /// When a [`LocalSearch`] moves to a neighbor.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Acceptance {
     /// Only to a strictly better neighbor: hill climbing, which stops at the first local optimum.
     Improving,
@@ -119,6 +120,14 @@ impl Acceptance {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "R: serde::Serialize, M: serde::Serialize, R::Genome: serde::Serialize",
+        deserialize = "R: serde::Deserialize<'de>, M: serde::Deserialize<'de>, R::Genome: serde::Deserialize<'de>"
+    ))
+)]
 pub struct LocalSearch<R: Representation, M> {
     representation: R,
     neighbor: M,
@@ -141,6 +150,8 @@ pub struct LocalSearch<R: Representation, M> {
     best_generation: u64,
     // the recent solutions of tabu search, in order and for lookups
     tabu: VecDeque<R::Genome>,
+    // rebuilt from `tabu` after a checkpoint, so a checkpoint doesn't depend on the hash order
+    #[cfg_attr(feature = "serde", serde(skip))]
     tabu_set: HashSet<R::Genome>,
     // iterated local search: (patience, kicks)
     restart: Option<(u64, usize)>,
@@ -315,6 +326,9 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
         }
         self.asked = false;
         self.evaluations += fitness.len() as u64;
+        if self.tabu_set.len() != self.tabu.len() {
+            self.tabu_set = self.tabu.iter().cloned().collect();
+        }
         if !self.started {
             self.current[0].set_fitness(fitness[0]);
             self.best = Some(self.current[0].clone());

@@ -13,6 +13,7 @@ fn fitness_of<G: Genome>(population: &Population<G>, index: usize) -> Fitness {
 ///
 /// Larger tournaments give more selection pressure. A size of 1 is random selection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tournament {
     size: usize,
 }
@@ -169,6 +170,7 @@ fn uniform_indices(population_len: usize, count: usize, rng: &mut StreamRng) -> 
 /// is uniform: with constraints, prefer [`Tournament`] or [`Rank`], which follow the feasibility
 /// rules.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Roulette;
 
 impl Select for Roulette {
@@ -195,6 +197,7 @@ impl Select for Roulette {
 /// It uses the same chances as [`Roulette`], with less spread: an individual with an expected
 /// number of selections of e.g. 2.4 is selected 2 or 3 times.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StochasticUniversalSampling;
 
 impl Select for StochasticUniversalSampling {
@@ -226,6 +229,7 @@ impl Select for StochasticUniversalSampling {
 /// With `pressure` `s` (from 1 to 2), the best individual is expected to be selected `s` times as
 /// often as the average one and the worst `2 - s` times. Equal fitness values share their rank.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rank {
     pressure: f64,
 }
@@ -302,6 +306,7 @@ impl Select for Rank {
 
 /// Truncation selection: uniformly random from the best `fraction` of the population.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Truncation {
     fraction: f64,
 }
@@ -339,6 +344,7 @@ impl Select for Truncation {
 
 /// Uniformly random selection, without selection pressure.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RandomSelection;
 
 impl Select for RandomSelection {

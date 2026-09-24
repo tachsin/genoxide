@@ -32,6 +32,7 @@ fn segment(len: usize, min_len: usize, rng: &mut StreamRng) -> (usize, usize) {
 /// from its own parent, where a gene that is now duplicated is replaced through the mapping
 /// between the two segments. The segment is never the whole genome.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PartiallyMappedCrossover;
 
 // `own` with the segment `start..end` of `other`, repaired by swaps (the mapping of PMX)
@@ -68,6 +69,7 @@ impl Crossover<Permutation> for PartiallyMappedCrossover {
 /// order they have in the other parent, starting after the segment and wrapping around. It keeps
 /// relative order, which suits sequencing and tours. The segment is never the whole genome.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OrderCrossover;
 
 // `own`'s segment `start..end`, and the other genes in the order of `other`, from `end` on
@@ -110,6 +112,7 @@ impl Crossover<Permutation> for OrderCrossover {
 /// every gene keeps the position it has in one of the parents. It's deterministic, and when the
 /// parents form a single cycle, the children are copies of the parents.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CycleCrossover;
 
 impl Crossover<Permutation> for CycleCrossover {
@@ -146,6 +149,7 @@ impl Crossover<Permutation> for CycleCrossover {
 /// random). Only when there's none left, it continues with a random unvisited gene. So children
 /// consist almost entirely of their parents' edges.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EdgeRecombinationCrossover;
 
 // a tour through the edges of `a` and `b`, from `start`
@@ -220,6 +224,7 @@ impl Crossover<Permutation> for EdgeRecombinationCrossover {
 /// In a tour, this replaces two edges and keeps all the others, which makes it the standard move
 /// for routing problems. The genome always changes (unless it has fewer than 2 genes).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InversionMutation;
 
 impl Mutate<Permutation> for InversionMutation {
@@ -244,6 +249,7 @@ impl Mutate<Permutation> for InversionMutation {
 ///
 /// The genome always changes (unless it has a single gene).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InsertionMutation;
 
 impl Mutate<Permutation> for InsertionMutation {
@@ -269,6 +275,7 @@ impl Mutate<Permutation> for InsertionMutation {
 /// The genome always changes (unless it has a single gene): a shuffle that happens to give the
 /// same order is shuffled again.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ScrambleMutation;
 
 impl Mutate<Permutation> for ScrambleMutation {

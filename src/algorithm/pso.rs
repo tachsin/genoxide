@@ -9,6 +9,7 @@ use rand::Rng;
 /// Which particles each particle learns from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Topology {
     /// Every particle follows the best position of the whole swarm (gbest). Converges fast, but
     /// the swarm can gather around a local optimum early.
@@ -56,6 +57,7 @@ pub enum Topology {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Pso {
     real: Real,
     topology: Topology,

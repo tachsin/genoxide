@@ -19,6 +19,7 @@ const WORD_BITS: usize = u64::BITS as usize;
 /// assert_eq!(bits.to_string(), "111");
 /// ```
 #[derive(Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Bits {
     // ceil(len / 64) words, the unused high bits of the last word are always zero
     words: Vec<u64>,
@@ -237,6 +238,7 @@ impl SwapGenes for Bits {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Binary {
     len: usize,
 }
@@ -280,6 +282,49 @@ impl Representation for Binary {
                 reason: format!("expected {} bits, got {}", self.len, genome.len()),
             })
         }
+    }
+}
+
+// validated: one word per 64 bits, with the unused high bits zero
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Bits {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename = "Bits")]
+        struct Raw {
+            words: Vec<u64>,
+            len: usize,
+        }
+        let Raw { words, len } = Raw::deserialize(deserializer)?;
+        let unused = match (words.last(), len % WORD_BITS) {
+            (Some(last), used) if used > 0 => last >> used,
+            _ => 0,
+        };
+        if words.len() != len.div_ceil(WORD_BITS) || unused != 0 {
+            return Err(serde::de::Error::custom(format!(
+                "{} words with unused bits {unused:#x} for {len} bits",
+                words.len()
+            )));
+        }
+        Ok(Self { words, len })
+    }
+}
+
+// validated like `new`
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Binary {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename = "Binary")]
+        struct Raw {
+            len: usize,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        Self::new(raw.len).map_err(serde::de::Error::custom)
     }
 }
 

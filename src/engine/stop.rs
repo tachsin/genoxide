@@ -42,6 +42,7 @@ enum Condition {
 /// Why a run stopped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum StopReason {
     /// The best fitness reached the target.
     Target,

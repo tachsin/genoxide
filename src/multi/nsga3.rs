@@ -52,9 +52,19 @@ use rand::Rng;
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "R: serde::Serialize, C: serde::Serialize, X: serde::Serialize, R::Genome: serde::Serialize",
+        deserialize = "R: serde::Deserialize<'de>, C: serde::Deserialize<'de>, X: serde::Deserialize<'de>, R::Genome: serde::Deserialize<'de>"
+    ))
+)]
 pub struct Nsga3<R: Representation, C, X, const M: usize> {
     variation: Variation<R, C, X>,
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     objectives: [Objective; M],
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::vec_of_arrays"))]
     reference: Vec<[f64; M]>,
     population_size: usize,
     crossover_rate: f64,
@@ -67,8 +77,11 @@ pub struct Nsga3<R: Representation, C, X, const M: usize> {
     front: Vec<Individual<R::Genome, Scores<M>>>,
     discarded: Vec<Individual<R::Genome, Scores<M>>>,
     // the normalization, with the objectives minimized: kept over the whole run
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     ideal: [f64; M],
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     worst: [f64; M],
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::option_matrix"))]
     extremes: Option<[[f64; M]; M]>,
     started: bool,
     asked: bool,

@@ -13,6 +13,7 @@ use crate::{Error, Result, StreamRng};
 /// parent: a crossover never just exchanges the whole genomes. Genomes shorter than `k + 1` genes
 /// use every possible point.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PointCrossover {
     points: usize,
 }
@@ -76,6 +77,7 @@ where
 
 /// Uniform crossover: every gene is exchanged with probability `rate`, 0.5 by default.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct UniformCrossover {
     rate: f64,
 }
@@ -132,6 +134,7 @@ where
 /// No crossover: the children are copies of their parents, for algorithms that only mutate,
 /// e.g. (μ+λ). It fits every representation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NoCrossover;
 
 impl<R: Representation> Crossover<R> for NoCrossover {
@@ -155,6 +158,7 @@ impl<R: Representation> Crossover<R> for NoCrossover {
 /// children always stay within the bounds, and then each gene goes to either child with probability
 /// one half.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SimulatedBinaryCrossover {
     eta: f64,
 }
@@ -229,6 +233,7 @@ impl Crossover<Real> for SimulatedBinaryCrossover {
 /// 0.366 keeps the spread of the population on average, and 0.5, the common choice, widens it a
 /// little (by about 17% in variance per generation, before selection).
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BlendCrossover {
     alpha: f64,
 }
@@ -272,6 +277,7 @@ impl Crossover<Real> for BlendCrossover {
 /// The weight is random for every crossover by default, or fixed. The children are always between
 /// their parents, so this narrows the population: pair it with a mutation that explores.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ArithmeticCrossover {
     weight: Option<f64>,
 }

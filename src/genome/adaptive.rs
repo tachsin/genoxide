@@ -20,6 +20,7 @@ use std::ops::{Deref, DerefMut, Range};
 /// assert_eq!(genome.step(), 0.1);
 /// ```
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AdaptiveReals {
     genes: Reals,
     step: f64,
@@ -110,6 +111,7 @@ impl SwapGenes for AdaptiveReals {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct AdaptiveReal {
     real: Real,
     initial_step: f64,
@@ -162,6 +164,23 @@ impl Representation for AdaptiveReal {
                 ),
             })
         }
+    }
+}
+
+// validated like `new`
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for AdaptiveReal {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename = "AdaptiveReal")]
+        struct Raw {
+            real: Real,
+            initial_step: f64,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        Self::new(raw.real, raw.initial_step).map_err(serde::de::Error::custom)
     }
 }
 

@@ -162,6 +162,7 @@ impl IntoFitness for Option<f64> {
 
 /// What to do when a fitness function returns NaN.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum NanPolicy {
     /// The solution gets [`Fitness::invalid`] (the default).
     #[default]
@@ -174,6 +175,7 @@ pub enum NanPolicy {
 
 /// The state of a run, for stop conditions and observers.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Progress {
     pub(crate) generation: u64,
     pub(crate) evaluations: u64,
@@ -255,6 +257,7 @@ impl Progress {
 
 /// The result of a run.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Outcome<G: Genome> {
     best: Individual<G>,
     generations: u64,
@@ -342,8 +345,36 @@ pub struct Engine<'o, A: Algorithm, F> {
     abort: Option<Arc<AtomicBool>>,
     nan_policy: NanPolicy,
     parallel: bool,
+    checkpoint: Option<Checkpoint<'o, A>>,
     results: Vec<Result<Fitness>>,
     scores: Vec<Fitness>,
+}
+
+// every how many generations to call a closure with the algorithm, and the closure
+pub(crate) type Checkpoint<'o, A> = (u64, Box<dyn FnMut(&A) -> Result<()> + 'o>);
+
+// calls the checkpoint closure if it's due after `generation`, or the run stops
+pub(crate) fn checkpoint<A>(
+    checkpoint: &mut Option<Checkpoint<'_, A>>,
+    algorithm: &A,
+    generation: u64,
+    stopping: bool,
+) -> Result<()> {
+    match checkpoint {
+        Some((every, save)) if stopping || generation % *every == 0 => save(algorithm),
+        _ => Ok(()),
+    }
+}
+
+// the error for checkpoints every 0 generations
+pub(crate) fn validate_checkpoint<A>(checkpoint: &Option<Checkpoint<'_, A>>) -> Result<()> {
+    match checkpoint {
+        Some((0, _)) => Err(Error::InvalidSetting {
+            setting: "checkpoint_every",
+            reason: "must be at least 1 generation".to_string(),
+        }),
+        _ => Ok(()),
+    }
 }
 
 impl<'o, A, F> Engine<'o, A, F>
@@ -361,6 +392,7 @@ where
             abort: None,
             nan_policy: NanPolicy::default(),
             parallel: false,
+            checkpoint: None,
             results: Vec::new(),
             scores: Vec::new(),
         }
@@ -417,6 +449,19 @@ where
         self.observe(FnObserver(callback))
     }
 
+    /// Calls `save` with the algorithm every `generations` generations (when the algorithm's
+    /// generation is a multiple of it, so a resumed run keeps the schedule) and when the run
+    /// stops, e.g. to write a checkpoint with `genoxide::checkpoint::save_file` (the `serde`
+    /// feature). An error from `save` stops the run with that error. `generations` must be at
+    /// least 1.
+    pub fn checkpoint_every<C>(mut self, generations: u64, save: C) -> Self
+    where
+        C: FnMut(&A) -> Result<()> + 'o,
+    {
+        self.checkpoint = Some((generations, Box::new(save)));
+        self
+    }
+
     /// Evaluates the genomes of each generation in parallel with rayon. Off by default: it pays
     /// off when the fitness function is expensive.
     #[cfg(feature = "parallel")]
@@ -440,7 +485,8 @@ where
     /// # Errors
     ///
     /// - [`Error::MissingSetting`] without a stop condition or abort flag.
-    /// - [`Error::InvalidSetting`] for an invalid stop condition.
+    /// - [`Error::InvalidSetting`] for an invalid stop condition, or checkpoints every 0
+    ///   generations.
     /// - [`Error::NanFitness`] if the fitness function returns NaN (a score or a constraint
     ///   violation) with [`NanPolicy::Error`].
     /// - [`Error::InvalidFitness`] if the fitness function returns a negative constraint violation,
@@ -454,6 +500,7 @@ where
         if let Some(stop) = &self.stop {
             stop.validate()?;
         }
+        validate_checkpoint(&self.checkpoint)?;
         let _span = trace::run::<A>();
         let start = Instant::now();
         loop {
@@ -494,6 +541,12 @@ where
             } else {
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
             };
+            checkpoint(
+                &mut self.checkpoint,
+                &self.algorithm,
+                progress.generation,
+                reason.is_some(),
+            )?;
             if let Some(stop_reason) = reason {
                 trace::finished(&progress, stop_reason, None);
                 return Ok(Outcome {
@@ -618,6 +671,10 @@ impl<A: Algorithm + fmt::Debug, F> fmt::Debug for Engine<'_, A, F> {
             .field("abort", &self.abort)
             .field("nan_policy", &self.nan_policy)
             .field("parallel", &self.parallel)
+            .field(
+                "checkpoint_every",
+                &self.checkpoint.as_ref().map(|(every, _)| every),
+            )
             .finish_non_exhaustive()
     }
 }

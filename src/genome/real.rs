@@ -19,6 +19,7 @@ use std::ops::{Deref, DerefMut, Range, RangeInclusive};
 /// assert!(norm > 1.5);
 /// ```
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Reals {
     genes: Vec<f64>,
 }
@@ -105,9 +106,11 @@ impl SwapGenes for Reals {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Real {
     bounds: Vec<RangeInclusive<f64>>,
     // the genes with more than one possible value
+    #[cfg_attr(feature = "serde", serde(skip))]
     variable: Vec<usize>,
 }
 
@@ -221,6 +224,22 @@ impl Representation for Real {
             }),
             None => Ok(()),
         }
+    }
+}
+
+// validated like `new`
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Real {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename = "Real")]
+        struct Raw {
+            bounds: Vec<RangeInclusive<f64>>,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        Self::new(raw.bounds).map_err(serde::de::Error::custom)
     }
 }
 

@@ -9,6 +9,7 @@ use rand::Rng;
 /// distinct other individuals `r1`, `r2` (and `r3`) and the scale factor `F`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Strategy {
     /// DE/rand/1: `v = r1 + F · (r2 − r3)`. The classic: robust, explores well.
     Rand1,
@@ -32,6 +33,7 @@ pub enum Strategy {
 /// Where the scale factor `F` and crossover rate `CR` of a differential evolution come from.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Control {
     /// The same `F` and `CR` for every trial.
     Fixed {
@@ -107,6 +109,7 @@ impl Default for Control {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct De {
     real: Real,
     strategy: Strategy,

@@ -7,6 +7,7 @@ use std::hash::{Hash, Hasher};
 
 /// Whether a higher or a lower fitness score is better.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Objective {
     /// Higher scores are better.
     #[default]
@@ -84,6 +85,7 @@ impl Objective {
 /// assert_eq!(Fitness::try_new(f64::NAN), Err(Error::NanFitness)); // or an error
 /// ```
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Fitness {
     // f64::NAN for an invalid fitness, otherwise never NaN and never -0.0; with the violation, the
     // fitness is 16 bytes, like a score alone, which keeps comparisons and copies cheap
@@ -230,6 +232,26 @@ impl Hash for Fitness {
         // every invalid fitness has the same NaN
         self.score.to_bits().hash(state);
         self.violation.to_bits().hash(state);
+    }
+}
+
+// validated like `try_constrained`; a NaN score is the invalid fitness
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Fitness {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename = "Fitness")]
+        struct Raw {
+            score: f64,
+            violation: f64,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        if raw.score.is_nan() {
+            return Ok(Self::invalid());
+        }
+        Self::try_constrained(raw.score, raw.violation).map_err(serde::de::Error::custom)
     }
 }
 

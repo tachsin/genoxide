@@ -39,7 +39,9 @@ use crate::{Error, Individual, Objective, Result};
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ParetoArchive<G: Genome, const M: usize> {
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     objectives: [Objective; M],
     capacity: Option<usize>,
     members: Vec<Individual<G, Scores<M>>>,

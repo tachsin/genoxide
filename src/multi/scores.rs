@@ -25,8 +25,10 @@ use std::hash::{Hash, Hasher};
 /// assert_eq!(Scores::constrained([1.0, 2.0], 0.5).violation(), 0.5);
 /// ```
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Scores<const M: usize> {
     // all NaN for an invalid solution, otherwise never NaN and never -0.0
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     values: [f64; M],
     // 0 when feasible or invalid, otherwise positive (possibly infinite); never NaN or -0.0
     violation: f64,
@@ -173,6 +175,27 @@ impl<const M: usize> Hash for Scores<M> {
             value.to_bits().hash(state);
         }
         self.violation.to_bits().hash(state);
+    }
+}
+
+// validated like `try_constrained`; all NaN values are the invalid scores
+#[cfg(feature = "serde")]
+impl<'de, const M: usize> serde::Deserialize<'de> for Scores<M> {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename = "Scores")]
+        struct Raw<const M: usize> {
+            #[serde(with = "crate::serde_arrays::array")]
+            values: [f64; M],
+            violation: f64,
+        }
+        let raw = Raw::<M>::deserialize(deserializer)?;
+        if M > 0 && raw.values.iter().all(|value| value.is_nan()) {
+            return Ok(Self::invalid());
+        }
+        Self::try_constrained(raw.values, raw.violation).map_err(serde::de::Error::custom)
     }
 }
 

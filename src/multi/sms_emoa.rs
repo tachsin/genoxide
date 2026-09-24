@@ -54,8 +54,17 @@ use rand::Rng;
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "R: serde::Serialize, C: serde::Serialize, X: serde::Serialize, R::Genome: serde::Serialize",
+        deserialize = "R: serde::Deserialize<'de>, C: serde::Deserialize<'de>, X: serde::Deserialize<'de>, R::Genome: serde::Deserialize<'de>"
+    ))
+)]
 pub struct SmsEmoa<R: Representation, C, X, const M: usize> {
     variation: Variation<R, C, X>,
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     objectives: [Objective; M],
     population_size: usize,
     offspring_count: usize,

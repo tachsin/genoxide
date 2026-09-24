@@ -49,6 +49,11 @@ pub enum Error {
     /// between an [`ask`](crate::algorithm::Algorithm::ask) and its tell, see
     /// [`Migrate`](crate::algorithm::Migrate).
     MigrationOutOfTurn,
+    /// A checkpoint can't be saved or loaded, see `genoxide::checkpoint` (the `serde` feature).
+    Checkpoint {
+        /// Why, e.g. that the file is corrupted.
+        reason: String,
+    },
 }
 
 impl fmt::Display for Error {
@@ -69,6 +74,7 @@ impl fmt::Display for Error {
                 f,
                 "migrants can only arrive after a `tell` and before the next `ask`"
             ),
+            Error::Checkpoint { reason } => write!(f, "checkpoint: {reason}"),
         }
     }
 }
