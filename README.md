@@ -63,10 +63,10 @@ A missing operator, or one that doesn't fit the genome, is a compile error that 
 
 ### What's there so far
 
-- **Genomes:** binary (bit-packed), integer and real (bounded per gene), permutation
+- **Genomes:** binary (bit-packed), integer and real (bounded per gene), permutation, and real with a self-adaptive step size
 - **Selection:** tournament, roulette, stochastic universal sampling, rank, truncation, random
 - **Crossover:** one-point, two-point, k-point, uniform; for real genomes SBX, blend (BLX-α), arithmetic; for permutations order (OX1), partially mapped (PMX), cycle (CX), edge recombination
-- **Mutation:** bit-flip, uniform, Gaussian, polynomial; for permutations swap, inversion (2-opt), insertion, scramble (every mutation changes the genome)
+- **Mutation:** bit-flip, uniform, Gaussian, polynomial, self-adaptive Gaussian; for permutations swap, inversion (2-opt), insertion, scramble (every mutation changes the genome)
 - **Schemes:** generational with elitism, steady-state, (μ+λ), (μ,λ), and memetic (Lamarckian local search on the best parents)
 - **Local search:** hill climbing (first-improvement or best-of-k, with plateau moves), simulated annealing, tabu search and iterated local search, with any mutation as the neighborhood
 - **Constraints:** Deb's feasibility rules (a fitness function returns a score and a constraint violation), and penalty functions

@@ -1,8 +1,10 @@
 //! Mutation: random changes to a genome.
 
 use super::{Mutate, check_rate};
-use crate::genome::{Binary, Bits, Integer, Integers, Order, Permutation, Real, Reals};
-use crate::math::pow;
+use crate::genome::{
+    AdaptiveReal, AdaptiveReals, Binary, Bits, Integer, Integers, Order, Permutation, Real, Reals,
+};
+use crate::math::{exp, pow};
 use crate::rng::Chance;
 use crate::{Error, Result, StreamRng};
 use std::ops::RangeInclusive;
@@ -386,6 +388,114 @@ impl Mutate<Real> for PolynomialMutation {
     }
 }
 
+/// Self-adaptive Gaussian mutation for [`AdaptiveReal`] genomes: the step size evolves with the
+/// genome, so the search tunes it by itself.
+///
+/// First the genome's step size changes log-normally, `σ' = σ · exp(τ · N(0, 1))`, then every gene
+/// (except fixed ones) moves by a normal step with standard deviation `σ'` times its range,
+/// mirrored at the bounds. Steps that lead to good genomes survive with them: large while far from
+/// an optimum, small close to it. The learning rate `τ` is `1 / √n` for `n` genes by default.
+///
+/// With [`NoCrossover`](crate::operator::NoCrossover) and
+/// [`Scheme::MuCommaLambda`](crate::algorithm::Scheme::MuCommaLambda) this is the classic
+/// (μ,λ)-ES with self-adaptation.
+///
+/// The step size stays between a minimum (1e-12 by default) and 10 ranges, and the genome always
+/// changes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SelfAdaptiveMutation {
+    learning_rate: Option<f64>,
+    min_step: f64,
+}
+
+// the largest step size: steps of 10 ranges are already uniform after mirroring
+const MAX_STEP: f64 = 10.0;
+
+impl SelfAdaptiveMutation {
+    /// Self-adaptive mutation with the learning rate `1 / √n`.
+    pub fn new() -> Self {
+        Self {
+            learning_rate: None,
+            min_step: 1e-12,
+        }
+    }
+
+    /// Self-adaptive mutation with the learning rate `tau` (positive and finite): how fast the
+    /// step size changes.
+    pub fn with_learning_rate(tau: f64) -> Result<Self> {
+        Ok(Self {
+            learning_rate: Some(check_positive("learning_rate", tau)?),
+            ..Self::new()
+        })
+    }
+
+    /// The smallest step size (positive and finite; 1e-12 by default), below which the step
+    /// size doesn't shrink.
+    pub fn with_min_step(self, min_step: f64) -> Result<Self> {
+        Ok(Self {
+            min_step: check_positive("min_step", min_step)?.min(MAX_STEP),
+            ..self
+        })
+    }
+
+    /// The learning rate, `None` for `1 / √n`.
+    pub fn learning_rate(&self) -> Option<f64> {
+        self.learning_rate
+    }
+
+    /// The smallest step size.
+    pub fn min_step(&self) -> f64 {
+        self.min_step
+    }
+}
+
+impl Default for SelfAdaptiveMutation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Mutate<AdaptiveReal> for SelfAdaptiveMutation {
+    fn mutate(
+        &self,
+        representation: &AdaptiveReal,
+        genome: &mut AdaptiveReals,
+        rng: &mut StreamRng,
+    ) {
+        let real = representation.real();
+        let variable = real.variable_genes();
+        if variable.is_empty() {
+            return;
+        }
+        let tau = self
+            .learning_rate
+            .unwrap_or_else(|| 1.0 / (variable.len() as f64).sqrt());
+        let step = (genome.step() * exp(tau * rng.normal())).clamp(self.min_step, MAX_STEP);
+        genome.set_step(step);
+        let bounds = real.bounds();
+        let mut changed = false;
+        for &gene in variable {
+            let range = &bounds[gene];
+            let current = genome[gene];
+            let mut value = reflect(
+                current + step * (range.end() - range.start()) * rng.normal(),
+                range,
+            );
+            if !range.contains(&value) {
+                // not computable with such huge bounds (NaN): a uniform value instead
+                value = crate::genome::real::random_other_in(range, current, rng);
+            }
+            changed |= value != current;
+            genome[gene] = value;
+        }
+        if !changed {
+            // steps too small to change a gene, after rounding
+            let gene = variable[rng.below(variable.len())];
+            genome[gene] = crate::genome::real::random_other_in(&bounds[gene], genome[gene], rng);
+        }
+    }
+}
+
 /// Swap mutation for [`Permutation`] genomes: exchanges the genes of `count` random pairs of
 /// positions, 1 by default.
 ///
@@ -519,6 +629,51 @@ mod tests {
         assert!(PolynomialMutation::per_gene(0.1, -1.0).is_err());
         assert!(PolynomialMutation::per_gene(0.1, f64::NAN).is_err());
         assert!(PolynomialMutation::count(1, 0.0).is_ok());
+    }
+
+    #[test]
+    fn self_adaptive_validation() {
+        assert!(SelfAdaptiveMutation::with_learning_rate(0.0).is_err());
+        assert!(SelfAdaptiveMutation::with_learning_rate(f64::NAN).is_err());
+        assert!(SelfAdaptiveMutation::new().with_min_step(-1.0).is_err());
+        assert_eq!(
+            SelfAdaptiveMutation::new()
+                .with_min_step(1e-6)
+                .unwrap()
+                .min_step(),
+            1e-6
+        );
+    }
+
+    #[test]
+    fn self_adaptive_mutation_with_huge_bounds() {
+        let adaptive = AdaptiveReal::new(Real::uniform(4, -8e307..=8e307).unwrap(), 1.0).unwrap();
+        let mut rng = StreamRng::seed_from_u64(0);
+        for _ in 0..1_000 {
+            let mut genome = adaptive.random_genome(&mut rng);
+            SelfAdaptiveMutation::new().mutate(&adaptive, &mut genome, &mut rng);
+            assert!(adaptive.validate(&genome).is_ok(), "{genome:?}");
+        }
+    }
+
+    #[test]
+    fn self_adaptive_steps_are_log_normal() {
+        // log(σ' / σ) is normal with standard deviation τ
+        let adaptive = AdaptiveReal::new(Real::uniform(16, -1.0..=1.0).unwrap(), 0.01).unwrap();
+        let mutation = SelfAdaptiveMutation::new();
+        let mut rng = StreamRng::seed_from_u64(0);
+        let logs: Vec<f64> = (0..20_000)
+            .map(|_| {
+                let mut genome = AdaptiveReals::new(Reals::from(vec![0.0; 16]), 0.01);
+                mutation.mutate(&adaptive, &mut genome, &mut rng);
+                (genome.step() / 0.01).ln()
+            })
+            .collect();
+        let mean = logs.iter().sum::<f64>() / logs.len() as f64;
+        let deviation =
+            (logs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / logs.len() as f64).sqrt();
+        assert!(mean.abs() < 0.01, "mean {mean}");
+        assert!((deviation - 0.25).abs() < 0.01, "deviation {deviation}");
     }
 
     #[test]
@@ -674,6 +829,21 @@ mod tests {
             let mut genome = original.clone();
             PolynomialMutation::count(count, eta).unwrap().mutate(&real, &mut genome, &mut rng);
             check(genome, Some(count.min(len)))?;
+        }
+
+        #[test]
+        fn self_adaptive(len in 1usize..20, step in 1e-15..20.0f64, seed: u64) {
+            // one fixed gene, which never changes
+            let real = Real::new(std::iter::once(3.0..=3.0).chain(std::iter::repeat_n(-1.0..=1.0, len))).unwrap();
+            let adaptive = AdaptiveReal::new(real, 0.1).unwrap();
+            let mut rng = StreamRng::seed_from_u64(seed);
+            let original = AdaptiveReals::new(adaptive.random_genome(&mut rng).into_parts().0, step);
+            let mut genome = original.clone();
+            SelfAdaptiveMutation::new().mutate(&adaptive, &mut genome, &mut rng);
+            prop_assert!(adaptive.validate(&genome).is_ok());
+            prop_assert!(genome.step() >= 1e-12 && genome.step() <= 10.0);
+            prop_assert_eq!(genome[0], 3.0);
+            prop_assert!(changed(&genome[..], &original[..]) >= 1);
         }
 
         #[test]

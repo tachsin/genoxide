@@ -41,6 +41,7 @@ fn main() -> genoxide::Result<()> {
 | Yes / no decisions (subset, knapsack, feature selection) | `Binary::new(len)` | `Bits` | `UniformCrossover`, `PointCrossover` | `BitFlip` |
 | Whole numbers in ranges (counts, choices, schedules) | `Integer::new([lo..=hi, ...])`, `Integer::uniform(len, lo..=hi)` | `Integers` (derefs to `[i64]`) | `UniformCrossover`, `PointCrossover` | `UniformMutation` |
 | Real numbers in ranges (parameters, continuous functions) | `Real::new([lo..=hi, ...])`, `Real::uniform(len, lo..=hi)` | `Reals` (derefs to `[f64]`) | `SimulatedBinaryCrossover` (η 15), `BlendCrossover` (α 0.5), `ArithmeticCrossover`, `UniformCrossover`, `PointCrossover` | `PolynomialMutation` (η 20), `GaussianMutation` (σ ≈ 0.03), `UniformMutation` |
+| Real numbers that need precise fine-tuning (a step size that adapts) | `AdaptiveReal::new(Real::..., initial_step)` | `AdaptiveReals` (derefs to `[f64]`; `.step()`) | `NoCrossover` for an ES, or `UniformCrossover`, `PointCrossover` | `SelfAdaptiveMutation` |
 | An order of `0..n` (tours, sequencing, assignment) | `Permutation::new(n)` | `Order` (derefs to `[usize]`) | `OrderCrossover` (sequences), `EdgeRecombinationCrossover` (tours), `PartiallyMappedCrossover`, `CycleCrossover` | `InversionMutation` (tours), `SwapMutation`, `InsertionMutation`, `ScrambleMutation` |
 
 Selection works with every representation. `Tournament::new(2..=5)?` is the usual choice.
@@ -90,6 +91,7 @@ Selection works with every representation. `Tournament::new(2..=5)?` is the usua
 | `UniformMutation::per_gene(rate)?`, `UniformMutation::count(n)?` | 0 < rate ≤ 1; n ≥ 1 |
 | `GaussianMutation::per_gene(rate, sigma)?`, `GaussianMutation::count(n, sigma)?` | sigma > 0, a fraction of each gene's range; mirrored at the bounds |
 | `PolynomialMutation::per_gene(rate, eta)?`, `PolynomialMutation::count(n, eta)?` | eta ≥ 0: larger means smaller steps; 20 is common |
+| `SelfAdaptiveMutation::new()`, `with_learning_rate(tau)?`, `.with_min_step(min)?` | `AdaptiveReal` only; tau > 0, 1/√n by default; min > 0, 1e-12 by default |
 | `SwapMutation::new()`, `SwapMutation::count(n)?` | n ≥ 1 |
 | `OrderCrossover`, `PartiallyMappedCrossover`, `CycleCrossover`, `EdgeRecombinationCrossover` | unit structs, `Permutation` only |
 | `InversionMutation`, `InsertionMutation`, `ScrambleMutation` | unit structs, `Permutation` only |
@@ -278,6 +280,32 @@ fn main() -> genoxide::Result<()> {
     let last = statistics.last().unwrap();
     println!("mean {:?}, {} distinct genomes", last.mean, last.unique);
     assert_eq!(last.generation, outcome.generations());
+    Ok(())
+}
+```
+
+### Evolution strategy with self-adaptation
+
+For smooth real-valued problems that need precise answers, a (μ,λ)-ES whose step size evolves with each solution: large steps far from the optimum, small ones close to it.
+
+```rust
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    let es = Ga::builder(AdaptiveReal::new(Real::uniform(5, -5.0..=5.0)?, 0.3)?)
+        .population_size(10) // μ
+        .select(Tournament::new(2)?)
+        .crossover(NoCrossover)
+        .mutate(SelfAdaptiveMutation::new())
+        .scheme(Scheme::MuCommaLambda { lambda: 70 }) // λ
+        .minimize()
+        .seed(1)
+        .build()?;
+    let outcome = Engine::new(es, |x: &AdaptiveReals| x.iter().map(|xi| xi * xi).sum::<f64>())
+        .stop_when(Stop::target(1e-10).or(Stop::evaluations(100_000)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    println!("step size at the end: {:e}", outcome.best_genome().step());
     Ok(())
 }
 ```
