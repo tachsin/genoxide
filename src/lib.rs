@@ -53,6 +53,8 @@
 //!   `genoxide`, from both engines
 //! - `serde`: `Serialize` and `Deserialize` for algorithms and their parts, and `checkpoint`, to
 //!   save a run and resume it exactly
+//! - `cli`: the `genoxide` program, which runs an optimization described in a TOML or JSON file
+//!   with any program as the fitness function
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
