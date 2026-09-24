@@ -18,6 +18,7 @@ pub mod nsga3;
 mod pareto;
 pub mod problems;
 mod scores;
+pub mod spea2;
 
 pub use algorithm::MultiObjectiveAlgorithm;
 pub use archive::ParetoArchive;
@@ -27,3 +28,4 @@ pub use nsga3::{Nsga3, Nsga3Builder};
 pub use pareto::{crowding_distance, dominates, non_dominated_sort};
 pub use problems::das_dennis;
 pub use scores::Scores;
+pub use spea2::{Spea2, Spea2Builder};

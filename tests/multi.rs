@@ -279,3 +279,24 @@ fn nsga3_spreads_a_three_objective_front() {
     let distance = igd(&outcome.front_values(), &problem.optimal_front(91));
     assert!(distance < 0.002, "{distance}");
 }
+
+#[test]
+fn spea2_approximates_the_zdt1_front() {
+    use genoxide::multi::Spea2;
+    use genoxide::multi::problems::{TestProblem, Zdt1};
+    // a hypervolume of 0.8697 to 0.8704 over 5 seeds; pymoo's SPEA2 reaches 0.8703 to 0.8706
+    let problem = Zdt1::new(30);
+    let spea2 = Spea2::builder(problem.real(), [Minimize, Minimize])
+        .population_size(100)
+        .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = MultiEngine::new(spea2, problem)
+        .stop_when(Stop::generations(249))
+        .run()
+        .unwrap();
+    let volume = hypervolume(&outcome.front_values(), &[1.1, 1.1], &[Minimize, Minimize]);
+    assert!(volume > 0.869, "{volume}");
+}
