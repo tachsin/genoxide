@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/tachsin/genoxide/compare/v0.5.0...v0.5.1) - 2026-09-24
+
+### <!-- 1 -->Fixed
+
+- handle infinite scores and huge bounds in selection and SBX, and other edge cases ([#98](https://github.com/tachsin/genoxide/pull/98))
+- handle infinite objective values in SMS-EMOA, SPEA2 and hypervolume contributions, and duplicate MOEA/D weights ([#99](https://github.com/tachsin/genoxide/pull/99))
+- make DE trials change a gene that can change, and bound lambda ([#101](https://github.com/tachsin/genoxide/pull/101))
+- clearer errors from the genoxide program and checkpoints ([#102](https://github.com/tachsin/genoxide/pull/102))
+- show observers the individuals migrants replace, and fix engine edge cases ([#100](https://github.com/tachsin/genoxide/pull/100))
+
 ## [0.5.0](https://github.com/tachsin/genoxide/compare/v0.4.0...v0.5.0) - 2026-09-24
 
 ### <!-- 0 -->Added
