@@ -27,6 +27,8 @@ result = cmaes.run(rastrigin, batch=True, target=1e-8, evaluations=500_000)
 print(result.best_genome, result.best_fitness)
 ```
 
+More in [examples/](examples/): OneMax, a knapsack with a constraint, N-Queens with tabu search, Rastrigin with CMA-ES and L-SHADE, and ZDT1 with NSGA-II.
+
 ## Install
 
 It isn't on PyPI yet. Build it from the repository with Rust and [maturin](https://www.maturin.rs/):

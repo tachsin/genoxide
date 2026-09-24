@@ -131,6 +131,7 @@ jobs:
           pip install maturin==1.15.0 pytest
           maturin develop --release
           pytest -v
+          for example in examples/*.py; do python "$example"; done
 
   msrv:
     name: MSRV (1.86)
