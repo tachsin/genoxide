@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/tachsin/genoxide/compare/v0.2.0...v0.3.0) - 2026-09-24
+
+### <!-- 0 -->Added
+
+- add differential evolution with rand/1, best/1 and current-to-pbest/1 ([#41](https://github.com/tachsin/genoxide/pull/41))
+- add adaptive differential evolution: JADE, SHADE and L-SHADE ([#43](https://github.com/tachsin/genoxide/pull/43))
+- add particle swarm optimization with global and ring topologies ([#45](https://github.com/tachsin/genoxide/pull/45))
+- add CMA-ES with IPOP and BIPOP restarts ([#47](https://github.com/tachsin/genoxide/pull/47))
+- add sep-CMA-ES, a diagonal covariance mode for high dimensions ([#49](https://github.com/tachsin/genoxide/pull/49))
+- add a (μ/ρ +, λ) evolution strategy with self-adaptation ([#51](https://github.com/tachsin/genoxide/pull/51))
+
+### <!-- 4 -->Documentation
+
+- benchmark genoxide's DE and CMA-ES, and refresh the charts ([#53](https://github.com/tachsin/genoxide/pull/53))
+
 ## [0.2.0](https://github.com/tachsin/genoxide/compare/v0.1.0...v0.2.0) - 2026-09-24
 
 ### <!-- 0 -->Added
