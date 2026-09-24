@@ -1,5 +1,6 @@
 //! The genetic algorithm.
 
+use super::steady::SteadyGa;
 use super::{Algorithm, Candidates};
 use crate::genome::{Genome, Representation};
 use crate::operator::{Crossover, Mutate, Select, check_probability, neighbor};
@@ -767,23 +768,7 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
         C: Crossover<R>,
         M: Mutate<R>,
     {
-        let population_size = self.population_size.ok_or(Error::MissingSetting {
-            setting: "population_size",
-        })?;
-        if population_size == 0 {
-            return Err(Error::InvalidSetting {
-                setting: "population_size",
-                reason: "must be at least 1".to_string(),
-            });
-        }
-        let crossover_rate = check_probability("crossover_rate", self.crossover_rate)?;
-        let mutation_rate = check_probability("mutation_rate", self.mutation_rate)?;
-        if crossover_rate == 0.0 && mutation_rate == 0.0 {
-            return Err(Error::InvalidSetting {
-                setting: "mutation_rate",
-                reason: "crossover_rate and mutation_rate are both 0, so every child would be a copy of a parent".to_string(),
-            });
-        }
+        let (population_size, crossover_rate, mutation_rate) = self.check()?;
         self.scheme.validate(population_size)?;
         if let Some((parents, neighbors)) = self.memetic {
             // the refined parents must survive the generation, or their refinement is lost
@@ -802,18 +787,6 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
                     ),
                 });
             }
-        }
-        if self.initial_genomes.len() > population_size {
-            return Err(Error::InvalidSetting {
-                setting: "initial_genomes",
-                reason: format!(
-                    "at most the population size {population_size}, got {}",
-                    self.initial_genomes.len()
-                ),
-            });
-        }
-        for genome in &self.initial_genomes {
-            self.representation.validate(genome)?;
         }
 
         let seed = self
@@ -851,6 +824,85 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
             best: None,
             best_generation: 0,
         })
+    }
+
+    /// Validates the settings and creates a [`SteadyGa`] for asynchronous evaluation with an
+    /// [`AsyncEngine`](crate::engine::AsyncEngine): it breeds one child at a time, and each result
+    /// replaces the worst individual when it's not worse. The scheme and memetic settings don't
+    /// apply to it.
+    ///
+    /// # Errors
+    ///
+    /// As [`build`](GaBuilder::build), and [`Error::InvalidSetting`] if a scheme or memetic
+    /// search was set.
+    pub fn build_steady(self) -> Result<SteadyGa<R, S, C, M>>
+    where
+        S: Select,
+        C: Crossover<R>,
+        M: Mutate<R>,
+    {
+        let (population_size, crossover_rate, mutation_rate) = self.check()?;
+        if self.scheme != Scheme::default() {
+            return Err(Error::InvalidSetting {
+                setting: "scheme",
+                reason: "a steady-state GA for asynchronous evaluation replaces the worst individual with each result; it has no scheme".to_string(),
+            });
+        }
+        if self.memetic.is_some() {
+            return Err(Error::InvalidSetting {
+                setting: "memetic",
+                reason: "a steady-state GA for asynchronous evaluation has no memetic search"
+                    .to_string(),
+            });
+        }
+        let seed = self
+            .seed
+            .unwrap_or_else(|| StreamRng::from_entropy().next_u64());
+        Ok(SteadyGa::new(
+            self.representation,
+            self.select,
+            self.crossover,
+            self.mutate,
+            self.objective,
+            population_size,
+            (crossover_rate, mutation_rate),
+            seed,
+            self.initial_genomes,
+        ))
+    }
+
+    // the population size and rates, checked, and the initial genomes checked
+    fn check(&self) -> Result<(usize, f64, f64)> {
+        let population_size = self.population_size.ok_or(Error::MissingSetting {
+            setting: "population_size",
+        })?;
+        if population_size == 0 {
+            return Err(Error::InvalidSetting {
+                setting: "population_size",
+                reason: "must be at least 1".to_string(),
+            });
+        }
+        let crossover_rate = check_probability("crossover_rate", self.crossover_rate)?;
+        let mutation_rate = check_probability("mutation_rate", self.mutation_rate)?;
+        if crossover_rate == 0.0 && mutation_rate == 0.0 {
+            return Err(Error::InvalidSetting {
+                setting: "mutation_rate",
+                reason: "crossover_rate and mutation_rate are both 0, so every child would be a copy of a parent".to_string(),
+            });
+        }
+        if self.initial_genomes.len() > population_size {
+            return Err(Error::InvalidSetting {
+                setting: "initial_genomes",
+                reason: format!(
+                    "at most the population size {population_size}, got {}",
+                    self.initial_genomes.len()
+                ),
+            });
+        }
+        for genome in &self.initial_genomes {
+            self.representation.validate(genome)?;
+        }
+        Ok((population_size, crossover_rate, mutation_rate))
     }
 }
 

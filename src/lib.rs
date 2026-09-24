@@ -37,9 +37,10 @@
 //!   [`LocalSearch`](algorithm::LocalSearch) (hill climbing, simulated annealing, tabu search),
 //!   evolution strategies [`Es`](algorithm::Es), CMA-ES [`Cmaes`](algorithm::Cmaes), differential
 //!   evolution [`De`](algorithm::De), particle swarm optimization [`Pso`](algorithm::Pso), and
-//!   the island model [`Islands`](algorithm::Islands)
+//!   the island model [`Islands`](algorithm::Islands), and [`SteadyGa`](algorithm::SteadyGa) for
+//!   asynchronous evaluation
 //! - [`Engine`]: runs an algorithm with stop conditions, parallel or [batch](engine::Batch)
-//!   evaluation and cancellation
+//!   evaluation and cancellation; [`AsyncEngine`](engine::AsyncEngine) evaluates asynchronously
 //! - [`multi`]: multi-objective optimization: NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA, the
 //!   [`MultiEngine`](multi::MultiEngine), Pareto dominance and non-dominated sorting
 //! - [`observer`]: statistics, hall of fame, progress lines and custom callbacks

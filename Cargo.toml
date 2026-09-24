@@ -41,6 +41,10 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 name = "rastrigin"
 required-features = ["parallel"]
 
+[[example]]
+name = "asynchronous"
+required-features = ["parallel"]
+
 [[bench]]
 name = "hot_paths"
 harness = false

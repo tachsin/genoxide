@@ -470,6 +470,37 @@ The engine evaluates the candidates of all islands together (in parallel with `.
 
 The islands must share the objective and the representation (the same genome length and bounds), so migrants fit: `build` checks both. Each island counts only its own evaluations, so give an L-SHADE island (`De::l_shade(real, budget)`) its share of the budget, not the whole.
 
+### Asynchronous evaluation for slow, uneven fitness functions
+
+When evaluations take long and their time varies (simulations, training runs, calls to other programs), a generational GA waits for the slowest evaluation of every generation. A steady-state GA with `AsyncEngine` gives each worker a new genome as soon as it's done. Build it with `build_steady()` instead of `build()`; the scheme and memetic settings don't apply.
+
+```rust
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    let ga = Ga::builder(Real::uniform(5, -5.12..=5.12)?)
+        .population_size(40)
+        .select(Tournament::new(3)?)
+        .crossover(SimulatedBinaryCrossover::new(15.0)?)
+        .mutate(PolynomialMutation::per_gene(0.2, 20.0)?)
+        .minimize()
+        .seed(1)
+        .build_steady()?;
+    let sphere = |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>();
+    let outcome = AsyncEngine::new(ga, sphere)
+        .workers(8) // evaluations at a time; the number of CPUs by default
+        .stop_when(Stop::target(1e-6).or(Stop::evaluations(100_000)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    Ok(())
+}
+```
+
+- Each result replaces the worst individual when it's not worse; a genome already in the population isn't added twice.
+- A generation is counted every `population_size` evaluations, for observers, checkpoints and `Stop::generations`. Stop conditions are checked after every result; the run returns once the evaluations in flight are done, and `Stop::evaluations` ends on the limit exactly.
+- With one worker, a seed gives the same run every time; with more, the order of the results depends on timing, so runs differ.
+- The workers are threads of their own, not rayon's: use more workers than CPUs for fitness functions that mostly wait.
+
 ### Checkpoints: resuming a long run
 
 With the `serde` feature (`genoxide = { version = "...", features = ["serde"] }`), `checkpoint_every` saves the algorithm every few generations and when the run stops. A run resumed from a checkpoint gives exactly the results of the uninterrupted run. Name the algorithm's type with an alias: loading needs it.

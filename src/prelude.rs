@@ -8,9 +8,13 @@ pub use crate::algorithm::cmaes::{self, Cmaes};
 pub use crate::algorithm::de::{self, De};
 pub use crate::algorithm::es::{self, Es};
 pub use crate::algorithm::pso::{self, Pso};
-pub use crate::algorithm::{Acceptance, Algorithm, Ga, Islands, LocalSearch, Migrate, Scheme};
+pub use crate::algorithm::{
+    Acceptance, Algorithm, Ga, Incremental, Islands, LocalSearch, Migrate, Scheme, SteadyGa,
+};
 pub use crate::constraint::{self, Penalty};
-pub use crate::engine::{Batch, Engine, FitnessFunction, NanPolicy, Outcome, Stop, StopReason};
+pub use crate::engine::{
+    AsyncEngine, Batch, Engine, FitnessFunction, NanPolicy, Outcome, Stop, StopReason,
+};
 pub use crate::genome::{
     AdaptiveReal, AdaptiveReals, Binary, Bits, Genome, Integer, Integers, Order, Permutation, Real,
     Reals, Representation,

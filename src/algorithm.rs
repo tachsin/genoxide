@@ -34,6 +34,7 @@ pub mod ga;
 pub mod islands;
 pub mod local_search;
 pub mod pso;
+pub mod steady;
 
 pub use cmaes::{Cmaes, CmaesBuilder, Covariance, Restarts};
 pub use de::{De, DeBuilder};
@@ -42,6 +43,7 @@ pub use ga::{Ga, GaBuilder, Scheme, Unset};
 pub use islands::{Islands, IslandsBuilder, Migrate};
 pub use local_search::{Acceptance, LocalSearch, LocalSearchBuilder};
 pub use pso::{Pso, PsoBuilder, Topology};
+pub use steady::{Incremental, SteadyGa};
 
 use crate::genome::Genome;
 use crate::{Fitness, Individual, Objective, Population, Result};

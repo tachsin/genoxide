@@ -44,7 +44,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: |
-          for example in one_max knapsack n_queens rastrigin; do
+          for example in one_max knapsack n_queens rastrigin asynchronous; do
             cargo run --release --example "$example"
           done
 
