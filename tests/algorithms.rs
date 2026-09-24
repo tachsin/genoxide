@@ -223,3 +223,112 @@ fn evolution_strategy_runs_in_parallel_with_the_same_results() {
     };
     assert_eq!(run(true), run(false));
 }
+
+// the best genome after a short run of each algorithm on a fitness function with only +, − and ×
+// (unlike Rastrigin's cosine or `powi`, which can differ between platforms); these must never
+// change for the same major version, on any platform
+fn portable_run<A: Algorithm<Genome = Reals>>(algorithm: A) -> Vec<f64> {
+    let rosenbrock = |x: &Reals| {
+        x.windows(2)
+            .map(|w| {
+                let (a, b) = (w[1] - w[0] * w[0], 1.0 - w[0]);
+                100.0 * a * a + b * b
+            })
+            .sum::<f64>()
+    };
+    Engine::new(algorithm, rosenbrock)
+        .stop_when(Stop::generations(30))
+        .run()
+        .unwrap()
+        .into_best()
+        .into_genome()
+        .into_vec()
+}
+
+#[test]
+fn portable_runs() {
+    let real = || Real::uniform(4, -5.12..=5.12).unwrap();
+    let runs = [
+        portable_run(
+            De::l_shade(real(), 2_000)
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
+        portable_run(
+            Pso::builder(real())
+                .population_size(10)
+                .topology(pso::Topology::Ring { neighbors: 1 })
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
+        portable_run(
+            Cmaes::builder(real())
+                .restarts(cmaes::Restarts::Bipop)
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
+        portable_run(
+            Cmaes::builder(real())
+                .covariance(cmaes::Covariance::Diagonal)
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
+        portable_run(
+            Es::builder(real())
+                .parents(3)
+                .offspring(12)
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
+    ];
+    let expected: [[f64; 4]; 5] = [
+        // L-SHADE
+        [
+            1.06352535213699,
+            1.169859968810408,
+            1.4252844985565545,
+            1.795976790704828,
+        ],
+        // PSO, ring
+        [
+            -0.1799238193223966,
+            -0.05058389355291476,
+            -0.0612702176085896,
+            -0.06988516362853431,
+        ],
+        // CMA-ES, BIPOP
+        [
+            0.5279924007248189,
+            0.25175040581128894,
+            0.04444586199689393,
+            -0.025219443384489004,
+        ],
+        // sep-CMA-ES
+        [
+            0.8459394832109357,
+            0.7058663406676571,
+            0.5424466612325327,
+            0.3428791600536547,
+        ],
+        // (3/3_I, 12)-ES
+        [
+            0.5294149601094941,
+            0.27231802269909716,
+            0.07182313884499765,
+            -0.001476731001038885,
+        ],
+    ];
+    for (run, expected) in runs.iter().zip(expected) {
+        assert_eq!(run[..], expected);
+    }
+}
