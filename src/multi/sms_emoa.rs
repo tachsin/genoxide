@@ -24,11 +24,15 @@ use rand::Rng;
 ///    last front that fits partly, the member with the smallest
 ///    [hypervolume contribution](super::indicator::hypervolume_contributions) is removed, one at
 ///    a time, until the rest fits. The contributions are computed with the objectives normalized
-///    by the parents' best and worst values, and the reference point at 11 in each normalized
-///    objective (pymoo's settings), so the extremes of the front are kept.
+///    by the best and worst feasible values of parents and children, and the reference point at
+///    11 in each normalized objective (pymoo's), so every point is inside it and the extremes of
+///    the front are kept. (pymoo normalizes by the parents only, which can put a far child beyond
+///    the reference point and drop it first, even when it's the best in another objective.)
 ///
 /// Maximizing the hypervolume gives fronts that are well spread and converged, at a higher cost
-/// per generation than NSGA-II: O(N log N) per removal for 2 objectives, O(N²) for 3. Infeasible
+/// per generation than NSGA-II: O(N log N) per removal for 2 objectives, O(N²) for 3, O(N³) for
+/// 4 and O(N⁴) for 5, where [`Nsga3`](super::Nsga3) or [`Moead`](super::Moead) are better
+/// choices. Infeasible
 /// solutions are ranked by constrained dominance, and removed at random from a last front of
 /// equal violation.
 ///
@@ -96,6 +100,25 @@ fn violation<const M: usize>(scores: &Scores<M>) -> f64 {
     } else {
         f64::INFINITY
     }
+}
+
+// the best and worst values of the feasible solutions, minimized, or `None` if none is feasible
+fn normalization<const M: usize>(
+    scores: &[Scores<M>],
+    objectives: &[Objective; M],
+) -> Option<([f64; M], [f64; M])> {
+    let mut ideal = [f64::INFINITY; M];
+    let mut nadir = [f64::NEG_INFINITY; M];
+    let mut any = false;
+    for score in scores.iter().filter(|s| s.is_feasible()) {
+        any = true;
+        let values = minimized(score, objectives);
+        for j in 0..M {
+            ideal[j] = ideal[j].min(values[j]);
+            nadir[j] = nadir[j].max(values[j]);
+        }
+    }
+    any.then_some((ideal, nadir))
 }
 
 // the values with every objective turned into one to minimize
@@ -178,26 +201,6 @@ where
         );
     }
 
-    // the best and worst values of the feasible parents, minimized, or `None` if no parent is
-    // feasible
-    fn normalization(&self) -> Option<([f64; M], [f64; M])> {
-        let mut ideal = [f64::INFINITY; M];
-        let mut nadir = [f64::NEG_INFINITY; M];
-        let mut any = false;
-        for individual in self.population.iter() {
-            let scores = individual.fitness().unwrap_or(Scores::invalid());
-            if scores.is_feasible() {
-                any = true;
-                let values = minimized(&scores, &self.objectives);
-                for j in 0..M {
-                    ideal[j] = ideal[j].min(values[j]);
-                    nadir[j] = nadir[j].max(values[j]);
-                }
-            }
-        }
-        any.then_some((ideal, nadir))
-    }
-
     // keeps `room` of the members of the last front, removing the smallest hypervolume
     // contributors one at a time (at random if the front is infeasible)
     fn thin(
@@ -253,12 +256,12 @@ where
 
     // the next population from the parents and the offspring
     fn survive(&mut self) {
-        let normalization = self.normalization();
         let parents = std::mem::take(&mut self.population).into_vec();
         let parent_count = parents.len();
         let mut pool = parents;
         pool.append(&mut self.offspring);
         let scores = scores_of(&pool);
+        let normalization = normalization(&scores, &self.objectives);
         let fronts = non_dominated_sort(&scores, &self.objectives);
         let mut chosen: Vec<usize> = Vec::with_capacity(self.population_size);
         for front in &fronts {
@@ -631,17 +634,44 @@ mod tests {
         for (individual, values) in sms_emoa.population.iter_mut().zip(parents) {
             individual.set_fitness(Scores::new(values));
         }
-        let normalization = sms_emoa.normalization();
-        assert_eq!(normalization, Some(([0.0, 0.0], [4.0, 4.0])));
         // (1.1, 2.9) is crowded next to (1, 3); the extremes have large contributions
         let scores: Vec<Scores<2>> = [[0.0, 4.0], [1.0, 3.0], [1.1, 2.9], [2.0, 2.0], [4.0, 0.0]]
             .into_iter()
             .map(Scores::new)
             .collect();
+        let normalization = normalization(&scores, &[Minimize, Minimize]);
+        assert_eq!(normalization, Some(([0.0, 0.0], [4.0, 4.0])));
         let kept = sms_emoa.thin(&[0, 1, 2, 3, 4], &scores, 4, normalization);
         assert_eq!(kept, [0, 1, 3, 4]);
         let kept = sms_emoa.thin(&[0, 1, 2, 3, 4], &scores, 2, normalization);
         assert_eq!(kept, [0, 4]);
+    }
+
+    #[test]
+    fn a_far_extreme_child_survives() {
+        // the child (5, 0) is far beyond the parents' range in the first objective, and the only
+        // best one in the second
+        let mut sms_emoa = builder(4, 0).offspring(4).build().unwrap();
+        let parents = [[0.0, 1.0], [0.1, 0.9], [0.05, 0.95], [0.02, 0.98]];
+        let children = [[5.0, 0.0], [0.03, 0.97], [0.04, 0.96], [0.06, 0.94]];
+        for (individual, values) in sms_emoa.population.iter_mut().zip(parents) {
+            individual.set_fitness(Scores::new(values));
+        }
+        sms_emoa.offspring = children
+            .iter()
+            .map(|values| {
+                let mut child = sms_emoa.population[0].clone();
+                child.set_fitness(Scores::new(*values));
+                child
+            })
+            .collect();
+        sms_emoa.survive();
+        let values: Vec<[f64; 2]> = sms_emoa
+            .population()
+            .iter()
+            .map(|x| x.fitness().unwrap().values().unwrap())
+            .collect();
+        assert!(values.contains(&[5.0, 0.0]), "{values:?}");
     }
 
     #[test]
