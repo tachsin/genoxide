@@ -133,7 +133,8 @@ impl Pso {
             return global;
         };
         let size = self.personal_bests.len();
-        if 2 * neighbors + 1 >= size {
+        // 2 · neighbors + 1 >= size, without overflow
+        if neighbors >= size / 2 {
             return global;
         }
         let mut best = index;
@@ -565,13 +566,19 @@ mod tests {
         assert_eq!(pso.neighborhood_best(0, 0), 0);
         assert_eq!(pso.neighborhood_best(5, 0), 3);
         assert_eq!(pso.neighborhood_best(19, 0), 0);
-        // a ring that covers the whole swarm is the global topology
-        let mut pso = builder(Topology::Ring { neighbors: 10 }, 0)
-            .build()
-            .unwrap();
+        // a ring that covers the whole swarm is the global topology, however large
+        for neighbors in [10, usize::MAX] {
+            let mut pso = builder(Topology::Ring { neighbors }, 0).build().unwrap();
+            pso.ask();
+            pso.tell(&fitness).unwrap();
+            assert_eq!(pso.neighborhood_best(0, 19), 19);
+        }
+        // 9 neighbors on each side leave out only the particle opposite
+        let mut pso = builder(Topology::Ring { neighbors: 9 }, 0).build().unwrap();
         pso.ask();
         pso.tell(&fitness).unwrap();
-        assert_eq!(pso.neighborhood_best(0, 19), 19);
+        assert_eq!(pso.neighborhood_best(10, 19), 19);
+        assert_eq!(pso.neighborhood_best(9, 19), 18);
     }
 
     #[test]
