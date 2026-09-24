@@ -90,6 +90,7 @@ cargo run --release --example knapsack    # a constraint with Deb's feasibility 
 cargo run --release --example n_queens    # permutation, (μ+λ)
 cargo run --release --example rastrigin   # real-valued, parallel evaluation
 cargo run --release --example asynchronous # a slow fitness function, asynchronous evaluation
+cargo run --release --manifest-path examples/gpu/Cargo.toml  # neuroevolution on the GPU, with wgpu
 ```
 
 ### Without writing Rust

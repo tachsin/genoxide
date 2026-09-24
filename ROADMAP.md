@@ -162,7 +162,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Island model: ring, fully connected and random topologies; deterministic and parallel
 - [x] Asynchronous / steady-state evaluation for expensive fitness
 - [x] Batch evaluation hook (SIMD, GPU, remote)
-- [ ] GPU evaluation example
+- [x] GPU evaluation example
 - [x] Checkpoint and resume (`serde` feature)
 - [x] Runs described in TOML / JSON, with a small CLI
 - [x] `tracing` integration and progress reporting

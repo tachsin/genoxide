@@ -1,1 +1,3 @@
 /target
+/examples/gpu/target
+/examples/gpu/Cargo.lock

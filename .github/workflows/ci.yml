@@ -47,6 +47,8 @@ jobs:
           for example in one_max knapsack n_queens rastrigin asynchronous; do
             cargo run --release --example "$example"
           done
+      # the GPU example needs a GPU to run: it's only compiled
+      - run: cargo check --manifest-path examples/gpu/Cargo.toml
 
   instructions:
     name: Instruction counts

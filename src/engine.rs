@@ -60,7 +60,8 @@ pub trait FitnessFunction<G>: Sync {
 /// It's called once per generation, with the genomes to evaluate (none when every child is a
 /// copy that inherits its fitness). It decides how to evaluate them, so
 /// [`Engine::parallel`] doesn't apply. Returning a different number of scores than genomes stops
-/// the run with [`Error::FitnessCount`].
+/// the run with [`Error::FitnessCount`]. The repository's `examples/gpu` evaluates a generation of
+/// neural networks in one GPU dispatch with wgpu.
 ///
 /// ```
 /// use genoxide::prelude::*;
