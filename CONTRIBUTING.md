@@ -42,3 +42,5 @@ Releases are automated with [release-plz](https://release-plz.dev/):
 Nothing is released by accident: a release only happens when a maintainer merges the release PR.
 
 Every minor release (0.6.0, 0.7.0, …) is benchmarked before it's released: the full run of [`benchmarks/`](benchmarks/) against the other libraries, with the charts, [docs/benchmarks/](docs/benchmarks/) and the README's findings updated from it. Patch releases (0.x.y) aren't benchmarked again. The run takes about 5 hours, and nothing else may run on the machine while it measures times.
+
+The Python package in `python/` has genoxide's version: the release PR sets it in `python/Cargo.toml` too.

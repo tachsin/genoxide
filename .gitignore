@@ -1,3 +1,8 @@
 /target
 /examples/gpu/target
 /examples/gpu/Cargo.lock
+/python/target
+/python/Cargo.lock
+__pycache__/
+*.so
+*.pyd

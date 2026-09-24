@@ -1,0 +1,964 @@
+"""Evolutionary computation in Rust, for Python.
+
+Genetic algorithms, local search, differential evolution, CMA-ES, particle swarm optimization and
+NSGA-II from `genoxide <https://github.com/tachsin/genoxide>`_, with Python fitness functions::
+
+    import genoxide as gx
+
+    # OneMax: the genome with the most ones
+    ga = gx.Ga(
+        gx.Binary(100),
+        population_size=100,
+        select=gx.Tournament(3),
+        crossover=gx.UniformCrossover(),
+        mutation=gx.BitFlip(rate=0.01),
+        seed=42,
+    )
+    result = ga.run(lambda bits: bits.sum(), target=100, generations=1_000)
+    print(result.best_fitness, result.generations)
+
+A fitness function takes a genome as a numpy array (``bool`` for :class:`Binary`, ``float64`` for
+:class:`Real`, ``int64`` for :class:`Integer` and :class:`Permutation`) and returns a number,
+``None`` for an invalid solution, or a tuple ``(score, constraint_violation)``. With
+``batch=True``, it takes a whole generation as a 2-D array, a genome per row, and returns an array
+of scores: one call per generation, for vectorized numpy code.
+
+A run stops at the first of its stop conditions: ``generations``, ``evaluations``, ``target``,
+``time`` (seconds) and ``stagnation`` (generations without improvement).
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal, Union
+
+import numpy as np
+
+from . import _genoxide
+
+__version__: str = _genoxide.__version__
+
+__all__ = [
+    # genomes
+    "Binary",
+    "Integer",
+    "Real",
+    "Permutation",
+    # selection
+    "Tournament",
+    "Rank",
+    "Roulette",
+    "StochasticUniversalSampling",
+    "Truncation",
+    "RandomSelection",
+    # crossover
+    "UniformCrossover",
+    "PointCrossover",
+    "NoCrossover",
+    "SimulatedBinaryCrossover",
+    "BlendCrossover",
+    "ArithmeticCrossover",
+    "OrderCrossover",
+    "PartiallyMappedCrossover",
+    "CycleCrossover",
+    "EdgeRecombinationCrossover",
+    # mutation
+    "BitFlip",
+    "UniformMutation",
+    "GaussianMutation",
+    "PolynomialMutation",
+    "SwapMutation",
+    "InversionMutation",
+    "InsertionMutation",
+    "ScrambleMutation",
+    # schemes and acceptance
+    "Generational",
+    "SteadyState",
+    "MuPlusLambda",
+    "MuCommaLambda",
+    "Improving",
+    "NotWorse",
+    "Annealing",
+    "Tabu",
+    # algorithms
+    "Ga",
+    "De",
+    "Cmaes",
+    "Pso",
+    "LocalSearch",
+    "Nsga2",
+    # results
+    "Result",
+    "MultiResult",
+]
+
+ObjectiveName = Literal["maximize", "minimize"]
+Bounds = Union[tuple[float, float], Sequence[tuple[float, float]]]
+
+
+def _bounds(bounds: Any, length: int | None, cast: Callable[[Any], Any]) -> list[list[Any]]:
+    """One ``[low, high]`` per gene, from one pair for every gene (with ``length``) or a pair per
+    gene."""
+    pairs = np.asarray(bounds, dtype=object)
+    if pairs.ndim == 1 and len(pairs) == 2:
+        if length is None:
+            raise ValueError("one pair of bounds for every gene needs the genome's length")
+        return [[cast(pairs[0]), cast(pairs[1])] for _ in range(length)]
+    if pairs.ndim != 2 or pairs.shape[1] != 2:
+        raise ValueError("bounds are a pair (low, high), or a pair per gene")
+    if length is not None and length != len(pairs):
+        raise ValueError(f"length is {length}, but there are bounds for {len(pairs)} genes")
+    return [[cast(low), cast(high)] for low, high in pairs]
+
+
+def _rate_or_count(name: str, rate: float | None, count: int | None) -> dict[str, Any]:
+    if (rate is None) == (count is None):
+        raise ValueError(f"{name} needs either rate (per gene) or count (genes)")
+    return {"rate": rate, "count": count}
+
+
+# --- genomes -------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Binary:
+    """Bit strings of ``length`` bits: numpy ``bool`` arrays."""
+
+    length: int
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "binary", "length": self.length}
+
+
+@dataclass(frozen=True)
+class Integer:
+    """Whole numbers between bounds, inclusive: numpy ``int64`` arrays.
+
+    ``bounds`` is one pair ``(low, high)`` for every gene, with ``length``, or a pair per gene.
+    """
+
+    bounds: Bounds
+    length: int | None = None
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "integer", "bounds": _bounds(self.bounds, self.length, int)}
+
+
+@dataclass(frozen=True)
+class Real:
+    """Real numbers between bounds: numpy ``float64`` arrays.
+
+    ``bounds`` is one pair ``(low, high)`` for every gene, with ``length``, or a pair per gene.
+    """
+
+    bounds: Bounds
+    length: int | None = None
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "real", "bounds": _bounds(self.bounds, self.length, float)}
+
+
+@dataclass(frozen=True)
+class Permutation:
+    """Orderings of ``0 .. length - 1``: numpy ``int64`` arrays."""
+
+    length: int
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "permutation", "length": self.length}
+
+
+Genome = Union[Binary, Integer, Real, Permutation]
+
+# --- selection -----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Tournament:
+    """The best of ``size`` random individuals."""
+
+    size: int
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "tournament", "size": self.size}
+
+
+@dataclass(frozen=True)
+class Rank:
+    """Linear ranking, with ``pressure`` between 1 and 2."""
+
+    pressure: float = 1.5
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "rank", "pressure": self.pressure}
+
+
+@dataclass(frozen=True)
+class Roulette:
+    """Fitness-proportional selection."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "roulette"}
+
+
+@dataclass(frozen=True)
+class StochasticUniversalSampling:
+    """Fitness-proportional selection with evenly spaced pointers."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "stochastic_universal_sampling"}
+
+
+@dataclass(frozen=True)
+class Truncation:
+    """Uniformly among the best ``fraction`` of the population."""
+
+    fraction: float
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "truncation", "fraction": self.fraction}
+
+
+@dataclass(frozen=True)
+class RandomSelection:
+    """Uniformly at random."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "random"}
+
+
+Select = Union[Tournament, Rank, Roulette, StochasticUniversalSampling, Truncation, RandomSelection]
+
+# --- crossover -----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class UniformCrossover:
+    """Swaps each gene with probability 1/2. Binary, integer and real genomes."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "uniform"}
+
+
+@dataclass(frozen=True)
+class PointCrossover:
+    """Swaps the segments between ``points`` random cut points. Binary, integer and real
+    genomes."""
+
+    points: int = 1
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "point", "points": self.points}
+
+
+@dataclass(frozen=True)
+class NoCrossover:
+    """Leaves the parents as they are: mutation only."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "none"}
+
+
+@dataclass(frozen=True)
+class SimulatedBinaryCrossover:
+    """SBX with distribution index ``eta``: higher keeps children closer to their parents. Real
+    genomes."""
+
+    eta: float = 15.0
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "simulated_binary", "eta": self.eta}
+
+
+@dataclass(frozen=True)
+class BlendCrossover:
+    """BLX-alpha: children uniformly in the parents' interval, widened by ``alpha`` on each side.
+    Real genomes."""
+
+    alpha: float = 0.5
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "blend", "alpha": self.alpha}
+
+
+@dataclass(frozen=True)
+class ArithmeticCrossover:
+    """Random weighted averages of the parents. Real genomes."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "arithmetic"}
+
+
+@dataclass(frozen=True)
+class OrderCrossover:
+    """OX: a segment of one parent, the rest in the other's order. Permutations."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "order"}
+
+
+@dataclass(frozen=True)
+class PartiallyMappedCrossover:
+    """PMX. Permutations."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "partially_mapped"}
+
+
+@dataclass(frozen=True)
+class CycleCrossover:
+    """CX: every position keeps a value of one of the parents. Permutations."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "cycle"}
+
+
+@dataclass(frozen=True)
+class EdgeRecombinationCrossover:
+    """ERX: keeps the parents' adjacencies, for routing problems. Permutations."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "edge_recombination"}
+
+
+Crossover = Union[
+    UniformCrossover,
+    PointCrossover,
+    NoCrossover,
+    SimulatedBinaryCrossover,
+    BlendCrossover,
+    ArithmeticCrossover,
+    OrderCrossover,
+    PartiallyMappedCrossover,
+    CycleCrossover,
+    EdgeRecombinationCrossover,
+]
+
+# --- mutation ------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class BitFlip:
+    """Flips each bit with probability ``rate``, or exactly ``count`` bits. Binary genomes."""
+
+    rate: float | None = None
+    count: int | None = None
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "bit_flip", **_rate_or_count("BitFlip", self.rate, self.count)}
+
+
+@dataclass(frozen=True)
+class UniformMutation:
+    """Redraws each gene uniformly within its bounds with probability ``rate``, or exactly
+    ``count`` genes. Integer and real genomes."""
+
+    rate: float | None = None
+    count: int | None = None
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "uniform", **_rate_or_count("UniformMutation", self.rate, self.count)}
+
+
+@dataclass(frozen=True)
+class GaussianMutation:
+    """Adds normal noise with standard deviation ``sigma`` (a fraction of each gene's range) to
+    each gene with probability ``rate``, or to exactly ``count`` genes. Real genomes."""
+
+    sigma: float
+    rate: float | None = None
+    count: int | None = None
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "gaussian",
+            "sigma": self.sigma,
+            **_rate_or_count("GaussianMutation", self.rate, self.count),
+        }
+
+
+@dataclass(frozen=True)
+class PolynomialMutation:
+    """Deb's polynomial mutation with distribution index ``eta``, of each gene with probability
+    ``rate`` (usually 1 / length), or of exactly ``count`` genes. Real genomes."""
+
+    eta: float = 20.0
+    rate: float | None = None
+    count: int | None = None
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "polynomial",
+            "eta": self.eta,
+            **_rate_or_count("PolynomialMutation", self.rate, self.count),
+        }
+
+
+@dataclass(frozen=True)
+class SwapMutation:
+    """Swaps ``count`` pairs of positions. Permutations."""
+
+    count: int = 1
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "swap", "count": self.count}
+
+
+@dataclass(frozen=True)
+class InversionMutation:
+    """Reverses a random segment. Permutations."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "inversion"}
+
+
+@dataclass(frozen=True)
+class InsertionMutation:
+    """Moves a value to another position. Permutations."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "insertion"}
+
+
+@dataclass(frozen=True)
+class ScrambleMutation:
+    """Shuffles a random segment. Permutations."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "scramble"}
+
+
+Mutation = Union[
+    BitFlip,
+    UniformMutation,
+    GaussianMutation,
+    PolynomialMutation,
+    SwapMutation,
+    InversionMutation,
+    InsertionMutation,
+    ScrambleMutation,
+]
+
+# --- schemes of the genetic algorithm ------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Generational:
+    """Children replace the population, except its ``elitism`` best individuals (the default,
+    with 1)."""
+
+    elitism: int = 1
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "generational", "elitism": self.elitism}
+
+
+@dataclass(frozen=True)
+class SteadyState:
+    """Each generation, ``replacements`` children replace the worst individuals."""
+
+    replacements: int
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "steady_state", "replacements": self.replacements}
+
+
+@dataclass(frozen=True)
+class MuPlusLambda:
+    """(mu + lambda): ``offspring`` children, and the best of parents and children survive."""
+
+    offspring: int
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "mu_plus_lambda", "lambda": self.offspring}
+
+
+@dataclass(frozen=True)
+class MuCommaLambda:
+    """(mu, lambda): ``offspring`` children, of which the best survive."""
+
+    offspring: int
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "mu_comma_lambda", "lambda": self.offspring}
+
+
+Scheme = Union[Generational, SteadyState, MuPlusLambda, MuCommaLambda]
+
+# --- acceptance of local search ------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Improving:
+    """Moves to strictly better neighbors only: hill climbing that stops at the first local
+    optimum."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "improving"}
+
+
+@dataclass(frozen=True)
+class NotWorse:
+    """Moves to better or equal neighbors (the default): hill climbing that drifts across
+    plateaus."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "not_worse"}
+
+
+@dataclass(frozen=True)
+class Annealing:
+    """Simulated annealing: also moves to a neighbor worse by d with probability exp(-d / T).
+    The temperature T starts at ``initial_temperature`` and is multiplied by ``cooling`` (e.g.
+    0.999) after every step."""
+
+    initial_temperature: float
+    cooling: float
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "annealing",
+            "initial_temperature": self.initial_temperature,
+            "cooling": self.cooling,
+        }
+
+
+@dataclass(frozen=True)
+class Tabu:
+    """Tabu search: moves to the best neighbor that isn't one of the last ``tenure`` solutions,
+    even if it's worse. Use it with several neighbors per step."""
+
+    tenure: int
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "tabu", "tenure": self.tenure}
+
+
+Acceptance = Union[Improving, NotWorse, Annealing, Tabu]
+
+# --- results -------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, eq=False)
+class Result:
+    """The result of a single-objective run."""
+
+    best_genome: np.ndarray
+    """The best genome found."""
+    best_fitness: float | None
+    """Its score, or None if no valid solution was found."""
+    violation: float
+    """Its constraint violation: 0 for a feasible solution."""
+    generations: int
+    evaluations: int
+    seconds: float
+    stop_reason: str
+    """What stopped the run: "target", "generations", "evaluations", "time" or "stagnation"."""
+
+
+@dataclass(frozen=True, eq=False)
+class MultiResult:
+    """The result of a multi-objective run: its final non-dominated front, without copies."""
+
+    front_genomes: np.ndarray
+    """The genomes of the front, a row each."""
+    front_objectives: np.ndarray
+    """Their objective values, a row each."""
+    front_violations: np.ndarray
+    """Their constraint violations: 0 for feasible solutions."""
+    generations: int
+    evaluations: int
+    seconds: float
+    stop_reason: str
+    """What stopped the run: "generations", "evaluations", "time" or "stagnation"."""
+
+
+# --- running -------------------------------------------------------------------------------------
+
+
+def _stop(
+    generations: int | None,
+    evaluations: int | None,
+    target: float | None,
+    time: float | None,
+    stagnation: int | None,
+) -> dict[str, Any]:
+    stop = {
+        "generations": generations,
+        "evaluations": evaluations,
+        "target": None if target is None else float(target),
+        "seconds": None if time is None else float(time),
+        "stagnation": stagnation,
+    }
+    if all(value is None for value in stop.values()):
+        raise ValueError(
+            "a run needs a stop condition: generations, evaluations, target, time or stagnation"
+        )
+    return stop
+
+
+def _check_callable(fitness: Any) -> None:
+    if not callable(fitness):
+        raise TypeError(f"the fitness function isn't callable: {fitness!r}")
+
+
+def _json_number(value: Any) -> Any:
+    """numpy numbers in the settings, as Python numbers."""
+    if isinstance(value, np.generic):
+        return value.item()
+    raise TypeError(f"{value!r} isn't a number, text or None")
+
+
+def _batch_scores(function: Callable[[np.ndarray], Any]) -> Callable[[np.ndarray], Any]:
+    """A batch function returning float64 arrays: scores, and constraint violations or None."""
+
+    def evaluate(genomes: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+        result = function(genomes)
+        # (scores, violations): two arrays, not a pair of scores
+        if isinstance(result, tuple) and len(result) == 2 and np.ndim(result[0]) == 1:
+            scores, violations = result
+            return (
+                np.asarray(scores, dtype=np.float64).reshape(-1),
+                np.asarray(violations, dtype=np.float64).reshape(-1),
+            )
+        return np.asarray(result, dtype=np.float64).reshape(-1), None
+
+    return evaluate
+
+
+def _batch_objectives(function: Callable[[np.ndarray], Any]) -> Callable[[np.ndarray], Any]:
+    """A batch function returning float64 arrays: a row of objective values per genome, and
+    constraint violations or None."""
+
+    def evaluate(genomes: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+        result = function(genomes)
+        # (objectives, violations): a matrix and an array
+        if isinstance(result, tuple) and len(result) == 2 and np.ndim(result[0]) == 2:
+            objectives, violations = result
+            return (
+                np.asarray(objectives, dtype=np.float64),
+                np.asarray(violations, dtype=np.float64).reshape(-1),
+            )
+        return np.asarray(result, dtype=np.float64), None
+
+    return evaluate
+
+
+class _Algorithm:
+    """An algorithm with its settings. ``run`` builds it anew, so runs with a seed repeat."""
+
+    _genome: Genome
+
+    def _describe(self) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def _objectives(self) -> list[str]:
+        raise NotImplementedError
+
+    def _run(
+        self,
+        fitness: Callable[[np.ndarray], Any],
+        stop: dict[str, Any],
+        batch: bool,
+        parallel: bool,
+    ) -> dict[str, Any]:
+        run = {
+            "genome": self._genome._describe(),
+            "algorithm": self._describe(),
+            "objectives": self._objectives(),
+            "stop": stop,
+        }
+        return _genoxide.run(json.dumps(run, default=_json_number), fitness, batch, parallel)
+
+
+class _SingleObjective(_Algorithm):
+    _objective: ObjectiveName
+
+    def _objectives(self) -> list[str]:
+        if self._objective not in ("maximize", "minimize"):
+            raise ValueError(f'objective is "maximize" or "minimize", not {self._objective!r}')
+        return [self._objective]
+
+    def run(
+        self,
+        fitness: Callable[[np.ndarray], Any],
+        *,
+        generations: int | None = None,
+        evaluations: int | None = None,
+        target: float | None = None,
+        time: float | None = None,
+        stagnation: int | None = None,
+        batch: bool = False,
+        parallel: bool = False,
+    ) -> Result:
+        """Runs until the first stop condition.
+
+        ``fitness`` takes a genome as a numpy array and returns a number, None (an invalid
+        solution) or ``(score, constraint_violation)``. With ``batch=True`` it takes a generation
+        as a 2-D array, a genome per row, and returns an array of scores (NaN for an invalid
+        solution), or a tuple of an array of scores and an array of constraint violations.
+
+        ``parallel=True`` calls a (non-batch) fitness function from several threads at once: it
+        pays off when the function releases the GIL, e.g. in numpy or I/O, or on free-threaded
+        Python.
+
+        Stop conditions: ``generations``, ``evaluations``, ``target`` (a score at least as good),
+        ``time`` (seconds) and ``stagnation`` (generations without improvement).
+
+        An exception in ``fitness``, or Ctrl+C, stops the run and is raised.
+        """
+        _check_callable(fitness)
+        stop = _stop(generations, evaluations, target, time, stagnation)
+        function = _batch_scores(fitness) if batch else fitness
+        return Result(**self._run(function, stop, batch, parallel))
+
+
+class Ga(_SingleObjective):
+    """A genetic algorithm.
+
+    Each generation, ``select`` picks parents, ``crossover`` combines pairs of them with
+    probability ``crossover_rate`` (default 0.9) and ``mutation`` changes each child with
+    probability ``mutation_rate`` (default 1). The ``scheme`` decides who survives: by default
+    the children replace the population, except its best individual.
+    """
+
+    def __init__(
+        self,
+        genome: Genome,
+        *,
+        population_size: int,
+        select: Select,
+        crossover: Crossover,
+        mutation: Mutation,
+        crossover_rate: float | None = None,
+        mutation_rate: float | None = None,
+        scheme: Scheme | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.population_size = population_size
+        self.select = select
+        self.crossover = crossover
+        self.mutation = mutation
+        self.crossover_rate = crossover_rate
+        self.mutation_rate = mutation_rate
+        self.scheme = scheme
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "ga",
+            "population_size": self.population_size,
+            "seed": self.seed,
+            "select": self.select._describe(),
+            "crossover": self.crossover._describe(),
+            "mutate": self.mutation._describe(),
+            "crossover_rate": self.crossover_rate,
+            "mutation_rate": self.mutation_rate,
+            "scheme": None if self.scheme is None else self.scheme._describe(),
+        }
+
+
+class De(_SingleObjective):
+    """Differential evolution. Real genomes.
+
+    By default DE/rand/1/bin with F 0.5 and CR 0.9. With ``l_shade``, L-SHADE (Tanabe and
+    Fukunaga, 2014) for a budget of that many evaluations: current-to-pbest/1, F and CR adapted
+    during the run, and a population that shrinks linearly from 18 times the number of genes to 4.
+    Stop the run at the same number of evaluations.
+    """
+
+    def __init__(
+        self,
+        genome: Real,
+        *,
+        population_size: int | None = None,
+        l_shade: int | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.population_size = population_size
+        self.l_shade = l_shade
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "de",
+            "population_size": self.population_size,
+            "seed": self.seed,
+            "l_shade": self.l_shade,
+        }
+
+
+class Cmaes(_SingleObjective):
+    """CMA-ES, the covariance matrix adaptation evolution strategy. Real genomes.
+
+    ``restarts``: "never", "ipop" (restarts with a doubled population) or "bipop" (alternating
+    large and small populations), for multimodal functions. ``initial_step``: the initial step
+    size, as a fraction of each gene's range.
+    """
+
+    def __init__(
+        self,
+        genome: Real,
+        *,
+        population_size: int | None = None,
+        restarts: Literal["never", "ipop", "bipop"] | None = None,
+        initial_step: float | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.population_size = population_size
+        self.restarts = restarts
+        self.initial_step = initial_step
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "cmaes",
+            "population_size": self.population_size,
+            "seed": self.seed,
+            "restarts": self.restarts,
+            "initial_step": self.initial_step,
+        }
+
+
+class Pso(_SingleObjective):
+    """Particle swarm optimization. Real genomes.
+
+    ``ring``: each particle follows the best of its ``ring`` neighbors on each side, instead of
+    the whole swarm's best, for multimodal functions.
+    """
+
+    def __init__(
+        self,
+        genome: Real,
+        *,
+        population_size: int | None = None,
+        ring: int | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.population_size = population_size
+        self.ring = ring
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "pso",
+            "population_size": self.population_size,
+            "seed": self.seed,
+            "ring": self.ring,
+        }
+
+
+class LocalSearch(_SingleObjective):
+    """Local search from one solution: each step evaluates ``neighbors`` (default 1) neighbors
+    made by ``neighbor``, a mutation, and ``acceptance`` decides whether to move to the best of
+    them: hill climbing across plateaus by default, or simulated annealing or tabu search.
+
+    ``restart=(patience, kicks)``: iterated local search, which restarts from the best solution
+    changed by ``kicks`` neighbor moves after ``patience`` steps without a new best.
+    """
+
+    def __init__(
+        self,
+        genome: Genome,
+        *,
+        neighbor: Mutation,
+        neighbors: int | None = None,
+        acceptance: Acceptance | None = None,
+        restart: tuple[int, int] | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.neighbor = neighbor
+        self.neighbors = neighbors
+        self.acceptance = acceptance
+        self.restart = restart
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "local_search",
+            "seed": self.seed,
+            "neighbor": self.neighbor._describe(),
+            "neighbors": self.neighbors,
+            "acceptance": None if self.acceptance is None else self.acceptance._describe(),
+            "restart": None if self.restart is None else list(self.restart),
+        }
+
+
+class Nsga2(_Algorithm):
+    """NSGA-II, for 2 to 6 objectives: non-dominated sorting and crowding distance.
+
+    ``objectives`` says, for each objective, whether to "maximize" or "minimize" it. The fitness
+    function returns a sequence of objective values, None (an invalid solution) or
+    ``(objective_values, constraint_violation)``; with ``batch=True``, a 2-D array with a row of
+    objective values per genome, or a tuple of it and an array of constraint violations.
+    """
+
+    def __init__(
+        self,
+        genome: Genome,
+        *,
+        objectives: Sequence[ObjectiveName],
+        population_size: int,
+        crossover: Crossover,
+        mutation: Mutation,
+        crossover_rate: float | None = None,
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self.objectives = list(objectives)
+        self.population_size = population_size
+        self.crossover = crossover
+        self.mutation = mutation
+        self.crossover_rate = crossover_rate
+        self.seed = seed
+
+    def _objectives(self) -> list[str]:
+        for objective in self.objectives:
+            if objective not in ("maximize", "minimize"):
+                raise ValueError(f'an objective is "maximize" or "minimize", not {objective!r}')
+        return self.objectives
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "nsga2",
+            "population_size": self.population_size,
+            "seed": self.seed,
+            "crossover": self.crossover._describe(),
+            "mutate": self.mutation._describe(),
+            "crossover_rate": self.crossover_rate,
+        }
+
+    def run(
+        self,
+        fitness: Callable[[np.ndarray], Any],
+        *,
+        generations: int | None = None,
+        evaluations: int | None = None,
+        time: float | None = None,
+        stagnation: int | None = None,
+        batch: bool = False,
+        parallel: bool = False,
+    ) -> MultiResult:
+        """Runs until the first stop condition: ``generations``, ``evaluations``, ``time``
+        (seconds) or ``stagnation``. See :meth:`Ga.run` for ``batch`` and ``parallel``."""
+        _check_callable(fitness)
+        stop = _stop(generations, evaluations, None, time, stagnation)
+        function = _batch_objectives(fitness) if batch else fitness
+        return MultiResult(**self._run(function, stop, batch, parallel))
