@@ -15,7 +15,9 @@ pub use crate::genome::{
     AdaptiveReal, AdaptiveReals, Binary, Bits, Genome, Integer, Integers, Order, Permutation, Real,
     Reals, Representation,
 };
-pub use crate::multi::{self, MultiEngine, MultiObjectiveAlgorithm, Nsga2, Nsga3, Scores, Spea2};
+pub use crate::multi::{
+    self, Moead, MultiEngine, MultiObjectiveAlgorithm, Nsga2, Nsga3, Scores, Spea2,
+};
 pub use crate::observer::{HallOfFame, Observer, Statistics};
 pub use crate::operator::{
     ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, CycleCrossover,
