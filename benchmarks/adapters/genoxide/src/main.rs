@@ -138,20 +138,35 @@ fn run_nqueens(args: &Args, seed: u64) -> Result<()> {
     let outcome = outcome?;
     let success = outcome.best_fitness().score() == Some(0.0);
     print_result(args, seed, "ga", &outcome, time_s, 0.0, success);
+
+    // the local search template of AGENTS.md, like genetic_algorithm's stochastic hill climbing:
+    // one neighbor per step, and moves to equal neighbors
+    let (outcome, time_s) = timed(|| {
+        let search = LocalSearch::builder(Permutation::new(args.size)?)
+            .neighbor(SwapMutation::new())
+            .acceptance(Acceptance::NotWorse)
+            .minimize()
+            .seed(seed)
+            .build()?;
+        Engine::new(search, nqueens).stop_when(args.stop(0.0)).run()
+    });
+    let outcome = outcome?;
+    let success = outcome.best_fitness().score() == Some(0.0);
+    print_result(args, seed, "local_search", &outcome, time_s, 0.0, success);
     Ok(())
 }
 
 const RASTRIGIN_TARGET: f64 = 0.01;
 
 fn run_rastrigin(args: &Args, seed: u64) -> Result<()> {
-    // the settings of examples/rastrigin.rs (polynomial mutation), single-threaded like every
-    // adapter
+    // the settings of examples/rastrigin.rs: polynomial mutation at the usual rate of 1 / length,
+    // single-threaded like every adapter
     let (outcome, time_s) = timed(|| {
         let ga = Ga::builder(Real::uniform(args.size, -5.12..=5.12)?)
             .population_size(100)
             .select(Tournament::new(3)?)
             .crossover(UniformCrossover::new())
-            .mutate(PolynomialMutation::per_gene(0.1, 20.0)?)
+            .mutate(PolynomialMutation::per_gene(1.0 / args.size as f64, 20.0)?)
             .scheme(Scheme::Generational { elitism: 2 })
             .minimize()
             .seed(seed)

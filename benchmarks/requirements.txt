@@ -4,3 +4,5 @@ pymoo==0.6.2
 pygad==3.7.0
 cma==4.5.0
 numpy>=2
+# charts
+matplotlib==3.11.2

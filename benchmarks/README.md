@@ -12,17 +12,27 @@ Evolutionary computation libraries on the same problems, with identical fitness 
 
 ## Running
 
-This needs Python 3.10+ and Rust (cargo). The libraries are downloaded and built by the commands below.
+This needs Python 3.11+ and Rust (cargo). The libraries are downloaded and built by the commands below. The published results are from Linux, where Valgrind also counts instructions.
 
 ```sh
 cd benchmarks
-python run.py setup      # .venv with the Python libraries from requirements.txt
+python run.py setup      # .venv with the Python libraries from requirements.txt (uses uv if installed)
 python run.py --quick    # 4 small scenarios, 3 seeds
 python run.py            # all scenarios, 10 seeds
 python run.py --scenarios nqueens-64-idiomatic --seeds 20 --libraries genetic_algorithm deap
+python run.py chart      # redraw the charts of the latest results
 ```
 
-Each run writes the raw runs, with library versions, to `results/<timestamp>.json`, and a table to `results/latest.md`.
+Each run writes:
+- the raw runs, with library versions and the platform, to `results/<timestamp>.json`
+- a table to `results/latest.md`
+- charts to `results/charts/`: time to target, evaluations per second and instructions per evaluation
+
+## Instructions per evaluation
+
+On Linux with [Valgrind](https://valgrind.org/), each run also counts CPU instructions with Callgrind. Instruction counts are exact and don't depend on the machine's load or clock speed, so they compare the cost of the libraries themselves.
+
+Each adapter runs OneMax 1000 in the matched configuration twice, with budgets of N and 2N evaluations. None of them can reach the target within that budget. The difference, I(2N) − I(N), divided by the difference in evaluations, cancels the interpreter startup, the imports and the setup. What's left is the cost of one evaluation, framework and fitness function together.
 
 ## Scenarios
 
