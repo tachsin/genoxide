@@ -85,7 +85,7 @@ fn maximize() -> Vec<Objective> {
     vec![Objective::Maximize]
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Objective {
     Maximize,
@@ -161,27 +161,27 @@ pub struct Ga {
 pub enum Select {
     Tournament { size: usize },
     Rank { pressure: f64 },
-    Roulette,
-    StochasticUniversal,
+    Roulette {},
+    StochasticUniversal {},
     Truncation { fraction: f64 },
-    Random,
+    Random {},
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Crossover {
-    Uniform,
-    OnePoint,
-    TwoPoint,
+    Uniform {},
+    OnePoint {},
+    TwoPoint {},
     KPoint { points: usize },
-    None,
+    None {},
     SimulatedBinary { eta: f64 },
     Blend { alpha: f64 },
-    Arithmetic,
-    Order,
-    PartiallyMapped,
-    Cycle,
-    EdgeRecombination,
+    Arithmetic {},
+    Order {},
+    PartiallyMapped {},
+    Cycle {},
+    EdgeRecombination {},
 }
 
 /// A mutation: `rate` changes each gene with that probability, `count` exactly that many genes.
@@ -209,9 +209,9 @@ pub enum Mutate {
     Swap {
         count: Option<usize>,
     },
-    Inversion,
-    Insertion,
-    Scramble,
+    Inversion {},
+    Insertion {},
+    Scramble {},
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -234,8 +234,8 @@ pub enum Restarts {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Acceptance {
-    Improving,
-    NotWorse,
+    Improving {},
+    NotWorse {},
     Annealing {
         initial_temperature: f64,
         cooling: f64,

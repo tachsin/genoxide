@@ -123,11 +123,18 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
         Some(workers) => workers,
         None => std::thread::available_parallelism().map_or(1, usize::from),
     };
+    if run
+        .checkpoint
+        .as_ref()
+        .is_some_and(|checkpoint| checkpoint.every == 0)
+    {
+        return Err("`checkpoint.every` must be at least 1 generation".to_string());
+    }
     if options.resume && run.checkpoint.is_none() {
         return Err("`--resume` needs a `[checkpoint]` in the run file".to_string());
     }
-    let settings =
-        serde_json::to_string(&(&run.genome, &run.algorithm)).map_err(|error| error.to_string())?;
+    let settings = serde_json::to_string(&(&run.genome, &run.fitness.objectives, &run.algorithm))
+        .map_err(|error| error.to_string())?;
     let context = Context {
         command,
         settings,
@@ -297,8 +304,8 @@ where
             }
             if let Some(acceptance) = acceptance {
                 builder = builder.acceptance(match acceptance {
-                    config::Acceptance::Improving => Acceptance::Improving,
-                    config::Acceptance::NotWorse => Acceptance::NotWorse,
+                    config::Acceptance::Improving {} => Acceptance::Improving,
+                    config::Acceptance::NotWorse {} => Acceptance::NotWorse,
                     config::Acceptance::Annealing {
                         initial_temperature,
                         cooling,
@@ -478,15 +485,24 @@ impl Context {
         let saved: Saved<A> = setting(checkpoint::load_file(path))?;
         if saved.settings != self.settings {
             return Err(format!(
-                "{} was saved with other genome or algorithm settings; resume with the run file that made it, changing only `fitness`, `stop`, `report` and `checkpoint`",
+                "{} was saved with other genome, objectives or algorithm settings; resume with the run file that made it, changing only `fitness.command`, `fitness.builtin`, `fitness.workers`, `fitness.nan`, `stop`, `report` and `checkpoint`",
                 path.display()
             ));
         }
         Ok(saved.algorithm)
     }
 
-    // saves a checkpoint of `algorithm`
-    fn save<A: Serialize + Clone>(&self, algorithm: &A, path: &Path) -> genoxide::Result<()> {
+    // saves a checkpoint of `algorithm`, unless a fitness program failed: its evaluations since
+    // are NaN, and the last good checkpoint stays
+    fn save<A: Serialize + Clone>(
+        &self,
+        algorithm: &A,
+        path: &Path,
+        pool: &Pool,
+    ) -> genoxide::Result<()> {
+        if pool.failure().is_some() {
+            return Ok(());
+        }
         let saved = Saved {
             settings: self.settings.clone(),
             algorithm: algorithm.clone(),
@@ -534,7 +550,7 @@ where
         engine = engine.observe(report);
     }
     if let Some((path, every)) = &context.checkpoint {
-        engine = engine.checkpoint_every(*every, move |algorithm| context.save(algorithm, path));
+        engine = engine.checkpoint_every(*every, |algorithm| context.save(algorithm, path, &pool));
     }
     let start = Instant::now();
     let outcome = engine.run();
@@ -564,7 +580,7 @@ where
         engine = engine.observe(report);
     }
     if let Some((path, every)) = &context.checkpoint {
-        engine = engine.checkpoint_every(*every, move |algorithm| context.save(algorithm, path));
+        engine = engine.checkpoint_every(*every, |algorithm| context.save(algorithm, path, &pool));
     }
     let start = Instant::now();
     let outcome = engine.run();
@@ -588,8 +604,8 @@ fn finish<G: Genes + genoxide::genome::Genome>(
         "generations": outcome.generations(),
         "evaluations": outcome.evaluations(),
         "seconds": elapsed.as_secs_f64(),
-        "fitness": fitness.score(),
-        "violation": fitness.violation(),
+        "fitness": fitness.score().map(number),
+        "violation": number(fitness.violation()),
         "genome": outcome.best_genome().to_json(),
     }))
 }
@@ -621,7 +637,7 @@ where
         });
     }
     if let Some((path, every)) = &context.checkpoint {
-        engine = engine.checkpoint_every(*every, move |algorithm| context.save(algorithm, path));
+        engine = engine.checkpoint_every(*every, |algorithm| context.save(algorithm, path, &pool));
     }
     let start = Instant::now();
     let outcome = engine.run();
@@ -645,8 +661,8 @@ where
         .map(|individual| {
             let scores = individual.fitness();
             json!({
-                "objectives": scores.and_then(|scores| scores.values()).map(|values| values.to_vec()),
-                "violation": scores.map(|scores| scores.violation()),
+                "objectives": scores.and_then(|scores| scores.values()).map(|values| values.map(number).to_vec()),
+                "violation": scores.map(|scores| number(scores.violation())),
                 "genome": individual.genome().to_json(),
             })
         })
@@ -671,4 +687,15 @@ fn stop_reason(reason: StopReason) -> String {
         _ => "other",
     }
     .to_string()
+}
+
+// a number as JSON: infinities, which JSON has no numbers for, as the text "inf" and "-inf"
+fn number(value: f64) -> Value {
+    if value.is_finite() {
+        json!(value)
+    } else if value > 0.0 {
+        json!("inf")
+    } else {
+        json!("-inf")
+    }
 }

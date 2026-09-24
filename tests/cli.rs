@@ -212,7 +212,7 @@ fn runs_resume_from_checkpoints() {
     let other = text(40).replace("\"uniform\"", "\"one-point\"");
     let error = run(&directory, "part.toml", &other, &["--resume"]).unwrap_err();
     assert!(
-        error.contains("other genome or algorithm settings"),
+        error.contains("other genome, objectives or algorithm settings"),
         "{error}"
     );
     // and so is another algorithm
@@ -344,4 +344,94 @@ fn the_built_in_fitness_programs_speak_the_protocol() {
     let help = genoxide(&["--help"]);
     assert!(String::from_utf8_lossy(&help.stdout).contains("genoxide run <file>"));
     assert!(!genoxide(&["frobnicate"]).status.success());
+}
+
+#[test]
+fn review_fixes() {
+    let directory = directory("review");
+    // extra keys on operators without settings are errors
+    let ga = CMAES.replace(
+        "type = \"cmaes\"",
+        "type = \"ga\"\npopulation_size = 10\nselect = { type = \"roulette\", size = 3 }\ncrossover = { type = \"uniform\" }\nmutate = { type = \"polynomial\", rate = 0.1, eta = 20.0 }",
+    );
+    let error = check(&directory, &ga).unwrap_err();
+    assert!(error.contains("unknown field `size`"), "{error}");
+    let error = check(
+        &directory,
+        &ga.replace(
+            "{ type = \"roulette\", size = 3 }",
+            "{ type = \"roulette\" }",
+        )
+        .replace("{ type = \"uniform\" }", "{ type = \"uniform\", eta = 3 }"),
+    )
+    .unwrap_err();
+    assert!(error.contains("unknown field `eta`"), "{error}");
+    // checkpoints every 0 generations
+    let error = check(
+        &directory,
+        &format!("{CMAES}[checkpoint]\npath = \"x.ckpt\"\nevery = 0\n"),
+    )
+    .unwrap_err();
+    assert!(error.contains("`checkpoint.every`"), "{error}");
+
+    // a failed program leaves no checkpoint of its NaN evaluations
+    let failing = format!(
+        "{}[checkpoint]\npath = \"failed.ckpt\"\nevery = 1\n",
+        CMAES
+            .replace("[\"minimize\"]", "[\"minimize\", \"minimize\"]")
+            .replace(
+                "type = \"cmaes\"",
+                "type = \"nsga2\"\npopulation_size = 10\ncrossover = { type = \"uniform\" }\nmutate = { type = \"polynomial\", rate = 0.1, eta = 20.0 }",
+            )
+            .replace("target = 1e-8\n", "")
+    );
+    let error = run(&directory, "failing.toml", &failing, &[]).unwrap_err();
+    assert!(error.contains("expected 2 numbers"), "{error}");
+    assert!(!directory.join("failed.ckpt").exists());
+
+    // resuming with other objectives is an error
+    let one_max = |objective: &str, generations: u64| {
+        format!(
+            "report = \"off\"\n[genome]\ntype = \"binary\"\nlength = 16\n[fitness]\nbuiltin = \"one-max\"\nobjectives = [\"{objective}\"]\n[algorithm]\ntype = \"ga\"\npopulation_size = 10\nseed = 1\nselect = {{ type = \"tournament\", size = 2 }}\ncrossover = {{ type = \"uniform\" }}\nmutate = {{ type = \"bit-flip\", rate = 0.1 }}\n[stop]\ngenerations = {generations}\n[checkpoint]\npath = \"one-max.ckpt\"\nevery = 5\n"
+        )
+    };
+    run(&directory, "one-max.toml", &one_max("maximize", 5), &[]).unwrap();
+    let error = run(
+        &directory,
+        "one-max.toml",
+        &one_max("minimize", 10),
+        &["--resume"],
+    )
+    .unwrap_err();
+    assert!(error.contains("other genome, objectives"), "{error}");
+    run(
+        &directory,
+        "one-max.toml",
+        &one_max("maximize", 10),
+        &["--resume"],
+    )
+    .unwrap();
+
+    // a relative program path is relative to the run file
+    let programs = directory.join("programs");
+    std::fs::create_dir_all(&programs).unwrap();
+    let copy = programs.join(Path::new(GENOXIDE).file_name().unwrap());
+    std::fs::copy(GENOXIDE, &copy).unwrap();
+    let relative = format!("./programs/{}", copy.file_name().unwrap().to_string_lossy());
+    let text = CMAES.replace(
+        "builtin = \"sphere\"",
+        &format!("command = [{relative:?}, \"fitness\", \"sphere\"]"),
+    );
+    let result = run(&directory, "relative.toml", &text, &[]).unwrap();
+    assert_eq!(result["stop_reason"], "target");
+
+    // infinite values are text in the result; null is only for an invalid fitness
+    let infinite = CMAES
+        .replace("bounds = [-5.0, 5.0]", "bounds = [1e200, 1e300]")
+        .replace("[\"minimize\"]", "[\"maximize\"]")
+        .replace("type = \"cmaes\"", "type = \"de\"\npopulation_size = 10")
+        .replace("target = 1e-8\nevaluations = 50000", "generations = 2");
+    let result = run(&directory, "infinite.toml", &infinite, &[]).unwrap();
+    assert_eq!(result["fitness"], "inf");
+    std::fs::remove_dir_all(&directory).unwrap();
 }

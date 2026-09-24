@@ -112,6 +112,13 @@ impl Pool {
         let (program, arguments) = command.split_first().ok_or("`fitness.command` is empty")?;
         let mut processes = Vec::with_capacity(workers);
         for _ in 0..workers {
+            // on Windows, a program path is looked up before changing directory
+            let program = Path::new(program);
+            let program = if program.is_relative() && program.components().count() > 1 {
+                directory.join(program)
+            } else {
+                program.to_path_buf()
+            };
             let mut command_line = Command::new(program);
             if !directory.as_os_str().is_empty() {
                 command_line.current_dir(directory);

@@ -22,7 +22,8 @@ Usage:
 The fitness program (`fitness.command` in the run file) runs once per worker, in the run file's
 directory. It reads a genome per line on stdin, the genes separated by spaces (bits as 0 and 1),
 and writes a line per genome on stdout: its objective values, then optionally a constraint
-violation (0 when feasible), separated by spaces. `nan` marks a genome that can't be scored.
+violation (0 when feasible), separated by spaces, and flushes. `nan` marks a genome that can't
+be scored.
 
 A minimal run file:
 

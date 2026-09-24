@@ -35,14 +35,14 @@ impl AnySelect {
                 Self::Tournament(setting(Tournament::new(size))?)
             }
             config::Select::Rank { pressure } => Self::Rank(setting(Rank::new(pressure))?),
-            config::Select::Roulette => Self::Roulette(Roulette),
-            config::Select::StochasticUniversal => {
+            config::Select::Roulette {} => Self::Roulette(Roulette),
+            config::Select::StochasticUniversal {} => {
                 Self::StochasticUniversal(StochasticUniversalSampling)
             }
             config::Select::Truncation { fraction } => {
                 Self::Truncation(setting(Truncation::new(fraction))?)
             }
-            config::Select::Random => Self::Random(RandomSelection),
+            config::Select::Random {} => Self::Random(RandomSelection),
         })
     }
 }
@@ -69,18 +69,18 @@ impl Select for AnySelect {
 // the name of an operator in the run file, for errors
 fn crossover_name(crossover: config::Crossover) -> &'static str {
     match crossover {
-        config::Crossover::Uniform => "uniform",
-        config::Crossover::OnePoint => "one-point",
-        config::Crossover::TwoPoint => "two-point",
+        config::Crossover::Uniform {} => "uniform",
+        config::Crossover::OnePoint {} => "one-point",
+        config::Crossover::TwoPoint {} => "two-point",
         config::Crossover::KPoint { .. } => "k-point",
-        config::Crossover::None => "none",
+        config::Crossover::None {} => "none",
         config::Crossover::SimulatedBinary { .. } => "simulated-binary",
         config::Crossover::Blend { .. } => "blend",
-        config::Crossover::Arithmetic => "arithmetic",
-        config::Crossover::Order => "order",
-        config::Crossover::PartiallyMapped => "partially-mapped",
-        config::Crossover::Cycle => "cycle",
-        config::Crossover::EdgeRecombination => "edge-recombination",
+        config::Crossover::Arithmetic {} => "arithmetic",
+        config::Crossover::Order {} => "order",
+        config::Crossover::PartiallyMapped {} => "partially-mapped",
+        config::Crossover::Cycle {} => "cycle",
+        config::Crossover::EdgeRecombination {} => "edge-recombination",
     }
 }
 
@@ -91,9 +91,9 @@ fn mutate_name(mutate: config::Mutate) -> &'static str {
         config::Mutate::Gaussian { .. } => "gaussian",
         config::Mutate::Polynomial { .. } => "polynomial",
         config::Mutate::Swap { .. } => "swap",
-        config::Mutate::Inversion => "inversion",
-        config::Mutate::Insertion => "insertion",
-        config::Mutate::Scramble => "scramble",
+        config::Mutate::Inversion {} => "inversion",
+        config::Mutate::Insertion {} => "insertion",
+        config::Mutate::Scramble {} => "scramble",
     }
 }
 
@@ -127,8 +127,8 @@ enum RateOrCount {
 
 fn point(crossover: config::Crossover) -> Option<Result<PointCrossover>> {
     match crossover {
-        config::Crossover::OnePoint => Some(Ok(PointCrossover::one_point())),
-        config::Crossover::TwoPoint => Some(Ok(PointCrossover::two_point())),
+        config::Crossover::OnePoint {} => Some(Ok(PointCrossover::one_point())),
+        config::Crossover::TwoPoint {} => Some(Ok(PointCrossover::two_point())),
         config::Crossover::KPoint { points } => Some(setting(PointCrossover::k_point(points))),
         _ => None,
     }
@@ -148,8 +148,8 @@ impl ListCrossover {
             return Ok(Self::Point(point?));
         }
         match crossover {
-            config::Crossover::Uniform => Ok(Self::Uniform(UniformCrossover::new())),
-            config::Crossover::None => Ok(Self::None(NoCrossover)),
+            config::Crossover::Uniform {} => Ok(Self::Uniform(UniformCrossover::new())),
+            config::Crossover::None {} => Ok(Self::None(NoCrossover)),
             _ => Err(wrong_crossover(
                 crossover,
                 genome,
@@ -199,15 +199,15 @@ impl RealCrossover {
             return Ok(Self::Point(point?));
         }
         match crossover {
-            config::Crossover::Uniform => Ok(Self::Uniform(UniformCrossover::new())),
-            config::Crossover::None => Ok(Self::None(NoCrossover)),
+            config::Crossover::Uniform {} => Ok(Self::Uniform(UniformCrossover::new())),
+            config::Crossover::None {} => Ok(Self::None(NoCrossover)),
             config::Crossover::SimulatedBinary { eta } => Ok(Self::SimulatedBinary(setting(
                 SimulatedBinaryCrossover::new(eta),
             )?)),
             config::Crossover::Blend { alpha } => {
                 Ok(Self::Blend(setting(BlendCrossover::new(alpha))?))
             }
-            config::Crossover::Arithmetic => Ok(Self::Arithmetic(ArithmeticCrossover::new())),
+            config::Crossover::Arithmetic {} => Ok(Self::Arithmetic(ArithmeticCrossover::new())),
             _ => Err(wrong_crossover(
                 crossover,
                 "real",
@@ -249,15 +249,15 @@ pub enum OrderCrossovers {
 impl OrderCrossovers {
     pub fn new(crossover: config::Crossover) -> Result<Self> {
         match crossover {
-            config::Crossover::Order => Ok(Self::Order(OrderCrossover)),
-            config::Crossover::PartiallyMapped => {
+            config::Crossover::Order {} => Ok(Self::Order(OrderCrossover)),
+            config::Crossover::PartiallyMapped {} => {
                 Ok(Self::PartiallyMapped(PartiallyMappedCrossover))
             }
-            config::Crossover::Cycle => Ok(Self::Cycle(CycleCrossover)),
-            config::Crossover::EdgeRecombination => {
+            config::Crossover::Cycle {} => Ok(Self::Cycle(CycleCrossover)),
+            config::Crossover::EdgeRecombination {} => {
                 Ok(Self::EdgeRecombination(EdgeRecombinationCrossover))
             }
-            config::Crossover::None => Ok(Self::None(NoCrossover)),
+            config::Crossover::None {} => Ok(Self::None(NoCrossover)),
             _ => Err(wrong_crossover(
                 crossover,
                 "permutation",
@@ -378,9 +378,9 @@ impl OrderMutation {
                 Some(count) => setting(SwapMutation::count(count))?,
                 None => SwapMutation::new(),
             }),
-            config::Mutate::Inversion => Self::Inversion(InversionMutation),
-            config::Mutate::Insertion => Self::Insertion(InsertionMutation),
-            config::Mutate::Scramble => Self::Scramble(ScrambleMutation),
+            config::Mutate::Inversion {} => Self::Inversion(InversionMutation),
+            config::Mutate::Insertion {} => Self::Insertion(InsertionMutation),
+            config::Mutate::Scramble {} => Self::Scramble(ScrambleMutation),
             _ => {
                 return Err(wrong_mutate(
                     mutate,
