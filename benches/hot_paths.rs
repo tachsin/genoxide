@@ -59,6 +59,10 @@ fn crossover(c: &mut Criterion) {
     group.bench_function("uniform_real_100", |bench| {
         bench.iter(|| UniformCrossover::new().crossover(&real, &mut x, &mut y, &mut rng))
     });
+    let sbx = SimulatedBinaryCrossover::new(15.0).unwrap();
+    group.bench_function("sbx_real_100", |bench| {
+        bench.iter(|| sbx.crossover(&real, &mut x, &mut y, &mut rng))
+    });
     group.finish();
 }
 

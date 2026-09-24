@@ -65,7 +65,7 @@ A missing operator, or one that doesn't fit the genome, is a compile error that 
 
 - **Genomes:** binary (bit-packed), integer and real (bounded per gene), permutation
 - **Selection:** tournament, roulette, stochastic universal sampling, rank, truncation, random
-- **Crossover:** one-point, two-point, k-point, uniform
+- **Crossover:** one-point, two-point, k-point, uniform, and for real genomes SBX, blend (BLX-α), arithmetic
 - **Mutation:** bit-flip, uniform, Gaussian, polynomial, swap (every mutation changes the genome)
 - **Schemes:** generational with elitism, steady-state, (μ+λ), (μ,λ)
 - **Engine:** ask / tell core, stop conditions (target, generations, evaluations, time, stagnation, custom, combined), parallel evaluation with the same results as sequential, abort flag, NaN policy

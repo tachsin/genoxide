@@ -40,7 +40,7 @@ fn main() -> genoxide::Result<()> {
 |---|---|---|---|---|
 | Yes / no decisions (subset, knapsack, feature selection) | `Binary::new(len)` | `Bits` | `UniformCrossover`, `PointCrossover` | `BitFlip` |
 | Whole numbers in ranges (counts, choices, schedules) | `Integer::new([lo..=hi, ...])`, `Integer::uniform(len, lo..=hi)` | `Integers` (derefs to `[i64]`) | `UniformCrossover`, `PointCrossover` | `UniformMutation` |
-| Real numbers in ranges (parameters, continuous functions) | `Real::new([lo..=hi, ...])`, `Real::uniform(len, lo..=hi)` | `Reals` (derefs to `[f64]`) | `UniformCrossover`, `PointCrossover` | `PolynomialMutation` (η 20), `GaussianMutation` (σ ≈ 0.03), `UniformMutation` |
+| Real numbers in ranges (parameters, continuous functions) | `Real::new([lo..=hi, ...])`, `Real::uniform(len, lo..=hi)` | `Reals` (derefs to `[f64]`) | `SimulatedBinaryCrossover` (η 15), `BlendCrossover` (α 0.5), `ArithmeticCrossover`, `UniformCrossover`, `PointCrossover` | `PolynomialMutation` (η 20), `GaussianMutation` (σ ≈ 0.03), `UniformMutation` |
 | An order of `0..n` (tours, sequencing, assignment) | `Permutation::new(n)` | `Order` (derefs to `[usize]`) | `NoCrossover` (permutation crossovers come in 0.2) | `SwapMutation` |
 
 Selection works with every representation. `Tournament::new(2..=5)?` is the usual choice.
@@ -82,6 +82,9 @@ Selection works with every representation. `Tournament::new(2..=5)?` is the usua
 | `PointCrossover::one_point()`, `two_point()`, `k_point(k)?` | k ≥ 1 |
 | `UniformCrossover::new()`, `with_rate(p)?` | 0 < p < 1, default 0.5 |
 | `NoCrossover` | any representation |
+| `SimulatedBinaryCrossover::new(eta)?` | `Real` only; eta ≥ 0: larger means children closer to their parents; 15 to 20 is common |
+| `BlendCrossover::new(alpha)?` | `Real` only; alpha ≥ 0, 0.5 is common |
+| `ArithmeticCrossover::new()`, `with_weight(w)?` | `Real` only; random weight, or 0 < w < 1 and w ≠ 0.5 |
 | `BitFlip::per_gene(rate)?`, `BitFlip::count(n)?` | 0 < rate ≤ 1; n ≥ 1 |
 | `UniformMutation::per_gene(rate)?`, `UniformMutation::count(n)?` | 0 < rate ≤ 1; n ≥ 1 |
 | `GaussianMutation::per_gene(rate, sigma)?`, `GaussianMutation::count(n, sigma)?` | sigma > 0, a fraction of each gene's range; mirrored at the bounds |
