@@ -89,7 +89,19 @@ cargo run --release --example one_max     # binary, statistics
 cargo run --release --example knapsack    # a constraint with Deb's feasibility rules, hall of fame
 cargo run --release --example n_queens    # permutation, (μ+λ)
 cargo run --release --example rastrigin   # real-valued, parallel evaluation
+cargo run --release --example asynchronous # a slow fitness function, asynchronous evaluation
 ```
+
+### Without writing Rust
+
+The `genoxide` program runs an optimization described in a TOML or JSON file. The fitness function is any program, in any language, that reads a genome per line and writes its fitness:
+
+```text
+cargo install genoxide --features cli
+genoxide run sphere.toml
+```
+
+See [docs/cli.md](docs/cli.md) for the run file and the protocol.
 
 Using an AI coding assistant? Point it to [AGENTS.md](AGENTS.md): it has the decision tables, settings, templates and fixes for common errors.
 

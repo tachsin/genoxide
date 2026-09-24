@@ -655,6 +655,36 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+### Without Rust: the `genoxide` program
+
+For a fitness function in another language, or no code at all, the `genoxide` program (`cargo install genoxide --features cli`) runs an optimization described in a TOML or JSON file: `genoxide run run.toml`. It starts `fitness.command` once per worker. The program reads a genome per line on stdin and writes a line per genome on stdout: the objective values, then optionally a constraint violation. The result goes to stdout as JSON. [docs/cli.md](docs/cli.md) has every setting.
+
+```toml
+[genome]
+type = "real"          # binary, integer, real or permutation
+length = 10
+bounds = [-5.12, 5.12]
+
+[fitness]
+command = ["python3", "fitness.py"]   # or builtin = "rastrigin"
+objectives = ["minimize"]
+
+[algorithm]
+type = "ga"            # ga, steady-ga, de, cmaes, pso, local-search, nsga2
+population_size = 50
+select = { type = "tournament", size = 3 }
+crossover = { type = "simulated-binary", eta = 15.0 }
+mutate = { type = "polynomial", rate = 0.1, eta = 20.0 }
+
+[stop]
+target = 0.01
+evaluations = 100000
+
+[checkpoint]           # genoxide run run.toml --resume continues from it
+path = "run.ckpt"
+every = 50
+```
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |

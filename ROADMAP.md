@@ -164,7 +164,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Batch evaluation hook (SIMD, GPU, remote)
 - [ ] GPU evaluation example
 - [x] Checkpoint and resume (`serde` feature)
-- [ ] Runs described in TOML / JSON, with a small CLI
+- [x] Runs described in TOML / JSON, with a small CLI
 - [x] `tracing` integration and progress reporting
 
 ### 0.6: Python
