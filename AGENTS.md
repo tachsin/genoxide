@@ -96,7 +96,7 @@ Selection works with every representation. `Tournament::new(2..=5)?` is the usua
 | `OrderCrossover`, `PartiallyMappedCrossover`, `CycleCrossover`, `EdgeRecombinationCrossover` | unit structs, `Permutation` only |
 | `InversionMutation`, `InsertionMutation`, `ScrambleMutation` | unit structs, `Permutation` only |
 
-Every mutation changes the genome: `per_gene` changes one random gene if none was picked.
+`per_gene(rate)` changes each gene independently with that probability, so with `1 / length` about a third of the children are unchanged copies: they inherit their parent's fitness without an evaluation. `count(n)` changes exactly `n` genes. A picked gene always gets a different value. Local search redraws a neighbor that didn't change.
 
 ### `Engine::new(algorithm, fitness)`
 

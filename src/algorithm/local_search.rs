@@ -4,7 +4,7 @@ use super::ga::Unset;
 use super::{Algorithm, Candidates};
 use crate::genome::Representation;
 use crate::math::exp;
-use crate::operator::Mutate;
+use crate::operator::{Mutate, neighbor};
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
 use std::collections::{HashSet, VecDeque};
@@ -275,8 +275,7 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
                 let best = self.best.as_ref().expect("best after the first tell");
                 let mut genome = best.genome().clone();
                 for _ in 0..kicks {
-                    self.neighbor
-                        .mutate(&self.representation, &mut genome, &mut self.rng);
+                    genome = neighbor(&self.neighbor, &self.representation, &genome, &mut self.rng);
                 }
                 self.candidates.clear();
                 self.candidates.push(Individual::new(genome));
@@ -286,9 +285,8 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
                 let current = self.current[0].genome();
                 self.candidates.clear();
                 for _ in 0..self.neighbors {
-                    let mut genome = current.clone();
-                    self.neighbor
-                        .mutate(&self.representation, &mut genome, &mut self.rng);
+                    let genome =
+                        neighbor(&self.neighbor, &self.representation, current, &mut self.rng);
                     self.candidates.push(Individual::new(genome));
                 }
                 self.pending.extend(0..self.neighbors);

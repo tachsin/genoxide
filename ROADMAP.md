@@ -100,7 +100,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] One-point, two-point, k-point (points between genes only)
 - [x] Uniform (exactly 50% per gene, or a given rate)
 
-#### Mutation (always changes the genome)
+#### Mutation (exact per-gene rates; a picked gene always changes)
 - [x] Bit-flip (per gene rate, or exactly n genes)
 - [x] Uniform (integer / real)
 - [x] Swap (permutation)
@@ -193,7 +193,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 ## Quality
 
 - **CI:** Linux, macOS and Windows; stable plus MSRV; clippy, fmt and rustdoc with `-D warnings`; a single-thread rayon job.
-- **Property-based tests (proptest)** for every operator: validity, e.g. permutations stay permutations; bounds; no no-op; exact rates.
+- **Property-based tests (proptest)** for every operator: validity, e.g. permutations stay permutations; bounds; no no-op (a picked gene changes, a count mutation changes the genome); exact rates.
 - **Fuzzing** of builders and the configuration file format.
 - **Performance:** from 0.1 on, every hot path has benchmarks, in two forms:
   - criterion benchmarks for wall time

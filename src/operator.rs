@@ -72,8 +72,27 @@ pub trait Crossover<R: Representation>: Clone + Debug + Send + Sync {
     note = "set the mutation with `.mutate(...)` (`.neighbor(...)` for local search): `BitFlip` for `Binary`, `UniformMutation` for `Integer`, `GaussianMutation`, `PolynomialMutation` or `UniformMutation` for `Real`, `SelfAdaptiveMutation` for `AdaptiveReal`, `SwapMutation`, `InversionMutation`, `InsertionMutation` or `ScrambleMutation` for `Permutation`"
 )]
 pub trait Mutate<R: Representation>: Clone + Debug + Send + Sync {
-    /// Mutates `genome`. The genome always changes (unless its space has a single genome).
+    /// Mutates `genome`. A mutation with a per-gene rate can leave it unchanged when it picks no
+    /// gene; the other mutations always change it (unless its space has a single genome).
     fn mutate(&self, representation: &R, genome: &mut R::Genome, rng: &mut StreamRng);
+}
+
+// a neighbor of `genome` by `mutate`, drawn again (up to 100 times) while it equals `genome`,
+// which a per-gene mutation can leave unchanged: local search never evaluates the solution itself
+pub(crate) fn neighbor<R: Representation, X: Mutate<R>>(
+    mutate: &X,
+    representation: &R,
+    genome: &R::Genome,
+    rng: &mut StreamRng,
+) -> R::Genome {
+    let mut candidate = genome.clone();
+    for _ in 0..100 {
+        mutate.mutate(representation, &mut candidate, rng);
+        if &candidate != genome {
+            break;
+        }
+    }
+    candidate
 }
 
 // A probability in [0, 1] for `setting`.
