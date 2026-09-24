@@ -1,7 +1,7 @@
 //! Running a multi-objective algorithm.
 
 use super::{MultiObjectiveAlgorithm, Scores};
-use crate::engine::{NanPolicy, Progress, evaluate_all};
+use crate::engine::{Batch, NanPolicy, Progress, evaluate_all, evaluate_batch};
 use crate::genome::Genome;
 use crate::{Error, Individual, Population, Result, Stop, StopReason};
 use std::fmt;
@@ -25,6 +25,48 @@ pub trait MultiFitnessFunction<G, const M: usize>: Sync {
 
     /// Scores a genome.
     fn evaluate(&self, genome: &G) -> Self::Output;
+
+    /// Whether the engine scores a generation with one call of
+    /// [`evaluate_batch`](MultiFitnessFunction::evaluate_batch) (`true`) rather than one call of
+    /// [`evaluate`](MultiFitnessFunction::evaluate) per genome, in parallel if asked (`false`,
+    /// the default). See [`Batch`].
+    fn is_batch(&self) -> bool {
+        false
+    }
+
+    /// The scores of `genomes`, in their order: one
+    /// [`evaluate`](MultiFitnessFunction::evaluate) each by default.
+    fn evaluate_batch(&self, genomes: &[&G]) -> Vec<Self::Output> {
+        genomes.iter().map(|genome| self.evaluate(genome)).collect()
+    }
+}
+
+impl<G, F, T, const M: usize> MultiFitnessFunction<G, M> for Batch<F>
+where
+    F: Fn(&[&G]) -> Vec<T> + Sync,
+    T: IntoScores<M>,
+{
+    type Output = T;
+
+    /// The scores of one genome: a batch of one.
+    ///
+    /// # Panics
+    ///
+    /// If the batch function returns no scores for it.
+    fn evaluate(&self, genome: &G) -> T {
+        (self.0)(&[genome])
+            .into_iter()
+            .next()
+            .expect("the batch function returns scores per genome")
+    }
+
+    fn is_batch(&self) -> bool {
+        true
+    }
+
+    fn evaluate_batch(&self, genomes: &[&G]) -> Vec<T> {
+        (self.0)(genomes)
+    }
 }
 
 impl<G, F, T, const M: usize> MultiFitnessFunction<G, M> for F
@@ -353,12 +395,21 @@ where
     fn evaluate(&mut self) -> Result<()> {
         let candidates = self.algorithm.ask();
         let fitness = &self.fitness;
-        evaluate_all(
-            candidates,
-            self.parallel,
-            &|genome: &A::Genome| fitness.evaluate(genome).into_scores(),
-            &mut self.results,
-        );
+        if fitness.is_batch() {
+            evaluate_batch(
+                candidates,
+                |genomes| fitness.evaluate_batch(genomes),
+                &mut self.results,
+                IntoScores::into_scores,
+            )?;
+        } else {
+            evaluate_all(
+                candidates,
+                self.parallel,
+                &|genome: &A::Genome| fitness.evaluate(genome).into_scores(),
+                &mut self.results,
+            );
+        }
         self.scores.clear();
         for result in self.results.drain(..) {
             self.scores.push(match (result, self.nan_policy) {

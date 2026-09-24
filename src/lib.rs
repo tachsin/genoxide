@@ -38,7 +38,8 @@
 //!   evolution strategies [`Es`](algorithm::Es), CMA-ES [`Cmaes`](algorithm::Cmaes), differential
 //!   evolution [`De`](algorithm::De), particle swarm optimization [`Pso`](algorithm::Pso), and
 //!   the island model [`Islands`](algorithm::Islands)
-//! - [`Engine`]: runs an algorithm with stop conditions, parallel evaluation and cancellation
+//! - [`Engine`]: runs an algorithm with stop conditions, parallel or [batch](engine::Batch)
+//!   evaluation and cancellation
 //! - [`multi`]: multi-objective optimization: NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA, the
 //!   [`MultiEngine`](multi::MultiEngine), Pareto dominance and non-dominated sorting
 //! - [`observer`]: statistics, hall of fame and custom callbacks

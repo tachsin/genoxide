@@ -10,7 +10,7 @@ pub use crate::algorithm::es::{self, Es};
 pub use crate::algorithm::pso::{self, Pso};
 pub use crate::algorithm::{Acceptance, Algorithm, Ga, Islands, LocalSearch, Migrate, Scheme};
 pub use crate::constraint::{self, Penalty};
-pub use crate::engine::{Engine, FitnessFunction, NanPolicy, Outcome, Stop, StopReason};
+pub use crate::engine::{Batch, Engine, FitnessFunction, NanPolicy, Outcome, Stop, StopReason};
 pub use crate::genome::{
     AdaptiveReal, AdaptiveReals, Binary, Bits, Genome, Integer, Integers, Order, Permutation, Real,
     Reals, Representation,
