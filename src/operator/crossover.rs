@@ -180,7 +180,13 @@ impl SimulatedBinaryCrossover {
 
 // the spread factor of SBX for one side, from `beta` (1 or more) and a random number in [0, 1)
 fn sbx_spread(beta: f64, random: f64, eta: f64) -> f64 {
-    let alpha = 2.0 - pow(beta, -(eta + 1.0));
+    // beta is infinite when the parents are extremely close compared to the bounds: beta^-(eta+1)
+    // is then 0
+    let alpha = if beta.is_finite() {
+        2.0 - pow(beta, -(eta + 1.0))
+    } else {
+        2.0
+    };
     if random <= 1.0 / alpha {
         pow(random * alpha, 1.0 / (eta + 1.0))
     } else {
@@ -219,8 +225,9 @@ impl Crossover<Real> for SimulatedBinaryCrossover {
 /// interval of the parents' genes, widened by `alpha` times its width on each side and limited to
 /// the bounds.
 ///
-/// With `alpha` 0 the children stay between their parents, which narrows the population; 0.5 is
-/// the common choice, and keeps its spread on average.
+/// With `alpha` 0 the children stay between their parents, which narrows the population. About
+/// 0.366 keeps the spread of the population on average, and 0.5, the common choice, widens it a
+/// little (by about 17% in variance per generation, before selection).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BlendCrossover {
     alpha: f64,
@@ -372,6 +379,16 @@ mod tests {
             distance(20.0),
             distance(200.0),
         ];
+        // huge bounds and very close parents: no overflow
+        let real = Real::uniform(1, -1e300..=1e300).unwrap();
+        let (mut a, mut b) = (Reals::from(vec![0.0]), Reals::from(vec![1e-13]));
+        let mut rng = StreamRng::seed_from_u64(0);
+        for _ in 0..100 {
+            SimulatedBinaryCrossover::new(15.0)
+                .unwrap()
+                .crossover(&real, &mut a, &mut b, &mut rng);
+            assert!(real.validate(&a).is_ok() && real.validate(&b).is_ok());
+        }
         assert!(
             distances.windows(2).all(|pair| pair[0] > pair[1]),
             "{distances:?}"
