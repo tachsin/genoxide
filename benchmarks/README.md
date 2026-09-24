@@ -58,6 +58,26 @@ The GA loops differ between libraries, so "matched" is as close as possible, not
 
 Evaluations to target measure search efficiency independently of the language.
 
+### Multi-objective
+
+| Problem | Variables | Objectives | Budget | Hypervolume reference point |
+|---|---|---|---|---|
+| ZDT1 (convex front) | 30 in [0, 1] | 2 | 25,000 evaluations | (1.1, 1.1) |
+| ZDT3 (disconnected front) | 30 in [0, 1] | 2 | 25,000 evaluations | (1.1, 1.1) |
+| DTLZ2 (spherical front) | 12 in [0, 1] | 3 | 25,000 evaluations | (1.1, 1.1, 1.1) |
+
+These runs have no target: each adapter runs until the budget is used up and prints the objective values of its final non-dominated front. `run.py` computes the hypervolume of every front with the same exact code, so the quality comparison doesn't depend on any library's indicator.
+
+The runs use the matched settings, in genoxide, pymoo and DEAP (PyGAD and genetic_algorithm have no multi-objective algorithms with these operators):
+- **NSGA-II, SPEA2 and SMS-EMOA:** 100 individuals (92 for DTLZ2), SBX with η 15 at 0.9, and polynomial mutation with η 20 at 1 / n.
+- **NSGA-III (DTLZ2):** 91 Das-Dennis reference directions (12 divisions), 92 individuals, SBX with η 30 at 1.
+- **MOEA/D:** 100 weight vectors (91 for DTLZ2), 20 neighbors, parents from the neighborhood with probability 0.9, Tchebycheff (PBI with θ 5 for DTLZ2), SBX with η 20 at 1.
+
+The algorithms still differ where the libraries do:
+- pymoo eliminates duplicate children.
+- pymoo's MOEA/D evaluates one child at a time. genoxide's evaluates a generation together and limits each child to 2 replacements.
+- DEAP's NSGA-II uses its crowded tournament (`selTournamentDCD`).
+
 ## Adding a library
 
 Write an adapter with this command line:

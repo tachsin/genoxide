@@ -128,7 +128,7 @@ genoxide's own performance is guarded in CI with [gungraun](https://github.com/g
 
 ### Results
 
-Linux, Intel Core Ultra 7 265K, single-threaded, 10 seeds per scenario, genoxide at the 0.3 development version. Every library runs with the same fitness functions and evaluation budgets, in the configurations described in [`benchmarks/`](benchmarks/): "matched" as equal as the libraries allow, "idiomatic" as each library recommends. The numbers behind the charts are in [docs/benchmarks/results.md](docs/benchmarks/results.md).
+Linux, Intel Core Ultra 7 265K, single-threaded, 10 seeds per scenario, genoxide at the 0.4 development version. Every library runs with the same fitness functions and evaluation budgets, in the configurations described in [`benchmarks/`](benchmarks/): "matched" as equal as the libraries allow, "idiomatic" as each library recommends. The numbers behind the charts are in [docs/benchmarks/results.md](docs/benchmarks/results.md).
 
 ![CPU instructions per evaluation](docs/benchmarks/instructions.svg)
 
@@ -136,9 +136,17 @@ Linux, Intel Core Ultra 7 265K, single-threaded, 10 seeds per scenario, genoxide
 
 ![Evaluations per second](docs/benchmarks/throughput.svg)
 
-- **Cost per evaluation:** genoxide needs about 3,200 CPU instructions per OneMax 1000 evaluation, fitness function included: 2.8 times fewer than genetic_algorithm, and 300 to 1,400 times fewer than pymoo, PyGAD and DEAP.
-- **Time to target:** genoxide is the fastest on OneMax (matched), on N-Queens, where its local search beats every other solver, and on Rastrigin 10 and 30, where its differential evolution (SHADE, without tuning) takes 8 ms and 41 ms: genetic_algorithm takes 11 ms on Rastrigin 10, and pymoo's GA 1.7 s on Rastrigin 30. genoxide is second on OneMax (idiomatic), after genetic_algorithm.
-- **Evaluations to target:** on Rastrigin 30, genoxide's DE needs 80,000 evaluations, fewer than pymoo's DE (104,000); pymoo's GA is the most efficient there, with 65,000. On Rastrigin 10, pymoo still needs about half as many: 11,700 (GA) and 15,000 (DE), against 25,750. genoxide's CMA-ES with IPOP restarts needs about 25% more evaluations than pymoo's, which restarts from the best solution instead of a random point, and is 6 times faster on Rastrigin 30. With an expensive fitness function, the evaluations count more than the framework's speed.
+![Hypervolume of multi-objective fronts](docs/benchmarks/hypervolume.svg)
+
+![Time of multi-objective runs](docs/benchmarks/front_time.svg)
+
+- **Cost per evaluation:** genoxide needs about 3,300 CPU instructions per OneMax 1000 evaluation, fitness function included: 2.7 times fewer than genetic_algorithm, and 300 to 1,300 times fewer than pymoo, PyGAD and DEAP.
+- **Time to target:** genoxide is the fastest in every single-objective scenario, and level with genetic_algorithm on OneMax 100 (idiomatic), at 0.45 ms each:
+  - **OneMax 1000 (matched):** 15 ms, against 127 ms for genetic_algorithm.
+  - **N-Queens:** its local search beats every other solver.
+  - **Rastrigin 10 and 30:** its GA takes 6 ms and 35 ms and its differential evolution (SHADE, without tuning) 8 ms and 40 ms, against 11 ms for genetic_algorithm on Rastrigin 10 and 1.7 s for pymoo's GA on Rastrigin 30.
+- **Evaluations to target:** on Rastrigin 30, genoxide's DE needs 80,000 evaluations and its GA 103,000, against 65,000 for pymoo's GA, the most efficient there, and 104,000 for pymoo's DE. On Rastrigin 10, pymoo needs about half as many: 11,700 (GA) and 15,000 (DE), against 22,700 for genoxide's GA and 25,750 for its DE. genoxide's CMA-ES with IPOP restarts needs about 25% more evaluations than pymoo's, which restarts from the best solution instead of a random point. With an expensive fitness function, the evaluations count more than the framework's speed.
+- **Multi-objective:** with the same operators and settings, genoxide's fronts match pymoo's in hypervolume within 0.003 on ZDT1, ZDT3 and DTLZ2, with NSGA-II, NSGA-III, SPEA2 and SMS-EMOA; its batch MOEA/D is up to 0.0023 behind pymoo's sequential one. genoxide takes 2.6 to 140 times less time than pymoo: 25 ms against 570 ms for NSGA-II on ZDT1, 42 ms against 5.9 s for MOEA/D, and 0.34 s against 0.9 s for SMS-EMOA on DTLZ2, where both compute hypervolume contributions in compiled code. SMS-EMOA gives the best fronts in both libraries.
 
 ## Contributing
 
