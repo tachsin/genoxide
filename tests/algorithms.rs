@@ -201,3 +201,25 @@ fn cma_es_runs_in_parallel_with_the_same_results() {
     };
     assert_eq!(run(true), run(false));
 }
+
+#[test]
+fn evolution_strategy_runs_in_parallel_with_the_same_results() {
+    let run = |parallel: bool| {
+        let es = Es::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+            .parents(5)
+            .offspring(35)
+            .recombination(es::Recombination::Dominant { rho: 2 })
+            .minimize()
+            .seed(7)
+            .build()
+            .unwrap();
+        let engine = Engine::new(es, rastrigin).stop_when(Stop::generations(100));
+        #[cfg(feature = "parallel")]
+        let engine = engine.parallel(parallel);
+        #[cfg(not(feature = "parallel"))]
+        let _ = parallel;
+        let mut engine = engine;
+        engine.run().unwrap().into_best()
+    };
+    assert_eq!(run(true), run(false));
+}
