@@ -26,8 +26,10 @@ use std::time::Instant;
 /// - A generation is counted for every `population_size` evaluations: observers, checkpoints and
 ///   [`Stop::generations`] use them. Observers are also notified once at the end, if evaluations
 ///   happened since the last generation.
-/// - Stop conditions are checked after every result. Then no new genome is proposed, and the run
-///   returns once the evaluations in flight are done; their results count.
+/// - Stop conditions are checked after every result, once the initial population
+///   (`population_size` results) is evaluated, like with [`Engine`](super::Engine). Then no new
+///   genome is proposed, and the run returns once the evaluations in flight are done; their
+///   results count.
 ///   [`Stop::evaluations`] stops proposing once the evaluations done and in flight reach the
 ///   limit, so the run ends on it exactly.
 /// - A panic in the fitness function stops the run once the other evaluations in flight are done,
@@ -324,6 +326,10 @@ impl<A: Incremental> Driver<'_, '_, A> {
         }
         if self.abort.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
             return Ok(Some(StopReason::Aborted));
+        }
+        // like `Engine`, stop conditions apply once the initial population is evaluated
+        if progress.evaluations < self.size {
+            return Ok(None);
         }
         Ok(self.stop.and_then(|stop| stop.check(&progress)))
     }

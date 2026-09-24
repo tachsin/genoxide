@@ -106,7 +106,15 @@ fn workers_evaluate_at_the_same_time_and_the_budget_is_exact() {
     assert_eq!(outcome.evaluations(), 300);
     assert!(most.load(Ordering::SeqCst) > 1);
     assert!(most.load(Ordering::SeqCst) <= 4);
-    // at least one evaluation, like the initial population of a generational run
+    // the initial population comes first, as in a generational run
+    let outcome = AsyncEngine::new(steady(8, 10, 4), one_max)
+        .workers(1)
+        .stop_when(Stop::generations(0))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.evaluations(), 10);
+    assert_eq!(outcome.generations(), 0);
+    // at least one evaluation, even with a budget of none
     let outcome = AsyncEngine::new(steady(8, 10, 4), one_max)
         .workers(3)
         .stop_when(Stop::evaluations(0))
