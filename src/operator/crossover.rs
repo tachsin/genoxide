@@ -214,8 +214,17 @@ impl Crossover<Real> for SimulatedBinaryCrossover {
             let random = rng.unit_f64();
             let spread_low = sbx_spread(1.0 + 2.0 * (low - start) / (high - low), random, self.eta);
             let spread_high = sbx_spread(1.0 + 2.0 * (end - high) / (high - low), random, self.eta);
-            let first = (0.5 * ((low + high) - spread_low * (high - low))).clamp(start, end);
-            let second = (0.5 * ((low + high) + spread_high * (high - low))).clamp(start, end);
+            let (first, second) = if (low + high).is_finite() && (high - low).is_finite() {
+                (
+                    0.5 * ((low + high) - spread_low * (high - low)),
+                    0.5 * ((low + high) + spread_high * (high - low)),
+                )
+            } else {
+                // halves first, where the sum or the difference of the genes overflows
+                let (middle, half) = (0.5 * low + 0.5 * high, 0.5 * high - 0.5 * low);
+                (middle - spread_low * half, middle + spread_high * half)
+            };
+            let (first, second) = (first.clamp(start, end), second.clamp(start, end));
             if rng.chance(Chance::Half) {
                 (a[gene], b[gene]) = (second, first);
             } else {
@@ -330,6 +339,23 @@ impl Crossover<Real> for ArithmeticCrossover {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sbx_spreads_genes_whose_sum_overflows() {
+        let real = Real::uniform(1, 0.0..=f64::MAX).unwrap();
+        let sbx = SimulatedBinaryCrossover::new(2.0).unwrap();
+        let mut rng = StreamRng::seed_from_u64(0);
+        let mut at_max = 0;
+        for _ in 0..500 {
+            let mut a = Reals::from(vec![0.6 * f64::MAX]);
+            let mut b = Reals::from(vec![0.7 * f64::MAX]);
+            sbx.crossover(&real, &mut a, &mut b, &mut rng);
+            assert!(real.validate(&a).is_ok() && real.validate(&b).is_ok());
+            at_max += usize::from(a[0] == f64::MAX && b[0] == f64::MAX);
+        }
+        // before, both children were clamped to the bound every time
+        assert_eq!(at_max, 0);
+    }
     use crate::genome::{Binary, Bits};
     use proptest::prelude::*;
 

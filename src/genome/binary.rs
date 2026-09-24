@@ -139,10 +139,15 @@ impl FromIterator<bool> for Bits {
 }
 
 impl fmt::Display for Bits {
-    /// The bits as `0` and `1`, from index 0.
+    /// The bits as `0` and `1`, from index 0. Width, fill and alignment apply.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.iter()
-            .try_for_each(|bit| f.write_str(if bit { "1" } else { "0" }))
+        if f.width().is_none() {
+            return self
+                .iter()
+                .try_for_each(|bit| f.write_str(if bit { "1" } else { "0" }));
+        }
+        let text: String = self.iter().map(|bit| if bit { '1' } else { '0' }).collect();
+        f.pad(&text)
     }
 }
 

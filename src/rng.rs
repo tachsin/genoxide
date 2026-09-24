@@ -216,15 +216,13 @@ pub(crate) enum Chance {
 const SKIP_BELOW: f64 = 0.4;
 
 impl Chance {
-    /// The chance of `probability`, which must be in `[0, 1]` (checked by the callers).
+    /// The chance of `probability`: never at 0 or below (and NaN), always at 1 or above. The
+    /// operators check their rates; a public trait method such as
+    /// [`swap_uniform`](crate::genome::SwapGenes::swap_uniform) can get any number.
     pub(crate) fn new(probability: f64) -> Self {
-        debug_assert!(
-            (0.0..=1.0).contains(&probability),
-            "probability {probability}"
-        );
         // exact: the product is below 2^64, and the conversion truncates
         let threshold = || (probability * 18_446_744_073_709_551_616.0) as u64;
-        if probability <= 0.0 {
+        if probability <= 0.0 || probability.is_nan() {
             Chance::Never
         } else if probability >= 1.0 {
             Chance::Always
