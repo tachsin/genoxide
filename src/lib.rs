@@ -34,8 +34,9 @@
 //! - [`Individual`] and [`Population`]: genomes with their fitness and age
 //! - [`operator`]: selection, crossover and mutation
 //! - [`algorithm`]: algorithms as ask / tell state machines: the genetic algorithm [`Ga`],
-//!   [`LocalSearch`](algorithm::LocalSearch) (hill climbing, simulated annealing, tabu search) and
-//!   differential evolution [`De`](algorithm::De)
+//!   [`LocalSearch`](algorithm::LocalSearch) (hill climbing, simulated annealing, tabu search),
+//!   differential evolution [`De`](algorithm::De) and particle swarm optimization
+//!   [`Pso`](algorithm::Pso)
 //! - [`Engine`]: runs an algorithm with stop conditions, parallel evaluation and cancellation
 //! - [`observer`]: statistics, hall of fame and custom callbacks
 //! - [`prelude`]: everything above in one import

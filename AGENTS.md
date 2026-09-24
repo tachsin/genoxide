@@ -362,6 +362,32 @@ fn main() -> genoxide::Result<()> {
 | `CurrentToPBest { p: 0.1, archive: 1.0 }` | Faster, still diverse thanks to the archive |
 | `Best1` | Fastest on easy problems; use it with `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, or the population can collapse before the optimum |
 
+### Particle swarm optimization
+
+Also for `Real` genomes. With the default constriction coefficients there is little to tune: the number of particles and the topology. `pso::Topology::Global` (default) converges fastest; `pso::Topology::Ring { neighbors: 1 }` explores longer and suits multimodal functions. On separable functions like Rastrigin, differential evolution with a small `CR` does much better.
+
+```rust
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    let rosenbrock = |x: &Reals| {
+        x.windows(2)
+            .map(|w| 100.0 * (w[1] - w[0] * w[0]).powi(2) + (1.0 - w[0]).powi(2))
+            .sum::<f64>()
+    };
+    let pso = Pso::builder(Real::uniform(5, -5.0..=10.0)?)
+        .population_size(40) // 20 to 50 particles
+        .minimize()
+        .seed(1)
+        .build()?;
+    let outcome = Engine::new(pso, rosenbrock)
+        .stop_when(Stop::target(0.01).or(Stop::evaluations(100_000)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    Ok(())
+}
+```
+
 ### Local search: hill climbing and simulated annealing
 
 `LocalSearch` improves a single solution, moving to one of `neighbors` random neighbors per step. It often beats a GA on permutations. Any mutation is a neighborhood; `InversionMutation` (2-opt) is the classic one for tours.
@@ -452,6 +478,7 @@ fn main() -> genoxide::Result<()> {
 | `Error::TellWithoutAsk` / `Error::FitnessCount` | Ask / tell out of step | One `tell` per `ask`, with one fitness per asked genome, in order |
 | Hill climbing (`Acceptance::Improving` or `NotWorse`) stops improving | A local optimum | `.restart(patience, kicks)` (iterated local search), `Acceptance::Tabu { tenure }` with several neighbors, or `Acceptance::Annealing` with an initial temperature about the size of typical fitness differences and `cooling` close to 1 (e.g. 0.999) |
 | A differential evolution stops improving far from the optimum, with a tiny population spread | The population collapsed (greedy strategy, fixed `F`) | `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, `Strategy::Rand1`, or an archive with `CurrentToPBest` |
+| A particle swarm gathers around a local optimum early | The global topology spreads the best position to every particle at once | `.topology(pso::Topology::Ring { neighbors: 1 })`, more particles, or differential evolution |
 | Real-valued search stalls in a local minimum | Steps too small to leave its basin (e.g. `GaussianMutation` with a tiny sigma) | `PolynomialMutation` with eta 20, or a larger sigma; on Rastrigin, sigma 0.03 of the range works and 0.01 stalls |
 | The best fitness stops improving early | Too little diversity | A larger population, a smaller tournament, a higher mutation rate, or `Stop::stagnation` with restarts |
 | Slow runs with a cheap fitness function | Debug build, or parallel overhead | Build with `--release`; use `.parallel(true)` only for expensive fitness functions |

@@ -30,10 +30,12 @@
 pub mod de;
 pub mod ga;
 pub mod local_search;
+pub mod pso;
 
 pub use de::{De, DeBuilder};
 pub use ga::{Ga, GaBuilder, Scheme, Unset};
 pub use local_search::{Acceptance, LocalSearch, LocalSearchBuilder};
+pub use pso::{Pso, PsoBuilder, Topology};
 
 use crate::genome::Genome;
 use crate::{Fitness, Individual, Objective, Population, Result};
