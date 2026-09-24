@@ -33,7 +33,8 @@ impl Mode {
         Ok(Mode::Count(count))
     }
 
-    // calls `change` with the genes to change, out of `genes` candidates: at least one
+    // calls `change` with the genes to change, out of `genes` candidates: each independently with
+    // the chance, or `count` of them
     fn apply(
         self,
         genes: usize,
@@ -46,15 +47,7 @@ impl Mode {
         }
         match self {
             Mode::PerGene { chance } => {
-                let mut changed = false;
-                rng.chosen(chance, genes, |rng, candidate| {
-                    change(gene(candidate), rng);
-                    changed = true;
-                });
-                if !changed {
-                    let candidate = rng.below(genes);
-                    change(gene(candidate), rng);
-                }
+                rng.chosen(chance, genes, |rng, candidate| change(gene(candidate), rng));
             }
             Mode::Count(count) => {
                 for candidate in rng.sample_distinct(count.min(genes), genes) {
@@ -65,16 +58,18 @@ impl Mode {
     }
 }
 
-/// Bit-flip mutation for [`Binary`] genomes: flips each bit with a probability, or `n` bits. The
-/// genome always changes.
+/// Bit-flip mutation for [`Binary`] genomes: flips each bit with a probability, or `n` bits.
+///
+/// A per-gene mutation changes no gene with probability `(1 − rate)^n`; in a genetic
+/// algorithm, such a child is a copy that inherits its parent's fitness without an evaluation.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BitFlip {
     mode: Mode,
 }
 
 impl BitFlip {
-    /// Flips each bit with probability `rate` (greater than 0 and at most 1). If no bit is flipped,
-    /// one random bit is flipped, so the genome always changes. A common choice is `1 / length`.
+    /// Flips each bit independently with probability `rate` (greater than 0 and at most 1). A
+    /// common choice is `1 / length`: one bit on average.
     pub fn per_gene(rate: f64) -> Result<Self> {
         Ok(Self {
             mode: Mode::per_gene("bit_flip_rate", rate)?,
@@ -100,7 +95,9 @@ impl Mutate<Binary> for BitFlip {
 /// Uniform mutation for [`Integer`] and [`Real`] genomes: gives genes a new random value within
 /// their bounds, different from the current one. Each gene with a probability, or `n` genes.
 ///
-/// The genome always changes. Genes whose bounds allow a single value are never changed.
+/// A per-gene mutation changes no gene with probability `(1 − rate)^n`; in a genetic
+/// algorithm, such a child is a copy that inherits its parent's fitness without an evaluation. Genes whose bounds allow a single value are never
+/// changed.
 ///
 /// ```
 /// use genoxide::genome::{Integer, Integers, Representation};
@@ -119,9 +116,8 @@ pub struct UniformMutation {
 }
 
 impl UniformMutation {
-    /// Changes each gene with probability `rate` (greater than 0 and at most 1). If no gene is
-    /// changed, one random gene is changed, so the genome always changes. A common choice is
-    /// `1 / length`.
+    /// Changes each gene independently with probability `rate` (greater than 0 and at most 1). A
+    /// common choice is `1 / length`.
     pub fn per_gene(rate: f64) -> Result<Self> {
         Ok(Self {
             mode: Mode::per_gene("uniform_mutation_rate", rate)?,
@@ -232,7 +228,9 @@ fn changed_gene(
 /// the bounds reachable without piling values up on them. Small steps make it the operator for
 /// fine-tuning, e.g. `sigma` 0.01 to 0.1.
 ///
-/// The genome always changes. Genes whose bounds allow a single value are never changed.
+/// A picked gene always changes. A per-gene mutation changes no gene with probability `(1 − rate)^n`; in a genetic
+/// algorithm, such a child is a copy that inherits its parent's fitness without an evaluation. Genes whose bounds allow a
+/// single value are never changed.
 ///
 /// ```
 /// use genoxide::genome::{Real, Reals, Representation};
@@ -255,8 +253,7 @@ pub struct GaussianMutation {
 
 impl GaussianMutation {
     /// Mutates each gene with probability `rate` (greater than 0 and at most 1), with a standard
-    /// deviation of `sigma` (positive) times the gene's range. If no gene is picked, one random
-    /// gene is, so the genome always changes.
+    /// deviation of `sigma` (positive) times the gene's range, each gene independently.
     pub fn per_gene(rate: f64, sigma: f64) -> Result<Self> {
         Ok(Self {
             mode: Mode::per_gene("gaussian_mutation_rate", rate)?,
@@ -306,7 +303,9 @@ impl Mutate<Real> for GaussianMutation {
 /// old one. Common values are 20 (the NSGA-II default) and 5 to 100. Steps shrink near the bounds,
 /// so the new value is always within them.
 ///
-/// The genome always changes. Genes whose bounds allow a single value are never changed.
+/// A picked gene always changes. A per-gene mutation changes no gene with probability `(1 − rate)^n`; in a genetic
+/// algorithm, such a child is a copy that inherits its parent's fitness without an evaluation. Genes whose bounds allow a
+/// single value are never changed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PolynomialMutation {
     mode: Mode,
@@ -315,8 +314,8 @@ pub struct PolynomialMutation {
 
 impl PolynomialMutation {
     /// Mutates each gene with probability `rate` (greater than 0 and at most 1), with
-    /// distribution index `eta` (0 or more). If no gene is picked, one random gene is, so the
-    /// genome always changes. A common choice is `rate` `1 / length`, `eta` 20.
+    /// distribution index `eta` (0 or more), each gene independently. A common choice is `rate`
+    /// `1 / length`, `eta` 20, as in NSGA-II.
     pub fn per_gene(rate: f64, eta: f64) -> Result<Self> {
         Ok(Self {
             mode: Mode::per_gene("polynomial_mutation_rate", rate)?,
@@ -747,20 +746,66 @@ mod tests {
         assert!(mean > 0.01, "mean {mean}");
     }
 
+    #[test]
+    fn per_gene_rates_are_exact() {
+        // 5 genes at rate 0.2: no change with probability 0.8⁵, one gene on average
+        let (trials, rate) = (40_000, 0.2);
+        let mut rng = StreamRng::seed_from_u64(0);
+        let binary = Binary::new(5).unwrap();
+        let real = Real::uniform(5, 0.0..=1.0).unwrap();
+        let (mut unchanged, mut flips, mut real_unchanged) = (0, 0, 0);
+        for _ in 0..trials {
+            let mut bits = Bits::zeros(5);
+            BitFlip::per_gene(rate)
+                .unwrap()
+                .mutate(&binary, &mut bits, &mut rng);
+            flips += bits.count_ones();
+            unchanged += usize::from(bits.count_ones() == 0);
+            let mut genome = Reals::from(vec![0.5; 5]);
+            PolynomialMutation::per_gene(rate, 20.0)
+                .unwrap()
+                .mutate(&real, &mut genome, &mut rng);
+            real_unchanged += usize::from(genome.iter().all(|&gene| gene == 0.5));
+        }
+        let expected = 0.8f64.powi(5);
+        for count in [unchanged, real_unchanged] {
+            let fraction = count as f64 / trials as f64;
+            assert!((fraction - expected).abs() < 0.01, "{fraction} {expected}");
+        }
+        let mean = flips as f64 / trials as f64;
+        assert!((mean - 1.0).abs() < 0.02, "{mean}");
+    }
+
+    #[test]
+    fn local_search_neighbors_always_differ() {
+        // a per-gene mutation that almost never picks a gene
+        let binary = Binary::new(8).unwrap();
+        let mutation = BitFlip::per_gene(0.05).unwrap();
+        let mut rng = StreamRng::seed_from_u64(0);
+        let genome = Bits::zeros(8);
+        for _ in 0..1000 {
+            let neighbor = crate::operator::neighbor(&mutation, &binary, &genome, &mut rng);
+            assert_ne!(neighbor, genome);
+        }
+    }
+
     fn changed<T: PartialEq>(a: &[T], b: &[T]) -> usize {
         a.iter().zip(b).filter(|(x, y)| x != y).count()
     }
 
     proptest! {
         #[test]
-        fn bit_flip_always_changes(len in 1usize..200, rate in 0.0001..=1.0f64, seed: u64) {
+        fn bit_flip_stays_valid(len in 1usize..200, rate in 0.0001..=1.0f64, seed: u64) {
             let binary = Binary::new(len).unwrap();
             let mut rng = StreamRng::seed_from_u64(seed);
             let original = binary.random_genome(&mut rng);
             let mut genome = original.clone();
             BitFlip::per_gene(rate).unwrap().mutate(&binary, &mut genome, &mut rng);
-            prop_assert_ne!(&genome, &original);
             prop_assert!(binary.validate(&genome).is_ok());
+            // a rate of 1 flips every bit
+            let mut genome = original.clone();
+            BitFlip::per_gene(1.0).unwrap().mutate(&binary, &mut genome, &mut rng);
+            prop_assert_eq!(changed(&genome.iter().collect::<Vec<_>>(), &original.iter().collect::<Vec<_>>()), len);
         }
 
         #[test]
@@ -778,7 +823,6 @@ mod tests {
             let original = integer.random_genome(&mut rng);
             let mut genome = original.clone();
             UniformMutation::per_gene(rate).unwrap().mutate(&integer, &mut genome, &mut rng);
-            prop_assert!(changed(&genome, &original) >= 1);
             prop_assert!(integer.validate(&genome).is_ok());
             let mut genome = original.clone();
             UniformMutation::count(count).unwrap().mutate(&integer, &mut genome, &mut rng);
@@ -793,7 +837,6 @@ mod tests {
             let original = real.random_genome(&mut rng);
             let mut genome = original.clone();
             UniformMutation::per_gene(rate).unwrap().mutate(&real, &mut genome, &mut rng);
-            prop_assert!(changed(&genome, &original) >= 1);
             prop_assert!(real.validate(&genome).is_ok());
             let mut genome = original.clone();
             UniformMutation::count(count).unwrap().mutate(&real, &mut genome, &mut rng);
@@ -811,9 +854,8 @@ mod tests {
                 prop_assert!(real.validate(&genome).is_ok());
                 prop_assert_eq!(genome[0], 3.0);
                 let changes = changed(&genome[..], &original[..]);
-                match exactly {
-                    Some(count) => prop_assert_eq!(changes, count),
-                    None => prop_assert!(changes >= 1),
+                if let Some(count) = exactly {
+                    prop_assert_eq!(changes, count);
                 }
                 Ok(())
             };

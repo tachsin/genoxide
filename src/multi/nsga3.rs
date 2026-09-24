@@ -893,13 +893,17 @@ mod tests {
         assert_eq!(nsga3.tell(&[]), Err(Error::TellWithoutAsk));
         assert_eq!(nsga3.ask().len(), 8);
         let f = |x: &Reals| Scores::new([x[0], 1.0 - x[0] + x[1]]);
+        let mut asked = 0;
         for generation in 0..5 {
             let told: Vec<Scores<2>> = nsga3.ask().iter().map(f).collect();
+            asked += told.len() as u64;
             nsga3.tell(&told).unwrap();
             assert_eq!(nsga3.generation(), generation);
             assert_eq!(nsga3.population().len(), 8);
         }
-        assert_eq!(nsga3.evaluations(), 40);
+        // children that are copies of a parent inherit its scores
+        assert_eq!(nsga3.evaluations(), asked);
+        assert!(asked <= 40);
         assert!(nsga3.ideal_point().is_some());
         let surviving_parents = nsga3.population().iter().filter(|x| x.age() > 0).count();
         assert_eq!(nsga3.discarded().len(), surviving_parents);

@@ -2,7 +2,7 @@
 
 use super::{Algorithm, Candidates};
 use crate::genome::{Genome, Representation};
-use crate::operator::{Crossover, Mutate, Select, check_probability};
+use crate::operator::{Crossover, Mutate, Select, check_probability, neighbor};
 use crate::rng::Chance;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
@@ -291,9 +291,12 @@ where
             order.sort_by(|&a, &b| objective.compare(fitness(b), fitness(a)));
             for &parent in order.iter().take(parents) {
                 for _ in 0..neighbors {
-                    let mut genome = self.population[parent].genome().clone();
-                    self.mutate
-                        .mutate(&self.representation, &mut genome, &mut self.rng);
+                    let genome = neighbor(
+                        &self.mutate,
+                        &self.representation,
+                        self.population[parent].genome(),
+                        &mut self.rng,
+                    );
                     self.offspring.push(Individual::new(genome));
                     self.refined.push(parent);
                 }

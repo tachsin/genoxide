@@ -35,7 +35,7 @@ fn zdt1(x: &Reals) -> [f64; 2] {
 #[test]
 fn nsga2_approximates_the_zdt1_front() {
     // the optimal front has a hypervolume of 0.8716 (reference point 1.1, 1.1); pymoo's NSGA-II
-    // reaches about 0.8698 with these settings, genoxide about 0.8692
+    // reaches 0.8696 to 0.8699 with these settings, genoxide 0.8689 to 0.8700 (5 seeds)
     let algorithm = nsga2(
         Real::uniform(30, 0.0..=1.0).unwrap(),
         [Minimize, Minimize],
@@ -46,7 +46,8 @@ fn nsga2_approximates_the_zdt1_front() {
         .stop_when(Stop::generations(249))
         .run()
         .unwrap();
-    assert_eq!(outcome.evaluations(), 25_000);
+    // at most 250 generations of 100; children that copy a parent aren't evaluated
+    assert!(outcome.evaluations() <= 25_000);
     let front = outcome.front_values();
     let volume = hypervolume(&front, &[1.1, 1.1], &[Minimize, Minimize]);
     assert!(volume > 0.868, "{volume}");
@@ -233,7 +234,7 @@ fn engine_settings_and_stop_conditions() {
         .run()
         .unwrap();
     assert_eq!(seen, [0, 1, 2, 3, 4]);
-    assert_eq!(outcome.evaluations(), 40);
+    assert!(outcome.evaluations() <= 40);
 }
 
 #[test]
@@ -261,8 +262,8 @@ fn nsga3_spreads_a_three_objective_front() {
     use genoxide::multi::indicator::igd;
     use genoxide::multi::problems::{Dtlz2, TestProblem};
     use genoxide::multi::{Nsga3, das_dennis};
-    // DTLZ2 with 91 reference directions (Deb and Jain's settings): pymoo reaches an IGD of
-    // about 0.001 to the 91 optimal points, genoxide about 0.003
+    // DTLZ2 with 91 reference directions (Deb and Jain's settings): an IGD to the 91 optimal
+    // points of 0.0009 to 0.0015 for pymoo, 0.0012 to 0.0016 for genoxide (5 seeds)
     let problem = Dtlz2::<3>::default();
     let nsga3 = Nsga3::builder(problem.real(), [Minimize; 3], das_dennis::<3>(12))
         .population_size(92)
@@ -276,5 +277,5 @@ fn nsga3_spreads_a_three_objective_front() {
         .run()
         .unwrap();
     let distance = igd(&outcome.front_values(), &problem.optimal_front(91));
-    assert!(distance < 0.004, "{distance}");
+    assert!(distance < 0.002, "{distance}");
 }

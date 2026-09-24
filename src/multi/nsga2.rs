@@ -635,8 +635,12 @@ mod tests {
 
     #[test]
     fn copies_of_parents_inherit_their_scores() {
-        // a mutation always changes a genome, so every child is new
-        let mut nsga2 = builder(10, 3).crossover_rate(0.0).build().unwrap();
+        // mutating every gene changes every child
+        let mut nsga2 = builder(10, 3)
+            .crossover_rate(0.0)
+            .mutate(PolynomialMutation::per_gene(1.0, 20.0).unwrap())
+            .build()
+            .unwrap();
         step(&mut nsga2);
         assert_eq!(nsga2.ask().len(), 10);
         // without mutation, the parents that aren't recombined are copied

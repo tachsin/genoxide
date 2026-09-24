@@ -4,7 +4,7 @@ Thanks for your interest! genoxide is at the design stage, so ideas and API feed
 
 ## Pull requests
 
-- **One change per PR, with tests.** Operators get property tests: validity, bounds, exact rates, and no no-op mutations.
+- **One change per PR, with tests.** Operators get property tests: validity, bounds, exact rates, and no no-op mutations (a picked gene always changes).
 - **The PR title is the changelog entry.** PRs are squash merged, and the title becomes the commit message and the line in the changelog. Use [Conventional Commits](https://www.conventionalcommits.org/) with a short sentence as the subject:
 
   | Type | Use for | Changelog section |
