@@ -442,6 +442,33 @@ fn update_best<G: Genome>(
     improved
 }
 
+impl<R, S, C, M> super::Migrate for Ga<R, S, C, M>
+where
+    R: Representation,
+    S: Select,
+    C: Crossover<R>,
+    M: Mutate<R>,
+{
+    fn immigrate(&mut self, migrants: Vec<Individual<R::Genome>>) -> Result<()> {
+        if self.asked || self.phase == Phase::Initial {
+            return Err(Error::MigrationOutOfTurn);
+        }
+        let count = migrants.len().min(self.population.len());
+        let size = self.population.len();
+        self.population.sort_best_first(self.objective);
+        self.population.truncate(size - count);
+        self.population.extend(migrants.into_iter().take(count));
+        if update_best(
+            &mut self.best,
+            &self.population.as_slice()[size - count..],
+            self.objective,
+        ) {
+            self.best_generation = self.generation;
+        }
+        Ok(())
+    }
+}
+
 impl<R, S, C, M> Algorithm for Ga<R, S, C, M>
 where
     R: Representation,

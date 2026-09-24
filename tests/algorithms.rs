@@ -332,3 +332,38 @@ fn portable_runs() {
         assert_eq!(run[..], expected);
     }
 }
+
+#[test]
+fn islands_run_in_parallel_with_the_same_results() {
+    use genoxide::algorithm::islands::Topology;
+    let run = |parallel: bool| {
+        let islands = (0..4)
+            .map(|seed| {
+                Ga::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+                    .population_size(20)
+                    .select(Tournament::new(3).unwrap())
+                    .crossover(UniformCrossover::new())
+                    .mutate(PolynomialMutation::per_gene(0.1, 20.0).unwrap())
+                    .minimize()
+                    .seed(seed)
+                    .build()
+                    .unwrap()
+            })
+            .collect();
+        let islands = Islands::builder(islands)
+            .topology(Topology::Random)
+            .interval(3)
+            .seed(9)
+            .build()
+            .unwrap();
+        let engine = Engine::new(islands, rastrigin).stop_when(Stop::generations(40));
+        #[cfg(feature = "parallel")]
+        let engine = engine.parallel(parallel);
+        #[cfg(not(feature = "parallel"))]
+        let _ = parallel;
+        let mut engine = engine;
+        let outcome = engine.run().unwrap();
+        (outcome.into_best(), engine.algorithm().population().clone())
+    };
+    assert_eq!(run(true), run(false));
+}

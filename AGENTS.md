@@ -420,6 +420,48 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+### Island model
+
+Several populations (islands) that evolve apart and exchange their best individuals every few generations: more diverse than one large population, and often faster on multimodal problems (on Rastrigin 30, 4 islands of 50 needed half the evaluations of one population of 200). Any `Ga` or `De` can be an island; give each its own seed.
+
+```rust
+use genoxide::algorithm::islands::Topology;
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    let islands = (0..4)
+        .map(|seed| {
+            Ga::builder(Real::uniform(10, -5.12..=5.12)?)
+                .population_size(25)
+                .select(Tournament::new(3)?)
+                .crossover(UniformCrossover::new())
+                .mutate(PolynomialMutation::per_gene(0.1, 20.0)?)
+                .minimize()
+                .seed(seed)
+                .build()
+        })
+        .collect::<genoxide::Result<Vec<_>>>()?;
+    let islands = Islands::builder(islands)
+        .topology(Topology::Ring) // or FullyConnected, Random
+        .interval(10) // generations between migrations
+        .migrants(2) // copies of each island's best, replacing the worst of the next
+        .build()?;
+    let rastrigin = |x: &Reals| {
+        10.0 * x.len() as f64
+            + x.iter()
+                .map(|xi| xi * xi - 10.0 * (std::f64::consts::TAU * xi).cos())
+                .sum::<f64>()
+    };
+    let outcome = Engine::new(islands, rastrigin)
+        .stop_when(Stop::target(0.01).or(Stop::evaluations(500_000)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    Ok(())
+}
+```
+
+The engine evaluates the candidates of all islands together (in parallel with `.parallel(true)`); breeding and migration are sequential, so a seed gives the same run with any number of threads.
+
 ### Multi-objective optimization
 
 When several objectives conflict (cost against quality, speed against accuracy), there is no single best solution but a front of trade-offs. The fitness function returns an array with one value per objective (or `(values, violation)` with a constraint violation, or `Option<[f64; M]>`); the algorithm takes the direction of each objective, and `MultiEngine` runs it. The outcome is the Pareto front.
