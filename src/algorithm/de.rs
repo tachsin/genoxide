@@ -219,9 +219,9 @@ impl De {
                 if !from_mutant || start == end {
                     x[j]
                 } else if mutant[j] < start {
-                    (start + x[j]) / 2.0
+                    midpoint(start, x[j])
                 } else if mutant[j] > end {
-                    (end + x[j]) / 2.0
+                    midpoint(end, x[j])
                 } else if mutant[j].is_nan() {
                     x[j]
                 } else {
@@ -272,6 +272,16 @@ impl De {
                 self.archive.push(replaced.into_genome());
             }
         }
+    }
+}
+
+// halfway between `a` and `b`, without overflow near the largest numbers
+fn midpoint(a: f64, b: f64) -> f64 {
+    let middle = (a + b) / 2.0;
+    if middle.is_finite() {
+        middle
+    } else {
+        a / 2.0 + b / 2.0
     }
 }
 
@@ -714,8 +724,9 @@ mod tests {
             dither: bool,
             seed: u64,
         ) {
-            // one fixed gene, and bounds of different widths
-            let real = Real::new([3.0..=3.0, -1.0..=1.0, 0.0..=100.0, -1e-3..=1e-3]).unwrap();
+            // one fixed gene, bounds of different widths, and bounds near the largest numbers
+            let real =
+                Real::new([3.0..=3.0, -1.0..=1.0, 0.0..=100.0, -1e-3..=1e-3, 0.0..=1.7e308]).unwrap();
             let mut de = De::builder(real.clone())
                 .population_size(8)
                 .strategy(strategy)
