@@ -1,43 +1,92 @@
 # genoxide
 
-**Evolutionary computation for Rust (and Python): fast, correct, reproducible.**
+[![Crates.io](https://img.shields.io/crates/v/genoxide.svg)](https://crates.io/crates/genoxide)
+[![Docs.rs](https://img.shields.io/docsrs/genoxide)](https://docs.rs/genoxide)
+[![CI](https://github.com/tachsin/genoxide/actions/workflows/ci.yml/badge.svg)](https://github.com/tachsin/genoxide/actions/workflows/ci.yml)
+[![Downloads](https://img.shields.io/crates/d/genoxide.svg)](https://crates.io/crates/genoxide)
+[![MSRV](https://img.shields.io/crates/msrv/genoxide)](Cargo.toml)
+[![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](src/lib.rs)
+[![License](https://img.shields.io/crates/l/genoxide.svg)](#license)
 
-Genetic algorithms, evolution strategies, multi-objective optimization, swarm and local search, all in one library.
+**Evolutionary computation for Rust: genetic algorithms, evolution strategies, differential evolution, particle swarms, local search and multi-objective optimization in one library.**
 
-> **🚧 Early days.** 0.5 is out: the genetic algorithm with operators for binary, integer,
-> real-valued and permutation problems, local search, constraint handling, CMA-ES, differential
-> evolution, particle swarm, evolution strategies, multi-objective optimization (NSGA-II,
-> NSGA-III, SPEA2, MOEA/D, SMS-EMOA), island models, batch and asynchronous evaluation,
-> checkpoints, and the `genoxide` program for runs described in TOML or JSON files. The API will
-> change between 0.x versions. See the [roadmap](ROADMAP.md) and share your ideas in the issues.
+> **Pre-1.0:** the API changes between 0.x versions. See the [roadmap](ROADMAP.md), and share ideas in the issues.
 
 ```toml
 [dependencies]
 genoxide = "0.5"
 ```
 
+## Benchmarks
+
+genoxide against 15 other libraries in Rust, C++, Python, Java and Julia, on 9 single-objective and 5 multi-objective scenarios:
+- **Rust:** genetic_algorithm, radiate, moors
+- **C++:** openGA, pygmo (pagmo)
+- **Python:** DEAP, pymoo, PyGAD, pycma, Nevergrad, SciPy
+- **Java:** Jenetics, jMetal
+- **Julia:** Evolutionary.jl, Metaheuristics.jl
+
+Measured on 2026-09-25 with genoxide 0.5.1, on Linux with an Intel Core Ultra 7 265K, single-threaded, 10 seeds per scenario. The charts show medians.
+
+![Time to target](docs/benchmarks/time_to_target.svg)
+
+- **Time to target:** genoxide is the fastest in 7 of the 9 single-objective scenarios:
+
+  | Scenario | genoxide | Next fastest | DEAP |
+  |---|---|---|---|
+  | OneMax 1000 | 15 ms | 59 ms (Evolutionary.jl) | 15.8 s |
+  | Rastrigin 30 | 39 ms | 70 ms (pygmo's SaDE) | 1.25 s (its CMA-ES, 8 of 10 runs) |
+  | Ackley 30 | 11 ms | 30 ms (Evolutionary.jl's ES) | 0.7 s (its CMA-ES) |
+
+  On OneMax 100, Evolutionary.jl's GA is slightly faster: 0.85 ms against 1.0 ms (matched), and 0.42 ms against 0.48 ms (idiomatic).
+- **Cost per evaluation:** genoxide needs 3,400 CPU instructions per OneMax 1000 evaluation, fitness function included:
+  - 2.6 times fewer than genetic_algorithm;
+  - 10 to 19 times fewer than moors, openGA and radiate;
+  - 90 to 1,300 times fewer than pygmo, pymoo, PyGAD and DEAP.
+- **Evaluations to target:** genoxide needs the fewest in the matched OneMax scenarios, N-Queens and Ackley 30, but not everywhere:
+  - **Rastrigin:** pygmo's SaDE needs about 5 times fewer (4,780 against genoxide's 24,782 on Rastrigin 10, and 15,570 against 81,000 on Rastrigin 30).
+  - **Rosenbrock:** pycma's CMA-ES needs 4,491 against 5,945, and genoxide's GA doesn't reach the target.
+  - **OneMax 100 (idiomatic):** pygmo needs 1,610 against 3,183.
+
+  With an expensive fitness function, those libraries would win there.
+- **Multi-objective:** with the same settings, genoxide's SMS-EMOA is within 0.0013 of the best hypervolume in all five scenarios. It ranks 3rd to 5th of 36 to 40 algorithm runs, and the best is the SMS-EMOA of jMetal or Metaheuristics.jl.
+  - **Speed:** genoxide's NSGA-II takes 24 to 33 ms per run, against about 0.55 s for pymoo and 1.3 to 1.4 s for DEAP on ZDT1 and DTLZ2.
+  - **moors:** only its NSGA-II is as fast, at 21 to 38 ms, with lower hypervolumes in all five scenarios. They're far lower on ZDT3 and DTLZ1. moors evaluates its parents again every generation, so the same budget gives it half the generations.
+
+How they're measured:
+- **The same problems:** every library gets the same fitness functions, written in its own language and checked against a reference, and the same evaluation budget.
+- **Time:** measured inside the process, around the optimization only. Interpreter or JVM startup, imports and JIT warm-up aren't included.
+- **Matched and idiomatic:** "matched" configurations are as equal as the libraries allow, and "idiomatic" ones are what each library recommends.
+- **Time to target** is the number of evaluations times the cost of an evaluation:
+  - The evaluations to target measure the search itself, whatever the language.
+  - The CPU instructions per evaluation measure the framework's cost.
+  - With a cheap fitness function, time mostly shows the framework's cost. With an expensive one, only the evaluations count.
+
+The full methodology, every library's settings, and the bugs we found in the libraries are in [benchmarks/README.md](benchmarks/README.md). The numbers behind the charts are in [docs/benchmarks/results.md](docs/benchmarks/results.md).
+
+<details>
+<summary>More charts: evaluations to target, instructions per evaluation, multi-objective runs</summary>
+
+![Evaluations to target](docs/benchmarks/evaluations_to_target.svg)
+
+![CPU instructions per evaluation](docs/benchmarks/instructions.svg)
+
+![Hypervolume of the final fronts](docs/benchmarks/hypervolume.svg)
+
+![Time of multi-objective runs](docs/benchmarks/front_time.svg)
+
+</details>
+
 ## Why genoxide?
 
-Rust has over 200 evolutionary computation crates, but most are small or abandoned. None of them covers what DEAP or pymoo offer in Python. Python has the breadth, but every operator runs in the interpreter. genoxide aims to combine both:
-
-- **Complete:** one library, from a simple GA to NSGA-III, CMA-ES and island models
-- **Fast:** native Rust, parallel evaluation, no allocations in the hot loop
-- **Correct:** configurations are validated when you build them, and operators are checked against the representation at compile time
-- **Reproducible:** the same seed gives the same result, on any number of threads
-- **Batteries included:** statistics, hall of fame, checkpointing, cancellation, benchmarks
-- **Also for Python:** `pip install genoxide`, planned
-
-## Why Rust
-
-genoxide is built to show what Rust brings to evolutionary computation. Every claim below will be measured or enforced, not just promised:
-
-| | What Rust gives | How genoxide shows it |
-|---|---|---|
-| **Speed** | Native code, zero-cost abstractions, no garbage collector, SIMD | Wall-time and instruction-count benchmarks (Callgrind) against the most used libraries in every language |
-| **Memory** | Compact data without per-object overhead | Bit-packed genomes, no allocations in the generation loop, measured peak memory |
-| **Fearless parallelism** | Data races are compile errors | Parallel evaluation, islands and batch fitness that are both safe and deterministic |
-| **Safety** | Memory safety, strong types | Invalid configurations and operator/genome mismatches are errors before the run starts; no panics in library code |
-| **Reproducibility** | Explicit ownership of state and rng | The same seed gives bit-for-bit the same result, on any number of threads |
+| | What it means |
+|---|---|
+| **Complete** | From a simple GA to NSGA-III, CMA-ES with restarts, L-SHADE and island models, see [what's there](#whats-there-so-far) |
+| **Fast** | Compiled Rust, bit-packed binary genomes, and parallel or batch evaluation. Measured against 15 libraries [above](#benchmarks), and guarded in CI: a PR that adds more than 5% instructions to a hot path fails ([gungraun](https://github.com/gungraun/gungraun)) |
+| **Correct** | Invalid settings are errors from `build()`, before anything runs. An operator that doesn't fit the genome is a compile error |
+| **Reproducible** | The same seed gives the same result, on any number of threads and on 32 or 64 bits: the random numbers and math are portable, and tests pin their values |
+| **Safe** | `#![forbid(unsafe_code)]`: memory safety from the compiler, and parallel code without data races |
+| **Batteries included** | Statistics, hall of fame, progress reports, constraints, checkpoints to resume a run, cancellation, `tracing` |
 
 ## A first look
 
@@ -123,47 +172,6 @@ Using an AI coding assistant? Point it to [AGENTS.md](AGENTS.md): it has the dec
 | 1.0 | Stable API and published benchmark report | planned |
 
 The details are in [ROADMAP.md](ROADMAP.md).
-
-## Benchmarks
-
-Every release will be benchmarked against the most used evolutionary computation libraries in every language:
-- Python: DEAP, pymoo, PyGAD, EvoX, Nevergrad, pycma
-- Java: Jenetics, jMetal
-- C++: pagmo, openGA
-- C#: GeneticSharp
-- Julia: Evolutionary.jl
-- Rust: radiate, moors, genetic_algorithm
-
-They all use the same problems, the same fitness functions and the same evaluation budgets. The results will be published with graphs:
-
-- **Time to target and success rate:** does it solve the problem, and how fast?
-- **Evaluations to target:** how efficient is the search itself, independent of language?
-- **Instructions per evaluation (Callgrind):** exact, noise-free framework cost, comparable across languages.
-- **Peak memory**
-
-genoxide's own performance is guarded in CI with [gungraun](https://github.com/gungraun/gungraun) (formerly iai-callgrind) instruction-count benchmarks: every PR shows its effect on the hot paths, and more than 5% more instructions fails CI.
-
-### Results
-
-Linux, Intel Core Ultra 7 265K, single-threaded, 10 seeds per scenario, genoxide at the 0.4 development version. Every library runs with the same fitness functions and evaluation budgets, in the configurations described in [`benchmarks/`](benchmarks/): "matched" as equal as the libraries allow, "idiomatic" as each library recommends. The numbers behind the charts are in [docs/benchmarks/results.md](docs/benchmarks/results.md).
-
-![CPU instructions per evaluation](docs/benchmarks/instructions.svg)
-
-![Median time to target](docs/benchmarks/time_to_target.svg)
-
-![Evaluations per second](docs/benchmarks/throughput.svg)
-
-![Hypervolume of multi-objective fronts](docs/benchmarks/hypervolume.svg)
-
-![Time of multi-objective runs](docs/benchmarks/front_time.svg)
-
-- **Cost per evaluation:** genoxide needs about 3,300 CPU instructions per OneMax 1000 evaluation, fitness function included: 2.7 times fewer than genetic_algorithm, and 300 to 1,300 times fewer than pymoo, PyGAD and DEAP.
-- **Time to target:** genoxide is the fastest in every single-objective scenario, and level with genetic_algorithm on OneMax 100 (idiomatic), at 0.45 ms each:
-  - **OneMax 1000 (matched):** 15 ms, against 127 ms for genetic_algorithm.
-  - **N-Queens:** its local search beats every other solver.
-  - **Rastrigin 10 and 30:** its GA takes 6 ms and 35 ms and its differential evolution (SHADE, without tuning) 8 ms and 40 ms, against 11 ms for genetic_algorithm on Rastrigin 10 and 1.7 s for pymoo's GA on Rastrigin 30.
-- **Evaluations to target:** on Rastrigin 30, genoxide's DE needs 80,000 evaluations and its GA 103,000, against 65,000 for pymoo's GA, the most efficient there, and 104,000 for pymoo's DE. On Rastrigin 10, pymoo needs about half as many: 11,700 (GA) and 15,000 (DE), against 22,700 for genoxide's GA and 25,750 for its DE. genoxide's CMA-ES with IPOP restarts needs about 25% more evaluations than pymoo's, which restarts from the best solution instead of a random point. With an expensive fitness function, the evaluations count more than the framework's speed.
-- **Multi-objective:** with the same operators and settings, genoxide's fronts match pymoo's in hypervolume within 0.003 on ZDT1, ZDT3 and DTLZ2, with NSGA-II, NSGA-III, SPEA2 and SMS-EMOA; its batch MOEA/D is up to 0.0023 behind pymoo's sequential one. genoxide takes 2.6 to 140 times less time than pymoo: 25 ms against 570 ms for NSGA-II on ZDT1, 42 ms against 5.9 s for MOEA/D, and 0.34 s against 0.9 s for SMS-EMOA on DTLZ2, where both compute hypervolume contributions in compiled code. SMS-EMOA gives the best fronts in both libraries.
 
 ## Contributing
 

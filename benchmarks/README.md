@@ -44,9 +44,9 @@ The fitness functions here are cheap, so the time charts mostly show framework a
 
 | | Time to target | Evaluations | Evaluations per second |
 |---|---|---|---|
-| genoxide | 15.4 ms | 54,038 | 3,234,466 |
-| DEAP | 15.45 s | 105,287 | 6,725 |
-| Ratio | 1,000× | 1.9× | 480× |
+| genoxide | 15.4 ms | 54,038 | 3,540,199 |
+| DEAP | 15.82 s | 105,287 | 6,681 |
+| Ratio | 1,000× | 1.9× | 530× |
 
 - **The evaluations:** genoxide needs half as many as DEAP, because it doesn't evaluate a child identical to its parent again; the child inherits the fitness.
 - **The evaluations per second:** genoxide stores the genome as packed bits in compiled Rust. DEAP keeps a Python object per individual, and its operators and fitness function are Python.
