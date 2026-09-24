@@ -455,6 +455,7 @@ fn main() -> genoxide::Result<()> {
 - Stop conditions: generations, evaluations, time, stagnation (generations without a new non-dominated solution) or custom; `Stop::target` needs a single objective.
 - `multi::non_dominated_sort` and `multi::crowding_distance` are available for your own algorithms.
 - To keep every non-dominated solution of a run, not only the final front: `let mut archive = multi::ParetoArchive::new(objectives);` and `.on_generation(|snapshot| archive.update(snapshot))`.
+- Test problems with known optimal fronts, usable directly as fitness functions: `multi::problems::{Zdt1, Zdt2, Zdt3, Zdt4, Zdt6, Dtlz1, Dtlz2, Dtlz3, Dtlz4}` (the `TestProblem` trait gives `real()` and `optimal_front(points)`).
 - Measure a front with `multi::indicator`: `hypervolume(&front, &reference_point, &objectives)` (larger is better), or `igd_plus`, `igd`, `gd` and `spread` against a reference front (smaller is better).
 
 ### Local search: hill climbing and simulated annealing
