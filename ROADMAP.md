@@ -132,8 +132,8 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Real-valued crossover: SBX, BLX-α, arithmetic
 - [x] Real-valued mutation: Gaussian, polynomial
 - [ ] Self-adaptive Gaussian mutation (a step size per individual)
-- [ ] Permutation crossover: PMX, OX1, CX, edge recombination
-- [ ] Permutation mutation: inversion (2-opt), insertion, scramble
+- [x] Permutation crossover: PMX, OX1, CX, edge recombination
+- [x] Permutation mutation: inversion (2-opt), insertion, scramble
 - [ ] Local search: hill climbing (first / best improvement), simulated annealing, tabu search, iterated local search
 - [ ] Memetic / Lamarckian hybrid (GA with local search on elites)
 - [ ] Constraint handling: Deb's feasibility rules, penalty functions

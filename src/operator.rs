@@ -5,6 +5,7 @@
 
 pub mod crossover;
 pub mod mutate;
+pub mod permutation;
 pub mod select;
 
 pub use crossover::{
@@ -12,6 +13,10 @@ pub use crossover::{
     UniformCrossover,
 };
 pub use mutate::{BitFlip, GaussianMutation, PolynomialMutation, SwapMutation, UniformMutation};
+pub use permutation::{
+    CycleCrossover, EdgeRecombinationCrossover, InsertionMutation, InversionMutation,
+    OrderCrossover, PartiallyMappedCrossover, ScrambleMutation,
+};
 pub use select::{
     RandomSelection, Rank, Roulette, StochasticUniversalSampling, Tournament, Truncation,
 };
@@ -44,7 +49,7 @@ pub trait Select: Clone + Debug + Send + Sync {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a crossover for `{R}`",
     label = "not a crossover for `{R}`",
-    note = "set the crossover with `.crossover(...)`; point and uniform crossover need genomes that implement `SwapGenes`, SBX, blend and arithmetic crossover are for `Real`, and `NoCrossover` fits every genome"
+    note = "set the crossover with `.crossover(...)`; point and uniform crossover need genomes that implement `SwapGenes`, SBX, blend and arithmetic crossover are for `Real`, order, partially mapped, cycle and edge recombination crossover for `Permutation`, and `NoCrossover` fits every genome"
 )]
 pub trait Crossover<R: Representation>: Clone + Debug + Send + Sync {
     /// Recombines `a` and `b`, which become the two children.
@@ -61,7 +66,7 @@ pub trait Crossover<R: Representation>: Clone + Debug + Send + Sync {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a mutation for `{R}`",
     label = "not a mutation for `{R}`",
-    note = "set the mutation with `.mutate(...)`: `BitFlip` for `Binary`, `UniformMutation` for `Integer`, `GaussianMutation`, `PolynomialMutation` or `UniformMutation` for `Real`, `SwapMutation` for `Permutation`"
+    note = "set the mutation with `.mutate(...)`: `BitFlip` for `Binary`, `UniformMutation` for `Integer`, `GaussianMutation`, `PolynomialMutation` or `UniformMutation` for `Real`, `SwapMutation`, `InversionMutation`, `InsertionMutation` or `ScrambleMutation` for `Permutation`"
 )]
 pub trait Mutate<R: Representation>: Clone + Debug + Send + Sync {
     /// Mutates `genome`. The genome always changes (unless its space has a single genome).
