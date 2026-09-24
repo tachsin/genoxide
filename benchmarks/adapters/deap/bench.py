@@ -17,6 +17,10 @@ creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
 creator.create("IndividualMax", list, fitness=creator.FitnessMax)
 creator.create("IndividualMin", list, fitness=creator.FitnessMin)
+creator.create("FitnessMin2", base.Fitness, weights=(-1.0, -1.0))
+creator.create("FitnessMin3", base.Fitness, weights=(-1.0, -1.0, -1.0))
+creator.create("Individual2", list, fitness=creator.FitnessMin2)
+creator.create("Individual3", list, fitness=creator.FitnessMin3)
 
 
 class Budget:
@@ -68,9 +72,92 @@ def rastrigin(individual):
     )
 
 
+def zdt_g(x):
+    return 1 + 9 * sum(x[1:]) / (len(x) - 1)
+
+
+def zdt1(x):
+    g = zdt_g(x)
+    return x[0], g * (1 - math.sqrt(x[0] / g))
+
+
+def zdt3(x):
+    g = zdt_g(x)
+    return x[0], g * (1 - math.sqrt(x[0] / g) - x[0] / g * math.sin(10 * math.pi * x[0]))
+
+
+def dtlz2(x, objectives=3):
+    g = sum((v - 0.5) ** 2 for v in x[objectives - 1:])
+    values = []
+    for m in range(objectives):
+        f = 1 + g
+        for v in x[:objectives - 1 - m]:
+            f *= math.cos(v * math.pi / 2)
+        if m > 0:
+            f *= math.sin(x[objectives - 1 - m] * math.pi / 2)
+        values.append(f)
+    return tuple(values)
+
+
+# (fitness function, variables, objectives, population size)
+FRONT_PROBLEMS = {
+    "zdt1": (zdt1, lambda size: size, 2, 100),
+    "zdt3": (zdt3, lambda size: size, 2, 100),
+    # size: the number of objectives, with k = 10
+    "dtlz2": (dtlz2, lambda size: size + 9, 3, 92),
+}
+
+
 # -------------------------------------------------------------------------------------------------
 # Solvers
 # -------------------------------------------------------------------------------------------------
+
+
+def solve_front(problem, size, solver, budget):
+    """NSGA-II (examples/ga/nsga2.py) or NSGA-III (examples/ga/nsga3.py) with the matched settings
+    of every library: SBX with eta 15 at 0.9 and polynomial mutation with eta 20 at 1 / n for
+    NSGA-II; SBX with eta 30 at 1 for NSGA-III."""
+    function, variables, objectives, population_size = FRONT_PROBLEMS[problem]
+    n = variables(size)
+    individual = creator.Individual2 if objectives == 2 else creator.Individual3
+    toolbox = base.Toolbox()
+    toolbox.register("attribute", random.random)
+    toolbox.register("individual", tools.initRepeat, individual, toolbox.attribute, n)
+    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    toolbox.register("evaluate", function)
+    eta = 15.0 if solver == "nsga2" else 30.0
+    toolbox.register("mate", tools.cxSimulatedBinaryBounded, low=0.0, up=1.0, eta=eta)
+    toolbox.register("mutate", tools.mutPolynomialBounded, low=0.0, up=1.0, eta=20.0, indpb=1.0 / n)
+    if solver == "nsga2":
+        toolbox.register("select", tools.selNSGA2)
+    else:
+        reference = tools.uniform_reference_points(objectives, 12)
+        toolbox.register("select", tools.selNSGA3, ref_points=reference)
+
+    population = toolbox.population(n=population_size)
+    for member in population:
+        member.fitness.values = budget.evaluate(toolbox.evaluate, member)
+    # assigns the crowding distance for the first tournament
+    population = toolbox.select(population, len(population))
+    generations = 0
+    while not budget.exhausted():
+        generations += 1
+        if solver == "nsga2":
+            offspring = [toolbox.clone(member) for member in tools.selTournamentDCD(population, len(population))]
+            for a, b in zip(offspring[::2], offspring[1::2]):
+                if random.random() <= 0.9:
+                    toolbox.mate(a, b)
+                toolbox.mutate(a)
+                toolbox.mutate(b)
+                del a.fitness.values, b.fitness.values
+        else:
+            offspring = algorithms.varAnd(population, toolbox, 1.0, 1.0)
+        for member in offspring:
+            if not member.fitness.valid:
+                member.fitness.values = budget.evaluate(toolbox.evaluate, member)
+        population = toolbox.select(population + offspring, population_size)
+    front = tools.sortNondominated(population, len(population), first_front_only=True)[0]
+    return [list(member.fitness.values) for member in front], generations
 
 
 def ea_simple(toolbox, population_size, cxpb, mutpb, budget, is_success):
@@ -177,6 +264,30 @@ def main():
     problem, size, mode = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     seed_from, seed_to = int(sys.argv[4]), int(sys.argv[5])
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
+
+    if problem in FRONT_PROBLEMS:
+        solvers = ["nsga2"] + (["nsga3"] if FRONT_PROBLEMS[problem][2] > 2 else [])
+        for seed in range(seed_from, seed_to + 1):
+            for solver in solvers:
+                random.seed(seed)
+                numpy.random.seed(seed)
+                budget = Budget(max_evaluations, max_seconds)
+                start = time.perf_counter()
+                front, generations = solve_front(problem, size, solver, budget)
+                elapsed = time.perf_counter() - start
+                print(json.dumps({
+                    "library": "deap",
+                    "solver": solver,
+                    "problem": problem,
+                    "size": size,
+                    "mode": mode,
+                    "seed": seed,
+                    "time_s": round(elapsed, 6),
+                    "generations": generations,
+                    "evaluations": budget.evaluations,
+                    "front": front,
+                }), flush=True)
+        return
 
     for seed in range(seed_from, seed_to + 1):
         solvers = []
