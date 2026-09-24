@@ -300,3 +300,40 @@ fn spea2_approximates_the_zdt1_front() {
     let volume = hypervolume(&outcome.front_values(), &[1.1, 1.1], &[Minimize, Minimize]);
     assert!(volume > 0.869, "{volume}");
 }
+
+#[test]
+fn moead_approximates_two_and_three_objective_fronts() {
+    use genoxide::multi::indicator::igd;
+    use genoxide::multi::problems::{Dtlz2, TestProblem, Zdt1};
+    use genoxide::multi::{Decomposition, Moead, das_dennis};
+    // ZDT1 with 100 weights and Tchebycheff: a hypervolume of 0.8683 to 0.8688 over 5 seeds
+    // (pymoo's sequential MOEA/D 0.8693 to 0.8705, its ParallelMOEAD 0.78 to 0.83)
+    let problem = Zdt1::new(30);
+    let moead = Moead::builder(problem.real(), [Minimize; 2], das_dennis::<2>(99))
+        .crossover(SimulatedBinaryCrossover::new(20.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = MultiEngine::new(moead, problem)
+        .stop_when(Stop::generations(249))
+        .run()
+        .unwrap();
+    let volume = hypervolume(&outcome.front_values(), &[1.1, 1.1], &[Minimize; 2]);
+    assert!(volume > 0.867, "{volume}");
+    // DTLZ2 with 91 weights and PBI: an IGD of 0.0008 to 0.0010 (pymoo 0.0005 to 0.0006)
+    let problem = Dtlz2::<3>::default();
+    let moead = Moead::builder(problem.real(), [Minimize; 3], das_dennis::<3>(12))
+        .decomposition(Decomposition::Pbi { theta: 5.0 })
+        .crossover(SimulatedBinaryCrossover::new(20.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / 12.0, 20.0).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = MultiEngine::new(moead, problem)
+        .stop_when(Stop::generations(249))
+        .run()
+        .unwrap();
+    let distance = igd(&outcome.front_values(), &problem.optimal_front(91));
+    assert!(distance < 0.0012, "{distance}");
+}

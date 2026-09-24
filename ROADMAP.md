@@ -152,7 +152,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] NSGA-II
 - [x] NSGA-III (reference points)
 - [x] SPEA2
-- [ ] MOEA/D
+- [x] MOEA/D
 - [ ] SMS-EMOA
 - [x] Pareto archive
 - [x] Indicators: hypervolume, IGD / IGD+, spread
