@@ -158,7 +158,7 @@ where
     }
 
     /// The ideal point so far: the best value of each objective among the feasible solutions,
-    /// `None` before the first survival.
+    /// `None` before the first survival, or while an objective's best value is infinite.
     pub fn ideal_point(&self) -> Option<[f64; M]> {
         let ideal = self.ideal;
         ideal.iter().all(|v| v.is_finite()).then(|| {

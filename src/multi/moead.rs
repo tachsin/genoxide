@@ -636,18 +636,20 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
         for genome in &self.initial_genomes {
             self.representation.validate(genome)?;
         }
-        // the nearest weight vectors, the lower index on ties
+        // the nearest weight vectors: itself first, then the lower index on ties
         let count = self.neighbors.min(size);
         let neighborhoods = self
             .weights
             .iter()
-            .map(|a| {
+            .enumerate()
+            .map(|(own, a)| {
                 let distance =
                     |b: &[f64; M]| a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum::<f64>();
                 let mut order: Vec<usize> = (0..size).collect();
                 order.sort_by(|&i, &j| {
                     distance(&self.weights[i])
                         .total_cmp(&distance(&self.weights[j]))
+                        .then((i != own).cmp(&(j != own)))
                         .then(i.cmp(&j))
                 });
                 order.truncate(count);
@@ -767,6 +769,21 @@ mod tests {
 
     #[test]
     fn neighborhoods_are_the_nearest_weights() {
+        // with duplicate weights, each subproblem still comes first in its own neighborhood
+        let duplicates = Moead::builder(
+            Real::uniform(3, 0.0..=1.0).unwrap(),
+            [Minimize, Minimize],
+            vec![[0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [1.0, 0.0]],
+        )
+        .neighbors(2)
+        .crossover(SimulatedBinaryCrossover::new(20.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / 3.0, 20.0).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+        for (index, neighborhood) in duplicates.neighborhoods().iter().enumerate() {
+            assert_eq!(neighborhood[0], index);
+        }
         // weights (0, 1), (0.25, 0.75), ..., (1, 0)
         let moead = builder(4, 0).neighbors(3).build().unwrap();
         assert_eq!(moead.neighborhoods()[0], [0, 1, 2]);

@@ -401,3 +401,32 @@ fn batch_matches_one_genome_at_a_time() {
         }
     );
 }
+
+#[test]
+fn hypervolume_contributions_of_infinite_values() {
+    use genoxide::multi::indicator::hypervolume_contributions;
+    let inf = f64::INFINITY;
+    let contributions = |front: &[[f64; 2]], reference: [f64; 2]| {
+        hypervolume_contributions(front, &reference, &[Minimize, Minimize])
+    };
+    // duplicates at minus infinity: neither is exclusive
+    let both = contributions(&[[-inf, 0.0], [-inf, 0.0]], [1.0, 1.0]);
+    assert!(both.iter().all(|value| !value.is_nan()), "{both:?}");
+    // an infinite reference point: a finite exclusive part stays finite
+    assert_eq!(
+        contributions(&[[0.0, 0.0], [1.0, 0.0]], [inf, 5.0]),
+        [5.0, 0.0]
+    );
+    // an infinitely good point has an infinite contribution
+    let values = contributions(&[[-inf, 2.0], [0.0, 1.0]], [1.0, 3.0]);
+    assert_eq!(values, [inf, 1.0]);
+    // one and three objectives
+    let one = hypervolume_contributions(&[[-inf], [-inf], [0.0]], &[1.0], &[Minimize]);
+    assert!(one.iter().all(|value| !value.is_nan()), "{one:?}");
+    let three = hypervolume_contributions(
+        &[[-inf, 0.0, 0.0], [-inf, 0.0, 0.0], [0.0, 0.5, 0.5]],
+        &[1.0, 1.0, 1.0],
+        &[Minimize; 3],
+    );
+    assert!(three.iter().all(|value| !value.is_nan()), "{three:?}");
+}
