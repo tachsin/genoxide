@@ -310,6 +310,41 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+### Differential evolution
+
+For continuous problems on `Real` genomes, differential evolution often needs far fewer evaluations than a GA. `CR` (the crossover rate) matters most: small (e.g. 0.1) for separable functions, where each gene can be optimized on its own; large (0.9) for rotated or coupled ones.
+
+```rust
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    let rastrigin = |x: &Reals| {
+        10.0 * x.len() as f64
+            + x.iter()
+                .map(|xi| xi * xi - 10.0 * (std::f64::consts::TAU * xi).cos())
+                .sum::<f64>()
+    };
+    let de = De::builder(Real::uniform(5, -5.12..=5.12)?)
+        .population_size(50) // 5 to 10 times the number of genes
+        .strategy(de::Strategy::CurrentToPBest { p: 0.1, archive: 1.0 })
+        .control(de::Control::Fixed { f: 0.5, cr: 0.1 })
+        .minimize()
+        .seed(1)
+        .build()?;
+    let outcome = Engine::new(de, rastrigin)
+        .stop_when(Stop::target(0.01).or(Stop::evaluations(100_000)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    Ok(())
+}
+```
+
+| `de::Strategy` | When |
+|---|---|
+| `Rand1` (default) | Robust; explores well |
+| `CurrentToPBest { p: 0.1, archive: 1.0 }` | Faster, still diverse thanks to the archive |
+| `Best1` | Fastest on easy problems; use it with `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, or the population can collapse before the optimum |
+
 ### Local search: hill climbing and simulated annealing
 
 `LocalSearch` improves a single solution, moving to one of `neighbors` random neighbors per step. It often beats a GA on permutations. Any mutation is a neighborhood; `InversionMutation` (2-opt) is the classic one for tours.
@@ -399,6 +434,7 @@ fn main() -> genoxide::Result<()> {
 | The best solution is infeasible | No feasible solution found yet | Run longer, check the constraints can be met, or start from a feasible solution with `.initial_genomes(...)` |
 | `Error::TellWithoutAsk` / `Error::FitnessCount` | Ask / tell out of step | One `tell` per `ask`, with one fitness per asked genome, in order |
 | Hill climbing (`Acceptance::Improving` or `NotWorse`) stops improving | A local optimum | `.restart(patience, kicks)` (iterated local search), `Acceptance::Tabu { tenure }` with several neighbors, or `Acceptance::Annealing` with an initial temperature about the size of typical fitness differences and `cooling` close to 1 (e.g. 0.999) |
+| A differential evolution stops improving far from the optimum, with a tiny population spread | The population collapsed (greedy strategy, fixed `F`) | `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, `Strategy::Rand1`, or an archive with `CurrentToPBest` |
 | Real-valued search stalls in a local minimum | Steps too small to leave its basin (e.g. `GaussianMutation` with a tiny sigma) | `PolynomialMutation` with eta 20, or a larger sigma; on Rastrigin, sigma 0.03 of the range works and 0.01 stalls |
 | The best fitness stops improving early | Too little diversity | A larger population, a smaller tournament, a higher mutation rate, or `Stop::stagnation` with restarts |
 | Slow runs with a cheap fitness function | Debug build, or parallel overhead | Build with `--release`; use `.parallel(true)` only for expensive fitness functions |
