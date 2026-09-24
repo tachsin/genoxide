@@ -135,7 +135,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Permutation crossover: PMX, OX1, CX, edge recombination
 - [x] Permutation mutation: inversion (2-opt), insertion, scramble
 - [x] Local search: hill climbing (first improvement, or the best of k random neighbors), simulated annealing
-- [ ] Local search: tabu search, iterated local search
+- [x] Local search: tabu search, iterated local search
 - [ ] Memetic / Lamarckian hybrid (GA with local search on elites)
 - [ ] Constraint handling: Deb's feasibility rules, penalty functions
 

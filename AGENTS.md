@@ -280,6 +280,15 @@ fn main() -> genoxide::Result<()> {
 
 `LocalSearch` improves a single solution, moving to one of `neighbors` random neighbors per step. It often beats a GA on permutations. Any mutation is a neighborhood; `InversionMutation` (2-opt) is the classic one for tours.
 
+| `.acceptance(...)` | Moves to the best neighbor when |
+|---|---|
+| `Acceptance::Improving` | it's strictly better (stops at a local optimum) |
+| `Acceptance::NotWorse` (default) | it's better or equal (drifts across plateaus) |
+| `Acceptance::Annealing { initial_temperature, cooling }` | it's better, or worse by Δ with probability exp(−Δ/T), T cooling every step |
+| `Acceptance::Tabu { tenure }` | it isn't one of the last `tenure` solutions (even if worse), or beats the best so far; use several neighbors |
+
+`.restart(patience, kicks)` adds iterated local search to any of them: after `patience` steps without a new best, the search restarts from the best solution changed by `kicks` neighbor moves.
+
 ```rust
 use genoxide::prelude::*;
 
@@ -353,7 +362,7 @@ fn main() -> genoxide::Result<()> {
 | `Error::InvalidGenome { reason }` | An initial genome doesn't fit the representation | Match its length and bounds |
 | `Error::NanFitness` | The fitness function returned NaN with `NanPolicy::Error` | Fix the fitness function, or keep the default `NanPolicy::Invalid` |
 | `Error::TellWithoutAsk` / `Error::FitnessCount` | Ask / tell out of step | One `tell` per `ask`, with one fitness per asked genome, in order |
-| Hill climbing (`Acceptance::Improving` or `NotWorse`) stops improving | A local optimum | `Acceptance::Annealing` with an initial temperature about the size of typical fitness differences, and `cooling` close to 1 (e.g. 0.999) |
+| Hill climbing (`Acceptance::Improving` or `NotWorse`) stops improving | A local optimum | `.restart(patience, kicks)` (iterated local search), `Acceptance::Tabu { tenure }` with several neighbors, or `Acceptance::Annealing` with an initial temperature about the size of typical fitness differences and `cooling` close to 1 (e.g. 0.999) |
 | Real-valued search stalls in a local minimum | Steps too small to leave its basin (e.g. `GaussianMutation` with a tiny sigma) | `PolynomialMutation` with eta 20, or a larger sigma; on Rastrigin, sigma 0.03 of the range works and 0.01 stalls |
 | The best fitness stops improving early | Too little diversity | A larger population, a smaller tournament, a higher mutation rate, or `Stop::stagnation` with restarts |
 | Slow runs with a cheap fitness function | Debug build, or parallel overhead | Build with `--release`; use `.parallel(true)` only for expensive fitness functions |
