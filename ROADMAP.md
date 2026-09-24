@@ -160,7 +160,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 
 ### 0.5: Scale and operations
 - [x] Island model: ring, fully connected and random topologies; deterministic and parallel
-- [ ] Asynchronous / steady-state evaluation for expensive fitness
+- [x] Asynchronous / steady-state evaluation for expensive fitness
 - [x] Batch evaluation hook (SIMD, GPU, remote)
 - [ ] GPU evaluation example
 - [x] Checkpoint and resume (`serde` feature)

@@ -1,8 +1,10 @@
 //! Running an algorithm: fitness evaluation, stop conditions, observers and cancellation.
 
+pub mod asynchronous;
 pub mod stop;
 pub(crate) mod trace;
 
+pub use asynchronous::AsyncEngine;
 pub use stop::{Stop, StopReason};
 
 use crate::algorithm::{Algorithm, Candidates};
