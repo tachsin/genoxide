@@ -135,8 +135,8 @@ impl Parameters {
 /// from the samples as evaluated. When a run meets one of the stop criteria ([`Criterion`]),
 /// [`Restarts`] can start a new one.
 ///
-/// Every random decision and every math function (a Jacobi eigendecomposition, fdlibm's `log`
-/// and `exp`) is portable, so a seed gives the same run on every platform.
+/// Every random decision and every math function (a Householder and QL eigendecomposition,
+/// fdlibm's `log` and `exp`) is portable, so a seed gives the same run on every platform.
 ///
 /// Built with [`Cmaes::builder`], run with an [`Engine`](crate::Engine).
 ///
@@ -470,7 +470,7 @@ impl Cmaes {
     fn decompose(&mut self) {
         let n = self.dimensions();
         self.eigen_generation = self.run_generation;
-        let (mut values, vectors) = jacobi(&self.covariance, n);
+        let (mut values, vectors) = eigen(&self.covariance, n);
         let max = values.iter().copied().fold(f64::MIN, f64::max);
         let min = values.iter().copied().fold(f64::MAX, f64::min);
         if !(min > 0.0 && max <= 1e14 * min) {
@@ -565,73 +565,184 @@ fn identity(n: usize) -> Vec<f64> {
 }
 
 // the eigenvalues and eigenvectors (the columns of a row-major matrix) of the symmetric row-major
-// `n × n` matrix, by the cyclic Jacobi method (Numerical Recipes): only +, −, ×, ÷ and sqrt, so
-// the same on every platform
-fn jacobi(matrix: &[f64], n: usize) -> (Vec<f64>, Vec<f64>) {
-    let mut a = matrix.to_vec();
-    let mut vectors = identity(n);
-    for sweep in 0..100 {
-        let off: f64 = (0..n)
-            .flat_map(|p| (p + 1..n).map(move |q| (p, q)))
-            .map(|(p, q)| a[p * n + q].abs())
-            .sum();
-        if off == 0.0 {
-            break;
-        }
-        // skip small elements in the first sweeps
-        let threshold = if sweep < 3 {
-            0.2 * off / (n * n) as f64
+// `n × n` matrix: a Householder reduction to tridiagonal form and the implicit QL method, as
+// tred2 and tql2 of JAMA (public domain), which Hansen's Java CMA-ES uses too. Only +, −, ×, ÷
+// and sqrt, so the same on every platform.
+fn eigen(matrix: &[f64], n: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut v = matrix.to_vec();
+    let mut d = vec![0.0; n];
+    let mut e = vec![0.0; n];
+    tridiagonalize(&mut v, &mut d, &mut e, n);
+    diagonalize(&mut v, &mut d, &mut e, n);
+    (d, v)
+}
+
+// sqrt(a² + b²) without overflow or underflow
+fn hypot(a: f64, b: f64) -> f64 {
+    let (a, b) = (a.abs(), b.abs());
+    let (large, small) = if a > b { (a, b) } else { (b, a) };
+    if large == 0.0 {
+        0.0
+    } else {
+        let ratio = small / large;
+        large * (1.0 + ratio * ratio).sqrt()
+    }
+}
+
+// tred2: the Householder reduction of the symmetric `v` to a tridiagonal matrix with diagonal
+// `d` and subdiagonal `e[1..]`, and the transformation in `v`
+fn tridiagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
+    d.copy_from_slice(&v[(n - 1) * n..]);
+    for i in (1..n).rev() {
+        let scale: f64 = d[..i].iter().map(|x| x.abs()).sum();
+        let mut h = 0.0;
+        if scale == 0.0 {
+            e[i] = d[i - 1];
+            for j in 0..i {
+                d[j] = v[(i - 1) * n + j];
+                v[i * n + j] = 0.0;
+                v[j * n + i] = 0.0;
+            }
         } else {
-            0.0
-        };
-        for p in 0..n {
-            for q in p + 1..n {
-                let apq = a[p * n + q];
-                let (app, aqq) = (a[p * n + p], a[q * n + q]);
-                let g = 100.0 * apq.abs();
-                // an element too small to change the diagonal is zero
-                if sweep > 3 && app.abs() + g == app.abs() && aqq.abs() + g == aqq.abs() {
-                    a[p * n + q] = 0.0;
-                    a[q * n + p] = 0.0;
-                    continue;
+            // the Householder vector
+            for x in &mut d[..i] {
+                *x /= scale;
+                h += *x * *x;
+            }
+            let mut f = d[i - 1];
+            let mut g = h.sqrt();
+            if f > 0.0 {
+                g = -g;
+            }
+            e[i] = scale * g;
+            h -= f * g;
+            d[i - 1] = f - g;
+            e[..i].fill(0.0);
+            // the similarity transformation of the remaining columns
+            for j in 0..i {
+                f = d[j];
+                v[j * n + i] = f;
+                g = e[j] + v[j * n + j] * f;
+                for k in j + 1..i {
+                    g += v[k * n + j] * d[k];
+                    e[k] += v[k * n + j] * f;
                 }
-                if apq.abs() <= threshold || apq == 0.0 {
-                    continue;
+                e[j] = g;
+            }
+            f = 0.0;
+            for j in 0..i {
+                e[j] /= h;
+                f += e[j] * d[j];
+            }
+            let hh = f / (h + h);
+            for j in 0..i {
+                e[j] -= hh * d[j];
+            }
+            for j in 0..i {
+                f = d[j];
+                g = e[j];
+                for k in j..i {
+                    v[k * n + j] -= f * e[k] + g * d[k];
                 }
-                let h = aqq - app;
-                let t = if h.abs() + g == h.abs() {
-                    apq / h
-                } else {
-                    let theta = 0.5 * h / apq;
-                    let t = 1.0 / (theta.abs() + (1.0 + theta * theta).sqrt());
-                    if theta < 0.0 { -t } else { t }
-                };
-                let c = 1.0 / (1.0 + t * t).sqrt();
-                let s = t * c;
-                let tau = s / (1.0 + c);
-                a[p * n + p] = app - t * apq;
-                a[q * n + q] = aqq + t * apq;
-                a[p * n + q] = 0.0;
-                a[q * n + p] = 0.0;
-                for k in 0..n {
-                    if k != p && k != q {
-                        let (akp, akq) = (a[k * n + p], a[k * n + q]);
-                        let new_p = akp - s * (akq + tau * akp);
-                        let new_q = akq + s * (akp - tau * akq);
-                        a[k * n + p] = new_p;
-                        a[p * n + k] = new_p;
-                        a[k * n + q] = new_q;
-                        a[q * n + k] = new_q;
-                    }
-                    let (vkp, vkq) = (vectors[k * n + p], vectors[k * n + q]);
-                    vectors[k * n + p] = vkp - s * (vkq + tau * vkp);
-                    vectors[k * n + q] = vkq + s * (vkp - tau * vkq);
+                d[j] = v[(i - 1) * n + j];
+                v[i * n + j] = 0.0;
+            }
+        }
+        d[i] = h;
+    }
+    // the accumulated transformations
+    for i in 0..n - 1 {
+        v[(n - 1) * n + i] = v[i * n + i];
+        v[i * n + i] = 1.0;
+        let h = d[i + 1];
+        if h != 0.0 {
+            for k in 0..=i {
+                d[k] = v[k * n + i + 1] / h;
+            }
+            for j in 0..=i {
+                let g: f64 = (0..=i).map(|k| v[k * n + i + 1] * v[k * n + j]).sum();
+                for k in 0..=i {
+                    v[k * n + j] -= g * d[k];
                 }
             }
         }
+        for k in 0..=i {
+            v[k * n + i + 1] = 0.0;
+        }
     }
-    let values = (0..n).map(|i| a[i * n + i]).collect();
-    (values, vectors)
+    for j in 0..n {
+        d[j] = v[(n - 1) * n + j];
+        v[(n - 1) * n + j] = 0.0;
+    }
+    v[(n - 1) * n + n - 1] = 1.0;
+    e[0] = 0.0;
+}
+
+// tql2: the eigenvalues (in `d`) and eigenvectors (the columns of `v`) of the tridiagonal matrix
+// from `tridiagonalize`, by the implicit QL method
+fn diagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
+    e.copy_within(1.., 0);
+    e[n - 1] = 0.0;
+    let mut f = 0.0;
+    let mut largest = 0.0f64;
+    for l in 0..n {
+        // a small subdiagonal element splits the matrix
+        largest = largest.max(d[l].abs() + e[l].abs());
+        let mut m = l;
+        while m < n - 1 && e[m].abs() > f64::EPSILON * largest {
+            m += 1;
+        }
+        if m > l {
+            for _ in 0..100 {
+                // the implicit shift
+                let mut g = d[l];
+                let mut p = (d[l + 1] - g) / (2.0 * e[l]);
+                let mut r = hypot(p, 1.0);
+                if p < 0.0 {
+                    r = -r;
+                }
+                d[l] = e[l] / (p + r);
+                d[l + 1] = e[l] * (p + r);
+                let dl1 = d[l + 1];
+                let mut h = g - d[l];
+                for x in &mut d[l + 2..] {
+                    *x -= h;
+                }
+                f += h;
+                // the implicit QL transformation
+                p = d[m];
+                let (mut c, mut c2, mut c3) = (1.0, 1.0, 1.0);
+                let el1 = e[l + 1];
+                let (mut s, mut s2) = (0.0, 0.0);
+                for i in (l..m).rev() {
+                    c3 = c2;
+                    c2 = c;
+                    s2 = s;
+                    g = c * e[i];
+                    h = c * p;
+                    r = hypot(p, e[i]);
+                    e[i + 1] = s * r;
+                    s = e[i] / r;
+                    c = p / r;
+                    p = c * d[i] - s * g;
+                    d[i + 1] = h + s * (c * g + s * d[i]);
+                    for k in 0..n {
+                        h = v[k * n + i + 1];
+                        v[k * n + i + 1] = s * v[k * n + i] + c * h;
+                        v[k * n + i] = c * v[k * n + i] - s * h;
+                    }
+                }
+                p = -s * s2 * c3 * el1 * e[l] / dl1;
+                e[l] = s * p;
+                d[l] = c * p;
+                if e[l].abs() <= f64::EPSILON * largest {
+                    break;
+                }
+            }
+        }
+        d[l] += f;
+        e[l] = 0.0;
+    }
 }
 
 impl Algorithm for Cmaes {
@@ -1190,25 +1301,64 @@ mod tests {
         })
     }
 
+    // A = V · diag(values) · Vᵀ, and Vᵀ · V = I
+    fn assert_decomposes(matrix: &[f64], n: usize) {
+        let (values, vectors) = eigen(matrix, n);
+        let scale = matrix.iter().fold(1.0f64, |max, x| max.max(x.abs()));
+        for i in 0..n {
+            for j in 0..n {
+                let rebuilt: f64 = (0..n)
+                    .map(|k| vectors[i * n + k] * values[k] * vectors[j * n + k])
+                    .sum();
+                assert!((rebuilt - matrix[i * n + j]).abs() < 1e-12 * scale * n as f64);
+                let dot: f64 = (0..n)
+                    .map(|k| vectors[k * n + i] * vectors[k * n + j])
+                    .sum();
+                let identity = if i == j { 1.0 } else { 0.0 };
+                assert!((dot - identity).abs() < 1e-12);
+            }
+        }
+    }
+
+    #[test]
+    fn eigen_decomposes_special_matrices() {
+        for n in [1, 2, 5, 60] {
+            assert_decomposes(&vec![0.0; n * n], n);
+            assert_decomposes(&identity(n), n);
+            // diagonal with repeated values, and rank one
+            let diagonal: Vec<f64> = (0..n * n)
+                .map(|k| {
+                    if k % (n + 1) == 0 {
+                        (k % 3) as f64
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
+            assert_decomposes(&diagonal, n);
+            let y: Vec<f64> = (0..n).map(|i| i as f64 - 2.5).collect();
+            let rank_one: Vec<f64> = (0..n * n).map(|k| y[k / n] * y[k % n]).collect();
+            assert_decomposes(&rank_one, n);
+            // badly conditioned
+            let scaled: Vec<f64> = (0..n * n)
+                .map(|k| {
+                    if k % (n + 1) == 0 {
+                        crate::math::pow(10.0, -((k % 15) as f64))
+                    } else {
+                        1e-9
+                    }
+                })
+                .collect();
+            assert_decomposes(&scaled, n);
+        }
+    }
+
     proptest! {
         #[test]
-        fn jacobi_decomposes_symmetric_matrices(
-            (n, matrix) in (1usize..8).prop_flat_map(|n| (Just(n), symmetric(n)))
+        fn eigen_decomposes_symmetric_matrices(
+            (n, matrix) in (1usize..30).prop_flat_map(|n| (Just(n), symmetric(n)))
         ) {
-            let (values, vectors) = jacobi(&matrix, n);
-            let scale = matrix.iter().fold(1.0f64, |max, x| max.max(x.abs()));
-            for i in 0..n {
-                for j in 0..n {
-                    // A = V · diag(values) · Vᵀ, and Vᵀ · V = I
-                    let rebuilt: f64 = (0..n)
-                        .map(|k| vectors[i * n + k] * values[k] * vectors[j * n + k])
-                        .sum();
-                    prop_assert!((rebuilt - matrix[i * n + j]).abs() < 1e-12 * scale * n as f64);
-                    let dot: f64 = (0..n).map(|k| vectors[k * n + i] * vectors[k * n + j]).sum();
-                    let identity = if i == j { 1.0 } else { 0.0 };
-                    prop_assert!((dot - identity).abs() < 1e-12);
-                }
-            }
+            assert_decomposes(&matrix, n);
         }
 
         #[test]
