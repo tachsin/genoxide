@@ -111,7 +111,8 @@ fn violation<const M: usize>(scores: &Scores<M>) -> f64 {
     }
 }
 
-// the best and worst values of the feasible solutions, minimized, or `None` if none is feasible
+// the best and worst finite values of the feasible solutions, minimized, or `None` if none is
+// feasible; an objective without finite values gets 0 and 1
 fn normalization<const M: usize>(
     scores: &[Scores<M>],
     objectives: &[Objective; M],
@@ -123,8 +124,15 @@ fn normalization<const M: usize>(
         any = true;
         let values = minimized(score, objectives);
         for j in 0..M {
-            ideal[j] = ideal[j].min(values[j]);
-            nadir[j] = nadir[j].max(values[j]);
+            if values[j].is_finite() {
+                ideal[j] = ideal[j].min(values[j]);
+                nadir[j] = nadir[j].max(values[j]);
+            }
+        }
+    }
+    for j in 0..M {
+        if ideal[j] > nadir[j] {
+            (ideal[j], nadir[j]) = (0.0, 1.0);
         }
     }
     any.then_some((ideal, nadir))
@@ -237,7 +245,13 @@ where
                         .iter()
                         .map(|&i| {
                             let values = minimized(&scores[i], &self.objectives);
-                            std::array::from_fn(|j| (values[j] - ideal[j]) / scale[j])
+                            // an infinitely bad value lies on the reference point (no
+                            // contribution), an infinitely good one beyond the ideal point
+                            std::array::from_fn(|j| match values[j] {
+                                f64::INFINITY => reference[j],
+                                f64::NEG_INFINITY => -1.0,
+                                value => (value - ideal[j]) / scale[j],
+                            })
                         })
                         .collect();
                     let contributions =
@@ -616,6 +630,38 @@ mod tests {
             }
             other => panic!("expected a setting error, got {other:?}"),
         }
+    }
+
+    // the values of the population, after a tell of `initial` and then of `child`
+    fn survivors(initial: &[[f64; 2]], child: [f64; 2]) -> Vec<[f64; 2]> {
+        let mut sms_emoa = builder(initial.len(), 0).offspring(1).build().unwrap();
+        assert_eq!(sms_emoa.ask().len(), initial.len());
+        let scores: Vec<Scores<2>> = initial.iter().map(|&values| Scores::new(values)).collect();
+        sms_emoa.tell(&scores).unwrap();
+        assert_eq!(sms_emoa.ask().len(), 1);
+        sms_emoa.tell(&[Scores::new(child)]).unwrap();
+        sms_emoa
+            .population()
+            .iter()
+            .map(|individual| individual.fitness().unwrap().values().unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn infinite_values_keep_selection_by_hypervolume() {
+        // an infinitely bad value contributes nothing: it goes first, not an extreme
+        let kept = survivors(
+            &[[0.0, 100.0], [1.0, 99.0], [50.0, 50.0], [100.0, 0.0]],
+            [-1.0, f64::INFINITY],
+        );
+        assert!(kept.contains(&[0.0, 100.0]), "{kept:?}");
+        assert!(!kept.contains(&[-1.0, f64::INFINITY]), "{kept:?}");
+        // an infinitely good value is an extreme of the front, which stays
+        let kept = survivors(
+            &[[f64::NEG_INFINITY, 5.0], [0.0, 3.0], [1.0, 2.0]],
+            [2.0, 1.0],
+        );
+        assert!(kept.contains(&[f64::NEG_INFINITY, 5.0]), "{kept:?}");
     }
 
     #[test]

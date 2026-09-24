@@ -169,7 +169,11 @@ fn contributions_of(points: &[Vec<f64>], reference: &[f64]) -> Vec<f64> {
             order.sort_by(|&a, &b| points[a][0].total_cmp(&points[b][0]));
             let best = order[0];
             let next = order.get(1).map_or(reference[0], |&i| points[i][0]);
-            contributions[best] = next - points[best][0];
+            contributions[best] = if next == points[best][0] {
+                0.0
+            } else {
+                next - points[best][0]
+            };
         }
         2 => {
             let mut order: Vec<usize> = (0..n).collect();
@@ -205,8 +209,11 @@ fn contributions_of(points: &[Vec<f64>], reference: &[f64]) -> Vec<f64> {
                 if thickness > 0.0 {
                     let slab = &mut slab[..below.len()];
                     staircase_contributions(&below, [reference[0], reference[1]], slab);
-                    for (&member, contribution) in members.iter().zip(slab.iter()) {
-                        contributions[member] += thickness * contribution;
+                    for (&member, &contribution) in members.iter().zip(slab.iter()) {
+                        // a zero contribution adds nothing, even to an infinite slab
+                        if contribution > 0.0 {
+                            contributions[member] += thickness * contribution;
+                        }
                     }
                 }
             }
@@ -230,7 +237,9 @@ fn contributions_of(points: &[Vec<f64>], reference: &[f64]) -> Vec<f64> {
                 if thickness > 0.0 {
                     let slab = contributions_of(&below, &reference[..last]);
                     for (&member, contribution) in members.iter().zip(slab) {
-                        contributions[member] += thickness * contribution;
+                        if contribution > 0.0 {
+                            contributions[member] += thickness * contribution;
+                        }
                     }
                 }
             }
@@ -271,10 +280,42 @@ fn staircase_contributions(points: &[[f64; 2]], reference: [f64; 2], contributio
                 ceiling = qy;
             }
         }
-        contributions[step] = (right - x) * (above - y) - covered;
+        let area = (right - x) * (above - y) - covered;
+        contributions[step] = if area.is_nan() {
+            // infinite coordinates: the uncovered strips one by one, which never subtract an
+            // infinity from an infinity (finite ones take the faster formula above)
+            exclusive_strips(&points[step..next], right, above)
+        } else {
+            area
+        };
         above = y;
         step = next;
     }
+}
+
+// the part of a step's rectangle (up to `right` and `above`) that the points it dominates, which
+// follow it, leave uncovered, as strips between their x coordinates
+fn exclusive_strips(points: &[[f64; 2]], right: f64, above: f64) -> f64 {
+    let [mut x, y] = points[0];
+    let mut ceiling = above;
+    let mut area = 0.0;
+    let mut strip = |from: f64, to: f64, top: f64| {
+        if to > from && top > y {
+            area += (to - from) * (top - y);
+        }
+    };
+    for &[qx, qy] in &points[1..] {
+        if qx >= right {
+            break;
+        }
+        if qy < ceiling {
+            strip(x, qx, ceiling);
+            x = qx;
+            ceiling = qy;
+        }
+    }
+    strip(x, right, ceiling);
+    area
 }
 
 /// The inverted generational distance: the mean distance from each point of the reference front
@@ -366,7 +407,7 @@ fn mean_nearest<const M: usize>(
 /// `Δ = (Σₘ d(eₘ, front) + Σ |d(x) − d̄|) / (Σₘ d(eₘ, front) + N d̄)`, where `eₘ` is the point of
 /// the reference front that is worst in objective `m`, `d(x)` the distance of a point of `front`
 /// to its nearest neighbor in `front`, and `d̄` their mean. 1 for fronts of fewer than 2 points,
-/// or when every distance is 0.
+/// or when every distance is 0, and NaN with infinite values.
 ///
 /// ```
 /// use genoxide::Objective::Minimize;

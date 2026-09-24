@@ -128,10 +128,14 @@ fn strength_fitness<const M: usize>(
         }
     }
     let (mut low, mut high) = ([f64::INFINITY; M], [f64::NEG_INFINITY; M]);
+    // over the finite values: one infinite value doesn't stop an objective being scaled
     for score in scores.iter().filter(|s| s.is_valid()) {
         for j in 0..M {
-            low[j] = low[j].min(score.raw()[j]);
-            high[j] = high[j].max(score.raw()[j]);
+            let value = score.raw()[j];
+            if value.is_finite() {
+                low[j] = low[j].min(value);
+                high[j] = high[j].max(value);
+            }
         }
     }
     let scale: [f64; M] = std::array::from_fn(|j| {
@@ -148,7 +152,13 @@ fn strength_fitness<const M: usize>(
             if scores[a].is_valid() && scores[b].is_valid() {
                 let distance = (0..M)
                     .map(|j| {
-                        let d = (scores[a].raw()[j] - scores[b].raw()[j]) / scale[j];
+                        let (x, y) = (scores[a].raw()[j], scores[b].raw()[j]);
+                        // equal infinities are 0 apart: `inf - inf` would be a NaN, whose sign
+                        // (and so its order) differs between processors
+                        if x == y {
+                            return 0.0;
+                        }
+                        let d = (x - y) / scale[j];
                         d * d
                     })
                     .sum::<f64>()
@@ -598,6 +608,28 @@ mod tests {
     use crate::genome::{Real, Reals};
     use crate::operator::{PolynomialMutation, SimulatedBinaryCrossover};
     use proptest::prelude::*;
+
+    #[test]
+    fn equal_infinities_are_no_nan_apart() {
+        // inf - inf is a NaN whose sign, and so its order, depends on the processor
+        let scores = [
+            Scores::new([f64::INFINITY, 0.0]),
+            Scores::new([f64::INFINITY, 1.0]),
+            Scores::new([0.0, 0.5]),
+            Scores::new([4.0, 0.2]),
+        ];
+        let (fitness, distances) = strength_fitness(&scores, &[Minimize, Minimize]);
+        assert!(fitness.iter().all(|value| !value.is_nan()));
+        assert!(
+            distances
+                .iter()
+                .flatten()
+                .all(|distance| !distance.is_nan())
+        );
+        // the objective with infinite values is still scaled, by its finite range 0 to 4
+        let expected = (1.0f64 + (0.5f64 - 0.2) * (0.5 - 0.2)).sqrt();
+        assert_eq!(distances[2][3], expected);
+    }
 
     fn builder(
         size: usize,
