@@ -151,7 +151,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Non-dominated sorting (fast and log variants), crowding distance
 - [x] NSGA-II
 - [x] NSGA-III (reference points)
-- [ ] SPEA2
+- [x] SPEA2
 - [ ] MOEA/D
 - [ ] SMS-EMOA
 - [x] Pareto archive

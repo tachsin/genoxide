@@ -450,6 +450,7 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+- `Spea2` has the same builder as `Nsga2` and usually spreads a 2-objective front a little better, at a higher cost per generation (its truncation compares every pair of solutions).
 - For 3 or more objectives, `Nsga3::builder(real, objectives, multi::das_dennis::<3>(12))` spreads the front along reference directions (91 for 3 objectives and 12 divisions); the population size defaults to their number. Use SBX with η 30 and polynomial mutation.
 - The number of objectives is part of the types: returning `[f64; 3]` for 2 objectives doesn't compile.
 - Constraints: feasible solutions dominate infeasible ones, and between infeasible ones the smaller violation wins (`multi::dominates`).
