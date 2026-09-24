@@ -25,7 +25,9 @@ use std::cmp::Ordering;
 /// 3. The next archive takes every non-dominated solution. If they're too few, the best of the
 ///    others by fitness fill it; if they're too many, the solution with the smallest distance to
 ///    its nearest neighbor (then second nearest, and so on) is removed until they fit, which
-///    keeps the extremes and spreads the front evenly.
+///    keeps the extremes and spreads the front evenly. Truncation costs O(N²) per removal in the
+///    worst case, so a generation that removes N solutions costs O(N³): fine for populations of
+///    a few hundred.
 ///
 /// Dominance is constrained dominance ([`dominates`]), and distances are measured with each
 /// objective scaled to its range among the valid solutions, so objectives with different scales
