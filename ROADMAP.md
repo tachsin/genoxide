@@ -141,7 +141,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 
 ### 0.3: Evolution strategies and swarm
 - [x] CMA-ES, with IPOP / BIPOP restarts
-- [ ] sep-CMA-ES for high dimensions
+- [x] sep-CMA-ES for high dimensions
 - [x] Differential evolution: rand/1, best/1, current-to-pbest
 - [x] Adaptive DE: JADE, SHADE, L-SHADE
 - [x] Particle swarm: global and local topologies
