@@ -128,7 +128,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Instruction count benchmarks in CI (gungraun, formerly iai-callgrind)
 - [x] genoxide adapter in the benchmark suite, first published results
 
-### 0.2: Real-valued and permutation excellence
+### 0.2: Real-valued and permutation excellence ✅
 - [x] Real-valued crossover: SBX, BLX-α, arithmetic
 - [x] Real-valued mutation: Gaussian, polynomial
 - [x] Self-adaptive Gaussian mutation (a step size per individual)
