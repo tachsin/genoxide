@@ -64,8 +64,34 @@ RASTRIGIN_BOUND = 5.12
 RASTRIGIN_TARGET = 0.01
 
 
+# Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
+# towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
+SHIFT = [2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(1000)]
+
+
 def rastrigin(solution):
-    return 10 * len(solution) + sum(v * v - 10 * math.cos(2 * math.pi * v) for v in solution)
+    return 10 * len(solution) + sum(
+        (v - s) ** 2 - 10 * math.cos(2 * math.pi * (v - s)) for v, s in zip(solution, SHIFT)
+    )
+
+
+def rosenbrock(solution):
+    return sum(100 * (b - a * a) ** 2 + (1 - a) ** 2 for a, b in zip(solution, solution[1:]))
+
+
+def ackley(solution):
+    n = len(solution)
+    squares = sum((v - s) ** 2 for v, s in zip(solution, SHIFT)) / n
+    cosines = sum(math.cos(2 * math.pi * (v - s)) for v, s in zip(solution, SHIFT)) / n
+    return -20 * math.exp(-0.2 * math.sqrt(squares)) - math.exp(cosines) + 20 + math.e
+
+
+# the real-valued problems: fitness function and bounds
+REAL_PROBLEMS = {
+    "rastrigin": (rastrigin, -RASTRIGIN_BOUND, RASTRIGIN_BOUND),
+    "rosenbrock": (rosenbrock, -5.0, 10.0),
+    "ackley": (ackley, -32.768, 32.768),
+}
 
 
 # -------------------------------------------------------------------------------------------------
@@ -105,14 +131,15 @@ def config_for(problem, size, mode, seed):
         )
         return config, lambda solution: -nqueens(solution), lambda best: best == 0
 
-    if problem == "rastrigin":
+    if problem in REAL_PROBLEMS:
         # PyGAD defaults, within the bounds
+        function, low, high = REAL_PROBLEMS[problem]
         config = dict(
             num_genes=size, sol_per_pop=100, num_parents_mating=50,
-            gene_space={"low": -RASTRIGIN_BOUND, "high": RASTRIGIN_BOUND},
-            init_range_low=-RASTRIGIN_BOUND, init_range_high=RASTRIGIN_BOUND,
+            gene_space={"low": low, "high": high},
+            init_range_low=low, init_range_high=high,
         )
-        return config, lambda solution: -rastrigin(solution), lambda best: -best <= RASTRIGIN_TARGET
+        return config, lambda solution: -function(solution), lambda best: -best <= RASTRIGIN_TARGET
 
     print(f"unknown problem {problem}", file=sys.stderr)
     sys.exit(2)
@@ -123,6 +150,9 @@ def main():
         print(__doc__, file=sys.stderr)
         sys.exit(2)
     problem, size, mode = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+    if problem in {"zdt1", "zdt2", "zdt3", "dtlz1", "dtlz2"}:
+        # no multi-objective algorithm with SBX and polynomial mutation
+        return
     seed_from, seed_to = int(sys.argv[4]), int(sys.argv[5])
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
 

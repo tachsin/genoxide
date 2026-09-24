@@ -82,12 +82,44 @@ RASTRIGIN_BOUND = 5.12
 RASTRIGIN_TARGET = 0.01
 
 
+# Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
+# towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
+SHIFT = [2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(1000)]
+
+
 class Rastrigin(CountingProblem):
     def __init__(self, size):
         super().__init__(n_var=size, xl=-RASTRIGIN_BOUND, xu=RASTRIGIN_BOUND)
 
     def fitness(self, x):
-        return 10 * len(x) + sum(v * v - 10 * math.cos(2 * math.pi * v) for v in x)
+        return 10 * len(x) + sum((v - s) ** 2 - 10 * math.cos(2 * math.pi * (v - s)) for v, s in zip(x, SHIFT))
+
+
+class Rosenbrock(CountingProblem):
+    def __init__(self, size):
+        super().__init__(n_var=size, xl=-5.0, xu=10.0)
+
+    def fitness(self, x):
+        return sum(100 * (b - a * a) ** 2 + (1 - a) ** 2 for a, b in zip(x, x[1:]))
+
+
+class Ackley(CountingProblem):
+    def __init__(self, size):
+        super().__init__(n_var=size, xl=-32.768, xu=32.768)
+
+    def fitness(self, x):
+        n = len(x)
+        squares = sum((v - s) ** 2 for v, s in zip(x, SHIFT)) / n
+        cosines = sum(math.cos(2 * math.pi * (v - s)) for v, s in zip(x, SHIFT)) / n
+        return -20 * math.exp(-0.2 * math.sqrt(squares)) - math.exp(cosines) + 20 + math.e
+
+
+# the real-valued problems: class and bounds
+REAL_PROBLEMS = {
+    "rastrigin": (Rastrigin, -RASTRIGIN_BOUND, RASTRIGIN_BOUND),
+    "rosenbrock": (Rosenbrock, -5.0, 10.0),
+    "ackley": (Ackley, -32.768, 32.768),
+}
 
 
 class FrontProblem(ElementwiseProblem):
@@ -112,6 +144,11 @@ def zdt1(x):
     return [x[0], g * (1 - math.sqrt(x[0] / g))]
 
 
+def zdt2(x):
+    g = zdt_g(x)
+    return [x[0], g * (1 - (x[0] / g) ** 2)]
+
+
 def zdt3(x):
     g = zdt_g(x)
     return [x[0], g * (1 - math.sqrt(x[0] / g) - x[0] / g * math.sin(10 * math.pi * x[0]))]
@@ -130,12 +167,28 @@ def dtlz2(x, objectives=3):
     return values
 
 
+def dtlz1(x, objectives=3):
+    tail = x[objectives - 1:]
+    g = 100 * (len(tail) + sum((v - 0.5) ** 2 - math.cos(20 * math.pi * (v - 0.5)) for v in tail))
+    values = []
+    for m in range(objectives):
+        f = 0.5 * (1 + g)
+        for v in x[:objectives - 1 - m]:
+            f *= v
+        if m > 0:
+            f *= 1 - x[objectives - 1 - m]
+        values.append(f)
+    return values
+
+
 # (fitness function, variables, objectives, population size, Das-Dennis divisions)
 FRONT_PROBLEMS = {
     "zdt1": (zdt1, lambda size: size, 2, 100, 99),
+    "zdt2": (zdt2, lambda size: size, 2, 100, 99),
     "zdt3": (zdt3, lambda size: size, 2, 100, 99),
-    # size: the number of objectives, with k = 10
+    # size: the number of objectives, with k = 10 (DTLZ2) and 5 (DTLZ1)
     "dtlz2": (dtlz2, lambda size: size + 9, 3, 92, 12),
+    "dtlz1": (dtlz1, lambda size: size + 4, 3, 92, 12),
 }
 
 
@@ -275,15 +328,16 @@ def solvers_for(problem_name, size, mode):
             )
         return [("ga", lambda: NQueens(size), algorithm, 0, lambda f: f, lambda best: best == 0)]
 
-    if problem_name == "rastrigin":
+    if problem_name in REAL_PROBLEMS:
         success = lambda best: best <= RASTRIGIN_TARGET
+        problem_class, low, high = REAL_PROBLEMS[problem_name]
         return [
             # defaults: population 100, SBX, polynomial mutation
-            ("ga", lambda: Rastrigin(size), lambda: GA(), RASTRIGIN_TARGET, lambda f: f, success),
-            ("de", lambda: Rastrigin(size), lambda: DE(), RASTRIGIN_TARGET, lambda f: f, success),
-            ("cma_es", lambda: Rastrigin(size),
+            ("ga", lambda: problem_class(size), lambda: GA(), RASTRIGIN_TARGET, lambda f: f, success),
+            ("de", lambda: problem_class(size), lambda: DE(), RASTRIGIN_TARGET, lambda f: f, success),
+            ("cma_es", lambda: problem_class(size),
              # with restarts, as recommended for Rastrigin in docs/source/algorithms/soo/cmaes.md
-             lambda: CMAES(x0=np.random.uniform(-RASTRIGIN_BOUND, RASTRIGIN_BOUND, size),
+             lambda: CMAES(x0=np.random.uniform(low, high, size),
                            restarts=10, restart_from_best=True),
              RASTRIGIN_TARGET, lambda f: f, success),
         ]

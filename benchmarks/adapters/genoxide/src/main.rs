@@ -4,10 +4,10 @@
 //! Prints one JSON line per solver per seed, see ../../README.md for the fields.
 
 use genoxide::Objective::Minimize;
-use genoxide::multi::problems::{Dtlz2, TestProblem, Zdt1, Zdt3};
+use genoxide::multi::problems::{Dtlz1, Dtlz2, TestProblem, Zdt1, Zdt2, Zdt3};
 use genoxide::multi::{Decomposition, Moead, Nsga3, SmsEmoa, Spea2, das_dennis};
 use genoxide::prelude::*;
-use std::f64::consts::PI;
+use std::f64::consts::{E, PI};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------------------------
@@ -34,12 +34,37 @@ fn nqueens(genome: &Order) -> f64 {
         .sum::<usize>() as f64
 }
 
+// Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
+// towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
+fn shift(i: usize) -> f64 {
+    2.0 * ((37 * i + 11) % 101) as f64 / 101.0 - 1.0
+}
+
 fn rastrigin(genome: &Reals) -> f64 {
     10.0 * genome.len() as f64
         + genome
             .iter()
-            .map(|x| x * x - 10.0 * (2.0 * PI * x).cos())
+            .enumerate()
+            .map(|(i, x)| {
+                let x = x - shift(i);
+                x * x - 10.0 * (2.0 * PI * x).cos()
+            })
             .sum::<f64>()
+}
+
+fn rosenbrock(genome: &Reals) -> f64 {
+    genome
+        .windows(2)
+        .map(|pair| 100.0 * (pair[1] - pair[0] * pair[0]).powi(2) + (1.0 - pair[0]).powi(2))
+        .sum()
+}
+
+fn ackley(genome: &Reals) -> f64 {
+    let n = genome.len() as f64;
+    let shifted = || genome.iter().enumerate().map(|(i, x)| x - shift(i));
+    let squares = shifted().map(|x| x * x).sum::<f64>() / n;
+    let cosines = shifted().map(|x| (2.0 * PI * x).cos()).sum::<f64>() / n;
+    -20.0 * (-0.2 * squares.sqrt()).exp() - cosines.exp() + 20.0 + E
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -161,8 +186,17 @@ fn run_nqueens(args: &Args, seed: u64) -> Result<()> {
 
 const RASTRIGIN_TARGET: f64 = 0.01;
 
-fn run_rastrigin(args: &Args, seed: u64) -> Result<()> {
-    let real = || Real::uniform(args.size, -5.12..=5.12);
+// the real-valued problems: Rastrigin, Rosenbrock and Ackley, with their bounds
+fn run_real(args: &Args, seed: u64) -> Result<()> {
+    let (bounds, fitness): (std::ops::RangeInclusive<f64>, fn(&Reals) -> f64) =
+        match args.problem.as_str() {
+            "rastrigin" => (-5.12..=5.12, rastrigin),
+            "rosenbrock" => (-5.0..=10.0, rosenbrock),
+            "ackley" => (-32.768..=32.768, ackley),
+            other => unreachable!("unknown problem {other}"),
+        };
+    let real = || Real::uniform(args.size, bounds.clone());
+    let rastrigin = fitness;
     let report = |solver: &str, outcome: Result<Outcome<Reals>>, time_s: f64| -> Result<()> {
         let outcome = outcome?;
         let success = outcome
@@ -356,7 +390,16 @@ fn run_front(args: &Args, seed: u64) -> Result<()> {
     let two = ["nsga2", "spea2", "sms_emoa", "moead"];
     match args.problem.as_str() {
         "zdt1" => run_front_problem(args, seed, Zdt1::new(args.size), 100, 99, &two),
+        "zdt2" => run_front_problem(args, seed, Zdt2::new(args.size), 100, 99, &two),
         "zdt3" => run_front_problem(args, seed, Zdt3::new(args.size), 100, 99, &two),
+        "dtlz1" => run_front_problem(
+            args,
+            seed,
+            Dtlz1::<3>::default(),
+            92,
+            12,
+            &["nsga2", "nsga3", "spea2", "sms_emoa", "moead"],
+        ),
         // size: the number of objectives
         "dtlz2" => run_front_problem(
             args,
@@ -391,8 +434,8 @@ fn main() -> Result<()> {
         match args.problem.as_str() {
             "onemax" => run_onemax(&args, seed)?,
             "nqueens" => run_nqueens(&args, seed)?,
-            "rastrigin" => run_rastrigin(&args, seed)?,
-            "zdt1" | "zdt3" | "dtlz2" => run_front(&args, seed)?,
+            "rastrigin" | "rosenbrock" | "ackley" => run_real(&args, seed)?,
+            "zdt1" | "zdt2" | "zdt3" | "dtlz1" | "dtlz2" => run_front(&args, seed)?,
             other => {
                 eprintln!("unknown problem {other}");
                 std::process::exit(2);
@@ -400,4 +443,20 @@ fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod shift_tests {
+    use super::*;
+
+    #[test]
+    fn shifted_functions() {
+        // 0 at the shift, and the values of a Python reference at a fixed point
+        let s: Vec<f64> = (0..10).map(shift).collect();
+        let x: Vec<f64> = (0..10).map(|i| 0.5 * (i % 7) as f64 - 1.5).collect();
+        assert!(rastrigin(&Reals::from(s.clone())).abs() < 1e-12);
+        assert!(ackley(&Reals::from(s.clone())).abs() < 1e-12);
+        assert!((rastrigin(&Reals::from(x.clone())) - 87.78147018265213).abs() < 1e-9);
+        assert!((ackley(&Reals::from(x.clone())) - 5.149902035382837).abs() < 1e-9);
+    }
 }

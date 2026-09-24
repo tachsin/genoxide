@@ -65,11 +65,37 @@ def nqueens(individual):
     return (conflicts,)
 
 
+# Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
+# towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
+SHIFT = [2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(1000)]
+
+
 def rastrigin(individual):
     return (
         10 * len(individual)
-        + sum(x * x - 10 * math.cos(2 * math.pi * x) for x in individual),
+        + sum((x - s) ** 2 - 10 * math.cos(2 * math.pi * (x - s)) for x, s in zip(individual, SHIFT)),
     )
+
+
+def rosenbrock(individual):
+    return (
+        sum(100 * (b - a * a) ** 2 + (1 - a) ** 2 for a, b in zip(individual, individual[1:])),
+    )
+
+
+def ackley(individual):
+    n = len(individual)
+    squares = sum((x - s) ** 2 for x, s in zip(individual, SHIFT)) / n
+    cosines = sum(math.cos(2 * math.pi * (x - s)) for x, s in zip(individual, SHIFT)) / n
+    return (-20 * math.exp(-0.2 * math.sqrt(squares)) - math.exp(cosines) + 20 + math.e,)
+
+
+# the real-valued problems: fitness function and bounds
+REAL_PROBLEMS = {
+    "rastrigin": (rastrigin, -5.12, 5.12),
+    "rosenbrock": (rosenbrock, -5.0, 10.0),
+    "ackley": (ackley, -32.768, 32.768),
+}
 
 
 def zdt_g(x):
@@ -79,6 +105,11 @@ def zdt_g(x):
 def zdt1(x):
     g = zdt_g(x)
     return x[0], g * (1 - math.sqrt(x[0] / g))
+
+
+def zdt2(x):
+    g = zdt_g(x)
+    return x[0], g * (1 - (x[0] / g) ** 2)
 
 
 def zdt3(x):
@@ -99,12 +130,28 @@ def dtlz2(x, objectives=3):
     return tuple(values)
 
 
+def dtlz1(x, objectives=3):
+    tail = x[objectives - 1:]
+    g = 100 * (len(tail) + sum((v - 0.5) ** 2 - math.cos(20 * math.pi * (v - 0.5)) for v in tail))
+    values = []
+    for m in range(objectives):
+        f = 0.5 * (1 + g)
+        for v in x[:objectives - 1 - m]:
+            f *= v
+        if m > 0:
+            f *= 1 - x[objectives - 1 - m]
+        values.append(f)
+    return tuple(values)
+
+
 # (fitness function, variables, objectives, population size)
 FRONT_PROBLEMS = {
     "zdt1": (zdt1, lambda size: size, 2, 100),
+    "zdt2": (zdt2, lambda size: size, 2, 100),
     "zdt3": (zdt3, lambda size: size, 2, 100),
-    # size: the number of objectives, with k = 10
+    # size: the number of objectives, with k = 10 (DTLZ2) and 5 (DTLZ1)
     "dtlz2": (dtlz2, lambda size: size + 9, 3, 92),
+    "dtlz1": (dtlz1, lambda size: size + 4, 3, 92),
 }
 
 
@@ -216,23 +263,30 @@ RASTRIGIN_BOUND = 5.12
 RASTRIGIN_TARGET = 0.01
 
 
-def solve_rastrigin_ga(size, budget):
+def solve_real_ga(problem, size, budget):
     # SBX + polynomial mutation, as in examples/ga/nsga2.py
+    function, low, high = REAL_PROBLEMS[problem]
     toolbox = base.Toolbox()
-    toolbox.register("attr_float", random.uniform, -RASTRIGIN_BOUND, RASTRIGIN_BOUND)
+    toolbox.register("attr_float", random.uniform, low, high)
     toolbox.register("individual", tools.initRepeat, creator.IndividualMin, toolbox.attr_float, size)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-    toolbox.register("evaluate", rastrigin)
-    toolbox.register("mate", tools.cxSimulatedBinaryBounded, low=-RASTRIGIN_BOUND, up=RASTRIGIN_BOUND, eta=20.0)
-    toolbox.register("mutate", tools.mutPolynomialBounded, low=-RASTRIGIN_BOUND, up=RASTRIGIN_BOUND, eta=20.0, indpb=1.0 / size)
+    toolbox.register("evaluate", function)
+    toolbox.register("mate", tools.cxSimulatedBinaryBounded, low=low, up=high, eta=20.0)
+    toolbox.register("mutate", tools.mutPolynomialBounded, low=low, up=high, eta=20.0, indpb=1.0 / size)
     toolbox.register("select", tools.selTournament, tournsize=3)
     best, generations = ea_simple(toolbox, 100, 0.9, 1.0, budget, lambda best: best <= RASTRIGIN_TARGET)
     return best, generations
 
 
-def solve_rastrigin_cmaes(size, budget):
-    # examples/es/cma_minfct.py (which also uses rastrigin)
-    strategy = cma.Strategy(centroid=[5.0] * size, sigma=5.0, lambda_=20 * size)
+def solve_real_cmaes(problem, size, budget):
+    # examples/es/cma_minfct.py, which minimizes rastrigin from [5.0] * n with sigma 5.0; the
+    # other problems start from a random point with a quarter of the range as sigma
+    function, low, high = REAL_PROBLEMS[problem]
+    if problem == "rastrigin":
+        centroid, sigma = [5.0] * size, 5.0
+    else:
+        centroid, sigma = [random.uniform(low, high) for _ in range(size)], (high - low) / 4
+    strategy = cma.Strategy(centroid=centroid, sigma=sigma, lambda_=20 * size)
     best = math.inf
     generations = 0
     while not budget.exhausted():
@@ -240,7 +294,7 @@ def solve_rastrigin_cmaes(size, budget):
         population = strategy.generate(creator.IndividualMin)
         values = []
         for individual in population:
-            individual.fitness.values = budget.evaluate(rastrigin, individual)
+            individual.fitness.values = budget.evaluate(function, individual)
             values.append(individual.fitness.values[0])
         # cma.Strategy has no stop criteria: once it converges (e.g. in a local optimum of
         # rastrigin) the covariance matrix degenerates, producing NaN candidates and then a
@@ -295,13 +349,13 @@ def main():
             solvers.append(lambda budget: solve_onemax(size, mode, budget)[0])
         elif problem == "nqueens":
             solvers.append(lambda budget: solve_nqueens(size, mode, budget)[0])
-        elif problem == "rastrigin":
+        elif problem in REAL_PROBLEMS:
             def ga(budget):
-                best, generations = solve_rastrigin_ga(size, budget)
+                best, generations = solve_real_ga(problem, size, budget)
                 return ("ga", best, generations, RASTRIGIN_TARGET, best <= RASTRIGIN_TARGET)
 
             def cmaes(budget):
-                best, generations = solve_rastrigin_cmaes(size, budget)
+                best, generations = solve_real_cmaes(problem, size, budget)
                 return ("cma_es", best, generations, RASTRIGIN_TARGET, best <= RASTRIGIN_TARGET)
 
             solvers += [ga, cmaes]
