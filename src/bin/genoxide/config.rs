@@ -259,7 +259,10 @@ pub struct Stop {
 
 /// Progress lines on stderr: every so often (`"2s"`), every so many generations, or `"off"`.
 #[derive(Debug, Deserialize)]
-#[serde(untagged)]
+#[serde(
+    untagged,
+    expecting = "a duration like \"2s\", a number of generations, or \"off\""
+)]
 pub enum Report {
     Generations(u64),
     Text(String),

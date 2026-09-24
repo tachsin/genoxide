@@ -451,12 +451,18 @@ impl Context {
             if !single {
                 return Err("`stop.target` needs a single objective".to_string());
             }
+            if target.is_nan() {
+                return Err("`stop.target` is NaN".to_string());
+            }
             conditions.push(Stop::target(target));
         }
         if let Some(time) = config.time {
             conditions.push(Stop::time(time));
         }
         if let Some(stagnation) = config.stagnation {
+            if stagnation == 0 {
+                return Err("`stop.stagnation` must be at least 1 generation".to_string());
+            }
             conditions.push(Stop::stagnation(stagnation));
         }
         let mut conditions = conditions.into_iter();
@@ -471,6 +477,9 @@ impl Context {
         match &self.report {
             config::Report::Text(text) if text == "off" => Ok(None),
             config::Report::Text(text) => Ok(Some(Report::every(config::parse_duration(text)?))),
+            config::Report::Generations(0) => {
+                Err("`report` must be at least 1 generation".to_string())
+            }
             config::Report::Generations(generations) => {
                 setting(Report::every_generations(*generations)).map(Some)
             }

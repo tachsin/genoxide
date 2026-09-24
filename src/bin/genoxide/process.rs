@@ -263,7 +263,14 @@ pub fn parse(line: &str, values: &mut [f64]) -> Result<f64, String> {
         }
         len if len == expected + 1 => {
             values.copy_from_slice(&numbers[..expected]);
-            Ok(numbers[expected])
+            let violation = numbers[expected];
+            if violation < 0.0 {
+                return Err(format!(
+                    "the constraint violation, the number after the {expected} objective value{}, is negative",
+                    if expected == 1 { "" } else { "s" }
+                ));
+            }
+            Ok(violation)
         }
         len => Err(format!(
             "expected {expected} number{} (the objective value{}), and optionally a constraint violation, got {len}",

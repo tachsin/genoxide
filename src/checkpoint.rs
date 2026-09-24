@@ -173,13 +173,21 @@ pub fn save_file<A: Serialize>(algorithm: &A, path: impl AsRef<Path>) -> Result<
     let mut temporary = path.as_os_str().to_owned();
     temporary.push(".tmp");
     let written = (|| {
-        let file = File::create(&temporary)
-            .map_err(|error| checkpoint_error(format!("can't create {temporary:?}: {error}")))?;
+        let file = File::create(&temporary).map_err(|error| {
+            checkpoint_error(format!(
+                "can't create {}: {error}",
+                Path::new(&temporary).display()
+            ))
+        })?;
         save(algorithm, BufWriter::new(&file))?;
-        file.sync_all()
-            .map_err(|error| checkpoint_error(format!("can't sync {temporary:?}: {error}")))?;
+        file.sync_all().map_err(|error| {
+            checkpoint_error(format!(
+                "can't sync {}: {error}",
+                Path::new(&temporary).display()
+            ))
+        })?;
         fs::rename(&temporary, path)
-            .map_err(|error| checkpoint_error(format!("can't replace {path:?}: {error}")))
+            .map_err(|error| checkpoint_error(format!("can't replace {}: {error}", path.display())))
     })();
     if written.is_err() {
         let _ = fs::remove_file(&temporary);
@@ -195,7 +203,7 @@ pub fn save_file<A: Serialize>(algorithm: &A, path: impl AsRef<Path>) -> Result<
 pub fn load_file<A: DeserializeOwned>(path: impl AsRef<Path>) -> Result<A> {
     let path = path.as_ref();
     let file = File::open(path)
-        .map_err(|error| checkpoint_error(format!("can't open {path:?}: {error}")))?;
+        .map_err(|error| checkpoint_error(format!("can't open {}: {error}", path.display())))?;
     load(BufReader::new(file))
 }
 
