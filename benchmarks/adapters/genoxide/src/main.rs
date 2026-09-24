@@ -159,10 +159,21 @@ fn run_nqueens(args: &Args, seed: u64) -> Result<()> {
 const RASTRIGIN_TARGET: f64 = 0.01;
 
 fn run_rastrigin(args: &Args, seed: u64) -> Result<()> {
+    let real = || Real::uniform(args.size, -5.12..=5.12);
+    let report = |solver: &str, outcome: Result<Outcome<Reals>>, time_s: f64| -> Result<()> {
+        let outcome = outcome?;
+        let success = outcome
+            .best_fitness()
+            .score()
+            .is_some_and(|best| best <= RASTRIGIN_TARGET);
+        print_result(args, seed, solver, &outcome, time_s, RASTRIGIN_TARGET, success);
+        Ok(())
+    };
+
     // the settings of examples/rastrigin.rs: polynomial mutation at the usual rate of 1 / length,
     // single-threaded like every adapter
     let (outcome, time_s) = timed(|| {
-        let ga = Ga::builder(Real::uniform(args.size, -5.12..=5.12)?)
+        let ga = Ga::builder(real()?)
             .population_size(100)
             .select(Tournament::new(3)?)
             .crossover(UniformCrossover::new())
@@ -175,13 +186,39 @@ fn run_rastrigin(args: &Args, seed: u64) -> Result<()> {
             .stop_when(args.stop(RASTRIGIN_TARGET))
             .run()
     });
-    let outcome = outcome?;
-    let success = outcome
-        .best_fitness()
-        .score()
-        .is_some_and(|best| best <= RASTRIGIN_TARGET);
-    print_result(args, seed, "ga", &outcome, time_s, RASTRIGIN_TARGET, success);
-    Ok(())
+    report("ga", outcome, time_s)?;
+
+    // differential evolution without tuning, as AGENTS.md suggests when F and CR are unknown:
+    // SHADE with current-to-pbest/1 and an archive, and the usual population of 100
+    let (outcome, time_s) = timed(|| {
+        let de = De::builder(real()?)
+            .population_size(100)
+            .strategy(de::Strategy::CurrentToPBest {
+                p: 0.1,
+                archive: 1.0,
+            })
+            .control(de::Control::Shade { memory: 6 })
+            .minimize()
+            .seed(seed)
+            .build()?;
+        Engine::new(de, rastrigin)
+            .stop_when(args.stop(RASTRIGIN_TARGET))
+            .run()
+    });
+    report("de", outcome, time_s)?;
+
+    // the CMA-ES template of AGENTS.md: the defaults, with IPOP restarts for a multimodal function
+    let (outcome, time_s) = timed(|| {
+        let cmaes = Cmaes::builder(real()?)
+            .restarts(cmaes::Restarts::Ipop)
+            .minimize()
+            .seed(seed)
+            .build()?;
+        Engine::new(cmaes, rastrigin)
+            .stop_when(args.stop(RASTRIGIN_TARGET))
+            .run()
+    });
+    report("cma_es", outcome, time_s)
 }
 
 fn main() -> Result<()> {
