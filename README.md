@@ -79,7 +79,7 @@ A missing operator, or one that doesn't fit the genome, is a compile error that 
 - **Local search:** hill climbing (first-improvement or best-of-k, with plateau moves), simulated annealing, tabu search and iterated local search, with any mutation as the neighborhood
 - **Constraints:** Deb's feasibility rules (a fitness function returns a score and a constraint violation), and penalty functions
 - **Engine:** ask / tell core, stop conditions (target, generations, evaluations, time, stagnation, custom, combined), parallel evaluation with the same results as sequential, batch evaluation (a whole generation in one call, for SIMD, GPUs or remote services), abort flag, NaN policy
-- **Observers:** statistics per generation, hall of fame, closures
+- **Observers:** statistics per generation, hall of fame, progress lines, closures; `tracing` spans and events behind the `tracing` feature
 
 ### Examples
 

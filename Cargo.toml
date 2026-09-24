@@ -18,11 +18,14 @@ all-features = true
 rand = "0.10"
 rand_chacha = "0.10"
 rayon = { version = "1.12", optional = true }
+tracing = { version = "0.1.41", optional = true, default-features = false, features = ["std"] }
 
 [features]
 default = ["parallel"]
 # parallel fitness evaluation with rayon
 parallel = ["dep:rayon"]
+# a span per run and events per generation, with the target `genoxide`
+tracing = ["dep:tracing"]
 
 [dev-dependencies]
 criterion = "0.8"
