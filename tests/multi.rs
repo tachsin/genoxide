@@ -429,7 +429,9 @@ fn hypervolume_contributions_of_infinite_values() {
         &[Minimize; 3],
     );
     assert!(three.iter().all(|value| !value.is_nan()), "{three:?}");
+}
 
+#[test]
 fn a_multi_objective_run_whose_stop_condition_is_met_returns_at_once() {
     let mut engine = MultiEngine::new(
         nsga2(
