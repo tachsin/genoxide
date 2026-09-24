@@ -424,3 +424,14 @@ fn batches_generation_limits_and_combined_budgets() {
         .unwrap();
     assert_eq!(outcome.evaluations(), 3);
 }
+
+#[test]
+fn an_asynchronous_run_whose_stop_condition_is_met_returns_at_once() {
+    let mut engine = AsyncEngine::new(steady(16, 10, 14), one_max)
+        .workers(2)
+        .stop_when(Stop::target(16.0).or(Stop::generations(50)));
+    let first = engine.run().unwrap();
+    let again = engine.run().unwrap();
+    assert_eq!(again.evaluations(), first.evaluations());
+    assert_eq!(again.stop_reason(), first.stop_reason());
+}

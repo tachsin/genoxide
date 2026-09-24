@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Runs an [`Incremental`] algorithm, such as a [`SteadyGa`](crate::algorithm::SteadyGa), with
 /// asynchronous evaluation on worker threads: each worker gets a new genome as soon as it's done,
@@ -188,6 +188,27 @@ where
             notified: None,
             discarded: Vec::new(),
         };
+        // a run that continues: its stop condition may already be met
+        if driver.algorithm.evaluations() >= driver.size {
+            let progress = driver.progress();
+            let aborted = driver
+                .abort
+                .is_some_and(|flag| flag.load(Ordering::Relaxed));
+            let reason = if aborted {
+                Some(StopReason::Aborted)
+            } else {
+                driver.stop.and_then(|stop| stop.check(&progress))
+            };
+            if let (Some(stop_reason), Some(best)) = (reason, driver.algorithm.best()) {
+                return Ok(Outcome {
+                    best: best.clone(),
+                    generations: progress.generation,
+                    evaluations: progress.evaluations,
+                    elapsed: Duration::ZERO,
+                    stop_reason,
+                });
+            }
+        }
         let (jobs, job_queue) = mpsc::channel::<A::Genome>();
         let job_queue = Mutex::new(job_queue);
         let (done, results) = mpsc::channel::<Done<A::Genome>>();
