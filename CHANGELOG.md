@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/tachsin/genoxide/compare/v0.4.0...v0.5.0) - 2026-09-24
+
+### <!-- 0 -->Added
+
+- add the island model with ring, fully connected and random migration ([#82](https://github.com/tachsin/genoxide/pull/82))
+- add batch evaluation of a whole generation in one call ([#84](https://github.com/tachsin/genoxide/pull/84))
+- add progress reporting and a tracing feature ([#86](https://github.com/tachsin/genoxide/pull/86))
+- add checkpoints to resume a run exactly, behind a serde feature ([#88](https://github.com/tachsin/genoxide/pull/88))
+- add asynchronous evaluation with a steady-state GA ([#90](https://github.com/tachsin/genoxide/pull/90))
+- add the genoxide program for runs described in TOML or JSON files ([#92](https://github.com/tachsin/genoxide/pull/92))
+
+### <!-- 4 -->Documentation
+
+- add a GPU example of batch evaluation with wgpu ([#93](https://github.com/tachsin/genoxide/pull/93))
+
 ## [0.4.0](https://github.com/tachsin/genoxide/compare/v0.3.0...v0.4.0) - 2026-09-24
 
 ### <!-- 0 -->Added
