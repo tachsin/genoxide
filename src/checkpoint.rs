@@ -1,10 +1,16 @@
 //! Checkpoints: an algorithm saved during a run, to resume the run later with exactly the results
 //! it would have had without the interruption.
 //!
-//! A checkpoint is a small header (the genoxide version), the algorithm's state in a compact
-//! binary format that stores every `f64` exactly (NaN and infinities too), and a checksum. It
-//! resumes with the same genoxide version that saved it; a corrupted or truncated file, or one from
-//! another version, is an [`Error::Checkpoint`], never a wrong run.
+//! A checkpoint is a small header (the genoxide version and the algorithm's type), the algorithm's
+//! state in a compact binary format that stores every `f64` exactly (NaN and infinities too), and
+//! a checksum. It resumes with the same genoxide version that saved it, as the same type; a
+//! corrupted or truncated file, one from another version, or one of another type is an
+//! [`Error::Checkpoint`].
+//!
+//! Load only checkpoints you trust, like the program that saved them: the checksum detects
+//! accidental damage, not tampering, and the algorithm's state isn't validated again. A crafted
+//! checkpoint can make a run panic or loop, though never break memory safety: genoxide has no
+//! unsafe code.
 //!
 //! [`Engine::checkpoint_every`](crate::Engine::checkpoint_every) saves the algorithm every few
 //! generations and when the run stops. To resume, load it and run it in a new engine with the same
@@ -42,15 +48,20 @@
 //! ```
 //!
 //! Save between a [`tell`](crate::algorithm::Algorithm::tell) and the next
-//! [`ask`](crate::algorithm::Algorithm::ask), as the engine does. Every algorithm, genome,
-//! representation, operator and observer of genoxide also implements `serde`'s `Serialize` and
-//! `Deserialize`, for other formats; deserializing validates fitness values, scores, genomes and
-//! representations. JSON can't store NaN or infinities, which invalid fitness values and some
-//! algorithms (e.g. crowding distances) use: prefer a binary format, or this module.
+//! [`ask`](crate::algorithm::Algorithm::ask), as the engine does. Observers aren't part of a
+//! checkpoint: a resumed run's statistics and hall of fame start empty.
+//!
+//! Every algorithm, genome, representation and operator of genoxide, and the statistics and hall
+//! of fame, also implement `serde`'s `Serialize` and `Deserialize`, for other formats.
+//! Deserializing checks fitness values, scores, genomes (a permutation is one, bits fit their
+//! length) and representations (valid bounds) on their own, not whether they fit together.
+//! JSON can't store NaN or infinities, which invalid fitness values and some algorithms (e.g.
+//! crowding distances) use: prefer a binary format, or this module.
 
 use crate::{Error, Result};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use std::any::type_name;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -66,13 +77,22 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn save<A: Serialize>(algorithm: &A, mut writer: impl Write) -> Result<()> {
     let payload = postcard::to_stdvec(algorithm)
         .map_err(|error| checkpoint_error(format!("can't serialize the algorithm: {error}")))?;
-    let mut bytes = Vec::with_capacity(MAGIC.len() + 1 + VERSION.len() + 8 + payload.len() + 8);
+    let kind = type_name::<A>().as_bytes();
+    let kind_len = u16::try_from(kind.len())
+        .map_err(|_| checkpoint_error(format!("the type name is too long: {}", kind.len())))?;
+    let mut bytes = Vec::with_capacity(
+        MAGIC.len() + 1 + VERSION.len() + 2 + kind.len() + 8 + payload.len() + 8,
+    );
     bytes.extend_from_slice(MAGIC);
     bytes.push(VERSION.len() as u8);
     bytes.extend_from_slice(VERSION.as_bytes());
+    bytes.extend_from_slice(&kind_len.to_le_bytes());
+    bytes.extend_from_slice(kind);
     bytes.extend_from_slice(&(payload.len() as u64).to_le_bytes());
     bytes.extend_from_slice(&payload);
-    bytes.extend_from_slice(&checksum(&payload).to_le_bytes());
+    // everything after the magic bytes
+    let sum = checksum(&bytes[MAGIC.len()..]);
+    bytes.extend_from_slice(&sum.to_le_bytes());
     writer
         .write_all(&bytes)
         .and_then(|()| writer.flush())
@@ -84,8 +104,8 @@ pub fn save<A: Serialize>(algorithm: &A, mut writer: impl Write) -> Result<()> {
 ///
 /// # Errors
 ///
-/// [`Error::Checkpoint`] if it can't be read, isn't a genoxide checkpoint, comes from another
-/// genoxide version, is corrupted or truncated, or doesn't hold an `A`.
+/// [`Error::Checkpoint`] if it can't be read, isn't a genoxide checkpoint, is corrupted or
+/// truncated, comes from another genoxide version, or holds another type than `A`.
 pub fn load<A: DeserializeOwned>(mut reader: impl Read) -> Result<A> {
     let mut bytes = Vec::new();
     reader
@@ -95,6 +115,15 @@ pub fn load<A: DeserializeOwned>(mut reader: impl Read) -> Result<A> {
     if take(&mut rest, MAGIC.len()) != Some(MAGIC) {
         return Err(checkpoint_error("not a genoxide checkpoint".to_string()));
     }
+    // the checksum first, over everything between the magic bytes and it
+    let summed = rest.len().checked_sub(8).ok_or_else(truncated)?;
+    let (content, sum) = rest.split_at(summed);
+    if sum != checksum(content).to_le_bytes() {
+        return Err(checkpoint_error(
+            "corrupted or truncated: the checksum doesn't match".to_string(),
+        ));
+    }
+    let mut rest = content;
     let version = take(&mut rest, 1)
         .and_then(|len| take(&mut rest, usize::from(len[0])))
         .ok_or_else(truncated)?;
@@ -105,18 +134,22 @@ pub fn load<A: DeserializeOwned>(mut reader: impl Read) -> Result<A> {
             String::from_utf8_lossy(version)
         )));
     }
+    let kind_len = take(&mut rest, 2).ok_or_else(truncated)?;
+    let kind_len = u16::from_le_bytes([kind_len[0], kind_len[1]]);
+    let kind = take(&mut rest, usize::from(kind_len)).ok_or_else(truncated)?;
+    if kind != type_name::<A>().as_bytes() {
+        return Err(checkpoint_error(format!(
+            "holds a {}, not a {}",
+            String::from_utf8_lossy(kind),
+            type_name::<A>()
+        )));
+    }
     let len = take(&mut rest, 8).ok_or_else(truncated)?;
     let len = u64::from_le_bytes(len.try_into().map_err(|_| truncated())?);
-    let payload = usize::try_from(len)
-        .ok()
-        .and_then(|len| take(&mut rest, len))
-        .ok_or_else(truncated)?;
-    let expected = take(&mut rest, 8).ok_or_else(truncated)?;
-    if expected != checksum(payload).to_le_bytes() || !rest.is_empty() {
-        return Err(checkpoint_error(
-            "corrupted: the checksum doesn't match".to_string(),
-        ));
+    if usize::try_from(len) != Ok(rest.len()) {
+        return Err(truncated());
     }
+    let payload = rest;
     match postcard::take_from_bytes(payload) {
         Ok((algorithm, [])) => Ok(algorithm),
         Ok(_) => Err(checkpoint_error(

@@ -506,8 +506,10 @@ fn main() -> genoxide::Result<()> {
 
 - `save_file` is atomic: it writes a temporary file and renames it, so a crash while saving keeps the previous checkpoint.
 - Generations, evaluations and stop conditions continue from the checkpoint; the time for `Stop::time` starts again. `MultiEngine` has `checkpoint_every` too.
-- A checkpoint loads with the same genoxide version that saved it. A corrupted, truncated or foreign file, or a different algorithm type, is `Error::Checkpoint`.
-- Every algorithm, genome, representation, operator and observer implements `Serialize` and `Deserialize`, for other formats. JSON can't store NaN or infinity (invalid fitness, crowding distances), so prefer `checkpoint` or a binary format.
+- A checkpoint loads with the same genoxide version that saved it, as the same type. A corrupted, truncated or foreign file, another version or another type is `Error::Checkpoint`.
+- Load only checkpoints you trust: the checksum catches accidental damage, not tampering, and a crafted checkpoint can make a run panic or loop (never memory-unsafe).
+- Observers aren't in a checkpoint: a resumed run's statistics and hall of fame start empty.
+- Every algorithm, genome, representation and operator, and `Statistics` and `HallOfFame`, implement `Serialize` and `Deserialize`, for other formats. JSON can't store NaN or infinity (invalid fitness, crowding distances), so prefer `checkpoint` or a binary format.
 
 ### Multi-objective optimization
 

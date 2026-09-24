@@ -29,7 +29,7 @@ fn bytes<A: Serialize>(algorithm: &A) -> Vec<u8> {
 }
 
 // runs `split` generations, saves, loads and runs to `total`; the same state as `total` at once
-fn resumes<A, F>(make: impl Fn() -> A, fitness: F, split: u64, total: u64, exact_bytes: bool)
+fn resumes<A, F>(make: impl Fn() -> A, fitness: F, split: u64, total: u64)
 where
     A: Algorithm + Serialize + DeserializeOwned,
     F: FitnessFunction<A::Genome> + Copy,
@@ -51,9 +51,7 @@ where
         second.algorithm().population(),
         whole.algorithm().population()
     );
-    if exact_bytes {
-        assert_eq!(bytes(second.algorithm()), bytes(whole.algorithm()));
-    }
+    assert_eq!(bytes(second.algorithm()), bytes(whole.algorithm()));
 }
 
 fn resumes_multi<A, F, const M: usize>(make: impl Fn() -> A, fitness: F, split: u64, total: u64)
@@ -115,14 +113,14 @@ fn de(seed: u64) -> De {
 
 #[test]
 fn genetic_algorithms_resume_exactly() {
-    resumes(|| one_max_ga(1), one_max, 7, 20, true);
+    resumes(|| one_max_ga(1), one_max, 7, 20);
     for scheme in [
         Scheme::Generational { elitism: 1 },
         Scheme::SteadyState { replacements: 5 },
         Scheme::MuPlusLambda { lambda: 20 },
         Scheme::MuCommaLambda { lambda: 40 },
     ] {
-        resumes(|| real_ga(scheme, 2), rastrigin, 9, 25, true);
+        resumes(|| real_ga(scheme, 2), rastrigin, 9, 25);
     }
     // memetic, on permutations
     let tour = |order: &Order| {
@@ -143,12 +141,12 @@ fn genetic_algorithms_resume_exactly() {
             .build()
             .unwrap()
     };
-    resumes(memetic, tour, 5, 15, true);
+    resumes(memetic, tour, 5, 15);
 }
 
 #[test]
 fn other_algorithms_resume_exactly() {
-    resumes(|| de(4), rastrigin, 10, 40, true);
+    resumes(|| de(4), rastrigin, 10, 40);
     let pso = || {
         Pso::builder(Real::uniform(10, -5.12..=5.12).unwrap())
             .population_size(20)
@@ -158,7 +156,7 @@ fn other_algorithms_resume_exactly() {
             .build()
             .unwrap()
     };
-    resumes(pso, rastrigin, 10, 30, true);
+    resumes(pso, rastrigin, 10, 30);
     let es = || {
         Es::builder(Real::uniform(10, -5.12..=5.12).unwrap())
             .parents(5)
@@ -169,7 +167,7 @@ fn other_algorithms_resume_exactly() {
             .build()
             .unwrap()
     };
-    resumes(es, rastrigin, 10, 30, true);
+    resumes(es, rastrigin, 10, 30);
     // across a BIPOP restart
     let cmaes = || {
         Cmaes::builder(Real::uniform(10, -5.12..=5.12).unwrap())
@@ -179,7 +177,7 @@ fn other_algorithms_resume_exactly() {
             .build()
             .unwrap()
     };
-    resumes(cmaes, rastrigin, 150, 400, true);
+    resumes(cmaes, rastrigin, 150, 400);
     let diagonal = || {
         Cmaes::builder(Real::uniform(10, -5.12..=5.12).unwrap())
             .covariance(cmaes::Covariance::Diagonal)
@@ -188,7 +186,7 @@ fn other_algorithms_resume_exactly() {
             .build()
             .unwrap()
     };
-    resumes(diagonal, rastrigin, 20, 60, true);
+    resumes(diagonal, rastrigin, 20, 60);
 }
 
 #[test]
@@ -202,7 +200,6 @@ fn local_search_resumes_exactly() {
         }
         count as f64
     };
-    // the tabu set is a hash set, whose order differs between runs: compare the populations
     let tabu = || {
         LocalSearch::builder(Permutation::new(16).unwrap())
             .neighbor(SwapMutation::new())
@@ -213,7 +210,7 @@ fn local_search_resumes_exactly() {
             .build()
             .unwrap()
     };
-    resumes(tabu, conflicts, 20, 60, false);
+    resumes(tabu, conflicts, 20, 60);
     let annealing = || {
         LocalSearch::builder(Binary::new(64).unwrap())
             .neighbor(BitFlip::count(1).unwrap())
@@ -226,7 +223,7 @@ fn local_search_resumes_exactly() {
             .build()
             .unwrap()
     };
-    resumes(annealing, one_max, 70, 200, true);
+    resumes(annealing, one_max, 70, 200);
 }
 
 #[test]
@@ -245,8 +242,8 @@ fn islands_resume_exactly() {
             .unwrap()
         };
         // resumed between migrations and at one
-        resumes(islands, rastrigin, 6, 20, true);
-        resumes(islands, rastrigin, 8, 20, true);
+        resumes(islands, rastrigin, 6, 20);
+        resumes(islands, rastrigin, 8, 20);
     }
     let islands = || {
         Islands::builder((0..3).map(de).collect())
@@ -255,7 +252,7 @@ fn islands_resume_exactly() {
             .build()
             .unwrap()
     };
-    resumes(islands, rastrigin, 7, 20, true);
+    resumes(islands, rastrigin, 7, 20);
 }
 
 #[test]
@@ -447,44 +444,89 @@ fn damaged_checkpoints_are_errors() {
     for len in 8..good.len() {
         let error = load(&good[..len]).unwrap_err();
         assert!(
-            error == "truncated" || error.starts_with("corrupted"),
+            error == "truncated" || error.starts_with("corrupted or truncated"),
             "{len}: {error}"
         );
     }
-    // every flipped bit after the version
-    let version_end = 9 + usize::from(good[8]);
-    for byte in version_end..good.len() {
+    // every flipped bit after the magic bytes
+    for byte in 8..good.len() {
         for bit in 0..8 {
             let mut bad = good.clone();
             bad[byte] ^= 1 << bit;
-            assert!(load(&bad).is_err(), "byte {byte}, bit {bit}");
+            let error = load(&bad).unwrap_err();
+            assert!(
+                error.starts_with("corrupted"),
+                "byte {byte}, bit {bit}: {error}"
+            );
         }
     }
     // extra bytes
     let mut long = good.clone();
     long.push(0);
     assert!(load(&long).unwrap_err().starts_with("corrupted"));
-    // another version
-    let mut other = good.clone();
+
+    // with a valid checksum: another version
+    let mut other = good[..good.len() - 8].to_vec();
     other[9] = b'9';
-    let error = load(&other).unwrap_err();
+    let error = load(&summed(other)).unwrap_err();
     assert!(error.starts_with("saved by genoxide 9"), "{error}");
     assert!(error.contains(env!("CARGO_PKG_VERSION")), "{error}");
-    // another algorithm: an error, not a panic or a wrong run
+    // another algorithm, even one with the same layout
     let error = checkpoint::load::<De>(good.as_slice())
         .map_err(reason)
         .unwrap_err();
     assert!(
-        error.starts_with("doesn't hold an algorithm of this type"),
+        error.starts_with("holds a genoxide::algorithm::ga::Ga<"),
         "{error}"
     );
-    let error = checkpoint::load::<Ga<Binary, Rank, UniformCrossover, BitFlip>>(good.as_slice())
-        .map_err(reason)
-        .unwrap_err();
+    assert!(
+        error.contains(", not a genoxide::algorithm::de::De"),
+        "{error}"
+    );
+    let roulette = Ga::builder(Binary::new(8).unwrap())
+        .population_size(4)
+        .select(Roulette)
+        .crossover(NoCrossover)
+        .mutate(BitFlip::count(1).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    let error = checkpoint::load::<Ga<Binary, StochasticUniversalSampling, NoCrossover, BitFlip>>(
+        bytes(&roulette).as_slice(),
+    )
+    .map_err(reason)
+    .unwrap_err();
+    assert!(error.contains("Roulette"), "{error}");
+    // a payload that doesn't hold what the header says: an error, not a panic
+    let header = good.len() - 8 - payload_len(&good);
+    let mut wrong = good[..header].to_vec();
+    wrong.truncate(header - 8);
+    wrong.extend_from_slice(&3u64.to_le_bytes());
+    wrong.extend_from_slice(&[1, 2, 3]);
+    let error = load(&summed(wrong)).unwrap_err();
     assert!(
         error.starts_with("doesn't hold an algorithm of this type"),
         "{error}"
     );
+}
+
+// the length of a checkpoint's payload
+fn payload_len(bytes: &[u8]) -> usize {
+    let version_end = 9 + usize::from(bytes[8]);
+    let kind_len = u16::from_le_bytes([bytes[version_end], bytes[version_end + 1]]);
+    let len_start = version_end + 2 + usize::from(kind_len);
+    u64::from_le_bytes(bytes[len_start..len_start + 8].try_into().unwrap()) as usize
+}
+
+// `bytes` with the checksum of a checkpoint: 64-bit FNV-1a of everything after the magic bytes
+fn summed(mut bytes: Vec<u8>) -> Vec<u8> {
+    let sum = bytes[8..]
+        .iter()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        });
+    bytes.extend_from_slice(&sum.to_le_bytes());
+    bytes
 }
 
 #[test]
