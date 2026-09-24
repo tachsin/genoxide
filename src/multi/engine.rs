@@ -246,7 +246,9 @@ where
     }
 
     /// What a NaN objective value or violation means: invalid scores (the default), or an
-    /// error.
+    /// error. A fitness function that returns [`Scores`] made with [`Scores::new`] has already
+    /// turned a NaN into invalid scores; return `[f64; M]`, or build them with
+    /// [`Scores::try_new`], for the error.
     pub fn nan_policy(mut self, policy: NanPolicy) -> Self {
         self.nan_policy = policy;
         self
