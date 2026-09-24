@@ -147,7 +147,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Particle swarm: global and local topologies
 - [x] (μ/ρ +, λ)-ES with self-adaptation
 
-### 0.4: Multi-objective
+### 0.4: Multi-objective ✅
 - [x] Non-dominated sorting (fast and log variants), crowding distance
 - [x] NSGA-II
 - [x] NSGA-III (reference points)
