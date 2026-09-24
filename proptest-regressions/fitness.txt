@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 5127e2df8b28d2c780ae321ef33597f570842ea5e97a43617010b94a07e00393 # shrinks to a = Fitness { score: Some(0.0), violation: 0.5 }, b = Fitness { score: Some(0.0), violation: 0.0 }

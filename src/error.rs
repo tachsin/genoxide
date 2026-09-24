@@ -23,6 +23,12 @@ pub enum Error {
     },
     /// A fitness value is NaN, see [`Fitness::try_new`](crate::Fitness::try_new).
     NanFitness,
+    /// A fitness value is invalid in another way, e.g. a negative constraint violation, see
+    /// [`Fitness::try_constrained`](crate::Fitness::try_constrained).
+    InvalidFitness {
+        /// Why the fitness is invalid.
+        reason: String,
+    },
     /// A genome doesn't belong to its representation, e.g. a seed of the wrong length.
     InvalidGenome {
         /// Why the genome is invalid, e.g. `"expected 10 bits, got 9"`.
@@ -49,6 +55,7 @@ impl fmt::Display for Error {
                 write!(f, "invalid setting `{setting}`: {reason}")
             }
             Error::NanFitness => write!(f, "fitness value is NaN"),
+            Error::InvalidFitness { reason } => write!(f, "invalid fitness: {reason}"),
             Error::InvalidGenome { reason } => write!(f, "invalid genome: {reason}"),
             Error::TellWithoutAsk => write!(f, "`tell` was called without a preceding `ask`"),
             Error::FitnessCount { expected, got } => {

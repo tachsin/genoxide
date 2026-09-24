@@ -235,13 +235,23 @@ impl<R: Representation, M> LocalSearch<R, M> {
                 if !objective.is_better(current, candidate) {
                     return true;
                 }
-                let (Some(current), Some(candidate)) = (current.score(), candidate.score()) else {
+                let (Some(current_score), Some(candidate_score)) =
+                    (current.score(), candidate.score())
+                else {
                     // an invalid neighbor is never accepted over a valid solution
                     return false;
                 };
-                let loss = match objective {
-                    Objective::Maximize => current - candidate,
-                    Objective::Minimize => candidate - current,
+                let score_loss = match objective {
+                    Objective::Maximize => current_score - candidate_score,
+                    Objective::Minimize => candidate_score - current_score,
+                };
+                let loss = match (current.is_feasible(), candidate.is_feasible()) {
+                    (true, true) => score_loss,
+                    // an infeasible neighbor is never accepted over a feasible solution
+                    (true, false) => return false,
+                    // both infeasible: how much the violation grows, or the score on a tie
+                    _ if candidate.violation() == current.violation() => score_loss,
+                    _ => candidate.violation() - current.violation(),
                 };
                 self.rng.unit_f64() < exp(-loss / self.temperature)
             }
@@ -720,6 +730,34 @@ mod tests {
         let mut cooling = search(annealing(10.0, 0.5), 1, 0);
         trajectory(&mut cooling, 3, ones);
         assert_eq!(cooling.temperature(), 10.0 * 0.5 * 0.5 * 0.5);
+    }
+
+    #[test]
+    fn annealing_follows_the_feasibility_rules() {
+        let hot = Acceptance::Annealing {
+            initial_temperature: 1e9,
+            cooling: 1.0,
+        };
+        let mut search = search(hot, 1, 0);
+        let (feasible, infeasible) = (Fitness::new(1.0), Fitness::constrained(100.0, 0.1));
+        // however hot: never from feasible to infeasible, always the other way
+        assert!((0..100).all(|_| !search.accepts(feasible, infeasible)));
+        assert!(search.accepts(infeasible, feasible));
+        // between infeasible solutions, a larger violation is a loss like a worse score
+        let (small, large) = (
+            Fitness::constrained(0.0, 0.1),
+            Fitness::constrained(0.0, 0.2),
+        );
+        assert!((0..100).any(|_| search.accepts(small, large)));
+        let mut cold = super::tests::search(
+            Acceptance::Annealing {
+                initial_temperature: 1e-12,
+                cooling: 1.0,
+            },
+            1,
+            0,
+        );
+        assert!((0..100).all(|_| !cold.accepts(small, large)));
     }
 
     #[test]

@@ -137,7 +137,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Local search: hill climbing (first improvement, or the best of k random neighbors), simulated annealing
 - [x] Local search: tabu search, iterated local search
 - [x] Memetic / Lamarckian hybrid (GA with local search on elites)
-- [ ] Constraint handling: Deb's feasibility rules, penalty functions
+- [x] Constraint handling: Deb's feasibility rules, penalty functions
 
 ### 0.3: Evolution strategies and swarm
 - [ ] CMA-ES, with IPOP / BIPOP restarts

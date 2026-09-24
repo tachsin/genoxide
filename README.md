@@ -69,6 +69,7 @@ A missing operator, or one that doesn't fit the genome, is a compile error that 
 - **Mutation:** bit-flip, uniform, Gaussian, polynomial; for permutations swap, inversion (2-opt), insertion, scramble (every mutation changes the genome)
 - **Schemes:** generational with elitism, steady-state, (μ+λ), (μ,λ), and memetic (Lamarckian local search on the best parents)
 - **Local search:** hill climbing (first-improvement or best-of-k, with plateau moves), simulated annealing, tabu search and iterated local search, with any mutation as the neighborhood
+- **Constraints:** Deb's feasibility rules (a fitness function returns a score and a constraint violation), and penalty functions
 - **Engine:** ask / tell core, stop conditions (target, generations, evaluations, time, stagnation, custom, combined), parallel evaluation with the same results as sequential, abort flag, NaN policy
 - **Observers:** statistics per generation, hall of fame, closures
 
@@ -76,7 +77,7 @@ A missing operator, or one that doesn't fit the genome, is a compile error that 
 
 ```text
 cargo run --release --example one_max     # binary, statistics
-cargo run --release --example knapsack    # constraints as invalid solutions, hall of fame
+cargo run --release --example knapsack    # a constraint with Deb's feasibility rules, hall of fame
 cargo run --release --example n_queens    # permutation, (μ+λ)
 cargo run --release --example rastrigin   # real-valued, parallel evaluation
 ```

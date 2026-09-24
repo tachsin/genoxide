@@ -64,14 +64,18 @@ impl Select for Tournament {
     }
 }
 
-// Selection weights proportional to how much better than the worst an individual is.
-// Invalid individuals get weight 0. None if no individual has a positive weight.
+// Selection weights proportional to how much better than the worst feasible individual an
+// individual is. Invalid and infeasible individuals get weight 0. None if no individual has a
+// positive weight.
 fn proportional_weights<G: Genome>(
     population: &Population<G>,
     objective: Objective,
 ) -> Option<Vec<f64>> {
     let mut scores: Vec<Option<f64>> = (0..population.len())
-        .map(|index| fitness_of(population, index).score())
+        .map(|index| {
+            let fitness = fitness_of(population, index);
+            fitness.is_feasible().then(|| fitness.score()).flatten()
+        })
         .collect();
     // Huge finite scores could make a difference to the worst, or the sum of the weights,
     // overflow. Scaling every score by a power of two keeps their proportions exact and makes
@@ -160,8 +164,10 @@ fn uniform_indices(population_len: usize, count: usize, rng: &mut StreamRng) -> 
 /// Roulette wheel (fitness proportionate) selection.
 ///
 /// The chance of an individual is proportional to how much better it is than the worst
-/// individual, so scores don't need to be positive. Invalid individuals are never selected, unless
-/// every individual is equal or invalid, in which case the selection is uniform.
+/// individual, so scores don't need to be positive. Invalid and infeasible individuals are never
+/// selected, unless every individual is equal, invalid or infeasible, in which case the selection
+/// is uniform: with constraints, prefer [`Tournament`] or [`Rank`], which follow the feasibility
+/// rules.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Roulette;
 
@@ -491,6 +497,20 @@ mod tests {
             1_000,
         );
         assert_eq!(counts, vec![0, 1_000, 0]);
+    }
+
+    #[test]
+    fn proportional_ignores_infeasible_individuals() {
+        let mut population = population(&[Some(1.0), Some(2.0), Some(3.0)]);
+        // the best score, but infeasible
+        population[2].set_fitness(Fitness::constrained(100.0, 1.0));
+        let mut rng = StreamRng::seed_from_u64(0);
+        let mut counts = [0; 3];
+        for index in Roulette.select(&population, Objective::Maximize, 3_000, &mut rng) {
+            counts[index] += 1;
+        }
+        // weights 0 (the worst feasible), 1 and 0 (infeasible)
+        assert_eq!(counts, [0, 3_000, 0]);
     }
 
     #[test]

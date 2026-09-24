@@ -36,8 +36,8 @@ pub struct Statistics {
 
 /// Statistics of the population after a generation.
 ///
-/// The mean and standard deviation are over the valid scores. Infinite scores make them infinite
-/// or NaN.
+/// The mean and standard deviation are over the feasible scores (valid and without a constraint
+/// violation). Infinite scores make them infinite or NaN.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct GenerationStatistics {
@@ -51,12 +51,15 @@ pub struct GenerationStatistics {
     pub best_so_far: Option<Fitness>,
     /// The best fitness in the population.
     pub best: Option<Fitness>,
-    /// The mean score, `None` without valid scores.
+    /// The mean feasible score, `None` without feasible individuals.
     pub mean: Option<f64>,
-    /// The (population) standard deviation of the scores, `None` without valid scores.
+    /// The (population) standard deviation of the feasible scores, `None` without feasible
+    /// individuals.
     pub std_dev: Option<f64>,
     /// The number of individuals with an invalid fitness.
     pub invalid: usize,
+    /// The number of individuals with a constraint violation.
+    pub infeasible: usize,
     /// The number of distinct genomes, a measure of diversity.
     pub unique: usize,
     /// The population size.
@@ -84,14 +87,15 @@ impl<G: Genome> Observer<G> for Statistics {
     fn observe(&mut self, snapshot: &Snapshot<'_, G>) {
         let population = snapshot.population();
         let progress = snapshot.progress();
-        let scores: Vec<f64> = population
+        let fitness: Vec<Fitness> = population
             .iter()
-            .filter_map(|individual| individual.fitness()?.score())
+            .filter_map(|individual| individual.fitness())
             .collect();
-        let evaluated = population
+        let scores: Vec<f64> = fitness
             .iter()
-            .filter(|individual| individual.is_evaluated())
-            .count();
+            .filter(|fitness| fitness.is_feasible())
+            .filter_map(|fitness| fitness.score())
+            .collect();
         let (mean, std_dev) = if scores.is_empty() {
             (None, None)
         } else {
@@ -119,7 +123,11 @@ impl<G: Genome> Observer<G> for Statistics {
                 .and_then(|individual| individual.fitness()),
             mean,
             std_dev,
-            invalid: evaluated - scores.len(),
+            invalid: fitness.iter().filter(|fitness| !fitness.is_valid()).count(),
+            infeasible: fitness
+                .iter()
+                .filter(|fitness| fitness.is_valid() && !fitness.is_feasible())
+                .count(),
             unique,
             size: population.len(),
         });
@@ -135,8 +143,8 @@ mod tests {
 
     #[test]
     fn statistics_of_a_population() {
-        let fitness = [Some(1.0), Some(3.0), None, Some(2.0)];
-        let genomes = ["00", "11", "01", "11"];
+        let fitness = [Some(1.0), Some(3.0), None, Some(2.0), Some(9.0)];
+        let genomes = ["00", "11", "01", "11", "10"];
         let population: Population<Bits> = genomes
             .iter()
             .zip(fitness)
@@ -146,6 +154,9 @@ mod tests {
                 individual
             })
             .collect();
+        // the last one is infeasible: counted, but not in the mean
+        let mut population = population;
+        population[4].set_fitness(Fitness::constrained(9.0, 0.5));
         let progress = Progress::for_test(4, Objective::Minimize);
         let mut statistics = Statistics::new();
         statistics.observe(&Snapshot::new(&population, &[], &population[0], &progress));
@@ -155,7 +166,8 @@ mod tests {
         assert_eq!(record.mean, Some(2.0));
         assert_eq!(record.std_dev, Some((2.0f64 / 3.0).sqrt()));
         assert_eq!(record.invalid, 1);
-        assert_eq!(record.unique, 3);
-        assert_eq!(record.size, 4);
+        assert_eq!(record.infeasible, 1);
+        assert_eq!(record.unique, 4);
+        assert_eq!(record.size, 5);
     }
 }
