@@ -112,23 +112,32 @@ fn proportional_weights<G: Genome>(
         })
         .collect();
     if weights.iter().all(|weight| weight.is_finite()) {
-        (weights.iter().sum::<f64>() > 0.0).then_some(weights)
-    } else {
-        // infinite scores: only the best individuals get a (equal) weight
-        let best = scores.iter().flatten().copied().reduce(|a, b| {
-            if objective.is_better(Fitness::new(b), Fitness::new(a)) {
-                b
-            } else {
-                a
-            }
-        })?;
-        Some(
-            scores
-                .iter()
-                .map(|score| if *score == Some(best) { 1.0 } else { 0.0 })
-                .collect(),
-        )
+        return (weights.iter().sum::<f64>() > 0.0).then_some(weights);
     }
+    let best = scores.iter().flatten().copied().reduce(|a, b| {
+        if objective.is_better(Fitness::new(b), Fitness::new(a)) {
+            b
+        } else {
+            a
+        }
+    })?;
+    Some(if best.is_infinite() {
+        // an infinitely good score: only the best individuals get an (equal) weight
+        scores
+            .iter()
+            .map(|score| if *score == Some(best) { 1.0 } else { 0.0 })
+            .collect()
+    } else {
+        // an infinitely bad score: its individuals get no weight, the others an equal one, the
+        // limit of a finite worst score going to infinity
+        scores
+            .iter()
+            .map(|score| match score {
+                Some(score) if *score != worst => 1.0,
+                _ => 0.0,
+            })
+            .collect()
+    })
 }
 
 // Cumulative weights, and the index of the last positive weight (the fallback for rounding).
@@ -362,6 +371,36 @@ impl Select for RandomSelection {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_infinitely_bad_score_gets_no_weight_and_the_others_equal_ones() {
+        // the limit of a finite worst score going to minus infinity
+        let draws = 3_000;
+        for (scores, objective) in [
+            (
+                vec![Some(f64::NEG_INFINITY), Some(1.0), Some(2.0), Some(3.0)],
+                Objective::Maximize,
+            ),
+            (
+                vec![Some(f64::INFINITY), Some(1.0), Some(2.0), Some(3.0)],
+                Objective::Minimize,
+            ),
+        ] {
+            for picked in [
+                counts(&Roulette, &scores, objective, draws),
+                counts(&StochasticUniversalSampling, &scores, objective, draws),
+            ] {
+                assert_eq!(picked[0], 0, "{picked:?}");
+                for &count in &picked[1..] {
+                    assert!((800..1_200).contains(&count), "{picked:?}");
+                }
+            }
+        }
+        // an infinitely good score still takes every pick
+        let scores = [Some(1.0), Some(f64::INFINITY), Some(2.0)];
+        let picked = counts(&Roulette, &scores, Objective::Maximize, draws);
+        assert_eq!(picked, [0, draws, 0]);
+    }
     use crate::Individual;
     use crate::genome::Bits;
     use proptest::prelude::*;

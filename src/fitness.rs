@@ -2,7 +2,7 @@
 
 use crate::error::{Error, Result};
 use std::cmp::Ordering;
-use std::fmt;
+use std::fmt::{self, Write};
 use std::hash::{Hash, Hasher};
 
 /// Whether a higher or a lower fitness score is better.
@@ -197,25 +197,39 @@ impl fmt::Debug for Fitness {
 }
 
 impl fmt::Display for Fitness {
-    /// The score, formatted like an `f64` (precision and width apply), or `invalid`.
+    /// The score, formatted like an `f64` (precision applies to it), and its constraint
+    /// violation if any, or `invalid`. Width, fill and alignment apply to the whole text.
     ///
     /// ```
     /// use genoxide::Fitness;
     ///
     /// assert_eq!(format!("{:.2}", Fitness::new(1.0 / 3.0)), "0.33");
     /// assert_eq!(Fitness::invalid().to_string(), "invalid");
+    /// assert_eq!(format!("{:>18}", Fitness::constrained(1.0, 0.5)), " 1 (violation 0.5)");
     /// ```
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.score() {
-            Some(score) => {
-                fmt::Display::fmt(&score, f)?;
-                if self.violation > 0.0 {
-                    write!(f, " (violation {})", self.violation)?;
-                }
-                Ok(())
-            }
-            None => f.pad("invalid"),
+        let Some(score) = self.score() else {
+            return f.pad("invalid");
+        };
+        if self.violation == 0.0 {
+            return fmt::Display::fmt(&score, f);
         }
+        let text = match f.precision() {
+            Some(precision) => format!("{score:.precision$} (violation {})", self.violation),
+            None => format!("{score} (violation {})", self.violation),
+        };
+        // padded by hand: `pad` would also cut the text to the precision
+        let width = f.width().unwrap_or(0);
+        let missing = width.saturating_sub(text.chars().count());
+        let (before, after) = match f.align() {
+            Some(fmt::Alignment::Left) => (0, missing),
+            Some(fmt::Alignment::Center) => (missing / 2, missing - missing / 2),
+            _ => (missing, 0),
+        };
+        let fill = f.fill();
+        (0..before).try_for_each(|_| f.write_char(fill))?;
+        f.write_str(&text)?;
+        (0..after).try_for_each(|_| f.write_char(fill))
     }
 }
 

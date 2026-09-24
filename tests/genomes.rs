@@ -404,3 +404,18 @@ fn self_adaptation_fine_tunes_where_a_fixed_step_cannot() {
         .unwrap();
     assert_eq!(outcome.stop_reason(), StopReason::Evaluations);
 }
+
+#[test]
+fn bits_display_takes_a_width_and_swap_uniform_clamps_its_rate() {
+    use genoxide::genome::SwapGenes;
+    let bits: Bits = [true, true].into_iter().collect();
+    assert_eq!(format!("{bits:>5}"), "   11");
+    assert_eq!(format!("{bits:<5}|"), "11   |");
+    assert_eq!(format!("{bits}"), "11");
+    let mut rng = StreamRng::seed_from_u64(0);
+    let (mut a, mut b) = (Bits::zeros(10), Bits::ones(10));
+    a.swap_uniform(&mut b, 1.5, &mut rng);
+    assert_eq!(a, Bits::ones(10));
+    a.swap_uniform(&mut b, f64::NAN, &mut rng);
+    assert_eq!(a, Bits::ones(10));
+}

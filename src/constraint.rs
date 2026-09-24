@@ -38,13 +38,13 @@ use crate::{Error, Fitness, Objective, Result};
 /// The violation of `value <= limit`: how far `value` is above `limit`, or 0. NaN if a value is
 /// NaN, so the fitness function's NaN is caught.
 pub fn at_most(value: f64, limit: f64) -> f64 {
-    let excess = value - limit;
-    if excess > 0.0 {
-        excess
-    } else if excess.is_nan() {
-        f64::NAN
-    } else {
+    // compared first: an infinite value at an equal infinite limit meets it
+    if value <= limit {
         0.0
+    } else if value > limit {
+        value - limit
+    } else {
+        f64::NAN
     }
 }
 
@@ -57,7 +57,13 @@ pub fn at_least(value: f64, limit: f64) -> f64 {
 /// outside `target ± tolerance`, or 0. Equality constraints of real values need a tolerance,
 /// e.g. `1e-6`.
 pub fn equal(value: f64, target: f64, tolerance: f64) -> f64 {
-    at_most((value - target).abs(), tolerance)
+    // an infinite value at an equal infinite target is 0 apart, not NaN
+    let distance = if value == target {
+        0.0
+    } else {
+        (value - target).abs()
+    };
+    at_most(distance, tolerance)
 }
 
 /// A static penalty function: the score made worse by `weight` times the constraint violation.
@@ -117,6 +123,18 @@ impl Penalty {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn equal_infinities_meet_their_constraints() {
+        assert_eq!(at_most(f64::INFINITY, f64::INFINITY), 0.0);
+        assert_eq!(at_least(f64::NEG_INFINITY, f64::NEG_INFINITY), 0.0);
+        assert_eq!(equal(f64::INFINITY, f64::INFINITY, 0.0), 0.0);
+        assert_eq!(at_most(f64::INFINITY, 1.0), f64::INFINITY);
+        assert_eq!(equal(f64::INFINITY, 1.0, 0.5), f64::INFINITY);
+        assert!(at_most(f64::NAN, 1.0).is_nan());
+        assert!(at_most(1.0, f64::NAN).is_nan());
+        assert!(equal(1.0, 1.0, f64::NAN).is_nan());
+    }
 
     #[test]
     fn violations() {
