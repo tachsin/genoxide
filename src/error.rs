@@ -45,6 +45,10 @@ pub enum Error {
         /// The number of fitness values told.
         got: usize,
     },
+    /// Migrants arrived before the first [`tell`](crate::algorithm::Algorithm::tell), or
+    /// between an [`ask`](crate::algorithm::Algorithm::ask) and its tell, see
+    /// [`Migrate`](crate::algorithm::Migrate).
+    MigrationOutOfTurn,
 }
 
 impl fmt::Display for Error {
@@ -61,6 +65,10 @@ impl fmt::Display for Error {
             Error::FitnessCount { expected, got } => {
                 write!(f, "expected {expected} fitness values, got {got}")
             }
+            Error::MigrationOutOfTurn => write!(
+                f,
+                "migrants can only arrive after a `tell` and before the next `ask`"
+            ),
         }
     }
 }

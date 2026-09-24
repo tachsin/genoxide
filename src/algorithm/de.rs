@@ -500,6 +500,45 @@ fn midpoint(a: f64, b: f64) -> f64 {
     }
 }
 
+impl super::Migrate for De {
+    fn immigrate(&mut self, migrants: Vec<Individual<Reals>>) -> Result<()> {
+        if self.asked || !self.started {
+            return Err(Error::MigrationOutOfTurn);
+        }
+        for migrant in &migrants {
+            self.real.validate(migrant.genome())?;
+        }
+        let objective = self.objective;
+        // the worst positions, the later one first on ties
+        let mut order: Vec<usize> = (0..self.population.len()).collect();
+        order.sort_by(|&a, &b| {
+            objective
+                .compare(self.fitness(a), self.fitness(b))
+                .then(b.cmp(&a))
+        });
+        let mut improved = false;
+        for (position, migrant) in order.into_iter().zip(migrants) {
+            let fitness = migrant.fitness().unwrap_or(Fitness::invalid());
+            let better = self.best.as_ref().is_none_or(|best| {
+                objective.is_better(fitness, best.fitness().unwrap_or(Fitness::invalid()))
+            });
+            if better {
+                self.best = Some(migrant.clone());
+                improved = true;
+            }
+            self.population[position] = migrant;
+        }
+        if improved {
+            self.best_generation = self.generation;
+        }
+        Ok(())
+    }
+
+    fn same_representation(&self, other: &Self) -> bool {
+        self.real == other.real
+    }
+}
+
 impl Algorithm for De {
     type Genome = Reals;
 

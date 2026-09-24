@@ -159,7 +159,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Constrained dominance
 
 ### 0.5: Scale and operations
-- [ ] Island model: ring, fully connected and random topologies; deterministic and parallel
+- [x] Island model: ring, fully connected and random topologies; deterministic and parallel
 - [ ] Asynchronous / steady-state evaluation for expensive fitness
 - [ ] Batch evaluation hook (SIMD, GPU, remote), with a GPU example
 - [ ] Checkpoint and resume (`serde` feature)

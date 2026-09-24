@@ -75,6 +75,7 @@ A missing operator, or one that doesn't fit the genome, is a compile error that 
 - **Differential evolution:** rand/1, best/1 and current-to-pbest/1 with an archive; fixed, dithered or adaptive parameters (JADE, SHADE, L-SHADE)
 - **Particle swarm optimization:** global or ring topology, constriction coefficients, velocity limits
 - **Multi-objective:** NSGA-II, NSGA-III (reference directions, pymoo's normalization) SPEA2, MOEA/D (Tchebycheff, PBI) and SMS-EMOA, with constrained dominance, O(N log N) non-dominated sorting for 2 objectives (ENS-BS for more), crowding distance, a Pareto archive; the number of objectives is checked at compile time; indicators: exact hypervolume and hypervolume contributions, IGD, IGD+, GD, generalized spread; the ZDT and DTLZ test problems
+- **Island model:** GA or DE islands with ring, fully connected or random migration; evaluated together, deterministic with any number of threads
 - **Local search:** hill climbing (first-improvement or best-of-k, with plateau moves), simulated annealing, tabu search and iterated local search, with any mutation as the neighborhood
 - **Constraints:** Deb's feasibility rules (a fitness function returns a score and a constraint violation), and penalty functions
 - **Engine:** ask / tell core, stop conditions (target, generations, evaluations, time, stagnation, custom, combined), parallel evaluation with the same results as sequential, abort flag, NaN policy

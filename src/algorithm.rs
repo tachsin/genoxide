@@ -31,6 +31,7 @@ pub mod cmaes;
 pub mod de;
 pub mod es;
 pub mod ga;
+pub mod islands;
 pub mod local_search;
 pub mod pso;
 
@@ -38,6 +39,7 @@ pub use cmaes::{Cmaes, CmaesBuilder, Covariance, Restarts};
 pub use de::{De, DeBuilder};
 pub use es::{Es, EsBuilder};
 pub use ga::{Ga, GaBuilder, Scheme, Unset};
+pub use islands::{Islands, IslandsBuilder, Migrate};
 pub use local_search::{Acceptance, LocalSearch, LocalSearchBuilder};
 pub use pso::{Pso, PsoBuilder, Topology};
 
