@@ -113,6 +113,140 @@ fn hypervolume_of(mut points: Vec<Vec<f64>>, reference: &[f64]) -> f64 {
     }
 }
 
+/// The exclusive hypervolume contribution of each point of a front, in its order: the volume
+/// that it dominates and no other point does, bounded by the `reference` point. A dominated point
+/// (or one of two equal points) contributes 0, as does a point that doesn't dominate the reference
+/// point. SMS-EMOA removes the smallest contributor.
+///
+/// It takes O(N log N) time for up to 2 objectives, and slices the last objective for more:
+/// O(N²) for 3, O(N³) for 4.
+///
+/// ```
+/// use genoxide::Objective::Minimize;
+/// use genoxide::multi::indicator::hypervolume_contributions;
+///
+/// let front = [[1.0, 3.0], [2.0, 2.0], [3.0, 1.0], [3.0, 3.0]];
+/// let contributions = hypervolume_contributions(&front, &[4.0, 4.0], &[Minimize, Minimize]);
+/// // each of the first three alone dominates a unit square; (3, 3) is dominated
+/// assert_eq!(contributions, [1.0, 1.0, 1.0, 0.0]);
+/// ```
+pub fn hypervolume_contributions<const M: usize>(
+    front: &[[f64; M]],
+    reference: &[f64; M],
+    objectives: &[Objective; M],
+) -> Vec<f64> {
+    let reference = minimized(reference, objectives);
+    let inside: Vec<usize> = (0..front.len())
+        .filter(|&i| {
+            minimized(&front[i], objectives)
+                .iter()
+                .zip(&reference)
+                .all(|(x, r)| x < r)
+        })
+        .collect();
+    let points: Vec<Vec<f64>> = inside
+        .iter()
+        .map(|&i| minimized(&front[i], objectives).to_vec())
+        .collect();
+    let mut contributions = vec![0.0; front.len()];
+    if M > 0 && !points.is_empty() {
+        for (&index, contribution) in inside.iter().zip(contributions_of(&points, &reference)) {
+            contributions[index] = contribution;
+        }
+    }
+    contributions
+}
+
+// the exclusive contributions of minimized points that all dominate the reference point
+fn contributions_of(points: &[Vec<f64>], reference: &[f64]) -> Vec<f64> {
+    let n = points.len();
+    let dimensions = reference.len();
+    let mut contributions = vec![0.0; n];
+    match dimensions {
+        1 => {
+            // the smallest point alone dominates up to the second smallest, unless they're equal
+            let mut order: Vec<usize> = (0..n).collect();
+            order.sort_by(|&a, &b| points[a][0].total_cmp(&points[b][0]));
+            let best = order[0];
+            let next = order.get(1).map_or(reference[0], |&i| points[i][0]);
+            contributions[best] = next - points[best][0];
+        }
+        2 => {
+            // the staircase of the non-dominated points: x increasing, y decreasing; a step's
+            // rectangle reaches to the next x and the previous y, and its exclusive part is what
+            // the points it dominates (duplicates included) leave uncovered
+            let mut order: Vec<usize> = (0..n).collect();
+            order.sort_by(|&a, &b| {
+                points[a][0]
+                    .total_cmp(&points[b][0])
+                    .then(points[a][1].total_cmp(&points[b][1]))
+            });
+            // positions in `order` of the steps
+            let mut stairs: Vec<usize> = Vec::new();
+            for (position, &i) in order.iter().enumerate() {
+                if stairs
+                    .last()
+                    .is_none_or(|&last| points[i][1] < points[order[last]][1])
+                {
+                    stairs.push(position);
+                }
+            }
+            for (step, &position) in stairs.iter().enumerate() {
+                let p = order[position];
+                let end = stairs.get(step + 1).copied().unwrap_or(n);
+                let right = stairs
+                    .get(step + 1)
+                    .map_or(reference[0], |&next| points[order[next]][0]);
+                let above = if step == 0 {
+                    reference[1]
+                } else {
+                    points[order[stairs[step - 1]]][1]
+                };
+                // the other points from this step to the next have x >= this step's x; those
+                // inside the rectangle cover part of it
+                let covering: Vec<Vec<f64>> = order[position + 1..end]
+                    .iter()
+                    .map(|&q| &points[q])
+                    .filter(|q| q[0] < right && q[1] < above)
+                    .cloned()
+                    .collect();
+                let area = (right - points[p][0]) * (above - points[p][1]);
+                let covered = if covering.is_empty() {
+                    0.0
+                } else {
+                    hypervolume_of(covering, &[right, above])
+                };
+                contributions[p] = area - covered;
+            }
+        }
+        _ => {
+            // between consecutive values of the last objective, the points below share a slab:
+            // each one's exclusive part of it is the slab's thickness times its exclusive
+            // contribution in one dimension fewer
+            let last = dimensions - 1;
+            let mut order: Vec<usize> = (0..n).collect();
+            order.sort_by(|&a, &b| points[a][last].total_cmp(&points[b][last]));
+            let mut below: Vec<Vec<f64>> = Vec::with_capacity(n);
+            let mut members: Vec<usize> = Vec::with_capacity(n);
+            for (position, &i) in order.iter().enumerate() {
+                below.push(points[i][..last].to_vec());
+                members.push(i);
+                let top = order
+                    .get(position + 1)
+                    .map_or(reference[last], |&next| points[next][last]);
+                let thickness = top - points[i][last];
+                if thickness > 0.0 {
+                    let slab = contributions_of(&below, &reference[..last]);
+                    for (&member, contribution) in members.iter().zip(slab) {
+                        contributions[member] += thickness * contribution;
+                    }
+                }
+            }
+        }
+    }
+    contributions
+}
+
 /// The inverted generational distance: the mean distance from each point of the reference front
 /// to the nearest point of `front`. Smaller is better; 0 means that `front` covers every point of
 /// the reference front. It measures both convergence and spread, but isn't Pareto compliant: a
@@ -321,6 +455,42 @@ mod tests {
     }
 
     #[test]
+    fn contributions_special_cases() {
+        let min2 = [Minimize, Minimize];
+        // duplicates contribute nothing, but still bound their neighbors
+        let front = [[1.0, 3.0], [2.0, 2.0], [2.0, 2.0], [3.0, 1.0]];
+        let contributions = hypervolume_contributions(&front, &[4.0, 4.0], &min2);
+        assert_eq!(contributions, [1.0, 0.0, 0.0, 1.0]);
+        // weakly dominated points contribute nothing, but they cover part of their dominator's
+        // box: (2, 2) takes 1 of the 2 that (1, 2) dominates
+        let front = [[1.0, 2.0], [1.0, 3.0], [2.0, 2.0]];
+        let contributions = hypervolume_contributions(&front, &[3.0, 3.0], &min2);
+        assert_eq!(contributions, [1.0, 0.0, 0.0]);
+        assert_eq!(
+            hypervolume_contributions(&[[5.0, 0.0]], &[4.0, 4.0], &min2),
+            [0.0]
+        );
+        let one = [Minimize];
+        assert_eq!(
+            hypervolume_contributions(&[[1.0], [3.0], [1.0]], &[4.0], &one),
+            [0.0; 3]
+        );
+        assert_eq!(
+            hypervolume_contributions(&[[1.0], [3.0]], &[4.0], &one),
+            [2.0, 0.0]
+        );
+        // a dominated point covers part of its dominator's exclusive volume in every slice:
+        // 4⁴ − 3 · 2 · 4 · 4 = 160
+        let front = [[1.0, 2.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]];
+        let contributions = hypervolume_contributions(&front, &[4.0; 4], &[Minimize; 4]);
+        assert_eq!(contributions, [0.0, 160.0]);
+        // three unit cubes along the diagonal of a 2 × 2 × 2 box
+        let cubes = [[0.0, 1.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 0.0]];
+        let contributions = hypervolume_contributions(&cubes, &[2.0; 3], &[Minimize; 3]);
+        assert_eq!(contributions, [1.0; 3]);
+    }
+
+    #[test]
     fn distances() {
         let reference = [[0.0, 1.0], [0.5, 0.5], [1.0, 0.0]];
         assert_eq!(igd(&reference, &reference), 0.0);
@@ -351,6 +521,24 @@ mod tests {
         assert!(spread(&front, &reference, &min2) > 0.0);
     }
 
+    // each contribution is the hypervolume lost without that point
+    fn check_contributions<const M: usize>(front: &[[f64; M]]) -> Result<(), TestCaseError> {
+        let (reference, objectives) = ([4.0; M], [Minimize; M]);
+        let total = hypervolume(front, &reference, &objectives);
+        let contributions = hypervolume_contributions(front, &reference, &objectives);
+        for (i, contribution) in contributions.iter().enumerate() {
+            let mut others = front.to_vec();
+            others.remove(i);
+            let difference = total - hypervolume(&others, &reference, &objectives);
+            let tolerance = 1e-9 * total.max(1.0);
+            prop_assert!(
+                (contribution - difference).abs() <= tolerance,
+                "{contribution} {difference}"
+            );
+        }
+        Ok(())
+    }
+
     fn any_front<const M: usize>(max: usize) -> impl Strategy<Value = Vec<[f64; M]>> {
         prop::collection::vec(
             prop::array::uniform::<_, M>((0..8).prop_map(|v| v as f64 / 2.0)),
@@ -370,6 +558,17 @@ mod tests {
             prop_assert!(close(hypervolume(&two, &[4.0; 2], &[Minimize; 2]), brute_force(&two, &[4.0; 2])));
             prop_assert!(close(hypervolume(&three, &[4.0; 3], &[Minimize; 3]), brute_force(&three, &[4.0; 3])));
             prop_assert!(close(hypervolume(&four, &reference(4.0), &[Minimize; 4]), brute_force(&four, &reference(4.0))));
+        }
+
+        #[test]
+        fn contributions_are_hypervolume_differences(
+            two in any_front::<2>(12),
+            three in any_front::<3>(10),
+            four in any_front::<4>(8),
+        ) {
+            check_contributions(&two)?;
+            check_contributions(&three)?;
+            check_contributions(&four)?;
         }
 
         #[test]

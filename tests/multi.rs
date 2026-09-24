@@ -337,3 +337,25 @@ fn moead_approximates_two_and_three_objective_fronts() {
     let distance = igd(&outcome.front_values(), &problem.optimal_front(91));
     assert!(distance < 0.0012, "{distance}");
 }
+
+#[test]
+fn sms_emoa_reaches_the_optimal_zdt1_hypervolume() {
+    use genoxide::multi::SmsEmoa;
+    use genoxide::multi::problems::{TestProblem, Zdt1};
+    // the optimal front's hypervolume is 0.8716: 0.8713 to 0.8716 over 5 seeds, like pymoo's
+    // SMS-EMOA (0.8715 to 0.8718)
+    let problem = Zdt1::new(30);
+    let sms_emoa = SmsEmoa::builder(problem.real(), [Minimize, Minimize])
+        .population_size(100)
+        .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = MultiEngine::new(sms_emoa, problem)
+        .stop_when(Stop::generations(249))
+        .run()
+        .unwrap();
+    let volume = hypervolume(&outcome.front_values(), &[1.1, 1.1], &[Minimize, Minimize]);
+    assert!(volume > 0.871, "{volume}");
+}

@@ -153,7 +153,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] NSGA-III (reference points)
 - [x] SPEA2
 - [x] MOEA/D
-- [ ] SMS-EMOA
+- [x] SMS-EMOA
 - [x] Pareto archive
 - [x] Indicators: hypervolume, IGD / IGD+, spread
 - [x] Constrained dominance

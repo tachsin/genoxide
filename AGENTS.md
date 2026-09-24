@@ -452,6 +452,7 @@ fn main() -> genoxide::Result<()> {
 
 - `Spea2` has the same builder as `Nsga2` and usually spreads a 2-objective front a little better, at a higher cost per generation (its truncation compares every pair of solutions).
 - `Moead::builder(real, objectives, multi::das_dennis::<M>(divisions))` decomposes the problem into one subproblem per weight vector (Tchebycheff by default, `multi::Decomposition::Pbi { theta: 5.0 }` for 3 or more objectives); cheap per generation, with very evenly spread fronts.
+- `SmsEmoa` (same builder as `Nsga2`) keeps the solutions that add the most hypervolume: the best 2-objective fronts (ZDT1 at the optimal hypervolume), at a higher cost per generation, especially for 3 or more objectives.
 - For 3 or more objectives, `Nsga3::builder(real, objectives, multi::das_dennis::<3>(12))` spreads the front along reference directions (91 for 3 objectives and 12 divisions); the population size defaults to their number. Use SBX with η 30 and polynomial mutation.
 - The number of objectives is part of the types: returning `[f64; 3]` for 2 objectives doesn't compile.
 - Constraints: feasible solutions dominate infeasible ones, and between infeasible ones the smaller violation wins (`multi::dominates`).
@@ -459,7 +460,7 @@ fn main() -> genoxide::Result<()> {
 - `multi::non_dominated_sort` and `multi::crowding_distance` are available for your own algorithms.
 - To keep every non-dominated solution of a run, not only the final front: `let mut archive = multi::ParetoArchive::new(objectives);` and `.on_generation(|snapshot| archive.update(snapshot))`.
 - Test problems with known optimal fronts, usable directly as fitness functions: `multi::problems::{Zdt1, Zdt2, Zdt3, Zdt4, Zdt6, Dtlz1, Dtlz2, Dtlz3, Dtlz4}` (the `TestProblem` trait gives `real()` and `optimal_front(points)`).
-- Measure a front with `multi::indicator`: `hypervolume(&front, &reference_point, &objectives)` (larger is better), or `igd_plus`, `igd`, `gd` and `spread` against a reference front (smaller is better).
+- Measure a front with `multi::indicator`: `hypervolume(&front, &reference_point, &objectives)` (larger is better; `hypervolume_contributions` gives each point's exclusive share), or `igd_plus`, `igd`, `gd` and `spread` against a reference front (smaller is better).
 
 ### Local search: hill climbing and simulated annealing
 
