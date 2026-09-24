@@ -435,3 +435,36 @@ fn review_fixes() {
     assert_eq!(result["fitness"], "inf");
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+#[test]
+fn stop_and_report_mistakes_are_found_by_check() {
+    let directory = directory("messages");
+    let expect = |text: &str, message: &str| {
+        let error = check(&directory, text).unwrap_err();
+        assert!(error.contains(message), "{message}: {error}");
+    };
+    expect(
+        &CMAES.replace("evaluations = 50000", "stagnation = 0"),
+        "`stop.stagnation` must be at least 1",
+    );
+    expect(
+        &CMAES.replace("target = 1e-8", "target = nan"),
+        "`stop.target` is NaN",
+    );
+    expect(
+        &CMAES.replace("report = \"off\"", "report = 0"),
+        "`report` must be at least 1",
+    );
+    expect(
+        &CMAES.replace("report = \"off\"", "report = -3"),
+        "a duration like \"2s\", a number of generations, or \"off\"",
+    );
+    // a second number for one objective is a violation, which can't be negative
+    let text = CMAES
+        .replace("builtin = \"sphere\"", "builtin = \"zdt1\"")
+        .replace("bounds = [-5.0, 5.0]", "bounds = [0.0, 5.0]");
+    let error = run(&directory, "zdt1.toml", &text, &[]).unwrap_err();
+    assert!(error.contains("fitness zdt1"), "{error}");
+    assert!(error.contains("the constraint violation"), "{error}");
+    std::fs::remove_dir_all(&directory).unwrap();
+}
