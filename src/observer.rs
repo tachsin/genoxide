@@ -1,9 +1,11 @@
 //! Observers: statistics, hall of fame and custom callbacks, notified after every generation.
 
 pub mod hall_of_fame;
+pub mod report;
 pub mod statistics;
 
 pub use hall_of_fame::HallOfFame;
+pub use report::Report;
 pub use statistics::{GenerationStatistics, Statistics};
 
 use crate::engine::Progress;

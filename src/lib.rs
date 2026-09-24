@@ -42,8 +42,14 @@
 //!   evaluation and cancellation
 //! - [`multi`]: multi-objective optimization: NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA, the
 //!   [`MultiEngine`](multi::MultiEngine), Pareto dominance and non-dominated sorting
-//! - [`observer`]: statistics, hall of fame and custom callbacks
+//! - [`observer`]: statistics, hall of fame, progress lines and custom callbacks
 //! - [`prelude`]: everything above in one import
+//!
+//! Cargo features:
+//!
+//! - `parallel` (default): parallel fitness evaluation with rayon
+//! - `tracing`: a span per run, an event per generation and one at the end, with the target
+//!   `genoxide`, from both engines
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]

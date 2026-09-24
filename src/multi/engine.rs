@@ -1,7 +1,7 @@
 //! Running a multi-objective algorithm.
 
 use super::{MultiObjectiveAlgorithm, Scores};
-use crate::engine::{Batch, NanPolicy, Progress, evaluate_all, evaluate_batch};
+use crate::engine::{Batch, NanPolicy, Progress, evaluate_all, evaluate_batch, trace};
 use crate::genome::Genome;
 use crate::{Error, Individual, Population, Result, Stop, StopReason};
 use std::fmt;
@@ -349,6 +349,7 @@ where
                 });
             }
         }
+        let _span = trace::run::<A>();
         let start = Instant::now();
         loop {
             self.evaluate()?;
@@ -359,6 +360,7 @@ where
                 start.elapsed(),
                 self.algorithm.front_generation(),
             );
+            trace::generation(&progress, Some(self.algorithm.front().len()));
             if !self.callbacks.is_empty() {
                 let snapshot = MultiSnapshot {
                     population: self.algorithm.population(),
@@ -380,6 +382,7 @@ where
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
             };
             if let Some(stop_reason) = reason {
+                trace::finished(&progress, stop_reason, Some(self.algorithm.front().len()));
                 return Ok(MultiOutcome {
                     front: self.algorithm.front().to_vec(),
                     generations: progress.generation(),

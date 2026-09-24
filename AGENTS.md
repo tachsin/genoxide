@@ -103,7 +103,7 @@ Selection works with every representation. `Tournament::new(2..=5)?` is the usua
 | Method | Default | Notes |
 |---|---|---|
 | `.stop_when(stop)` | none | required, unless an abort flag is set; several calls combine with "or" |
-| `.observe(observer)` | none | pass `&mut observer` to read it after the run |
+| `.observe(observer)` | none | pass `&mut observer` to read it after the run; `Report::new()` prints progress |
 | `.on_generation(closure)` | none | `|snapshot| ...`, called after every generation, including generation 0 |
 | `.parallel(true)` | off | rayon; same results as sequential; worth it for expensive fitness functions; no effect on a `Batch` |
 | `.abort_flag(Arc<AtomicBool>)` | none | stops after the current generation once set |
@@ -270,6 +270,7 @@ fn main() -> genoxide::Result<()> {
         .abort_flag(Arc::clone(&abort))
         .parallel(true)
         .observe(&mut statistics)
+        .observe(Report::every(Duration::from_secs(1))) // a line to stderr each second
         .on_generation(|snapshot| {
             let progress = snapshot.progress();
             if progress.generation() % 10 == 0 {
@@ -284,6 +285,10 @@ fn main() -> genoxide::Result<()> {
     Ok(())
 }
 ```
+
+`Report::new()` prints a progress line to stderr after the initial population and then once a second. `Report::every(duration)` and `Report::every_generations(n)?` change how often, and `.to(writer)` sends the lines elsewhere. In a multi-objective run, call `report.update(snapshot.progress())` from `.on_generation`.
+
+With the `tracing` feature, both engines emit events with the target `genoxide`: an info span `run` (with the algorithm type), a debug event per generation (generation, evaluations, best, and the front size in a multi-objective run), and an info event when the run finishes (the stop reason and totals). Enable it with `genoxide = { version = "...", features = ["tracing"] }`, and show it with any subscriber, e.g. `RUST_LOG=genoxide=debug` with `tracing-subscriber`.
 
 ### Evolution strategy with self-adaptation
 

@@ -165,7 +165,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [ ] GPU evaluation example
 - [ ] Checkpoint and resume (`serde` feature)
 - [ ] Runs described in TOML / JSON, with a small CLI
-- [ ] `tracing` integration and progress reporting
+- [x] `tracing` integration and progress reporting
 
 ### 0.6: Python
 - [ ] `pip install genoxide` via PyO3 / maturin, wheels for Linux, macOS and Windows

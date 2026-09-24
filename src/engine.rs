@@ -1,6 +1,7 @@
 //! Running an algorithm: fitness evaluation, stop conditions, observers and cancellation.
 
 pub mod stop;
+pub(crate) mod trace;
 
 pub use stop::{Stop, StopReason};
 
@@ -174,12 +175,12 @@ pub enum NanPolicy {
 /// The state of a run, for stop conditions and observers.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Progress {
-    generation: u64,
-    evaluations: u64,
-    elapsed: Duration,
-    best: Option<Fitness>,
-    objective: Objective,
-    best_generation: u64,
+    pub(crate) generation: u64,
+    pub(crate) evaluations: u64,
+    pub(crate) elapsed: Duration,
+    pub(crate) best: Option<Fitness>,
+    pub(crate) objective: Objective,
+    pub(crate) best_generation: u64,
 }
 
 impl Progress {
@@ -453,6 +454,7 @@ where
         if let Some(stop) = &self.stop {
             stop.validate()?;
         }
+        let _span = trace::run::<A>();
         let start = Instant::now();
         loop {
             self.evaluate()?;
@@ -470,6 +472,7 @@ where
                 objective: self.algorithm.objective(),
                 best_generation: self.algorithm.best_generation(),
             };
+            trace::generation(&progress, None);
             if !self.observers.is_empty() {
                 let snapshot = Snapshot::new(
                     self.algorithm.population(),
@@ -492,6 +495,7 @@ where
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
             };
             if let Some(stop_reason) = reason {
+                trace::finished(&progress, stop_reason, None);
                 return Ok(Outcome {
                     best: best.clone(),
                     generations: progress.generation,

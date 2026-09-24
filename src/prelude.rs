@@ -18,7 +18,7 @@ pub use crate::genome::{
 pub use crate::multi::{
     self, Moead, MultiEngine, MultiObjectiveAlgorithm, Nsga2, Nsga3, Scores, Spea2,
 };
-pub use crate::observer::{HallOfFame, Observer, Statistics};
+pub use crate::observer::{HallOfFame, Observer, Report, Statistics};
 pub use crate::operator::{
     ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, CycleCrossover,
     EdgeRecombinationCrossover, GaussianMutation, InsertionMutation, InversionMutation, Mutate,
