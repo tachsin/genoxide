@@ -477,18 +477,30 @@ def main():
         instructions = measure_instructions(args.libraries)
 
     if previous:
-        # the other libraries' results, as they were
-        runs = [run for run in previous["runs"] if run["library"] not in args.libraries] + runs
+        # the results of the other libraries and scenarios, as they were
+        rerun = {scenario_name(*scenario[:3]) for scenario in scenarios}
+        runs = [
+            run for run in previous["runs"]
+            if run["library"] not in args.libraries
+            or scenario_name(run["problem"], run["size"], run["mode"]) not in rerun
+        ] + runs
         versions = {**previous["versions"], **versions}
-        if previous.get("instructions") is not None or instructions is not None:
+        if instructions is None:
+            # not measured again (no Valgrind, or --no-instructions): keep the previous counts
+            instructions = previous.get("instructions")
+            if instructions:
+                print("instruction counts: kept from the previous results", flush=True)
+        else:
             kept = [row for row in previous.get("instructions") or [] if row["library"] not in args.libraries]
-            instructions = kept + (instructions or [])
+            instructions = kept + instructions
 
     rows = summarize(runs)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     results = ROOT / "results"
     results.mkdir(exist_ok=True)
     platform = describe_platform()
+    if previous and previous.get("platform") not in (None, platform):
+        platform = f"{previous['platform']}; {', '.join(args.libraries)} rerun on {platform}"
     report = {"versions": versions, "seeds": seeds, "max_seconds": max_seconds, "platform": platform,
               "runs": runs, "summary": rows, "instructions": instructions}
     results_file = results / f"{timestamp}.json"
