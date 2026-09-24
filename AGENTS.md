@@ -454,6 +454,7 @@ fn main() -> genoxide::Result<()> {
 - Constraints: feasible solutions dominate infeasible ones, and between infeasible ones the smaller violation wins (`multi::dominates`).
 - Stop conditions: generations, evaluations, time, stagnation (generations without a new non-dominated solution) or custom; `Stop::target` needs a single objective.
 - `multi::non_dominated_sort` and `multi::crowding_distance` are available for your own algorithms.
+- Measure a front with `multi::indicator`: `hypervolume(&front, &reference_point, &objectives)` (larger is better), or `igd_plus`, `igd`, `gd` and `spread` against a reference front (smaller is better).
 
 ### Local search: hill climbing and simulated annealing
 

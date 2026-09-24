@@ -2,6 +2,7 @@
 
 use genoxide::Objective::{Maximize, Minimize};
 use genoxide::engine::NanPolicy;
+use genoxide::multi::indicator::{hypervolume, igd_plus};
 use genoxide::operator::{PolynomialMutation, SimulatedBinaryCrossover};
 use genoxide::prelude::*;
 use std::sync::Arc;
@@ -31,24 +32,6 @@ fn zdt1(x: &Reals) -> [f64; 2] {
     [x[0], g * (1.0 - (x[0] / g).sqrt())]
 }
 
-// the hypervolume of 2-objective points to minimize, up to the reference point
-fn hypervolume(points: &[[f64; 2]], reference: [f64; 2]) -> f64 {
-    let mut points: Vec<[f64; 2]> = points
-        .iter()
-        .copied()
-        .filter(|p| p[0] < reference[0] && p[1] < reference[1])
-        .collect();
-    points.sort_by(|a, b| a[0].total_cmp(&b[0]));
-    let (mut volume, mut previous) = (0.0, reference[1]);
-    for point in points {
-        if point[1] < previous {
-            volume += (reference[0] - point[0]) * (previous - point[1]);
-            previous = point[1];
-        }
-    }
-    volume
-}
-
 #[test]
 fn nsga2_approximates_the_zdt1_front() {
     // the optimal front has a hypervolume of 0.8716 (reference point 1.1, 1.1); pymoo's NSGA-II
@@ -64,8 +47,18 @@ fn nsga2_approximates_the_zdt1_front() {
         .run()
         .unwrap();
     assert_eq!(outcome.evaluations(), 25_000);
-    let volume = hypervolume(&outcome.front_values(), [1.1, 1.1]);
+    let front = outcome.front_values();
+    let volume = hypervolume(&front, &[1.1, 1.1], &[Minimize, Minimize]);
     assert!(volume > 0.868, "{volume}");
+    // 1000 points of the optimal front, f2 = 1 - √f1
+    let optimal: Vec<[f64; 2]> = (0..1000)
+        .map(|i| {
+            let f1 = i as f64 / 999.0;
+            [f1, 1.0 - f1.sqrt()]
+        })
+        .collect();
+    let distance = igd_plus(&front, &optimal, &[Minimize, Minimize]);
+    assert!(distance < 0.01, "{distance}");
 }
 
 #[test]
