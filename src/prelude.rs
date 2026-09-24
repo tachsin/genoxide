@@ -5,6 +5,7 @@
 //! ```
 
 pub use crate::algorithm::de::{self, De};
+pub use crate::algorithm::pso::{self, Pso};
 pub use crate::algorithm::{Acceptance, Algorithm, Ga, LocalSearch, Scheme};
 pub use crate::constraint::{self, Penalty};
 pub use crate::engine::{Engine, FitnessFunction, NanPolicy, Outcome, Stop, StopReason};

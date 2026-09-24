@@ -96,3 +96,71 @@ fn adaptive_differential_evolution_solves_rastrigin_without_tuning() {
         .unwrap();
     assert_eq!(outcome.stop_reason(), StopReason::Target);
 }
+
+fn rosenbrock(x: &Reals) -> f64 {
+    x.windows(2)
+        .map(|w| 100.0 * (w[1] - w[0] * w[0]).powi(2) + (1.0 - w[0]).powi(2))
+        .sum()
+}
+
+#[test]
+fn particle_swarm_solves_rosenbrock() {
+    let pso = Pso::builder(Real::uniform(10, -5.0..=10.0).unwrap())
+        .population_size(40)
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(pso, rosenbrock)
+        .stop_when(Stop::target(0.01).or(Stop::evaluations(200_000)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+}
+
+#[test]
+fn particle_swarm_ring_escapes_more_local_optima_than_global() {
+    // the ring spreads good positions slowly and keeps exploring
+    let median = |topology| {
+        let mut results: Vec<f64> = (0..5)
+            .map(|seed| {
+                let pso = Pso::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+                    .population_size(40)
+                    .topology(topology)
+                    .minimize()
+                    .seed(seed)
+                    .build()
+                    .unwrap();
+                let outcome = Engine::new(pso, rastrigin)
+                    .stop_when(Stop::evaluations(100_000))
+                    .run()
+                    .unwrap();
+                outcome.best().fitness().unwrap().score().unwrap()
+            })
+            .collect();
+        results.sort_by(f64::total_cmp);
+        results[2]
+    };
+    assert!(median(pso::Topology::Ring { neighbors: 1 }) < median(pso::Topology::Global));
+}
+
+#[test]
+fn particle_swarm_runs_in_parallel_with_the_same_results() {
+    let run = |parallel: bool| {
+        let pso = Pso::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+            .population_size(30)
+            .topology(pso::Topology::Ring { neighbors: 1 })
+            .minimize()
+            .seed(7)
+            .build()
+            .unwrap();
+        let engine = Engine::new(pso, rastrigin).stop_when(Stop::generations(50));
+        #[cfg(feature = "parallel")]
+        let engine = engine.parallel(parallel);
+        #[cfg(not(feature = "parallel"))]
+        let _ = parallel;
+        let mut engine = engine;
+        engine.run().unwrap().into_best()
+    };
+    assert_eq!(run(true), run(false));
+}
