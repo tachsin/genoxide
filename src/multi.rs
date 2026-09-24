@@ -9,6 +9,7 @@
 //! [`indicator`] measures the quality of a whole front.
 
 mod algorithm;
+mod archive;
 mod engine;
 pub mod indicator;
 pub mod nsga2;
@@ -16,6 +17,7 @@ mod pareto;
 mod scores;
 
 pub use algorithm::MultiObjectiveAlgorithm;
+pub use archive::ParetoArchive;
 pub use engine::{IntoScores, MultiEngine, MultiFitnessFunction, MultiOutcome, MultiSnapshot};
 pub use nsga2::{Nsga2, Nsga2Builder};
 pub use pareto::{crowding_distance, dominates, non_dominated_sort};

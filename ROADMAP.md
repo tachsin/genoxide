@@ -154,7 +154,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [ ] SPEA2
 - [ ] MOEA/D
 - [ ] SMS-EMOA
-- [ ] Pareto archive
+- [x] Pareto archive
 - [x] Indicators: hypervolume, IGD / IGD+, spread
 - [x] Constrained dominance
 
