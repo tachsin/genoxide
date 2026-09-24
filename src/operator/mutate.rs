@@ -179,20 +179,30 @@ fn check_positive(setting: &'static str, value: f64) -> Result<f64> {
     }
 }
 
-// `value` mirrored at the bounds until it's inside them, as light reflects between two mirrors
+// `value` mirrored at the bounds until it's inside them, as light reflects between two mirrors.
+// NaN if that can't be computed (an infinite value, or one so far out that it overflows), which
+// callers reject.
 fn reflect(value: f64, range: &RangeInclusive<f64>) -> f64 {
     let (start, end) = (*range.start(), *range.end());
     if (start..=end).contains(&value) {
         return value;
     }
     let width = end - start;
-    let offset = (value - start).rem_euclid(2.0 * width);
-    let offset = if offset > width {
-        2.0 * width - offset
+    // in units of the width; with huge bounds, `value - start` can overflow, the quotients can't
+    let mut position = (value - start) / width;
+    if !position.is_finite() {
+        position = value / width - start / width;
+    }
+    if !position.is_finite() {
+        return f64::NAN;
+    }
+    let position = position.rem_euclid(2.0);
+    let position = if position > 1.0 {
+        2.0 - position
     } else {
-        offset
+        position
     };
-    (start + offset).clamp(start, end)
+    (start + position * width).clamp(start, end)
 }
 
 // a new value for a gene in `range`, other than `current`: `propose` until it differs (almost
@@ -520,6 +530,24 @@ mod tests {
         assert_eq!(reflect(2.25, &range), 0.25);
         assert_eq!(reflect(-1.25, &range), 0.75);
         assert_eq!(reflect(3.0, &range), 1.0);
+        // huge bounds: no overflow
+        let huge = -8e307..=8e307;
+        let mirrored = reflect(1.7e308, &huge);
+        assert!(huge.contains(&mirrored), "{mirrored}");
+        // not computable: NaN, which the mutations reject
+        assert!(reflect(f64::INFINITY, &huge).is_nan());
+    }
+
+    #[test]
+    fn gaussian_mutation_with_huge_bounds() {
+        let real = Real::uniform(4, -8e307..=8e307).unwrap();
+        let mutation = GaussianMutation::per_gene(1.0, 1.0).unwrap();
+        let mut rng = StreamRng::seed_from_u64(0);
+        for _ in 0..1_000 {
+            let mut genome = real.random_genome(&mut rng);
+            mutation.mutate(&real, &mut genome, &mut rng);
+            assert!(real.validate(&genome).is_ok(), "{genome:?}");
+        }
     }
 
     // (mean, standard deviation) of the new value of gene 0, from `current`, over many mutations

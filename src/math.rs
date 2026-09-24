@@ -6,7 +6,8 @@
 //! floating point operations: IEEE 754 makes their results exact to the bit, so they give the same
 //! result everywhere. `sqrt` needs no port: IEEE 754 requires it to be correctly rounded.
 
-/// The natural logarithm of `x`, for finite `x > 0`, the same on every platform.
+/// The natural logarithm of `x`, the same on every platform: `-inf` for 0, NaN for negative `x`
+/// and NaN, `inf` for `inf`.
 ///
 /// The platform `ln` can differ in the last bit between systems, which would change the random
 /// choices made with it. This is fdlibm's `__ieee754_log` (the basis of most libm
@@ -24,7 +25,16 @@ pub(crate) fn log(x: f64) -> f64 {
     const LG5: f64 = f64::from_bits(0x3fc7_4664_96cb_03de); // 1.818357216161805012e-1
     const LG6: f64 = f64::from_bits(0x3fc3_9a09_d078_c69f); // 1.531383769920937332e-1
     const LG7: f64 = f64::from_bits(0x3fc2_f112_df3e_5244); // 1.479819860511658591e-1
-    debug_assert!(x > 0.0 && x.is_finite(), "log({x})");
+    // fdlibm's special cases
+    if x.is_nan() || x < 0.0 {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if x == f64::INFINITY {
+        return x;
+    }
 
     let mut x = x;
     let mut high = (x.to_bits() >> 32) as i32;
@@ -139,7 +149,8 @@ pub(crate) fn exp(x: f64) -> f64 {
     if k == 0 {
         return 1.0 - ((x * c) / (c - 2.0) - x);
     }
-    let y = 1.0 - ((lo - hi) - (x * c) / (2.0 - c));
+    // fdlibm's order of operations, for fdlibm's results
+    let y = 1.0 - ((lo - (x * c) / (2.0 - c)) - hi);
     // multiply by 2^k through the exponent bits
     if k >= -1021 {
         f64::from_bits(y.to_bits().wrapping_add((i64::from(k) << 52) as u64))
@@ -233,6 +244,9 @@ mod tests {
             let (ours, std) = (exp(x), x.exp());
             assert!(ulps(ours, std) <= 1, "exp({x:e}) = {ours:e}, std {std:e}");
         }
+        assert_eq!(log(0.0), f64::NEG_INFINITY);
+        assert_eq!(log(f64::INFINITY), f64::INFINITY);
+        assert!(log(-1.0).is_nan() && log(f64::NAN).is_nan());
         assert_eq!(exp(710.0), f64::INFINITY);
         assert_eq!(exp(-746.0), 0.0);
         assert!(exp(f64::NAN).is_nan());
@@ -271,7 +285,7 @@ mod tests {
         assert_eq!(
             values.map(f64::to_bits),
             [
-                4613303445314885482, // 2.7182818284590455, fdlibm's exp(1)
+                4613303445314885482, // 2.7182818284590455, 1 ulp above e
                 4584361024591036262, // 0.0301973834223185
                 4607656066507473108, // 1.1051709180756477
                 4606680541981188862, // 0.944280480021092
