@@ -105,7 +105,7 @@ Selection works with every representation. `Tournament::new(2..=5)?` is the usua
 | `.stop_when(stop)` | none | required, unless an abort flag is set; several calls combine with "or" |
 | `.observe(observer)` | none | pass `&mut observer` to read it after the run |
 | `.on_generation(closure)` | none | `|snapshot| ...`, called after every generation, including generation 0 |
-| `.parallel(true)` | off | rayon; same results as sequential; worth it for expensive fitness functions |
+| `.parallel(true)` | off | rayon; same results as sequential; worth it for expensive fitness functions; no effect on a `Batch` |
 | `.abort_flag(Arc<AtomicBool>)` | none | stops after the current generation once set |
 | `.nan_policy(NanPolicy::Error)` | `NanPolicy::Invalid` | what a NaN fitness means |
 
@@ -119,6 +119,7 @@ Stop conditions: `Stop::target(score)`, `Stop::generations(n)`, `Stop::evaluatio
 - `None` or `Fitness::invalid()` marks a solution that can't be scored at all. Invalid is worse than everything else. Prefer a violation for constraints: it tells the search how close a solution is.
 - `Penalty::new(weight)?.fitness(objective, score, violation)` is a static penalty function instead of Deb's rules; the weight needs tuning.
 - NaN becomes invalid by default, or an error with `NanPolicy::Error`.
+- `Batch(|genomes: &[&G]| -> Vec<T>)` scores a whole generation in one call, in order: for SIMD, a GPU or a remote service. It works with `Engine` and `MultiEngine`, and is called once per generation (with an empty slice when every child inherited its fitness). Returning a different number of values is `Error::FitnessCount`.
 - Maximize is the default. Call `.minimize()` on the builder for costs and errors; don't negate scores.
 
 ## Templates

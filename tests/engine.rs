@@ -361,3 +361,80 @@ fn constrained_fitness_functions() {
         .unwrap();
     assert_eq!(outcome.stop_reason(), StopReason::Generations);
 }
+
+fn batch_one_max(genomes: &[&Bits]) -> Vec<f64> {
+    genomes.iter().map(|genome| one_max(genome)).collect()
+}
+
+#[test]
+fn batch_matches_one_genome_at_a_time() {
+    // every scheme, as they differ in which children they evaluate
+    for scheme in [
+        Scheme::Generational { elitism: 1 },
+        Scheme::SteadyState { replacements: 10 },
+        Scheme::MuPlusLambda { lambda: 20 },
+    ] {
+        let mut single = Statistics::new();
+        let one = Engine::new(ga(40, scheme, 4), one_max)
+            .stop_when(Stop::generations(30))
+            .observe(&mut single)
+            .run()
+            .unwrap();
+        let mut batched = Statistics::new();
+        let batch = Engine::new(ga(40, scheme, 4), Batch(batch_one_max))
+            .stop_when(Stop::generations(30))
+            .observe(&mut batched)
+            .run()
+            .unwrap();
+        assert_eq!(one.best(), batch.best(), "{scheme:?}");
+        assert_eq!(one.evaluations(), batch.evaluations(), "{scheme:?}");
+        assert_eq!(records(&single), records(&batched), "{scheme:?}");
+    }
+}
+
+#[test]
+fn batch_is_called_once_per_generation_with_every_genome() {
+    let calls = std::sync::Mutex::new(Vec::new());
+    let outcome = Engine::new(
+        ga(40, Scheme::default(), 5),
+        Batch(|genomes: &[&Bits]| {
+            calls.lock().unwrap().push(genomes.len());
+            batch_one_max(genomes)
+        }),
+    )
+    .stop_when(Stop::generations(10))
+    .run()
+    .unwrap();
+    let calls = calls.into_inner().unwrap();
+    // the initial population, then one call per generation
+    assert_eq!(calls.len() as u64, outcome.generations() + 1);
+    assert_eq!(calls.iter().sum::<usize>() as u64, outcome.evaluations());
+}
+
+#[test]
+fn batch_with_a_wrong_number_of_scores_is_an_error() {
+    let too_few = Batch(|genomes: &[&Bits]| vec![0.0; genomes.len() - 1]);
+    let error = Engine::new(ga(20, Scheme::default(), 6), too_few)
+        .stop_when(Stop::generations(5))
+        .run()
+        .unwrap_err();
+    assert_eq!(
+        error,
+        Error::FitnessCount {
+            expected: 50,
+            got: 49
+        }
+    );
+    // any kind of fitness value
+    let constrained = Batch(|genomes: &[&Bits]| {
+        genomes
+            .iter()
+            .map(|genome| (one_max(genome), 0.0))
+            .collect::<Vec<_>>()
+    });
+    let outcome = Engine::new(ga(20, Scheme::default(), 6), constrained)
+        .stop_when(Stop::target(20.0).or(Stop::generations(500)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+}

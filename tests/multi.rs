@@ -6,7 +6,7 @@ use genoxide::multi::indicator::{hypervolume, igd_plus};
 use genoxide::operator::{PolynomialMutation, SimulatedBinaryCrossover};
 use genoxide::prelude::*;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 type RealNsga2<const M: usize> =
     genoxide::multi::Nsga2<Real, SimulatedBinaryCrossover, PolynomialMutation, M>;
@@ -358,4 +358,46 @@ fn sms_emoa_reaches_the_optimal_zdt1_hypervolume() {
         .unwrap();
     let volume = hypervolume(&outcome.front_values(), &[1.1, 1.1], &[Minimize, Minimize]);
     assert!(volume > 0.871, "{volume}");
+}
+
+#[test]
+fn batch_matches_one_genome_at_a_time() {
+    let algorithm = || {
+        nsga2(
+            Real::uniform(10, 0.0..=1.0).unwrap(),
+            [Minimize, Minimize],
+            20,
+            7,
+        )
+    };
+    let one = MultiEngine::new(algorithm(), zdt1)
+        .stop_when(Stop::generations(20))
+        .run()
+        .unwrap();
+    let calls = AtomicUsize::new(0);
+    let batch = MultiEngine::new(
+        algorithm(),
+        Batch(|genomes: &[&Reals]| {
+            calls.fetch_add(1, Ordering::Relaxed);
+            genomes.iter().map(|x| zdt1(x)).collect::<Vec<_>>()
+        }),
+    )
+    .stop_when(Stop::generations(20))
+    .run()
+    .unwrap();
+    assert_eq!(one.front(), batch.front());
+    assert_eq!(one.evaluations(), batch.evaluations());
+    assert_eq!(calls.into_inner(), 21);
+    // a wrong number of scores stops the run
+    let error = MultiEngine::new(algorithm(), Batch(|_: &[&Reals]| vec![[0.0, 0.0]]))
+        .stop_when(Stop::generations(20))
+        .run()
+        .unwrap_err();
+    assert_eq!(
+        error,
+        Error::FitnessCount {
+            expected: 20,
+            got: 1
+        }
+    );
 }

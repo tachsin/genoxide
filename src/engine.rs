@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a fitness function for `{G}`",
     label = "not a fitness function for `{G}`",
-    note = "a fitness function is a closure `|genome: &{G}| ...` returning `f64`, `Fitness`, `Option<f64>` or `(f64, f64)` (a score and a constraint violation), or a type implementing `FitnessFunction<{G}>`"
+    note = "a fitness function is a closure `|genome: &{G}| ...` returning `f64`, `Fitness`, `Option<f64>` or `(f64, f64)` (a score and a constraint violation), a `Batch` of a closure `|genomes: &[&{G}]| ...` returning a `Vec` of those, or a type implementing `FitnessFunction<{G}>`"
 )]
 pub trait FitnessFunction<G>: Sync {
     /// The type of a score.
@@ -30,6 +30,84 @@ pub trait FitnessFunction<G>: Sync {
 
     /// The score of `genome`.
     fn evaluate(&self, genome: &G) -> Self::Output;
+
+    /// Whether the engine evaluates a generation with one call of
+    /// [`evaluate_batch`](FitnessFunction::evaluate_batch) (`true`) rather than one call of
+    /// [`evaluate`](FitnessFunction::evaluate) per genome, in parallel if asked (`false`, the
+    /// default). See [`Batch`].
+    fn is_batch(&self) -> bool {
+        false
+    }
+
+    /// The scores of `genomes`, in their order: one [`evaluate`](FitnessFunction::evaluate)
+    /// each by default. Override it, and [`is_batch`](FitnessFunction::is_batch), to evaluate a
+    /// generation at once, e.g. on a GPU.
+    fn evaluate_batch(&self, genomes: &[&G]) -> Vec<Self::Output> {
+        genomes.iter().map(|genome| self.evaluate(genome)).collect()
+    }
+}
+
+/// A fitness function that takes all the genomes of a generation at once and returns their
+/// scores, in their order: for SIMD or GPU evaluation, a remote service, or any function with a
+/// large cost per call. [`Engine`] takes a `Batch` of a closure returning a `Vec` of `f64`,
+/// [`Fitness`], `Option<f64>` or `(f64, f64)`, and [`MultiEngine`](crate::multi::MultiEngine) a
+/// `Batch` returning a `Vec` of `[f64; M]` or the other
+/// [`IntoScores`](crate::multi::IntoScores) types.
+///
+/// It's called once per generation, with the genomes to evaluate (none when every child is a
+/// copy that inherits its fitness). It decides how to evaluate them, so
+/// [`Engine::parallel`] doesn't apply. Returning a different number of scores than genomes stops
+/// the run with [`Error::FitnessCount`].
+///
+/// ```
+/// use genoxide::prelude::*;
+///
+/// let ga = Ga::builder(Binary::new(64)?)
+///     .population_size(30)
+///     .select(Tournament::new(3)?)
+///     .crossover(UniformCrossover::new())
+///     .mutate(BitFlip::per_gene(1.0 / 64.0)?)
+///     .seed(1)
+///     .build()?;
+/// // one call per generation, e.g. one GPU dispatch or one request
+/// let onemax = Batch(|genomes: &[&Bits]| {
+///     genomes.iter().map(|genome| genome.count_ones() as f64).collect::<Vec<_>>()
+/// });
+/// let outcome = Engine::new(ga, onemax)
+///     .stop_when(Stop::target(64.0).or(Stop::generations(1_000)))
+///     .run()?;
+/// assert_eq!(outcome.stop_reason(), StopReason::Target);
+/// # Ok::<(), genoxide::Error>(())
+/// ```
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Batch<F>(pub F);
+
+impl<G, F, T> FitnessFunction<G> for Batch<F>
+where
+    F: Fn(&[&G]) -> Vec<T> + Sync,
+    T: IntoFitness,
+{
+    type Output = T;
+
+    /// The score of one genome: a batch of one.
+    ///
+    /// # Panics
+    ///
+    /// If the batch function returns no score for it.
+    fn evaluate(&self, genome: &G) -> T {
+        (self.0)(&[genome])
+            .into_iter()
+            .next()
+            .expect("the batch function returns a score per genome")
+    }
+
+    fn is_batch(&self) -> bool {
+        true
+    }
+
+    fn evaluate_batch(&self, genomes: &[&G]) -> Vec<T> {
+        (self.0)(genomes)
+    }
 }
 
 impl<G, F, T> FitnessFunction<G> for F
@@ -429,12 +507,21 @@ where
     fn evaluate(&mut self) -> Result<()> {
         let candidates = self.algorithm.ask();
         let fitness = &self.fitness;
-        evaluate_all(
-            candidates,
-            self.parallel,
-            &|genome: &A::Genome| fitness.evaluate(genome).into_fitness(),
-            &mut self.results,
-        );
+        if fitness.is_batch() {
+            evaluate_batch(
+                candidates,
+                |genomes| fitness.evaluate_batch(genomes),
+                &mut self.results,
+                IntoFitness::into_fitness,
+            )?;
+        } else {
+            evaluate_all(
+                candidates,
+                self.parallel,
+                &|genome: &A::Genome| fitness.evaluate(genome).into_fitness(),
+                &mut self.results,
+            );
+        }
         self.scores.clear();
         for result in self.results.drain(..) {
             self.scores.push(match (result, self.nan_policy) {
@@ -445,6 +532,29 @@ where
         }
         Ok(())
     }
+}
+
+// evaluates every candidate with one call of a batch function into `results`, in order
+pub(crate) fn evaluate_batch<G, X, T, R>(
+    candidates: Candidates<'_, G, X>,
+    batch: impl FnOnce(&[&G]) -> Vec<T>,
+    results: &mut Vec<R>,
+    convert: impl Fn(T) -> R,
+) -> Result<()>
+where
+    G: Genome,
+{
+    let genomes: Vec<&G> = candidates.iter().collect();
+    let values = batch(&genomes);
+    if values.len() != genomes.len() {
+        return Err(Error::FitnessCount {
+            expected: genomes.len(),
+            got: values.len(),
+        });
+    }
+    results.clear();
+    results.extend(values.into_iter().map(convert));
+    Ok(())
 }
 
 // evaluates every candidate into `results`, in order, in parallel if asked; the results are the
