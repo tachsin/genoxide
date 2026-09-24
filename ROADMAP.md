@@ -139,7 +139,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Memetic / Lamarckian hybrid (GA with local search on elites)
 - [x] Constraint handling: Deb's feasibility rules, penalty functions
 
-### 0.3: Evolution strategies and swarm
+### 0.3: Evolution strategies and swarm ✅
 - [x] CMA-ES, with IPOP / BIPOP restarts
 - [x] sep-CMA-ES for high dimensions
 - [x] Differential evolution: rand/1, best/1, current-to-pbest
