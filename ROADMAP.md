@@ -140,7 +140,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Constraint handling: Deb's feasibility rules, penalty functions
 
 ### 0.3: Evolution strategies and swarm
-- [ ] CMA-ES, with IPOP / BIPOP restarts
+- [x] CMA-ES, with IPOP / BIPOP restarts
 - [ ] sep-CMA-ES for high dimensions
 - [x] Differential evolution: rand/1, best/1, current-to-pbest
 - [x] Adaptive DE: JADE, SHADE, L-SHADE

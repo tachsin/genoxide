@@ -164,3 +164,40 @@ fn particle_swarm_runs_in_parallel_with_the_same_results() {
     };
     assert_eq!(run(true), run(false));
 }
+
+#[test]
+fn cma_es_with_restarts_solves_rastrigin() {
+    for restarts in [cmaes::Restarts::Ipop, cmaes::Restarts::Bipop] {
+        let cmaes = Cmaes::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+            .restarts(restarts)
+            .minimize()
+            .seed(0)
+            .build()
+            .unwrap();
+        let outcome = Engine::new(cmaes, rastrigin)
+            .stop_when(Stop::target(0.01).or(Stop::evaluations(500_000)))
+            .run()
+            .unwrap();
+        assert_eq!(outcome.stop_reason(), StopReason::Target, "{restarts:?}");
+    }
+}
+
+#[test]
+fn cma_es_runs_in_parallel_with_the_same_results() {
+    let run = |parallel: bool| {
+        let cmaes = Cmaes::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+            .restarts(cmaes::Restarts::Bipop)
+            .minimize()
+            .seed(7)
+            .build()
+            .unwrap();
+        let engine = Engine::new(cmaes, rastrigin).stop_when(Stop::generations(300));
+        #[cfg(feature = "parallel")]
+        let engine = engine.parallel(parallel);
+        #[cfg(not(feature = "parallel"))]
+        let _ = parallel;
+        let mut engine = engine;
+        engine.run().unwrap().into_best()
+    };
+    assert_eq!(run(true), run(false));
+}

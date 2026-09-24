@@ -362,6 +362,33 @@ fn main() -> genoxide::Result<()> {
 | `CurrentToPBest { p: 0.1, archive: 1.0 }` | Faster, still diverse thanks to the archive |
 | `Best1` | Fastest on easy problems; use it with `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, or the population can collapse before the optimum |
 
+### CMA-ES
+
+The strongest general choice for continuous problems with up to a few hundred `Real` genes, especially when the genes interact (rotated or badly conditioned functions): it learns their correlations. Nothing needs tuning; the defaults set the population size from the number of genes and the initial step size to 0.3 of each range. For multimodal functions, add restarts: `cmaes::Restarts::Ipop` (a growing population) or `cmaes::Restarts::Bipop` (large and small populations in turn).
+
+```rust
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    let rastrigin = |x: &Reals| {
+        10.0 * x.len() as f64
+            + x.iter()
+                .map(|xi| xi * xi - 10.0 * (std::f64::consts::TAU * xi).cos())
+                .sum::<f64>()
+    };
+    let cmaes = Cmaes::builder(Real::uniform(5, -5.12..=5.12)?)
+        .restarts(cmaes::Restarts::Ipop)
+        .minimize()
+        .seed(1)
+        .build()?;
+    let outcome = Engine::new(cmaes, rastrigin)
+        .stop_when(Stop::target(0.01).or(Stop::evaluations(200_000)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    Ok(())
+}
+```
+
 ### Particle swarm optimization
 
 Also for `Real` genomes. With the default constriction coefficients there is little to tune: the number of particles and the topology. `pso::Topology::Global` (default) converges fastest; `pso::Topology::Ring { neighbors: 1 }` explores longer and suits multimodal functions. On separable functions like Rastrigin, differential evolution with a small `CR` does much better.
@@ -478,6 +505,7 @@ fn main() -> genoxide::Result<()> {
 | `Error::TellWithoutAsk` / `Error::FitnessCount` | Ask / tell out of step | One `tell` per `ask`, with one fitness per asked genome, in order |
 | Hill climbing (`Acceptance::Improving` or `NotWorse`) stops improving | A local optimum | `.restart(patience, kicks)` (iterated local search), `Acceptance::Tabu { tenure }` with several neighbors, or `Acceptance::Annealing` with an initial temperature about the size of typical fitness differences and `cooling` close to 1 (e.g. 0.999) |
 | A differential evolution stops improving far from the optimum, with a tiny population spread | The population collapsed (greedy strategy, fixed `F`) | `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, `Strategy::Rand1`, or an archive with `CurrentToPBest` |
+| A CMA-ES stops improving (without restarts) | The run converged: `cmaes.converged()` says why | `.restarts(cmaes::Restarts::Ipop)` or `Bipop`; a larger `.initial_step(...)` or `.population_size(...)` |
 | A particle swarm gathers around a local optimum early | The global topology spreads the best position to every particle at once | `.topology(pso::Topology::Ring { neighbors: 1 })`, more particles, or differential evolution |
 | Real-valued search stalls in a local minimum | Steps too small to leave its basin (e.g. `GaussianMutation` with a tiny sigma) | `PolynomialMutation` with eta 20, or a larger sigma; on Rastrigin, sigma 0.03 of the range works and 0.01 stalls |
 | The best fitness stops improving early | Too little diversity | A larger population, a smaller tournament, a higher mutation rate, or `Stop::stagnation` with restarts |
