@@ -52,6 +52,22 @@ pub enum Criterion {
     ConditionCov,
 }
 
+/// The covariance matrix of a [`Cmaes`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Covariance {
+    /// A full covariance matrix, which learns the correlations between genes (the default). Each
+    /// sample costs O(n²) and each eigendecomposition O(n³), for `n` genes: best up to a few
+    /// hundred genes.
+    #[default]
+    Full,
+    /// A diagonal covariance matrix (sep-CMA-ES, Ros and Hansen, 2008): only the variance of
+    /// each gene is learned, (n + 2) / 3 times faster than with a full matrix, and each sample
+    /// costs O(n). For separable problems and for high dimensions, from hundreds to thousands of
+    /// genes; it can't learn correlations between genes.
+    Diagonal,
+}
+
 // the population of every restart is at most this many times the initial one
 const MAX_GROWTH: usize = 1024;
 
@@ -59,7 +75,8 @@ const MAX_GROWTH: usize = 1024;
 const RESAMPLES: usize = 100;
 
 // the strategy parameters for `n` dimensions and `lambda` samples, the defaults of Hansen's 2016
-// tutorial with positive recombination weights
+// tutorial with positive recombination weights, and learning rates (n + 2) / 3 times larger for
+// a diagonal covariance matrix (Ros and Hansen, 2008)
 #[derive(Clone, Debug)]
 struct Parameters {
     lambda: usize,
@@ -79,7 +96,7 @@ struct Parameters {
 }
 
 impl Parameters {
-    fn new(n: usize, lambda: usize) -> Self {
+    fn new(n: usize, lambda: usize, covariance: Covariance) -> Self {
         let dimensions = n as f64;
         let mu = lambda / 2;
         let raw: Vec<f64> = (1..=mu)
@@ -92,14 +109,21 @@ impl Parameters {
         let d_sigma =
             1.0 + 2.0 * (((mu_eff - 1.0) / (dimensions + 1.0)).sqrt() - 1.0).max(0.0) + c_sigma;
         let c_c = (4.0 + mu_eff / dimensions) / (dimensions + 4.0 + 2.0 * mu_eff / dimensions);
-        let c_1 = 2.0 / ((dimensions + 1.3) * (dimensions + 1.3) + mu_eff);
+        let faster = match covariance {
+            Covariance::Full => 1.0,
+            Covariance::Diagonal => (dimensions + 2.0) / 3.0,
+        };
+        let c_1 = (faster * 2.0 / ((dimensions + 1.3) * (dimensions + 1.3) + mu_eff)).min(1.0);
         let c_mu = (1.0 - c_1).min(
-            2.0 * (mu_eff - 2.0 + 1.0 / mu_eff)
+            faster * 2.0 * (mu_eff - 2.0 + 1.0 / mu_eff)
                 / ((dimensions + 2.0) * (dimensions + 2.0) + mu_eff),
         );
         let chi_n = dimensions.sqrt()
             * (1.0 - 1.0 / (4.0 * dimensions) + 1.0 / (21.0 * dimensions * dimensions));
-        let eigen_interval = (1.0 / ((c_1 + c_mu) * dimensions * 10.0)).max(1.0) as u64;
+        let eigen_interval = match covariance {
+            Covariance::Full => (1.0 / ((c_1 + c_mu) * dimensions * 10.0)).max(1.0) as u64,
+            Covariance::Diagonal => 1,
+        };
         let history = 10 + (30.0 * dimensions / lambda as f64).ceil() as usize;
         Self {
             lambda,
@@ -127,7 +151,8 @@ impl Parameters {
 /// so that good steps become more likely. `C` learns the scaling and the correlations of the
 /// genes, which makes the search invariant to rotations and to the conditioning of the problem.
 /// The parameters are the defaults of Hansen's tutorial (2016); only the population size and the
-/// initial step size are settings.
+/// initial step size are settings. For many genes, [`Covariance::Diagonal`] (sep-CMA-ES) is
+/// faster.
 ///
 /// The search works in coordinates scaled to `0..=1` per gene, so genes with different ranges
 /// start with the same relative step size, and genes with a single value are left out. A sample
@@ -160,13 +185,15 @@ pub struct Cmaes {
     // the indices of the genes with more than one value, the dimensions of the search
     free: Vec<usize>,
     restarts: Restarts,
+    covariance_type: Covariance,
     initial_step: f64,
     initial_lambda: usize,
     objective: Objective,
     seed: u64,
     rng: StreamRng,
     parameters: Parameters,
-    // the distribution in scaled coordinates: C = B · diag(D²) · Bᵀ, matrices row-major
+    // the distribution in scaled coordinates: C = B · diag(D²) · Bᵀ, matrices row-major; for a
+    // diagonal C, the variances and no B
     mean: Vec<f64>,
     sigma: f64,
     run_sigma: f64,
@@ -211,6 +238,7 @@ impl Cmaes {
             initial_step: 0.3,
             initial_mean: None,
             restarts: Restarts::Never,
+            covariance: Covariance::Full,
             objective: Objective::default(),
             seed: None,
         }
@@ -263,6 +291,28 @@ impl Cmaes {
         self.free.len()
     }
 
+    fn diagonal(&self) -> bool {
+        self.covariance_type == Covariance::Diagonal
+    }
+
+    // the variance of coordinate `i`, the diagonal of C
+    fn variance(&self, i: usize) -> f64 {
+        if self.diagonal() {
+            self.covariance[i]
+        } else {
+            self.covariance[i * self.dimensions() + i]
+        }
+    }
+
+    // coordinate `i` of principal axis `k`, B[i][k]
+    fn axis(&self, i: usize, k: usize) -> f64 {
+        if self.diagonal() {
+            if i == k { 1.0 } else { 0.0 }
+        } else {
+            self.basis[i * self.dimensions() + k]
+        }
+    }
+
     // the genome of the scaled coordinates `u`
     fn to_genome(&self, u: &[f64]) -> Reals {
         let bounds = self.real.bounds();
@@ -277,12 +327,17 @@ impl Cmaes {
     // a new run with `lambda` samples, step size `sigma` and a mean at `mean`
     fn start_run(&mut self, lambda: usize, sigma: f64, mean: Vec<f64>) {
         let n = self.dimensions();
-        self.parameters = Parameters::new(n, lambda);
+        self.parameters = Parameters::new(n, lambda, self.covariance_type);
         self.mean = mean;
         self.sigma = sigma;
         self.run_sigma = sigma;
-        self.covariance = identity(n);
-        self.basis = identity(n);
+        if self.diagonal() {
+            self.covariance = vec![1.0; n];
+            self.basis = Vec::new();
+        } else {
+            self.covariance = identity(n);
+            self.basis = identity(n);
+        }
         self.deviations = vec![1.0; n];
         self.path_sigma = vec![0.0; n];
         self.path_c = vec![0.0; n];
@@ -341,16 +396,20 @@ impl Cmaes {
                     *value = self.rng.normal();
                 }
                 // y = B · D · z
-                let step: Vec<f64> = (0..n)
-                    .map(|i| {
-                        let row = &self.basis[i * n..(i + 1) * n];
-                        row.iter()
-                            .zip(&self.deviations)
-                            .zip(&z)
-                            .map(|((b, d), z)| b * d * z)
-                            .sum()
-                    })
-                    .collect();
+                let step: Vec<f64> = if self.diagonal() {
+                    self.deviations.iter().zip(&z).map(|(d, z)| d * z).collect()
+                } else {
+                    (0..n)
+                        .map(|i| {
+                            let row = &self.basis[i * n..(i + 1) * n];
+                            row.iter()
+                                .zip(&self.deviations)
+                                .zip(&z)
+                                .map(|((b, d), z)| b * d * z)
+                                .sum()
+                        })
+                        .collect()
+                };
                 let u: Vec<f64> = self
                     .mean
                     .iter()
@@ -414,16 +473,27 @@ impl Cmaes {
             *m = (*m + self.sigma * y).clamp(0.0, 1.0);
         }
         // the evolution path of σ, with C^(−1/2) · y_w = B · D⁻¹ · Bᵀ · y_w
-        let rotated: Vec<f64> = (0..n)
-            .map(|k| {
-                let projection: f64 = (0..n).map(|i| self.basis[i * n + k] * mean_step[i]).sum();
-                projection / self.deviations[k]
-            })
-            .collect();
+        let whitened: Vec<f64> = if self.diagonal() {
+            mean_step
+                .iter()
+                .zip(&self.deviations)
+                .map(|(y, d)| y / d)
+                .collect()
+        } else {
+            let rotated: Vec<f64> = (0..n)
+                .map(|k| {
+                    let projection: f64 =
+                        (0..n).map(|i| self.basis[i * n + k] * mean_step[i]).sum();
+                    projection / self.deviations[k]
+                })
+                .collect();
+            (0..n)
+                .map(|i| (0..n).map(|k| self.basis[i * n + k] * rotated[k]).sum())
+                .collect()
+        };
         let factor = (c_sigma * (2.0 - c_sigma) * mu_eff).sqrt();
-        for i in 0..n {
-            let whitened: f64 = (0..n).map(|k| self.basis[i * n + k] * rotated[k]).sum();
-            self.path_sigma[i] = (1.0 - c_sigma) * self.path_sigma[i] + factor * whitened;
+        for (path, w) in self.path_sigma.iter_mut().zip(&whitened) {
+            *path = (1.0 - c_sigma) * *path + factor * w;
         }
         let norm = self.path_sigma.iter().map(|p| p * p).sum::<f64>().sqrt();
         self.decay *= (1.0 - c_sigma) * (1.0 - c_sigma);
@@ -442,18 +512,31 @@ impl Cmaes {
         // the rank-one and rank-μ updates
         let delta = if h_sigma { 0.0 } else { c_c * (2.0 - c_c) };
         let keep = 1.0 + c_1 * delta - c_1 - c_mu;
-        for i in 0..n {
-            for j in 0..=i {
+        if self.diagonal() {
+            for i in 0..n {
                 let rank_mu: f64 = weights
                     .iter()
                     .zip(&order)
-                    .map(|(w, &index)| w * self.steps[index][i] * self.steps[index][j])
+                    .map(|(w, &index)| w * self.steps[index][i] * self.steps[index][i])
                     .sum();
-                let value = keep * self.covariance[i * n + j]
-                    + c_1 * self.path_c[i] * self.path_c[j]
+                self.covariance[i] = keep * self.covariance[i]
+                    + c_1 * self.path_c[i] * self.path_c[i]
                     + c_mu * rank_mu;
-                self.covariance[i * n + j] = value;
-                self.covariance[j * n + i] = value;
+            }
+        } else {
+            for i in 0..n {
+                for j in 0..=i {
+                    let rank_mu: f64 = weights
+                        .iter()
+                        .zip(&order)
+                        .map(|(w, &index)| w * self.steps[index][i] * self.steps[index][j])
+                        .sum();
+                    let value = keep * self.covariance[i * n + j]
+                        + c_1 * self.path_c[i] * self.path_c[j]
+                        + c_mu * rank_mu;
+                    self.covariance[i * n + j] = value;
+                    self.covariance[j * n + i] = value;
+                }
             }
         }
         // cumulative step-size adaptation, at most a factor e per generation
@@ -470,14 +553,19 @@ impl Cmaes {
     fn decompose(&mut self) {
         let n = self.dimensions();
         self.eigen_generation = self.run_generation;
-        let (mut values, vectors) = eigen(&self.covariance, n);
+        let (mut values, vectors) = if self.diagonal() {
+            (self.covariance.clone(), Vec::new())
+        } else {
+            eigen(&self.covariance, n)
+        };
         let max = values.iter().copied().fold(f64::MIN, f64::max);
         let min = values.iter().copied().fold(f64::MAX, f64::min);
         if !(min > 0.0 && max <= 1e14 * min) {
             self.converged = Some(Criterion::ConditionCov);
             let shift = (max / 1e14 - min).max(0.0) + f64::MIN_POSITIVE;
+            let stride = if self.diagonal() { 1 } else { n + 1 };
             for i in 0..n {
-                self.covariance[i * n + i] += shift;
+                self.covariance[i * stride] += shift;
             }
             for value in &mut values {
                 *value += shift;
@@ -520,7 +608,7 @@ impl Cmaes {
             return Some(Criterion::EqualFunValues);
         }
         let tol_x = 1e-12 * self.run_sigma;
-        let deviation = |i: usize| self.covariance[i * n + i].sqrt();
+        let deviation = |i: usize| self.variance(i).sqrt();
         if (0..n).all(|i| sigma * self.path_c[i].abs() < tol_x && sigma * deviation(i) < tol_x) {
             return Some(Criterion::TolX);
         }
@@ -530,7 +618,7 @@ impl Cmaes {
         }
         let axis = (self.run_generation % n as u64) as usize;
         let scale = 0.1 * sigma * self.deviations[axis];
-        if (0..n).all(|i| self.mean[i] + scale * self.basis[i * n + axis] == self.mean[i]) {
+        if (0..n).all(|i| self.mean[i] + scale * self.axis(i, axis) == self.mean[i]) {
             return Some(Criterion::NoEffectAxis);
         }
         if (0..n).any(|i| self.mean[i] + 0.2 * sigma * deviation(i) == self.mean[i]) {
@@ -831,7 +919,8 @@ impl Algorithm for Cmaes {
 /// A builder for a [`Cmaes`], from [`Cmaes::builder`].
 ///
 /// Defaults: the population size of [`Cmaes::default_population_size`], an initial step size of
-/// 0.3 of each gene's range, a random initial mean, no restarts, maximize and a random seed.
+/// 0.3 of each gene's range, a random initial mean, no restarts, a full covariance matrix,
+/// maximize and a random seed.
 #[derive(Clone, Debug)]
 pub struct CmaesBuilder {
     real: Real,
@@ -839,6 +928,7 @@ pub struct CmaesBuilder {
     initial_step: f64,
     initial_mean: Option<Reals>,
     restarts: Restarts,
+    covariance: Covariance,
     objective: Objective,
     seed: Option<u64>,
 }
@@ -870,6 +960,12 @@ impl CmaesBuilder {
     /// default.
     pub fn restarts(mut self, restarts: Restarts) -> Self {
         self.restarts = restarts;
+        self
+    }
+
+    /// A full or a diagonal covariance matrix (sep-CMA-ES). [`Covariance::Full`] by default.
+    pub fn covariance(mut self, covariance: Covariance) -> Self {
+        self.covariance = covariance;
         self
     }
 
@@ -954,12 +1050,13 @@ impl CmaesBuilder {
             real: self.real,
             free,
             restarts: self.restarts,
+            covariance_type: self.covariance,
             initial_step: self.initial_step,
             initial_lambda: lambda,
             objective: self.objective,
             seed,
             rng,
-            parameters: Parameters::new(n, lambda),
+            parameters: Parameters::new(n, lambda, self.covariance),
             mean: Vec::new(),
             sigma: 0.0,
             run_sigma: 0.0,
@@ -1094,7 +1191,7 @@ mod tests {
             ),
         ];
         for (n, lambda, expected) in cases {
-            let p = Parameters::new(n, lambda);
+            let p = Parameters::new(n, lambda, Covariance::Full);
             let actual = [
                 p.mu_eff, p.c_sigma, p.d_sigma, p.c_c, p.c_1, p.c_mu, p.chi_n,
             ];
@@ -1105,6 +1202,17 @@ mod tests {
             assert!(close(p.weights.iter().sum(), 1.0));
             assert!(p.weights.windows(2).all(|w| w[0] > w[1]));
         }
+        // sep-CMA-ES: learning rates (n + 2) / 3 times larger
+        let (full, diagonal) = (
+            Parameters::new(10, 10, Covariance::Full),
+            Parameters::new(10, 10, Covariance::Diagonal),
+        );
+        assert!(close(diagonal.c_1, full.c_1 * 4.0));
+        assert!(close(diagonal.c_mu, full.c_mu * 4.0));
+        assert_eq!(
+            (diagonal.c_sigma, diagonal.eigen_interval),
+            (full.c_sigma, 1)
+        );
         assert_eq!(Cmaes::default_population_size(1), 4);
         assert_eq!(Cmaes::default_population_size(10), 10);
         assert_eq!(Cmaes::default_population_size(100), 17);
@@ -1197,6 +1305,27 @@ mod tests {
     }
 
     #[test]
+    fn sep_cma_es_learns_the_scaling_of_many_genes() {
+        // a separable ellipsoid in 30 dimensions: about 8,500 evaluations with a diagonal
+        // covariance matrix (pycma: 10,500), 40,000 with a full one
+        let run = |covariance| {
+            let cmaes = builder(30, 1).covariance(covariance).build().unwrap();
+            Engine::new(cmaes, ellipsoid)
+                .stop_when(Stop::target(1e-10).or(Stop::evaluations(12_000)))
+                .run()
+                .unwrap()
+        };
+        let outcome = run(Covariance::Diagonal);
+        assert_eq!(
+            outcome.stop_reason(),
+            StopReason::Target,
+            "{}",
+            outcome.evaluations()
+        );
+        assert_eq!(run(Covariance::Full).stop_reason(), StopReason::Evaluations);
+    }
+
+    #[test]
     fn converged_runs_are_detected() {
         let run = |f: fn(&Reals) -> f64| {
             let mut cmaes = builder(4, 2).build().unwrap();
@@ -1279,15 +1408,21 @@ mod tests {
 
     #[test]
     fn same_seed_same_run() {
-        let run = |seed| {
-            let mut cmaes = builder(5, seed).restarts(Restarts::Bipop).build().unwrap();
-            for _ in 0..50 {
-                step(&mut cmaes, rosenbrock);
-            }
-            cmaes.population().clone()
-        };
-        assert_eq!(run(3), run(3));
-        assert_ne!(run(3), run(4));
+        for covariance in [Covariance::Full, Covariance::Diagonal] {
+            let run = |seed| {
+                let mut cmaes = builder(5, seed)
+                    .restarts(Restarts::Bipop)
+                    .covariance(covariance)
+                    .build()
+                    .unwrap();
+                for _ in 0..50 {
+                    step(&mut cmaes, rosenbrock);
+                }
+                cmaes.population().clone()
+            };
+            assert_eq!(run(3), run(3));
+            assert_ne!(run(3), run(4));
+        }
     }
 
     fn symmetric(n: usize) -> impl Strategy<Value = Vec<f64>> {
@@ -1367,6 +1502,7 @@ mod tests {
             lambda in 2usize..12,
             initial_step in 0.001..=1.0f64,
             restarts in prop::sample::select(vec![Restarts::Never, Restarts::Ipop, Restarts::Bipop]),
+            diagonal: bool,
         ) {
             // one fixed gene, bounds of different widths, and a random fitness
             let real = Real::new([3.0..=3.0, -1.0..=1.0, 0.0..=100.0, -1e-3..=1e-3, -8e307..=8e307])
@@ -1375,6 +1511,7 @@ mod tests {
                 .population_size(lambda)
                 .initial_step(initial_step)
                 .restarts(restarts)
+                .covariance(if diagonal { Covariance::Diagonal } else { Covariance::Full })
                 .minimize()
                 .seed(seed)
                 .build()
@@ -1392,11 +1529,14 @@ mod tests {
                 prop_assert!(cmaes.sigma.is_finite() && cmaes.sigma > 0.0);
                 prop_assert!(cmaes.deviations.iter().all(|d| d.is_finite() && *d > 0.0));
                 let n = cmaes.dimensions();
-                for i in 0..n {
-                    for j in 0..n {
-                        prop_assert_eq!(cmaes.covariance[i * n + j], cmaes.covariance[j * n + i]);
+                if !diagonal {
+                    for i in 0..n {
+                        for j in 0..n {
+                            prop_assert_eq!(cmaes.covariance[i * n + j], cmaes.covariance[j * n + i]);
+                        }
                     }
                 }
+                prop_assert!((0..n).all(|i| cmaes.variance(i) > 0.0 && cmaes.variance(i).is_finite()));
             }
         }
     }

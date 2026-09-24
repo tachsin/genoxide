@@ -364,7 +364,7 @@ fn main() -> genoxide::Result<()> {
 
 ### CMA-ES
 
-The strongest general choice for continuous problems with up to a few hundred `Real` genes, especially when the genes interact (rotated or badly conditioned functions): it learns their correlations. Nothing needs tuning; the defaults set the population size from the number of genes and the initial step size to 0.3 of each range. For multimodal functions, add restarts: `cmaes::Restarts::Ipop` (a growing population) or `cmaes::Restarts::Bipop` (large and small populations in turn).
+The strongest general choice for continuous problems with up to a few hundred `Real` genes, especially when the genes interact (rotated or badly conditioned functions): it learns their correlations. Nothing needs tuning; the defaults set the population size from the number of genes and the initial step size to 0.3 of each range. For multimodal functions, add restarts: `cmaes::Restarts::Ipop` (a growing population) or `cmaes::Restarts::Bipop` (large and small populations in turn). For hundreds to thousands of genes, or separable problems, use `.covariance(cmaes::Covariance::Diagonal)` (sep-CMA-ES): each sample costs O(n) instead of O(n²), and the scaling of each gene is learned much faster, but not the correlations.
 
 ```rust
 use genoxide::prelude::*;
