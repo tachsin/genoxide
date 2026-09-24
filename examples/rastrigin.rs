@@ -3,8 +3,8 @@
 //! Shows a real-valued genome, minimization, parallel evaluation and a time limit. The global
 //! minimum is 0, at the origin.
 //!
-//! Uniform mutation finds the basin of the global minimum, but it's a blunt tool for the last
-//! digits: the Gaussian and polynomial mutations planned for 0.2 fine-tune much better.
+//! Polynomial mutation both explores (large steps are possible) and fine-tunes (most steps are
+//! small), which is what the many local minima of Rastrigin need.
 //!
 //! ```text
 //! cargo run --release --example rastrigin
@@ -25,10 +25,10 @@ fn rastrigin(x: &Reals) -> f64 {
 
 fn main() -> Result<()> {
     let ga = Ga::builder(Real::uniform(DIMENSIONS, -5.12..=5.12)?)
-        .population_size(200)
-        .select(Tournament::new(4)?)
+        .population_size(100)
+        .select(Tournament::new(3)?)
         .crossover(UniformCrossover::new())
-        .mutate(UniformMutation::count(1)?)
+        .mutate(PolynomialMutation::per_gene(0.1, 20.0)?)
         .scheme(Scheme::Generational { elitism: 2 })
         .minimize()
         .seed(3)
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
         // worth it for expensive fitness functions; the results are the same either way
         .parallel(true)
         .stop_when(
-            Stop::target(1e-3)
+            Stop::target(0.01)
                 .or(Stop::stagnation(500))
                 .or(Stop::time(Duration::from_secs(30))),
         )

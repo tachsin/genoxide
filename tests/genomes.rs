@@ -94,3 +94,28 @@ fn permutation_sorts() {
         .unwrap();
     assert_eq!(outcome.best_genome(), &Order::identity(12));
 }
+
+#[test]
+fn polynomial_mutation_solves_rastrigin() {
+    let rastrigin = |x: &Reals| {
+        10.0 * x.len() as f64
+            + x.iter()
+                .map(|xi| xi * xi - 10.0 * (std::f64::consts::TAU * xi).cos())
+                .sum::<f64>()
+    };
+    let ga = Ga::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+        .population_size(100)
+        .select(Tournament::new(3).unwrap())
+        .crossover(UniformCrossover::new())
+        .mutate(PolynomialMutation::per_gene(0.1, 20.0).unwrap())
+        .scheme(Scheme::Generational { elitism: 2 })
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(ga, rastrigin)
+        .stop_when(Stop::target(0.01).or(Stop::evaluations(400_000)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+}

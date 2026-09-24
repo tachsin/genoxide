@@ -77,6 +77,14 @@ fn mutation(c: &mut Criterion) {
     group.bench_function("uniform_real_100", |b| {
         b.iter(|| uniform.mutate(&real, &mut reals, &mut rng))
     });
+    let gaussian = GaussianMutation::per_gene(0.01, 0.03).unwrap();
+    group.bench_function("gaussian_real_100", |b| {
+        b.iter(|| gaussian.mutate(&real, &mut reals, &mut rng))
+    });
+    let polynomial = PolynomialMutation::per_gene(0.01, 20.0).unwrap();
+    group.bench_function("polynomial_real_100", |b| {
+        b.iter(|| polynomial.mutate(&real, &mut reals, &mut rng))
+    });
     let permutation = Permutation::new(100).unwrap();
     let mut order = permutation.random_genome(&mut rng);
     group.bench_function("swap_permutation_100", |b| {

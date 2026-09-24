@@ -46,6 +46,7 @@ pub mod error;
 pub mod fitness;
 pub mod genome;
 pub mod individual;
+mod math;
 pub mod observer;
 pub mod operator;
 pub mod population;

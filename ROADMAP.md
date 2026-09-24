@@ -130,7 +130,8 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 
 ### 0.2: Real-valued and permutation excellence
 - [ ] Real-valued crossover: SBX, BLX-α, arithmetic
-- [ ] Real-valued mutation: Gaussian (fixed and self-adaptive), polynomial
+- [x] Real-valued mutation: Gaussian, polynomial
+- [ ] Self-adaptive Gaussian mutation (a step size per individual)
 - [ ] Permutation crossover: PMX, OX1, CX, edge recombination
 - [ ] Permutation mutation: inversion (2-opt), insertion, scramble
 - [ ] Local search: hill climbing (first / best improvement), simulated annealing, tabu search, iterated local search
