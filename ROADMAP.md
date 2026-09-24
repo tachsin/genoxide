@@ -145,7 +145,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Differential evolution: rand/1, best/1, current-to-pbest
 - [x] Adaptive DE: JADE, SHADE, L-SHADE
 - [x] Particle swarm: global and local topologies
-- [ ] (μ/ρ +, λ)-ES with self-adaptation
+- [x] (μ/ρ +, λ)-ES with self-adaptation
 
 ### 0.4: Multi-objective
 - [ ] Non-dominated sorting (fast and log variants), crowding distance

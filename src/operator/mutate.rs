@@ -184,7 +184,7 @@ fn check_positive(setting: &'static str, value: f64) -> Result<f64> {
 // `value` mirrored at the bounds until it's inside them, as light reflects between two mirrors.
 // NaN if that can't be computed (an infinite value, or one so far out that it overflows), which
 // callers reject.
-fn reflect(value: f64, range: &RangeInclusive<f64>) -> f64 {
+pub(crate) fn reflect(value: f64, range: &RangeInclusive<f64>) -> f64 {
     let (start, end) = (*range.start(), *range.end());
     if (start..=end).contains(&value) {
         return value;
@@ -409,7 +409,7 @@ pub struct SelfAdaptiveMutation {
 }
 
 // the largest step size: steps of 10 ranges are already uniform after mirroring
-const MAX_STEP: f64 = 10.0;
+pub(crate) const MAX_STEP: f64 = 10.0;
 
 impl SelfAdaptiveMutation {
     /// Self-adaptive mutation with the learning rate `1 / √n`.

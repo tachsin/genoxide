@@ -286,29 +286,34 @@ fn main() -> genoxide::Result<()> {
 
 ### Evolution strategy with self-adaptation
 
-For smooth real-valued problems that need precise answers, a (μ,λ)-ES whose step size evolves with each solution: large steps far from the optimum, small ones close to it.
+For smooth real-valued problems that need precise answers, a (μ/ρ, λ)-ES whose step sizes evolve with each solution: large steps far from the optimum, small ones close to it. With a step size per gene (the default), it also learns how differently the genes are scaled.
 
 ```rust
 use genoxide::prelude::*;
 
 fn main() -> genoxide::Result<()> {
-    let es = Ga::builder(AdaptiveReal::new(Real::uniform(5, -5.0..=5.0)?, 0.3)?)
-        .population_size(10) // μ
-        .select(Tournament::new(2)?)
-        .crossover(NoCrossover)
-        .mutate(SelfAdaptiveMutation::new())
-        .scheme(Scheme::MuCommaLambda { lambda: 70 }) // λ
+    // (5/5_I, 35)-ES: intermediate recombination of all 5 parents, comma selection
+    let es = Es::builder(Real::uniform(5, -5.0..=5.0)?)
+        .parents(5) // μ
+        .offspring(35) // λ, 5 to 7 times μ
         .minimize()
         .seed(1)
         .build()?;
-    let outcome = Engine::new(es, |x: &AdaptiveReals| x.iter().map(|xi| xi * xi).sum::<f64>())
+    let outcome = Engine::new(es, |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>())
         .stop_when(Stop::target(1e-10).or(Stop::evaluations(100_000)))
         .run()?;
     assert_eq!(outcome.stop_reason(), StopReason::Target);
-    println!("step size at the end: {:e}", outcome.best_genome().step());
     Ok(())
 }
 ```
+
+| Setting | Options |
+|---|---|
+| `.recombination(...)` | `es::Recombination::Intermediate { rho }` (default, ρ = μ), `es::Recombination::Dominant { rho }`; ρ = 1 for none |
+| `.selection(...)` | `es::Selection::Comma` (default; best for self-adaptation), `es::Selection::Plus` (elitist) |
+| `.step_sizes(...)` | `es::StepSizes::PerGene` (default), `es::StepSizes::One` (faster when all genes are scaled alike) |
+
+A GA can run an ES too, with other operators: `AdaptiveReal` genomes, `SelfAdaptiveMutation`, `NoCrossover` and `Scheme::MuCommaLambda { lambda }`. For hard problems (rotated, badly conditioned or multimodal), CMA-ES is stronger.
 
 ### Differential evolution
 
