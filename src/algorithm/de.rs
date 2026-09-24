@@ -155,6 +155,10 @@ impl De {
     /// linearly to 4; current-to-pbest/1 with `p` 0.11 and an archive of 2.6 times the population;
     /// SHADE with a memory of 6. Set the objective, and stop the run at `max_evaluations`.
     ///
+    /// Unlike the paper, the `CR` memory takes the weighted arithmetic mean of SHADE (see
+    /// [`Control::Shade`]), `pbest` can come from the best individual alone when `p` times the
+    /// population rounds to 1, and a target replaced by an equally good trial is archived too.
+    ///
     /// ```
     /// use genoxide::prelude::*;
     ///
@@ -311,6 +315,12 @@ impl De {
         let size = size.clamp(minimum, self.population.len());
         if size < self.population.len() {
             self.population.sort_best_first(self.objective);
+            // the trials of this generation (age 0) that are dropped are discarded
+            let dropped = self.population.as_slice()[size..]
+                .iter()
+                .filter(|individual| individual.age() == 0)
+                .cloned();
+            self.discarded.extend(dropped);
             self.population.truncate(size);
             if let Strategy::CurrentToPBest { archive, .. } = self.strategy {
                 let archive_size = (archive * size as f64).round() as usize;
@@ -1053,6 +1063,9 @@ mod tests {
         let mut previous = de.population().len();
         while de.evaluations() < 2_000 {
             step(&mut de);
+            // every trial survived (age 0) or was discarded, also when the population shrank
+            let survived = de.population().iter().filter(|x| x.age() == 0).count();
+            assert_eq!(survived + de.discarded().len(), previous);
             let size = de.population().len();
             let expected =
                 (40.0 + (4.0 - 40.0) * de.evaluations().min(2_000) as f64 / 2_000.0).round();
