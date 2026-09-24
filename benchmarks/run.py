@@ -309,7 +309,7 @@ def front_table(rows):
             f"| {row['median_hypervolume']:.4f} "
             f"| {row['worst_hypervolume']:.4f} to {row['best_hypervolume']:.4f} "
             f"| {format_seconds(row['median_time'])} "
-            f"| {format_number(row['median_evaluations'])} "
+            f"| {format_number(round(row['median_evaluations']))} "
             f"| {format_number(round(row['evaluations_per_second']))} |"
         )
     return "\n".join(lines)
