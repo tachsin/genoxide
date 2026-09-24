@@ -1,6 +1,6 @@
 //! Batch fitness evaluation on the GPU: neuroevolution of a small neural network. Each genome is
 //! the 65 weights of a network with 2 inputs, 16 hidden tanh units and 1 output. Its fitness is
-//! the mean squared error of the network over 4,096 samples of a function: over 4 million
+//! the mean squared error of the network over 4,096 samples of a function: about 2 million
 //! network evaluations per generation. A generation goes to the GPU at once, through `Batch`: one
 //! upload of the weights, one dispatch with a workgroup per genome, one download of the errors.
 //!
