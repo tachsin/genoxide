@@ -158,7 +158,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Indicators: hypervolume, IGD / IGD+, spread
 - [x] Constrained dominance
 
-### 0.5: Scale and operations
+### 0.5: Scale and operations ✅
 - [x] Island model: ring, fully connected and random topologies; deterministic and parallel
 - [x] Asynchronous / steady-state evaluation for expensive fitness
 - [x] Batch evaluation hook (SIMD, GPU, remote)
