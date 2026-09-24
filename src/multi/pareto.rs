@@ -73,6 +73,18 @@ fn pareto_dominates(a: &[f64], b: &[f64]) -> bool {
     better
 }
 
+// whether `new` has a solution that no solution of `old` dominates or equals: the front improved
+pub(crate) fn gains<const M: usize>(
+    new: &[Scores<M>],
+    old: &[Scores<M>],
+    objectives: &[Objective; M],
+) -> bool {
+    new.iter().any(|candidate| {
+        !old.iter()
+            .any(|other| other == candidate || dominates(other, candidate, objectives))
+    })
+}
+
 /// The fronts of non-dominated sorting by [constrained dominance](dominates): the first front
 /// holds the indices of the solutions that no other solution dominates, the second those that
 /// only the first front dominates, and so on. Each front lists its indices in ascending order.

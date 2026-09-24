@@ -105,26 +105,26 @@ pub trait Algorithm {
 /// It doesn't allocate, and it's `Copy` and `Sync`, so it can be shared between threads for
 /// parallel evaluation.
 #[derive(Debug)]
-pub struct Candidates<'a, G: Genome> {
-    individuals: &'a [Individual<G>],
+pub struct Candidates<'a, G: Genome, F = Fitness> {
+    individuals: &'a [Individual<G, F>],
     indices: &'a [usize],
 }
 
-impl<G: Genome> Clone for Candidates<'_, G> {
+impl<G: Genome, F> Clone for Candidates<'_, G, F> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<G: Genome> Copy for Candidates<'_, G> {}
+impl<G: Genome, F> Copy for Candidates<'_, G, F> {}
 
-impl<'a, G: Genome> Candidates<'a, G> {
+impl<'a, G: Genome, F> Candidates<'a, G, F> {
     /// The genomes of `individuals` at `indices`.
     ///
     /// # Panics
     ///
     /// [`get`](Candidates::get) and [`iter`](Candidates::iter) panic if an index is out of bounds.
-    pub fn new(individuals: &'a [Individual<G>], indices: &'a [usize]) -> Self {
+    pub fn new(individuals: &'a [Individual<G, F>], indices: &'a [usize]) -> Self {
         Self {
             individuals,
             indices,

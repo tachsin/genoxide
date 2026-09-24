@@ -7,8 +7,14 @@
 //! worsening another. [`non_dominated_sort`] ranks solutions into successive fronts, and
 //! [`crowding_distance`] measures how isolated a solution is within its front.
 
+mod algorithm;
+mod engine;
+pub mod nsga2;
 mod pareto;
 mod scores;
 
+pub use algorithm::MultiObjectiveAlgorithm;
+pub use engine::{IntoScores, MultiEngine, MultiFitnessFunction, MultiOutcome, MultiSnapshot};
+pub use nsga2::{Nsga2, Nsga2Builder};
 pub use pareto::{crowding_distance, dominates, non_dominated_sort};
 pub use scores::Scores;
