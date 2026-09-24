@@ -88,6 +88,8 @@ pub enum NanPolicy {
     #[default]
     Invalid,
     /// The run stops with [`Error::NanFitness`] (also for a NaN constraint violation).
+    ///
+    /// Either way, a negative constraint violation stops the run with [`Error::InvalidFitness`].
     Error,
 }
 
@@ -339,7 +341,10 @@ where
     ///
     /// - [`Error::MissingSetting`] without a stop condition or abort flag.
     /// - [`Error::InvalidSetting`] for an invalid stop condition.
-    /// - [`Error::NanFitness`] if the fitness function returns NaN with [`NanPolicy::Error`].
+    /// - [`Error::NanFitness`] if the fitness function returns NaN (a score or a constraint
+    ///   violation) with [`NanPolicy::Error`].
+    /// - [`Error::InvalidFitness`] if the fitness function returns a negative constraint violation,
+    ///   with any [`NanPolicy`]: that's a bug in the fitness function, not a result.
     pub fn run(&mut self) -> Result<Outcome<A::Genome>> {
         if self.stop.is_none() && self.abort.is_none() {
             return Err(Error::MissingSetting {
