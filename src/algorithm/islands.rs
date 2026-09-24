@@ -3,6 +3,7 @@
 use super::{Algorithm, Candidates};
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
+use std::collections::HashMap;
 use std::sync::OnceLock;
 
 /// An [`Algorithm`] whose population can take individuals from elsewhere: the islands of
@@ -102,6 +103,8 @@ pub struct Islands<A: Migrate> {
     population: OnceLock<Population<A::Genome>>,
     #[cfg_attr(feature = "serde", serde(skip))]
     discarded: OnceLock<Vec<Individual<A::Genome>>>,
+    // the individuals that migrants replaced in the last generation
+    replaced: Vec<Individual<A::Genome>>,
     asked: bool,
     started: bool,
     generation: u64,
@@ -182,8 +185,21 @@ impl<A: Migrate> Islands<A> {
             }
         }
         for (island, migrants) in self.islands.iter_mut().zip(arriving) {
-            if !migrants.is_empty() {
-                island.immigrate(migrants)?;
+            if migrants.is_empty() {
+                continue;
+            }
+            let before: Vec<Individual<A::Genome>> = island.population().iter().cloned().collect();
+            island.immigrate(migrants)?;
+            // the individuals the migrants replaced, which observers see as discarded
+            let mut kept: HashMap<&A::Genome, usize> = HashMap::new();
+            for individual in island.population().iter() {
+                *kept.entry(individual.genome()).or_default() += 1;
+            }
+            for individual in before {
+                match kept.get_mut(individual.genome()) {
+                    Some(count) if *count > 0 => *count -= 1,
+                    _ => self.replaced.push(individual),
+                }
             }
         }
         Ok(())
@@ -251,6 +267,7 @@ impl<A: Migrate> Algorithm for Islands<A> {
         }
         self.asked = false;
         self.evaluations += fitness.len() as u64;
+        self.replaced.clear();
         let mut rest = fitness;
         for (island, &count) in self.islands.iter_mut().zip(&self.counts) {
             let (own, others) = rest.split_at(count);
@@ -285,11 +302,14 @@ impl<A: Migrate> Algorithm for Islands<A> {
         self.best.as_ref()
     }
 
+    /// The individuals the islands discarded in the last generation, and those that migrants
+    /// replaced.
     fn discarded(&self) -> &[Individual<A::Genome>] {
         self.discarded.get_or_init(|| {
             self.islands
                 .iter()
                 .flat_map(|island| island.discarded().iter().cloned())
+                .chain(self.replaced.iter().cloned())
                 .collect()
         })
     }
@@ -404,6 +424,7 @@ impl<A: Migrate> IslandsBuilder<A> {
             pending: Vec::new(),
             population: OnceLock::new(),
             discarded: OnceLock::new(),
+            replaced: Vec::new(),
             asked: false,
             started: false,
             generation: 0,

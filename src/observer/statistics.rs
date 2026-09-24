@@ -108,7 +108,23 @@ impl<G: Genome> Observer<G> for Statistics {
                 .map(|score| (score - mean) * (score - mean))
                 .sum::<f64>()
                 / count;
-            (Some(mean), Some(variance.sqrt()))
+            if (mean.is_finite() && variance.is_finite())
+                || !scores.iter().all(|score| score.is_finite())
+            {
+                (Some(mean), Some(variance.sqrt()))
+            } else {
+                // finite scores whose sum or squares overflow: scaled by the largest magnitude
+                let scale = scores
+                    .iter()
+                    .fold(0.0, |largest: f64, score| largest.max(score.abs()));
+                let mean = scores.iter().map(|score| score / scale).sum::<f64>() / count;
+                let variance = scores
+                    .iter()
+                    .map(|score| (score / scale - mean) * (score / scale - mean))
+                    .sum::<f64>()
+                    / count;
+                (Some(mean * scale), Some(variance.sqrt() * scale))
+            }
         };
         let unique = population
             .iter()

@@ -429,4 +429,22 @@ fn hypervolume_contributions_of_infinite_values() {
         &[Minimize; 3],
     );
     assert!(three.iter().all(|value| !value.is_nan()), "{three:?}");
+
+fn a_multi_objective_run_whose_stop_condition_is_met_returns_at_once() {
+    let mut engine = MultiEngine::new(
+        nsga2(
+            Real::uniform(3, 0.0..=1.0).unwrap(),
+            [Minimize, Minimize],
+            8,
+            0,
+        ),
+        zdt1,
+    )
+    .stop_when(Stop::generations(4));
+    let first = engine.run().unwrap();
+    assert_eq!(first.generations(), 4);
+    // again: no fifth generation, and no evaluation
+    let outcome = engine.run().unwrap();
+    assert_eq!(outcome.generations(), 4);
+    assert_eq!(outcome.evaluations(), first.evaluations());
 }

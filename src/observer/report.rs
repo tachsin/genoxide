@@ -55,6 +55,8 @@ pub struct Report<W = io::Stderr> {
     every: Every,
     // the generation and time of the last line
     last: Option<(u64, Duration)>,
+    // the time of the last update: an earlier one starts a new run
+    seen: Option<Duration>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -77,6 +79,7 @@ impl Report {
             writer: io::stderr(),
             every: Every::Time(interval),
             last: None,
+            seen: None,
         }
     }
 
@@ -97,6 +100,7 @@ impl Report {
             writer: io::stderr(),
             every: Every::Generations(generations),
             last: None,
+            seen: None,
         })
     }
 }
@@ -114,6 +118,7 @@ impl<W: Write> Report<W> {
             writer,
             every: self.every,
             last: self.last,
+            seen: self.seen,
         }
     }
 
@@ -131,10 +136,12 @@ impl<W: Write> Report<W> {
     /// [`MultiEngine::on_generation`](crate::multi::MultiEngine::on_generation) in a
     /// multi-objective run.
     pub fn update(&mut self, progress: &Progress) {
+        let restarted = self.seen.is_some_and(|seen| progress.elapsed() < seen);
+        self.seen = Some(progress.elapsed());
         let due = match (self.last, self.every) {
             (None, _) => true,
             // a new run, e.g. `Engine::run` called again: its time starts again
-            (Some((_, last)), _) if progress.elapsed() < last => true,
+            _ if restarted => true,
             (Some((_, last)), Every::Time(interval)) => {
                 let interval = interval.as_nanos();
                 interval == 0
@@ -208,6 +215,23 @@ mod tests {
         assert!(lines[1].starts_with("generation 3: "));
         assert!(lines[2].starts_with("generation 6: "));
         assert!(Report::every_generations(0).is_err());
+    }
+
+    #[test]
+    fn a_run_that_continues_gets_a_line_after_unprinted_updates() {
+        let progress = |generation: u64, millis: u64| {
+            let mut progress = Progress::for_test(generation, Objective::Maximize);
+            progress.elapsed = Duration::from_millis(millis);
+            progress
+        };
+        let mut report = Report::every(Duration::from_secs(3600)).to(Vec::new());
+        // the first run prints generation 0 only
+        for (generation, millis) in [(0, 0), (1, 5), (2, 10)] {
+            report.update(&progress(generation, millis));
+        }
+        // the next run's first generation takes longer than the first run's generation 0
+        report.update(&progress(3, 3));
+        assert_eq!(lines(report).len(), 2);
     }
 
     #[test]

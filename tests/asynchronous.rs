@@ -363,3 +363,64 @@ fn one_worker_resumes_exactly() {
     checkpoint::save(resumed.algorithm(), &mut bytes).unwrap();
     assert_eq!(bytes, final_state);
 }
+
+#[test]
+fn batches_generation_limits_and_combined_budgets() {
+    // a batch function answers one genome at a time, with one score
+    let outcome = AsyncEngine::new(
+        steady(8, 10, 11),
+        Batch(|genomes: &[&Bits]| {
+            genomes
+                .iter()
+                .map(|genome| one_max(genome))
+                .collect::<Vec<_>>()
+        }),
+    )
+    .workers(2)
+    .stop_when(Stop::evaluations(50))
+    .run()
+    .unwrap();
+    assert_eq!(outcome.evaluations(), 50);
+    for wrong in [0, 2] {
+        let error = AsyncEngine::new(
+            steady(8, 10, 11),
+            Batch(move |_: &[&Bits]| vec![1.0; wrong]),
+        )
+        .workers(2)
+        .stop_when(Stop::evaluations(50))
+        .run()
+        .unwrap_err();
+        assert_eq!(
+            error,
+            Error::FitnessCount {
+                expected: 1,
+                got: wrong
+            }
+        );
+    }
+
+    // a generation limit is a budget: no overshoot, and every generation observed
+    let mut statistics = Statistics::new();
+    let outcome = AsyncEngine::new(steady(8, 2, 12), one_max)
+        .workers(8)
+        .stop_when(Stop::generations(3))
+        .observe(&mut statistics)
+        .run()
+        .unwrap();
+    assert_eq!(outcome.generations(), 3);
+    assert_eq!(outcome.evaluations(), 8);
+    let generations: Vec<u64> = statistics
+        .records()
+        .iter()
+        .map(|record| record.generation)
+        .collect();
+    assert_eq!(generations, [0, 1, 2, 3]);
+
+    // the evaluation budget holds even when another condition is met first
+    let outcome = AsyncEngine::new(steady(8, 10, 13), one_max)
+        .workers(4)
+        .stop_when(Stop::target(0.0).or(Stop::evaluations(3)))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.evaluations(), 3);
+}
