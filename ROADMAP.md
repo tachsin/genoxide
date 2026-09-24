@@ -148,7 +148,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] (μ/ρ +, λ)-ES with self-adaptation
 
 ### 0.4: Multi-objective
-- [ ] Non-dominated sorting (fast and log variants), crowding distance
+- [x] Non-dominated sorting (fast and log variants), crowding distance
 - [ ] NSGA-II
 - [ ] NSGA-III (reference points)
 - [ ] SPEA2
@@ -156,7 +156,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [ ] SMS-EMOA
 - [ ] Pareto archive
 - [ ] Indicators: hypervolume, IGD / IGD+, spread
-- [ ] Constrained dominance
+- [x] Constrained dominance
 
 ### 0.5: Scale and operations
 - [ ] Island model: ring, fully connected and random topologies; deterministic and parallel
