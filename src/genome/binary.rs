@@ -209,16 +209,17 @@ impl SwapGenes for Bits {
 
     fn swap_uniform(&mut self, other: &mut Self, rate: f64, rng: &mut StreamRng) {
         assert_eq!(self.len, other.len, "genomes of different lengths");
-        let chance = crate::rng::Chance::new(rate);
-        for word in 0..self.word_count() {
-            let random = if rate == 0.5 {
+        if rate == 0.5 {
+            for word in 0..self.word_count() {
                 // every bit of a random word is 1 with probability exactly 0.5
-                rng.next_u64()
-            } else {
-                (0..WORD_BITS).fold(0, |mask, bit| mask | (u64::from(rng.chance(chance)) << bit))
-            };
-            let mask = random & self.used_bits(word);
-            self.swap_word_bits(other, word, mask);
+                let mask = rng.next_u64() & self.used_bits(word);
+                self.swap_word_bits(other, word, mask);
+            }
+        } else {
+            let chance = crate::rng::Chance::new(rate);
+            rng.chosen(chance, self.len, |_, bit| {
+                self.swap_word_bits(other, bit / WORD_BITS, 1 << (bit % WORD_BITS));
+            });
         }
     }
 }

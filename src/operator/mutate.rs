@@ -43,12 +43,10 @@ impl Mode {
         match self {
             Mode::PerGene { chance } => {
                 let mut changed = false;
-                for candidate in 0..genes {
-                    if rng.chance(chance) {
-                        change(gene(candidate), rng);
-                        changed = true;
-                    }
-                }
+                rng.chosen(chance, genes, |rng, candidate| {
+                    change(gene(candidate), rng);
+                    changed = true;
+                });
                 if !changed {
                     let candidate = rng.below(genes);
                     change(gene(candidate), rng);
