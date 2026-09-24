@@ -120,24 +120,45 @@ impl Progress {
         self.elapsed
     }
 
-    /// The fitness of the best individual found so far.
+    /// The fitness of the best individual found so far. Always `None` in a multi-objective run
+    /// ([`MultiEngine`](crate::multi::MultiEngine)), which has a front of trade-offs instead.
     pub fn best(&self) -> Option<Fitness> {
         self.best
     }
 
-    /// Whether higher or lower fitness is better.
+    /// Whether higher or lower fitness is better. In a multi-objective run, the default
+    /// ([`Objective::Maximize`]): each objective's direction is a setting of the algorithm.
     pub fn objective(&self) -> Objective {
         self.objective
     }
 
-    /// The generation in which the best individual so far was found.
+    /// The generation in which the best individual so far was found. In a multi-objective run,
+    /// the last generation in which the front gained a solution that no earlier front member
+    /// dominated or equaled.
     pub fn best_generation(&self) -> u64 {
         self.best_generation
     }
 
-    /// The number of generations since the best fitness last improved.
+    /// The number of generations since the best fitness (or the front) last improved.
     pub fn stagnant_generations(&self) -> u64 {
         self.generation.saturating_sub(self.best_generation)
+    }
+
+    // the progress of a multi-objective run, which has no best fitness
+    pub(crate) fn multi_objective(
+        generation: u64,
+        evaluations: u64,
+        elapsed: Duration,
+        best_generation: u64,
+    ) -> Self {
+        Self {
+            generation,
+            evaluations,
+            elapsed,
+            best: None,
+            objective: Objective::default(),
+            best_generation,
+        }
     }
 
     #[cfg(test)]
@@ -407,16 +428,13 @@ where
     // evaluates the asked genomes into `self.scores`
     fn evaluate(&mut self) -> Result<()> {
         let candidates = self.algorithm.ask();
-        self.results.clear();
-        if self.parallel {
-            evaluate_parallel(&self.fitness, candidates, &mut self.results);
-        } else {
-            self.results.extend(
-                candidates
-                    .iter()
-                    .map(|genome| self.fitness.evaluate(genome).into_fitness()),
-            );
-        }
+        let fitness = &self.fitness;
+        evaluate_all(
+            candidates,
+            self.parallel,
+            &|genome: &A::Genome| fitness.evaluate(genome).into_fitness(),
+            &mut self.results,
+        );
         self.scores.clear();
         for result in self.results.drain(..) {
             self.scores.push(match (result, self.nan_policy) {
@@ -429,31 +447,50 @@ where
     }
 }
 
-#[cfg(feature = "parallel")]
-fn evaluate_parallel<G, F>(
-    fitness: &F,
-    candidates: Candidates<'_, G>,
-    results: &mut Vec<Result<Fitness>>,
+// evaluates every candidate into `results`, in order, in parallel if asked; the results are the
+// same either way
+pub(crate) fn evaluate_all<G, F, T, E>(
+    candidates: Candidates<'_, G, F>,
+    parallel: bool,
+    evaluate: &E,
+    results: &mut Vec<T>,
 ) where
     G: Genome,
-    F: FitnessFunction<G>,
+    F: Sync,
+    T: Send,
+    E: Fn(&G) -> T + Sync,
+{
+    results.clear();
+    if parallel {
+        evaluate_parallel(candidates, evaluate, results);
+    } else {
+        results.extend(candidates.iter().map(evaluate));
+    }
+}
+
+#[cfg(feature = "parallel")]
+fn evaluate_parallel<G, F, T, E>(
+    candidates: Candidates<'_, G, F>,
+    evaluate: &E,
+    results: &mut Vec<T>,
+) where
+    G: Genome,
+    F: Sync,
+    T: Send,
+    E: Fn(&G) -> T + Sync,
 {
     use rayon::prelude::*;
     // collecting an indexed parallel iterator keeps the order, whatever the thread count
     (0..candidates.len())
         .into_par_iter()
-        .map(|position| {
-            let genome = candidates.get(position).expect("position in bounds");
-            fitness.evaluate(genome).into_fitness()
-        })
+        .map(|position| evaluate(candidates.get(position).expect("position in bounds")))
         .collect_into_vec(results);
 }
 
 #[cfg(not(feature = "parallel"))]
-fn evaluate_parallel<G, F>(_: &F, _: Candidates<'_, G>, _: &mut Vec<Result<Fitness>>)
+fn evaluate_parallel<G, F, T, E>(_: Candidates<'_, G, F>, _: &E, _: &mut Vec<T>)
 where
     G: Genome,
-    F: FitnessFunction<G>,
 {
     unreachable!("parallel evaluation can't be enabled without the `parallel` feature")
 }

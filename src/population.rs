@@ -1,7 +1,7 @@
 //! A population of individuals.
 
 use crate::genome::Genome;
-use crate::{Individual, Objective};
+use crate::{Fitness, Individual, Objective};
 use std::cmp::Ordering;
 use std::ops::{Index, IndexMut};
 
@@ -22,20 +22,18 @@ use std::ops::{Index, IndexMut};
 /// let best = population.best(Objective::Maximize).unwrap();
 /// assert_eq!(best.genome().to_string(), "11");
 /// ```
+///
+/// The fitness type `F` is [`Fitness`] by default, and [`Scores`](crate::multi::Scores) in
+/// multi-objective optimization.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Population<G: Genome> {
-    individuals: Vec<Individual<G>>,
+pub struct Population<G: Genome, F = Fitness> {
+    individuals: Vec<Individual<G, F>>,
 }
 
-impl<G: Genome> Population<G> {
+impl<G: Genome, F> Population<G, F> {
     /// A population of these individuals.
-    pub fn new(individuals: Vec<Individual<G>>) -> Self {
+    pub fn new(individuals: Vec<Individual<G, F>>) -> Self {
         Self { individuals }
-    }
-
-    /// A population of new, not yet evaluated individuals with these genomes.
-    pub fn from_genomes<I: IntoIterator<Item = G>>(genomes: I) -> Self {
-        genomes.into_iter().map(Individual::new).collect()
     }
 
     /// The number of individuals.
@@ -49,17 +47,17 @@ impl<G: Genome> Population<G> {
     }
 
     /// The individuals.
-    pub fn iter(&self) -> std::slice::Iter<'_, Individual<G>> {
+    pub fn iter(&self) -> std::slice::Iter<'_, Individual<G, F>> {
         self.individuals.iter()
     }
 
     /// The individuals, mutable.
-    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Individual<G>> {
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Individual<G, F>> {
         self.individuals.iter_mut()
     }
 
     /// Adds an individual.
-    pub fn push(&mut self, individual: Individual<G>) {
+    pub fn push(&mut self, individual: Individual<G, F>) {
         self.individuals.push(individual);
     }
 
@@ -69,13 +67,20 @@ impl<G: Genome> Population<G> {
     }
 
     /// The individuals as a slice.
-    pub fn as_slice(&self) -> &[Individual<G>] {
+    pub fn as_slice(&self) -> &[Individual<G, F>] {
         &self.individuals
     }
 
     /// The individuals, consuming the population.
-    pub fn into_vec(self) -> Vec<Individual<G>> {
+    pub fn into_vec(self) -> Vec<Individual<G, F>> {
         self.individuals
+    }
+}
+
+impl<G: Genome> Population<G> {
+    /// A population of new, not yet evaluated individuals with these genomes.
+    pub fn from_genomes<I: IntoIterator<Item = G>>(genomes: I) -> Self {
+        genomes.into_iter().map(Individual::new).collect()
     }
 
     /// The position of the best evaluated individual (the first one on ties), or `None` if no
@@ -117,53 +122,53 @@ impl<G: Genome> Population<G> {
     }
 }
 
-impl<G: Genome> Default for Population<G> {
+impl<G: Genome, F> Default for Population<G, F> {
     /// An empty population.
     fn default() -> Self {
         Self::new(Vec::new())
     }
 }
 
-impl<G: Genome> Extend<Individual<G>> for Population<G> {
-    fn extend<I: IntoIterator<Item = Individual<G>>>(&mut self, iter: I) {
+impl<G: Genome, F> Extend<Individual<G, F>> for Population<G, F> {
+    fn extend<I: IntoIterator<Item = Individual<G, F>>>(&mut self, iter: I) {
         self.individuals.extend(iter);
     }
 }
 
-impl<G: Genome> FromIterator<Individual<G>> for Population<G> {
-    fn from_iter<I: IntoIterator<Item = Individual<G>>>(iter: I) -> Self {
+impl<G: Genome, F> FromIterator<Individual<G, F>> for Population<G, F> {
+    fn from_iter<I: IntoIterator<Item = Individual<G, F>>>(iter: I) -> Self {
         Self::new(iter.into_iter().collect())
     }
 }
 
-impl<G: Genome> IntoIterator for Population<G> {
-    type Item = Individual<G>;
-    type IntoIter = std::vec::IntoIter<Individual<G>>;
+impl<G: Genome, F> IntoIterator for Population<G, F> {
+    type Item = Individual<G, F>;
+    type IntoIter = std::vec::IntoIter<Individual<G, F>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.individuals.into_iter()
     }
 }
 
-impl<'a, G: Genome> IntoIterator for &'a Population<G> {
-    type Item = &'a Individual<G>;
-    type IntoIter = std::slice::Iter<'a, Individual<G>>;
+impl<'a, G: Genome, F> IntoIterator for &'a Population<G, F> {
+    type Item = &'a Individual<G, F>;
+    type IntoIter = std::slice::Iter<'a, Individual<G, F>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.individuals.iter()
     }
 }
 
-impl<G: Genome> Index<usize> for Population<G> {
-    type Output = Individual<G>;
+impl<G: Genome, F> Index<usize> for Population<G, F> {
+    type Output = Individual<G, F>;
 
-    fn index(&self, index: usize) -> &Individual<G> {
+    fn index(&self, index: usize) -> &Individual<G, F> {
         &self.individuals[index]
     }
 }
 
-impl<G: Genome> IndexMut<usize> for Population<G> {
-    fn index_mut(&mut self, index: usize) -> &mut Individual<G> {
+impl<G: Genome, F> IndexMut<usize> for Population<G, F> {
+    fn index_mut(&mut self, index: usize) -> &mut Individual<G, F> {
         &mut self.individuals[index]
     }
 }

@@ -420,6 +420,41 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+### Multi-objective optimization
+
+When several objectives conflict (cost against quality, speed against accuracy), there is no single best solution but a front of trade-offs. The fitness function returns an array with one value per objective (or `(values, violation)` with a constraint violation, or `Option<[f64; M]>`); the algorithm takes the direction of each objective, and `MultiEngine` runs it. The outcome is the Pareto front.
+
+```rust
+use genoxide::Objective::Minimize;
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    // ZDT1: two objectives, 30 genes
+    let zdt1 = |x: &Reals| {
+        let g = 1.0 + 9.0 * x[1..].iter().sum::<f64>() / 29.0;
+        [x[0], g * (1.0 - (x[0] / g).sqrt())]
+    };
+    let nsga2 = Nsga2::builder(Real::uniform(30, 0.0..=1.0)?, [Minimize, Minimize])
+        .population_size(100)
+        .crossover(SimulatedBinaryCrossover::new(15.0)?)
+        .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0)?)
+        .seed(1)
+        .build()?;
+    let outcome = MultiEngine::new(nsga2, zdt1)
+        .stop_when(Stop::generations(200))
+        .run()?;
+    for [f1, f2] in outcome.front_values() {
+        assert!(f2 <= 1.0 - f1.sqrt() + 0.05); // close to the optimal front
+    }
+    Ok(())
+}
+```
+
+- The number of objectives is part of the types: returning `[f64; 3]` for 2 objectives doesn't compile.
+- Constraints: feasible solutions dominate infeasible ones, and between infeasible ones the smaller violation wins (`multi::dominates`).
+- Stop conditions: generations, evaluations, time, stagnation (generations without a new non-dominated solution) or custom; `Stop::target` needs a single objective.
+- `multi::non_dominated_sort` and `multi::crowding_distance` are available for your own algorithms.
+
 ### Local search: hill climbing and simulated annealing
 
 `LocalSearch` improves a single solution, moving to one of `neighbors` random neighbors per step. It often beats a GA on permutations. Any mutation is a neighborhood; `InversionMutation` (2-opt) is the classic one for tours.
@@ -501,6 +536,7 @@ fn main() -> genoxide::Result<()> {
 | ``error[E0277]: `usize` is not a fitness value`` (then "the method `stop_when` exists … but its trait bounds were not satisfied") | The fitness function returns an integer | Return `f64` (`... as f64`), `Fitness` or `Option<f64>` |
 | `no method named parallel` | Built without the default `parallel` feature | Enable the `parallel` feature, or drop `.parallel(true)` |
 | `Error::MissingSetting { setting: "population_size" }` | No population size | `.population_size(n)` |
+| ``error[E0277]: `[f64; 3]` is not a result with 2 objective values`` | The fitness function returns a different number of values than the algorithm has objectives | Return an array with one value per objective, e.g. `[f1, f2]` for `[Minimize, Minimize]` |
 | `Error::MissingSetting { setting: "stop_when" }` | The engine has no stop condition | `.stop_when(Stop::generations(n))`, or an abort flag |
 | `Error::InvalidSetting { setting, reason }` | A value is out of range | Read `reason`; see [Settings](#settings) |
 | `Error::InvalidGenome { reason }` | An initial genome doesn't fit the representation | Match its length and bounds |

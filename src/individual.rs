@@ -11,6 +11,9 @@ use crate::genome::Genome;
 /// Changing the genome through [`genome_mut`](Individual::genome_mut) makes it a new individual:
 /// the fitness and age are cleared, so a stale fitness is impossible.
 ///
+/// The fitness type `F` is [`Fitness`] by default, and [`Scores`](crate::multi::Scores) in
+/// multi-objective optimization.
+///
 /// ```
 /// use genoxide::{Fitness, Individual};
 /// use genoxide::genome::Bits;
@@ -22,15 +25,24 @@ use crate::genome::Genome;
 /// assert_eq!(individual.fitness(), None); // changed, so not evaluated
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Individual<G: Genome> {
+pub struct Individual<G: Genome, F = Fitness> {
     genome: G,
-    fitness: Option<Fitness>,
+    fitness: Option<F>,
     age: u32,
 }
 
 impl<G: Genome> Individual<G> {
     /// A new, not yet evaluated individual.
     pub fn new(genome: G) -> Self {
+        Self::unevaluated(genome)
+    }
+}
+
+impl<G: Genome, F> Individual<G, F> {
+    /// A new, not yet evaluated individual, with any fitness type, e.g.
+    /// [`Scores`](crate::multi::Scores) for multi-objective optimization.
+    /// [`new`](Individual::new) is the same with [`Fitness`].
+    pub fn unevaluated(genome: G) -> Self {
         Self {
             genome,
             fitness: None,
@@ -57,7 +69,10 @@ impl<G: Genome> Individual<G> {
     }
 
     /// The fitness, or `None` if not evaluated yet.
-    pub fn fitness(&self) -> Option<Fitness> {
+    pub fn fitness(&self) -> Option<F>
+    where
+        F: Copy,
+    {
         self.fitness
     }
 
@@ -67,7 +82,7 @@ impl<G: Genome> Individual<G> {
     }
 
     /// Sets the fitness, the result of evaluating the genome.
-    pub fn set_fitness(&mut self, fitness: Fitness) {
+    pub fn set_fitness(&mut self, fitness: F) {
         self.fitness = Some(fitness);
     }
 

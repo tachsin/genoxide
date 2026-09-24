@@ -178,6 +178,15 @@ impl Stop {
                 .flatten(),
         }
     }
+
+    // whether a condition needs a single objective (a target)
+    pub(crate) fn has_target(&self) -> bool {
+        match &self.condition {
+            Condition::Target(_) => true,
+            Condition::Any(stops) | Condition::All(stops) => stops.iter().any(Stop::has_target),
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Debug for Stop {
