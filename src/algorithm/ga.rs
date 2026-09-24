@@ -302,20 +302,23 @@ where
     }
 
     // memetic: replaces each refined parent by its best neighbor when that's not worse; returns the
-    // neighbors that weren't taken
-    fn refine(&mut self) -> Vec<Individual<R::Genome>> {
+    // neighbors that weren't taken, and copies of the ones that were
+    fn refine(&mut self) -> Refinement<R::Genome> {
         let Some((_, neighbors)) = self.memetic else {
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         };
         let start = self.offspring.len() - self.refined.len();
         let candidates: Vec<_> = self.offspring.drain(start..).collect();
-        lamarckian(
+        let mut taken = Vec::new();
+        let rejected = lamarckian(
             &mut self.population,
             candidates,
             &self.refined,
             neighbors,
             self.objective,
-        )
+            &mut taken,
+        );
+        (rejected, taken)
     }
 
     // forms the next population from the evaluated offspring
@@ -356,15 +359,19 @@ where
     }
 }
 
+// the neighbors of a memetic refinement that weren't taken, and copies of the ones that were
+type Refinement<G> = (Vec<Individual<G>>, Vec<Individual<G>>);
+
 // `candidates` are the neighbors of `parents` (the position of each one's parent), `neighbors` per
 // parent in a row: each parent is replaced by its best neighbor (the first on ties) when that's not
-// worse. Returns the neighbors that weren't taken.
+// worse. Returns the neighbors that weren't taken, and adds copies of the taken ones to `taken`.
 fn lamarckian<G: Genome>(
     population: &mut Population<G>,
     candidates: Vec<Individual<G>>,
     parents: &[usize],
     neighbors: usize,
     objective: Objective,
+    taken: &mut Vec<Individual<G>>,
 ) -> Vec<Individual<G>> {
     let fitness = |individual: &Individual<G>| individual.fitness().unwrap_or(Fitness::invalid());
     let mut rejected = Vec::new();
@@ -378,9 +385,10 @@ fn lamarckian<G: Genome>(
                 best
             }
         });
-        let taken = !objective.is_better(fitness(&population[parent]), fitness(&group[best]));
+        let take = !objective.is_better(fitness(&population[parent]), fitness(&group[best]));
         for (index, candidate) in group.into_iter().enumerate() {
-            if taken && index == best {
+            if take && index == best {
+                taken.push(candidate.clone());
                 population[parent] = candidate;
             } else {
                 rejected.push(candidate);
@@ -499,9 +507,20 @@ where
                 if update_best(&mut self.best, &self.offspring, self.objective) {
                     self.best_generation = self.generation;
                 }
-                let rejected = self.refine();
+                let (rejected, taken) = self.refine();
                 self.survive();
                 self.discarded.extend(rejected);
+                // with (μ+λ), a refined parent can lose to the offspring: it was evaluated, so
+                // observers see it as discarded
+                for individual in taken {
+                    let survived = self
+                        .population
+                        .iter()
+                        .any(|survivor| survivor.genome() == individual.genome());
+                    if !survived {
+                        self.discarded.push(individual);
+                    }
+                }
             }
         }
         Ok(())
@@ -663,11 +682,16 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
         self
     }
 
-    /// Memetic (Lamarckian) local search: every generation, the `parents` best parents (from 1 to
-    /// the population size) each try `neighbors` (at least 1) neighbors, made by the mutation
-    /// operator and evaluated with the offspring. A parent is replaced by its best neighbor when
-    /// that neighbor is not worse, before survivor selection. It adds `parents * neighbors`
-    /// evaluations per generation. Off by default.
+    /// Memetic (Lamarckian) local search: every generation, the `parents` best parents each try
+    /// `neighbors` (at least 1) neighbors, made by the mutation operator and evaluated with the
+    /// offspring. A parent is replaced by its best neighbor when that neighbor is not worse, before
+    /// survivor selection. It adds `parents * neighbors` evaluations per generation. Off by
+    /// default.
+    ///
+    /// The refined parents must be ones that survive the generation, so `parents` is at most the
+    /// elitism of [`Scheme::Generational`], the population size minus the replacements of
+    /// [`Scheme::SteadyState`], or the population size with [`Scheme::MuPlusLambda`]. It doesn't
+    /// work with [`Scheme::MuCommaLambda`], where no parent survives.
     pub fn memetic(mut self, parents: usize, neighbors: usize) -> Self {
         self.memetic = Some((parents, neighbors));
         self
@@ -715,11 +739,19 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
         }
         self.scheme.validate(population_size)?;
         if let Some((parents, neighbors)) = self.memetic {
-            if parents == 0 || parents > population_size || neighbors == 0 {
+            // the refined parents must survive the generation, or their refinement is lost
+            let survivors = match self.scheme {
+                Scheme::Generational { elitism } => elitism,
+                Scheme::SteadyState { replacements } => population_size - replacements,
+                Scheme::MuPlusLambda { .. } => population_size,
+                Scheme::MuCommaLambda { .. } => 0,
+            };
+            if parents == 0 || parents > survivors || neighbors == 0 {
                 return Err(Error::InvalidSetting {
                     setting: "memetic",
                     reason: format!(
-                        "parents must be between 1 and the population size {population_size}, and neighbors at least 1, got {parents} and {neighbors}"
+                        "parents must be between 1 and the number of parents that survive a generation, {survivors} with {:?} (the elitism of a generational scheme, the population size minus the replacements of a steady-state one, the population size with (μ+λ), none with (μ,λ)), and neighbors at least 1; got {parents} and {neighbors}",
+                        self.scheme
                     ),
                 });
             }
@@ -996,20 +1028,85 @@ mod tests {
     #[test]
     fn memetic_validation() {
         assert_eq!(setting(builder(8).memetic(0, 2).build()), "memetic");
-        assert_eq!(setting(builder(8).memetic(11, 2).build()), "memetic");
-        assert_eq!(setting(builder(8).memetic(2, 0).build()), "memetic");
-        assert!(builder(8).memetic(10, 1).build().is_ok());
+        assert_eq!(setting(builder(8).memetic(1, 0).build()), "memetic");
+        // at most the parents that survive: the elitism (1 by default), ...
+        assert_eq!(setting(builder(8).memetic(2, 1).build()), "memetic");
+        assert!(builder(8).memetic(1, 1).build().is_ok());
+        let scheme = |scheme, parents| builder(8).scheme(scheme).memetic(parents, 1).build();
+        assert!(scheme(Scheme::Generational { elitism: 3 }, 3).is_ok());
+        assert_eq!(
+            setting(scheme(Scheme::Generational { elitism: 0 }, 1)),
+            "memetic"
+        );
+        // ... the population size minus the replacements, all with (μ+λ), none with (μ,λ)
+        assert!(scheme(Scheme::SteadyState { replacements: 4 }, 6).is_ok());
+        assert_eq!(
+            setting(scheme(Scheme::SteadyState { replacements: 4 }, 7)),
+            "memetic"
+        );
+        assert!(scheme(Scheme::MuPlusLambda { lambda: 5 }, 10).is_ok());
+        assert_eq!(
+            setting(scheme(Scheme::MuPlusLambda { lambda: 5 }, 11)),
+            "memetic"
+        );
+        assert_eq!(
+            setting(scheme(Scheme::MuCommaLambda { lambda: 20 }, 1)),
+            "memetic"
+        );
     }
 
     #[test]
     fn memetic_neighbors_are_evaluated_with_the_offspring() {
-        let mut ga = builder(16).memetic(3, 2).build().unwrap();
+        let mut ga = builder(16)
+            .scheme(Scheme::Generational { elitism: 3 })
+            .memetic(3, 2)
+            .build()
+            .unwrap();
         step(&mut ga);
-        // 9 offspring (elitism 1) and 3 parents with 2 neighbors each
-        assert_eq!(ga.ask().len(), 9 + 6);
+        // 7 offspring (elitism 3) and 3 parents with 2 neighbors each
+        assert_eq!(ga.ask().len(), 7 + 6);
         step(&mut ga);
-        assert_eq!(ga.evaluations(), 10 + 15);
+        assert_eq!(ga.evaluations(), 10 + 13);
         assert_eq!(ga.population().len(), 10);
+    }
+
+    #[test]
+    fn memetic_improvements_survive_or_are_discarded() {
+        // every evaluated individual is in the population or discarded, for every scheme
+        // (μ+λ) with every parent refined and many offspring: refined parents can lose
+        for (scheme, parents) in [
+            (Scheme::Generational { elitism: 3 }, 3),
+            (Scheme::SteadyState { replacements: 5 }, 3),
+            (Scheme::MuPlusLambda { lambda: 20 }, 10),
+        ] {
+            let mut ga = builder(64)
+                .scheme(scheme)
+                .memetic(parents, 1)
+                .build()
+                .unwrap();
+            step(&mut ga);
+            for _ in 0..20 {
+                let asked: Vec<Bits> = ga.ask().iter().cloned().collect();
+                step_with(&mut ga, &asked);
+                for genome in &asked {
+                    let seen = ga
+                        .population()
+                        .iter()
+                        .chain(ga.discarded())
+                        .any(|individual| individual.genome() == genome);
+                    assert!(seen, "{scheme:?}");
+                }
+            }
+        }
+    }
+
+    // tells the one max fitness of `asked`, which is what `ga.ask()` gives
+    fn step_with(ga: &mut OneMaxGa, asked: &[Bits]) {
+        let fitness: Vec<Fitness> = asked
+            .iter()
+            .map(|genome| Fitness::new(genome.count_ones() as f64))
+            .collect();
+        ga.tell(&fitness).unwrap();
     }
 
     fn evaluated(genome: &str, score: f64) -> Individual<Bits> {
@@ -1031,13 +1128,17 @@ mod tests {
             evaluated("10", 2.0),
             evaluated("00", 1.0),
         ];
+        let mut taken = Vec::new();
         let rejected = lamarckian(
             &mut population,
             candidates,
             &[0, 0, 1, 1],
             2,
             Objective::Maximize,
+            &mut taken,
         );
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken[0].genome().to_string(), "11");
         assert_eq!(population[0].genome().to_string(), "11");
         assert_eq!(population[0].age(), 0);
         assert_eq!(population[1].genome().to_string(), "01");

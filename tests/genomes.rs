@@ -304,7 +304,8 @@ fn memetic_ga_solves_a_tour() {
         .crossover(OrderCrossover)
         .mutate(InversionMutation)
         .mutation_rate(0.2)
-        // the 2 best parents try 8 2-opt moves each, every generation
+        // the 2 best parents, which survive as elites, try 8 2-opt moves each, every generation
+        .scheme(Scheme::Generational { elitism: 2 })
         .memetic(2, 8)
         .minimize()
         .seed(0)
