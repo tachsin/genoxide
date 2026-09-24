@@ -204,7 +204,9 @@ impl Select for Roulette {
 /// Stochastic universal sampling: roulette wheel selection with evenly spaced pointers.
 ///
 /// It uses the same chances as [`Roulette`], with less spread: an individual with an expected
-/// number of selections of e.g. 2.4 is selected 2 or 3 times.
+/// number of selections of e.g. 2.4 is selected 2 or 3 times. The selected individuals come in a
+/// random order, as Baker's method shuffles them before mating: the pointers find them in
+/// population order, and parents taken in pairs would otherwise often be the same individual.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StochasticUniversalSampling;
@@ -227,9 +229,14 @@ impl Select for StochasticUniversalSampling {
         let total = *cumulative.last().expect("not empty");
         let spacing = total / count as f64;
         let start = rng.unit_f64() * spacing;
-        (0..count)
+        let mut picks: Vec<usize> = (0..count)
             .map(|i| pick(&cumulative, last_positive, start + i as f64 * spacing))
-            .collect()
+            .collect();
+        // Fisher-Yates
+        for i in (1..picks.len()).rev() {
+            picks.swap(i, rng.below(i + 1));
+        }
+        picks
     }
 }
 
@@ -400,6 +407,27 @@ mod tests {
         let scores = [Some(1.0), Some(f64::INFINITY), Some(2.0)];
         let picked = counts(&Roulette, &scores, Objective::Maximize, draws);
         assert_eq!(picked, [0, draws, 0]);
+    }
+
+    #[test]
+    fn sus_picks_come_in_a_random_order() {
+        let scores: Vec<Option<f64>> = (0..10).map(|score| Some(f64::from(score))).collect();
+        let population = population(&scores);
+        let mut rng = StreamRng::seed_from_u64(3);
+        let (mut sorted, mut self_pairs, mut pairs) = (0, 0, 0);
+        for _ in 0..1_000 {
+            let picks =
+                StochasticUniversalSampling.select(&population, Objective::Maximize, 10, &mut rng);
+            sorted += usize::from(picks.is_sorted());
+            for pair in picks.chunks_exact(2) {
+                self_pairs += usize::from(pair[0] == pair[1]);
+                pairs += 1;
+            }
+        }
+        // before, every selection was sorted, and 44% of the pairs were one individual twice
+        assert!(sorted < 10, "{sorted}");
+        let fraction = self_pairs as f64 / pairs as f64;
+        assert!(fraction < 0.2, "{fraction}");
     }
     use crate::Individual;
     use crate::genome::Bits;
