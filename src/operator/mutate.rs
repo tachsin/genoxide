@@ -477,10 +477,14 @@ impl Mutate<AdaptiveReal> for SelfAdaptiveMutation {
         for &gene in variable {
             let range = &bounds[gene];
             let current = genome[gene];
-            let value = reflect(
+            let mut value = reflect(
                 current + step * (range.end() - range.start()) * rng.normal(),
                 range,
             );
+            if !range.contains(&value) {
+                // not computable with such huge bounds (NaN): a uniform value instead
+                value = crate::genome::real::random_other_in(range, current, rng);
+            }
             changed |= value != current;
             genome[gene] = value;
         }
@@ -639,6 +643,17 @@ mod tests {
                 .min_step(),
             1e-6
         );
+    }
+
+    #[test]
+    fn self_adaptive_mutation_with_huge_bounds() {
+        let adaptive = AdaptiveReal::new(Real::uniform(4, -8e307..=8e307).unwrap(), 1.0).unwrap();
+        let mut rng = StreamRng::seed_from_u64(0);
+        for _ in 0..1_000 {
+            let mut genome = adaptive.random_genome(&mut rng);
+            SelfAdaptiveMutation::new().mutate(&adaptive, &mut genome, &mut rng);
+            assert!(adaptive.validate(&genome).is_ok(), "{genome:?}");
+        }
     }
 
     #[test]
