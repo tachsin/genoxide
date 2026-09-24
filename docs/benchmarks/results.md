@@ -1,9 +1,9 @@
-# Results 20260924-121708
+# Results 20260924-135307
 
 Seeds per scenario: 10, wall time cap per run: 60.0 s, single-threaded.
 Linux, Intel(R) Core(TM) Ultra 7 265K
 
-- genoxide 0.3.0+8ce5b50 (the 0.4 development version)
+- genoxide 0.3.0+b477580 (the 0.4 development version)
 - genetic_algorithm 0.27.3
 - deap 1.4.4
 - pygad 3.7.0
@@ -67,30 +67,30 @@ Linux, Intel(R) Core(TM) Ultra 7 265K
 |---|---|---|---|---|---|---|
 | dtlz2-3-matched | deap / nsga2 | 0.6891 | 0.6852 to 0.6986 | 1.29 s | 25,024 | 19,394 |
 | dtlz2-3-matched | deap / nsga3 | 0.7435 | 0.7413 to 0.7441 | 628.0 ms | 25,024 | 39,482 |
-| dtlz2-3-matched | genoxide / moead | 0.7441 | 0.7439 to 0.7442 | 27.4 ms | 25,014 | 902,536 |
-| dtlz2-3-matched | genoxide / nsga2 | 0.6984 | 0.6888 to 0.7080 | 24.9 ms | 25,036 | 980,958 |
-| dtlz2-3-matched | genoxide / nsga3 | 0.7442 | 0.7428 to 0.7444 | 40.2 ms | 25,024 | 611,414 |
-| dtlz2-3-matched | genoxide / sms_emoa | 0.7542 | 0.7539 to 0.7544 | 343.2 ms | 25,042 | 73,234 |
-| dtlz2-3-matched | genoxide / spea2 | 0.7300 | 0.7272 to 0.7316 | 274.8 ms | 25,031 | 90,804 |
+| dtlz2-3-matched | genoxide / moead | 0.7441 | 0.7439 to 0.7442 | 27.7 ms | 25,014 | 894,737 |
+| dtlz2-3-matched | genoxide / nsga2 | 0.6984 | 0.6888 to 0.7080 | 24.7 ms | 25,036 | 995,812 |
+| dtlz2-3-matched | genoxide / nsga3 | 0.7442 | 0.7428 to 0.7444 | 40.6 ms | 25,024 | 612,627 |
+| dtlz2-3-matched | genoxide / sms_emoa | 0.7544 | 0.7540 to 0.7545 | 340.7 ms | 25,043 | 73,353 |
+| dtlz2-3-matched | genoxide / spea2 | 0.7300 | 0.7272 to 0.7316 | 276.3 ms | 25,031 | 90,596 |
 | dtlz2-3-matched | pymoo / moead | 0.7443 | 0.7440 to 0.7445 | 6.35 s | 25,025 | 3,933 |
 | dtlz2-3-matched | pymoo / nsga2 | 0.6970 | 0.6877 to 0.7102 | 571.4 ms | 25,024 | 43,619 |
 | dtlz2-3-matched | pymoo / nsga3 | 0.7443 | 0.7439 to 0.7445 | 629.4 ms | 25,024 | 39,571 |
 | dtlz2-3-matched | pymoo / sms_emoa | 0.7545 | 0.7542 to 0.7547 | 902.4 ms | 25,024 | 27,690 |
 | dtlz2-3-matched | pymoo / spea2 | 0.7321 | 0.7275 to 0.7344 | 4.21 s | 25,024 | 5,940 |
 | zdt1-30-matched | deap / nsga2 | 0.8694 | 0.8689 to 0.8698 | 1.51 s | 25,000 | 16,399 |
-| zdt1-30-matched | genoxide / moead | 0.8684 | 0.8676 to 0.8689 | 41.9 ms | 25,045 | 596,560 |
-| zdt1-30-matched | genoxide / nsga2 | 0.8694 | 0.8690 to 0.8697 | 24.9 ms | 25,020 | 1,002,286 |
-| zdt1-30-matched | genoxide / sms_emoa | 0.8715 | 0.8715 to 0.8717 | 53.0 ms | 25,052 | 470,718 |
-| zdt1-30-matched | genoxide / spea2 | 0.8703 | 0.8699 to 0.8707 | 202.5 ms | 25,060 | 122,722 |
+| zdt1-30-matched | genoxide / moead | 0.8684 | 0.8676 to 0.8689 | 41.3 ms | 25,045 | 604,923 |
+| zdt1-30-matched | genoxide / nsga2 | 0.8694 | 0.8690 to 0.8697 | 24.6 ms | 25,020 | 986,844 |
+| zdt1-30-matched | genoxide / sms_emoa | 0.8715 | 0.8714 to 0.8717 | 52.2 ms | 25,046 | 466,267 |
+| zdt1-30-matched | genoxide / spea2 | 0.8703 | 0.8699 to 0.8707 | 199.8 ms | 25,060 | 124,778 |
 | zdt1-30-matched | pymoo / moead | 0.8699 | 0.8672 to 0.8707 | 5.93 s | 25,000 | 4,199 |
 | zdt1-30-matched | pymoo / nsga2 | 0.8697 | 0.8693 to 0.8699 | 570.0 ms | 25,000 | 43,859 |
 | zdt1-30-matched | pymoo / sms_emoa | 0.8716 | 0.8715 to 0.8718 | 698.9 ms | 25,000 | 34,835 |
 | zdt1-30-matched | pymoo / spea2 | 0.8706 | 0.8703 to 0.8708 | 2.14 s | 25,000 | 11,514 |
 | zdt3-30-matched | deap / nsga2 | 1.3273 | 1.2446 to 1.3277 | 1.48 s | 25,000 | 16,749 |
-| zdt3-30-matched | genoxide / moead | 1.3216 | 1.3196 to 1.3226 | 41.5 ms | 25,034 | 602,785 |
-| zdt3-30-matched | genoxide / nsga2 | 1.3273 | 1.2447 to 1.3277 | 25.1 ms | 25,062 | 971,164 |
-| zdt3-30-matched | genoxide / sms_emoa | 1.3288 | 1.3286 to 1.3289 | 51.4 ms | 25,070 | 482,117 |
-| zdt3-30-matched | genoxide / spea2 | 1.3272 | 1.3269 to 1.3277 | 197.5 ms | 25,050 | 126,326 |
+| zdt3-30-matched | genoxide / moead | 1.3216 | 1.3196 to 1.3226 | 41.2 ms | 25,034 | 603,721 |
+| zdt3-30-matched | genoxide / nsga2 | 1.3273 | 1.2447 to 1.3277 | 24.8 ms | 25,062 | 1,003,757 |
+| zdt3-30-matched | genoxide / sms_emoa | 1.3288 | 1.3287 to 1.3289 | 50.1 ms | 25,070 | 496,767 |
+| zdt3-30-matched | genoxide / spea2 | 1.3272 | 1.3269 to 1.3277 | 193.3 ms | 25,050 | 130,274 |
 | zdt3-30-matched | pymoo / moead | 1.3239 | 1.3220 to 1.3251 | 5.87 s | 25,000 | 4,226 |
 | zdt3-30-matched | pymoo / nsga2 | 1.3276 | 1.3273 to 1.3280 | 563.2 ms | 25,000 | 44,253 |
 | zdt3-30-matched | pymoo / sms_emoa | 1.3288 | 1.2455 to 1.3289 | 706.9 ms | 25,000 | 35,222 |
