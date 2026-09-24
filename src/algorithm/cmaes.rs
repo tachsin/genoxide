@@ -216,7 +216,7 @@ impl Cmaes {
         }
     }
 
-    /// The default population size for `n` genes, `4 + ⌊3 ln n⌋`: 10 for 10 genes, 14 for 100.
+    /// The default population size for `n` genes, `4 + ⌊3 ln n⌋`: 10 for 10 genes, 17 for 100.
     pub fn default_population_size(n: usize) -> usize {
         4 + (3.0 * log(n.max(1) as f64)) as usize
     }
