@@ -6,6 +6,7 @@ Usage:
     python run.py --quick                    # small scenarios, 3 seeds
     python run.py --seeds 5 --scenarios onemax-100-matched nqueens-32-idiomatic
     python run.py --libraries deap genetic_algorithm
+    python run.py check                      # test the adapters against the rules, before a run
     python run.py chart                      # redraw the charts of the latest results
     python run.py --libraries genoxide --update results/<file>.json
                                              # rerun one library, keep the others' results
@@ -970,7 +971,7 @@ def latest_results():
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", nargs="?", choices=["run", "setup", "chart"], default="run")
+    parser.add_argument("command", nargs="?", choices=["run", "setup", "check", "chart"], default="run")
     parser.add_argument("--seeds", type=int, default=10)
     parser.add_argument("--max-seconds", type=float, default=60.0, help="wall time cap per run")
     parser.add_argument("--quick", action="store_true", help="small scenarios, 3 seeds")
@@ -1015,6 +1016,15 @@ def main():
         return
     if not VENV_PYTHON.exists():
         raise SystemExit("run `python run.py setup` first")
+    import check
+    if args.command == "check":
+        scenarios = [s for s in SCENARIOS if not args.scenarios or scenario_name(*s[:3]) in args.scenarios]
+        raise SystemExit(0 if check.check(args.libraries, scenarios) else 1)
+    # the rules come first: only adapters that passed `run.py check` as they are now are measured
+    unchecked = check.unchecked(args.libraries)
+    if unchecked:
+        raise SystemExit(f"{', '.join(unchecked)}: the adapter hasn't passed `python run.py check` since it last "
+                         "changed. Check it first (docs/benchmarks/rules.md).")
     pinned = None
     if is_wsl() and not args.allow_unpinned:
         pinned = tuple(int(core) for core in args.cores.split(","))
