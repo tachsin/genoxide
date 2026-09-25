@@ -1,11 +1,18 @@
-# Benchmark adapter for Metaheuristics.jl (https://github.com/jmejia8/Metaheuristics.jl).
+# Benchmark adapter for Metaheuristics.jl (https://github.com/jmejia8/Metaheuristics.jl, docs:
+# https://jmejia8.github.io/Metaheuristics.jl/stable/).
 #
 # Usage: julia --project=<this folder> --threads=1 bench.jl <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
+#        julia --project=<this folder> bench.jl values <problem> <size>   # one JSON solution per line on stdin
 #        julia --project=<this folder> bench.jl --version
 # Prints one JSON line per solver per seed, see ../../README.md for the fields.
 #
-# Every solver is warmed up (compiled) with a tiny untimed run of the same problem before the
-# timed runs, so time_s holds the optimization only.
+# The methods, their settings and where Metaheuristics.jl recommends them are explained in
+# docs/benchmarks/libraries/metaheuristics_jl.md; each one is cited next to its code below. "The
+# guide" is the "Quick Selection Guide" of docs/src/algorithms/index.md
+# (https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/).
+#
+# Every solver is warmed up (compiled) with an untimed run of the same problem, 1,000 evaluations
+# and seed 1000, before the timed runs (rule 4.2), so time_s holds the optimization only.
 
 using Metaheuristics
 using LinearAlgebra
@@ -14,12 +21,12 @@ using Random
 BLAS.set_num_threads(1)
 
 # -------------------------------------------------------------------------------------------------
-# Fitness functions, identical to the ones in the other adapters. Metaheuristics.jl minimizes.
+# Fitness functions, identical to problems.py. Metaheuristics.jl minimizes.
 # -------------------------------------------------------------------------------------------------
 
 onemax(x::AbstractVector{Bool}) = -count(x)
 
-# Number of diagonal conflicts, O(n) (DEAP examples/ga/nqueens.py), 1-based: queen i in column p[i]
+# Diagonal conflicts: for each diagonal, its queens minus one. 1-based: queen i in column p[i]
 function nqueens(p::AbstractVector{<:Integer})
     n = length(p)
     left = zeros(Int, 2n - 1)
@@ -143,13 +150,17 @@ const FRONT_PROBLEMS = Dict(
 )
 
 # -------------------------------------------------------------------------------------------------
-# The budget: counts the evaluations and keeps the best value. A Termination criterion stops the
-# run at the target, at max_evaluations or at max_seconds, checked after every iteration.
+# The budget: counts every evaluation (rule 3) and keeps the best value and solution. A termination
+# criterion stops the run at the target, at max_evaluations or at max_seconds, checked after every
+# iteration.
 # -------------------------------------------------------------------------------------------------
 
 mutable struct Budget
     evaluations::Int
     best::Float64
+    solution::Any
+    # evaluated solutions outside the bounds (rule 2.4), as the library proposed them
+    outside::Int
     const max_evaluations::Int
     const max_seconds::Float64
     const target::Float64
@@ -157,53 +168,97 @@ mutable struct Budget
 end
 
 Budget(max_evaluations, max_seconds, target = -Inf) =
-    Budget(0, Inf, max_evaluations, max_seconds, target, time())
+    Budget(0, Inf, nothing, 0, max_evaluations, max_seconds, target, time())
+
+outside(x, bounds) = bounds !== nothing && any(v -> v < bounds[1] || v > bounds[2], x)
 
 exhausted(budget::Budget) =
     budget.best <= budget.target ||
     budget.evaluations >= budget.max_evaluations ||
     time() - budget.start >= budget.max_seconds
 
+# a user-defined termination criterion, as the library's own (src/termination/budget.jl)
 struct BudgetTermination <: Metaheuristics.AbstractTermination
     budget::Budget
 end
 Metaheuristics.stop_check(status, criterion::BudgetTermination) = exhausted(criterion.budget)
 
-function counted(f, budget::Budget)
+# `bounds`: (lower, upper) of every variable, to count the solutions outside them
+function counted(f, budget::Budget; bounds = nothing)
     return function (x)
         budget.evaluations += 1
+        outside(x, bounds) && (budget.outside += 1)
         value = f(x)
-        value < budget.best && (budget.best = value)
+        if value < budget.best
+            budget.best = value
+            budget.solution = copy(x)
+        end
         return value
     end
 end
 
-# multi-objective: (objectives, inequality constraints, equality constraints)
+# multi-objective: (objectives, inequality constraints, equality constraints), the form the
+# multi-objective algorithms take (NSGA2 docstring)
 function counted_front(f, m, budget::Budget)
     return function (x)
         budget.evaluations += 1
+        outside(x, (0.0, 1.0)) && (budget.outside += 1)
         return f(x, m), [0.0], [0.0]
     end
 end
 
-# The options: the seed, and no library stop other than ours. The evaluation and time limits are
-# the library's too (checked after every iteration, MOEA/D after every child); f_tol = -1 turns off
-# its convergence stops (a collapsed population for single objectives, RobustConvergence for
-# multiple objectives), as in the other adapters.
-options(budget::Budget, seed) = Options(
-    f_calls_limit = budget.max_evaluations,
-    time_limit = budget.max_seconds,
+# The options (Options docstring, docs/src/api.md) of one attempt: its seed, and what is left of the
+# evaluations and of the time. f_calls_limit is also what ECA uses to switch to exploitation at 95%
+# of it (eca_solution in src/algorithms/singleobjective/ECA/ECA.jl). The tolerances are the
+# defaults (f_tol 1e-12, f_tol_rel eps(), x_tol 1e-8). The iteration limit, only a budget, is
+# lifted (rule 2.2). A matched run has no convergence criterion: f_tol = -1 makes the one optimize
+# always checks (CheckConvergence, which needs all of its criteria) impossible.
+options(budget::Budget, seed; matched = false) = Options(
+    f_calls_limit = budget.max_evaluations - budget.evaluations,
+    time_limit = budget.max_seconds - (time() - budget.start),
     iterations = typemax(Int) ÷ 4,
-    f_tol = -1.0,
+    f_tol = matched ? -1.0 : 1e-12,
     seed = seed,
 )
 
-algorithm_kwargs(budget, seed) = (options = options(budget, seed), termination = BudgetTermination(budget))
+# The termination: BudgetTermination, and the library's convergence criteria, which end the attempt
+# (rule 2.2): the one optimize checks always (default_stop_check in src/termination/default.jl:
+# CheckConvergence, all of AbsoluteFunctionConvergence(f_tol), RelativeFunctionConvergence(f_tol_rel),
+# SmallStandardDeviation and RelativeParameterConvergence(x_tol)), and the one it adds when the user
+# gives no termination (src/optimize/before.jl): the same CheckConvergence for one objective,
+# RobustConvergence(ftol = f_tol) for several.
+# The matched scenarios (the matched OneMax and the multi-objective ones) run the matched
+# configuration, which has no convergence criterion: they run to the target or the budget, with
+# BudgetTermination only, and never restart.
+function algorithm_kwargs(budget, seed; front = false, matched = false)
+    opts = options(budget, seed; matched)
+    matched && return (options = opts, termination = BudgetTermination(budget))
+    convergence = front ? Metaheuristics.RobustConvergence(ftol = opts.f_tol) :
+        Metaheuristics.CheckConvergence(f_tol_abs = opts.f_tol, f_tol_rel = opts.f_tol_rel, x_tol = opts.x_tol)
+    return (options = opts, termination = Metaheuristics.Termination(checkany = [BudgetTermination(budget), convergence]))
+end
+
+# An attempt that ends before the target, the budget or the cap has converged. The library has no
+# restart after convergence: its Restart (docs/src/algorithms/singleobjective.md, "Restart")
+# replaces the population every 100 iterations whatever happens, and keeps the base method's stops.
+# So the method starts again from a new random start, with the seed seed * 1000 + restart (rule
+# 2.2); `budget` keeps the best solution and counts every evaluation.
+# Returns (the last attempt's status, iterations, restarts).
+function run_restarting(start, budget::Budget, seed)
+    iterations = 0
+    restart = 0
+    while true
+        status = start(restart == 0 ? seed : seed * 1000 + restart)
+        iterations += status.iteration
+        exhausted(budget) && return status, iterations, restart
+        restart += 1
+    end
+end
 
 # -------------------------------------------------------------------------------------------------
 # Operators for the matched OneMax: the GA framework of Metaheuristics.jl dispatches on operator
-# types, these are the missing ones (two-point crossover with a probability, and bit-flip on a
-# fraction of the children).
+# types (docs/src/tutorials/create-metaheuristic.md), these are the missing ones (two-point
+# crossover with a probability, and bit-flip on a fraction of the children).
 # -------------------------------------------------------------------------------------------------
 
 struct TwoPointCrossover
@@ -245,8 +300,11 @@ function Metaheuristics.mutation!(Q::AbstractMatrix{Bool}, parameters::BitFlipSo
 end
 
 # -------------------------------------------------------------------------------------------------
-# Solvers: (name, run(budget, seed) -> status) per problem
+# Solvers: (name, run(budget, seed) -> status, decode(best solution) -> reported solution)
 # -------------------------------------------------------------------------------------------------
+
+bits(x) = Int.(x)
+zero_based(p) = p .- 1
 
 function onemax_solvers(size, mode)
     run = function (budget, seed)
@@ -261,23 +319,26 @@ function onemax_solvers(size, mode)
                 crossover = TwoPointCrossover(0.5),
                 mutation = BitFlipSomeChildren(0.2, 1.0 / size),
                 environmental_selection = GenerationalReplacement(),
-                algorithm_kwargs(budget, seed)...,
+                algorithm_kwargs(budget, seed; matched = true)...,
             )
         else
-            # the binary example of the GA docstring: GA() with its defaults (population 100,
-            # binary tournament, uniform crossover 0.5, bit-flip 1e-5, elitist replacement)
+            # the guide: "Binary: Use GA with BitFlipMutation". The binary example of the GA
+            # docstring (docs/src/algorithms/singleobjective.md, "GA"): GA() with its defaults,
+            # population 100, binary tournament, uniform crossover 0.5, BitFlipMutation(1e-5),
+            # elitist replacement
             algorithm = GA(; algorithm_kwargs(budget, seed)...)
         end
         return optimize(counted(onemax, budget), BitArraySpace(size), algorithm)
     end
-    return [("ga", run)]
+    return [("ga", run, bits)]
 end
 
 function nqueens_solvers(size)
-    # docs/src/tutorials/n-queens.md: optimize(attacks, PermutationSpace(N), GA), i.e. the defaults
-    # for permutations (population 100, binary tournament, order crossover, slight mutation,
-    # elitist replacement)
-    run = function (budget, seed)
+    # the guide: "Permutation-based: Use GA with OrderCrossover or BRKGA".
+    # docs/src/tutorials/n-queens.md: optimize(attacks, PermutationSpace(N), GA), i.e. the GA's
+    # defaults for permutations (get_parameters in src/algorithms/singleobjective/GA/GA.jl):
+    # population 100, binary tournament, OrderCrossover, SlightMutation, elitist replacement
+    ga = function (budget, seed)
         N = 100
         algorithm = GA(;
             N = N,
@@ -290,29 +351,33 @@ function nqueens_solvers(size)
         )
         return optimize(counted(nqueens, budget), PermutationSpace(size), algorithm)
     end
-    return [("ga", run)]
+    # the BRKGA docstring (docs/src/algorithms/combinatorial.md, "BRKGA"): random keys in [0, 1]^n
+    # decoded by sortperm, with the defaults (20 elites, 10 mutants, 70 offspring, bias 0.7)
+    brkga = function (budget, seed)
+        bounds = boxconstraints(lb = zeros(size), ub = ones(size))
+        return optimize(counted(keys -> nqueens(sortperm(keys)), budget), bounds, BRKGA(; algorithm_kwargs(budget, seed)...))
+    end
+    return [("ga", ga, zero_based), ("brkga", brkga, keys -> sortperm(keys) .- 1)]
 end
 
 function real_solvers(problem, size)
     f, lower, upper = REAL_PROBLEMS[problem]
     bounds = boxconstraints(lb = fill(lower, size), ub = fill(upper, size))
-    solve(make) = (budget, seed) -> optimize(counted(f, budget), bounds, make(algorithm_kwargs(budget, seed)))
+    # the bounds: the initial population within them, and each method's own repair (ECA:
+    # evo_boundary_repairer!, DE and PSO: reset_to_violated_bounds!)
+    solve(make) = (budget, seed) -> optimize(counted(f, budget; bounds = (lower, upper)), bounds, make(algorithm_kwargs(budget, seed)))
+    # the guide: "Box-constrained (continuous): Use ECA, DE, PSO, or SHADE", the first three, with
+    # their defaults (their docstrings, docs/src/algorithms/singleobjective.md). ECA is also the
+    # default of optimize and the Quick Start's method on Rastrigin (docs/src/index.md); DE and PSO
+    # are "Good for multimodal".
     return [
-        # the library's defaults, as in docs/src/examples.md (ECA() on Rastrigin) and the
-        # docstrings: ECA (K = 7, N = K·D), DE/rand/1/bin (N = 10·D, F = 0.7, CR = 0.5),
-        # PSO (N = 10·D, C1 = C2 = 2, ω = 0.8), GA (population 100, SBX and polynomial mutation)
-        ("eca", solve(kwargs -> ECA(; kwargs...))),
-        ("de", solve(kwargs -> DE(; kwargs...))),
-        ("pso", solve(kwargs -> PSO(; kwargs...))),
-        ("ga", solve(kwargs -> GA(;
-            N = 100,
-            initializer = Metaheuristics.RandomInBounds(; N = 100),
-            selection = TournamentSelection(; N = 100),
-            crossover = Metaheuristics.SBX(; bounds),
-            mutation = PolynomialMutation(; bounds),
-            environmental_selection = ElitistReplacement(),
-            kwargs...,
-        ))),
+        # ECA: K = 7, population K·D, η_max = 2, p_exploit 0.95, p_bin 0.02
+        ("eca", solve(kwargs -> ECA(; kwargs...)), identity),
+        # DE/rand/1/bin: population 10·D, F = 0.7, CR = 0.5 (the code's defaults; its docstring
+        # says F = 1.0)
+        ("de", solve(kwargs -> DE(; kwargs...)), identity),
+        # PSO: population 10·D, C1 = C2 = 2, ω = 0.8
+        ("pso", solve(kwargs -> PSO(; kwargs...)), identity),
     ]
 end
 
@@ -325,59 +390,85 @@ end
 # Differences:
 # - the library's p_cr is the probability of crossing each variable, and every pair is crossed
 #   (pymoo: pairs at 0.9, variables at 0.5)
-# - its NSGA-II and SPEA2 create 2N children per generation, not N
-# - its MOEA/D is MOEA/D-DE: DE/rand/1 (F 0.5, CR 1) with polynomial mutation, not SBX, at most
-#   2 replacements per child, and Tchebycheff also for DTLZ (no PBI)
+# - its NSGA-II and SPEA2 create 2N children per generation, not N (the reproduction of
+#   AbstractNSGA in src/algorithms/multiobjective/NSGA2/NSGA2.jl); its SMS-EMOA is steady-state,
+#   one child at a time, N per iteration
+# - its SMS-EMOA estimates the hypervolume contributions with 3 objectives by Monte Carlo, with its
+#   default n_samples = 10,000 samples for every child
+# - a converged attempt restarts (rule 2.2), and the front is the last attempt's final population
+# Not run (rule 6.1): the library's MOEA/D is MOEAD_DE, whose reproduction is DE/rand/1 with
+# polynomial mutation and can't take the matched SBX (MOEAD_DE_reproduction in
+# src/algorithms/multiobjective/MOEAD_DE/MOEAD_DE.jl); CCMO is for constrained problems.
 function front_solvers(problem, size)
     f, variables, objectives, population, divisions = FRONT_PROBLEMS[problem]
     n = variables(size)
     m = objectives(size)
+    # the bounds: the initial population within them, and the library's repair of the offspring
+    # (reset_to_violated_bounds! after SBX and polynomial mutation)
     bounds = boxconstraints(lb = zeros(n), ub = ones(n))
-    solve(make) = (budget, seed) -> optimize(counted_front(f, m, budget), bounds, make(algorithm_kwargs(budget, seed)))
-    solvers = [
+    solve(make) = (budget, seed) -> optimize(counted_front(f, m, budget), bounds, make(algorithm_kwargs(budget, seed; matched = true)))
+    return [
         ("nsga2", solve(kwargs -> NSGA2(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
         ("nsga3", solve(kwargs -> NSGA3(; N = population, η_cr = 30, p_cr = 1.0, η_m = 20, p_m = 1.0 / n, partitions = divisions, kwargs...))),
         ("spea2", solve(kwargs -> SPEA2(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
-        ("moead", solve(kwargs -> MOEAD_DE(gen_ref_dirs(m, divisions); T = 20, δ = 0.9, η = 20, p_m = 1.0 / n, kwargs...))),
         ("sms_emoa", solve(kwargs -> SMS_EMOA(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
     ]
-    return solvers
 end
 
-# the untimed warm-up run of every solver before the timed ones: a few generations, which compile
-# everything the timed runs call
+# the untimed warm-up run of every solver before the timed ones (rule 4.2)
 const WARM_UP_EVALUATIONS = 1000
+const WARM_UP_SEED = 1000
 
-# run.py's early stop: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took
-# CAPPED of it) without reaching the target runs no more seeds
+# rule 5.3: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took CAPPED of
+# it) without reaching the target runs no more seeds
 const EARLY_SEEDS = 3
 const CAPPED = 0.98
 
-non_dominated(points) = [p for p in points if !any(q -> all(q .<= p) && any(q .< p), points)]
+non_dominated(points) = [i for (i, p) in enumerate(points) if !any(q -> all(q .<= p) && any(q .< p), points)]
 
 # -------------------------------------------------------------------------------------------------
 # Output
 # -------------------------------------------------------------------------------------------------
 
-json_number(x::Integer) = string(x)
-json_number(x::Real) = isfinite(x) ? repr(Float64(x)) : (isnan(x) ? "NaN" : (x > 0 ? "Infinity" : "-Infinity"))
+json_value(x::Bool) = string(x)
+json_value(x::Integer) = string(x)
+json_value(x::Real) = isfinite(x) ? repr(Float64(x)) : (isnan(x) ? "NaN" : (x > 0 ? "Infinity" : "-Infinity"))
+json_value(x::AbstractString) = "\"$x\""
+json_value(x::AbstractVector) = "[" * join((json_value(v) for v in x), ",") * "]"
 
 function print_line(fields)
-    parts = String[]
-    for (key, value) in fields
-        text = value isa AbstractString ? "\"$value\"" :
-            value isa Bool ? string(value) :
-            value isa AbstractVector ? "[" * join(("[" * join(json_number.(p), ",") * "]" for p in value), ",") * "]" :
-            json_number(value)
-        push!(parts, "\"$key\":$text")
-    end
-    println("{" * join(parts, ",") * "}")
+    println("{" * join(("\"$key\":" * json_value(value) for (key, value) in fields), ",") * "}")
     return flush(stdout)
+end
+
+# `values <problem> <size>`: one JSON solution per line on stdin, its value (or objectives) per
+# line on stdout, with the fitness functions above (rule 1.2)
+function print_values(problem, size)
+    for line in eachline(stdin)
+        isempty(strip(line)) && continue
+        text = strip(line, ['[', ']', ' ', '\t', '\r'])
+        x = [parse(Float64, strip(s)) for s in split(text, ',') if !isempty(strip(s))]
+        if problem == "onemax"
+            println(json_value(-onemax(x .!= 0)))
+        elseif problem == "nqueens"
+            println(json_value(nqueens(round.(Int, x) .+ 1)))
+        elseif haskey(REAL_PROBLEMS, problem)
+            println(json_value(REAL_PROBLEMS[problem][1](x)))
+        else
+            f, _, objectives, _, _ = FRONT_PROBLEMS[problem]
+            println(json_value(f(x, objectives(size))))
+        end
+    end
+    return
 end
 
 function main(args)
     if length(args) == 1 && args[1] == "--version"
         println(pkgversion(Metaheuristics))
+        return
+    end
+    if length(args) == 3 && args[1] == "values"
+        print_values(args[2], parse(Int, args[3]))
         return
     end
     if length(args) != 7
@@ -390,9 +481,9 @@ function main(args)
 
     if haskey(FRONT_PROBLEMS, problem)
         solvers = front_solvers(problem, size)
-        # warm-up: compile every solver with a tiny untimed run
         for (_, run) in solvers
-            run(Budget(WARM_UP_EVALUATIONS, 10.0), 0)
+            budget = Budget(WARM_UP_EVALUATIONS, 10.0)
+            run_restarting(s -> run(budget, s), budget, WARM_UP_SEED)
         end
         capped = Dict(solver => 0 for (solver, _) in solvers)
         for seed in seed_from:seed_to, (solver, run) in solvers
@@ -400,14 +491,19 @@ function main(args)
             index >= EARLY_SEEDS && capped[solver] == EARLY_SEEDS && continue
             budget = Budget(max_evaluations, max_seconds)
             start = time_ns()
-            status = run(budget, seed)
+            status, iterations, restarts = run_restarting(s -> run(budget, s), budget, seed)
             elapsed = (time_ns() - start) / 1.0e9
             capped[solver] += index < EARLY_SEEDS && elapsed >= CAPPED * max_seconds
-            front = non_dominated([Metaheuristics.fval(s) for s in status.population])
+            # the final population of the last attempt (rule 7.2): the objective values the library
+            # evaluated
+            points = [Metaheuristics.fval(s) for s in status.population]
+            front = non_dominated(points)
             print_line([
                 "library" => "metaheuristics_jl", "solver" => solver, "problem" => problem, "size" => size,
                 "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-                "generations" => status.iteration, "evaluations" => budget.evaluations, "front" => front,
+                "generations" => iterations, "evaluations" => budget.evaluations, "restarts" => restarts,
+                "outside" => budget.outside, "population" => length(points), "front" => points[front],
+                "solutions" => [Metaheuristics.get_position(status.population[i]) for i in front],
             ])
         end
         return
@@ -427,18 +523,18 @@ function main(args)
         return
     end
 
-    # warm-up: compile every solver with a tiny untimed run of the same problem
-    for (_, run) in solvers
-        run(Budget(WARM_UP_EVALUATIONS, 10.0, target), 0)
+    for (_, run, _) in solvers
+        budget = Budget(WARM_UP_EVALUATIONS, 10.0, target)
+        run_restarting(s -> run(budget, s), budget, WARM_UP_SEED)
     end
 
-    capped = Dict(solver => 0 for (solver, _) in solvers)
-    for seed in seed_from:seed_to, (solver, run) in solvers
+    capped = Dict(solver => 0 for (solver, _, _) in solvers)
+    for seed in seed_from:seed_to, (solver, run, decode) in solvers
         index = seed - seed_from
         index >= EARLY_SEEDS && capped[solver] == EARLY_SEEDS && continue
         budget = Budget(max_evaluations, max_seconds, target)
         start = time_ns()
-        status = run(budget, seed)
+        _, iterations, restarts = run_restarting(s -> run(budget, s), budget, seed)
         elapsed = (time_ns() - start) / 1.0e9
         best = problem == "onemax" ? -Int(budget.best) : problem == "nqueens" ? Int(budget.best) : budget.best
         success = problem == "onemax" ? best >= size : budget.best <= target
@@ -446,8 +542,10 @@ function main(args)
         print_line([
             "library" => "metaheuristics_jl", "solver" => solver, "problem" => problem, "size" => size,
             "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-            "generations" => status.iteration, "evaluations" => budget.evaluations,
+            "generations" => iterations, "evaluations" => budget.evaluations, "restarts" => restarts,
+            (haskey(REAL_PROBLEMS, problem) ? ["outside" => budget.outside] : [])...,
             "best" => best, "target" => problem == "onemax" ? size : target, "success" => success,
+            "solution" => decode(budget.solution),
         ])
     end
     return
