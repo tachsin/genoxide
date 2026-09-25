@@ -116,6 +116,12 @@ def check_run(r, problem, size, budget, cap):
         failures.append(f"{where}: {evaluations} evaluations, over the budget of {budget} by more than "
                         f"a generation ({per_generation})")
     capped = r["time_s"] >= CAPPED * cap
+    # rule 2.4: every evaluated solution inside the bounds
+    if problem in problems.REAL_BOUNDS or front:
+        if "outside" not in r:
+            failures.append(f"{where}: missing outside (rule 2.4)")
+        elif r["outside"] != 0:
+            failures.append(f"{where}: {r['outside']} evaluated solutions outside the bounds (rule 2.4)")
     if front:
         if len(r["front"]) != len(r["solutions"]) or not r["front"]:
             failures.append(f"{where}: {len(r['front'])} points in the front, {len(r['solutions'])} solutions")

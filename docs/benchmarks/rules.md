@@ -21,14 +21,17 @@ Every library is measured under these rules. An adapter that breaks one isn't be
 
 Nothing else ends a run.
 
-2.2. **Methods that stop by themselves keep going.** Some methods end on their own criteria: a tolerance, a number of generations without improvement, or an iteration limit.
-- If the library has a restart mechanism for the method (IPOP for CMA-ES, for example), the adapter uses it.
-- If it doesn't, the adapter turns the criterion off if the library allows it.
-- Otherwise the adapter starts the method again from a new random start, keeps the best solution, and counts every evaluation.
+2.2. **Methods that stop by themselves keep going.** Some methods end on their own criteria.
+- **A limit that's only a budget,** such as a maximum number of generations or iterations, is lifted.
+- **A criterion that detects convergence,** such as a tolerance or a number of generations without improvement, ends that attempt, and the method starts again:
+  - with the library's restart mechanism for the method, if it has one (IPOP for CMA-ES, for example);
+  - otherwise from a new random start, with a seed derived from the run's seed, such as `seed * 1000 + restart`. The adapter keeps the best solution and counts every evaluation.
 
-A user with time left would do the same.
+A user with time left would do the same. A converged method with its criterion turned off would only spend the rest of the budget where it's stuck.
 
 2.3. A library that checks the stop only between generations may go past the target or the budget by at most one generation. **[checked]** Evaluations beyond the budget plus one generation make the run invalid.
+
+2.4. **Only inside the bounds.** A problem is defined on its box of bounds, and every solution a method evaluates must lie inside it. The library's own bound handling is used: clipping, repair, a transformation or a bounded operator. The page says which. **[checked]** Each run of a continuous or multi-objective problem reports `outside`, the number of evaluated solutions outside the bounds, counted by the adapter's own counter, and it must be 0.
 
 ## 3. Counting evaluations
 
@@ -60,7 +63,7 @@ A user with time left would do the same.
 
 ## 6. Which methods run
 
-6.1. **Matched mode:** the same algorithm, operators, rates and population size in every library, as the scenario lists them. A library that can't match the algorithm itself doesn't run the scenario. Smaller differences are listed in the notes.
+6.1. **Matched mode:** the same algorithm, operators, rates and population size in every library, as the scenario lists them. A library that can't match the algorithm itself doesn't run the scenario. Smaller differences are listed in the notes. The matched multi-objective scenarios run only NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA. A library's other multi-objective algorithms aren't run, and its page lists them.
 
 6.2. **Idiomatic mode:** the methods a library's own documentation recommends for the problem type:
 - binary;
@@ -70,6 +73,13 @@ A user with time left would do the same.
 - multi-objective.
 
 For each method, the adapter cites where the library recommends it: a page of the docs, an example or the README. The settings are the documented defaults, or the ones documented for that problem type.
+
+**The docs decide, not our tests.** Where a library documents several methods or settings, the choice follows what the docs say, in this order:
+1. a preference they state;
+2. their example for that problem type;
+3. otherwise, the default.
+
+The separate test runs are shown on the page, but they never pick a method or a setting.
 
 6.3. **Not allowed in idiomatic mode:**
 - tuning settings to the benchmark problems;

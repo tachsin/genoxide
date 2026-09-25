@@ -163,7 +163,7 @@ It prints one JSON line per solver per seed, with the best solution found:
  "solution": [1, 1, 1, ...]}
 ```
 
-A solver whose generations change size, such as CMA-ES with IPOP restarts, also prints `"last_generation"`, the evaluations of its last generation: a run may go past its budget by at most that (rule 2.3). A multi-objective run prints `"front": [[f1, f2], ...]` and `"solutions": [[x1, x2, ...], ...]`, the solutions of those points in the same order, instead of `best`, `target`, `success` and `solution`. For a problem its library can't do, an adapter prints nothing.
+A run of a continuous or multi-objective problem also prints `"outside"`, the number of evaluated solutions outside the bounds, counted around the fitness function. It must be 0 (rule 2.4). A solver whose generations change size, such as CMA-ES with IPOP restarts, also prints `"last_generation"`, the evaluations of its last generation: a run may go past its budget by at most that (rule 2.3). A multi-objective run prints `"front": [[f1, f2], ...]` and `"solutions": [[x1, x2, ...], ...]`, the solutions of those points in the same order, instead of `best`, `target`, `success` and `solution`. For a problem its library can't do, an adapter prints nothing.
 
 The second evaluates solutions with the adapter's own fitness functions:
 
