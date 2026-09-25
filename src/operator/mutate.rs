@@ -398,14 +398,15 @@ impl Mutate<Real> for PolynomialMutation {
 /// First the genome's step size changes log-normally, `σ' = σ · exp(τ · N(0, 1))`, then every gene
 /// (except fixed ones) moves by a normal step with standard deviation `σ'` times its range,
 /// mirrored at the bounds. Steps that lead to good genomes survive with them: large while far from
-/// an optimum, small close to it. The learning rate `τ` is `1 / √n` for `n` genes by default.
+/// an optimum, small close to it. The learning rate `τ` is `1 / √n` by default, for the `n` genes
+/// that can take more than one value.
 ///
 /// With [`NoCrossover`](crate::operator::NoCrossover) and
 /// [`Scheme::MuCommaLambda`](crate::algorithm::Scheme::MuCommaLambda) this is the classic
 /// (μ,λ)-ES with self-adaptation.
 ///
 /// The step size stays between a minimum (1e-12 by default) and 10 ranges, and the genome always
-/// changes.
+/// changes (unless no gene can take more than one value).
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SelfAdaptiveMutation {
@@ -417,7 +418,8 @@ pub struct SelfAdaptiveMutation {
 pub(crate) const MAX_STEP: f64 = 10.0;
 
 impl SelfAdaptiveMutation {
-    /// Self-adaptive mutation with the learning rate `1 / √n`.
+    /// Self-adaptive mutation with the learning rate `1 / √n`, for the `n` genes that can take
+    /// more than one value.
     pub fn new() -> Self {
         Self {
             learning_rate: None,
@@ -435,7 +437,7 @@ impl SelfAdaptiveMutation {
     }
 
     /// The smallest step size (positive and finite; 1e-12 by default), below which the step
-    /// size doesn't shrink.
+    /// size doesn't shrink. A minimum above 10, the largest step size, is 10.
     pub fn with_min_step(self, min_step: f64) -> Result<Self> {
         Ok(Self {
             min_step: check_positive("min_step", min_step)?.min(MAX_STEP),
@@ -443,7 +445,8 @@ impl SelfAdaptiveMutation {
         })
     }
 
-    /// The learning rate, `None` for `1 / √n`.
+    /// The learning rate, `None` for `1 / √n`, for the `n` genes that can take more than one
+    /// value.
     pub fn learning_rate(&self) -> Option<f64> {
         self.learning_rate
     }

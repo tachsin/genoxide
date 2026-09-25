@@ -1,6 +1,6 @@
 //! Parent selection.
 
-use super::{Select, check_rate};
+use super::{MAX_SIZE, Select, check_rate};
 use crate::genome::Genome;
 use crate::{Error, Fitness, Objective, Population, Result, StreamRng};
 use std::cmp::Ordering;
@@ -19,12 +19,13 @@ pub struct Tournament {
 }
 
 impl Tournament {
-    /// Tournaments of `size` individuals, at least 1.
+    /// Tournaments of `size` individuals, at least 1 and at most 2^24, the largest population
+    /// size.
     pub fn new(size: usize) -> Result<Self> {
-        if size == 0 {
+        if size == 0 || size > MAX_SIZE {
             return Err(Error::InvalidSetting {
                 setting: "tournament_size",
-                reason: "must be at least 1".to_string(),
+                reason: format!("must be between 1 and {MAX_SIZE}, got {size}"),
             });
         }
         Ok(Self { size })

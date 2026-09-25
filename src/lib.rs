@@ -26,7 +26,7 @@
 //!
 //! The building blocks:
 //!
-//! - [`Error`]: all errors, no panics in library code
+//! - [`Error`]: all errors: invalid settings are errors, not panics
 //! - [`StreamRng`]: portable, seedable random numbers with independent streams
 //! - [`Fitness`] and [`Objective`]: totally ordered fitness values, with an invalid state and
 //!   constraint violations ([`constraint`], Deb's feasibility rules)
@@ -50,7 +50,7 @@
 //!
 //! - `parallel` (default): parallel fitness evaluation with rayon
 //! - `tracing`: a span per run, an event per generation and one at the end, with the target
-//!   `genoxide`, from both engines
+//!   `genoxide`, from the three engines
 //! - `serde`: `Serialize` and `Deserialize` for algorithms and their parts, and `checkpoint`, to
 //!   save a run and resume it exactly
 //! - `cli`: the `genoxide` program, which runs an optimization described in a TOML or JSON file

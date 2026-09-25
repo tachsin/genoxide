@@ -63,6 +63,14 @@ pub trait Crossover<R: Representation>: Clone + Debug + Send + Sync {
         b: &mut R::Genome,
         rng: &mut StreamRng,
     );
+
+    /// Whether the crossover can change the genomes: `true` by default, `false` for
+    /// [`NoCrossover`], whose children are copies of their parents. Builders use it to reject a
+    /// mutation rate of 0 with a crossover that doesn't recombine, where every child would be a
+    /// copy.
+    fn recombines(&self) -> bool {
+        true
+    }
 }
 
 /// Changes a genome randomly, in place.
@@ -93,6 +101,47 @@ pub(crate) fn neighbor<R: Representation, X: Mutate<R>>(
         }
     }
     candidate
+}
+
+// The largest population, number of offspring, tournament, number of neighbors or of restart
+// kicks the builders accept, 2^24: far beyond practical runs, and small enough that the memory and
+// time they take are bounded instead of overflowing or hanging.
+pub(crate) const MAX_SIZE: usize = 1 << 24;
+
+// A count of at most `MAX_SIZE` for `setting`.
+pub(crate) fn check_size(setting: &'static str, size: usize) -> Result<usize> {
+    if size <= MAX_SIZE {
+        Ok(size)
+    } else {
+        Err(Error::InvalidSetting {
+            setting,
+            reason: format!("must be at most {MAX_SIZE} (2^24), got {size}"),
+        })
+    }
+}
+
+// The crossover and mutation rates of an algorithm that breeds children, each in [0, 1], unless
+// every child would be a copy of a parent: both rates 0, or a mutation rate of 0 with a crossover
+// that doesn't recombine.
+pub(crate) fn check_rates(
+    crossover_rate: f64,
+    mutation_rate: f64,
+    recombines: bool,
+) -> Result<(f64, f64)> {
+    let crossover_rate = check_probability("crossover_rate", crossover_rate)?;
+    let mutation_rate = check_probability("mutation_rate", mutation_rate)?;
+    if mutation_rate == 0.0 && (crossover_rate == 0.0 || !recombines) {
+        let reason = if recombines {
+            "crossover_rate and mutation_rate are both 0, so every child would be a copy of a parent"
+        } else {
+            "mutation_rate is 0 and the crossover doesn't recombine (NoCrossover), so every child would be a copy of a parent"
+        };
+        return Err(Error::InvalidSetting {
+            setting: "mutation_rate",
+            reason: reason.to_string(),
+        });
+    }
+    Ok((crossover_rate, mutation_rate))
 }
 
 // A probability in [0, 1] for `setting`.

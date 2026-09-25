@@ -175,6 +175,10 @@ macro_rules! list_crossover {
                     Self::None(crossover) => crossover.crossover(representation, a, b, rng),
                 }
             }
+
+            fn recombines(&self) -> bool {
+                !matches!(self, Self::None(_))
+            }
         }
     };
 }
@@ -234,6 +238,10 @@ impl Crossover<Real> for RealCrossover {
             Self::Arithmetic(crossover) => crossover.crossover(representation, a, b, rng),
         }
     }
+
+    fn recombines(&self) -> bool {
+        !matches!(self, Self::None(_))
+    }
 }
 
 /// A crossover of permutations.
@@ -282,6 +290,10 @@ impl Crossover<Permutation> for OrderCrossovers {
             Self::EdgeRecombination(crossover) => crossover.crossover(representation, a, b, rng),
             Self::None(crossover) => crossover.crossover(representation, a, b, rng),
         }
+    }
+
+    fn recombines(&self) -> bool {
+        !matches!(self, Self::None(_))
     }
 }
 

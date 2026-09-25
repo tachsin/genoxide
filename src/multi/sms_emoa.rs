@@ -6,7 +6,7 @@ use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, dominates, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
 use crate::genome::Representation;
-use crate::operator::{Crossover, Mutate, check_probability};
+use crate::operator::{Crossover, Mutate, check_rates, check_size};
 use crate::rng::Chance;
 use crate::{Error, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
@@ -483,15 +483,15 @@ impl<R: Representation, const M: usize, C, X> SmsEmoaBuilder<R, M, C, X> {
         }
     }
 
-    /// The population size, at least 2. Required.
+    /// The population size, at least 2 and at most 2^24. Required.
     pub fn population_size(mut self, size: usize) -> Self {
         self.population_size = Some(size);
         self
     }
 
-    /// The number of children per generation, at least 1. The population size by default; 1 is
-    /// the original steady-state SMS-EMOA, which needs more generations but fewer evaluations
-    /// per improvement.
+    /// The number of children per generation, at least 1 and at most 2^24. The population size
+    /// by default; 1 is the original steady-state SMS-EMOA, which needs more generations but
+    /// fewer evaluations per improvement.
     pub fn offspring(mut self, count: usize) -> Self {
         self.offspring = Some(count);
         self
@@ -536,8 +536,10 @@ impl<R: Representation, const M: usize, C, X> SmsEmoaBuilder<R, M, C, X> {
     /// # Errors
     ///
     /// - [`Error::MissingSetting`] without a population size.
-    /// - [`Error::InvalidSetting`] for a population size below 2, no offspring, no objectives,
-    ///   rates out of range or both 0, or more initial genomes than the population size.
+    /// - [`Error::InvalidSetting`] for a population size below 2, no offspring, a population
+    ///   size or offspring above 2^24, no objectives, rates out of range, a mutation rate of 0
+    ///   with a crossover rate of 0 or [`NoCrossover`](crate::operator::NoCrossover), or more
+    ///   initial genomes than the population size.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<SmsEmoa<R, C, X, M>>
     where
@@ -554,21 +556,20 @@ impl<R: Representation, const M: usize, C, X> SmsEmoaBuilder<R, M, C, X> {
                 format!("SMS-EMOA needs at least 2 individuals, got {size}"),
             );
         }
+        check_size("population_size", size)?;
         let offspring = self.offspring.unwrap_or(size);
         if offspring == 0 {
             return invalid("offspring", "must be at least 1".to_string());
         }
+        check_size("offspring", offspring)?;
         if M == 0 {
             return invalid("objectives", "at least 1 objective is needed".to_string());
         }
-        let crossover_rate = check_probability("crossover_rate", self.crossover_rate)?;
-        let mutation_rate = check_probability("mutation_rate", self.mutation_rate)?;
-        if crossover_rate == 0.0 && mutation_rate == 0.0 {
-            return invalid(
-                "mutation_rate",
-                "crossover_rate and mutation_rate are both 0, so every child would be a copy of a parent".to_string(),
-            );
-        }
+        let (crossover_rate, mutation_rate) = check_rates(
+            self.crossover_rate,
+            self.mutation_rate,
+            self.crossover.recombines(),
+        )?;
         if self.initial_genomes.len() > size {
             return invalid(
                 "initial_genomes",

@@ -2,6 +2,7 @@
 
 use super::{Algorithm, Candidates};
 use crate::genome::{Real, Reals, Representation};
+use crate::operator::check_size;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
 
@@ -69,9 +70,9 @@ pub enum Control {
     /// trial improved: the weighted Lehmer mean of `F` and the weighted arithmetic mean of `CR`
     /// (as in SHADE), with a `CR` that stays 0 once the successes only had `CR` 0 (as in L-SHADE).
     Shade {
-        /// The number of (`F`, `CR`) pairs remembered, at least 1. Small memories adapt faster:
-        /// 5 to 10 is a good choice (L-SHADE uses 6). Each slot is updated once every `memory`
-        /// generations.
+        /// The number of (`F`, `CR`) pairs remembered, at least 1 and at most 2^24. Small
+        /// memories adapt faster: 5 to 10 is a good choice (L-SHADE uses 6). Each slot is updated
+        /// once every `memory` generations.
         memory: usize,
     },
 }
@@ -858,7 +859,7 @@ pub struct DeBuilder {
 }
 
 impl DeBuilder {
-    /// The population size, at least 4. The number of genes + 10 by default.
+    /// The population size, at least 4 and at most 2^24. The number of genes + 10 by default.
     pub fn population_size(mut self, size: usize) -> Self {
         self.population_size = Some(size);
         self
@@ -926,8 +927,9 @@ impl DeBuilder {
     ///
     /// # Errors
     ///
-    /// - [`Error::InvalidSetting`] for a population size below 4, or strategy, control or
-    ///   restart settings out of range.
+    /// - [`Error::InvalidSetting`] for a population size below 4 or above 2^24, strategy,
+    ///   control, linear reduction or restart settings out of range, or more initial genomes than
+    ///   the population size.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<De> {
         let size = self.population_size.unwrap_or(self.real.genome_len() + 10);
@@ -937,6 +939,7 @@ impl DeBuilder {
                 reason: format!("differential evolution needs at least 4 individuals, got {size}"),
             });
         }
+        check_size("population_size", size)?;
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
         if let Strategy::CurrentToPBest { p, archive } = self.strategy {
             if !(p > 0.0 && p <= 1.0) {
@@ -984,6 +987,7 @@ impl DeBuilder {
                 if memory == 0 {
                     return invalid("memory", "must be at least 1".to_string());
                 }
+                check_size("memory", memory)?;
                 0.5
             }
         };

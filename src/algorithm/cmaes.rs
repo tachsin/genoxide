@@ -3,6 +3,7 @@
 use super::{Algorithm, Candidates};
 use crate::genome::{Real, Reals, Representation};
 use crate::math::{exp, log};
+use crate::operator::check_size;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
 use std::collections::VecDeque;
@@ -16,15 +17,16 @@ pub enum Restarts {
     /// it with a stop condition such as [`Stop::stagnation`](crate::Stop::stagnation).
     #[default]
     Never,
-    /// IPOP-CMA-ES (Auger and Hansen, 2005): each restart doubles the population size and starts
-    /// from a random point with the initial step size. Larger populations smooth out local
-    /// optima, which suits multimodal functions with a global structure, like Rastrigin.
+    /// IPOP-CMA-ES (Auger and Hansen, 2005): each restart doubles the population size, up to
+    /// 1024 times the initial one, and starts from a random point with the initial step size.
+    /// Larger populations smooth out local optima, which suits multimodal functions with a global
+    /// structure, like Rastrigin.
     Ipop,
     /// BIPOP-CMA-ES (Hansen, 2009): restarts alternate between a large population regime, which
-    /// doubles the population like IPOP, and a small one with a random smaller population and a
-    /// random step size down to 1/100 of the initial one. The regime that has used fewer
-    /// evaluations goes next; the first run counts as a large one. Good on a wider range of
-    /// multimodal functions than IPOP.
+    /// doubles the population like IPOP (up to 1024 times the initial one), and a small one with
+    /// a random smaller population and a random step size down to 1/100 of the initial one. The
+    /// regime that has used fewer evaluations goes next; the first run counts as a large one. Good
+    /// on a wider range of multimodal functions than IPOP.
     Bipop,
 }
 
@@ -249,7 +251,9 @@ impl Cmaes {
         }
     }
 
-    /// The default population size for `n` genes, `4 + ⌊3 ln n⌋`: 10 for 10 genes, 17 for 100.
+    /// The default population size for `n` genes that can take more than one value (a gene whose
+    /// bounds are equal is fixed, and not searched), `4 + ⌊3 ln n⌋`: 10 for 10 genes, 17 for
+    /// 100.
     pub fn default_population_size(n: usize) -> usize {
         4 + (3.0 * log(n.max(1) as f64)) as usize
     }
@@ -939,9 +943,10 @@ pub struct CmaesBuilder {
 }
 
 impl CmaesBuilder {
-    /// The number of samples per generation `λ`, at least 2. Larger populations are slower but
-    /// more global. `4 + ⌊3 ln n⌋` for `n` genes by default; with restarts, the size of the first
-    /// run.
+    /// The number of samples per generation `λ`, at least 2 and at most 2^24. Larger populations
+    /// are slower but more global. `4 + ⌊3 ln n⌋` by default, for the `n` genes that can take
+    /// more than one value (see [`Cmaes::default_population_size`]); with restarts, the size of
+    /// the first run.
     pub fn population_size(mut self, size: usize) -> Self {
         self.population_size = Some(size);
         self
@@ -1000,8 +1005,8 @@ impl CmaesBuilder {
     ///
     /// # Errors
     ///
-    /// - [`Error::InvalidSetting`] for a population size below 2, an initial step size out of
-    ///   range, or a representation without a gene that has more than one value.
+    /// - [`Error::InvalidSetting`] for a population size below 2 or above 2^24, an initial step
+    ///   size out of range, or a representation without a gene that has more than one value.
     /// - [`Error::InvalidGenome`] for an initial mean that doesn't fit the representation.
     pub fn build(self) -> Result<Cmaes> {
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
@@ -1024,6 +1029,7 @@ impl CmaesBuilder {
                 format!("CMA-ES needs at least 2 samples, got {lambda}"),
             );
         }
+        check_size("population_size", lambda)?;
         if !(self.initial_step > 0.0 && self.initial_step <= 1.0) {
             return invalid(
                 "initial_step",

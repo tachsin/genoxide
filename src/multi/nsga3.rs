@@ -5,7 +5,7 @@ use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
 use crate::genome::Representation;
-use crate::operator::{Crossover, Mutate, check_probability};
+use crate::operator::{Crossover, Mutate, check_rates, check_size};
 use crate::rng::Chance;
 use crate::{Error, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
@@ -691,8 +691,9 @@ impl<R: Representation, const M: usize, C, X> Nsga3Builder<R, M, C, X> {
         }
     }
 
-    /// The population size, at least 2; also the number of children per generation. The number
-    /// of reference directions by default; smaller populations can't fill every direction.
+    /// The population size, at least 2 and at most 2^24; also the number of children per
+    /// generation. The number of reference directions by default; smaller populations can't fill
+    /// every direction.
     pub fn population_size(mut self, size: usize) -> Self {
         self.population_size = Some(size);
         self
@@ -737,8 +738,10 @@ impl<R: Representation, const M: usize, C, X> Nsga3Builder<R, M, C, X> {
     /// # Errors
     ///
     /// - [`Error::InvalidSetting`] for no objectives, no reference directions or one with a
-    ///   negative, non-finite or all-zero component, a population size below 2, rates out of
-    ///   range or both 0, or more initial genomes than the population size.
+    ///   negative, non-finite or all-zero component, a population size below 2 or above 2^24,
+    ///   rates out of range, a mutation rate of 0 with a crossover rate of 0 or
+    ///   [`NoCrossover`](crate::operator::NoCrossover), or more initial genomes than the
+    ///   population size.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<Nsga3<R, C, X, M>>
     where
@@ -772,14 +775,12 @@ impl<R: Representation, const M: usize, C, X> Nsga3Builder<R, M, C, X> {
                 format!("NSGA-III needs at least 2 individuals, got {size}"),
             );
         }
-        let crossover_rate = check_probability("crossover_rate", self.crossover_rate)?;
-        let mutation_rate = check_probability("mutation_rate", self.mutation_rate)?;
-        if crossover_rate == 0.0 && mutation_rate == 0.0 {
-            return invalid(
-                "mutation_rate",
-                "crossover_rate and mutation_rate are both 0, so every child would be a copy of a parent".to_string(),
-            );
-        }
+        check_size("population_size", size)?;
+        let (crossover_rate, mutation_rate) = check_rates(
+            self.crossover_rate,
+            self.mutation_rate,
+            self.crossover.recombines(),
+        )?;
         if self.initial_genomes.len() > size {
             return invalid(
                 "initial_genomes",

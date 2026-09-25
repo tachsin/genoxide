@@ -371,7 +371,7 @@ impl<A: Migrate> IslandsBuilder<A> {
     /// # Errors
     ///
     /// [`Error::InvalidSetting`] for fewer than 2 islands, islands that already ran or that
-    /// don't share an objective, an interval of 0, or no migrants.
+    /// don't share an objective and a representation, an interval of 0, or no migrants.
     pub fn build(self) -> Result<Islands<A>> {
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
         if self.islands.len() < 2 {

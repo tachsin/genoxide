@@ -44,9 +44,10 @@ impl<G: Genome> HallOfFame<G> {
                 reason: "must be at least 1".to_string(),
             });
         }
+        // no memory reserved ahead: the capacity can be huge
         Ok(Self {
             capacity,
-            individuals: Vec::with_capacity(capacity),
+            individuals: Vec::new(),
         })
     }
 

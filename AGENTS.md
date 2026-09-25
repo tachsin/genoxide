@@ -109,7 +109,7 @@ Selection works with every representation. `Tournament::new(2..=5)?` is the usua
 | `.abort_flag(Arc<AtomicBool>)` | none | stops after the current generation once set |
 | `.nan_policy(NanPolicy::Error)` | `NanPolicy::Invalid` | what a NaN fitness means |
 
-Stop conditions: `Stop::target(score)`, `Stop::generations(n)`, `Stop::evaluations(n)`, `Stop::time(duration)`, `Stop::stagnation(n)` and `Stop::custom(|progress| ...)`. Combine them with `.or(...)` and `.and(...)`. They are checked after every generation, including the initial population. `Stop::target` means "at least as good as", so at most the score when minimizing.
+Stop conditions: `Stop::target(score)`, `Stop::generations(n)`, `Stop::evaluations(n)`, `Stop::time(duration)`, `Stop::stagnation(n)` and `Stop::custom(|progress| ...)`. Combine them with `.or(...)` and `.and(...)`. They are checked after every generation, including the initial population. `Stop::target` means "at least as good as", so at most the score when minimizing. A run whose only conditions are a target or an evaluation limit stops with `StopReason::Stalled` after `genoxide::engine::STALL_GENERATIONS` (10 000) generations in a row without a genome to evaluate, e.g. a GA whose children are all copies of their parents.
 
 ## Fitness functions
 
@@ -370,8 +370,8 @@ fn main() -> genoxide::Result<()> {
 
 | `de::Strategy` | When |
 |---|---|
-| `Rand1` (default) | Robust; explores well |
-| `CurrentToPBest { p: 0.1, archive: 1.0 }` | Faster, still diverse thanks to the archive |
+| `CurrentToPBest { p: 0.1, archive: 1.0 }` (default) | Fast, still diverse thanks to the archive |
+| `Rand1` | Robust; explores well |
 | `Best1` | Fastest on easy problems; use it with `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, or the population can collapse before the optimum |
 
 ### CMA-ES
@@ -709,6 +709,7 @@ every = 50
 | A CMA-ES stops improving (without restarts) | The run converged: `cmaes.converged()` says why | `.restarts(cmaes::Restarts::Ipop)` or `Bipop`; a larger `.initial_step(...)` or `.population_size(...)` |
 | A particle swarm gathers around a local optimum early | The global topology spreads the best position to every particle at once | `.topology(pso::Topology::Ring { neighbors: 1 })`, more particles, or differential evolution |
 | Real-valued search stalls in a local minimum | Steps too small to leave its basin (e.g. `GaussianMutation` with a tiny sigma) | `PolynomialMutation` with eta 20, or a larger sigma; on Rastrigin, sigma 0.03 of the range works and 0.01 stalls |
+| `StopReason::Stalled` | For 10 000 generations, every child was a copy of a parent (e.g. a converged population with `mutation_rate(0.0)`), so nothing was evaluated and a target or evaluation limit could never be met | A mutation rate above 0, or add `Stop::generations(n)` or `Stop::stagnation(n)` |
 | The best fitness stops improving early | Too little diversity | A larger population, a smaller tournament, a higher mutation rate, or `Stop::stagnation` with restarts |
 | Slow runs with a cheap fitness function | Debug build, or parallel overhead | Build with `--release`; use `.parallel(true)` only for expensive fitness functions |
 
@@ -717,4 +718,4 @@ every = 50
 - **Reproducible:** the same seed and settings give the same results on every platform, with or without `.parallel(true)` and on any number of threads.
 - **Deterministic ties:** the earlier individual wins.
 - **The best is never lost:** `outcome.best()` is the best individual ever evaluated, even when it didn't survive.
-- **No panics** in library code for invalid input: invalid settings are errors from `build()` and `run()`.
+- **No panics on invalid settings:** they are errors from constructors, `build()` and `run()`, including sizes above 2^24 (populations, offspring, tournaments, neighbors). The only panics are documented under `# Panics`: an index out of bounds (`Bits::set`, `Order::swap`, like slices), the constructors of the multi-objective test problems (`multi::problems`) with too few variables, and a `Batch` that returns no score for a single genome.

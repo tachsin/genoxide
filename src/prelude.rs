@@ -20,7 +20,7 @@ pub use crate::genome::{
     Reals, Representation,
 };
 pub use crate::multi::{
-    self, Moead, MultiEngine, MultiObjectiveAlgorithm, Nsga2, Nsga3, Scores, Spea2,
+    self, Moead, MultiEngine, MultiObjectiveAlgorithm, Nsga2, Nsga3, Scores, SmsEmoa, Spea2,
 };
 pub use crate::observer::{HallOfFame, Observer, Report, Statistics};
 pub use crate::operator::{
