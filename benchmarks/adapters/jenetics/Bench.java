@@ -1,14 +1,27 @@
 /*
- * Benchmark adapter for Jenetics (io.jenetics:jenetics and jenetics.ext).
+ * Benchmark adapter for Jenetics (io.jenetics:jenetics and jenetics.ext), following
+ * docs/benchmarks/rules.md. Its page, docs/benchmarks/libraries/jenetics.md, gives every method,
+ * where Jenetics recommends it, what was left out and why, and the separate test runs.
  *
  * Usage: java -cp ... Bench <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
+ *        java -cp ... Bench values <problem> <size>     (one JSON solution per line on stdin)
  *        java -cp ... Bench --version
  * Prints one JSON line per solver per seed, see ../../README.md for the fields.
  *
- * Every run is single-threaded: the engine gets `.executor(Runnable::run)`, which also evaluates
- * the fitness on the calling thread (Jenetics uses the ForkJoinPool common pool by default).
- * Before the timed runs of a problem, every solver runs once untimed with a small budget, so the
- * JIT has compiled the fitness function and the engine.
+ * - Evaluations (rule 3) are counted by the adapter, in the fitness function the engine calls.
+ *   Jenetics evaluates only individuals it hasn't evaluated yet: survivors and offspring left
+ *   unchanged by the alterers keep their fitness.
+ * - One thread (rule 4.3): the engine gets `.executor(Runnable::run)`, which also evaluates the
+ *   fitness on the calling thread (Jenetics uses the ForkJoinPool common pool by default); the
+ *   manual's "Reproducibility" section (2.7) configures it the same way. run.sh runs the JVM with
+ *   the serial garbage collector and with -Xbatch, so the JIT compiles on the calling thread's time.
+ * - Seeds (rule 5.2): the engine's random generator is RandomRegistry's L64X256MixRandom (its
+ *   default algorithm), created from the seed (manual 1.4.2 and 2.7).
+ * - Time (rule 4.2): before the timed runs, every solver runs once untimed, with 1,000 evaluations
+ *   and the seed 1,000,003, so the JIT has compiled the fitness function and the engine.
+ * - Keeping going (rule 2.2): an evolution stream has no end of its own (its examples end it with
+ *   Limits.bySteadyFitness and a generation limit, which the budget replaces); every run ends at the
+ *   target, the budget or the time cap, checked after each generation.
  */
 
 import io.jenetics.Alterer;
@@ -24,27 +37,31 @@ import io.jenetics.Mutator;
 import io.jenetics.Optimize;
 import io.jenetics.PartiallyMatchedCrossover;
 import io.jenetics.Phenotype;
+import io.jenetics.Selector;
 import io.jenetics.SwapMutator;
 import io.jenetics.TournamentSelector;
 import io.jenetics.engine.Codecs;
 import io.jenetics.engine.Engine;
 import io.jenetics.engine.EvolutionResult;
 import io.jenetics.ext.SimulatedBinaryCrossover;
-import io.jenetics.ext.moea.MOEA;
 import io.jenetics.ext.moea.NSGA2Selector;
 import io.jenetics.ext.moea.UFTournamentSelector;
 import io.jenetics.ext.moea.Vec;
 import io.jenetics.ext.moea.VecFactory;
 import io.jenetics.util.DoubleRange;
-import io.jenetics.util.ISeq;
 import io.jenetics.util.MSeq;
 import io.jenetics.util.RandomRegistry;
 import io.jenetics.util.Seq;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
 import java.util.random.RandomGenerator;
@@ -53,60 +70,29 @@ import java.util.random.RandomGeneratorFactory;
 public final class Bench {
 
     static final String LIBRARY = "jenetics";
+    // the untimed JIT warm-up run of every solver (rule 4.2)
+    static final long WARM_UP_SEED = 1_000_003L;
+    static final long WARM_UP_EVALUATIONS = 1_000L;
 
     // ---------------------------------------------------------------------------------------------
-    // Fitness functions, identical to the ones in the other adapters
+    // Fitness functions, identical to problems.py
     // ---------------------------------------------------------------------------------------------
-
-    /** Counts the evaluations and keeps the best value found, stops at the budget. */
-    static final class Budget {
-        final long maxEvaluations;
-        final long deadline;
-        final boolean minimize;
-        final double target;
-        long evaluations;
-        double best;
-
-        Budget(long maxEvaluations, double maxSeconds, boolean minimize, double target) {
-            this.maxEvaluations = maxEvaluations;
-            this.deadline = System.nanoTime() + (long) (maxSeconds * 1e9);
-            this.minimize = minimize;
-            this.target = target;
-            this.best = minimize ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
-        }
-
-        double record(double value) {
-            evaluations++;
-            if (minimize ? value < best : value > best) {
-                best = value;
-            }
-            return value;
-        }
-
-        boolean reached() {
-            return minimize ? best <= target : best >= target;
-        }
-
-        boolean done() {
-            return reached() || evaluations >= maxEvaluations || System.nanoTime() >= deadline;
-        }
-    }
 
     static double onemax(BitChromosome chromosome) {
         return chromosome.bitCount();
     }
 
-    /** Number of diagonal conflicts, O(n) (same as NQueens.fitness in adapters/pymoo/bench.py). */
-    static double nqueens(int[] individual) {
-        int size = individual.length;
-        int[] left = new int[2 * size - 1];
-        int[] right = new int[2 * size - 1];
-        for (int i = 0; i < size; i++) {
-            left[i + individual[i]]++;
-            right[size - 1 - i + individual[i]]++;
+    /** Diagonal conflicts of queens at (i, order[i]): for each diagonal, its queens minus one. */
+    static double nqueens(int[] order) {
+        int n = order.length;
+        int[] left = new int[2 * n - 1];
+        int[] right = new int[2 * n - 1];
+        for (int i = 0; i < n; i++) {
+            left[i + order[i]]++;
+            right[n - 1 - i + order[i]]++;
         }
         int conflicts = 0;
-        for (int i = 0; i < 2 * size - 1; i++) {
+        for (int i = 0; i < 2 * n - 1; i++) {
             if (left[i] > 1) conflicts += left[i] - 1;
             if (right[i] > 1) conflicts += right[i] - 1;
         }
@@ -176,7 +162,7 @@ public final class Bench {
         return new double[] {x[0], g * (1.0 - Math.sqrt(r) - r * Math.sin(10.0 * Math.PI * x[0]))};
     }
 
-    /** DTLZ1 with 3 objectives and 7 variables (k = 5). */
+    /** DTLZ1 with 3 objectives (7 variables, k = 5). */
     static double[] dtlz1(double[] x) {
         double sum = 0.0;
         for (int i = 2; i < x.length; i++) {
@@ -191,7 +177,7 @@ public final class Bench {
         };
     }
 
-    /** DTLZ2 with 3 objectives and 12 variables (k = 10). */
+    /** DTLZ2 with 3 objectives (12 variables, k = 10). */
     static double[] dtlz2(double[] x) {
         double g = 0.0;
         for (int i = 2; i < x.length; i++) {
@@ -207,7 +193,20 @@ public final class Bench {
         };
     }
 
-    // (function, variables, objectives, population size, Das-Dennis divisions)
+    /** A single-objective real-valued problem: its function and bounds. */
+    record RealProblem(ToDoubleFunction<double[]> function, double lower, double upper) {}
+
+    static RealProblem realProblem(String name, int size) {
+        double[] s = shift(size);
+        return switch (name) {
+            case "rastrigin" -> new RealProblem(x -> rastrigin(x, s), -5.12, 5.12);
+            case "rosenbrock" -> new RealProblem(Bench::rosenbrock, -5.0, 10.0);
+            case "ackley" -> new RealProblem(x -> ackley(x, s), -32.768, 32.768);
+            default -> null;
+        };
+    }
+
+    /** A multi-objective problem: its function, variables, objectives and population size. */
     record FrontProblem(Function<double[], double[]> function, int variables, int objectives, int population) {}
 
     static FrontProblem frontProblem(String name, int size) {
@@ -223,7 +222,49 @@ public final class Bench {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Operators Jenetics doesn't have
+    // The budget: counts the evaluations, keeps the best value and its solution
+    // ---------------------------------------------------------------------------------------------
+
+    static final class Budget {
+        final long maxEvaluations;
+        final long deadline;
+        final boolean minimize;
+        final double target;
+        long evaluations;
+        double best;
+        // the best solution: boolean[], int[] or double[]
+        Object solution;
+
+        Budget(long maxEvaluations, double maxSeconds, boolean minimize, double target) {
+            this.maxEvaluations = maxEvaluations;
+            this.deadline = System.nanoTime() + (long) (maxSeconds * 1e9);
+            this.minimize = minimize;
+            this.target = target;
+            this.best = minimize ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
+        }
+
+        /** Counts one evaluation; returns whether its value is the best so far. */
+        boolean record(double value) {
+            evaluations++;
+            if (minimize ? value < best : value > best) {
+                best = value;
+                return true;
+            }
+            return false;
+        }
+
+        boolean reached() {
+            return minimize ? best <= target : best >= target;
+        }
+
+        /** The end of a run: the target, the budget or the time cap (rule 2.1). */
+        boolean done() {
+            return reached() || evaluations >= maxEvaluations || System.nanoTime() >= deadline;
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Operators Jenetics doesn't have (for the matched scenarios only)
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -320,18 +361,18 @@ public final class Bench {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Runs
+    // Single-objective runs
     // ---------------------------------------------------------------------------------------------
 
     record Args(String problem, int size, String mode, long seedFrom, long seedTo, long maxEvaluations,
                 double maxSeconds) {}
 
     static void seed(long seed) {
-        // the engine's random generator, per thread (the runs are on one thread)
-        RandomRegistry.random(() -> RandomGeneratorFactory.of("L64X256MixRandom").create(seed));
+        // the engine's random generator (manual 1.4.2): RandomRegistry's default algorithm, seeded
+        RandomRegistry.random(RandomGeneratorFactory.of("L64X256MixRandom").create(seed));
     }
 
-    /** Runs the evolution stream until the budget is used up; returns the generations. */
+    /** Runs an evolution stream until the budget ends the run; returns the generations. */
     static <G extends Gene<?, G>, C extends Comparable<? super C>> long evolve(
             Engine<G, C> engine, Budget budget, List<EvolutionResult<G, C>> last) {
         long[] generations = {0};
@@ -354,9 +395,16 @@ public final class Bench {
 
     record Solver(String name, SingleSolver solver) {}
 
-    static String number(double value) {
-        if (value == Math.rint(value) && Math.abs(value) < 1e15) return Long.toString((long) value);
-        return Double.toString(value);
+    /** The OneMax fitness through the budget, keeping the best bits. */
+    static double countOnes(Genotype<BitGene> genotype, Budget budget) {
+        BitChromosome chromosome = genotype.chromosome().as(BitChromosome.class);
+        double value = onemax(chromosome);
+        if (budget.record(value)) {
+            boolean[] bits = new boolean[chromosome.length()];
+            for (int i = 0; i < bits.length; i++) bits[i] = chromosome.get(i).bit();
+            budget.solution = bits;
+        }
+        return value;
     }
 
     static List<Solver> singleSolvers(Args args, boolean[] minimize, double[] target) {
@@ -374,8 +422,7 @@ public final class Bench {
                     // probability 0.5); p = 0.25 gives DEAP's expected number of crossovers
                     // (N / 2 pairs * 0.5). The mutation is the custom MatchedBitFlip above.
                     solvers.add(new Solver("ga", budget -> evolve(
-                        Engine.builder(
-                                (Genotype<BitGene> gt) -> budget.record(onemax(gt.chromosome().as(BitChromosome.class))),
+                        Engine.builder((Genotype<BitGene> gt) -> countOnes(gt, budget),
                                 Genotype.of(BitChromosome.of(size, 0.5)))
                             .populationSize(300)
                             .offspringFraction(1.0)
@@ -386,12 +433,14 @@ public final class Bench {
                             .build(),
                         budget, null)));
                 } else {
-                    // the README's "Hello World" and jenetics.example/OnesCounting.java: the engine
-                    // defaults (population 50, tournament of 3, SinglePointCrossover(0.2),
-                    // Mutator(0.15), 60% offspring, maximal age 70), with random bits (p = 0.5)
+                    // The README's "Hello World (Ones counting)" (BitChromosome.of(n, 0.5)) and
+                    // jenetics.example/OnesCounting.java: the engine defaults, population 50,
+                    // TournamentSelector(3) for offspring and survivors, SinglePointCrossover(0.2),
+                    // Mutator(0.15), 60% offspring, maximal age 70. (The manual's "Ones counting"
+                    // example, section 6.1, sets population 500, RouletteWheelSelector,
+                    // Mutator(0.55) and SinglePointCrossover(0.06); left out, see the page.)
                     solvers.add(new Solver("ga", budget -> evolve(
-                        Engine.builder(
-                                (Genotype<BitGene> gt) -> budget.record(onemax(gt.chromosome().as(BitChromosome.class))),
+                        Engine.builder((Genotype<BitGene> gt) -> countOnes(gt, budget),
                                 Genotype.of(BitChromosome.of(size, 0.5)))
                             .executor(Runnable::run)
                             .build(),
@@ -401,10 +450,18 @@ public final class Bench {
             case "nqueens" -> {
                 minimize[0] = true;
                 target[0] = 0;
-                // the permutation codec with the settings of jenetics.example/TravelingSalesman.java:
-                // engine defaults, SwapMutator(0.15) and PartiallyMatchedCrossover(0.15)
+                // jenetics.example/TravelingSalesman.java, Jenetics' permutation example:
+                // Codecs.ofPermutation, SwapMutator(0.15), PartiallyMatchedCrossover(0.15), the
+                // other settings the engine defaults (population 50, TournamentSelector(3), 60%
+                // offspring, maximal age 70). (The manual's version of it, section 6.5, sets
+                // population 500, maximal age 11, SwapMutator(0.2) and
+                // PartiallyMatchedCrossover(0.35); left out, see the page.)
                 solvers.add(new Solver("ga", budget -> evolve(
-                    Engine.builder((int[] p) -> budget.record(nqueens(p)), Codecs.ofPermutation(size))
+                    Engine.builder((int[] order) -> {
+                                double value = nqueens(order);
+                                if (budget.record(value)) budget.solution = order.clone();
+                                return value;
+                            }, Codecs.ofPermutation(size))
                         .optimize(Optimize.MINIMUM)
                         .alterers(new SwapMutator<>(0.15), new PartiallyMatchedCrossover<>(0.15))
                         .executor(Runnable::run)
@@ -414,20 +471,16 @@ public final class Bench {
             case "rastrigin", "rosenbrock", "ackley" -> {
                 minimize[0] = true;
                 target[0] = 0.01;
-                double[] s = shift(size);
-                double lower;
-                double upper;
-                ToDoubleFunction<double[]> function;
-                switch (args.problem()) {
-                    case "rastrigin" -> { lower = -5.12; upper = 5.12; function = x -> rastrigin(x, s); }
-                    case "rosenbrock" -> { lower = -5.0; upper = 10.0; function = Bench::rosenbrock; }
-                    default -> { lower = -32.768; upper = 32.768; function = x -> ackley(x, s); }
-                }
-                // jenetics.example/RealFunction.java (the real-valued example of the manual):
-                // population 500, Mutator(0.03), MeanAlterer(0.6), other settings the defaults
+                RealProblem problem = realProblem(args.problem(), size);
+                // The manual's "Rastrigin function" example (section 6.3), with the settings of its
+                // "Real function" example (6.2): Codecs.ofVector, population 500, Mutator(0.03),
+                // MeanAlterer(0.6), other settings the defaults
                 solvers.add(new Solver("ga", budget -> evolve(
-                    Engine.builder((double[] x) -> budget.record(function.applyAsDouble(x)),
-                            Codecs.ofVector(new DoubleRange(lower, upper), size))
+                    Engine.builder((double[] x) -> {
+                                double value = problem.function().applyAsDouble(x);
+                                if (budget.record(value)) budget.solution = x.clone();
+                                return value;
+                            }, Codecs.ofVector(new DoubleRange(problem.lower(), problem.upper()), size))
                         .populationSize(500)
                         .optimize(Optimize.MINIMUM)
                         .alterers(new Mutator<>(0.03), new MeanAlterer<>(0.6))
@@ -458,21 +511,21 @@ public final class Bench {
                 System.out.println("{\"library\":\"" + LIBRARY + "\",\"solver\":\"" + solver.name()
                     + "\",\"problem\":\"" + args.problem() + "\",\"size\":" + args.size()
                     + ",\"mode\":\"" + args.mode() + "\",\"seed\":" + seed
-                    + ",\"time_s\":" + String.format(java.util.Locale.ROOT, "%.6f", time)
+                    + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
                     + ",\"generations\":" + generations + ",\"evaluations\":" + budget.evaluations
                     + ",\"best\":" + number(budget.best) + ",\"target\":" + number(target[0])
-                    + ",\"success\":" + budget.reached() + "}");
+                    + ",\"success\":" + budget.reached() + ",\"solution\":" + json(budget.solution) + "}");
             }
         }
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Multi-objective
+    // Multi-objective runs
     // ---------------------------------------------------------------------------------------------
 
-    /** The non-dominated objective vectors (minimized), without duplicates. */
-    static List<double[]> nonDominated(List<double[]> points) {
-        List<double[]> front = new ArrayList<>();
+    /** The indexes of the non-dominated points (minimized), without duplicates. */
+    static List<Integer> nonDominated(List<double[]> points) {
+        List<Integer> front = new ArrayList<>();
         for (int i = 0; i < points.size(); i++) {
             double[] p = points.get(i);
             boolean keep = true;
@@ -487,7 +540,7 @@ public final class Bench {
                 }
                 if (notWorse && (better || j < i)) keep = false; // dominated, or a duplicate seen before
             }
-            if (keep) front.add(p);
+            if (keep) front.add(i);
         }
         return front;
     }
@@ -505,87 +558,167 @@ public final class Bench {
             for (String solver : new String[] {"nsga2", "moea"}) {
                 seed(seed);
                 Budget budget = new Budget(args.maxEvaluations(), args.maxSeconds(), true, Double.NEGATIVE_INFINITY);
+                // Every objective minimized through VecFactory.ofDoubleVec(MINIMUM, ...), the
+                // manual's way to set each objective's direction (3.1.7.4), with the engine's
+                // default direction. Not Vec.of with the engine minimizing, as the manual's DTLZ1
+                // example does: then the crowding distance is always 0 inside the fronts (a
+                // Jenetics bug, see the library's page), and both solvers lose their diversity.
                 Function<double[], Vec<double[]>> fitness = x -> {
                     budget.evaluations++;
                     return vectors.newVec(problem.function().apply(x));
                 };
                 List<EvolutionResult<DoubleGene, Vec<double[]>>> last = new ArrayList<>();
-                List<double[]> points = new ArrayList<>();
                 long start = System.nanoTime();
                 long generations;
+                Seq<Phenotype<DoubleGene, Vec<double[]>>> result;
                 if (solver.equals("nsga2")) {
-                    // NSGA-II with the matched settings, as close as the Jenetics engine allows
-                    // (jenetics.ext.moea): the engine keeps "survivors" and adds "offspring".
-                    // With a population of 2N, N survivors chosen by NSGA2Selector (rank and
-                    // crowding distance) and N offspring, the survivors are NSGA-II's selection of
-                    // N from parents + children. Differences: the initial population has 2N
-                    // members; parents come from all 2N (not the N survivors), by UFTournamentSelector
-                    // (the crowded binary tournament of Fortin & Parizeau 2013); Jenetics'
-                    // SimulatedBinaryCrossover (η 15) changes one of the two children only, so
+                    // NSGA-II with the matched settings, built from the Jenetics engine and the
+                    // jenetics.ext.moea selectors (manual 3.1.7.2: "the implementation doesn't
+                    // exactly follow an established algorithm, like NSGA2"). The engine keeps
+                    // "survivors" and adds "offspring" to them. With a population of 2N, N
+                    // survivors chosen by NSGA2Selector (rank, then crowding distance) and N
+                    // offspring, the population is NSGA-II's parents + children, and the survivors
+                    // are NSGA-II's selection of N from them. The parents of the offspring are
+                    // drawn from those same N by UFTournamentSelector, the crowded binary
+                    // tournament (with unique fitnesses) of Fortin & Parizeau 2013.
+                    // Differences: the initial population has 2N random members; Jenetics'
+                    // SimulatedBinaryCrossover (η 15) changes one of the two parents only, so
                     // probability 0.45 per individual gives NSGA-II's expected number of
                     // crossovers (N / 2 pairs * 0.9); polynomial mutation (η 20, 1 / n) is the
                     // custom PolynomialMutator above.
+                    NSGA2Selector<DoubleGene, Vec<double[]>> survival = NSGA2Selector.ofVec();
+                    UFTournamentSelector<DoubleGene, Vec<double[]>> tournament = UFTournamentSelector.ofVec();
+                    Selector<DoubleGene, Vec<double[]>> parents =
+                        (candidates, count, optimize) ->
+                            tournament.select(survival.select(candidates, population, optimize), count, optimize);
                     var engine = Engine.builder(fitness, Codecs.ofVector(new DoubleRange(0.0, 1.0), n))
                         .populationSize(2 * population)
                         .offspringSize(population)
-                        .offspringSelector(UFTournamentSelector.ofVec())
-                        .survivorsSelector(NSGA2Selector.ofVec())
+                        .offspringSelector(parents)
+                        .survivorsSelector(survival)
                         .alterers(new SimulatedBinaryCrossover<>(0.45, 15.0), new PolynomialMutator<>(1.0 / n, 20.0))
                         .maximalPhenotypeAge(Long.MAX_VALUE / 2)
                         .executor(Runnable::run)
                         .build();
                     generations = evolve(engine, budget, last);
                     // the last population holds N survivors and N children: NSGA-II's final
-                    // selection of N from them, as the result
-                    var result = last.get(0);
-                    var selected = NSGA2Selector.<DoubleGene, double[], Vec<double[]>>ofVec()
-                        .select(result.population(), population, result.optimize());
-                    for (var phenotype : selected) points.add(phenotype.fitness().data());
+                    // selection of N from them is the final population
+                    var end = last.get(0);
+                    result = survival.select(end.population(), population, end.optimize());
                 } else {
-                    // the documented MOEA setup (javadoc of io.jenetics.ext.moea.MOEA and the
-                    // manual): Mutator(0.1), MeanAlterer, TournamentSelector(2) for the offspring,
-                    // UFTournamentSelector for the survivors, the Pareto set collected with
-                    // MOEA.toParetoSet(); population N instead of the default 50
+                    // The manual's "DTLZ1" example (section 6.9), Jenetics' own multi-objective
+                    // setup: SimulatedBinaryCrossover(1) (contiguity 2.5, its default),
+                    // Mutator(1 / n), TournamentSelector(5) for the offspring, NSGA2Selector for
+                    // the survivors, the other settings the defaults (60% offspring, maximal age
+                    // 70). The population is the scenario's (the example's is 100), and the
+                    // objectives are minimized as above (the example: Vec.of and .minimizing()).
+                    // Its final population is the result (the example collects MOEA.toParetoSet
+                    // over all generations, an archive that rule 7.2 excludes).
                     var engine = Engine.builder(fitness, Codecs.ofVector(new DoubleRange(0.0, 1.0), n))
                         .populationSize(population)
-                        .alterers(new Mutator<>(0.1), new MeanAlterer<>())
-                        .offspringSelector(new TournamentSelector<>(2))
-                        .survivorsSelector(UFTournamentSelector.ofVec())
+                        .alterers(new SimulatedBinaryCrossover<>(1), new Mutator<>(1.0 / n))
+                        .offspringSelector(new TournamentSelector<>(5))
+                        .survivorsSelector(NSGA2Selector.ofVec())
                         .executor(Runnable::run)
                         .build();
-                    long[] count = {0};
-                    ISeq<Phenotype<DoubleGene, Vec<double[]>>> set = engine.stream()
-                        .limit(result -> {
-                            count[0] = result.generation();
-                            return !budget.done();
-                        })
-                        .collect(MOEA.toParetoSet());
-                    generations = count[0];
-                    for (var phenotype : set) points.add(phenotype.fitness().data());
+                    generations = evolve(engine, budget, last);
+                    result = last.get(0).population();
                 }
-                List<double[]> front = nonDominated(points);
+                List<double[]> points = new ArrayList<>();
+                List<double[]> solutions = new ArrayList<>();
+                for (var phenotype : result) {
+                    points.add(phenotype.fitness().data());
+                    var chromosome = phenotype.genotype().chromosome();
+                    double[] x = new double[chromosome.length()];
+                    for (int i = 0; i < x.length; i++) x[i] = chromosome.get(i).doubleValue();
+                    solutions.add(x);
+                }
+                List<Integer> front = nonDominated(points);
                 double time = (System.nanoTime() - start) / 1e9;
                 if (!print) continue;
-                StringBuilder json = new StringBuilder();
-                json.append("{\"library\":\"").append(LIBRARY).append("\",\"solver\":\"").append(solver)
-                    .append("\",\"problem\":\"").append(args.problem()).append("\",\"size\":").append(args.size())
-                    .append(",\"mode\":\"").append(args.mode()).append("\",\"seed\":").append(seed)
-                    .append(",\"time_s\":").append(String.format(java.util.Locale.ROOT, "%.6f", time))
-                    .append(",\"generations\":").append(generations)
-                    .append(",\"evaluations\":").append(budget.evaluations).append(",\"front\":[");
+                StringBuilder frontJson = new StringBuilder("[");
+                StringBuilder solutionsJson = new StringBuilder("[");
                 for (int i = 0; i < front.size(); i++) {
-                    if (i > 0) json.append(',');
-                    json.append('[');
-                    double[] point = front.get(i);
-                    for (int k = 0; k < point.length; k++) {
-                        if (k > 0) json.append(',');
-                        json.append(point[k]);
+                    if (i > 0) {
+                        frontJson.append(',');
+                        solutionsJson.append(',');
                     }
-                    json.append(']');
+                    frontJson.append(json(points.get(front.get(i))));
+                    solutionsJson.append(json(solutions.get(front.get(i))));
                 }
-                System.out.println(json.append("]}"));
+                System.out.println("{\"library\":\"" + LIBRARY + "\",\"solver\":\"" + solver
+                    + "\",\"problem\":\"" + args.problem() + "\",\"size\":" + args.size()
+                    + ",\"mode\":\"" + args.mode() + "\",\"seed\":" + seed
+                    + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
+                    + ",\"generations\":" + generations + ",\"evaluations\":" + budget.evaluations
+                    + ",\"front\":" + frontJson.append(']') + ",\"solutions\":" + solutionsJson.append(']') + "}");
             }
         }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // `values`: the adapter's fitness functions at given solutions (rule 1.2)
+    // ---------------------------------------------------------------------------------------------
+
+    static double[] parse(String line) {
+        String body = line.trim();
+        body = body.substring(1, body.length() - 1).trim();
+        if (body.isEmpty()) return new double[0];
+        String[] parts = body.split(",");
+        double[] x = new double[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i].trim();
+            x[i] = part.equals("true") ? 1 : part.equals("false") ? 0 : Double.parseDouble(part);
+        }
+        return x;
+    }
+
+    static void values(String problem, int size) throws IOException {
+        BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        FrontProblem front = frontProblem(problem, size);
+        RealProblem real = realProblem(problem, size);
+        StringBuilder out = new StringBuilder();
+        String line;
+        while ((line = in.readLine()) != null) {
+            if (line.isBlank()) continue;
+            double[] x = parse(line);
+            if (front != null) {
+                out.append(json(front.function().apply(x)));
+            } else if (real != null) {
+                out.append(number(real.function().applyAsDouble(x)));
+            } else if (problem.equals("onemax")) {
+                BitSet bits = new BitSet(x.length);
+                for (int i = 0; i < x.length; i++) bits.set(i, x[i] != 0);
+                out.append(number(onemax(BitChromosome.of(bits, x.length))));
+            } else if (problem.equals("nqueens")) {
+                int[] order = new int[x.length];
+                for (int i = 0; i < x.length; i++) order[i] = (int) x[i];
+                out.append(number(nqueens(order)));
+            } else {
+                throw new IllegalArgumentException("unknown problem " + problem);
+            }
+            out.append('\n');
+        }
+        System.out.print(out);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+
+    static String number(double value) {
+        if (value == Math.rint(value) && Math.abs(value) < 1e15) return Long.toString((long) value);
+        return Double.toString(value);
+    }
+
+    static String json(Object solution) {
+        StringBuilder text = new StringBuilder("[");
+        if (solution instanceof boolean[] bits) {
+            for (int i = 0; i < bits.length; i++) text.append(i > 0 ? "," : "").append(bits[i] ? 1 : 0);
+        } else if (solution instanceof int[] order) {
+            for (int i = 0; i < order.length; i++) text.append(i > 0 ? "," : "").append(order[i]);
+        } else if (solution instanceof double[] x) {
+            for (int i = 0; i < x.length; i++) text.append(i > 0 ? "," : "").append(x[i]);
+        }
+        return text.append(']').toString();
     }
 
     static void run(Args args, boolean print) {
@@ -601,9 +734,13 @@ public final class Bench {
         return version != null ? version : "unknown";
     }
 
-    public static void main(String[] argv) {
+    public static void main(String[] argv) throws IOException {
         if (argv.length == 1 && argv[0].equals("--version")) {
             System.out.println(version());
+            return;
+        }
+        if (argv.length == 3 && argv[0].equals("values")) {
+            values(argv[1], Integer.parseInt(argv[2]));
             return;
         }
         if (argv.length != 7) {
@@ -612,9 +749,9 @@ public final class Bench {
         }
         Args args = new Args(argv[0], Integer.parseInt(argv[1]), argv[2], Long.parseLong(argv[3]),
             Long.parseLong(argv[4]), Long.parseLong(argv[5]), Double.parseDouble(argv[6]));
-        // JIT warm-up: every solver once on the same problem, untimed and unprinted
-        run(new Args(args.problem(), args.size(), args.mode(), 1_000_003L, 1_000_003L,
-            Math.min(args.maxEvaluations(), 10_000L), Math.min(args.maxSeconds(), 2.0)), false);
+        // JIT warm-up (rule 4.2): every solver once on the same problem, untimed and unprinted
+        run(new Args(args.problem(), args.size(), args.mode(), WARM_UP_SEED, WARM_UP_SEED,
+            WARM_UP_EVALUATIONS, args.maxSeconds()), false);
         run(args, true);
     }
 }
