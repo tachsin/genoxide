@@ -300,7 +300,7 @@ def run_outcome(run):
     """How a run ended, for the log."""
     if "success" not in run:
         return "front"
-    return "target reached" if run["success"] else "target missed"
+    return "target reached" if run["success"] else "not reached"
 
 
 def run_adapter(adapter, problem, size, mode, seeds, max_evaluations, max_seconds):
@@ -410,6 +410,11 @@ def format_count(value):
     return "-" if value is None else f"{round(value):,}"
 
 
+def gap_to_optimum(run):
+    """The distance of a run's best value from the optimum: 0 when it's optimal."""
+    return run["size"] - run["best"] if run["problem"] == "onemax" else run["best"]
+
+
 def summarize(runs):
     groups = {}
     for run in runs:
@@ -432,6 +437,9 @@ def summarize(runs):
     for (scenario, library, solver), group in groups.items():
         successes = [run for run in group if run["success"]]
         rate = evaluations_per_second(group)
+        # how far each run's best is from the optimum (rule 8.1): every problem's optimum is 0,
+        # except OneMax's, all ones
+        gaps = sorted(gap_to_optimum(run) for run in group)
         rows.append({
             "scenario": scenario,
             "library": library,
@@ -442,6 +450,9 @@ def summarize(runs):
             "median_evaluations": median([run["evaluations"] for run in group]),
             "evaluations_to_target": median([run["evaluations"] for run in successes]),
             "median_best": median([run["best"] for run in group]),
+            "median_gap": median(gaps),
+            "best_gap": gaps[0],
+            "worst_gap": gaps[-1],
             "evaluations_per_second": rate,
             "throughput_vs_deap": rate / reference[scenario] if scenario in reference and library != "deap" else None,
         })
@@ -511,11 +522,13 @@ def coverage_table(runs, libraries):
 
 
 def markdown_table(rows):
-    """The single-objective results. The time and evaluations to target are medians of the
-    successful runs, as in the charts; the median evaluations are of all runs."""
+    """The single-objective results. The time and evaluations to target are medians of the runs
+    that reached it, as in the charts; the median evaluations and the distance to the optimum at the
+    end are of all runs (rule 8.1)."""
     lines = [
-        "| Scenario | Library / solver | Success | Median time to target | Median evaluations to target "
-        "| Median evaluations | Median best | Evaluations/s | Throughput vs DEAP GA |",
+        "| Scenario | Library / solver | Reached the target | Median time to target | Median evaluations to target "
+        "| Median evaluations | Distance to the optimum at the end: median (best to worst) | Evaluations/s "
+        "| Throughput vs DEAP GA |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
     for row in rows:
@@ -523,15 +536,20 @@ def markdown_table(rows):
         ratio = "-" if ratio is None else (f"{ratio:.1f}×" if ratio < 10 else f"{ratio:.0f}×")
         lines.append(
             f"| {row['scenario']} | {row['library']} / {row['solver']} "
-            f"| {row['success_rate'] * 100:.0f}% ({row['runs']}) "
+            f"| {round(row['success_rate'] * row['runs'])} of {row['runs']} "
             f"| {format_seconds(row['time_to_target'])} "
             f"| {format_count(row.get('evaluations_to_target'))} "
             f"| {format_count(row['median_evaluations'])} "
-            f"| {format_number(row['median_best'])} "
+            f"| {format_gap(row, 'median_gap')} ({format_gap(row, 'best_gap')} to {format_gap(row, 'worst_gap')}) "
             f"| {format_count(row['evaluations_per_second'])} "
             f"| {ratio} |"
         )
     return "\n".join(lines)
+
+
+def format_gap(row, key):
+    # summaries from before rule 8.1 have no distances
+    return format_number(row[key]) if key in row else "-"
 
 
 def instructions_table(rows):
@@ -792,8 +810,8 @@ def draw_charts(results, out_dir, formats=("svg",)):
         if not scenarios:
             break
         figure, axes = chart(
-            title, context + " · × never reached the target · k/n: reached in k of n runs · a missing library can't "
-            "run the scenario: see notes.md",
+            title, context + " · × didn't reach the target within the budget: see the distance chart · k/n: reached "
+            "in k of n runs · a missing library can't run the scenario: see notes.md",
             [(scenario, len([row for row in rows if row["scenario"] == scenario])) for scenario in scenarios],
             {row["library"] for row in rows})
         for scenario in scenarios:
@@ -804,6 +822,29 @@ def draw_charts(results, out_dir, formats=("svg",)):
                 axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
                 axis.yaxis.set_major_formatter(ticks)
         save(figure, name)
+
+    # --- how close every run got: the distance to the optimum at the end (rule 8.1) -----------------
+    gap_rows = [row for row in rows if "median_gap" in row]
+    if gap_rows:
+        figure, axes = chart(
+            "Distance to the optimum at the end of the run, median of all runs (lower is better)",
+            context + " · a run ends at the target, its budget or 60 s · dashed: the target, 0.01",
+            [(scenario, len([row for row in gap_rows if row["scenario"] == scenario])) for scenario in scenarios],
+            {row["library"] for row in gap_rows})
+        for scenario in scenarios:
+            axis = axes[scenario]
+            # a log axis can't show 0: a distance of 0 is drawn at a tenth of the smallest other one
+            group = [row for row in gap_rows if row["scenario"] == scenario]
+            positive = [row["median_gap"] for row in group if row["median_gap"] > 0]
+            floor = min(positive) / 10 if positive else 1e-3
+            bars(axis, group, lambda row, floor=floor: max(row["median_gap"], floor),
+                 lambda v, floor=floor: "0" if v <= floor else short_number(v) if v >= 1000 else f"{v:.3g}")
+            panel_title(axis, scenario, f"budget {short_number(budgets[scenario])} evaluations" if scenario in budgets else "")
+            if scenario.split("-")[0] in ("rastrigin", "rosenbrock", "ackley"):
+                axis.axhline(0.01, color="#444444", linewidth=0.7, linestyle=(0, (4, 3)), zorder=0)
+            if axis.get_yscale() == "log":
+                axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
+        save(figure, "distance_to_optimum")
 
     # --- cost per evaluation ------------------------------------------------------------------------
     instructions = results.get("instructions")
