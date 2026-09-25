@@ -183,6 +183,7 @@ Fixes from an independent review of 0.6.0 ([#116](https://github.com/tachsin/gen
 - [x] The steady-state GA doesn't propose twins, and PSO's initial velocities respect `max_velocity`
 - [x] Clearer errors and stricter settings in the Python package, with license files in the wheels
 - [x] Fairer benchmark adapters (numpy fitness in pymoo and PyGAD), and timings on pinned P-cores
+- [x] DE defaults from the literature: SHADE's published settings, with its random `p` per trial, instead of settings chosen on the benchmark's own problems
 
 ### 0.8: Genetic programming and neuroevolution
 - [ ] Zero-copy numpy genomes in the Python package

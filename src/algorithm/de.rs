@@ -29,6 +29,30 @@ pub enum Strategy {
         /// 1 (JADE) or 2.6 (L-SHADE). When full, a random member makes room.
         archive: f64,
     },
+    /// DE/current-to-pbest/1 with a random `p` for every trial, as in SHADE: like
+    /// [`Strategy::CurrentToPBest`], but each trial draws its own `p` uniformly between `2 / NP`
+    /// and `max_p`, for a population of `NP`, so `pbest` is always one of at least the best two
+    /// (Tanabe and Fukunaga, 2013, eq. 20). When `2 / NP` is larger than `max_p` (populations
+    /// below 10 with `max_p` 0.2), `p` is `2 / NP`.
+    CurrentToPBestRandomP {
+        /// The largest fraction of the population that `pbest` is chosen from, greater than 0
+        /// and at most 1; SHADE uses 0.2.
+        max_p: f64,
+        /// The size of the archive as a multiple of the population size, 0 for no archive;
+        /// SHADE uses 1. When full, a random member makes room.
+        archive: f64,
+    },
+}
+
+impl Strategy {
+    // the size of the archive as a multiple of the population size, 0 without one
+    fn archive_rate(self) -> f64 {
+        match self {
+            Strategy::CurrentToPBest { archive, .. }
+            | Strategy::CurrentToPBestRandomP { archive, .. } => archive,
+            Strategy::Rand1 | Strategy::Best1 => 0.0,
+        }
+    }
 }
 
 /// Where the scale factor `F` and crossover rate `CR` of a differential evolution come from.
@@ -71,8 +95,10 @@ pub enum Control {
     /// (as in SHADE), with a `CR` that stays 0 once the successes only had `CR` 0 (as in L-SHADE).
     Shade {
         /// The number of (`F`, `CR`) pairs remembered, at least 1 and at most 2^24. Small
-        /// memories adapt faster: 5 to 10 is a good choice (L-SHADE uses 6). Each slot is updated
-        /// once every `memory` generations.
+        /// memories adapt faster. SHADE uses 100, the size of its population, and L-SHADE 6; on
+        /// the CEC 2013 problems, SHADE's paper found memories of 5 to 100 similar (30 and 50
+        /// slightly better) and larger ones worse. Each slot is updated once every `memory`
+        /// generations that had a successful trial.
         memory: usize,
     },
 }
@@ -101,8 +127,8 @@ pub enum Restarts {
     /// that converged or stalled, and migrants that arrive in between (see
     /// [`Islands`](crate::algorithm::Islands)) are kept too.
     ///
-    /// Small populations need far fewer evaluations to reach a target, but converge early on
-    /// hard problems; restarts make them reliable.
+    /// Restarts aren't part of JADE, SHADE or L-SHADE: they're genoxide's addition, so that a
+    /// population that converged early goes on searching elsewhere instead of around one point.
     OnStagnation {
         /// Converged: the scores of the population are within `tolerance` of each other,
         /// relative to the best score (`max - min <= tolerance · (1 + |best|)`), e.g. 1e-8, and
@@ -191,19 +217,33 @@ pub struct De {
 impl De {
     /// A builder for a differential evolution on `real`.
     ///
-    /// The defaults are the settings that reached targets in the fewest evaluations in
-    /// genoxide's measurements (shifted Rastrigin, Rosenbrock and Ackley with 10 and 30 genes):
-    /// current-to-pbest/1 with an archive, SHADE's adaptation, a population of the number of
-    /// genes + 10, and restarts on stagnation. See [`DeBuilder`].
+    /// The defaults are SHADE as published (R. Tanabe and A. Fukunaga, "Success-History Based
+    /// Parameter Adaptation for Differential Evolution", IEEE CEC 2013, pp. 71–78,
+    /// doi:10.1109/CEC.2013.6557555), plus genoxide's restarts:
+    ///
+    /// - current-to-pbest/1 with a random `p` for every trial, uniform between `2 / NP` and 0.2
+    ///   (section V-B, eq. 20), and an archive of the population's size (section IV-B,
+    ///   algorithm 1): [`Strategy::CurrentToPBestRandomP`] `{ max_p: 0.2, archive: 1.0 }`;
+    /// - SHADE's adaptation of `F` and `CR` with a memory of 100 pairs starting at 0.5 (section
+    ///   V-A): [`Control::Shade`] `{ memory: 100 }`;
+    /// - a population of 100 (section VI: "SHADE used a population size N = 100 and memory size
+    ///   H = N = 100");
+    /// - restarts on stagnation, with a tolerance of 1e-8 and a patience of 200 generations:
+    ///   genoxide's choice, not part of SHADE, so that a run doesn't settle for good on the
+    ///   first point it converges to.
+    ///
+    /// genoxide's SHADE differs from the paper in the details that [`Control::Shade`] and
+    /// [`De::l_shade`] describe: the `CR` memory can stay 0 (from L-SHADE), and a target
+    /// replaced by an equally good trial is archived too. See [`DeBuilder`].
     pub fn builder(real: Real) -> DeBuilder {
         DeBuilder {
             real,
-            population_size: None,
-            strategy: Strategy::CurrentToPBest {
-                p: 0.1,
+            population_size: 100,
+            strategy: Strategy::CurrentToPBestRandomP {
+                max_p: 0.2,
                 archive: 1.0,
             },
-            control: Control::Shade { memory: 6 },
+            control: Control::Shade { memory: 100 },
             objective: Objective::default(),
             seed: None,
             initial_genomes: Vec::new(),
@@ -398,12 +438,10 @@ impl De {
                 .cloned();
             self.discarded.extend(dropped);
             self.population.truncate(size);
-            if let Strategy::CurrentToPBest { archive, .. } = self.strategy {
-                let archive_size = (archive * size as f64).round() as usize;
-                while self.archive.len() > archive_size {
-                    let random = self.rng.below(self.archive.len());
-                    self.archive.swap_remove(random);
-                }
+            let archive_size = (self.strategy.archive_rate() * size as f64).round() as usize;
+            while self.archive.len() > archive_size {
+                let random = self.rng.below(self.archive.len());
+                self.archive.swap_remove(random);
             }
         }
     }
@@ -415,6 +453,20 @@ impl De {
             if !excluded.contains(&index) {
                 return index;
             }
+        }
+    }
+
+    // the fraction of the population of `size` that the `pbest` of the next trial is chosen from
+    fn pbest_fraction(&mut self, size: usize) -> f64 {
+        match self.strategy {
+            Strategy::CurrentToPBest { p, .. } => p,
+            // uniform between 2 / NP and max_p, or 2 / NP when that's larger
+            Strategy::CurrentToPBestRandomP { max_p, .. } => {
+                let min_p = 2.0 / size as f64;
+                min_p + (max_p - min_p).max(0.0) * self.rng.unit_f64()
+            }
+            // no pbest
+            Strategy::Rand1 | Strategy::Best1 => 0.0,
         }
     }
 
@@ -438,7 +490,8 @@ impl De {
                 let (a, b, c) = (genes(self, best), genes(self, r1), genes(self, r2));
                 (0..x.len()).map(|j| a[j] + f * (b[j] - c[j])).collect()
             }
-            Strategy::CurrentToPBest { p, .. } => {
+            Strategy::CurrentToPBest { .. } | Strategy::CurrentToPBestRandomP { .. } => {
+                let p = self.pbest_fraction(size);
                 let top = ((p * size as f64).round() as usize).clamp(1, size);
                 let pbest = order[self.rng.below(top)];
                 let r1 = self.other_than(size, &[target]);
@@ -501,12 +554,8 @@ impl De {
     // the trials that replace their targets, then the rejected ones as discarded
     fn select(&mut self) {
         let objective = self.objective;
-        let archive_size = match self.strategy {
-            Strategy::CurrentToPBest { archive, .. } => {
-                (archive * self.population.len() as f64).round() as usize
-            }
-            _ => 0,
-        };
+        let archive_size =
+            (self.strategy.archive_rate() * self.population.len() as f64).round() as usize;
         self.discarded.clear();
         let trials = std::mem::take(&mut self.trials);
         let mut successes = Vec::new();
@@ -836,19 +885,15 @@ impl Algorithm for De {
 
 /// A builder for a [`De`], from [`De::builder`].
 ///
-/// Defaults: DE/current-to-pbest/1 with `p` 0.1 and an archive of the population's size,
-/// SHADE's adaptation with a memory of 6, a population of the number of genes + 10, restarts on
-/// stagnation (tolerance 1e-8, patience 200), maximize, a random initial population and a random
-/// seed.
-///
-/// Small populations reach a target in fewer evaluations, and the restarts keep them from
-/// getting stuck: with 10 and 30 genes, genes + 10 reached shifted Rastrigin, Rosenbrock and
-/// Ackley targets in 2 to 5 times fewer evaluations than a population of 100. Non-separable,
-/// highly multimodal problems (e.g. rotated Rastrigin) do better with larger populations, e.g. 100.
+/// Defaults: SHADE's settings (Tanabe and Fukunaga, 2013, see [`De::builder`]), that is
+/// DE/current-to-pbest/1 with a random `p` per trial between `2 / NP` and 0.2 and an archive of
+/// the population's size, SHADE's adaptation with a memory of 100, and a population of 100; plus
+/// genoxide's restarts on stagnation (tolerance 1e-8, patience 200), maximize, a random initial
+/// population and a random seed.
 #[derive(Clone, Debug)]
 pub struct DeBuilder {
     real: Real,
-    population_size: Option<usize>,
+    population_size: usize,
     strategy: Strategy,
     control: Control,
     objective: Objective,
@@ -859,20 +904,21 @@ pub struct DeBuilder {
 }
 
 impl DeBuilder {
-    /// The population size, at least 4 and at most 2^24. The number of genes + 10 by default.
+    /// The population size, at least 4 and at most 2^24. 100 by default, as in SHADE.
     pub fn population_size(mut self, size: usize) -> Self {
-        self.population_size = Some(size);
+        self.population_size = size;
         self
     }
 
-    /// How mutant vectors are built. DE/current-to-pbest/1 with `p` 0.1 and an archive of the
-    /// population's size by default.
+    /// How mutant vectors are built. DE/current-to-pbest/1 with a random `p` per trial between
+    /// `2 / NP` and 0.2 and an archive of the population's size by default, as in SHADE.
     pub fn strategy(mut self, strategy: Strategy) -> Self {
         self.strategy = strategy;
         self
     }
 
-    /// Where `F` and `CR` come from. SHADE's adaptation with a memory of 6 by default.
+    /// Where `F` and `CR` come from. SHADE's adaptation with a memory of 100 by default, as in
+    /// SHADE.
     pub fn control(mut self, control: Control) -> Self {
         self.control = control;
         self
@@ -917,7 +963,8 @@ impl DeBuilder {
     }
 
     /// When the population starts over from new random individuals. On stagnation by default,
-    /// with a tolerance of 1e-8 and a patience of 200 generations.
+    /// with a tolerance of 1e-8 and a patience of 200 generations: genoxide's choice, as SHADE
+    /// has no restarts.
     pub fn restarts(mut self, restarts: Restarts) -> Self {
         self.restarts = restarts;
         self
@@ -932,7 +979,7 @@ impl DeBuilder {
     ///   the population size.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<De> {
-        let size = self.population_size.unwrap_or(self.real.genome_len() + 10);
+        let size = self.population_size;
         if size < 4 {
             return Err(Error::InvalidSetting {
                 setting: "population_size",
@@ -941,13 +988,19 @@ impl DeBuilder {
         }
         check_size("population_size", size)?;
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
-        if let Strategy::CurrentToPBest { p, archive } = self.strategy {
+        let p = match self.strategy {
+            Strategy::CurrentToPBest { p, .. } => Some(("p", p)),
+            Strategy::CurrentToPBestRandomP { max_p, .. } => Some(("max_p", max_p)),
+            Strategy::Rand1 | Strategy::Best1 => None,
+        };
+        if let Some((setting, p)) = p {
             if !(p > 0.0 && p <= 1.0) {
                 return invalid(
-                    "p",
+                    setting,
                     format!("must be greater than 0 and at most 1, got {p}"),
                 );
             }
+            let archive = self.strategy.archive_rate();
             if !(archive >= 0.0 && archive.is_finite()) {
                 return invalid(
                     "archive",
@@ -1101,7 +1154,7 @@ mod tests {
         de.tell(&fitness).unwrap();
     }
 
-    const STRATEGIES: [Strategy; 4] = [
+    const STRATEGIES: [Strategy; 6] = [
         Strategy::Rand1,
         Strategy::Best1,
         Strategy::CurrentToPBest {
@@ -1111,6 +1164,14 @@ mod tests {
         Strategy::CurrentToPBest {
             p: 0.2,
             archive: 1.5,
+        },
+        Strategy::CurrentToPBestRandomP {
+            max_p: 0.2,
+            archive: 1.0,
+        },
+        Strategy::CurrentToPBestRandomP {
+            max_p: 1.0,
+            archive: 0.0,
         },
     ];
 
@@ -1126,8 +1187,25 @@ mod tests {
     #[test]
     fn validation() {
         let real = || Real::uniform(2, 0.0..=1.0).unwrap();
-        // the number of genes + 10 by default
-        assert_eq!(De::builder(real()).build().unwrap().population().len(), 12);
+        // SHADE's settings by default
+        let de = De::builder(real()).build().unwrap();
+        assert_eq!(de.population().len(), 100);
+        assert_eq!(
+            de.strategy(),
+            Strategy::CurrentToPBestRandomP {
+                max_p: 0.2,
+                archive: 1.0
+            }
+        );
+        assert_eq!(de.control(), Control::Shade { memory: 100 });
+        assert_eq!(de.adapted(), vec![(0.5, 0.5); 100]);
+        assert_eq!(
+            de.restarts(),
+            Restarts::OnStagnation {
+                tolerance: 1e-8,
+                patience: 200
+            }
+        );
         assert_eq!(
             setting(De::builder(real()).population_size(3).build()),
             "population_size"
@@ -1155,6 +1233,22 @@ mod tests {
         assert_eq!(setting(with(pbest(0.0, 1.0), fixed(0.5, 0.9))), "p");
         assert_eq!(setting(with(pbest(0.1, -1.0), fixed(0.5, 0.9))), "archive");
         assert!(with(pbest(1.0, 0.0), fixed(2.0, 0.0)).is_ok());
+        let random_p = |max_p, archive| Strategy::CurrentToPBestRandomP { max_p, archive };
+        for max_p in [0.0, -0.1, 1.5, f64::NAN, f64::INFINITY] {
+            assert_eq!(
+                setting(with(random_p(max_p, 1.0), fixed(0.5, 0.9))),
+                "max_p"
+            );
+        }
+        for archive in [-1.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(
+                setting(with(random_p(0.2, archive), fixed(0.5, 0.9))),
+                "archive"
+            );
+        }
+        assert!(with(random_p(1.0, 0.0), fixed(0.5, 0.9)).is_ok());
+        // a population where 2 / NP is larger than max_p
+        assert!(with(random_p(0.01, 1.0), fixed(0.5, 0.9)).is_ok());
         assert!(matches!(
             De::builder(real())
                 .population_size(10)
@@ -1209,6 +1303,13 @@ mod tests {
                     archive: 1.0,
                 },
                 Control::default(),
+            ),
+            (
+                Strategy::CurrentToPBestRandomP {
+                    max_p: 0.2,
+                    archive: 1.0,
+                },
+                Control::Shade { memory: 100 },
             ),
         ] {
             let de = builder(strategy, 1)
@@ -1527,6 +1628,84 @@ mod tests {
     }
 
     #[test]
+    fn random_p_stays_between_two_over_np_and_max_p() {
+        for (size, max_p) in [
+            (100, 0.2),
+            (40, 0.5),
+            (20, 1.0),
+            (4, 0.2),
+            (8, 0.2),
+            (10, 0.2),
+        ] {
+            let mut de = builder(
+                Strategy::CurrentToPBestRandomP {
+                    max_p,
+                    archive: 1.0,
+                },
+                0,
+            )
+            .population_size(size)
+            .build()
+            .unwrap();
+            let min_p = 2.0 / size as f64;
+            let (mut lowest, mut highest) = (f64::INFINITY, f64::NEG_INFINITY);
+            for _ in 0..10_000 {
+                let p = de.pbest_fraction(size);
+                lowest = lowest.min(p);
+                highest = highest.max(p);
+                // pbest comes from at least the best two
+                assert!(((p * size as f64).round() as usize) >= 2, "{size} {p}");
+            }
+            if min_p < max_p {
+                assert!(
+                    lowest >= min_p && highest <= max_p,
+                    "{size} {lowest} {highest}"
+                );
+                // spread over the whole range
+                let width = max_p - min_p;
+                assert!(lowest < min_p + 0.01 * width && highest > max_p - 0.01 * width);
+            } else {
+                // 2 / NP when that's larger than max_p
+                assert_eq!((lowest, highest), (min_p, min_p), "{size}");
+            }
+        }
+        // a fixed p is the same for every trial
+        let mut de = builder(
+            Strategy::CurrentToPBest {
+                p: 0.1,
+                archive: 1.0,
+            },
+            0,
+        )
+        .build()
+        .unwrap();
+        assert_eq!(de.pbest_fraction(20), 0.1);
+    }
+
+    #[test]
+    fn random_p_uses_the_current_population_size() {
+        // with linear reduction, 2 / NP grows as the population shrinks, down to 4 individuals
+        let mut de = builder(
+            Strategy::CurrentToPBestRandomP {
+                max_p: 0.2,
+                archive: 1.0,
+            },
+            2,
+        )
+        .population_size(40)
+        .control(Control::Shade { memory: 100 })
+        .linear_reduction(4, 2_000)
+        .build()
+        .unwrap();
+        while de.evaluations() < 2_000 {
+            step(&mut de);
+        }
+        assert_eq!(de.population().len(), 4);
+        assert!(de.archive().len() <= 4);
+        assert_eq!(de.pbest_fraction(4), 0.5);
+    }
+
+    #[test]
     fn same_seed_same_run() {
         let run = |seed| {
             let mut de = builder(
@@ -1583,9 +1762,7 @@ mod tests {
                 for (index, individual) in de.population().iter().enumerate() {
                     prop_assert!(!Objective::Minimize.is_better(before[index], individual.fitness().unwrap()));
                 }
-                if let Strategy::CurrentToPBest { archive, .. } = strategy {
-                    prop_assert!(de.archive().len() <= (archive * 8.0).round() as usize);
-                }
+                prop_assert!(de.archive().len() <= (strategy.archive_rate() * 8.0).round() as usize);
             }
         }
     }

@@ -119,7 +119,7 @@ L-SHADE spreads its search over the whole budget by design, so it reaches the ta
 
 **Methods:** the Python docs have no example for a unimodal function and state no preference among their real-valued algorithms, so the algorithms that run with their documented defaults ([lines 266-283](../../../benchmarks/adapters/genoxide_python/bench.py#L266-L283)):
 - **`cma_es`:** `gx.Cmaes(genome, restarts="ipop")`: the defaults, with IPOP for rule 2.2, which restarts a converged method with the library's own restarts.
-- **`de`:** `gx.De(genome)`, the defaults of python/README.md's table and the `De` docstring: DE/current-to-pbest/1 with an archive, SHADE's adaptation of F and CR, the number of genes + 10 individuals, and restarts when the population converges or stalls. The docstring says these are "the settings that reached targets in the fewest evaluations in genoxide's measurements", which were made on this benchmark's problems ([genoxide.md](genoxide.md#continuous-multimodal-rastrigin-10-and-30-ackley-30)).
+- **`de`:** `gx.De(genome)`, the defaults of python/README.md's table and the `De` docstring: SHADE's published settings (current-to-pbest/1 with an archive, SHADE's adaptation of F and CR, 100 individuals), and restarts when the population converges or stalls ([genoxide.md](genoxide.md#continuous-multimodal-rastrigin-10-and-30-ackley-30)).
 - **`pso`:** `gx.Pso(genome, population_size=40)`: the population size is required, and 40 is the `Pso` docstring's ("e.g. 40"); the default global topology.
 
 **Keeping going:** CMA-ES and DE restart by themselves; PSO has no convergence criterion and runs to the budget.

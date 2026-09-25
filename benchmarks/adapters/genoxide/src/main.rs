@@ -461,9 +461,9 @@ fn run_real(args: &Args, seed: u64) -> Result<()> {
             .build()
     };
     // differential evolution, AGENTS.md: "often needs far fewer evaluations than a GA", with the
-    // builder's defaults, as AGENTS.md's DE template runs Rastrigin: current-to-pbest/1 with an
-    // archive, SHADE's adaptation, the number of genes + 10 individuals, and restarts when the
-    // population converges or stalls
+    // builder's defaults, as AGENTS.md's DE template runs Rastrigin: SHADE's published settings
+    // (current-to-pbest/1 with an archive and a random p per trial, 100 individuals, a memory of
+    // 100), and restarts when the population converges or stalls
     let de = |seed| De::builder(real()?).minimize().seed(seed).build();
 
     if args.problem == "rosenbrock" {

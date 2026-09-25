@@ -108,7 +108,7 @@ TOML, or JSON for files ending in `.json`, with the same structure. Unknown sett
 |---|---|---|
 | `"ga"` | any | `population_size`, `select`, `crossover`, `mutate`; optional `seed`, `crossover_rate` (0.9), `mutation_rate` (1.0), `scheme` |
 | `"steady-ga"` | any | as `"ga"`, without `scheme`: asynchronous evaluation, where each worker gets a new genome as soon as it's done |
-| `"de"` | real | optional `population_size` (the number of genes + 10), `seed`, or `l_shade = <evaluations>` for L-SHADE |
+| `"de"` | real | optional `population_size` (100), `seed`, or `l_shade = <evaluations>` for L-SHADE |
 | `"cmaes"` | real | optional `population_size`, `seed`, `restarts` (`"never"`, `"ipop"`, `"bipop"`), `initial_step` (a fraction of each gene's range) |
 | `"pso"` | real | `population_size`; optional `seed`, `ring = <neighbors>` for a ring topology |
 | `"local-search"` | any | `neighbor` (a mutation); optional `seed`, `neighbors` (1), `acceptance`, `restart = [patience, kicks]` |

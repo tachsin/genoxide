@@ -323,9 +323,9 @@ A GA can run an ES too, with other operators: `AdaptiveReal` genomes, `SelfAdapt
 
 ### Differential evolution
 
-For continuous problems on `Real` genomes, differential evolution often needs far fewer evaluations than a GA. Its defaults are the settings that reached targets in the fewest evaluations in genoxide's measurements: current-to-pbest/1 with an archive, SHADE's adaptation of `F` and `CR`, a population of the number of genes + 10, and restarts when the population converges or stalls. Set only what the problem needs:
+For continuous problems on `Real` genomes, differential evolution often needs far fewer evaluations than a GA. Its defaults are SHADE's published settings (Tanabe and Fukunaga, "Success-History Based Parameter Adaptation for Differential Evolution", IEEE CEC 2013): current-to-pbest/1 with a random `p` per trial between 2 / population and 0.2 and an archive of the population's size, SHADE's adaptation of `F` and `CR` with a memory of 100, and a population of 100. genoxide adds restarts when the population converges or stalls (tolerance 1e-8, patience 200 generations), its own choice, so a run doesn't settle for good on the first point it converges to. Set only what the problem needs:
 
-- `.population_size(n)`: larger (e.g. 100) for non-separable, highly multimodal problems such as rotated Rastrigin.
+- `.population_size(n)`: the population, 100 by default.
 - `.control(de::Control::Fixed { f, cr })`: fixed `F` and `CR`; a small `CR` (e.g. 0.1) suits separable functions, a large one (0.9) rotated or coupled ones.
 - `.restarts(de::Restarts::Never)`: no restarts.
 
@@ -370,7 +370,8 @@ fn main() -> genoxide::Result<()> {
 
 | `de::Strategy` | When |
 |---|---|
-| `CurrentToPBest { p: 0.1, archive: 1.0 }` (default) | Fast, still diverse thanks to the archive |
+| `CurrentToPBestRandomP { max_p: 0.2, archive: 1.0 }` (default) | SHADE's: a random `p` per trial; fast, still diverse thanks to the archive |
+| `CurrentToPBest { p: 0.1, archive: 1.0 }` | JADE's, with a fixed `p` |
 | `Rand1` | Robust; explores well |
 | `Best1` | Fastest on easy problems; use it with `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, or the population can collapse before the optimum |
 

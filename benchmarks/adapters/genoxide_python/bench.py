@@ -275,7 +275,7 @@ def real_solvers(problem, size):
         # the Python docs have no example for a unimodal function and state no preference among
         # their real-valued algorithms, so the algorithms that run with their defaults: CMA-ES
         # (above), DE and PSO. DE with its defaults (python/README.md's table, the De docstring):
-        # SHADE with current-to-pbest/1 and an archive, the number of genes + 10 individuals, and
+        # SHADE's published settings (current-to-pbest/1 with an archive, 100 individuals), and
         # restarts. PSO needs a population size: the Pso docstring's "e.g. 40", the global topology
         de = ("de", lambda seed, budget: gx.De(genome, objective="minimize", seed=seed), function, True)
         pso = ("pso", lambda seed, budget: gx.Pso(genome, population_size=40, objective="minimize", seed=seed),
