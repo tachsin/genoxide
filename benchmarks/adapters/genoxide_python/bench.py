@@ -11,26 +11,26 @@ its solutions), see ../../README.md for the fields. The second reads one JSON so
 from stdin and prints its value (or its list of objectives), with the fitness functions below. The
 third compares the fitness functions with problems.py at random points.
 
-The solvers and their settings are the Rust genoxide adapter's (../genoxide/src/main.rs), through
-the Python API, except the island model, which the package doesn't have: its GA runs as one
-population, with the settings of examples/rastrigin.rs. Where genoxide's docs recommend each of
-them, and the separate test runs: docs/benchmarks/libraries/genoxide_python.md. The fitness
-functions are written as python/README.md and python/examples/ write them:
-- `batch=True` with vectorized numpy functions, called with a generation at a time: what
-  python/README.md recommends for vectorized numpy ("one call per generation"), as in
-  python/examples/rastrigin.py and zdt1.py; used by the GA, DE, CMA-ES, PSO and the
-  multi-objective algorithms;
-- a function per genome for local search and tabu search, which evaluate a few neighbors per
-  step, as python/examples/n_queens.py;
-- a function per genome in the matched OneMax runs, like DEAP's: a Python call per genome, which
-  counts the ones with numpy's sum, as python/examples/onemax.py and README.md's first example.
+The methods and settings come from the Python package's own docs, python/README.md, its
+examples (python/examples/) and its docstrings (python/genoxide/__init__.py), in the order of rule
+6.2: a preference they state, then their example for the problem type, then the defaults. They're
+not the Rust adapter's, which follow the Rust docs. Where each comes from, and the separate test
+runs: docs/benchmarks/libraries/genoxide_python.md. The fitness functions are written as those
+examples write them:
+- a function per genome for OneMax, as python/README.md's first example and
+  python/examples/onemax.py (`bits.sum()`), in the matched and the idiomatic runs;
+- a function per genome for N-Queens, as python/examples/n_queens.py;
+- `batch=True` with vectorized numpy functions, a generation per call, for the real-valued and
+  multi-objective problems, as python/examples/rastrigin.py and zdt1.py, and what python/README.md
+  recommends for vectorized numpy ("one call per generation").
 
 The rules (docs/benchmarks/rules.md), as this adapter follows them:
 - each fitness function counts the genomes it evaluates itself (rule 3): that count is the
   reported "evaluations", and the package's own `result.evaluations` must be the same (a
   difference is printed to stderr);
 - a run ends at the target, the evaluation budget or the time cap only (rule 2.1). On convergence
-  a method starts again (rule 2.2): DE and CMA-ES (IPOP) with their own restarts; the others have
+  a method starts again (rule 2.2): DE and CMA-ES (IPOP) with their own restarts; L-SHADE has no
+  restarts and no convergence criterion (its population shrinks over the budget); the others have
   no convergence criterion but the package's stall ("stalled": 10,000 generations without a
   genome to evaluate), after which the adapter starts them again with the seed
   `seed * 1000 + restart`, keeping the best and counting every evaluation;
@@ -207,20 +207,20 @@ FRONT_PROBLEMS = {
 }
 
 # -------------------------------------------------------------------------------------------------
-# Solvers: the Rust genoxide adapter's, with the same settings and citations. Each is made by a
-# function of the seed, so a restart can make it again with another seed.
+# Solvers, from the Python package's docs. Each is made by a function of the seed and the budget
+# left, so a restart can make it again with another seed.
 # -------------------------------------------------------------------------------------------------
 
 REAL_TARGET = 0.01
 
 
 def onemax_solvers(size, mode):
-    """[(solver, make the algorithm from a seed, fitness, batch)]"""
+    """[(solver, make the algorithm from a seed and a budget, fitness, batch)]"""
     if mode == "matched":
         # the matched settings (benchmarks/README.md), as DEAP's eaSimple: population 300,
         # tournament 3, two-point crossover with probability 0.5, bit-flip with probability
         # 1 / size per gene on 20% of the children, no elitism; a Python function per genome
-        return [("ga", lambda seed: gx.Ga(
+        return [("ga", lambda seed, budget: gx.Ga(
             gx.Binary(size),
             population_size=300,
             select=gx.Tournament(3),
@@ -231,46 +231,28 @@ def onemax_solvers(size, mode):
             scheme=gx.Generational(elitism=0),
             seed=seed,
         ), onemax, False)]
-    # idiomatic: genoxide's example for OneMax, the same in python/README.md's first example,
-    # examples/one_max.rs and AGENTS.md: population 100, tournament 3, uniform crossover, bit-flip
-    # at 1 / length per gene; the default rates and scheme (generational, elitism 1)
-    return [("ga", lambda seed: gx.Ga(
+    # idiomatic: python/README.md's first example, OneMax with 100 bits: population 100,
+    # tournament 3, uniform crossover, BitFlip(rate=0.01), the default rates and scheme
+    # (generational, elitism 1), and a function per genome (`bits.sum()`). The docs have a second
+    # OneMax example, python/examples/onemax.py, which copies DEAP's first tutorial (population 300,
+    # two-point crossover at 0.5, BitFlip(rate=0.05) on 20% of the children); the README's is the
+    # package's own, and comes first
+    return [("ga", lambda seed, budget: gx.Ga(
         gx.Binary(size),
         population_size=100,
         select=gx.Tournament(3),
         crossover=gx.UniformCrossover(),
-        mutation=gx.BitFlip(rate=1.0 / size),
+        mutation=gx.BitFlip(rate=0.01),
         seed=seed,
-    ), onemax_batch, True)]
+    ), onemax, False)]
 
 
 def nqueens_solvers(size):
+    # the package's example for N-Queens, python/examples/n_queens.py: tabu search with swap
+    # neighbors, 32 per step, tenure 20, and a function per genome. The Python docs present no
+    # other method for permutations
     return [
-        # genoxide's example for N-Queens, examples/n_queens.rs, and AGENTS.md's permutation
-        # template: (20 + 20) with tournament 2, no crossover and swap mutation
-        ("ga", lambda seed: gx.Ga(
-            gx.Permutation(size),
-            population_size=20,
-            select=gx.Tournament(2),
-            crossover=gx.NoCrossover(),
-            mutation=gx.SwapMutation(),
-            scheme=gx.MuPlusLambda(20),
-            objective="minimize",
-            seed=seed,
-        ), nqueens_batch, True),
-        # local search, which AGENTS.md prefers on permutations, as the rustdoc's example for
-        # N-Queens sets it: hill climbing with swap neighbors, the best of 4 per step, the default
-        # acceptance NotWorse
-        ("local_search", lambda seed: gx.LocalSearch(
-            gx.Permutation(size),
-            neighbor=gx.SwapMutation(),
-            neighbors=4,
-            objective="minimize",
-            seed=seed,
-        ), nqueens, False),
-        # tabu search, the package's example for N-Queens (python/examples/n_queens.py): swap
-        # neighbors, 32 per step, tenure 20
-        ("tabu_search", lambda seed: gx.LocalSearch(
+        ("tabu_search", lambda seed, budget: gx.LocalSearch(
             gx.Permutation(size),
             neighbor=gx.SwapMutation(),
             neighbors=32,
@@ -284,41 +266,37 @@ def nqueens_solvers(size):
 def real_solvers(problem, size):
     function, low, high = REAL_PROBLEMS[problem]
     genome = gx.Real((low, high), length=size)
-    # CMA-ES with its defaults and IPOP restarts: python/README.md's first example and
-    # python/examples/rastrigin.py, AGENTS.md's CMA-ES template; for Rosenbrock too (rule 2.2)
-    cmaes = ("cma_es", lambda seed: gx.Cmaes(genome, restarts="ipop", objective="minimize", seed=seed),
+    # CMA-ES with IPOP restarts, as python/examples/rastrigin.py and python/README.md's first
+    # example set it; the Cmaes docstring gives IPOP "for multimodal functions", and on Rosenbrock
+    # rule 2.2 restarts a converged run with the library's restarts
+    cmaes = ("cma_es", lambda seed, budget: gx.Cmaes(genome, restarts="ipop", objective="minimize", seed=seed),
              function, True)
-    # differential evolution with the package's defaults (AGENTS.md's DE template): SHADE with
-    # current-to-pbest/1 and an archive, the number of genes + 10 individuals, and restarts
-    de = ("de", lambda seed: gx.De(genome, objective="minimize", seed=seed), function, True)
     if problem == "rosenbrock":
-        # AGENTS.md's example for this problem, its PSO template (on Rosenbrock): 40 particles,
-        # the global topology
-        pso = ("pso", lambda seed: gx.Pso(genome, population_size=40, objective="minimize", seed=seed),
+        # the Python docs have no example for a unimodal function and state no preference among
+        # their real-valued algorithms, so the algorithms that run with their defaults: CMA-ES
+        # (above), DE and PSO. DE with its defaults (python/README.md's table, the De docstring):
+        # SHADE with current-to-pbest/1 and an archive, the number of genes + 10 individuals, and
+        # restarts. PSO needs a population size: the Pso docstring's "e.g. 40", the global topology
+        de = ("de", lambda seed, budget: gx.De(genome, objective="minimize", seed=seed), function, True)
+        pso = ("pso", lambda seed, budget: gx.Pso(genome, population_size=40, objective="minimize", seed=seed),
                function, True)
         return [cmaes, de, pso]
-    # the Rust adapter runs the GA as AGENTS.md's island model, which the package doesn't have:
-    # here it's one population, the GA of examples/rastrigin.rs (polynomial mutation at the
-    # usual rate of 1 / length, elitism 2)
-    ga = ("ga", lambda seed: gx.Ga(
-        genome,
-        population_size=100,
-        select=gx.Tournament(3),
-        crossover=gx.UniformCrossover(),
-        mutation=gx.PolynomialMutation(20.0, rate=1.0 / size),
-        scheme=gx.Generational(elitism=2),
-        objective="minimize",
-        seed=seed,
-    ), function, True)
-    return [ga, de, cmaes]
+    # multimodal: the package's example for Rastrigin, python/examples/rastrigin.py, runs CMA-ES
+    # with IPOP restarts (above) and L-SHADE for the run's budget of evaluations, with the run
+    # stopped at that budget (the De docstring: "Stop the run at the same number of evaluations")
+    l_shade = ("l_shade", lambda seed, budget: gx.De(genome, l_shade=budget, objective="minimize", seed=seed),
+               function, True)
+    return [cmaes, l_shade]
 
 
 def front_solvers(problem, size):
     """The matched settings (benchmarks/README.md): NSGA-II, SPEA2 and SMS-EMOA with SBX with eta
-    15 at 0.9 (their default rate) and polynomial mutation with eta 20 at 1 / n; NSGA-III (3
-    objectives only, as AGENTS.md presents it) with SBX with eta 30 at 1; MOEA/D with SBX with eta
-    20 at 1, 20 neighbors and neighborhood mating 0.9 (its defaults), Tchebycheff, or PBI with
-    theta 5 with 3 objectives. SBX and polynomial mutation keep the genes in [0, 1] (rule 2.4)."""
+    15 at 0.9 (their default rate) and polynomial mutation with eta 20 at 1 / n; NSGA-III with 3
+    objectives only (python/README.md presents it for fronts where NSGA-II's crowding distance
+    "works poorly") with SBX with eta 30 at 1; MOEA/D with SBX with eta 20 at 1, 20 neighbors and
+    neighborhood mating 0.9 (its defaults), Tchebycheff, or PBI with theta 5 with 3 objectives
+    (python/README.md: PBI "spreads fronts of 3 or more objectives well"). SBX and polynomial
+    mutation keep the genes in [0, 1] (rule 2.4)."""
     function, variables, objectives, population, divisions = FRONT_PROBLEMS[problem]
     n = variables(size)
     genome = gx.Real((0.0, 1.0), length=n)
@@ -380,8 +358,9 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
     while True:
         generation["evaluated"] = 0
         left = max_seconds - (time.perf_counter() - start)
-        result = make(seed if restart == 0 else seed * 1000 + restart).run(
-            function, batch=batch, target=target, evaluations=max_evaluations - EVALUATIONS,
+        budget = max_evaluations - EVALUATIONS
+        result = make(seed if restart == 0 else seed * 1000 + restart, budget).run(
+            function, batch=batch, target=target, evaluations=budget,
             time=max(left, 0.0), on_generation=track if solver == "cma_es" else None)
         generations += result.generations
         reported += result.evaluations
