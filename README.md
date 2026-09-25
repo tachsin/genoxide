@@ -19,55 +19,33 @@ genoxide = "0.6"
 
 ## Benchmarks
 
-genoxide, and its Python package, against 15 other libraries in Rust, C++, Python, Java and Julia, on 9 single-objective and 5 multi-objective scenarios:
-- **Rust:** genetic_algorithm, radiate, moors
-- **C++:** openGA, pygmo (pagmo)
-- **Python:** DEAP, pymoo, PyGAD, pycma, Nevergrad, SciPy
-- **Java:** Jenetics, jMetal
-- **Julia:** Evolutionary.jl, Metaheuristics.jl
-
-Measured on 2026-09-25 with genoxide 0.6.0, on Linux with an Intel Core Ultra 7 265K, single-threaded, 10 seeds per scenario. The other libraries were measured the same day on the same machine, and only the libraries that change are measured again. The charts show medians.
+genoxide and its Python package against 15 libraries: genetic_algorithm, radiate and moors (Rust), openGA and pygmo (C++), DEAP, pymoo, PyGAD, pycma, Nevergrad and SciPy (Python), Jenetics and jMetal (Java), Evolutionary.jl and Metaheuristics.jl (Julia). One thread on an Intel Core Ultra 7 265K, median of 10 runs.
 
 ![Time to target](docs/benchmarks/time_to_target.svg)
 
-- **Time to target:** genoxide is the fastest in 7 of the 9 single-objective scenarios:
+- **Fastest in 7 of the 9 single-objective problems:**
 
-  | Scenario | genoxide | Next fastest | DEAP |
+  | Problem | genoxide | Next fastest | DEAP |
   |---|---|---|---|
   | OneMax 1000 | 15 ms | 59 ms (Evolutionary.jl) | 15.8 s |
   | Rastrigin 30 | 15 ms | 70 ms (pygmo's SaDE) | 1.25 s (its CMA-ES, 8 of 10 runs) |
   | Rosenbrock 10 | 1.6 ms | 12 ms (Metaheuristics.jl's ECA) | 107 ms (its CMA-ES) |
   | Ackley 30 | 6.3 ms | 30 ms (Evolutionary.jl's ES) | 0.7 s (its CMA-ES) |
 
-  On OneMax 100, Evolutionary.jl's GA is slightly faster: 0.85 ms against 1.0 ms (matched), and 0.42 ms against 0.48 ms (idiomatic).
-- **Cost per evaluation:** genoxide needs 3,400 CPU instructions per OneMax 1000 evaluation, fitness function included:
-  - 2.6 times fewer than genetic_algorithm;
-  - 10 to 19 times fewer than moors, openGA and radiate;
-  - 90 to 1,300 times fewer than pygmo, pymoo, PyGAD and DEAP.
-- **Evaluations to target:** genoxide needs the fewest in the matched OneMax scenarios, N-Queens, Rastrigin 10 and Ackley 30, but not everywhere:
-  - **Rastrigin 30:** pygmo's SaDE needs 15,570 against genoxide's 28,280. Its small population and exponential crossover suit separable functions like this one.
-  - **Rosenbrock:** pycma's CMA-ES needs 4,491 against 5,945, and genoxide's GA doesn't reach the target.
-  - **OneMax 100 (idiomatic):** pygmo needs 1,610 against 3,183.
+  On OneMax 100, the GAs of Evolutionary.jl and genetic_algorithm are slightly faster.
+- **The cheapest evaluation:** 3,400 CPU instructions per OneMax 1000 evaluation, fitness function included. That's 2.6 times fewer than genetic_algorithm, 10 to 19 times fewer than moors, openGA and radiate, and 90 to 1,300 times fewer than the Python libraries.
+- **Not always the fewest evaluations:**
+  - Rastrigin 30: pygmo's SaDE needs 15,570, against genoxide's 28,280.
+  - Rosenbrock: the CMA-ES of pycma and pymoo need 4,491 and 4,676, against 5,945.
+  - OneMax 100: pygmo's GA needs 1,610, against 3,183.
 
-  With an expensive fitness function, those libraries would win there.
-- **The Python package**, with its fitness functions in Python:
-  - **Time to target:** it's second only to genoxide itself on Rastrigin 10, Rastrigin 30 and Ackley 30, at 2.4 ms, 18 ms and 8.1 ms. On OneMax 1000 it takes 81 ms, against 15.8 s for DEAP.
-  - **Cost per evaluation:** 29,000 CPU instructions, most of them the Python fitness function, against 1.0 million for pymoo and 4.4 million for DEAP.
-  - **Multi-objective:** its NSGA-II takes 28 to 40 ms per run, against 0.55 to 0.87 s for pymoo, with the same hypervolumes.
-- **Multi-objective:** with the same settings, genoxide's SMS-EMOA is within 0.0013 of the best hypervolume in all five scenarios. The best is the SMS-EMOA of jMetal or Metaheuristics.jl.
-  - **Speed:** genoxide's NSGA-II takes 25 to 34 ms per run, against 0.55 to 0.87 s for pymoo and 1.3 to 2.1 s for DEAP.
-  - **moors:** only its NSGA-II is as fast, at 21 to 38 ms, with lower hypervolumes in all five scenarios. They're far lower on ZDT3 and DTLZ1. moors evaluates its parents again every generation, so the same budget gives it half the generations.
+  With an expensive fitness function, the number of evaluations is what counts.
+- **From Python,** with the fitness function in Python: Rastrigin 30 in 18 ms and OneMax 1000 in 81 ms, where DEAP takes 15.8 s.
+- **Multi-objective:** genoxide's SMS-EMOA gets within 0.2% of the best hypervolume on all five problems. Its NSGA-II takes 25 to 34 ms per run, against 0.55 to 0.87 s for pymoo and 1.3 to 2.1 s for DEAP.
 
-How they're measured:
-- **The same problems:** every library gets the same fitness functions, written in its own language and checked against a reference, and the same evaluation budget.
-- **Time:** measured inside the process, around the optimization only. Interpreter or JVM startup, imports and JIT warm-up aren't included.
-- **Matched and idiomatic:** "matched" configurations are as equal as the libraries allow, and "idiomatic" ones are what each library recommends.
-- **Time to target** is the number of evaluations times the cost of an evaluation:
-  - The evaluations to target measure the search itself, whatever the language.
-  - The CPU instructions per evaluation measure the framework's cost.
-  - With a cheap fitness function, time mostly shows the framework's cost. With an expensive one, only the evaluations count.
+Every library solves the same problems with the same evaluation budget, and time counts the optimization only. Time to target is the number of evaluations times the cost of one evaluation. With a cheap fitness function, the library's own cost dominates; with an expensive one, only the evaluations matter.
 
-The full methodology, every library's settings, and the bugs we found in the libraries are in [benchmarks/README.md](benchmarks/README.md). The numbers behind the charts are in [docs/benchmarks/results.md](docs/benchmarks/results.md).
+The methods, settings and bugs found per library are in [benchmarks/README.md](benchmarks/README.md), and the full numbers are in [docs/benchmarks/results.md](docs/benchmarks/results.md).
 
 <details>
 <summary>More charts: evaluations to target, instructions per evaluation, multi-objective runs</summary>
@@ -87,11 +65,11 @@ The full methodology, every library's settings, and the bugs we found in the lib
 | | What it means |
 |---|---|
 | **Complete** | From a simple GA to NSGA-III, CMA-ES with restarts, L-SHADE and island models, see [what's there](#whats-there-so-far) |
-| **Fast** | Compiled Rust, bit-packed binary genomes, and parallel or batch evaluation. Measured against 15 libraries [above](#benchmarks), and guarded in CI: a PR that adds more than 5% instructions to a hot path fails ([gungraun](https://github.com/gungraun/gungraun)) |
+| **Fast** | Compiled Rust, bit-packed binary genomes, and parallel or batch evaluation; see the [benchmarks](#benchmarks) |
 | **Correct** | Invalid settings are errors from `build()`, before anything runs. An operator that doesn't fit the genome is a compile error |
-| **Reproducible** | The same seed gives the same result, on any number of threads and on 32 or 64 bits: the random numbers and math are portable, and tests pin their values, which CI checks on 32-bit Linux too |
+| **Reproducible** | The same seed gives the same result, on any number of threads and on 32- or 64-bit machines |
 | **Safe** | `#![forbid(unsafe_code)]`: memory safety from the compiler, and parallel code without data races |
-| **Also for Python** | `pip install genoxide`: the algorithms, with numpy genomes and vectorized fitness functions, see [`python/`](python/) |
+| **Also for Python** | `pip install genoxide`, with numpy genomes and vectorized fitness functions; see [`python/`](python/) |
 | **Batteries included** | Statistics, hall of fame, progress reports, constraints, checkpoints to resume a run, cancellation, `tracing` |
 
 ## A first look
@@ -118,26 +96,24 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
-A missing operator, or one that doesn't fit the genome, is a compile error that says what to set. Invalid settings are errors from `build()`, before anything runs.
-
 ### What's there so far
 
 - **Genomes:** binary (bit-packed), integer and real (bounded per gene), permutation, and real with a self-adaptive step size
 - **Selection:** tournament, roulette, stochastic universal sampling, rank, truncation, random
 - **Crossover:** one-point, two-point, k-point, uniform; for real genomes SBX, blend (BLX-α), arithmetic; for permutations order (OX1), partially mapped (PMX), cycle (CX), edge recombination
-- **Mutation:** bit-flip, uniform, Gaussian, polynomial, self-adaptive Gaussian; for permutations swap, inversion (2-opt), insertion, scramble (per-gene rates are exact; a picked gene always changes)
+- **Mutation:** bit-flip, uniform, Gaussian, polynomial, self-adaptive Gaussian; for permutations swap, inversion (2-opt), insertion, scramble
 - **Schemes:** generational with elitism, steady-state, (μ+λ), (μ,λ), and memetic (Lamarckian local search on the best parents)
 - **Evolution strategies:** (μ/ρ +, λ)-ES with intermediate or dominant recombination and self-adapted step sizes (one, or one per gene)
-- **CMA-ES:** covariance matrix adaptation with Hansen's defaults and stop criteria, IPOP and BIPOP restarts, sep-CMA-ES (diagonal) for high dimensions, portable (a Householder and QL eigendecomposition)
+- **CMA-ES:** with IPOP and BIPOP restarts, and sep-CMA-ES for high dimensions
 - **Differential evolution:** rand/1, best/1 and current-to-pbest/1 with an archive; fixed, dithered or adaptive parameters (JADE, SHADE, L-SHADE)
 - **Particle swarm optimization:** global or ring topology, constriction coefficients, velocity limits
-- **Multi-objective:** NSGA-II, NSGA-III (reference directions, pymoo's normalization) SPEA2, MOEA/D (Tchebycheff, PBI) and SMS-EMOA, with constrained dominance, duplicate elimination, O(N log N) non-dominated sorting for 2 objectives (ENS-BS for more), crowding distance, a Pareto archive; the number of objectives is checked at compile time; indicators: exact hypervolume and hypervolume contributions, IGD, IGD+, GD, generalized spread; the ZDT and DTLZ test problems
-- **Asynchronous evaluation:** a steady-state GA whose workers each get a new genome as soon as they're done, for slow fitness functions whose time varies
-- **Island model:** GA or DE islands with ring, fully connected or random migration; evaluated together, deterministic with any number of threads
+- **Multi-objective:** NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA, with constraints, duplicate elimination and a Pareto archive; indicators: hypervolume, IGD, IGD+, GD and spread; the ZDT and DTLZ test problems
+- **Asynchronous evaluation:** for slow fitness functions whose time varies
+- **Island model:** GA or DE islands with ring, fully connected or random migration
 - **Local search:** hill climbing (first-improvement or best-of-k, with plateau moves), simulated annealing, tabu search and iterated local search, with any mutation as the neighborhood
 - **Constraints:** Deb's feasibility rules (a fitness function returns a score and a constraint violation), and penalty functions
-- **Engine:** ask / tell core, stop conditions (target, generations, evaluations, time, stagnation, custom, combined), parallel evaluation with the same results as sequential, batch evaluation (a whole generation in one call, for SIMD, GPUs or remote services), abort flag, NaN policy, checkpoints to resume a run exactly (`serde` feature)
-- **Observers:** statistics per generation, hall of fame, progress lines, closures; `tracing` spans and events behind the `tracing` feature
+- **Engine:** stop conditions (target, generations, evaluations, time, stagnation, custom), parallel evaluation, batch evaluation (a whole generation in one call, for SIMD, GPUs or remote services), cancellation, checkpoints to resume a run (`serde` feature)
+- **Observers:** statistics per generation, hall of fame, progress lines, `tracing`
 
 ### Examples
 
@@ -163,7 +139,7 @@ See [docs/cli.md](docs/cli.md) for the run file and the protocol.
 
 ### From Python
 
-The Python package, in [`python/`](python/), runs genoxide's algorithms with fitness functions in Python and numpy: a genome at a time, a whole generation in one call for vectorized code, or from several threads.
+The Python package runs genoxide's algorithms with fitness functions in Python and numpy, one genome at a time or a whole generation in one call. See [`python/`](python/).
 
 ```python
 import genoxide as gx
@@ -183,7 +159,7 @@ result = ga.run(lambda bits: bits.sum(), target=100, generations=1_000)
 pip install genoxide
 ```
 
-The wheels need no Rust: Linux, macOS and Windows, for CPython 3.10 and later.
+Wheels for Linux, macOS and Windows, CPython 3.10 and later.
 
 Using an AI coding assistant? Point it to [AGENTS.md](AGENTS.md): it has the decision tables, settings, templates and fixes for common errors.
 
@@ -206,7 +182,7 @@ The details are in [ROADMAP.md](ROADMAP.md).
 
 ## Contributing
 
-genoxide is at an early stage, which is the best time to shape it. Open an issue for ideas, use cases or API feedback, and see [CONTRIBUTING.md](CONTRIBUTING.md) for pull requests, versioning and releases.
+Open an issue for ideas, use cases or API feedback. See [CONTRIBUTING.md](CONTRIBUTING.md) for pull requests.
 
 ## License
 
