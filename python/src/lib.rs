@@ -14,6 +14,7 @@ use pyo3::prelude::*;
 #[pymodule]
 fn _genoxide(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run::run, module)?)?;
+    module.add_function(wrap_pyfunction!(run::das_dennis, module)?)?;
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
