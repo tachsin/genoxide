@@ -1,6 +1,7 @@
 //! Binary genomes: fixed length bit strings, bit-packed.
 
 use super::{Genome, Representation, SwapGenes};
+use crate::operator::check_size;
 use crate::{Error, Result, StreamRng};
 use rand::Rng;
 use std::fmt;
@@ -249,7 +250,11 @@ pub struct Binary {
 }
 
 impl Binary {
-    /// Binary genomes of `len` bits. `len` must be at least 1.
+    /// Binary genomes of `len` bits, between 1 and 2^24.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a length of 0 or above 2^24.
     pub fn new(len: usize) -> Result<Self> {
         if len == 0 {
             return Err(Error::InvalidSetting {
@@ -257,7 +262,9 @@ impl Binary {
                 reason: "a binary genome needs at least 1 bit".to_string(),
             });
         }
-        Ok(Self { len })
+        Ok(Self {
+            len: check_size("len", len)?,
+        })
     }
 }
 

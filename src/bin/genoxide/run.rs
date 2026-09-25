@@ -8,6 +8,7 @@ use crate::operators::{
 use crate::process::{Genes, Multi, Pool, Single};
 use genoxide::algorithm::{Incremental, cmaes, pso};
 use genoxide::checkpoint;
+use genoxide::engine::asynchronous::MAX_WORKERS;
 use genoxide::genome::Representation;
 use genoxide::multi::MultiObjectiveAlgorithm;
 use genoxide::observer::Report;
@@ -119,7 +120,11 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
         );
     }
     let workers = match run.fitness.workers {
-        Some(0) => return Err("`fitness.workers` must be at least 1".to_string()),
+        Some(workers) if workers == 0 || workers > MAX_WORKERS => {
+            return Err(format!(
+                "`fitness.workers` must be between 1 and {MAX_WORKERS}, got {workers}"
+            ));
+        }
         Some(workers) => workers,
         None => std::thread::available_parallelism().map_or(1, usize::from),
     };

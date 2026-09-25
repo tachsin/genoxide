@@ -706,6 +706,7 @@ fn stop_reason(reason: StopReason) -> &'static str {
         StopReason::Time => "time",
         StopReason::Stagnation => "stagnation",
         StopReason::Aborted => "aborted",
+        StopReason::Stalled => "stalled",
         _ => "other",
     }
 }
