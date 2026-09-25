@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [**breaking**] eliminate duplicate children in NSGA-II, NSGA-III, SPEA2 and SMS-EMOA ([#109](https://github.com/tachsin/genoxide/pull/109))
 - [**breaking**] restart differential evolution on stagnation, and default to SHADE with a small population ([#113](https://github.com/tachsin/genoxide/pull/113))
 - add a Python package with numpy genomes, batch and parallel fitness functions ([#105](https://github.com/tachsin/genoxide/pull/105))
+- add NSGA-III, SPEA2, MOEA/D, SMS-EMOA and a progress callback to the Python package ([#112](https://github.com/tachsin/genoxide/pull/112))
 
 ### <!-- 1 -->Fixed
 
