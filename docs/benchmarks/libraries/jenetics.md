@@ -42,7 +42,7 @@ Only C1-only compilation and `-Xbatch` stay within 10%. C1 alone makes the code 
 **Keeping going:** the README ends the stream with `limit(100)` and OnesCounting.java with `limit(10)`, generation limits, which the budget replaces. Neither sets a convergence criterion, so a run goes to the budget.
 
 **Left out:**
-- The manual's settings (section 6.1): see above. In a separate test they reached no target either (5 seeds, the best at the end 73, from 72 to 74).
+- The manual's settings (section 6.1): see above. In a separate test, run to the budget without the listing's `bySteadyFitness(7)`, they reached no target either (5 seeds, the best at the end 73, from 72 to 74).
 - Evolution strategies (manual 2.9): the manual shows how to configure the engine as a (μ, λ) or (μ + λ) ES, without values for μ, λ or the mutation rate, and not for a problem type.
 
 **Why the idiomatic run likely misses the target:** `Mutator(0.15)` gives each bit of an offspring a new random value with probability 0.15 (0.15^(1/3) for the individual, for its chromosome and for the bit), so it flips about 7.5% of the bits, 7 or 8 of 100. Near the optimum, nearly every mutated child loses ones, and with 50 individuals selection doesn't keep up.
