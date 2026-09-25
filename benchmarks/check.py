@@ -109,7 +109,9 @@ def check_run(r, problem, size, budget, cap):
         return [f"{where}: missing {', '.join(missing)}"]
     failures = []
     evaluations, generations = r["evaluations"], max(r["generations"], 1)
-    per_generation = math.ceil(evaluations / generations)
+    # a generation's size: the average, or the last one's, which an adapter whose generations grow
+    # (e.g. CMA-ES with IPOP restarts) reports as last_generation
+    per_generation = max(math.ceil(evaluations / generations), r.get("last_generation", 0))
     if evaluations > budget + per_generation:
         failures.append(f"{where}: {evaluations} evaluations, over the budget of {budget} by more than "
                         f"a generation ({per_generation})")
