@@ -7,7 +7,8 @@ For each library and scenario:
 - runs (rules 1.3, 2.1, 2.3): two short runs; each reported solution must evaluate to the reported
   best (or front), stay within its problem's domain, and each run must end only at the target, its
   budget (plus at most one generation) or its time cap;
-- threads (rule 4.3): the adapter's CPU time must stay within 10% of its wall time;
+- threads (rule 4.3): the adapter's CPU time, over all its check runs, must stay within 10% of their
+  wall time;
 - repeat (rule 5.2): the same seed, twice, must give the same evaluations and results.
 
 A library passes when every scenario it runs passes. The result is saved with a hash of the
@@ -27,10 +28,9 @@ import run
 CHECK_EVALUATIONS = 20_000
 CHECK_SECONDS = 10.0
 REPEAT_EVALUATIONS = 2_000
-# CPU time over wall time above this means other threads did work (rule 4.3); shorter runs are
-# dominated by startup and aren't judged
+# CPU time over wall time above this means other threads did work (rule 4.3); judged over all of a
+# library's short runs together, so a fast adapter is judged too
 THREADS = 1.10
-THREADS_MIN_SECONDS = 1.0
 # a run that took this share of its cap was stopped by it
 CAPPED = 0.98
 
@@ -143,8 +143,9 @@ def check_run(r, problem, size, budget, cap):
     return failures
 
 
-def check_scenario(name, adapter, problem, size, mode, budget):
-    """(ran, failures, notes) of one library in one scenario."""
+def check_scenario(name, adapter, problem, size, mode, budget, usage):
+    """(ran, failures, notes) of one library in one scenario; adds the short runs' wall and CPU
+    seconds to `usage`."""
     budget = min(budget, CHECK_EVALUATIONS)
     command = adapter["command"] + [problem, str(size), mode, "0", "1", str(budget), str(CHECK_SECONDS)]
     stdout, stderr, code, wall, cpu = execute(command)
@@ -156,13 +157,9 @@ def check_scenario(name, adapter, problem, size, mode, budget):
     failures = []
     for r in runs:
         failures += check_run(r, problem, size, budget, CHECK_SECONDS)
-    notes = []
-    if wall >= THREADS_MIN_SECONDS:
-        ratio = cpu / wall
-        notes.append(f"CPU/wall {ratio:.2f}")
-        if ratio > THREADS:
-            failures.append(f"threads: CPU time {cpu:.1f} s over {wall:.1f} s of wall time ({ratio:.2f}): "
-                            "it used more than one thread")
+    usage[0] += wall
+    usage[1] += cpu
+    notes = [f"CPU/wall {cpu / wall:.2f}"] if wall > 0 else []
 
     # the same seed twice, with a budget of evaluations only
     repeat = adapter["command"] + [problem, str(size), mode, "0", "0", str(REPEAT_EVALUATIONS), "600"]
@@ -208,9 +205,10 @@ def check(libraries, scenarios):
             print(f"building {name} adapter ...", flush=True)
             subprocess.run(adapter["build"], check=True)
         library_failures = 0
+        usage = [0.0, 0.0]
         for problem, size, mode, budget in scenarios:
             scenario = run.scenario_name(problem, size, mode)
-            ran, failures, notes = check_scenario(name, adapter, problem, size, mode, budget)
+            ran, failures, notes = check_scenario(name, adapter, problem, size, mode, budget, usage)
             if not ran:
                 print(f"  {name} {scenario}: doesn't run", flush=True)
                 continue
@@ -219,6 +217,13 @@ def check(libraries, scenarios):
             for failure in failures:
                 print(f"      {failure}", flush=True)
             library_failures += len(failures)
+        wall, cpu = usage
+        if wall > 0:
+            ratio = cpu / wall
+            verdict = "FAIL: it used more than one thread" if ratio > THREADS else "pass"
+            print(f"  {name} threads: CPU {cpu:.1f} s over {wall:.1f} s of wall time ({ratio:.2f}): {verdict}",
+                  flush=True)
+            library_failures += ratio > THREADS
         passed = library_failures == 0
         all_passed &= passed
         print(f"{name}: {'PASSED' if passed else f'FAILED ({library_failures} failures)'}", flush=True)
