@@ -24,7 +24,8 @@
     .\pin-wsl.ps1 -Install
 #>
 param(
-    [int[]]$Cores = @(8, 19),
+    # a list (-Cores 8,19), or one text with commas, as a scheduled task passes it
+    [string[]]$Cores = @('8', '19'),
     [switch]$Install,
     [switch]$Uninstall,
     # append the outcome to %LOCALAPPDATA%\genoxide\pin-wsl.log (the scheduled task does)
@@ -74,6 +75,7 @@ function Write-Outcome([string]$Message) {
     $Message
 }
 
+$Cores = @($Cores -split ',' | ForEach-Object { [int]$_.Trim() })
 $mask = [int64]0
 foreach ($core in $Cores) {
     $mask = $mask -bor ([int64]1 -shl $core)
