@@ -9,6 +9,7 @@ on:
       - "python/**"
       - "src/**"
       - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/python-wheels.yml"
   workflow_dispatch:
   workflow_call:
@@ -33,19 +34,16 @@ jobs:
       run:
         shell: bash
     steps:
+      # the Python package has genoxide's version, and the dependency versions of Cargo.lock: both
+      # are the workspace's, in the root Cargo.toml and Cargo.lock
       - uses: actions/checkout@v7
-      # the Python package has genoxide's version
-      - name: Version
-        run: |
-          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-          perl -pi -e 's/^version = "[^"]*"/version = "'"$version"'"/ if !$done && /^version/ && ($done = 1)' python/Cargo.toml
-          grep -m1 '^version' python/Cargo.toml
       - uses: PyO3/maturin-action@v1.51.0
         with:
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           working-directory: python
-          args: --release --out dist
+          # no --release: it would take the place of the `wheel` profile of pyproject.toml
+          args: --locked --out dist
       - uses: actions/setup-python@v7
         if: matrix.platform.test
         with:
@@ -66,15 +64,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Version
-        run: |
-          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-          perl -pi -e 's/^version = "[^"]*"/version = "'"$version"'"/ if !$done && /^version/ && ($done = 1)' python/Cargo.toml
       - uses: PyO3/maturin-action@v1.51.0
         with:
           command: sdist
           working-directory: python
-          args: --out dist
+          args: --locked --out dist
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: wheels-sdist
