@@ -119,6 +119,7 @@ benchmarks\pin-wsl.ps1 -Install
 ```sh
 cd benchmarks
 python run.py setup      # .venv with the Python libraries from requirements.txt (uses uv if installed)
+python run.py check     # test the adapters against the rules (a timed run needs it)
 python run.py --quick    # small scenarios, 3 seeds
 python run.py            # all scenarios, 10 seeds
 python run.py --scenarios nqueens-64-idiomatic --seeds 20 --libraries genetic_algorithm deap
@@ -148,17 +149,28 @@ Each adapter runs OneMax 1000 in the matched configuration twice, with budgets o
 
 ## Adding a library
 
-Write an adapter with this command line:
+An adapter follows [the rules](../docs/benchmarks/rules.md) and has two commands. The first runs the solvers:
 
 ```
 <adapter> <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
 ```
 
-It prints one JSON line per solver per seed:
+It prints one JSON line per solver per seed, with the best solution found:
 
 ```json
 {"library": "deap", "solver": "ga", "problem": "onemax", "size": 100, "mode": "matched", "seed": 0,
- "time_s": 0.21, "generations": 37, "evaluations": 7041, "best": 100, "target": 100, "success": true}
+ "time_s": 0.21, "generations": 37, "evaluations": 7041, "best": 100, "target": 100, "success": true,
+ "solution": [1, 1, 1, ...]}
 ```
 
-A multi-objective run prints `"front": [[f1, f2], ...]` instead of `best`, `target` and `success`. For a problem its library can't do, an adapter prints nothing. Register the adapter in `ADAPTERS` in `run.py`, with its language, and keep its fitness functions identical to the other adapters'.
+A multi-objective run prints `"front": [[f1, f2], ...]` and `"solutions": [[x1, x2, ...], ...]`, the solutions of those points in the same order, instead of `best`, `target`, `success` and `solution`. For a problem its library can't do, an adapter prints nothing.
+
+The second evaluates solutions with the adapter's own fitness functions:
+
+```
+<adapter> values <problem> <size>
+```
+
+It reads one JSON solution per line and prints its value, or its list of objectives, one per line.
+
+Register the adapter in `ADAPTERS` in `run.py`, with its language, write its page in [docs/benchmarks/libraries/](../docs/benchmarks/libraries/), and run `python run.py check --libraries <name>`. A timed run measures only adapters that passed the check as they are now.
