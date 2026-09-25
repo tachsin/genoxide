@@ -133,7 +133,7 @@ Rosenbrock 10 (budget 500,000):
 | Solver | Runs | Reached | Median evaluations to the target | Best value: median | best | worst | At the cap |
 |---|---|---|---|---|---|---|---|
 | cma_es | 5 | 5 | 5,840 | 0.009198 | 0.008564 | 0.009741 | 0 |
-| de | 5 | 5 | 7,400 | 0.009191 | 0.007153 | 0.009787 | 0 |
+| de | 5 | 5 | 38,100 | 0.008082 | 0.004516 | 0.008217 | 0 |
 | pso | 5 | 5 | 98,160 | 0.009987 | 0.009948 | 0.009991 | 0 |
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1

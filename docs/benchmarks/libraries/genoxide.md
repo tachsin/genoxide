@@ -109,7 +109,7 @@ Rastrigin 10 (budget 500,000):
 | Solver | Runs | Reached | Median evaluations to the target | Best value: median | best | worst | At the cap |
 |---|---|---|---|---|---|---|---|
 | islands | 5 | 5 | 16,108 | 0.008556 | 0.007568 | 0.009915 | 0 |
-| de | 5 | 5 | 4,400 | 0.008197 | 0.003399 | 0.009838 | 0 |
+| de | 5 | 5 | 40,200 | 0.007575 | 0.006501 | 0.008201 | 0 |
 | cma_es | 5 | 5 | 80,200 | 0.009076 | 0.004135 | 0.009887 | 0 |
 
 Rastrigin 30 (budget 2,000,000):
@@ -117,7 +117,7 @@ Rastrigin 30 (budget 2,000,000):
 | Solver | Runs | Reached | Median evaluations to the target | Best value: median | best | worst | At the cap |
 |---|---|---|---|---|---|---|---|
 | islands | 5 | 3 | 1,875,790 | 0.00942 | 0.007191 | 0.01347 | 0 |
-| de | 5 | 5 | 27,960 | 0.009308 | 0.005445 | 0.00955 | 0 |
+| de | 5 | 5 | 100,900 | 0.009562 | 0.007007 | 0.009812 | 0 |
 | cma_es | 5 | 5 | 525,238 | 0.009529 | 0.007666 | 0.009915 | 0 |
 
 Ackley 30 (budget 1,000,000):
@@ -125,7 +125,7 @@ Ackley 30 (budget 1,000,000):
 | Solver | Runs | Reached | Median evaluations to the target | Best value: median | best | worst | At the cap |
 |---|---|---|---|---|---|---|---|
 | islands | 5 | 0 | - | 0.09492 | 0.06938 | 0.1146 | 0 |
-| de | 5 | 5 | 8,040 | 0.009627 | 0.009334 | 0.00982 | 0 |
+| de | 5 | 5 | 18,400 | 0.009097 | 0.007977 | 0.00984 | 0 |
 | cma_es | 5 | 5 | 3,164 | 0.008987 | 0.008779 | 0.009896 | 0 |
 
 The island model with its template's settings does worse than the single GA it's preferred to, except on Rastrigin 10: 2 of 5 runs miss the Rastrigin 30 target within 2,000,000 evaluations, and no run reaches the Ackley 30 target within 1,000,000 (they end between 0.069 and 0.115). This is a result against the docs' stated preference.
@@ -152,7 +152,7 @@ Rosenbrock 10 (budget 500,000):
 | Solver | Runs | Reached | Median evaluations to the target | Best value: median | best | worst | At the cap |
 |---|---|---|---|---|---|---|---|
 | cma_es | 5 | 5 | 5,840 | 0.009198 | 0.008564 | 0.009741 | 0 |
-| de | 5 | 5 | 7,360 | 0.009191 | 0.008339 | 0.009786 | 0 |
+| de | 5 | 5 | 38,100 | 0.008082 | 0.004516 | 0.008217 | 0 |
 | pso | 5 | 5 | 98,160 | 0.009987 | 0.009948 | 0.009991 | 0 |
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1
