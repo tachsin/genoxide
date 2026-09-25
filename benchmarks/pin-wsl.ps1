@@ -8,8 +8,9 @@
     process) once. That needs an Administrator PowerShell and a running WSL, and lasts until the
     virtual machine stops: `wsl --shutdown`, or about a minute after the last Linux process ends.
 
-    -Install registers a scheduled task that pins it at logon and every minute, with the highest
-    privileges, so it stays pinned. -Uninstall removes the task.
+    -Install registers a scheduled task that pins it every minute from now on and from every logon,
+    in the user's session with the highest privileges, without a window, so it stays pinned. It
+    logs each run to %LOCALAPPDATA%\genoxide\pin-wsl.log. -Uninstall removes the task.
 
     benchmarks/run.py checks the pinning before it measures times, and refuses to measure without it.
 
@@ -25,7 +26,9 @@
 param(
     [int[]]$Cores = @(8, 19),
     [switch]$Install,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    # append the outcome to %LOCALAPPDATA%\genoxide\pin-wsl.log (the scheduled task does)
+    [switch]$Log
 )
 $ErrorActionPreference = 'Stop'
 $task = 'genoxide-pin-wsl'
@@ -37,13 +40,20 @@ if ($Uninstall) {
 }
 
 if ($Install) {
-    $arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Cores $($Cores -join ',')"
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
-    # at logon, then every minute: WSL's virtual machine restarts whenever WSL starts again
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
-    $trigger.Repetition = (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)).Repetition
-    # S4U: runs without a window, whether or not the user is logged on
-    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Highest
+    # conhost --headless: no window every minute
+    $arguments = "--headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Cores $($Cores -join ',') -Log"
+    $action = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument $arguments
+    # every minute, from now on and from every logon: WSL's virtual machine restarts whenever WSL
+    # starts again
+    $every = (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)).Repetition
+    $now = New-ScheduledTaskTrigger -Once -At (Get-Date)
+    $now.Repetition = $every
+    $logon = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+    $logon.Repetition = $every
+    $trigger = @($now, $logon)
+    # the user's elevated session: setting the affinity of the virtual machine is refused to a
+    # task that runs whether the user is logged on or not (S4U)
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -ExecutionTimeLimit (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
     Register-ScheduledTask -TaskName $task -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
@@ -52,20 +62,35 @@ if ($Install) {
     return
 }
 
+function Write-Outcome([string]$Message) {
+    if ($Log) {
+        $folder = Join-Path $env:LOCALAPPDATA 'genoxide'
+        New-Item -ItemType Directory -Force -Path $folder | Out-Null
+        $file = Join-Path $folder 'pin-wsl.log'
+        # the last 1000 lines are enough
+        $lines = @(Get-Content $file -ErrorAction SilentlyContinue | Select-Object -Last 999)
+        $lines + ('{0:yyyy-MM-dd HH:mm:ss} {1}' -f (Get-Date), $Message) | Set-Content $file
+    }
+    $Message
+}
+
 $mask = [int64]0
 foreach ($core in $Cores) {
     $mask = $mask -bor ([int64]1 -shl $core)
 }
 $vm = Get-Process -Name vmmemWSL -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $vm) {
-    'WSL is not running: nothing to pin'
+    Write-Outcome 'WSL is not running: nothing to pin'
     return
 }
 try {
     if ([int64]$vm.ProcessorAffinity -ne $mask) {
         $vm.ProcessorAffinity = [IntPtr]$mask
+        Write-Outcome ('WSL (process {0}) pinned to cores {1} (mask 0x{2:X})' -f $vm.Id, ($Cores -join ', '), $mask)
+    } else {
+        Write-Outcome ('WSL (process {0}) already pinned to cores {1}' -f $vm.Id, ($Cores -join ', '))
     }
 } catch {
+    Write-Outcome "error: $($_.Exception.Message)"
     throw 'pinning WSL needs an Administrator PowerShell (or the scheduled task of -Install)'
 }
-'WSL (process {0}) pinned to cores {1} (mask 0x{2:X})' -f $vm.Id, ($Cores -join ', '), $mask
