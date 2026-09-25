@@ -89,13 +89,13 @@ The tabu search of the Python example is kept, as the docs' example for this pro
 
 **Methods:** AGENTS.md states a preference for each: CMA-ES is "the strongest general choice for continuous problems", with restarts "for multimodal functions"; differential evolution "often needs far fewer evaluations than a GA"; and a GA runs best as an island model: "more diverse than one large population, and often faster on multimodal problems". Particle swarm and the evolution strategy are the ones it advises against here (below).
 - **`islands`:** the GA as AGENTS.md's [island model](../../../AGENTS.md#island-model), with its template, which runs Rastrigin: 4 islands of 25, each with its own seed (`4 * seed + island`), tournament 3, uniform crossover, polynomial mutation with η 20 at 0.1 per gene, the default scheme (elitism 1); a ring, migration every 10 generations, 2 migrants ([lines 485-509](../../../benchmarks/adapters/genoxide/src/main.rs#L485-L509)). The template's rate of 0.1 is used as it is, also with 30 genes.
-- **`de`:** differential evolution with its defaults, as AGENTS.md's [DE template](../../../AGENTS.md#differential-evolution) runs Rastrigin: DE/current-to-pbest/1 with an archive, SHADE's adaptation of F and CR, the number of genes + 10 individuals, and restarts when the population converges or stalls ([lines 463-467](../../../benchmarks/adapters/genoxide/src/main.rs#L463-L467)).
+- **`de`:** differential evolution with its defaults, as AGENTS.md's [DE template](../../../AGENTS.md#differential-evolution) runs Rastrigin: SHADE's published settings (current-to-pbest/1 with an archive and a random p per trial, SHADE's adaptation of F and CR, 100 individuals), and restarts when the population converges or stalls ([lines 463-467](../../../benchmarks/adapters/genoxide/src/main.rs#L463-L467)).
 - **`cma_es`:** CMA-ES with its defaults (AGENTS.md: "nothing needs tuning": 4 + ⌊3 ln n⌋ samples, an initial step of 0.3 of each range) and IPOP restarts, which AGENTS.md's [CMA-ES template](../../../AGENTS.md#cma-es) (on Rastrigin), [python/README.md](../../../python/README.md) and the rustdoc of `Restarts::Ipop` ("suits multimodal functions with a global structure, like Rastrigin") recommend for multimodal functions ([lines 450-462](../../../benchmarks/adapters/genoxide/src/main.rs#L450-L462)). IPOP rather than BIPOP: the rustdoc says IPOP "suits multimodal functions with a global structure, like Rastrigin", and the docs' examples for Rastrigin use it.
 
 **Keeping going:** the island model has no convergence criterion and runs to the budget. DE restarts by itself when its population converges or stalls (its default), and CMA-ES with IPOP restarts with a doubled population when a run meets one of its stop criteria.
 
 **Left out** (5 seeds each, with the scenario's budget):
-- **L-SHADE** (`De::l_shade(real, budget)`), which [python/examples/rastrigin.py](../../../python/examples/rastrigin.py) runs on Rastrigin 30: AGENTS.md says it "aims at the best final value rather than the fewest evaluations to a target". It reached every target, after a median of 48,003 (Rastrigin 10), 405,783 (Rastrigin 30) and 78,847 (Ackley 30) evaluations, against 4,400, 27,960 and 8,040 for the default DE.
+- **L-SHADE** (`De::l_shade(real, budget)`), which [python/examples/rastrigin.py](../../../python/examples/rastrigin.py) runs on Rastrigin 30: AGENTS.md says it "aims at the best final value rather than the fewest evaluations to a target". It reached every target, after a median of 48,003 (Rastrigin 10), 405,783 (Rastrigin 30) and 78,847 (Ackley 30) evaluations, against 40,200, 100,900 and 18,400 for the default DE.
 - **BIPOP restarts** (`cmaes::Restarts::Bipop`, "good on a wider range of multimodal functions than IPOP"): the docs' statement about IPOP names this kind of function ("with a global structure, like Rastrigin"), and their examples for Rastrigin use IPOP. For information: BIPOP needed a median of 138,893 (Rastrigin 10) and 868,670 (Rastrigin 30) evaluations, and the same as IPOP on Ackley 30 (3,164).
 - **DE with a fixed small CR** (`de::Control::Fixed { f: 0.5, cr: 0.1 }`), which AGENTS.md suggests for separable functions: it's a setting for a known property of the function, which the benchmark doesn't give the libraries. For information: it needed 4,820, 46,800 and 14,800 evaluations.
 - **The GA as one population**, the settings of [examples/rastrigin.rs](../../../examples/rastrigin.rs) (population 100, tournament 3, uniform crossover, polynomial mutation with η 20 at 1 / n, elitism 2), which the adapter ran before the rules' amendment of rule 6.2: AGENTS.md prefers the island model for multimodal problems. For information: it reached every target, after a median of 23,530 (Rastrigin 10), 101,527 (Rastrigin 30) and 245,513 (Ackley 30) evaluations. The Python package follows its own docs ([genoxide_python.md](genoxide_python.md)).
@@ -109,7 +109,7 @@ Rastrigin 10 (budget 500,000):
 | Solver | Runs | Reached | Median evaluations to the target | Best value: median | best | worst | At the cap |
 |---|---|---|---|---|---|---|---|
 | islands | 5 | 5 | 16,108 | 0.008556 | 0.007568 | 0.009915 | 0 |
-| de | 5 | 5 | 4,400 | 0.008197 | 0.003399 | 0.009838 | 0 |
+| de | 5 | 5 | 40,200 | 0.007575 | 0.006501 | 0.008201 | 0 |
 | cma_es | 5 | 5 | 80,200 | 0.009076 | 0.004135 | 0.009887 | 0 |
 
 Rastrigin 30 (budget 2,000,000):
@@ -117,7 +117,7 @@ Rastrigin 30 (budget 2,000,000):
 | Solver | Runs | Reached | Median evaluations to the target | Best value: median | best | worst | At the cap |
 |---|---|---|---|---|---|---|---|
 | islands | 5 | 3 | 1,875,790 | 0.00942 | 0.007191 | 0.01347 | 0 |
-| de | 5 | 5 | 27,960 | 0.009308 | 0.005445 | 0.00955 | 0 |
+| de | 5 | 5 | 100,900 | 0.009562 | 0.007007 | 0.009812 | 0 |
 | cma_es | 5 | 5 | 525,238 | 0.009529 | 0.007666 | 0.009915 | 0 |
 
 Ackley 30 (budget 1,000,000):
@@ -125,12 +125,12 @@ Ackley 30 (budget 1,000,000):
 | Solver | Runs | Reached | Median evaluations to the target | Best value: median | best | worst | At the cap |
 |---|---|---|---|---|---|---|---|
 | islands | 5 | 0 | - | 0.09492 | 0.06938 | 0.1146 | 0 |
-| de | 5 | 5 | 8,040 | 0.009627 | 0.009334 | 0.00982 | 0 |
+| de | 5 | 5 | 18,400 | 0.009097 | 0.007977 | 0.00984 | 0 |
 | cma_es | 5 | 5 | 3,164 | 0.008987 | 0.008779 | 0.009896 | 0 |
 
 The island model with its template's settings does worse than the single GA it's preferred to, except on Rastrigin 10: 2 of 5 runs miss the Rastrigin 30 target within 2,000,000 evaluations, and no run reaches the Ackley 30 target within 1,000,000 (they end between 0.069 and 0.115). This is a result against the docs' stated preference.
 
-**Where the DE defaults come from:** the rustdoc of `De::builder` ([src/algorithm/de.rs](../../../src/algorithm/de.rs), lines 194-197) says they are "the settings that reached targets in the fewest evaluations in genoxide's measurements (shifted Rastrigin, Rosenbrock and Ackley with 10 and 30 genes)": the problems of this benchmark. They're the documented defaults, which the rules allow, but they were chosen on these problems, which rule 6.3 doesn't allow for a setting chosen by an adapter. Readers should weigh the DE results with that in mind.
+**Where the DE defaults come from:** SHADE's paper (Tanabe and Fukunaga, IEEE CEC 2013), as the rustdoc of `De::builder` cites it; the restart criterion is genoxide's own. genoxide 0.6's defaults had been chosen on this benchmark's problems, and 0.7 replaced them with the published ones.
 
 ## Continuous, unimodal: Rosenbrock 10
 
@@ -152,7 +152,7 @@ Rosenbrock 10 (budget 500,000):
 | Solver | Runs | Reached | Median evaluations to the target | Best value: median | best | worst | At the cap |
 |---|---|---|---|---|---|---|---|
 | cma_es | 5 | 5 | 5,840 | 0.009198 | 0.008564 | 0.009741 | 0 |
-| de | 5 | 5 | 7,360 | 0.009191 | 0.008339 | 0.009786 | 0 |
+| de | 5 | 5 | 38,100 | 0.008082 | 0.004516 | 0.008217 | 0 |
 | pso | 5 | 5 | 98,160 | 0.009987 | 0.009948 | 0.009991 | 0 |
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1

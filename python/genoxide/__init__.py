@@ -967,14 +967,15 @@ class Ga(_SingleObjective):
 class De(_SingleObjective):
     """Differential evolution. Real genomes.
 
-    By default DE/current-to-pbest/1 with an archive, SHADE's adaptation of F and CR, a
-    population of the number of genes + 10, and restarts when the population converges or
-    stalls: the settings that reached targets in the fewest evaluations in genoxide's
-    measurements. Non-separable, highly multimodal problems do better with a larger
-    ``population_size``, e.g. 100. With ``l_shade``, L-SHADE (Tanabe and
-    Fukunaga, 2014) for a budget of that many evaluations: current-to-pbest/1, F and CR adapted
-    during the run, and a population that shrinks linearly from 18 times the number of genes to 4.
-    Stop the run at the same number of evaluations.
+    By default SHADE's published settings (Tanabe and Fukunaga, "Success-History Based
+    Parameter Adaptation for Differential Evolution", IEEE CEC 2013): DE/current-to-pbest/1 with
+    a random p per trial between 2 / population and 0.2 and an archive of the population's size,
+    SHADE's adaptation of F and CR with a memory of 100, and a population of 100. genoxide adds
+    restarts when the population converges or stalls (its own choice, not part of SHADE).
+
+    With ``l_shade``, L-SHADE (Tanabe and Fukunaga, 2014) for a budget of that many evaluations:
+    current-to-pbest/1, F and CR adapted during the run, and a population that shrinks linearly
+    from 18 times the number of genes to 4. Stop the run at the same number of evaluations.
     """
 
     def __init__(

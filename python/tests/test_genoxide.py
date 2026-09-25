@@ -75,6 +75,18 @@ def test_the_batch_function_gets_a_generation():
     assert sum(shape[0] for shape in shapes) == result.evaluations
 
 
+def test_de_defaults_to_shades_population():
+    # the Rust defaults: SHADE's population of 100, whatever the number of genes
+    shapes = []
+
+    def sphere(x):
+        shapes.append(x.shape)
+        return (x * x).sum(axis=1)
+
+    gx.De(gx.Real((-1.0, 1.0), length=4), objective="minimize", seed=1).run(sphere, generations=2, batch=True)
+    assert shapes == [(100, 4)] * 3
+
+
 @pytest.mark.parametrize(
     "algorithm",
     [

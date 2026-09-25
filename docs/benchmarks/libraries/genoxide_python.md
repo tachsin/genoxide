@@ -119,7 +119,7 @@ L-SHADE spreads its search over the whole budget by design, so it reaches the ta
 
 **Methods:** the Python docs have no example for a unimodal function and state no preference among their real-valued algorithms, so the algorithms that run with their documented defaults ([lines 266-283](../../../benchmarks/adapters/genoxide_python/bench.py#L266-L283)):
 - **`cma_es`:** `gx.Cmaes(genome, restarts="ipop")`: the defaults, with IPOP for rule 2.2, which restarts a converged method with the library's own restarts.
-- **`de`:** `gx.De(genome)`, the defaults of python/README.md's table and the `De` docstring: DE/current-to-pbest/1 with an archive, SHADE's adaptation of F and CR, the number of genes + 10 individuals, and restarts when the population converges or stalls. The docstring says these are "the settings that reached targets in the fewest evaluations in genoxide's measurements", which were made on this benchmark's problems ([genoxide.md](genoxide.md#continuous-multimodal-rastrigin-10-and-30-ackley-30)).
+- **`de`:** `gx.De(genome)`, the defaults of python/README.md's table and the `De` docstring: SHADE's published settings (current-to-pbest/1 with an archive, SHADE's adaptation of F and CR, 100 individuals), and restarts when the population converges or stalls ([genoxide.md](genoxide.md#continuous-multimodal-rastrigin-10-and-30-ackley-30)).
 - **`pso`:** `gx.Pso(genome, population_size=40)`: the population size is required, and 40 is the `Pso` docstring's ("e.g. 40"); the default global topology.
 
 **Keeping going:** CMA-ES and DE restart by themselves; PSO has no convergence criterion and runs to the budget.
@@ -133,7 +133,7 @@ Rosenbrock 10 (budget 500,000):
 | Solver | Runs | Reached | Median evaluations to the target | Best value: median | best | worst | At the cap |
 |---|---|---|---|---|---|---|---|
 | cma_es | 5 | 5 | 5,840 | 0.009198 | 0.008564 | 0.009741 | 0 |
-| de | 5 | 5 | 7,400 | 0.009191 | 0.007153 | 0.009787 | 0 |
+| de | 5 | 5 | 38,100 | 0.008082 | 0.004516 | 0.008217 | 0 |
 | pso | 5 | 5 | 98,160 | 0.009987 | 0.009948 | 0.009991 | 0 |
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1
