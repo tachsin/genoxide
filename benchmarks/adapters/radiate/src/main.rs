@@ -34,14 +34,16 @@
 //! the same thread; radiate-core-1.3.1/src/domain/random_provider.rs).
 //! Fitness: through `raw_fitness_fn`, radiate's documented way to evaluate the genotype without
 //! decoding it (docs/source/fitness.md, "Raw Fitness"). The values are computed in f64 like in the
-//! other adapters; radiate keeps them as an f32 `Score`, so the fitness function also keeps the
-//! best value in f64 and its solution, and the run reports those.
+//! other adapters (radiate keeps them as an f32 `Score`). The fitness wrapper counts every call and
+//! records the first evaluation whose f64 value reaches the target (`first_hit`), which also ends
+//! the run after its generation. The run reports radiate's own best solution (`Generation::value`,
+//! the best of the run), with its value recomputed in f64 after the clock.
 
 use radiate::prelude::*;
 use std::f64::consts::{E, PI};
 use std::io::BufRead;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, LazyLock, OnceLock};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------------------------
@@ -67,18 +69,24 @@ fn nqueens(columns: impl ExactSizeIterator<Item = usize>) -> f64 {
         .sum::<usize>() as f64
 }
 
-// Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
-// towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
-fn shift(i: usize) -> f64 {
-    2.0 * ((37 * i + 11) % 101) as f64 / 101.0 - 1.0
+// Rastrigin and Ackley are shifted (rule 1.4): gene i is measured from
+// s_i = 0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1), upper the box's upper bound, in this
+// order. Computed once, before any run, for up to MAX_GENES genes.
+const MAX_GENES: usize = 1024;
+fn shifts(upper: f64) -> Vec<f64> {
+    (0..MAX_GENES)
+        .map(|i| 0.8 * upper * (2.0 * ((37 * i + 11) % 101) as f64 / 101.0 - 1.0))
+        .collect()
 }
+static RASTRIGIN_SHIFT: LazyLock<Vec<f64>> = LazyLock::new(|| shifts(5.12));
+static ACKLEY_SHIFT: LazyLock<Vec<f64>> = LazyLock::new(|| shifts(32.768));
 
 fn rastrigin(x: &[f64]) -> f64 {
     10.0 * x.len() as f64
         + x.iter()
-            .enumerate()
-            .map(|(i, v)| {
-                let v = v - shift(i);
+            .zip(RASTRIGIN_SHIFT.iter())
+            .map(|(v, s)| {
+                let v = v - s;
                 v * v - 10.0 * (2.0 * PI * v).cos()
             })
             .sum::<f64>()
@@ -92,7 +100,7 @@ fn rosenbrock(x: &[f64]) -> f64 {
 
 fn ackley(x: &[f64]) -> f64 {
     let n = x.len() as f64;
-    let shifted = || x.iter().enumerate().map(|(i, v)| v - shift(i));
+    let shifted = || x.iter().zip(ACKLEY_SHIFT.iter()).map(|(v, s)| v - s);
     let squares = shifted().map(|v| v * v).sum::<f64>() / n;
     let cosines = shifted().map(|v| (2.0 * PI * v).cos()).sum::<f64>() / n;
     -20.0 * (-0.2 * squares.sqrt()).exp() - cosines.exp() + 20.0 + E
@@ -187,47 +195,68 @@ fn alleles(genotype: &Genotype<FloatChromosome<f64>>) -> Vec<f64> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The budget: counts the evaluations and keeps the best value and its solution, in the fitness
-// function
+// The budget: counts the evaluations and records the first one that reaches the target, in the
+// fitness function
 // ---------------------------------------------------------------------------------------------
 
-struct Budget<S> {
+/// The first evaluation whose value reaches the target
+struct Hit {
+    evaluations: usize,
+    time_s: f64,
+    value: f64,
+    genes: Vec<f64>,
+}
+
+struct Budget {
     evaluations: AtomicUsize,
-    // f64 bits of the best value so far, and its solution
-    best: AtomicU64,
-    solution: Mutex<Vec<S>>,
+    first_hit: OnceLock<Hit>,
     // evaluated solutions outside the problem's bounds, as radiate proposed them (rule 2.4)
     outside: AtomicUsize,
     minimize: bool,
     target: f64,
     max_evaluations: usize,
+    start: Instant,
     deadline: Instant,
 }
 
-impl<S> Budget<S> {
+impl Budget {
     fn new(args: &Args, start: Instant, minimize: bool, target: f64) -> Arc<Self> {
-        let worst = if minimize { f64::INFINITY } else { f64::NEG_INFINITY };
         Arc::new(Self {
             evaluations: AtomicUsize::new(0),
-            best: AtomicU64::new(worst.to_bits()),
-            solution: Mutex::new(Vec::new()),
+            first_hit: OnceLock::new(),
             outside: AtomicUsize::new(0),
             minimize,
             target,
             max_evaluations: args.max_evaluations,
+            start,
             deadline: start + Duration::from_secs_f64(args.max_seconds),
         })
     }
 
-    /// Counts one evaluation of `value`; keeps it and its solution if it's the best so far
-    fn record(&self, value: f64, solution: impl FnOnce() -> Vec<S>) -> f64 {
-        self.count();
-        let best = self.best();
-        if (self.minimize && value < best) || (!self.minimize && value > best) {
-            self.best.store(value.to_bits(), Ordering::Relaxed);
-            *self.solution.lock().unwrap() = solution();
+    /// Counts one evaluation of `value`, and records it if it's the first to reach the target:
+    /// its count, the clock and (once per run) a copy of its genes, reported if radiate's own best
+    /// doesn't reach the target (radiate compares f32 scores)
+    fn record(&self, value: f64, genes: impl FnOnce() -> Vec<f64>) -> f64 {
+        let evaluations = self.evaluations.fetch_add(1, Ordering::Relaxed) + 1;
+        if self.reaches(value) && self.first_hit.get().is_none() {
+            let time_s = self.start.elapsed().as_secs_f64();
+            let _ = self.first_hit.set(Hit {
+                evaluations,
+                time_s,
+                value,
+                genes: genes(),
+            });
         }
         value
+    }
+
+    /// Whether `value` reaches the target (problems.reached)
+    fn reaches(&self, value: f64) -> bool {
+        if self.minimize {
+            value <= self.target
+        } else {
+            value >= self.target
+        }
     }
 
     /// Counts `x` if it's outside [lower, upper] in any variable (not clipped: as evaluated)
@@ -249,22 +278,10 @@ impl<S> Budget<S> {
         self.evaluations.load(Ordering::Relaxed)
     }
 
-    fn best(&self) -> f64 {
-        f64::from_bits(self.best.load(Ordering::Relaxed))
-    }
-
-    // problems.reached
-    fn reached(&self) -> bool {
-        if self.minimize {
-            self.best() <= self.target
-        } else {
-            self.best() >= self.target
-        }
-    }
-
-    // checked by the engine after every generation
+    // checked by the engine after every generation: the target (an evaluated solution reached
+    // it), the budget or the time
     fn done(&self) -> bool {
-        self.reached()
+        self.first_hit.get().is_some()
             || self.evaluations() >= self.max_evaluations
             || Instant::now() >= self.deadline
     }
@@ -286,11 +303,10 @@ struct Args {
 
 /// Builds the engine (the random initial population) and runs it until the budget is done,
 /// checked after every generation. Returns the last generation.
-fn run_engine<C, T, S>(budget: &Arc<Budget<S>>, engine: GeneticEngine<C, T>) -> Generation<C, T>
+fn run_engine<C, T>(budget: &Arc<Budget>, engine: GeneticEngine<C, T>) -> Generation<C, T>
 where
     C: Chromosome + Clone + PartialEq + 'static,
     T: Clone + Send + Sync + 'static,
-    S: Send + Sync + 'static,
 {
     let stop = Arc::clone(budget);
     engine
@@ -300,56 +316,83 @@ where
         .expect("radiate engine failed")
 }
 
-fn print_single<S>(
+/// Prints a single-objective run: `best` is the value of `solution` (a JSON array)
+fn print_single(
     args: &Args,
     seed: u64,
     solver: &str,
-    budget: &Budget<S>,
+    budget: &Budget,
     generations: usize,
     time_s: f64,
-    format: impl Fn(&S) -> String,
+    best: f64,
+    solution: String,
 ) {
-    let solution: Vec<String> = budget.solution.lock().unwrap().iter().map(format).collect();
     // rule 2.4: the continuous problems report the evaluated solutions outside the bounds
     let outside = match real_problem(&args.problem) {
         Some(_) => format!(",\"outside\":{}", budget.outside()),
         None => String::new(),
     };
+    let first_hit = match budget.first_hit.get() {
+        Some(hit) => format!(
+            "{{\"evaluations\":{},\"time_s\":{:.6}}}",
+            hit.evaluations, hit.time_s
+        ),
+        None => "null".to_string(),
+    };
     println!(
-        "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"best\":{:?},\"target\":{:?},\"success\":{},\"solution\":[{}]{outside}}}",
+        "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"best\":{best:?},\"target\":{:?},\"success\":{},\"first_hit\":{first_hit},\"solution\":{solution}{outside}}}",
         args.problem,
         args.size,
         args.mode,
         budget.evaluations(),
-        budget.best(),
         budget.target,
-        budget.reached(),
-        solution.join(","),
+        budget.reaches(best),
     );
 }
 
-/// Runs `build` (which gets the budget for its fitness function) with the seed, and prints the run
-fn run_single<C, T, S>(
+/// Runs `build` (which gets the budget for its fitness function) with the seed, and prints the
+/// run. `report` gives the value and the JSON solution of radiate's best (`Generation::value`),
+/// after the clock.
+fn run_single<C, T>(
     args: &Args,
     seed: u64,
     solver: &str,
     minimize: bool,
     target: f64,
-    build: impl FnOnce(Arc<Budget<S>>) -> GeneticEngine<C, T>,
-    format: impl Fn(&S) -> String,
+    build: impl FnOnce(Arc<Budget>) -> GeneticEngine<C, T>,
+    report: impl FnOnce(&T) -> (f64, String),
 ) where
     C: Chromosome + Clone + PartialEq + 'static,
     T: Clone + Send + Sync + 'static,
-    S: Send + Sync + 'static,
 {
-    let (budget, generations, time_s) = random_provider::scoped_seed(seed, || {
+    let (budget, generation, time_s) = random_provider::scoped_seed(seed, || {
         // the clock starts before the engine creates the initial population
         let start = Instant::now();
         let budget = Budget::new(args, start, minimize, target);
         let generation = run_engine(&budget, build(Arc::clone(&budget)));
-        (budget, generation.index(), start.elapsed().as_secs_f64())
+        let time_s = start.elapsed().as_secs_f64();
+        (budget, generation, time_s)
     });
-    print_single(args, seed, solver, &budget, generations, time_s, format);
+    let (mut best, mut solution) = report(generation.value());
+    // radiate's best is chosen by its f32 score; if it doesn't reach the target in f64 while an
+    // evaluated solution did, that solution is the run's best
+    if let Some(hit) = budget.first_hit.get() {
+        if !budget.reaches(best) {
+            best = hit.value;
+            solution = if real_problem(&args.problem).is_some() {
+                json_row(&hit.genes)
+            } else {
+                json_integers(hit.genes.iter().map(|&v| v as usize))
+            };
+        }
+    }
+    print_single(args, seed, solver, &budget, generation.index(), time_s, best, solution);
+}
+
+/// A JSON array of integers
+fn json_integers(values: impl Iterator<Item = usize>) -> String {
+    let values: Vec<String> = values.map(|v| v.to_string()).collect();
+    format!("[{}]", values.join(","))
 }
 
 // The idiomatic methods; the page docs/benchmarks/libraries/radiate.md links each source.
@@ -365,7 +408,8 @@ fn run_single<C, T, S>(
 // (its population and selectors) with the recipe's alterers:
 // - mutation rate 0.01, the stated starting rate;
 // - crossover rate: the stated range is 0.5-0.8; within it, the example's own crossover rate
-//   (hello-world and Rastrigin 0.5, Rosenbrock 0.75); the TSP example's 0.4 is outside the range, so
+//   (knapsack, the engine default UniformCrossover(0.5), and Rastrigin 0.5, Rosenbrock 0.75); the
+//   TSP example's 0.4 is outside the range, so
 //   the permutation recipe takes the engine default crossover's 0.5 (engine/index.md, "Engine
 //   Defaults": UniformCrossover(0.5));
 // - the mutator, where the recipe names two: the one of the example (Swap in the TSP example,
@@ -382,49 +426,65 @@ const IDIOMATIC_REAL: [&str; 3] = ["ga", "ga_blend", "ga_intermediate"];
 
 fn run_onemax(args: &Args, seed: u64) {
     let size = args.size;
-    let solvers: &[&str] = if args.mode == "matched" { &["ga"] } else { &IDIOMATIC_BINARY };
-    for &solver in solvers {
-        let build = |budget: Arc<Budget<bool>>| {
-            let builder = GeneticEngine::builder()
+    let fitness = |budget: Arc<Budget>| {
+        move |genotype: &Genotype<BitChromosome>| {
+            let genes = genotype[0].as_slice();
+            budget.record(onemax(genes.iter().map(|gene| *gene.allele())), || {
+                genes.iter().map(|gene| *gene.allele() as u8 as f64).collect()
+            })
+        }
+    };
+    if args.mode == "matched" {
+        // as DEAP's eaSimple: population 300, tournament of 3 (with replacement, like
+        // selTournament), two-point crossover 0.5, bit flip 1/size on 20% of the children,
+        // no elitism. All radiate's own selector and alterers. Differences:
+        // - offspring_fraction 1.0: every generation is 300 selected and altered copies,
+        //   no survivors, as eaSimple. max_age off: radiate by default replaces
+        //   individuals older than 20 generations with random ones, eaSimple doesn't.
+        // - crossover: radiate visits every child and with probability 0.5 crosses it
+        //   with a random other child (both change), DEAP crosses the disjoint pairs
+        //   (0,1), (2,3), ... with probability 0.5: the same expected 150 crossovers per
+        //   generation, but a child can be crossed more than once. radiate's cut points
+        //   are drawn from 0..size (a cut at 0 is a no-op), DEAP's from 1..size.
+        // - mutation: radiate has no per-individual mutation probability, so BitFlip
+        //   flips each bit with probability 0.2 / size: the same expected 0.2 flipped
+        //   bits per child, spread over more children (18% instead of 12.6% mutated).
+        // - evaluations: both evaluate only the changed children; DEAP also re-evaluates
+        //   a child it chose to mutate when no bit happened to flip.
+        let build = |budget: Arc<Budget>| {
+            GeneticEngine::builder()
                 .codec(BitCodec::vector(size))
-                .raw_fitness_fn(move |genotype: &Genotype<BitChromosome>| {
-                    let genes = genotype[0].as_slice();
-                    budget.record(onemax(genes.iter().map(|gene| *gene.allele())), || {
-                        genes.iter().map(|gene| *gene.allele()).collect()
-                    })
-                });
-            if args.mode == "matched" {
-                // as DEAP's eaSimple: population 300, tournament of 3 (with replacement, like
-                // selTournament), two-point crossover 0.5, bit flip 1/size on 20% of the children,
-                // no elitism. Differences:
-                // - offspring_fraction 1.0: every generation is 300 selected and altered copies,
-                //   no survivors, as eaSimple. max_age off: radiate by default replaces
-                //   individuals older than 20 generations with random ones, eaSimple doesn't.
-                // - crossover: radiate visits every child and with probability 0.5 crosses it
-                //   with a random other child (both change), DEAP crosses the disjoint pairs
-                //   (0,1), (2,3), ... with probability 0.5: the same expected 150 crossovers per
-                //   generation, but a child can be crossed more than once. radiate's cut points
-                //   are drawn from 0..size (a cut at 0 is a no-op), DEAP's from 1..size.
-                // - mutation: radiate has no per-individual mutation probability, so BitFlip
-                //   flips each bit with probability 0.2 / size: the same expected 0.2 flipped
-                //   bits per child, spread over more children (18% instead of 12.6% mutated).
-                // - evaluations: both evaluate only the changed children; DEAP also re-evaluates
-                //   a child it chose to mutate when no bit happened to flip.
-                return builder
-                    .population_size(300)
-                    .offspring_fraction(1.0)
-                    .max_age(usize::MAX)
-                    .offspring_selector(TournamentSelector::new(3))
-                    .alter(alters!(
-                        MultiPointCrossover::new(0.5, 2),
-                        BitFlipMutator::new(0.2 / size as f32)
-                    ))
-                    .build();
-            }
-            // the README's "Hello, Radiate!" example (examples/rust/hello-world, lines 8-19), a
-            // count of matching genes like OneMax: Boltzmann offspring selection with temperature
-            // 4, the other engine defaults (population 100, tournament of 3 for the survivors)
-            let builder = builder.offspring_selector(BoltzmannSelector::new(4.0));
+                .raw_fitness_fn(fitness(budget))
+                .population_size(300)
+                .offspring_fraction(1.0)
+                .max_age(usize::MAX)
+                .offspring_selector(TournamentSelector::new(3))
+                .alter(alters!(
+                    MultiPointCrossover::new(0.5, 2),
+                    BitFlipMutator::new(0.2 / size as f32)
+                ))
+                .build()
+        };
+        let report = |bits: &Vec<bool>| {
+            (
+                onemax(bits.iter().copied()),
+                json_integers(bits.iter().map(|&bit| bit as usize)),
+            )
+        };
+        run_single(args, seed, "ga", false, size as f64, build, report);
+        return;
+    }
+    for solver in IDIOMATIC_BINARY {
+        // radiate's binary example, the knapsack (examples/rust/knapsack, lines 11-18): a
+        // SubSetCodec, whose genome is a BitChromosome with one bit per item (here the items are
+        // the gene indices, and the fitness counts the bits), max_age 50, and the other engine
+        // defaults (population 100, roulette offspring selection, tournament of 3 for the
+        // survivors, offspring fraction 0.8)
+        let build = |budget: Arc<Budget>| {
+            let builder = GeneticEngine::builder()
+                .codec(SubSetCodec::new((0..size).collect::<Vec<usize>>()))
+                .raw_fitness_fn(fitness(budget))
+                .max_age(50);
             match solver {
                 // the example as it is, with the default alterers UniformCrossover(0.5) and
                 // UniformMutator(0.1), which redraws each bit with probability 0.1 (flips it with
@@ -440,8 +500,18 @@ fn run_onemax(args: &Args, seed: u64) {
                     .build(),
             }
         };
-        let format = |bit: &bool| if *bit { "1" } else { "0" }.to_string();
-        run_single(args, seed, solver, false, size as f64, build, format);
+        // the subset of items: the indices of the ones
+        let report = |items: &Vec<Arc<usize>>| {
+            let mut bits = vec![false; size];
+            for item in items {
+                bits[**item] = true;
+            }
+            (
+                onemax(bits.iter().copied()),
+                json_integers(bits.iter().map(|&bit| bit as usize)),
+            )
+        };
+        run_single(args, seed, solver, false, size as f64, build, report);
     }
 }
 
@@ -452,7 +522,7 @@ fn run_onemax(args: &Args, seed: u64) {
 fn run_nqueens(args: &Args, seed: u64) {
     let size = args.size;
     for solver in IDIOMATIC_PERMUTATION {
-        let build = |budget: Arc<Budget<usize>>| {
+        let build = |budget: Arc<Budget>| {
             // radiate's permutation example (examples/rust/TSP, lines 13-19): PermutationCodec,
             // population 250, minimizing, the other engine defaults (roulette offspring
             // selection, tournament of 3 for the survivors). radiate's own N-Queens example
@@ -463,7 +533,7 @@ fn run_nqueens(args: &Args, seed: u64) {
                 .raw_fitness_fn(move |genotype: &Genotype<PermutationChromosome<usize>>| {
                     let genes = genotype[0].as_slice();
                     budget.record(nqueens(genes.iter().map(|gene| *gene.allele())), || {
-                        genes.iter().map(|gene| *gene.allele()).collect()
+                        genes.iter().map(|gene| *gene.allele() as f64).collect()
                     })
                 })
                 .minimizing()
@@ -482,7 +552,10 @@ fn run_nqueens(args: &Args, seed: u64) {
                     .build(),
             }
         };
-        run_single(args, seed, solver, true, 0.0, build, |v: &usize| v.to_string());
+        let report = |order: &Vec<usize>| {
+            (nqueens(order.iter().copied()), json_integers(order.iter().copied()))
+        };
+        run_single(args, seed, solver, true, 0.0, build, report);
     }
 }
 
@@ -497,7 +570,7 @@ fn run_real(args: &Args, seed: u64) {
     for solver in IDIOMATIC_REAL {
         let range = range.clone();
         let (lower, upper) = (range.start, range.end);
-        let build = |budget: Arc<Budget<f64>>| {
+        let build = |budget: Arc<Budget>| {
             // the bounds: FloatCodec::vector draws the genes in the range and sets it as their
             // bounds; every alterer writes through FloatGene::set_allele, which clamps to them
             // (radiate-core-1.3.1/src/genome/chromosomes/float.rs, lines 82-85)
@@ -549,7 +622,8 @@ fn run_real(args: &Args, seed: u64) {
                     .build(),
             }
         };
-        run_single(args, seed, solver, true, 0.01, build, |v: &f64| format!("{v:?}"));
+        let report = |x: &Vec<f64>| (function(x), json_row(x));
+        run_single(args, seed, solver, true, 0.01, build, report);
     }
 }
 
@@ -599,6 +673,12 @@ fn json_rows(rows: &[Vec<f64>]) -> String {
 /// population.
 ///
 /// Differences from the textbook algorithms, all radiate's own:
+/// - the initial population has 2 mu random individuals, not mu: radiate keeps the population at
+///   the size of the initial one (its survivor and offspring counts are fractions of the initial
+///   population's length, radiate-engines-1.3.1/src/builder/config.rs, `survivor_count` and
+///   `offspring_count`), so a first population of mu (`population(..)`) would keep mu / 2 survivors
+///   and breed mu / 2 offspring in every generation. The extra mu evaluations come out of the
+///   budget.
 /// - the mating pool is drawn from all 2 mu individuals (parents and offspring of the previous
 ///   generation), not from the mu survivors
 /// - NSGA-II: the crowding distance is computed over the whole population, not per front
@@ -634,7 +714,7 @@ fn run_front(args: &Args, seed: u64) {
         let (counter, generations, time_s, points, solutions) =
             random_provider::scoped_seed(seed, || {
                 let start = Instant::now();
-                let counter: Arc<Budget<()>> = Budget::new(args, start, true, f64::NEG_INFINITY);
+                let counter: Arc<Budget> = Budget::new(args, start, true, f64::NEG_INFINITY);
                 let fitness = Arc::clone(&counter);
                 let builder = GeneticEngine::builder()
                     .codec(FloatCodec::vector(variables, 0.0_f64..1.0))
@@ -748,6 +828,9 @@ fn values(problem: &str, size: usize) {
 }
 
 fn main() {
+    // the shifts are computed before any run
+    LazyLock::force(&RASTRIGIN_SHIFT);
+    LazyLock::force(&ACKLEY_SHIFT);
     let raw: Vec<String> = std::env::args().skip(1).collect();
     if raw.len() == 3 && raw[0] == "values" {
         values(&raw[1], raw[2].parse().expect("size"));
@@ -790,13 +873,14 @@ mod tests {
     #[test]
     fn fitness_values() {
         // 0 at the optimum, and the values of problems.py at fixed points
-        let s: Vec<f64> = (0..10).map(shift).collect();
         let x: Vec<f64> = (0..10).map(|i| 0.5 * (i % 7) as f64 - 1.5).collect();
-        assert!(rastrigin(&s).abs() < 1e-12);
-        assert!(ackley(&s).abs() < 1e-12);
+        assert!(rastrigin(&RASTRIGIN_SHIFT[..10]).abs() < 1e-12);
+        assert!(ackley(&ACKLEY_SHIFT[..10]).abs() < 1e-12);
+        assert_eq!(RASTRIGIN_SHIFT[0], -3.20380198019802);
+        assert_eq!(ACKLEY_SHIFT[4], 3.893227722772275);
         assert!(rosenbrock(&[1.0; 10]).abs() < 1e-12);
-        assert!((rastrigin(&x) - 87.78147018265213).abs() < 1e-9);
-        assert!((ackley(&x) - 5.149902035382837).abs() < 1e-9);
+        assert!((rastrigin(&x) - 145.90969988928046).abs() < 1e-9);
+        assert!((ackley(&x) - 20.92235706225884).abs() < 1e-9);
         assert_eq!(onemax([true, false, true].into_iter()), 2.0);
         // all 8 queens on one diagonal: 7 conflicts
         assert_eq!(nqueens(0..8), 7.0);
