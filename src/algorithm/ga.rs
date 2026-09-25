@@ -33,15 +33,15 @@ pub enum Scheme {
     /// (μ+λ): `lambda` offspring per generation, and the best μ of parents and offspring survive.
     /// On ties, offspring are preferred, which lets the population drift across plateaus.
     MuPlusLambda {
-        /// The number of offspring per generation, at least 1, and few enough that the parents
-        /// and offspring fit in memory: at most `isize::MAX` bytes of individuals.
+        /// The number of offspring per generation, between 1 and 2^24, and few enough that the
+        /// parents and offspring fit in memory: at most `isize::MAX` bytes of individuals.
         lambda: usize,
     },
     /// (μ,λ): `lambda` offspring per generation, and the best μ offspring survive. `lambda` is at
     /// least μ.
     MuCommaLambda {
-        /// The number of offspring per generation, at least μ, and few enough that the offspring
-        /// fit in memory: at most `isize::MAX` bytes of individuals.
+        /// The number of offspring per generation, between μ and 2^24, and few enough that the
+        /// offspring fit in memory: at most `isize::MAX` bytes of individuals.
         lambda: usize,
     },
 }
@@ -82,15 +82,20 @@ impl Scheme {
                 ))
             }
             Scheme::MuPlusLambda { lambda: 0 } => invalid("lambda must be at least 1".to_string()),
-            Scheme::MuPlusLambda { lambda } if lambda > individuals.saturating_sub(size) => {
+            Scheme::MuPlusLambda { lambda }
+                if lambda > MAX_SIZE.min(individuals.saturating_sub(size)) =>
+            {
                 invalid(format!(
-                    "lambda must be at most {}, the most offspring that fit in memory with the                      population, got {lambda}",
-                    individuals.saturating_sub(size)
+                    "lambda must be at most {}, got {lambda}",
+                    MAX_SIZE.min(individuals.saturating_sub(size))
                 ))
             }
-            Scheme::MuCommaLambda { lambda } if lambda > individuals => invalid(format!(
-                "lambda must be at most {individuals}, the most offspring that fit in memory,                  got {lambda}"
-            )),
+            Scheme::MuCommaLambda { lambda } if lambda > MAX_SIZE.min(individuals) => {
+                invalid(format!(
+                    "lambda must be at most {}, got {lambda}",
+                    MAX_SIZE.min(individuals)
+                ))
+            }
             Scheme::MuCommaLambda { lambda } if lambda < size => invalid(format!(
                 "lambda must be at least the population size {size}, got {lambda}"
             )),
@@ -775,11 +780,11 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
     /// - [`Error::InvalidSetting`] for a population size of 0 or above 2^24, rates outside
     ///   [0, 1], a mutation rate of 0 with a crossover rate of 0 or [`NoCrossover`] (every child
     ///   would be a copy), a [`Scheme`] that doesn't fit the population size or with more than
-    ///   `u32::MAX` offspring, more initial genomes than the population size, or memetic settings
-    ///   out of range.
+    ///   2^24 offspring, more initial genomes than the population size, or memetic settings out
+    ///   of range.
+    /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     ///
     /// [`NoCrossover`]: crate::operator::NoCrossover
-    /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<Ga<R, S, C, M>>
     where
         S: Select,
@@ -1028,6 +1033,16 @@ mod tests {
         assert!(!valid(Scheme::MuPlusLambda { lambda: 91 }));
         assert!(valid(Scheme::MuCommaLambda { lambda: 100 }));
         assert!(!valid(Scheme::MuCommaLambda { lambda: 101 }));
+        // and at most 2^24, however much fits
+        let valid = |scheme: Scheme| scheme.validate(10, usize::MAX).is_ok();
+        assert!(valid(Scheme::MuCommaLambda { lambda: MAX_SIZE }));
+        assert!(!valid(Scheme::MuCommaLambda {
+            lambda: MAX_SIZE + 1
+        }));
+        assert!(valid(Scheme::MuPlusLambda { lambda: MAX_SIZE }));
+        assert!(!valid(Scheme::MuPlusLambda {
+            lambda: MAX_SIZE + 1
+        }));
     }
 
     #[test]
