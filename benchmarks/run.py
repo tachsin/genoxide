@@ -574,10 +574,17 @@ LIBRARY_NAMES = {"genoxide": "genoxide", "genoxide_python": "genoxide (Python)",
                  "metaheuristics_jl": "Metaheuristics.jl"}
 SOLVER_NAMES = {"ga": "GA", "evolve": "GA", "hill_climb": "hill climbing", "local_search": "local search",
                 "cma_es": "CMA-ES", "de": "DE", "pso": "PSO", "es": "ES", "nsga2": "NSGA-II", "nsga3": "NSGA-III",
-                "spea2": "SPEA2", "sms_emoa": "SMS-EMOA", "moead": "MOEA/D", "sade": "SaDE", "ngopt": "NGOpt",
-                "two_points_de": "TwoPointsDE", "ipop_cma_es": "IPOP-CMA-ES", "discrete_one_plus_one": "(1+1)",
-                "eca": "ECA", "age_moea": "AGE-MOEA", "ibea": "IBEA", "revea": "REVEA", "moea": "MOEA",
-                "smpso": "SMPSO", "nspso": "NSPSO"}
+                "spea2": "SPEA2", "sms_emoa": "SMS-EMOA", "moead": "MOEA/D", "sade": "SaDE",
+                "ipop_cma_es": "IPOP-CMA-ES", "discrete_one_plus_one": "discrete (1+1)", "eca": "ECA",
+                "islands": "GA (islands)", "tabu_search": "tabu search", "l_shade": "L-SHADE",
+                "ga_uniform": "GA (uniform)", "ga_multipoint": "GA (multi-point)", "ga_pmx": "GA (PMX)",
+                "ga_blend": "GA (blend)", "ga_intermediate": "GA (intermediate)", "ga_assist": "GA (assist)",
+                "ihs": "IHS", "gaco": "GACO", "simulated_annealing": "simulated annealing", "xnes": "xNES",
+                "brkga": "BRKGA", "nelder_mead": "Nelder-Mead", "bipop_cma_es": "BIPOP-CMA-ES",
+                "lq_cma_es": "lq-CMA-ES", "ngiohtuned": "NgIohTuned", "one_plus_one": "(1+1)",
+                "portfolio_discrete_one_plus_one": "portfolio (1+1)", "rotated_two_points_de": "RotatedTwoPointsDE",
+                "genetic_de": "GeneticDE", "scr_hammersley": "Hammersley search", "lbfgsb": "L-BFGS-B",
+                "dual_annealing": "dual annealing", "direct": "DIRECT"}
 PROBLEM_NAMES = {"onemax": "OneMax", "nqueens": "N-Queens", "rastrigin": "Rastrigin", "rosenbrock": "Rosenbrock",
                  "ackley": "Ackley", "zdt1": "ZDT1", "zdt2": "ZDT2", "zdt3": "ZDT3", "dtlz1": "DTLZ1", "dtlz2": "DTLZ2"}
 GENOXIDE_COLOR = "#ce422b"

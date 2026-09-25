@@ -63,13 +63,13 @@ Which criteria count:
 
 5.1. Each solver runs 10 seeds, 0 to 9, passed to the library's own random number generator.
 
-5.2. **[checked]** The same seed gives the same evaluations and the same best value, where the library supports seeding. A library that can't be seeded is listed in the notes.
+5.2. **[checked]** The same seed gives the same evaluations and the same best value, where the library supports seeding. A library that can't be seeded says so on its page.
 
 5.3. A solver whose first 3 seeds all run for the full 60 seconds without reaching the target runs no more seeds. Its result shows 3 runs.
 
 ## 6. Which methods run
 
-6.1. **Matched mode:** the same algorithm, operators, rates and population size in every library, as the scenario lists them. A library that can't match the algorithm itself doesn't run the scenario. Smaller differences are listed in the notes. The matched multi-objective scenarios run only NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA. A library's other multi-objective algorithms aren't run, and its page lists them.
+6.1. **Matched mode:** the same algorithm, operators, rates and population size in every library, as the scenario lists them. A library that can't match the algorithm itself doesn't run the scenario. Smaller differences are listed on the library's page. The matched multi-objective scenarios run only NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA. A library's other multi-objective algorithms aren't run, and its page lists them.
 
 6.2. **Idiomatic mode:** the methods a library's own documentation recommends for the problem type:
 - binary;
@@ -95,7 +95,7 @@ The separate test runs are shown on the page, but they never pick a method or a 
 
 6.4. At most 3 methods per library and problem type, the library's first recommendations.
 
-6.5. Every method left out that a reader might expect gets a reason in the notes.
+6.5. Every method left out that a reader might expect gets a reason on the library's page.
 
 ## 7. Multi-objective runs
 
@@ -119,7 +119,7 @@ A run that ends without reaching the target is reported as "not reached", with t
 
 8.3. Library versions are pinned and recorded with each result.
 
-8.4. Library bugs aren't worked around, except where the notes say so and show both results.
+8.4. Library bugs aren't worked around, except where the library's page says so and shows both results. The [notes](notes.md) list every bug found.
 
 ## 9. Open documentation
 
