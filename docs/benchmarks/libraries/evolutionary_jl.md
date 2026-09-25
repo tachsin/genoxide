@@ -13,6 +13,7 @@ Know a better way to solve one of these problems with Evolutionary.jl? [Open a b
   - The convergence test is the library's: each method's default metric (`AbsDiff(1e-12)` of the best value for GA and CMA-ES, `AbsDiff(1e-10)` for DE and ES, `GD` and `GD(true)` for NSGA2) within its tolerance for more than `successive_f_tol` generations (`src/api/optimize.jl`). `successive_f_tol` is the default of 10, or the value of the library's example for the problem type (25 for DE on Rastrigin, 30 for the GA on N-Queens).
   - These convergence criteria count: they are part of each method's own settings (the `metrics` keyword of `GA`, `ES`, `CMAES`, `DE` and `NSGA2`, with its default), and the library's ways to set a budget (`iterations`, `time_limit`, a `callback`) leave them in effect.
   - CMA-ES also ends when the eigendecomposition of its covariance matrix fails (`update_state!` returns `true`, `src/cmaes.jl`).
+  - These apply in the idiomatic scenarios. The matched scenarios run the matched configuration, which has no convergence criterion: `successive_f_tol = typemax(Int)` lifts the library's, and they run to the target or the budget in one attempt.
   - An attempt that ends one of these ways starts again from a new random start, with the seed `seed * 1000 + restart`: Evolutionary.jl has no restart mechanism. The best solution and every evaluation are kept. Each run prints its `restarts`.
   - The `callback` of [`Options`](https://wildart.github.io/Evolutionary.jl/stable/tutorial/#General-options) ends the run at the target, the budget or the time cap, after every generation.
 - **Bounds** (rule 2.4): the continuous and multi-objective problems use `BoxConstraints` ([docs](https://wildart.github.io/Evolutionary.jl/stable/constraints/#Box-Constrained-Optimization)): the initial population is drawn within the bounds (`initial_population`, `src/api/utilities.jl`), and every new solution of GA, ES, CMA-ES, DE and NSGA2 is clipped to them (`apply!` → `clip!`, `src/api/constraints.jl`) before it's evaluated. The adapter counts the evaluated solutions outside the bounds (`outside`): 0 in every run.
@@ -23,11 +24,11 @@ Know a better way to solve one of these problems with Evolutionary.jl? [Open a b
 
 ## Binary: OneMax 100 and 1000 (matched), OneMax 100 (idiomatic)
 
-**Methods** (`onemax_solvers`, lines 280-313):
+**Methods** (`onemax_solvers`, lines 280-315):
 - Matched: `GA` with DEAP's `eaSimple` settings: population 300, `tournament(3)`, two-point crossover (`TPX`) at 0.5, bit-flip at 1/n on 20% of the children, no elitism. The library's `flip` flips exactly one bit, so the adapter's `bitflip_per_gene` does DEAP's per-gene flip; the crossover probability is the wrapper `crossover_with_probability` with `crossoverRate = 1`, which copies the parents it doesn't cross (see "Bugs found" for why). Evolutionary's `tournament` draws its contestants without replacement.
 - Idiomatic: `GA(selection = tournament(3), mutation = flip, crossover = TPX, mutationRate = 0.05, crossoverRate = 0.85, populationSize = 100)` with the default options, the library's only binary example, `test/onemax.jl`, whose genome also has 100 bits.
 
-**Keeping going:** the GA's convergence test (the best value unchanged for more than 10 generations) restarts it, in the matched runs too. Without elitism, the matched GA's best value often stays the same for 10 generations near the end: on OneMax 1000, 47 restarts in 5 runs, and 3 of 5 runs reached the target, where the same GA without restarts reached it in 5 of 5 (median 135,001 evaluations, in the separate tests before rule 2.2 was amended).
+**Keeping going:** matched: the matched configuration has no convergence criterion, so the GA's is lifted and it runs to the target or the budget. Idiomatic: the GA's convergence test (the best value unchanged for more than 10 generations) restarts it.
 
 **Left out:** none: the documentation has no other binary configuration.
 
@@ -36,12 +37,12 @@ Know a better way to solve one of these problems with Evolutionary.jl? [Open a b
 | Scenario | Solver | Runs | Reached | Median evaluations to target | Best value: median (best, worst) | Runs at the cap | Restarts (5 runs) |
 |---|---|---|---|---|---|---|---|
 | OneMax 100, matched | ga | 5 | 5 | 9,901 | 100 (100, 100) | 0 | 0 |
-| OneMax 1000, matched | ga | 5 | 3 | 766,806 | 1000 (1000, 999) | 0 | 47 |
+| OneMax 1000, matched | ga | 5 | 5 | 135,001 | 1000 (1000, 1000) | 0 | 0 |
 | OneMax 100, idiomatic | ga | 5 | 5 | 7,602 | 100 (100, 100) | 0 | 6 |
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods** (`nqueens_solvers`, lines 315-339), both from the library's only permutation example, `test/n-queens.jl`:
+**Methods** (`nqueens_solvers`, lines 317-341), both from the library's only permutation example, `test/n-queens.jl`:
 - `ga`: `GA(populationSize = 100, selection = tournament(5), crossover = PMX, crossoverRate = 0.89, mutation = inversion, mutationRate = 0.06)` with `successive_f_tol = 30`. The test tries 5 mutations × 5 crossovers as equals; the library's defaults (`genop`, which does nothing) aren't among them, so the adapter takes the first of each list.
 - `es`: `ES(mutation = mutationwrapper(inversion), μ = 20, ρ = 1, λ = 100, selection = :plus)` with the default options. The test tries 5 mutations with `:plus` and `:comma`: the first mutation, and `:plus`, the library's default selection.
 
@@ -60,7 +61,7 @@ Know a better way to solve one of these problems with Evolutionary.jl? [Open a b
 
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
-**Methods** (`real_solvers`, lines 341-387). The library presents four methods for real numbers (the [README](https://github.com/SciML/Evolutionary.jl#algorithms) and the [documentation's index](https://wildart.github.io/Evolutionary.jl/stable/) list ES, CMA-ES, GA and DE), and rule 6.4 allows three. The documentation states what two of them are for, so they come first; the third is the library's example for the problem type, `test/rastrigin.jl`, whose first method is the ES:
+**Methods** (`real_solvers`, lines 343-389). The library presents four methods for real numbers (the [README](https://github.com/SciML/Evolutionary.jl#algorithms) and the [documentation's index](https://wildart.github.io/Evolutionary.jl/stable/) list ES, CMA-ES, GA and DE), and rule 6.4 allows three. The documentation states what two of them are for, so they come first; the third is the library's example for the problem type, `test/rastrigin.jl`, whose first method is the ES:
 - `cma_es`: the [CMA-ES page](https://wildart.github.io/Evolutionary.jl/stable/cmaes/): for "difficult (non-convex, ill-conditioned, multi-modal, rugged, noisy) optimization problems in continuous search spaces". `CMAES(lambda = 100)` with the default options, as in `test/rastrigin.jl`: a (50,100)-CMA-ES with the default σ0 of 0.5, from a random point of the domain.
 - `de`: the [DE page](https://wildart.github.io/Evolutionary.jl/stable/de/): DE "is used for multidimensional real-valued functions". `test/rastrigin.jl` runs DE with population 100 and F = 0.9, with `successive_f_tol = 25`, and varies the selection, the recombination and the number of differences, which take the library's defaults (`random`, `BINX(0.5)`, 1): DE/rand/1/bin.
 - `es`: the (15/15,100)-σ-SA-ES of `test/rastrigin.jl` ([ES page](https://wildart.github.io/Evolutionary.jl/stable/es/)): `AnisotropicStrategy`, `average` recombination of the solutions and strategies, `gaussian` mutation of both, comma selection.
@@ -108,11 +109,11 @@ DE's convergence test ends an attempt when its best value hasn't changed for 26 
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1 (matched)
 
-**Methods:** [`NSGA2`](https://wildart.github.io/Evolutionary.jl/stable/moea/), the library's only multi-objective algorithm, with the matched settings (`run_front`, lines 407-434): population 100 (92 with 3 objectives), SBX with η 15 at 0.9, polynomial mutation with η 20 at 1/n, binary tournament on rank and crowding distance (the library's default). Differences: Evolutionary's `SBX` and `PLM` are the unbounded variants, and the box constraints clip the offspring to [0, 1]; its `SBX` crosses each variable with probability 0.5, as pymoo's. The crossover probability is `crossover_with_probability` with `crossoverRate = 1`, for the reason under "Bugs found". The objectives use the in-place form `f!(F, x)` of the [tutorial](https://wildart.github.io/Evolutionary.jl/stable/tutorial/#Objective-Function-Definition).
+**Methods:** [`NSGA2`](https://wildart.github.io/Evolutionary.jl/stable/moea/), the library's only multi-objective algorithm, with the matched settings (`run_front`, lines 409-437): population 100 (92 with 3 objectives), SBX with η 15 at 0.9, polynomial mutation with η 20 at 1/n, binary tournament on rank and crowding distance (the library's default). Differences: Evolutionary's `SBX` and `PLM` are the unbounded variants, and the box constraints clip the offspring to [0, 1]; its `SBX` crosses each variable with probability 0.5, as pymoo's. The crossover probability is `crossover_with_probability` with `crossoverRate = 1`, for the reason under "Bugs found". The objectives use the in-place form `f!(F, x)` of the [tutorial](https://wildart.github.io/Evolutionary.jl/stable/tutorial/#Objective-Function-Definition).
 
-**The front** (rule 7.2): the non-dominated part of the final population of 100 (92), which NSGA2 leaves in the population vector passed to `optimize` (after a restart, the last attempt's). Its objective values are the ones recorded when those solutions were evaluated (`counted!` keeps them), not NSGA2's own, which the bug below mixes up.
+**The front** (rule 7.2): the non-dominated part of the final population of 100 (92), which NSGA2 leaves in the population vector passed to `optimize`. Its objective values are the ones recorded when those solutions were evaluated (`counted!` keeps them), not NSGA2's own, which the bug below mixes up.
 
-**Keeping going:** its convergence test (the `GD` metrics, default options as in `test/moea.jl`) restarts it; it never triggered in the separate tests.
+**Keeping going:** the matched configuration has no convergence criterion, so NSGA2's (its `GD` metrics) is lifted, and it runs to the budget in one attempt.
 
 **Left out:** no other multi-objective algorithm exists in the library.
 

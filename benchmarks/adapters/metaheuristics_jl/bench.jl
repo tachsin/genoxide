@@ -211,11 +211,13 @@ end
 # evaluations and of the time. f_calls_limit is also what ECA uses to switch to exploitation at 95%
 # of it (eca_solution in src/algorithms/singleobjective/ECA/ECA.jl). The tolerances are the
 # defaults (f_tol 1e-12, f_tol_rel eps(), x_tol 1e-8). The iteration limit, only a budget, is
-# lifted (rule 2.2).
-options(budget::Budget, seed) = Options(
+# lifted (rule 2.2). A matched run has no convergence criterion: f_tol = -1 makes the one optimize
+# always checks (CheckConvergence, which needs all of its criteria) impossible.
+options(budget::Budget, seed; matched = false) = Options(
     f_calls_limit = budget.max_evaluations - budget.evaluations,
     time_limit = budget.max_seconds - (time() - budget.start),
     iterations = typemax(Int) ÷ 4,
+    f_tol = matched ? -1.0 : 1e-12,
     seed = seed,
 )
 
@@ -225,8 +227,12 @@ options(budget::Budget, seed) = Options(
 # SmallStandardDeviation and RelativeParameterConvergence(x_tol)), and the one it adds when the user
 # gives no termination (src/optimize/before.jl): the same CheckConvergence for one objective,
 # RobustConvergence(ftol = f_tol) for several.
-function algorithm_kwargs(budget, seed; front = false)
-    opts = options(budget, seed)
+# The matched scenarios (the matched OneMax and the multi-objective ones) run the matched
+# configuration, which has no convergence criterion: they run to the target or the budget, with
+# BudgetTermination only, and never restart.
+function algorithm_kwargs(budget, seed; front = false, matched = false)
+    opts = options(budget, seed; matched)
+    matched && return (options = opts, termination = BudgetTermination(budget))
     convergence = front ? Metaheuristics.RobustConvergence(ftol = opts.f_tol) :
         Metaheuristics.CheckConvergence(f_tol_abs = opts.f_tol, f_tol_rel = opts.f_tol_rel, x_tol = opts.x_tol)
     return (options = opts, termination = Metaheuristics.Termination(checkany = [BudgetTermination(budget), convergence]))
@@ -313,7 +319,7 @@ function onemax_solvers(size, mode)
                 crossover = TwoPointCrossover(0.5),
                 mutation = BitFlipSomeChildren(0.2, 1.0 / size),
                 environmental_selection = GenerationalReplacement(),
-                algorithm_kwargs(budget, seed)...,
+                algorithm_kwargs(budget, seed; matched = true)...,
             )
         else
             # the guide: "Binary: Use GA with BitFlipMutation". The binary example of the GA
@@ -400,7 +406,7 @@ function front_solvers(problem, size)
     # the bounds: the initial population within them, and the library's repair of the offspring
     # (reset_to_violated_bounds! after SBX and polynomial mutation)
     bounds = boxconstraints(lb = zeros(n), ub = ones(n))
-    solve(make) = (budget, seed) -> optimize(counted_front(f, m, budget), bounds, make(algorithm_kwargs(budget, seed; front = true)))
+    solve(make) = (budget, seed) -> optimize(counted_front(f, m, budget), bounds, make(algorithm_kwargs(budget, seed; matched = true)))
     return [
         ("nsga2", solve(kwargs -> NSGA2(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
         ("nsga3", solve(kwargs -> NSGA3(; N = population, η_cr = 30, p_cr = 1.0, η_m = 20, p_m = 1.0 / n, partitions = divisions, kwargs...))),

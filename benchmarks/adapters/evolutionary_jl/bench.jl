@@ -283,8 +283,8 @@ function onemax_solvers(size, mode)
         # bit-flip with probability 1 / size on 20% of the children, no elitism (ɛ = 0).
         # Differences: Evolutionary's tournament draws its contestants without replacement from a
         # shuffled population (DEAP: with replacement); the crossover and bit-flip are the wrappers
-        # above (the library's own `flip` flips exactly one bit). The GA's convergence test (AbsDiff
-        # of the best value, with the default successive_f_tol) restarts it, as in every scenario.
+        # above (the library's own `flip` flips exactly one bit). The matched configuration has no
+        # convergence criterion: successive_f_tol = typemax(Int) lifts the GA's.
         method = () -> GA(
             populationSize = 300,
             selection = tournament(3),
@@ -306,8 +306,10 @@ function onemax_solvers(size, mode)
             mutationRate = 0.05,
         )
     end
+    # the matched configuration has no convergence criterion: it runs to the target or the budget
+    tolerance = mode == "matched" ? typemax(Int) : 10
     run = (budget, seed) -> run_restarting(budget, seed) do rng
-        Evolutionary.optimize(counted(onemax, budget), () -> bitrand(rng, size), method(), options(budget, rng))
+        Evolutionary.optimize(counted(onemax, budget), () -> bitrand(rng, size), method(), options(budget, rng; successive_f_tol = tolerance))
     end
     return [("ga", run)]
 end
@@ -423,11 +425,12 @@ function run_front(problem, size, budget, seed)
             mutationRate = 1.0,
         )
         # the initial population, uniform in [0, 1]; NSGA2 replaces its members in place, so it
-        # holds the final population afterwards (rule 7.2): after a restart, the last attempt's.
-        # The library's convergence test (its GD metrics, test/moea.jl's default options) applies.
+        # holds the final population afterwards (rule 7.2). The matched configuration has no
+        # convergence criterion, so the GD metrics are lifted (successive_f_tol = typemax(Int)):
+        # the run goes to the budget in one attempt.
         population = [rand(rng, n) for _ in 1:population_size]
         Evolutionary.optimize(
-            counted!(f!, budget), zeros(m), BoxConstraints(0.0, 1.0, n), method, population, options(budget, rng),
+            counted!(f!, budget), zeros(m), BoxConstraints(0.0, 1.0, n), method, population, options(budget, rng; successive_f_tol = typemax(Int)),
         )
     end
     return generations, restarts, population
