@@ -9,7 +9,8 @@
 //! files of the crate 0.27.3 (README.md, AGENTS.md, AGENTS_TEMPLATES.md, examples/).
 //!
 //! How the runs follow the benchmark rules (docs/benchmarks/rules.md):
-//! - Evaluations are counted in the fitness functions, every call (rule 3).
+//! - Evaluations are counted in the fitness functions, every call (rule 3). The fitness also
+//!   records the first evaluation whose value reaches the target (`first_hit`).
 //! - A run ends at the target (the strategy's `with_target_fitness_score`), or when the budget or
 //!   the time is used up (the abort flag, which Evolve and HillClimb check once per generation).
 //! - Rule 2.2: `with_max_stale_generations` detects convergence (generations without
@@ -19,45 +20,62 @@
 //!   (strategy/evolve/builder.rs and strategy/hill_climb/builder.rs: every repeat is
 //!   `self.clone().try_into()`, whose rng is `SmallRng::seed_from_u64(seed)`). So `restarts`
 //!   below does what `call_repeatedly` does, one run after the other until a run is conclusive
-//!   (target or abort), keeping the best, from a new random start with the seed
-//!   `seed * 1000 + restart`. No run uses a limit that's only a budget (`with_max_generations`).
+//!   (target or abort), keeping the best by the library's fitness score, from a new random start:
+//!   attempt 0 with `seed`, restart r with `(seed + 1) * 1_000_000 + r`. No run uses a limit
+//!   that's only a budget (`with_max_generations`).
 //! - Rule 2.4: the RangeGenotype keeps every gene inside its allele range itself (random values
 //!   drawn from the range, mutations clamped to it: genotype/range.rs). The fitness counts the
 //!   evaluated solutions outside the bounds, as the library proposed them, and each continuous
 //!   run prints the count as `outside`.
+//! - The clock starts before the strategy is built and stops when it returns; the reported
+//!   values are computed from the best genes after it.
 //! - Single-threaded: no `with_par_fitness`, no `call_par_*`. The only other thread is the timer,
 //!   which sleeps until the time cap.
 //! - Seeded with `with_rng_seed_from_u64`.
+//! - Matched OneMax isn't run: the library has no generational replacement (see the page).
 
 use genetic_algorithm::strategy::evolve::prelude::*;
 use genetic_algorithm::strategy::hill_climb::prelude::*;
 use std::io::BufRead;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, OnceLock};
 use std::time::{Duration, Instant};
 
-/// Shared evaluation budget: counts fitness evaluations and sets the abort flag when the budget
-/// (evaluations or seconds) is used up.
+/// Shared evaluation budget: counts fitness evaluations, records the first one that reaches the
+/// target, and sets the abort flag when the budget (evaluations or seconds) is used up.
 #[derive(Clone, Debug)]
 struct Budget {
     evaluations: Arc<AtomicUsize>,
     // evaluated solutions outside the problem's bounds (rule 2.4)
     outside: Arc<AtomicUsize>,
+    // (evaluations, seconds) at the first evaluation that reaches the target
+    first_hit: Arc<OnceLock<(usize, f64)>>,
     max_evaluations: usize,
     abort_flag: Arc<AtomicBool>,
+    // the start of the clock
+    start: Instant,
 }
 impl Budget {
-    fn new(max_evaluations: usize) -> Self {
+    fn new(max_evaluations: usize, abort_flag: Arc<AtomicBool>) -> Self {
         Self {
             evaluations: Arc::new(AtomicUsize::new(0)),
             outside: Arc::new(AtomicUsize::new(0)),
+            first_hit: Arc::new(OnceLock::new()),
             max_evaluations,
-            abort_flag: Arc::new(AtomicBool::new(false)),
+            abort_flag,
+            start: Instant::now(),
         }
     }
-    fn count(&self) {
-        if self.evaluations.fetch_add(1, Ordering::Relaxed) + 1 >= self.max_evaluations {
+    /// Counts one evaluation, whose value reaches the target or not
+    fn count(&self, reached: bool) {
+        let evaluations = self.evaluations.fetch_add(1, Ordering::Relaxed) + 1;
+        if reached && self.first_hit.get().is_none() {
+            let _ = self
+                .first_hit
+                .set((evaluations, self.start.elapsed().as_secs_f64()));
+        }
+        if evaluations >= self.max_evaluations {
             self.abort_flag.store(true, Ordering::Relaxed);
         }
     }
@@ -67,19 +85,22 @@ impl Budget {
     fn aborted(&self) -> bool {
         self.abort_flag.load(Ordering::Relaxed)
     }
-    /// Sets the abort flag after max_seconds, stopped by dropping the returned sender
-    fn start_timer(&self, max_seconds: f64) -> (mpsc::Sender<()>, std::thread::JoinHandle<()>) {
-        let (sender, receiver) = mpsc::channel::<()>();
-        let abort_flag = self.abort_flag.clone();
-        let handle = std::thread::spawn(move || {
-            if let Err(mpsc::RecvTimeoutError::Timeout) =
-                receiver.recv_timeout(Duration::from_secs_f64(max_seconds))
-            {
-                abort_flag.store(true, Ordering::Relaxed);
-            }
-        });
-        (sender, handle)
-    }
+}
+
+/// Sets the abort flag after max_seconds, stopped by dropping the returned sender
+fn start_timer(
+    abort_flag: Arc<AtomicBool>,
+    max_seconds: f64,
+) -> (mpsc::Sender<()>, std::thread::JoinHandle<()>) {
+    let (sender, receiver) = mpsc::channel::<()>();
+    let handle = std::thread::spawn(move || {
+        if let Err(mpsc::RecvTimeoutError::Timeout) =
+            receiver.recv_timeout(Duration::from_secs_f64(max_seconds))
+        {
+            abort_flag.store(true, Ordering::Relaxed);
+        }
+    });
+    (sender, handle)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -106,18 +127,24 @@ fn nqueens_value(order: &[usize]) -> usize {
         .sum()
 }
 
-// Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
-// towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
-fn shift(i: usize) -> f64 {
-    2.0 * ((37 * i + 11) % 101) as f64 / 101.0 - 1.0
+// Rastrigin and Ackley are shifted (rule 1.4): gene i is measured from
+// s_i = 0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1), upper the box's upper bound, in this
+// order. Computed once, before any run, for up to MAX_GENES genes.
+const MAX_GENES: usize = 1024;
+fn shifts(upper: f64) -> Vec<f64> {
+    (0..MAX_GENES)
+        .map(|i| 0.8 * upper * (2.0 * ((37 * i + 11) % 101) as f64 / 101.0 - 1.0))
+        .collect()
 }
+static RASTRIGIN_SHIFT: LazyLock<Vec<f64>> = LazyLock::new(|| shifts(5.12));
+static ACKLEY_SHIFT: LazyLock<Vec<f64>> = LazyLock::new(|| shifts(32.768));
 
 fn rastrigin_value(x: &[f64]) -> f64 {
     10.0 * x.len() as f64
         + x.iter()
-            .enumerate()
-            .map(|(i, x)| {
-                let x = x - shift(i);
+            .zip(RASTRIGIN_SHIFT.iter())
+            .map(|(x, s)| {
+                let x = x - s;
                 x * x - 10.0 * (2.0 * std::f64::consts::PI * x).cos()
             })
             .sum::<f64>()
@@ -131,7 +158,7 @@ fn rosenbrock_value(x: &[f64]) -> f64 {
 
 fn ackley_value(x: &[f64]) -> f64 {
     let n = x.len() as f64;
-    let shifted = || x.iter().enumerate().map(|(i, x)| x - shift(i));
+    let shifted = || x.iter().zip(ACKLEY_SHIFT.iter()).map(|(x, s)| x - s);
     let squares = shifted().map(|x| x * x).sum::<f64>() / n;
     let cosines = shifted()
         .map(|x| (2.0 * std::f64::consts::PI * x).cos())
@@ -149,8 +176,9 @@ impl Fitness for OneMax {
         chromosome: &FitnessChromosome<Self>,
         _genotype: &FitnessGenotype<Self>,
     ) -> Option<FitnessValue> {
-        self.0.count();
-        Some(onemax_value(&chromosome.genes) as FitnessValue)
+        let value = onemax_value(&chromosome.genes);
+        self.0.count(value >= chromosome.genes.len());
+        Some(value as FitnessValue)
     }
 }
 
@@ -165,9 +193,10 @@ impl Fitness for NQueens {
         chromosome: &FitnessChromosome<Self>,
         _genotype: &FitnessGenotype<Self>,
     ) -> Option<FitnessValue> {
-        self.0.count();
         let order: Vec<usize> = chromosome.genes.iter().map(|&gene| gene as usize).collect();
-        Some(nqueens_value(&order) as FitnessValue)
+        let value = nqueens_value(&order);
+        self.0.count(value == 0);
+        Some(value as FitnessValue)
     }
 }
 
@@ -196,11 +225,12 @@ impl Fitness for Real {
         chromosome: &FitnessChromosome<Self>,
         _genotype: &FitnessGenotype<Self>,
     ) -> Option<FitnessValue> {
-        self.budget.count();
         if chromosome.genes.iter().any(|&x| x < self.low || x > self.high) {
             self.budget.outside.fetch_add(1, Ordering::Relaxed);
         }
-        Some(scaled((self.function)(&chromosome.genes)))
+        let value = (self.function)(&chromosome.genes);
+        self.budget.count(value <= REAL_TARGET);
+        Some(scaled(value))
     }
 }
 
@@ -237,8 +267,14 @@ fn print_result(args: &Args, seed: u64, outcome: &Outcome, time_s: f64, budget: 
     } else {
         String::new()
     };
+    let first_hit = match budget.first_hit.get() {
+        Some((evaluations, time_s)) => {
+            format!("{{\"evaluations\":{evaluations},\"time_s\":{time_s:.6}}}")
+        }
+        None => "null".to_string(),
+    };
     println!(
-        "{{\"library\":\"genetic_algorithm\",\"solver\":\"{}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{},\"time_s\":{:.6},\"generations\":{},\"evaluations\":{},\"best\":{},\"target\":{},\"success\":{},\"solution\":{}{}}}",
+        "{{\"library\":\"genetic_algorithm\",\"solver\":\"{}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{},\"time_s\":{:.6},\"generations\":{},\"evaluations\":{},\"best\":{},\"target\":{},\"success\":{},\"first_hit\":{},\"solution\":{}{}}}",
         outcome.solver,
         args.problem,
         args.size,
@@ -250,49 +286,65 @@ fn print_result(args: &Args, seed: u64, outcome: &Outcome, time_s: f64, budget: 
         outcome.best,
         outcome.target,
         outcome.success,
+        first_hit,
         outcome.solution,
         outside,
     );
 }
 
-/// Times one run, from before the initial population to the end
-fn run<F: FnOnce(&Budget) -> Outcome>(args: &Args, seed: u64, solve: F) {
-    let budget = Budget::new(args.max_evaluations);
-    let (timer, timer_handle) = budget.start_timer(args.max_seconds);
-    let now = Instant::now();
-    let outcome = solve(&budget);
-    let time_s = now.elapsed().as_secs_f64();
+/// Times one run, from before the initial population to the end of `solve`; `outcome` builds the
+/// reported values from its result after the clock
+fn run<R>(
+    args: &Args,
+    seed: u64,
+    solve: impl FnOnce(&Budget) -> R,
+    outcome: impl FnOnce(R) -> Outcome,
+) {
+    let abort_flag = Arc::new(AtomicBool::new(false));
+    let (timer, timer_handle) = start_timer(abort_flag.clone(), args.max_seconds);
+    // the clock starts here (Budget::new)
+    let budget = Budget::new(args.max_evaluations, abort_flag);
+    let result = solve(&budget);
+    let time_s = budget.start.elapsed().as_secs_f64();
     drop(timer);
     timer_handle.join().unwrap();
+    let outcome = outcome(result);
     print_result(args, seed, &outcome, time_s, &budget);
 }
 
+/// The seed of an attempt (rule 2.2): the run's seed first, then (seed + 1) * 1_000_000 + restart
+fn attempt_seed(seed: u64, restart: u64) -> u64 {
+    if restart == 0 {
+        seed
+    } else {
+        (seed + 1) * 1_000_000 + restart
+    }
+}
+
 /// `call_repeatedly` with a seed per run (see the top of the file): `once(seed)` runs the
-/// strategy and returns (its best genes, whether it is conclusive, its generations). Runs until
-/// one is conclusive (the target reached or the run aborted), and returns the best genes by
-/// `value` (minimized) and the generations of all runs.
+/// strategy and returns (its best genes, their fitness score, whether it is conclusive, its
+/// generations). Runs until one is conclusive (the target reached or the run aborted), and
+/// returns the best genes by the library's (minimized) score and the generations of all runs.
 fn restarts<T>(
     seed: u64,
-    mut once: impl FnMut(u64) -> (Option<Vec<T>>, bool, usize),
-    value: impl Fn(&[T]) -> f64,
-) -> (Vec<T>, f64, usize) {
-    let mut best: Option<(Vec<T>, f64)> = None;
+    mut once: impl FnMut(u64) -> (Option<Vec<T>>, Option<FitnessValue>, bool, usize),
+) -> (Vec<T>, usize) {
+    let mut best: Option<(Vec<T>, FitnessValue)> = None;
     let mut generations = 0;
     for restart in 0.. {
-        let (genes, conclusive, run_generations) = once(seed * 1000 + restart);
+        let (genes, score, conclusive, run_generations) = once(attempt_seed(seed, restart));
         generations += run_generations;
-        if let Some(genes) = genes {
-            let run_value = value(&genes);
-            if best.as_ref().is_none_or(|(_, best_value)| run_value < *best_value) {
-                best = Some((genes, run_value));
+        if let (Some(genes), Some(score)) = (genes, score) {
+            if best.as_ref().is_none_or(|(_, best_score)| score < *best_score) {
+                best = Some((genes, score));
             }
         }
         if conclusive {
             break;
         }
     }
-    let (genes, best_value) = best.expect("a run evaluates at least one chromosome");
-    (genes, best_value, generations)
+    let (genes, _) = best.expect("a run evaluates at least one chromosome");
+    (genes, generations)
 }
 
 fn json_list<T: std::fmt::Debug>(values: impl Iterator<Item = T>) -> String {
@@ -301,71 +353,56 @@ fn json_list<T: std::fmt::Debug>(values: impl Iterator<Item = T>) -> String {
 }
 
 fn onemax(args: &Args, seed: u64) {
+    // Matched OneMax (DEAP's eaSimple: tournament selection of parents, generational replacement
+    // without elitism) isn't run (decision 1 and 2 of the fairness review; the page explains it):
+    // Evolve's selection keeps survivors from parents and offspring together, and at a
+    // replacement rate of 1.0 it keeps every offspring and selects nothing. Print nothing.
+    if args.mode == "matched" {
+        return;
+    }
     let target = args.size;
-    run(args, seed, |budget| {
-        let genotype = BinaryGenotype::builder()
-            .with_genes_size(args.size)
-            .build()
-            .unwrap();
-        // the operator types are generic parameters of the builder, so build it per arm. The
-        // only ending condition is the target (with_max_stale_generations isn't set), so a run
-        // ends at the target or through the abort flag
-        macro_rules! builder {
-            () => {
-                Evolve::builder()
-                    .with_genotype(genotype.clone())
-                    .with_fitness(OneMax(budget.clone()))
-                    .with_target_fitness_score(target as FitnessValue)
-                    .with_abort_flag(budget.abort_flag.clone())
-                    .with_rng_seed_from_u64(seed)
-            };
-        }
-        let (genes, generations) = match args.mode.as_str() {
-            // matched, as DEAP eaSimple: population 300, tournament of 3, two-point crossover
-            // with probability 0.5, mutation of ~1 bit on 20% of the children, no elitism.
-            // Differences: DEAP selects parents by tournament with replacement; this library
-            // selects the survivors from parents + offspring by tournament without replacement,
-            // so the selection pressure comes from the surplus. A replacement_rate of 1.0 (only
-            // offspring survive) would select 300 out of 300 offspring, i.e. no selection at all,
-            // hence 0.5. MutateSingleGene(0.2) mutates exactly one bit of 20% of the children,
-            // where a bit flip at 1 / size flips ~1 bit.
-            "matched" => {
-                let evolve = builder!()
-                    .with_target_population_size(300)
-                    .with_select(SelectTournament::new(0.5, 0.0, 3))
-                    .with_crossover(CrossoverMultiPoint::new(1.0, 0.5, 2, false))
-                    .with_mutate(MutateSingleGene::new(0.2))
-                    .call()
-                    .unwrap();
-                (evolve.best_genes(), evolve.state.current_generation)
-            }
+    run(
+        args,
+        seed,
+        |budget| {
+            let genotype = BinaryGenotype::builder()
+                .with_genes_size(args.size)
+                .build()
+                .unwrap();
             // idiomatic: AGENTS.md "If unsure, start here", for binary genotypes:
             // SelectTournament(0.5, 0.02, 4), CrossoverUniform(0.7, 0.8), MutateSingleGene(0.2);
             // population 100 as in README.md "Quick Usage", which is this problem (100 genes,
-            // count the true values, target 100)
-            _ => {
-                let evolve = builder!()
-                    .with_target_population_size(100)
-                    .with_select(SelectTournament::new(0.5, 0.02, 4))
-                    .with_crossover(CrossoverUniform::new(0.7, 0.8))
-                    .with_mutate(MutateSingleGene::new(0.2))
-                    .call()
-                    .unwrap();
-                (evolve.best_genes(), evolve.state.current_generation)
+            // count the true values, target 100). The only ending condition is the target
+            // (with_max_stale_generations isn't set), so a run ends at the target or through the
+            // abort flag.
+            let evolve = Evolve::builder()
+                .with_genotype(genotype)
+                .with_fitness(OneMax(budget.clone()))
+                .with_target_fitness_score(target as FitnessValue)
+                .with_abort_flag(budget.abort_flag.clone())
+                .with_rng_seed_from_u64(seed)
+                .with_target_population_size(100)
+                .with_select(SelectTournament::new(0.5, 0.02, 4))
+                .with_crossover(CrossoverUniform::new(0.7, 0.8))
+                .with_mutate(MutateSingleGene::new(0.2))
+                .call()
+                .unwrap();
+            (evolve.best_genes(), evolve.state.current_generation)
+        },
+        |(genes, generations)| {
+            let genes = genes.expect("the initial population is evaluated");
+            let best = onemax_value(&genes);
+            Outcome {
+                solver: "evolve",
+                generations,
+                best: best.to_string(),
+                target: target.to_string(),
+                success: best >= target,
+                solution: json_list(genes.iter().map(|&bit| bit as u8)),
+                bounded: false,
             }
-        };
-        let genes = genes.expect("the initial population is evaluated");
-        let best = onemax_value(&genes);
-        Outcome {
-            solver: "evolve",
-            generations,
-            best: best.to_string(),
-            target: target.to_string(),
-            success: best >= target,
-            solution: json_list(genes.iter().map(|&bit| bit as u8)),
-            bounded: false,
-        }
-    });
+        },
+    );
 }
 
 fn nqueens_genotype(size: usize) -> UniqueGenotype<u8> {
@@ -383,11 +420,11 @@ fn nqueens(args: &Args, seed: u64) {
     // Stochastic with call_repeatedly for genomes >20 genes"), max_stale_generations(10000) and
     // with_replace_on_equal_fitness(true) ("crucial for this problem"). It ends after 10000
     // generations without improvement, so it restarts, as call_repeatedly would.
-    run(args, seed, |budget| {
-        let order = |genes: &[u8]| genes.iter().map(|&gene| gene as usize).collect::<Vec<_>>();
-        let (genes, best, generations) = restarts(
-            seed,
-            |run_seed| {
+    run(
+        args,
+        seed,
+        |budget| {
+            restarts(seed, |run_seed| {
                 let hill_climb = HillClimb::builder()
                     .with_genotype(nqueens_genotype(args.size))
                     .with_variant(HillClimbVariant::Stochastic)
@@ -400,25 +437,30 @@ fn nqueens(args: &Args, seed: u64) {
                     .with_rng_seed_from_u64(run_seed)
                     .call()
                     .unwrap();
-                let conclusive = hill_climb.best_fitness_score() == Some(0) || budget.aborted();
+                let score = hill_climb.best_fitness_score();
+                let conclusive = score == Some(0) || budget.aborted();
                 (
                     hill_climb.best_genes(),
+                    score,
                     conclusive,
                     hill_climb.state.current_generation,
                 )
-            },
-            |genes| nqueens_value(&order(genes)) as f64,
-        );
-        Outcome {
-            solver: "hill_climb",
-            generations,
-            best: (best as usize).to_string(),
-            target: "0".to_string(),
-            success: best == 0.0,
-            solution: json_list(genes.iter()),
-            bounded: false,
-        }
-    });
+            })
+        },
+        |(genes, generations)| {
+            let order: Vec<usize> = genes.iter().map(|&gene| gene as usize).collect();
+            let best = nqueens_value(&order);
+            Outcome {
+                solver: "hill_climb",
+                generations,
+                best: best.to_string(),
+                target: "0".to_string(),
+                success: best == 0,
+                solution: json_list(genes.iter()),
+                bounded: false,
+            }
+        },
+    );
 }
 
 /// (lower bound, upper bound, function) of a real-valued problem
@@ -430,15 +472,22 @@ fn real_problem(problem: &str) -> (f64, f64, fn(&[f64]) -> f64) {
     }
 }
 
-fn real_outcome(solver: &'static str, genes: Vec<f64>, best: f64, generations: usize) -> Outcome {
-    Outcome {
-        solver,
-        generations,
-        best: format!("{best:?}"),
-        target: format!("{REAL_TARGET:?}"),
-        success: best <= REAL_TARGET,
-        solution: json_list(genes.iter()),
-        bounded: true,
+/// The reported values of a continuous run, from its best genes (after the clock)
+fn real_outcome(
+    solver: &'static str,
+    function: fn(&[f64]) -> f64,
+) -> impl FnOnce((Vec<f64>, usize)) -> Outcome {
+    move |(genes, generations)| {
+        let best = function(&genes);
+        Outcome {
+            solver,
+            generations,
+            best: format!("{best:?}"),
+            target: format!("{REAL_TARGET:?}"),
+            success: best <= REAL_TARGET,
+            solution: json_list(genes.iter()),
+            bounded: true,
+        }
     }
 }
 
@@ -446,129 +495,121 @@ fn real_outcome(solver: &'static str, genes: Vec<f64>, best: f64, generations: u
 fn real_evolve(args: &Args, seed: u64) {
     let (low, high, function) = real_problem(&args.problem);
     let width = high - low;
-    run(args, seed, |budget| {
-        let (genes, best, generations) = restarts(
-            seed,
-            |run_seed| {
-                // Rule 6.2's order (a stated preference, then the example for the problem type,
-                // then the default); the page explains each step.
-                // The example: examples/evolve_range_float.rs, the library's Evolve example for a
-                // real function: population 100, SelectTournament(0.5, 0.02, 4),
-                // MutateMultiGene(2, 0.2), precision 1e-5.
-                // Stated preferences, which come first:
-                // - its comments call StepScaled(vec![0.1, 0.01, 0.001, 0.0001]) (on its range
-                //   0..=1; the same shares of the range here) the "best approach for this problem,
-                //   converges fast, but needs low max_stale_generations to trigger next scale",
-                //   and give the low value, .with_max_stale_generations(100), commented out next
-                //   to the 100_000 it runs with: so StepScaled with 100;
-                // - AGENTS.md "Which Crossover?" recommends CrossoverUniform or
-                //   CrossoverSinglePoint for a RangeGenotype, where the example has
-                //   CrossoverMultiPoint(0.7, 0.8, 9, false): so CrossoverUniform(0.7, 0.8), the
-                //   rates of the example and of AGENTS.md's presets.
-                // The step advances after max_stale_generations without improvement (AGENTS.md
-                // "Scale advancement"), and the attempt ends in the last one.
-                let genotype = RangeGenotype::<f64>::builder()
-                    .with_genes_size(args.size)
-                    .with_allele_range(low..=high)
-                    .with_mutation_type(MutationType::StepScaled(
-                        [0.1, 0.01, 0.001, 0.0001]
-                            .iter()
-                            .map(|share| share * width)
-                            .collect(),
-                    ))
-                    .build()
-                    .unwrap();
-                let evolve = Evolve::builder()
-                    .with_genotype(genotype)
-                    .with_target_population_size(100)
-                    .with_max_stale_generations(100)
-                    .with_fitness(Real {
-                        budget: budget.clone(),
-                        function,
-                        low,
-                        high,
-                    })
-                    .with_fitness_ordering(FitnessOrdering::Minimize)
-                    .with_target_fitness_score(scaled(REAL_TARGET))
-                    .with_select(SelectTournament::new(0.5, 0.02, 4))
-                    .with_crossover(CrossoverUniform::new(0.7, 0.8))
-                    .with_mutate(MutateMultiGene::new(2, 0.2))
-                    .with_abort_flag(budget.abort_flag.clone())
-                    .with_rng_seed_from_u64(run_seed)
-                    .call()
-                    .unwrap();
-                let conclusive = evolve
-                    .best_fitness_score()
-                    .is_some_and(|score| score <= scaled(REAL_TARGET))
-                    || budget.aborted();
-                (
-                    evolve.best_genes(),
-                    conclusive,
-                    evolve.state.current_generation,
-                )
-            },
-            function,
-        );
-        real_outcome("evolve", genes, best, generations)
-    });
+    let solve = |budget: &Budget| {
+        restarts(seed, |run_seed| {
+            // Rule 6.2's order (a stated preference, then the example for the problem type,
+            // then the default); the page explains each step.
+            // The example: examples/evolve_range_float.rs, the library's Evolve example for a
+            // real function: population 100, SelectTournament(0.5, 0.02, 4),
+            // MutateMultiGene(2, 0.2), precision 1e-5.
+            // Stated preferences, which come first:
+            // - its comments call StepScaled(vec![0.1, 0.01, 0.001, 0.0001]) (on its range
+            //   0..=1; the same shares of the range here) the "best approach for this problem,
+            //   converges fast, but needs low max_stale_generations to trigger next scale",
+            //   and give the low value, .with_max_stale_generations(100), commented out next
+            //   to the 100_000 it runs with: so StepScaled with 100;
+            // - AGENTS.md "Which Crossover?" recommends CrossoverUniform or
+            //   CrossoverSinglePoint for a RangeGenotype, where the example has
+            //   CrossoverMultiPoint(0.7, 0.8, 9, false): so CrossoverUniform(0.7, 0.8), the
+            //   rates of the example and of AGENTS.md's presets.
+            // The step advances after max_stale_generations without improvement (AGENTS.md
+            // "Scale advancement"), and the attempt ends in the last one.
+            let genotype = RangeGenotype::<f64>::builder()
+                .with_genes_size(args.size)
+                .with_allele_range(low..=high)
+                .with_mutation_type(MutationType::StepScaled(
+                    [0.1, 0.01, 0.001, 0.0001]
+                        .iter()
+                        .map(|share| share * width)
+                        .collect(),
+                ))
+                .build()
+                .unwrap();
+            let evolve = Evolve::builder()
+                .with_genotype(genotype)
+                .with_target_population_size(100)
+                .with_max_stale_generations(100)
+                .with_fitness(Real {
+                    budget: budget.clone(),
+                    function,
+                    low,
+                    high,
+                })
+                .with_fitness_ordering(FitnessOrdering::Minimize)
+                .with_target_fitness_score(scaled(REAL_TARGET))
+                .with_select(SelectTournament::new(0.5, 0.02, 4))
+                .with_crossover(CrossoverUniform::new(0.7, 0.8))
+                .with_mutate(MutateMultiGene::new(2, 0.2))
+                .with_abort_flag(budget.abort_flag.clone())
+                .with_rng_seed_from_u64(run_seed)
+                .call()
+                .unwrap();
+            let score = evolve.best_fitness_score();
+            let conclusive =
+                score.is_some_and(|score| score <= scaled(REAL_TARGET)) || budget.aborted();
+            (
+                evolve.best_genes(),
+                score,
+                conclusive,
+                evolve.state.current_generation,
+            )
+        })
+    };
+    run(args, seed, solve, real_outcome("evolve", function));
 }
 
 /// HillClimb on Rosenbrock (continuous, unimodal)
 fn real_hill_climb(args: &Args, seed: u64) {
     let (low, high, function) = real_problem(&args.problem);
     let width = high - low;
-    run(args, seed, |budget| {
-        let (genes, best, generations) = restarts(
-            seed,
-            |run_seed| {
-                // HillClimb for a "Convex search space, few local optima" (README.md "When to
-                // use which strategy?"), SteepestAscent for a small genome (AGENTS.md "Which
-                // HillClimb Variant?"), as examples/hill_climb_range.rs: StepScaled(vec![0.1,
-                // 0.01, 0.001, 0.0001, 0.00001]) on the range 0..=1 (here the same steps as
-                // shares of the range) and max_stale_generations(1), which moves to the next
-                // step after a generation without improvement and ends the run in the last.
-                // AGENTS.md "Exact local optimum needed: SteepestAscent + call_repeatedly(n)".
-                let genotype = RangeGenotype::<f64>::builder()
-                    .with_genes_size(args.size)
-                    .with_allele_range(low..=high)
-                    .with_mutation_type(MutationType::StepScaled(
-                        [0.1, 0.01, 0.001, 0.0001, 0.00001]
-                            .iter()
-                            .map(|share| share * width)
-                            .collect(),
-                    ))
-                    .build()
-                    .unwrap();
-                let hill_climb = HillClimb::builder()
-                    .with_genotype(genotype)
-                    .with_variant(HillClimbVariant::SteepestAscent)
-                    .with_max_stale_generations(1)
-                    .with_fitness(Real {
-                        budget: budget.clone(),
-                        function,
-                        low,
-                        high,
-                    })
-                    .with_fitness_ordering(FitnessOrdering::Minimize)
-                    .with_target_fitness_score(scaled(REAL_TARGET))
-                    .with_abort_flag(budget.abort_flag.clone())
-                    .with_rng_seed_from_u64(run_seed)
-                    .call()
-                    .unwrap();
-                let conclusive = hill_climb
-                    .best_fitness_score()
-                    .is_some_and(|score| score <= scaled(REAL_TARGET))
-                    || budget.aborted();
-                (
-                    hill_climb.best_genes(),
-                    conclusive,
-                    hill_climb.state.current_generation,
-                )
-            },
-            function,
-        );
-        real_outcome("hill_climb", genes, best, generations)
-    });
+    let solve = |budget: &Budget| {
+        restarts(seed, |run_seed| {
+            // HillClimb for a "Convex search space, few local optima" (README.md "When to
+            // use which strategy?"), SteepestAscent for a small genome (AGENTS.md "Which
+            // HillClimb Variant?"), as examples/hill_climb_range.rs: StepScaled(vec![0.1,
+            // 0.01, 0.001, 0.0001, 0.00001]) on the range 0..=1 (here the same steps as
+            // shares of the range) and max_stale_generations(1), which moves to the next
+            // step after a generation without improvement and ends the run in the last.
+            // AGENTS.md "Exact local optimum needed: SteepestAscent + call_repeatedly(n)".
+            let genotype = RangeGenotype::<f64>::builder()
+                .with_genes_size(args.size)
+                .with_allele_range(low..=high)
+                .with_mutation_type(MutationType::StepScaled(
+                    [0.1, 0.01, 0.001, 0.0001, 0.00001]
+                        .iter()
+                        .map(|share| share * width)
+                        .collect(),
+                ))
+                .build()
+                .unwrap();
+            let hill_climb = HillClimb::builder()
+                .with_genotype(genotype)
+                .with_variant(HillClimbVariant::SteepestAscent)
+                .with_max_stale_generations(1)
+                .with_fitness(Real {
+                    budget: budget.clone(),
+                    function,
+                    low,
+                    high,
+                })
+                .with_fitness_ordering(FitnessOrdering::Minimize)
+                .with_target_fitness_score(scaled(REAL_TARGET))
+                .with_abort_flag(budget.abort_flag.clone())
+                .with_rng_seed_from_u64(run_seed)
+                .call()
+                .unwrap();
+            let score = hill_climb.best_fitness_score();
+            let conclusive =
+                score.is_some_and(|score| score <= scaled(REAL_TARGET)) || budget.aborted();
+            (
+                hill_climb.best_genes(),
+                score,
+                conclusive,
+                hill_climb.state.current_generation,
+            )
+        })
+    };
+    run(args, seed, solve, real_outcome("hill_climb", function));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -618,6 +659,9 @@ fn values(problem: &str) {
 }
 
 fn main() {
+    // the shifts are computed before any run
+    LazyLock::force(&RASTRIGIN_SHIFT);
+    LazyLock::force(&ACKLEY_SHIFT);
     let raw: Vec<String> = std::env::args().skip(1).collect();
     if raw.len() == 3 && raw[0] == "values" {
         values(&raw[1]);
@@ -637,6 +681,7 @@ fn main() {
         max_evaluations: raw[5].parse().unwrap(),
         max_seconds: raw[6].parse().unwrap(),
     };
+    assert!(args.size <= MAX_GENES, "at most {MAX_GENES} genes");
     for seed in args.seed_from..=args.seed_to {
         match args.problem.as_str() {
             "onemax" => onemax(&args, seed),
@@ -663,12 +708,13 @@ mod tests {
     #[test]
     fn fitness_values() {
         // 0 at the shift, and the values of the Python reference at a fixed point
-        let s: Vec<f64> = (0..10).map(shift).collect();
         let x: Vec<f64> = (0..10).map(|i| 0.5 * (i % 7) as f64 - 1.5).collect();
-        assert!(rastrigin_value(&s).abs() < 1e-12);
-        assert!(ackley_value(&s).abs() < 1e-12);
-        assert!((rastrigin_value(&x) - 87.78147018265213).abs() < 1e-9);
-        assert!((ackley_value(&x) - 5.149902035382837).abs() < 1e-9);
+        assert!(rastrigin_value(&RASTRIGIN_SHIFT[..10]).abs() < 1e-12);
+        assert!(ackley_value(&ACKLEY_SHIFT[..10]).abs() < 1e-12);
+        assert!((rastrigin_value(&x) - 145.90969988928046).abs() < 1e-9);
+        assert!((ackley_value(&x) - 20.92235706225884).abs() < 1e-9);
+        assert_eq!(RASTRIGIN_SHIFT[0], -3.20380198019802);
+        assert_eq!(ACKLEY_SHIFT[4], 3.893227722772275);
         assert_eq!(rosenbrock_value(&[1.0; 10]), 0.0);
         assert_eq!(nqueens_value(&[3, 1, 6, 2, 5, 7, 4, 0]), 0);
         assert_eq!(nqueens_value(&[0, 1, 2, 3, 4, 5, 6, 7]), 7);
@@ -679,5 +725,13 @@ mod tests {
     fn scaled_target() {
         assert!(scaled(0.01) <= scaled(REAL_TARGET));
         assert!(scaled(0.010001) > scaled(REAL_TARGET));
+    }
+
+    #[test]
+    fn seeds() {
+        assert_eq!(attempt_seed(0, 0), 0);
+        assert_eq!(attempt_seed(3, 0), 3);
+        assert_eq!(attempt_seed(0, 1), 1_000_001);
+        assert_eq!(attempt_seed(9, 2), 10_000_002);
     }
 }

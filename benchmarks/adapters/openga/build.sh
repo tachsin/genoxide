@@ -24,5 +24,5 @@ if [ ! -f "$INCLUDE/openGA.hpp" ]; then
 fi
 
 mkdir -p "$OUT"
-g++ -O3 -march=native -std=c++17 -DNDEBUG -DOPENGA_VERSION="\"$VERSION\"" \
+g++ -O3 -std=c++17 -DNDEBUG -DOPENGA_VERSION="\"$VERSION\"" \
     -I "$INCLUDE" -o "$OUT/ga_bench_openga" "$HERE/bench.cpp"
