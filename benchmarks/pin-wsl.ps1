@@ -28,7 +28,7 @@ param(
     [switch]$Uninstall
 )
 $ErrorActionPreference = 'Stop'
-$task = 'genoxide benchmarks: pin WSL'
+$task = 'genoxide-pin-wsl'
 
 if ($Uninstall) {
     Unregister-ScheduledTask -TaskName $task -Confirm:$false
