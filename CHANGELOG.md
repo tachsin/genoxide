@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.2](https://github.com/tachsin/genoxide/compare/v0.5.1...v0.5.2) - 2026-09-25
+
+### <!-- 4 -->Documentation
+
+- benchmark 16 libraries on 14 scenarios, with the methodology and vertical charts ([#106](https://github.com/tachsin/genoxide/pull/106))
+
 ## [0.5.1](https://github.com/tachsin/genoxide/compare/v0.5.0...v0.5.1) - 2026-09-24
 
 ### <!-- 1 -->Fixed
