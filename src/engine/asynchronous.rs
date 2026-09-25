@@ -17,6 +17,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// The most workers an [`AsyncEngine`] starts: far more than the CPUs of one machine, for fitness
+/// functions that mostly wait, and few enough that starting them doesn't exhaust the system.
+pub const MAX_WORKERS: usize = 4096;
+
 /// Runs an [`Incremental`] algorithm, such as a [`SteadyGa`](crate::algorithm::SteadyGa), with
 /// asynchronous evaluation on worker threads: each worker gets a new genome as soon as it's done,
 /// so none waits for the slowest evaluation of a generation. For expensive fitness functions
@@ -102,8 +106,9 @@ where
         self
     }
 
-    /// The number of evaluations at a time, at least 1. The number of available CPUs by
-    /// default; more for fitness functions that mostly wait, e.g. on other processes.
+    /// The number of evaluations at a time, between 1 and [`MAX_WORKERS`]. The number of
+    /// available CPUs by default; more for fitness functions that mostly wait, e.g. on other
+    /// processes.
     pub fn workers(mut self, workers: usize) -> Self {
         self.workers = workers;
         self
@@ -136,8 +141,8 @@ where
     /// # Errors
     ///
     /// - [`Error::MissingSetting`] without a stop condition or abort flag.
-    /// - [`Error::InvalidSetting`] for an invalid stop condition, 0 workers, or checkpoints every
-    ///   0 generations.
+    /// - [`Error::InvalidSetting`] for an invalid stop condition, 0 workers or more than
+    ///   [`MAX_WORKERS`], workers the system can't start, or checkpoints every 0 generations.
     /// - [`Error::NanFitness`] for a NaN with [`NanPolicy::Error`], and
     ///   [`Error::InvalidFitness`] for a negative constraint violation.
     /// - [`Error::FitnessCount`] if a [`Batch`](super::Batch) doesn't return one score for one
@@ -161,10 +166,10 @@ where
         if let Some(stop) = &self.stop {
             stop.validate()?;
         }
-        if self.workers == 0 {
+        if self.workers == 0 || self.workers > MAX_WORKERS {
             return Err(Error::InvalidSetting {
                 setting: "workers",
-                reason: "must be at least 1".to_string(),
+                reason: format!("must be between 1 and {MAX_WORKERS}, got {}", self.workers),
             });
         }
         validate_checkpoint(&self.checkpoint)?;
@@ -229,7 +234,7 @@ where
             for _ in 0..workers {
                 let done = done.clone();
                 let job_queue = &job_queue;
-                scope.spawn(move || {
+                let spawned = thread::Builder::new().spawn_scoped(scope, move || {
                     loop {
                         // the lock is held only while waiting for a job
                         let job = match job_queue.lock() {
@@ -256,8 +261,20 @@ where
                         }
                     }
                 });
+                if let Err(error) = spawned {
+                    failure = Some(Error::InvalidSetting {
+                        setting: "workers",
+                        reason: format!("can't start {workers} threads: {error}"),
+                    });
+                    break;
+                }
             }
             drop(done);
+            if failure.is_some() {
+                // the workers that started stop, without a job
+                drop(jobs);
+                return;
+            }
 
             let mut in_flight = 0;
             while in_flight < workers && !driver.budget_reached(in_flight) {

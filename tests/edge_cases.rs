@@ -3,6 +3,7 @@
 
 use genoxide::Objective::Minimize;
 use genoxide::engine::STALL_GENERATIONS;
+use genoxide::engine::asynchronous::MAX_WORKERS;
 use genoxide::prelude::*;
 use std::cell::Cell;
 use std::sync::mpsc;
@@ -207,6 +208,9 @@ const MAX: usize = 1 << 24;
 #[test]
 fn huge_sizes_are_setting_errors() {
     for size in [MAX + 1, usize::MAX] {
+        assert_eq!(setting(Binary::new(size)), "len");
+        assert_eq!(setting(Permutation::new(size)), "len");
+
         let ga = || {
             Ga::builder(Binary::new(8).unwrap())
                 .population_size(size)
@@ -279,6 +283,26 @@ fn huge_sizes_are_setting_errors() {
         );
     }
     assert!(Tournament::new(MAX).is_ok());
+    assert!(Binary::new(MAX).is_ok());
+    assert!(Permutation::new(MAX).is_ok());
+}
+
+#[test]
+fn too_many_workers_are_a_setting_error() {
+    for workers in [MAX_WORKERS + 1, usize::MAX] {
+        let steady = Ga::builder(Binary::new(8).unwrap())
+            .population_size(10)
+            .select(Tournament::new(2).unwrap())
+            .crossover(UniformCrossover::new())
+            .mutate(BitFlip::count(1).unwrap())
+            .build_steady()
+            .unwrap();
+        let outcome = AsyncEngine::new(steady, one_max)
+            .workers(workers)
+            .stop_when(Stop::evaluations(100))
+            .run();
+        assert_eq!(setting(outcome), "workers");
+    }
 }
 
 #[test]

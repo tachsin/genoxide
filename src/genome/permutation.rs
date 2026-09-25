@@ -1,6 +1,7 @@
 //! Permutation genomes: orderings of `0..n`.
 
 use super::{Genome, Representation};
+use crate::operator::check_size;
 use crate::{Error, Result, StreamRng};
 use std::ops::Deref;
 
@@ -116,7 +117,11 @@ pub struct Permutation {
 }
 
 impl Permutation {
-    /// Permutations of `0..len`, `len` at least 1.
+    /// Permutations of `0..len`, `len` between 1 and 2^24.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a length of 0 or above 2^24.
     pub fn new(len: usize) -> Result<Self> {
         if len == 0 {
             return Err(Error::InvalidSetting {
@@ -124,7 +129,9 @@ impl Permutation {
                 reason: "a permutation needs at least 1 gene".to_string(),
             });
         }
-        Ok(Self { len })
+        Ok(Self {
+            len: check_size("len", len)?,
+        })
     }
 }
 

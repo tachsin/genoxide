@@ -882,6 +882,21 @@ def test_invalid_front_members_have_no_violation_of_0():
     assert np.isnan(result.front_violations).all()
 
 
+def test_a_run_that_can_only_make_copies_stops_as_stalled():
+    # every child of a 1-gene permutation is a copy, so 100 evaluations are never reached
+    ga = gx.Ga(
+        gx.Permutation(1),
+        population_size=4,
+        select=gx.Tournament(2),
+        crossover=gx.OrderCrossover(),
+        mutation=gx.SwapMutation(),
+        seed=0,
+    )
+    result = ga.run(lambda order: 1.0, evaluations=100)
+    assert result.stop_reason == "stalled"
+    assert result.evaluations == 4
+
+
 # --- batch and parallel -------------------------------------------------------------------------
 
 

@@ -672,8 +672,9 @@ class Result:
     evaluations: int
     seconds: float
     stop_reason: str
-    """What stopped the run: "target", "generations", "evaluations", "time", "stagnation" or
-    "aborted" (by ``on_generation``)."""
+    """What stopped the run: "target", "generations", "evaluations", "time", "stagnation",
+    "aborted" (by ``on_generation``) or "stalled" (nothing new to evaluate for 10,000
+    generations in a row, e.g. every child was a copy, so no other condition could be met)."""
 
 
 @dataclass(frozen=True, eq=False)
@@ -690,8 +691,9 @@ class MultiResult:
     evaluations: int
     seconds: float
     stop_reason: str
-    """What stopped the run: "generations", "evaluations", "time", "stagnation" or "aborted" (by
-    ``on_generation``)."""
+    """What stopped the run: "generations", "evaluations", "time", "stagnation", "aborted" (by
+    ``on_generation``) or "stalled" (nothing new to evaluate for 10,000 generations in a row, e.g.
+    every child was a copy, so no other condition could be met)."""
 
 
 @dataclass(frozen=True)
