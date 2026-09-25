@@ -19,9 +19,13 @@
  *   default algorithm), created from the seed (manual 1.4.2 and 2.7).
  * - Time (rule 4.2): before the timed runs, every solver runs once untimed, with 1,000 evaluations
  *   and the seed 1,000,003, so the JIT has compiled the fitness function and the engine.
- * - Keeping going (rule 2.2): an evolution stream has no end of its own (its examples end it with
- *   Limits.bySteadyFitness and a generation limit, which the budget replaces); every run ends at the
- *   target, the budget or the time cap, checked after each generation.
+ * - Keeping going (rule 2.2): an evolution stream has no end of its own; the examples end it with a
+ *   generation limit (a budget, replaced by the scenario's) or with Limits.bySteadyFitness (a
+ *   convergence criterion: the attempt ends and the run restarts from a new random population, see
+ *   evolve()). Every run ends at the target, the budget or the time cap, checked after each
+ *   generation.
+ * - Bounds (rule 2.4): the continuous and multi-objective runs count the evaluated solutions outside
+ *   the problem's bounds, in the fitness function, and print them as "outside".
  */
 
 import io.jenetics.Alterer;
@@ -43,6 +47,7 @@ import io.jenetics.TournamentSelector;
 import io.jenetics.engine.Codecs;
 import io.jenetics.engine.Engine;
 import io.jenetics.engine.EvolutionResult;
+import io.jenetics.engine.Limits;
 import io.jenetics.ext.SimulatedBinaryCrossover;
 import io.jenetics.ext.moea.NSGA2Selector;
 import io.jenetics.ext.moea.UFTournamentSelector;
@@ -234,6 +239,8 @@ public final class Bench {
         double best;
         // the best solution: boolean[], int[] or double[]
         Object solution;
+        // evaluated solutions outside the problem's bounds (rule 2.4)
+        long outside;
 
         Budget(long maxEvaluations, double maxSeconds, boolean minimize, double target) {
             this.maxEvaluations = maxEvaluations;
@@ -260,6 +267,16 @@ public final class Bench {
         /** The end of a run: the target, the budget or the time cap (rule 2.1). */
         boolean done() {
             return reached() || evaluations >= maxEvaluations || System.nanoTime() >= deadline;
+        }
+
+        /** Counts a solution the library evaluates outside [lower, upper] (rule 2.4). */
+        void bounds(double[] x, double lower, double upper) {
+            for (double v : x) {
+                if (!(v >= lower && v <= upper)) {
+                    outside++;
+                    return;
+                }
+            }
         }
     }
 
@@ -375,22 +392,42 @@ public final class Bench {
     /** Runs an evolution stream until the budget ends the run; returns the generations. */
     static <G extends Gene<?, G>, C extends Comparable<? super C>> long evolve(
             Engine<G, C> engine, Budget budget, List<EvolutionResult<G, C>> last) {
-        long[] generations = {0};
-        engine.stream()
-            .limit(result -> {
-                generations[0] = result.generation();
-                if (last != null) {
-                    last.clear();
-                    last.add(result);
-                }
-                return !budget.done();
-            })
-            .forEach(result -> {});
-        return generations[0];
+        return evolve(engine, budget, last, 0, -1);
+    }
+
+    /**
+     * Runs evolution streams until the budget ends the run; returns the generations. With
+     * `steadyGenerations` > 0, an attempt also ends after that many generations without a better
+     * best fitness (Limits.bySteadyFitness, the convergence criterion of the documented example),
+     * and the run starts again from a new random population, the generator seeded with
+     * seed * 1000 + restart (rule 2.2); the budget keeps the best and counts every evaluation.
+     */
+    static <G extends Gene<?, G>, C extends Comparable<? super C>> long evolve(
+            Engine<G, C> engine, Budget budget, List<EvolutionResult<G, C>> last, int steadyGenerations,
+            long seed) {
+        long generations = 0;
+        for (int restart = 0; ; restart++) {
+            if (restart > 0) seed(seed * 1000 + restart);
+            long[] attempt = {0};
+            var stream = engine.stream();
+            if (steadyGenerations > 0) stream = stream.limit(Limits.bySteadyFitness(steadyGenerations));
+            stream
+                .limit(result -> {
+                    attempt[0] = result.generation();
+                    if (last != null) {
+                        last.clear();
+                        last.add(result);
+                    }
+                    return !budget.done();
+                })
+                .forEach(result -> {});
+            generations += attempt[0];
+            if (steadyGenerations <= 0 || budget.done()) return generations;
+        }
     }
 
     interface SingleSolver {
-        long run(Budget budget);
+        long run(Budget budget, long seed);
     }
 
     record Solver(String name, SingleSolver solver) {}
@@ -421,7 +458,7 @@ public final class Bench {
                     // and mates it with a random other one (DEAP: consecutive pairs with
                     // probability 0.5); p = 0.25 gives DEAP's expected number of crossovers
                     // (N / 2 pairs * 0.5). The mutation is the custom MatchedBitFlip above.
-                    solvers.add(new Solver("ga", budget -> evolve(
+                    solvers.add(new Solver("ga", (budget, seed) -> evolve(
                         Engine.builder((Genotype<BitGene> gt) -> countOnes(gt, budget),
                                 Genotype.of(BitChromosome.of(size, 0.5)))
                             .populationSize(300)
@@ -433,13 +470,14 @@ public final class Bench {
                             .build(),
                         budget, null)));
                 } else {
-                    // The README's "Hello World (Ones counting)" (BitChromosome.of(n, 0.5)) and
-                    // jenetics.example/OnesCounting.java: the engine defaults, population 50,
-                    // TournamentSelector(3) for offspring and survivors, SinglePointCrossover(0.2),
-                    // Mutator(0.15), 60% offspring, maximal age 70. (The manual's "Ones counting"
-                    // example, section 6.1, sets population 500, RouletteWheelSelector,
-                    // Mutator(0.55) and SinglePointCrossover(0.06); left out, see the page.)
-                    solvers.add(new Solver("ga", budget -> evolve(
+                    // The README's "Hello World (Ones counting)" (BitChromosome.of(n, 0.5)) and the
+                    // delivered example program jenetics.example/OnesCounting.java: the engine
+                    // defaults, population 50, TournamentSelector(3) for offspring and survivors,
+                    // SinglePointCrossover(0.2), Mutator(0.15), 60% offspring, maximal age 70.
+                    // Both end the stream with a generation limit only (limit(100), limit(10)),
+                    // which the budget replaces. (The manual's listing, section 6.1, sets other
+                    // values; see the page for why the delivered program decides.)
+                    solvers.add(new Solver("ga", (budget, seed) -> evolve(
                         Engine.builder((Genotype<BitGene> gt) -> countOnes(gt, budget),
                                 Genotype.of(BitChromosome.of(size, 0.5)))
                             .executor(Runnable::run)
@@ -450,13 +488,13 @@ public final class Bench {
             case "nqueens" -> {
                 minimize[0] = true;
                 target[0] = 0;
-                // jenetics.example/TravelingSalesman.java, Jenetics' permutation example:
-                // Codecs.ofPermutation, SwapMutator(0.15), PartiallyMatchedCrossover(0.15), the
-                // other settings the engine defaults (population 50, TournamentSelector(3), 60%
-                // offspring, maximal age 70). (The manual's version of it, section 6.5, sets
-                // population 500, maximal age 11, SwapMutator(0.2) and
-                // PartiallyMatchedCrossover(0.35); left out, see the page.)
-                solvers.add(new Solver("ga", budget -> evolve(
+                // The delivered example program jenetics.example/TravelingSalesman.java, Jenetics'
+                // permutation example: Codecs.ofPermutation, SwapMutator(0.15),
+                // PartiallyMatchedCrossover(0.15), the other settings the engine defaults
+                // (population 50, TournamentSelector(3), 60% offspring, maximal age 70). It ends
+                // the stream with limit(1_000) only, which the budget replaces. (The manual's
+                // listing, section 6.5, sets other values; see the page.)
+                solvers.add(new Solver("ga", (budget, seed) -> evolve(
                     Engine.builder((int[] order) -> {
                                 double value = nqueens(order);
                                 if (budget.record(value)) budget.solution = order.clone();
@@ -472,11 +510,18 @@ public final class Bench {
                 minimize[0] = true;
                 target[0] = 0.01;
                 RealProblem problem = realProblem(args.problem(), size);
-                // The manual's "Rastrigin function" example (section 6.3), with the settings of its
-                // "Real function" example (6.2): Codecs.ofVector, population 500, Mutator(0.03),
-                // MeanAlterer(0.6), other settings the defaults
-                solvers.add(new Solver("ga", budget -> evolve(
+                // The manual's "Rastrigin function" example (section 6.3), whose engine is the one
+                // of its "Real function" example (6.2, and the delivered program
+                // jenetics.example/RealFunction.java): Codecs.ofVector, population 500,
+                // Mutator(0.03), MeanAlterer(0.6), other settings the defaults. Both end the
+                // stream with Limits.bySteadyFitness(7), a convergence criterion: an attempt ends
+                // after 7 generations without a better best, and the run restarts (rule 2.2; the
+                // "Real function" example's limit(100) is a budget, lifted). A DoubleGene stays in
+                // its range: Mutator draws a new value in the range, MeanAlterer takes the mean of
+                // two values in it (rule 2.4).
+                solvers.add(new Solver("ga", (budget, seed) -> evolve(
                     Engine.builder((double[] x) -> {
+                                budget.bounds(x, problem.lower(), problem.upper());
                                 double value = problem.function().applyAsDouble(x);
                                 if (budget.record(value)) budget.solution = x.clone();
                                 return value;
@@ -486,7 +531,7 @@ public final class Bench {
                         .alterers(new Mutator<>(0.03), new MeanAlterer<>(0.6))
                         .executor(Runnable::run)
                         .build(),
-                    budget, null)));
+                    budget, null, 7, seed)));
             }
             default -> {
                 return null;
@@ -505,16 +550,20 @@ public final class Bench {
                 seed(seed);
                 Budget budget = new Budget(args.maxEvaluations(), args.maxSeconds(), minimize[0], target[0]);
                 long start = System.nanoTime();
-                long generations = solver.solver().run(budget);
+                long generations = solver.solver().run(budget, seed);
                 double time = (System.nanoTime() - start) / 1e9;
                 if (!print) continue;
+                // the continuous problems report the solutions evaluated outside the bounds
+                String outside = realProblem(args.problem(), args.size()) != null
+                    ? ",\"outside\":" + budget.outside : "";
                 System.out.println("{\"library\":\"" + LIBRARY + "\",\"solver\":\"" + solver.name()
                     + "\",\"problem\":\"" + args.problem() + "\",\"size\":" + args.size()
                     + ",\"mode\":\"" + args.mode() + "\",\"seed\":" + seed
                     + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
                     + ",\"generations\":" + generations + ",\"evaluations\":" + budget.evaluations
                     + ",\"best\":" + number(budget.best) + ",\"target\":" + number(target[0])
-                    + ",\"success\":" + budget.reached() + ",\"solution\":" + json(budget.solution) + "}");
+                    + ",\"success\":" + budget.reached() + outside
+                    + ",\"solution\":" + json(budget.solution) + "}");
             }
         }
     }
@@ -554,24 +603,30 @@ public final class Bench {
         Arrays.fill(directions, Optimize.MINIMUM);
         VecFactory<double[]> vectors = VecFactory.ofDoubleVec(directions);
 
+        // Only NSGA-II runs (rule 6.1: the matched multi-objective scenarios run NSGA-II, NSGA-III,
+        // SPEA2, MOEA/D and SMS-EMOA, and Jenetics has only the selectors for NSGA-II). Its own
+        // multi-objective setup, the manual's DTLZ1 example (section 6.9), isn't run: see the page.
         for (long seed = args.seedFrom(); seed <= args.seedTo(); seed++) {
-            for (String solver : new String[] {"nsga2", "moea"}) {
+            for (String solver : new String[] {"nsga2"}) {
                 seed(seed);
                 Budget budget = new Budget(args.maxEvaluations(), args.maxSeconds(), true, Double.NEGATIVE_INFINITY);
                 // Every objective minimized through VecFactory.ofDoubleVec(MINIMUM, ...), the
                 // manual's way to set each objective's direction (3.1.7.4), with the engine's
                 // default direction. Not Vec.of with the engine minimizing, as the manual's DTLZ1
                 // example does: then the crowding distance is always 0 inside the fronts (a
-                // Jenetics bug, see the library's page), and both solvers lose their diversity.
+                // Jenetics bug, see the library's page), and the selection loses its diversity.
+                // A DoubleGene stays in [0, 1): SimulatedBinaryCrossover clamps its value to the
+                // gene's range, PolynomialMutator (the adapter's) clips it (rule 2.4).
                 Function<double[], Vec<double[]>> fitness = x -> {
                     budget.evaluations++;
+                    budget.bounds(x, 0.0, 1.0);
                     return vectors.newVec(problem.function().apply(x));
                 };
                 List<EvolutionResult<DoubleGene, Vec<double[]>>> last = new ArrayList<>();
                 long start = System.nanoTime();
                 long generations;
                 Seq<Phenotype<DoubleGene, Vec<double[]>>> result;
-                if (solver.equals("nsga2")) {
+                {
                     // NSGA-II with the matched settings, built from the Jenetics engine and the
                     // jenetics.ext.moea selectors (manual 3.1.7.2: "the implementation doesn't
                     // exactly follow an established algorithm, like NSGA2"). The engine keeps
@@ -605,24 +660,6 @@ public final class Bench {
                     // selection of N from them is the final population
                     var end = last.get(0);
                     result = survival.select(end.population(), population, end.optimize());
-                } else {
-                    // The manual's "DTLZ1" example (section 6.9), Jenetics' own multi-objective
-                    // setup: SimulatedBinaryCrossover(1) (contiguity 2.5, its default),
-                    // Mutator(1 / n), TournamentSelector(5) for the offspring, NSGA2Selector for
-                    // the survivors, the other settings the defaults (60% offspring, maximal age
-                    // 70). The population is the scenario's (the example's is 100), and the
-                    // objectives are minimized as above (the example: Vec.of and .minimizing()).
-                    // Its final population is the result (the example collects MOEA.toParetoSet
-                    // over all generations, an archive that rule 7.2 excludes).
-                    var engine = Engine.builder(fitness, Codecs.ofVector(new DoubleRange(0.0, 1.0), n))
-                        .populationSize(population)
-                        .alterers(new SimulatedBinaryCrossover<>(1), new Mutator<>(1.0 / n))
-                        .offspringSelector(new TournamentSelector<>(5))
-                        .survivorsSelector(NSGA2Selector.ofVec())
-                        .executor(Runnable::run)
-                        .build();
-                    generations = evolve(engine, budget, last);
-                    result = last.get(0).population();
                 }
                 List<double[]> points = new ArrayList<>();
                 List<double[]> solutions = new ArrayList<>();
@@ -651,6 +688,7 @@ public final class Bench {
                     + ",\"mode\":\"" + args.mode() + "\",\"seed\":" + seed
                     + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
                     + ",\"generations\":" + generations + ",\"evaluations\":" + budget.evaluations
+                    + ",\"outside\":" + budget.outside
                     + ",\"front\":" + frontJson.append(']') + ",\"solutions\":" + solutionsJson.append(']') + "}");
             }
         }

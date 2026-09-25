@@ -30,11 +30,9 @@ import org.uma.jmetal.algorithm.singleobjective.differentialevolution.Differenti
 import org.uma.jmetal.algorithm.singleobjective.evolutionstrategy.CovarianceMatrixAdaptationEvolutionStrategy;
 import org.uma.jmetal.algorithm.singleobjective.evolutionstrategy.EvolutionStrategyBuilder;
 import org.uma.jmetal.component.algorithm.EvolutionaryAlgorithm;
-import org.uma.jmetal.component.algorithm.ParticleSwarmOptimizationAlgorithm;
 import org.uma.jmetal.component.algorithm.multiobjective.MOEADBuilder;
 import org.uma.jmetal.component.algorithm.multiobjective.NSGAIIBuilder;
 import org.uma.jmetal.component.algorithm.multiobjective.NSGAIIIBuilder;
-import org.uma.jmetal.component.algorithm.multiobjective.SMPSOBuilder;
 import org.uma.jmetal.component.algorithm.multiobjective.SMSEMOABuilder;
 import org.uma.jmetal.component.algorithm.singleobjective.GeneticAlgorithmBuilder;
 import org.uma.jmetal.component.catalogue.common.termination.Termination;
@@ -261,6 +259,8 @@ public final class Bench {
         boolean timeUp;
         // the best solution: boolean[], int[] or double[]
         Object solution;
+        // evaluated solutions outside the problem's bounds (rule 2.4)
+        long outside;
 
         Budget(long maxEvaluations, double maxSeconds, boolean minimize, double target) {
             this.maxEvaluations = maxEvaluations;
@@ -302,6 +302,16 @@ public final class Bench {
         /** Multi-objective: checked between generations. */
         boolean exhausted() {
             return evaluations >= maxEvaluations || System.nanoTime() >= deadline;
+        }
+
+        /** Counts a solution the library evaluates outside [lower, upper] (rule 2.4). */
+        void bounds(double[] x, double lower, double upper) {
+            for (double v : x) {
+                if (!(v >= lower && v <= upper)) {
+                    outside++;
+                    return;
+                }
+            }
         }
     }
 
@@ -396,10 +406,14 @@ public final class Bench {
     static final class RealProblem extends AbstractDoubleProblem {
         final ToDoubleFunction<double[]> function;
         final Budget budget;
+        final double lower;
+        final double upper;
 
         RealProblem(String name, int size, RealFunction real, Budget budget) {
             this.function = real.function();
             this.budget = budget;
+            this.lower = real.lower();
+            this.upper = real.upper();
             numberOfObjectives(1);
             numberOfConstraints(0);
             name(name);
@@ -410,6 +424,7 @@ public final class Bench {
         public DoubleSolution evaluate(DoubleSolution solution) {
             budget.before();
             double[] x = values(solution);
+            budget.bounds(x, lower, upper);
             double value = function.applyAsDouble(x);
             solution.objectives()[0] = value;
             if (budget.better(value)) budget.solution = x;
@@ -434,7 +449,9 @@ public final class Bench {
         @Override
         public DoubleSolution evaluate(DoubleSolution solution) {
             budget.evaluations++;
-            double[] f = function.apply(values(solution));
+            double[] x = values(solution);
+            budget.bounds(x, 0.0, 1.0);
+            double[] f = function.apply(x);
             System.arraycopy(f, 0, solution.objectives(), 0, f.length);
             return solution;
         }
@@ -449,7 +466,7 @@ public final class Bench {
 
     /** A solver: runs until the budget ends it; returns the generations. */
     interface SingleSolver {
-        long run(Budget budget);
+        long run(Budget budget, long seed);
     }
 
     record Solver(String name, SingleSolver solver) {}
@@ -490,18 +507,22 @@ public final class Bench {
     }
 
     /**
-     * jMetal's CMA-ES with its defaults (λ 10, σ 0.3), restarted from a new random point whenever it
-     * ends by itself (rule 2.2): jMetal has no restart mechanism, and it ends a run when its
-     * eigendecomposition fails its check (checkEigenCorrectness sets the evaluations to the maximum)
-     * or throws (CMAESUtils.tql2 can throw ArrayIndexOutOfBoundsException once the covariance matrix
-     * degenerates). Every restart keeps counting the evaluations; the best is kept by the budget.
+     * jMetal's CMA-ES with its defaults (λ 10, σ 0.3). Its maximum of evaluations, a budget, is
+     * lifted (rule 2.2). It also ends an attempt when its covariance matrix degenerates: when the
+     * eigendecomposition fails its check (checkEigenCorrectness sets the evaluations to the
+     * maximum), or when CMAESUtils.tql2 throws ArrayIndexOutOfBoundsException (NaN in the matrix).
+     * jMetal has no restart mechanism, so the adapter then starts it again from a new random point,
+     * with JMetalRandom seeded with seed * 1000 + restart (rule 2.2); the budget keeps the best and
+     * counts every evaluation. Bounds (rule 2.4): jMetal clips every sample to the bounds
+     * (Bounds.restrict in sampleSolution).
      * jMetal's CMA-ES has a bug: once it has converged, its σ grows without bound, every sample
      * lands on the bounds and the run stalls without ending, often for 200,000 evaluations before
      * tql2 throws. The adapter doesn't restart it then (rule 8.4), so the results show the bug.
      */
-    static long cmaes(Budget budget, RealProblem problem, int size, double lower, double upper) {
+    static long cmaes(Budget budget, long seed, RealProblem problem, int size, double lower, double upper) {
         long generations = 0;
-        while (true) {
+        for (int restart = 0; ; restart++) {
+            if (restart > 0) JMetalRandom.getInstance().setSeed(seed * 1000 + restart);
             // jMetal starts the mean at a random point in [0, 1)^n whatever the bounds, which is next
             // to the shifted optimum of these problems (the shift lies in [-1, 1]); the start here is
             // a random point within the bounds, like the other libraries' CMA-ES
@@ -520,7 +541,7 @@ public final class Bench {
             } catch (Stop stop) {
                 return generations + (budget.evaluations - before) / algorithm.getLambda();
             } catch (ArrayIndexOutOfBoundsException error) {
-                // the covariance matrix degenerated: restart, as when it ends by itself
+                // NaN in the covariance matrix: the attempt ends, as when it ends by itself
             }
             generations += (budget.evaluations - before) / algorithm.getLambda();
             if (budget.done()) return generations;
@@ -553,7 +574,7 @@ public final class Bench {
                     // every child, so bit-flip with 0.2 / size per bit (DEAP: 1 / size on 20% of
                     // the children, the same expected number of flips); every child is evaluated,
                     // changed or not.
-                    solvers.add(new Solver("ga", budget -> runComponent(termination ->
+                    solvers.add(new Solver("ga", (budget, seed) -> runComponent(termination ->
                         new GeneticAlgorithmBuilder<>("GGA", new OneMaxProblem(size, budget), 300, 300,
                                 new SinglePointCrossover<>(0.5), new BitFlipMutation<>(0.2 / size))
                             .setSelection(new NaryTournamentSelection<>(3, 300, new ObjectiveComparator<>(0)))
@@ -565,7 +586,7 @@ public final class Bench {
                     // GenerationalGeneticAlgorithmBinaryExample.java (on OneMax): population 100,
                     // 100 children, binary tournament, SinglePointCrossover(0.9),
                     // BitFlipMutation(1 / bits), (μ + λ) replacement (GeneticAlgorithmBuilder's)
-                    solvers.add(new Solver("ga", budget -> runComponent(termination ->
+                    solvers.add(new Solver("ga", (budget, seed) -> runComponent(termination ->
                         new GeneticAlgorithmBuilder<>("GGA", new OneMaxProblem(size, budget), 100, 100,
                                 new SinglePointCrossover<>(0.9), new BitFlipMutation<>(1.0 / size))
                             .setTermination(termination)
@@ -573,7 +594,7 @@ public final class Bench {
                     // jmetal-algorithm examples/singleobjective/ElitistEvolutionStrategyRunner.java
                     // (on OneMax): the elitist (μ + λ) evolution strategy with μ 1, λ 10,
                     // BitFlipMutation(1 / bits)
-                    solvers.add(new Solver("es", budget -> {
+                    solvers.add(new Solver("es", (budget, seed) -> {
                         var es = new EvolutionStrategyBuilder<BinarySolution>(new OneMaxProblem(size, budget),
                                 new BitFlipMutation<>(1.0 / size), EvolutionStrategyBuilder.EvolutionStrategyVariant.ELITIST)
                             .setMaxEvaluations(Integer.MAX_VALUE)
@@ -591,7 +612,7 @@ public final class Bench {
                 // jmetal-component examples/singleobjective/geneticalgorithm/GeneticAlgorithmTSPExample.java:
                 // population 100, 100 children, binary tournament, PMXCrossover(0.9),
                 // PermutationSwapMutation(1 / n), (μ + λ) replacement
-                solvers.add(new Solver("ga", budget -> runComponent(termination ->
+                solvers.add(new Solver("ga", (budget, seed) -> runComponent(termination ->
                     new GeneticAlgorithmBuilder<>("GGA", new NQueensProblem(size, budget), 100, 100,
                             new PMXCrossover(0.9), new PermutationSwapMutation<Integer>(1.0 / size))
                         .setTermination(termination)
@@ -602,17 +623,20 @@ public final class Bench {
                 target[0] = 0.01;
                 RealFunction real = realFunction(args.problem(), size);
                 Function<Budget, RealProblem> problem = budget -> new RealProblem(args.problem(), size, real, budget);
+                // Bounds (rule 2.4): SBXCrossover, PolynomialMutation and
+                // DifferentialEvolutionCrossover repair a value outside the bounds to the bound
+                // (RepairDoubleSolutionWithBoundValue, their default); CMA-ES clips its samples
                 // jmetal-component examples/singleobjective/geneticalgorithm/GenerationalGeneticAlgorithmExample.java:
                 // population 100, 100 children, binary tournament, SBXCrossover(0.9, η 20),
                 // PolynomialMutation(1 / n, η 20), (μ + λ) replacement
-                solvers.add(new Solver("ga", budget -> runComponent(termination ->
+                solvers.add(new Solver("ga", (budget, seed) -> runComponent(termination ->
                     new GeneticAlgorithmBuilder<>("GGA", problem.apply(budget), 100, 100,
                             new SBXCrossover(0.9, 20.0), new PolynomialMutation(1.0 / size, 20.0))
                         .setTermination(termination)
                         .build())));
                 // jmetal-algorithm examples/singleobjective/DifferentialEvolutionRunner.java:
                 // DE/rand/1/bin with CR 0.5 and F 0.5, population 100
-                solvers.add(new Solver("de", budget -> {
+                solvers.add(new Solver("de", (budget, seed) -> {
                     var evaluator = new CountingEvaluator<DoubleSolution>();
                     var de = new DifferentialEvolution(problem.apply(budget), Integer.MAX_VALUE, 100,
                         new DifferentialEvolutionCrossover(0.5, 0.5, DifferentialEvolutionCrossover.DE_VARIANT.RAND_1_BIN),
@@ -622,8 +646,8 @@ public final class Bench {
                 }));
                 // jmetal-algorithm examples/singleobjective/CovarianceMatrixAdaptationEvolutionStrategyRunner.java:
                 // the builder's defaults (λ 10, σ 0.3), with restarts (see cmaes() above)
-                solvers.add(new Solver("cma_es", budget ->
-                    cmaes(budget, problem.apply(budget), size, real.lower(), real.upper())));
+                solvers.add(new Solver("cma_es", (budget, seed) ->
+                    cmaes(budget, seed, problem.apply(budget), size, real.lower(), real.upper())));
             }
             default -> {
                 return null;
@@ -642,16 +666,20 @@ public final class Bench {
                 JMetalRandom.getInstance().setSeed(seed);
                 Budget budget = new Budget(args.maxEvaluations(), args.maxSeconds(), minimize[0], target[0]);
                 long start = System.nanoTime();
-                long generations = solver.solver().run(budget);
+                long generations = solver.solver().run(budget, seed);
                 double time = (System.nanoTime() - start) / 1e9;
                 if (!print) continue;
+                // the continuous problems report the solutions evaluated outside the bounds
+                String outside = realFunction(args.problem(), args.size()) != null
+                    ? ",\"outside\":" + budget.outside : "";
                 System.out.println("{\"library\":\"" + LIBRARY + "\",\"solver\":\"" + solver.name()
                     + "\",\"problem\":\"" + args.problem() + "\",\"size\":" + args.size()
                     + ",\"mode\":\"" + args.mode() + "\",\"seed\":" + seed
                     + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
                     + ",\"generations\":" + generations + ",\"evaluations\":" + budget.evaluations
                     + ",\"best\":" + number(budget.best) + ",\"target\":" + number(target[0])
-                    + ",\"success\":" + budget.reached() + ",\"solution\":" + json(budget.solution) + "}");
+                    + ",\"success\":" + budget.reached() + outside
+                    + ",\"solution\":" + json(budget.solution) + "}");
             }
         }
     }
@@ -723,7 +751,10 @@ public final class Bench {
         return directory;
     }
 
-    static final String[] FRONT_SOLVERS = {"nsga2", "nsga3", "spea2", "moead", "sms_emoa", "smpso"};
+    // the matched multi-objective algorithms (rule 6.1); jMetal's others, such as SMPSO, aren't run.
+    // Bounds (rule 2.4): SBXCrossover and PolynomialMutation repair a value outside the bounds to
+    // the bound (RepairDoubleSolutionWithBoundValue, their default).
+    static final String[] FRONT_SOLVERS = {"nsga2", "nsga3", "spea2", "moead", "sms_emoa"};
 
     static void runFront(Args args, boolean print) throws IOException {
         FrontFunction front = frontFunction(args.problem(), args.size());
@@ -793,20 +824,9 @@ public final class Bench {
                         algorithm.run();
                         result = algorithm.result();
                     }
-                    case "sms_emoa" -> {
-                        // population N, one child per step, SBX η 15 at 0.9, PM η 20 at 1 / n
-                        var algorithm = new SMSEMOABuilder<>(problem, population, new SBXCrossover(0.9, 15.0), mutation)
-                            .setTermination(termination)
-                            .build();
-                        algorithm.run();
-                        result = algorithm.result();
-                    }
                     default -> {
-                        // SMPSO (jMetal's own algorithm; not a matched setting): the builder's
-                        // defaults, swarm N and a leader archive of N (CrowdingDistanceArchive), PM
-                        // η 20 at 1 / n as the turbulence on every 6th particle; its result is that
-                        // archive
-                        ParticleSwarmOptimizationAlgorithm algorithm = new SMPSOBuilder(problem, population)
+                        // SMS-EMOA: population N, one child per step, SBX η 15 at 0.9, PM η 20 at 1 / n
+                        var algorithm = new SMSEMOABuilder<>(problem, population, new SBXCrossover(0.9, 15.0), mutation)
                             .setTermination(termination)
                             .build();
                         algorithm.run();
@@ -833,6 +853,7 @@ public final class Bench {
                     + ",\"mode\":\"" + args.mode() + "\",\"seed\":" + seed
                     + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
                     + ",\"generations\":" + generations[0] + ",\"evaluations\":" + budget.evaluations
+                    + ",\"outside\":" + budget.outside
                     + ",\"front\":" + frontJson.append(']') + ",\"solutions\":" + solutionsJson.append(']') + "}");
             }
         }
