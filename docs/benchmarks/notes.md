@@ -39,6 +39,9 @@ Every adapter's source has its full settings, and where its idiomatic settings c
 - **genoxide:**
   - A child identical to one of its parents inherits the parent's fitness, without an evaluation.
   - Its OneMax genomes are bit-packed.
+- **genoxide (Python):** genoxide's Python package, whose algorithms are genoxide's Rust, calling Python fitness functions, with the Rust adapter's solvers and settings.
+  - In the matched OneMax runs, the fitness function is pure Python, called with one genome at a time, as in DEAP. In the other runs, it's vectorized numpy, called with a generation at a time (`batch=True`), as the package's README recommends.
+  - With the same seed and the same fitness values, it runs the same search as genoxide in Rust, evaluation for evaluation. numpy's `sum` adds in another order, so some fitness values differ in the last bit, and its CMA-ES, DE and MOEA/D runs take other paths with the same settings.
 - **genetic_algorithm:** it selects survivors from parents and offspring by tournament, without replacement.
 - **radiate:** its recommended settings don't reach the idiomatic OneMax, N-Queens and Rosenbrock targets.
 - **moors:**

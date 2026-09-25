@@ -34,6 +34,16 @@ VENV = ROOT / ".venv"
 VENV_PYTHON = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 RUST_ADAPTER = ROOT / "adapters" / "genetic_algorithm"
 GENOXIDE_ADAPTER = ROOT / "adapters" / "genoxide"
+# genoxide's Python package, built with maturin in release mode and installed into .venv
+GENOXIDE_PYTHON = ROOT.parent / "python"
+GENOXIDE_PYTHON_BUILD = (
+    # rebuilt every time: uv would otherwise keep a wheel built from older Rust sources
+    ["uv", "pip", "install", "--quiet", "--python", str(VENV_PYTHON), "--reinstall-package", "genoxide",
+     str(GENOXIDE_PYTHON)]
+    if shutil.which("uv")
+    else [str(VENV_PYTHON), "-m", "pip", "install", "--quiet", "--force-reinstall", "--no-deps",
+          str(GENOXIDE_PYTHON)]
+)
 # the builds of the adapters that aren't Rust or Python, outside the repository
 BUILDS = Path(os.environ.get("BENCH_BUILDS", Path.home() / "bench-targets"))
 
@@ -46,6 +56,14 @@ ADAPTERS = {
         # the genoxide of this repository: its version and commit
         "version": ("cargo", "genoxide", GENOXIDE_ADAPTER),
         "language": "Rust",
+    },
+    "genoxide_python": {
+        # genoxide's Python package: its Rust algorithms, calling Python fitness functions
+        "build": GENOXIDE_PYTHON_BUILD,
+        "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "genoxide_python" / "bench.py")],
+        # the package of this repository: its version and commit
+        "version": ("python", "genoxide"),
+        "language": "Rust via Python",
     },
     "genetic_algorithm": {
         "build": ["cargo", "build", "--release", "--quiet", "--manifest-path", str(RUST_ADAPTER / "Cargo.toml")],
@@ -227,16 +245,18 @@ def library_version(kind, package, adapter=None):
         # a command that prints the version, e.g. an adapter's --version
         return subprocess.run(package, capture_output=True, text=True, check=True, cwd=ROOT).stdout.strip()
     if kind == "python":
-        return subprocess.run(
+        version = subprocess.run(
             [str(VENV_PYTHON), "-c", f"import importlib.metadata as m; print(m.version('{package}'))"],
             capture_output=True, text=True, check=True, cwd=ROOT,
         ).stdout.strip()
-    metadata = json.loads(subprocess.run(
-        ["cargo", "metadata", "--format-version", "1", "--manifest-path", str(adapter / "Cargo.toml")],
-        capture_output=True, text=True, check=True,
-    ).stdout)
-    version = next(p["version"] for p in metadata["packages"] if p["name"] == package)
+    else:
+        metadata = json.loads(subprocess.run(
+            ["cargo", "metadata", "--format-version", "1", "--manifest-path", str(adapter / "Cargo.toml")],
+            capture_output=True, text=True, check=True,
+        ).stdout)
+        version = next(p["version"] for p in metadata["packages"] if p["name"] == package)
     if package == "genoxide":
+        # genoxide, in Rust or Python, is this repository's: its commit too
         commit = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT,
         ).stdout.strip()
@@ -444,7 +464,7 @@ def markdown_table(rows):
     return "\n".join(lines)
 
 
-LIBRARY_NAMES = {"genoxide": "genoxide", "genetic_algorithm": "genetic_algorithm", "deap": "DEAP",
+LIBRARY_NAMES = {"genoxide": "genoxide", "genoxide_python": "genoxide (Python)", "genetic_algorithm": "genetic_algorithm", "deap": "DEAP",
                  "pygad": "PyGAD", "pymoo": "pymoo", "radiate": "radiate", "moors": "moors", "pycma": "pycma",
                  "nevergrad": "Nevergrad", "scipy": "SciPy", "pygmo": "pygmo", "openga": "openGA",
                  "jenetics": "Jenetics", "jmetal": "jMetal", "evolutionary_jl": "Evolutionary.jl",
@@ -458,6 +478,9 @@ SOLVER_NAMES = {"ga": "GA", "evolve": "GA", "hill_climb": "hill climbing", "loca
 PROBLEM_NAMES = {"onemax": "OneMax", "nqueens": "N-Queens", "rastrigin": "Rastrigin", "rosenbrock": "Rosenbrock",
                  "ackley": "Ackley", "zdt1": "ZDT1", "zdt2": "ZDT2", "zdt3": "ZDT3", "dtlz1": "DTLZ1", "dtlz2": "DTLZ2"}
 GENOXIDE_COLOR = "#ce422b"
+# genoxide's Python package: a lighter red
+GENOXIDE_PYTHON_COLOR = "#ec8b78"
+GENOXIDE_COLORS = {"genoxide": GENOXIDE_COLOR, "genoxide_python": GENOXIDE_PYTHON_COLOR}
 # the other libraries, in the order of ADAPTERS: a qualitative palette without red
 PALETTE = ["#4c78a8", "#f58518", "#54a24b", "#b279a2", "#9d755d", "#72b7b2", "#e0b000", "#ff9da6",
            "#79706e", "#1b9e77", "#7570b3", "#a6761d", "#e7298a", "#66a61e", "#666666"]
@@ -467,7 +490,7 @@ def library_colors(libraries):
     """A color per library, the same in every chart."""
     colors, others = {}, iter(PALETTE)
     for name in list(ADAPTERS) + sorted(set(libraries) - set(ADAPTERS)):
-        colors[name] = GENOXIDE_COLOR if name == "genoxide" else next(others, "#888888")
+        colors[name] = GENOXIDE_COLORS[name] if name in GENOXIDE_COLORS else next(others, "#888888")
     return colors
 
 
@@ -651,7 +674,7 @@ def draw_charts(results, out_dir, formats=("svg",)):
         axis.set_xticks(positions, [label(row["library"], row["solver"]) for row in group], rotation=60,
                         ha="right", rotation_mode="anchor", fontsize=6.5)
         for tick_label, row in zip(axis.get_xticklabels(), group):
-            if row["library"] == "genoxide":
+            if row["library"] in ("genoxide", "genoxide_python"):
                 tick_label.set_fontweight("bold")
         axis.tick_params(axis="x", length=0, pad=1.5)
         axis.tick_params(axis="y", labelsize=6.3, length=2, pad=1.5)

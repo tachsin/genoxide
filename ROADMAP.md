@@ -168,13 +168,14 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] `tracing` integration and progress reporting
 
 ### 0.6: Python
-- [ ] `pip install genoxide` via PyO3 / maturin, wheels for Linux, macOS and Windows
+- [x] `pip install genoxide` via PyO3 / maturin, wheels for Linux, macOS and Windows
 - [x] Python fitness functions and vectorized numpy batch fitness
-- [ ] Zero-copy numpy genomes
+- Zero-copy numpy genomes: moved to 0.7. A batch copies a generation into one array, which costs little next to a Python fitness function.
 - [x] Pythonic builders
-- [ ] Parity examples with the DEAP / pymoo tutorials
+- [x] Parity examples with the DEAP / pymoo tutorials
 
 ### 0.7: Genetic programming and neuroevolution
+- [ ] Zero-copy numpy genomes in the Python package
 - [ ] Tree GP, strongly typed
 - [ ] Subtree crossover; point, subtree and hoist mutation; bloat control
 - [ ] Symbolic regression examples
