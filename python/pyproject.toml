@@ -7,6 +7,7 @@ name = "genoxide"
 description = "Evolutionary computation in Rust, for Python: genetic algorithms, CMA-ES, differential evolution, NSGA-II and more"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
+license-files = ["licenses/LICENSE-MIT", "licenses/LICENSE-APACHE"]
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.21"]
 keywords = ["genetic-algorithm", "evolutionary", "optimization", "metaheuristics", "cma-es"]

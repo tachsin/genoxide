@@ -63,7 +63,7 @@ It returns one of these:
 
 The fitness function must be deterministic: genoxide doesn't evaluate a child identical to one of its parents again.
 
-With `batch=True`, the function takes a whole generation as a 2-D array, a genome per row, and returns an array of scores, or a tuple of scores and constraint violations. It's one call per generation (none for a generation whose children are all copies of their parents), so vectorized numpy, a GPU or a remote service pays its cost per call once per generation instead of once per genome.
+With `batch=True`, the function takes a whole generation as a 2-D array, a genome per row, and returns an array of scores, or a tuple of scores and constraint violations (arrays or `(n, 1)` columns); a multi-objective function returns a 2-D array, a row of objective values per genome. It's one call per generation (none for a generation whose children are all copies of their parents), so vectorized numpy, a GPU or a remote service pays its cost per call once per generation instead of once per genome.
 
 With `parallel=True`, genoxide calls a function that isn't a batch function from several threads at once. It pays off when the function releases the GIL, e.g. in numpy on large arrays or waiting for I/O, or on free-threaded Python.
 
@@ -84,7 +84,7 @@ An exception in the fitness function stops the run and is raised by `run`, and s
 | `Moead` | all | `objectives`, `weights` (a subproblem each), `crossover`, `mutation`, `decomposition` (`Tchebycheff()`), `neighbors` (20), `neighbor_mating` (0.9), `max_replacements` (2), `crossover_rate` (1), `mutation_rate` (1) |
 | `SmsEmoa` | all | `objectives`, `population_size`, `crossover`, `mutation`, `offspring` (`population_size`), `crossover_rate` (0.9), `mutation_rate` (1) |
 
-Single-objective algorithms maximize, or minimize with `objective="minimize"`. The multi-objective algorithms take `objectives=["minimize", "maximize", ...]`, 2 to 6 of them. Their fitness function returns a sequence of objective values, and their result is the final non-dominated front: `front_genomes`, `front_objectives` and `front_violations`.
+Single-objective algorithms maximize, or minimize with `objective="minimize"`. The multi-objective algorithms take `objectives=["minimize", "maximize", ...]`, 2 to 6 of them. Their fitness function returns a sequence of objective values, and their result is the final non-dominated front: `front_genomes`, `front_objectives` and `front_violations`. A solution that couldn't be scored has NaN objective values and a NaN violation, and so does the `violation` of a single-objective result without a valid solution.
 
 - `Nsga2` spreads the front by crowding distance, which works poorly beyond 2 or 3 objectives.
 - `Nsga3` spreads it along reference directions instead, and `Moead` solves a single-objective subproblem per weight vector. `das_dennis(objectives, divisions)` gives evenly spread directions or weights, a row each: 91 for 3 objectives and 12 divisions.
@@ -115,7 +115,7 @@ Operators:
 - `generations`
 - `evaluations`
 - `target`: a score at least as good (single objective)
-- `time`: seconds
+- `time`: seconds (`math.inf` for no limit)
 - `stagnation`: generations without improvement
 
 The result says which one stopped it, in `stop_reason`, with the numbers of `generations` and `evaluations` and the `seconds` it took.

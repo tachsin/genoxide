@@ -116,6 +116,18 @@ fn type_name(value: &Bound<'_, PyAny>) -> String {
         .map_or_else(|_| "?".to_string(), |name| name.to_string())
 }
 
+// the error of a result that doesn't convert to numbers: a TypeError with `message`, caused by the
+// conversion's TypeError. Any other error, e.g. an OverflowError for an int too large for a float
+// or an exception in `__float__`, is the result's own, and raised as it is.
+fn not_numbers(py: Python<'_>, error: PyErr, message: impl FnOnce() -> String) -> PyErr {
+    if !error.is_instance_of::<PyTypeError>(py) {
+        return error;
+    }
+    let wrong = PyTypeError::new_err(message());
+    wrong.set_cause(py, Some(error));
+    wrong
+}
+
 // a batch returned a score per genome
 fn check_count(scores: usize, genomes: usize) -> PyResult<()> {
     if scores == genomes {
@@ -154,11 +166,13 @@ fn value(result: &Bound<'_, PyAny>) -> PyResult<Value> {
         let (score, violation) = tuple.extract::<(f64, f64)>()?;
         return Ok(Value::Constrained(score, violation));
     }
-    result.extract::<f64>().map(Value::Score).map_err(|_| {
-        PyTypeError::new_err(format!(
-            "a fitness function returns a number, None (an invalid solution) or a tuple (score, constraint violation), not {}",
-            type_name(result)
-        ))
+    result.extract::<f64>().map(Value::Score).map_err(|error| {
+        not_numbers(result.py(), error, || {
+            format!(
+                "a fitness function returns a number, None (an invalid solution) or a tuple (score, constraint violation), not {}",
+                type_name(result)
+            )
+        })
     })
 }
 
@@ -244,11 +258,13 @@ impl<const M: usize> IntoScores<M> for MultiValue<M> {
 }
 
 fn objectives<const M: usize>(scores: &Bound<'_, PyAny>) -> PyResult<[f64; M]> {
-    let scores = scores.extract::<Vec<f64>>().map_err(|_| {
-        PyTypeError::new_err(format!(
-            "a multi-objective fitness function returns a sequence of {M} numbers, None (an invalid solution) or a tuple (scores, constraint violation), not {}",
-            type_name(scores)
-        ))
+    let scores = scores.extract::<Vec<f64>>().map_err(|error| {
+        not_numbers(scores.py(), error, || {
+            format!(
+                "a multi-objective fitness function returns a sequence of {M} numbers, None (an invalid solution) or a tuple (scores, constraint violation), not {}",
+                type_name(scores)
+            )
+        })
     })?;
     <[f64; M]>::try_from(scores).map_err(|scores| {
         PyValueError::new_err(format!(
@@ -259,7 +275,7 @@ fn objectives<const M: usize>(scores: &Bound<'_, PyAny>) -> PyResult<[f64; M]> {
 }
 
 // M numbers, None (invalid) or (M numbers, violation): a tuple of 2 whose first item isn't a
-// number
+// number. A first item that is a number but fails to convert raises its error.
 fn multi_value<const M: usize>(result: &Bound<'_, PyAny>) -> PyResult<MultiValue<M>> {
     if result.is_none() {
         return Ok(MultiValue::Invalid);
@@ -267,9 +283,13 @@ fn multi_value<const M: usize>(result: &Bound<'_, PyAny>) -> PyResult<MultiValue
     if let Ok(tuple) = result.cast::<PyTuple>() {
         if tuple.len() == 2 {
             let first = tuple.get_item(0)?;
-            if first.extract::<f64>().is_err() {
-                let violation = tuple.get_item(1)?.extract::<f64>()?;
-                return Ok(MultiValue::Constrained(objectives(&first)?, violation));
+            match first.extract::<f64>() {
+                Ok(_) => {}
+                Err(error) if error.is_instance_of::<PyTypeError>(result.py()) => {
+                    let violation = tuple.get_item(1)?.extract::<f64>()?;
+                    return Ok(MultiValue::Constrained(objectives(&first)?, violation));
+                }
+                Err(error) => return Err(error),
             }
         }
     }

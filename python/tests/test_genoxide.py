@@ -1,4 +1,8 @@
 import dataclasses
+import importlib.metadata
+import json
+import math
+import pathlib
 import signal
 import threading
 
@@ -687,3 +691,210 @@ def test_other_threads_run_during_a_run():
 
 def test_version():
     assert gx.__version__.count(".") == 2
+
+
+# --- settings: NaN, infinity, wrong types and numbers that aren't whole --------------------------
+
+
+def test_an_infinite_time_limit_is_no_limit():
+    result = onemax_ga().run(lambda bits: 0.0, generations=3, time=math.inf)
+    assert result.stop_reason == "generations"
+    with pytest.raises(ValueError, match="stop condition"):
+        onemax_ga().run(lambda bits: 0.0, time=math.inf)
+
+
+def test_nan_and_infinite_settings_are_errors_that_name_them():
+    with pytest.raises(ValueError, match="Real.bounds are finite numbers, not nan"):
+        gx.Cmaes(gx.Real((0.0, math.nan), length=2)).run(lambda x: 0.0, generations=1)
+    with pytest.raises(ValueError, match="Real.bounds"):
+        gx.Cmaes(gx.Real([(0.0, 1.0), (-math.inf, 1.0)])).run(lambda x: 0.0, generations=1)
+    with pytest.raises(ValueError, match="BitFlip.rate is a finite number"):
+        onemax_ga(mutation=gx.BitFlip(rate=math.nan)).run(lambda bits: 0.0, generations=1)
+    with pytest.raises(ValueError, match="mutation_rate"):
+        onemax_ga(mutation_rate=math.inf).run(lambda bits: 0.0, generations=1)
+    with pytest.raises(ValueError, match="target"):
+        onemax_ga().run(lambda bits: 0.0, target=math.inf)
+    with pytest.raises(ValueError, match="time"):
+        onemax_ga().run(lambda bits: 0.0, time=math.nan)
+    with pytest.raises(ValueError, match="time"):
+        onemax_ga().run(lambda bits: 0.0, time=-math.inf)
+    with pytest.raises(ValueError, match="Annealing.cooling"):
+        gx.LocalSearch(
+            gx.Binary(8), neighbor=gx.BitFlip(count=1), acceptance=gx.Annealing(1.0, math.nan)
+        ).run(lambda bits: 0.0, generations=1)
+    with pytest.raises(ValueError, match="reference_directions are finite numbers"):
+        gx.Nsga3(
+            gx.Real((0.0, 1.0), length=3),
+            objectives=["minimize", "minimize"],
+            reference_directions=[[0.0, 1.0], [math.nan, 0.5]],
+            crossover=gx.SimulatedBinaryCrossover(),
+            mutation=gx.PolynomialMutation(rate=0.3),
+        ).run(lambda x: (0.0, 0.0), generations=1)
+
+
+def test_a_wrong_type_is_an_error_that_names_the_setting():
+    with pytest.raises(ValueError, match="generations is a whole number, not 3.0"):
+        onemax_ga().run(lambda bits: 0.0, generations=3.0)
+    with pytest.raises(ValueError, match="population_size is a whole number"):
+        onemax_ga(population_size=10.5).run(lambda bits: 0.0, generations=1)
+    with pytest.raises(ValueError, match="seed is a whole number, not True"):
+        onemax_ga(seed=True).run(lambda bits: 0.0, generations=1)
+    with pytest.raises(ValueError, match="Tournament.size is at least 0, not -2"):
+        onemax_ga(select=gx.Tournament(-2)).run(lambda bits: 0.0, generations=1)
+    with pytest.raises(ValueError, match="Rank.pressure is a finite number, not '1.5'"):
+        onemax_ga(select=gx.Rank("1.5")).run(lambda bits: 0.0, generations=1)
+    with pytest.raises(ValueError, match="restart kicks"):
+        gx.LocalSearch(gx.Binary(8), neighbor=gx.BitFlip(count=1), restart=(5, 2.5)).run(
+            lambda bits: 0.0, generations=1
+        )
+    with pytest.raises(ValueError, match="restarts"):
+        gx.Cmaes(gx.Real((0.0, 1.0), length=2), restarts="always").run(
+            lambda x: 0.0, generations=1
+        )
+    with pytest.raises(ValueError, match="eliminate_duplicates is True or False"):
+        gx.Nsga2(
+            gx.Binary(8),
+            objectives=["maximize", "maximize"],
+            population_size=8,
+            crossover=gx.UniformCrossover(),
+            mutation=gx.BitFlip(count=1),
+            eliminate_duplicates=1,
+        ).run(lambda bits: (0.0, 0.0), generations=1)
+    with pytest.raises(ValueError, match="divisions is a whole number"):
+        gx.das_dennis(3, 12.0)
+
+
+def test_the_native_run_names_a_wrong_setting():
+    ga = onemax_ga()
+    run = {
+        "genome": ga._genome._describe(),
+        "algorithm": ga._describe(),
+        "objectives": ["maximize"],
+        "stop": {"generations": 3.5},
+    }
+    with pytest.raises(ValueError, match="`stop.generations`"):
+        gx._genoxide.run(json.dumps(run), lambda bits: 0.0)
+
+
+def test_integer_bounds_that_are_not_whole_numbers_are_an_error():
+    # int() truncates: (-0.5, 3.7) would be (0, 3)
+    with pytest.raises(ValueError, match="Integer.bounds are whole numbers, not -0.5"):
+        gx.Integer((-0.5, 3.7), length=2)._describe()
+    with pytest.raises(ValueError, match="Integer.bounds"):
+        gx.Integer([(0, 5), (1.0, 3)])._describe()
+    # numpy integers are whole numbers
+    bounds = np.array([[0, 5], [-3, 3]], dtype=np.int64)
+    assert gx.Integer(bounds)._describe()["bounds"] == [[0, 5], [-3, 3]]
+    genome = gx.Integer((np.int32(1), np.int64(4)), length=np.int64(2))
+    assert genome._describe()["bounds"] == [[1, 4], [1, 4]]
+
+
+def test_a_bool_length_is_an_error():
+    # range(True) is range(1): one gene
+    with pytest.raises(ValueError, match="Real.length is a whole number, not True"):
+        gx.Real((0.0, 1.0), length=True)._describe()
+    with pytest.raises(ValueError, match="Binary.length is a whole number, not 8.0"):
+        gx.Binary(8.0)._describe()
+    with pytest.raises(ValueError, match="Permutation.length"):
+        gx.Permutation(np.True_)._describe()
+
+
+# --- fitness values that fail to convert keep their error ---------------------------------------
+
+
+def test_a_fitness_value_too_large_for_a_float_raises_overflow_error():
+    with pytest.raises(OverflowError):
+        onemax_ga().run(lambda bits: 10**400, generations=1)
+    nsga2 = gx.Nsga2(
+        gx.Binary(8),
+        objectives=["maximize", "maximize"],
+        population_size=8,
+        crossover=gx.UniformCrossover(),
+        mutation=gx.BitFlip(count=1),
+    )
+    with pytest.raises(OverflowError):
+        nsga2.run(lambda bits: (10**400, 1.0), generations=1)
+    with pytest.raises(OverflowError):
+        nsga2.run(lambda bits: [1.0, 10**400], generations=1)
+
+
+def test_the_exception_of_a_fitness_values_float_conversion_is_kept():
+    class Score:
+        def __float__(self):
+            raise ZeroDivisionError("the real cause")
+
+    with pytest.raises(ZeroDivisionError, match="the real cause"):
+        onemax_ga().run(lambda bits: Score(), generations=1)
+
+
+def test_a_fitness_value_that_is_not_a_number_is_caused_by_its_conversion_error():
+    with pytest.raises(TypeError, match="returns a number") as raised:
+        onemax_ga().run(lambda bits: "one", generations=1)
+    assert isinstance(raised.value.__cause__, TypeError)
+
+
+# --- batch results ------------------------------------------------------------------------------
+
+
+def test_batch_scores_and_violations_as_columns():
+    def fitness(bits):
+        return bits.sum(axis=1, keepdims=True), np.zeros((len(bits), 1))
+
+    columns = onemax_ga().run(fitness, generations=3, batch=True)
+    rows = onemax_ga().run(
+        lambda bits: (bits.sum(axis=1), np.zeros(len(bits))), generations=3, batch=True
+    )
+    assert columns.generations == 3
+    assert columns.best_fitness == rows.best_fitness
+
+
+def test_a_1d_multi_objective_batch_result_is_a_clear_error():
+    nsga2 = gx.Nsga2(
+        gx.Binary(5),
+        objectives=["minimize", "minimize"],
+        population_size=10,
+        crossover=gx.UniformCrossover(),
+        mutation=gx.BitFlip(rate=0.1),
+    )
+    with pytest.raises(ValueError, match="2-D array, a row of objective values per genome"):
+        nsga2.run(lambda bits: bits.sum(axis=1), generations=1, batch=True)
+
+
+# --- invalid solutions --------------------------------------------------------------------------
+
+
+def test_an_invalid_solution_has_a_nan_violation():
+    result = onemax_ga().run(lambda bits: None, generations=2)
+    assert result.best_fitness is None
+    assert math.isnan(result.violation)
+
+
+def test_invalid_front_members_have_no_violation_of_0():
+    result = gx.Nsga2(
+        gx.Real((0.0, 1.0), length=3),
+        objectives=["minimize", "minimize"],
+        population_size=10,
+        crossover=gx.SimulatedBinaryCrossover(),
+        mutation=gx.PolynomialMutation(rate=0.3),
+        seed=1,
+    ).run(lambda x: None, generations=2)
+    assert np.isnan(result.front_objectives).all()
+    assert np.isnan(result.front_violations).all()
+
+
+# --- batch and parallel -------------------------------------------------------------------------
+
+
+def test_batch_and_parallel_accept_ints():
+    assert onemax_ga().run(lambda bits: 0.0, generations=1, parallel=1).generations == 1
+    assert onemax_ga().run(lambda bits: bits.sum(axis=1), generations=1, batch=1).generations == 1
+    assert onemax_ga().run(lambda bits: bits.sum(), generations=1, batch=0).generations == 1
+
+
+# --- packaging ----------------------------------------------------------------------------------
+
+
+def test_the_package_has_the_license_files():
+    files = importlib.metadata.distribution("genoxide").files or []
+    names = {pathlib.PurePath(str(file)).name for file in files}
+    assert {"LICENSE-MIT", "LICENSE-APACHE"} <= names, sorted(names)
