@@ -9,7 +9,9 @@ Usage:
     python run.py check                      # test the adapters against the rules, before a run
     python run.py chart                      # redraw the charts of the latest results
     python run.py --libraries genoxide --update results/<file>.json
-                                             # rerun one library, keep the others' results
+                                             # rerun one library, keep the others' results, if a
+                                             # reference run still takes the file's time
+                                             # (--allow-drift: even if not)
     python run.py --version-label genoxide=0.7.0
                                              # record genoxide as 0.7.0, e.g. before the release
                                              # PR bumps Cargo.toml
@@ -29,9 +31,12 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 import venv
 from pathlib import Path
+
+import problems
 
 ROOT = Path(__file__).resolve().parent
 VENV = ROOT / ".venv"
@@ -189,16 +194,31 @@ SCENARIOS = [
     ("dtlz2", 3, "matched", 25_000),
     ("dtlz1", 3, "matched", 40_000),
 ]
+BUDGETS = {f"{problem}-{size}-{mode}": budget for problem, size, mode, budget in SCENARIOS}
 QUICK_SCENARIOS = {"onemax-100-matched", "onemax-100-idiomatic", "nqueens-32-idiomatic", "rastrigin-10-idiomatic",
                    "zdt1-30-matched"}
 
-# the multi-objective problems and the hypervolume's reference point
+# the multi-objective problems and the hypervolume's reference point: 1.1 times the nadir of the
+# optimal front, (1, 1) for ZDT and DTLZ2, 0.5 for DTLZ1
 FRONT_PROBLEMS = {"zdt1": (1.1, 1.1), "zdt2": (1.1, 1.1), "zdt3": (1.1, 1.1), "dtlz2": (1.1, 1.1, 1.1),
-                  "dtlz1": (1.1, 1.1, 1.1)}
+                  "dtlz1": (0.55, 0.55, 0.55)}
 
 
 def is_front(problem):
     return problem in FRONT_PROBLEMS
+
+
+def non_dominated(points):
+    """The points that no other point dominates (all objectives minimized), without duplicates."""
+    unique = [list(p) for p in dict.fromkeys(tuple(p) for p in points)]
+    return [p for p in unique if not any(q != p and all(a <= b for a, b in zip(q, p)) for q in unique)]
+
+
+def front_hypervolume(run):
+    """The hypervolume of a run's front, from the objectives of its solutions as problems.py computes
+    them, not from the values the adapter printed (rule 7.3)."""
+    points = [problems.objectives(run["problem"], run["size"], x) for x in run["solutions"]]
+    return hypervolume(non_dominated(points), FRONT_PROBLEMS[run["problem"]])
 
 
 def hypervolume(points, reference):
@@ -280,30 +300,39 @@ EARLY_SEEDS = 3
 CAPPED = 0.98
 
 
-def hit_the_cap(run, max_seconds):
-    return not run.get("success") and run["time_s"] >= CAPPED * max_seconds
-
-
 def stop_early(runs, max_seconds):
     """The runs without the seeds after EARLY_SEEDS of a solver whose first EARLY_SEEDS runs all
     hit the time cap."""
-    seeds = sorted({run["seed"] for run in runs})[:EARLY_SEEDS]
+    seeds = sorted({run.get("seed") for run in runs if isinstance(run.get("seed"), int)})[:EARLY_SEEDS]
     stopped = set()
-    for solver in {run["solver"] for run in runs}:
-        first = [run for run in runs if run["solver"] == solver and run["seed"] in seeds]
-        if len(first) == EARLY_SEEDS and all(hit_the_cap(run, max_seconds) for run in first):
+    for solver in {run.get("solver") for run in runs}:
+        first = [run for run in runs if run.get("solver") == solver and run.get("seed") in seeds]
+        if len(first) == EARLY_SEEDS and all(capped(run, max_seconds) for run in first):
             stopped.add(solver)
-    return [run for run in runs if run["solver"] not in stopped or run["seed"] in seeds]
+    return [run for run in runs if run.get("solver") not in stopped or run.get("seed") in seeds]
 
 
-def run_outcome(run):
+def capped(run, max_seconds):
+    """Whether the time cap stopped a run: it took the cap without reaching the target (a
+    multi-objective run has none) or using its evaluation budget."""
+    budget = BUDGETS.get(scenario_name(run.get("problem"), run.get("size"), run.get("mode")))
+    return (run.get("time_s", 0) >= CAPPED * max_seconds and not run.get("success")
+            and (budget is None or run.get("evaluations", 0) < budget))
+
+
+def run_outcome(run, max_seconds):
     """How a run ended, for the log."""
-    if "success" not in run:
-        return "front"
-    return "target reached" if run["success"] else "not reached"
+    if "success" in run and run["success"]:
+        return "target reached"
+    ended = "front" if "success" not in run else "not reached"
+    return f"{ended}, stopped by the time cap" if capped(run, max_seconds) else ended
 
 
 def run_adapter(adapter, problem, size, mode, seeds, max_evaluations, max_seconds):
+    """The runs of an adapter in a scenario. Each is validated with the checks of `run.py check`
+    (check.check_run); a run that fails keeps its failures in "invalid" and is left out of every
+    summary."""
+    import check
     command = adapter["command"] + [
         problem, str(size), mode, "0", str(seeds - 1), str(max_evaluations), str(max_seconds),
     ]
@@ -317,24 +346,35 @@ def run_adapter(adapter, problem, size, mode, seeds, max_evaluations, max_second
             if line.strip():
                 run = json.loads(line)
                 runs.append(run)
-                print(f"  run: {run['library']} {run['solver']} seed {run['seed']}: "
-                      f"{run['time_s']:.3f} s, {run_outcome(run)}", flush=True)
+                failures = check.check_run(run, problem, size, max_evaluations, max_seconds)
+                if failures:
+                    run["invalid"] = failures
+                print(f"  run: {run.get('library')} {run.get('solver')} seed {run.get('seed')}: "
+                      f"{run.get('time_s', 0):.3f} s, "
+                      + (f"INVALID: {'; '.join(failures)}" if failures else run_outcome(run, max_seconds)),
+                      flush=True)
         if process.wait() != 0:
             stderr.seek(0)
             print(stderr.read(), file=sys.stderr)
             raise SystemExit(f"adapter failed: {' '.join(command)}")
     runs = stop_early(runs, max_seconds)
     for run in runs:
-        if is_front(run["problem"]):
-            # the same hypervolume for every library; the front itself isn't kept
-            run["hypervolume"] = hypervolume(run.pop("front"), FRONT_PROBLEMS[run["problem"]])
+        if is_front(problem) and not run.get("invalid"):
+            # the same hypervolume for every library, from the solutions; the front printed isn't kept
+            run.pop("front")
+            run["hypervolume"] = front_hypervolume(run)
     return runs
 
 
+def valid(runs):
+    """The runs that passed validation: the only ones summarized."""
+    return [run for run in runs if not run.get("invalid")]
+
+
 # Instructions per evaluation, with Callgrind: each adapter runs with a budget of N and of 2N
-# evaluations, and (I(2N) - I(N)) / (E(2N) - E(N)) cancels the startup, imports and setup. The
-# matched OneMax configurations make it a comparison of framework cost; no library reaches the
-# target of OneMax 1000 within 2N evaluations.
+# evaluations, and (I(2N) - I(N)) / (E(2N) - E(N)) cancels the startup, imports and setup. It's the
+# cost per evaluation, framework and fitness together, so it depends on how many children a library
+# evaluates per generation; no library reaches the target of OneMax 1000 within 2N evaluations.
 INSTRUCTIONS_SCENARIO = ("onemax", 1000, "matched")
 INSTRUCTIONS_EVALUATIONS = 3_000
 
@@ -415,9 +455,32 @@ def gap_to_optimum(run):
     return run["size"] - run["best"] if run["problem"] == "onemax" else run["best"]
 
 
-def summarize(runs):
+def first_hit(run):
+    """(evaluations, seconds) at the run's first hit of the target, or None. A run from before
+    first_hit was recorded stopped at the target: its end."""
+    if not run["success"]:
+        return None
+    hit = run.get("first_hit")
+    return (hit["evaluations"], hit["time_s"]) if hit else (run["evaluations"], run["time_s"])
+
+
+def expected_to_target(group):
+    """The expected running time (ERT, Hansen et al., COCO) of a solver in evaluations and in seconds:
+    what all its runs spent, up to the first hit in the runs that reached the target and in full in
+    the others, divided by the number of runs that reached it. (None, None) if none did."""
+    hits = [first_hit(run) for run in group]
+    reached = sum(1 for hit in hits if hit)
+    if not reached:
+        return None, None
+    evaluations = sum(hit[0] if hit else run["evaluations"] for run, hit in zip(group, hits))
+    seconds = sum(hit[1] if hit else run["time_s"] for run, hit in zip(group, hits))
+    return evaluations / reached, seconds / reached
+
+
+def summarize(runs, max_seconds=60.0):
+    """The single-objective results of the valid runs, per scenario and solver."""
     groups = {}
-    for run in runs:
+    for run in valid(runs):
         if is_front(run["problem"]):
             continue
         key = (scenario_name(run["problem"], run["size"], run["mode"]), run["library"], run["solver"])
@@ -440,15 +503,18 @@ def summarize(runs):
         # how far each run's best is from the optimum (rule 8.1): every problem's optimum is 0,
         # except OneMax's, all ones
         gaps = sorted(gap_to_optimum(run) for run in group)
+        ert_evaluations, ert_time = expected_to_target(group)
         rows.append({
             "scenario": scenario,
             "library": library,
             "solver": solver,
             "runs": len(group),
-            "success_rate": len(successes) / len(group),
-            "time_to_target": median([run["time_s"] for run in successes]),
+            "reached": len(successes),
+            # runs the time cap stopped, not the budget: limited by speed, not by the search
+            "capped": sum(1 for run in group if capped(run, max_seconds)),
+            "ert_time": ert_time,
+            "ert_evaluations": ert_evaluations,
             "median_evaluations": median([run["evaluations"] for run in group]),
-            "evaluations_to_target": median([run["evaluations"] for run in successes]),
             "median_best": median([run["best"] for run in group]),
             "median_gap": median(gaps),
             "best_gap": gaps[0],
@@ -460,10 +526,10 @@ def summarize(runs):
     return rows
 
 
-def summarize_fronts(runs):
-    """Median hypervolume and time of each multi-objective solver."""
+def summarize_fronts(runs, max_seconds=60.0):
+    """Median hypervolume and time of each multi-objective solver, over its valid runs."""
     groups = {}
-    for run in runs:
+    for run in valid(runs):
         if is_front(run["problem"]):
             key = (scenario_name(run["problem"], run["size"], run["mode"]), run["library"], run["solver"])
             groups.setdefault(key, []).append(run)
@@ -482,6 +548,8 @@ def summarize_fronts(runs):
             "median_evaluations": median([run["evaluations"] for run in group]),
             # runs where the library failed (an adapter's "error"): an empty front, hypervolume 0
             "errors": sum(1 for run in group if run.get("error")),
+            # runs the time cap stopped before their evaluation budget
+            "capped": sum(1 for run in group if capped(run, max_seconds)),
             "evaluations_per_second": sum(run["evaluations"] for run in group)
             / max(sum(run["time_s"] for run in group), 1e-9),
         })
@@ -491,12 +559,14 @@ def summarize_fronts(runs):
 
 def front_table(rows):
     lines = [
-        "| Scenario | Library / solver | Median hypervolume | Range | Median time | Median evaluations | Evaluations/s |",
-        "|---|---|---|---|---|---|---|",
+        "| Scenario | Library / solver | Runs | Stopped by the time cap | Median hypervolume | Range | Median time "
+        "| Median evaluations | Evaluations/s |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for row in rows:
         lines.append(
             f"| {row['scenario']} | {row['library']} / {row['solver']} "
+            f"| {row['runs']} | {row.get('capped', 0)} "
             f"| {row['median_hypervolume']:.4f} "
             f"| {row['worst_hypervolume']:.4f} to {row['best_hypervolume']:.4f} "
             f"| {format_seconds(row['median_time'])} "
@@ -509,36 +579,43 @@ def front_table(rows):
 def coverage_table(runs, libraries):
     """Which library ran which scenario: a library missing from a scenario can't run it (see
     docs/benchmarks/notes.md)."""
-    ran = {(run["library"], scenario_name(run["problem"], run["size"], run["mode"])) for run in runs}
+    def where(run):
+        return run.get("library"), scenario_name(run.get("problem"), run.get("size"), run.get("mode"))
+
+    ran = {where(run) for run in valid(runs)}
+    printed = {where(run) for run in runs}
     scenarios = [scenario_name(*scenario[:3]) for scenario in SCENARIOS
-                 if any(scenario_name(*scenario[:3]) == name for _, name in ran)]
+                 if any(scenario_name(*scenario[:3]) == name for _, name in printed)]
     names = [name for name in list(ADAPTERS) + sorted(set(libraries) - set(ADAPTERS)) if name in libraries]
     lines = ["| Library | " + " | ".join(scenario_title(scenario) for scenario in scenarios) + " |",
              "|---|" + "---|" * len(scenarios)]
     for name in names:
-        cells = ["✓" if (name, scenario) in ran else "–" for scenario in scenarios]
+        # ✗: every run the library printed there was invalid
+        cells = ["✓" if (name, scenario) in ran else "✗" if (name, scenario) in printed else "–"
+                 for scenario in scenarios]
         lines.append(f"| {LIBRARY_NAMES.get(name, name)} | " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
 
 def markdown_table(rows):
-    """The single-objective results. The time and evaluations to target are medians of the runs
-    that reached it, as in the charts; the median evaluations and the distance to the optimum at the
-    end are of all runs (rule 8.1)."""
+    """The single-objective results (rule 8.1). The time and evaluations to target are the expected
+    running time (ERT), as in the charts; the median evaluations and the distance to the optimum at
+    the end are of all runs."""
     lines = [
-        "| Scenario | Library / solver | Reached the target | Median time to target | Median evaluations to target "
-        "| Median evaluations | Distance to the optimum at the end: median (best to worst) | Evaluations/s "
-        "| Throughput vs DEAP GA |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| Scenario | Library / solver | Reached the target | Stopped by the time cap | Expected time to target "
+        "| Expected evaluations to target | Median evaluations "
+        "| Distance to the optimum at the end: median (best to worst) | Evaluations/s | Throughput vs DEAP GA |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for row in rows:
         ratio = row["throughput_vs_deap"]
         ratio = "-" if ratio is None else (f"{ratio:.1f}×" if ratio < 10 else f"{ratio:.0f}×")
         lines.append(
             f"| {row['scenario']} | {row['library']} / {row['solver']} "
-            f"| {round(row['success_rate'] * row['runs'])} of {row['runs']} "
-            f"| {format_seconds(row['time_to_target'])} "
-            f"| {format_count(row.get('evaluations_to_target'))} "
+            f"| {row['reached']} of {row['runs']} "
+            f"| {row['capped']} "
+            f"| {format_seconds(row['ert_time']) if row['ert_time'] is not None else 'not reached'} "
+            f"| {format_count(row['ert_evaluations']) if row['ert_evaluations'] is not None else 'not reached'} "
             f"| {format_count(row['median_evaluations'])} "
             f"| {format_gap(row, 'median_gap')} ({format_gap(row, 'best_gap')} to {format_gap(row, 'worst_gap')}) "
             f"| {format_count(row['evaluations_per_second'])} "
@@ -552,12 +629,26 @@ def format_gap(row, key):
     return format_number(row[key]) if key in row else "-"
 
 
+def invalid_list(runs):
+    """The runs that failed validation, with why: excluded from every table and chart."""
+    invalid = [run for run in runs if run.get("invalid")]
+    lines = [f"Invalid runs, left out of every table and chart: {len(invalid)}"]
+    if invalid:
+        lines.append("")
+        for run in invalid:
+            lines.append(f"- {run.get('library')} / {run.get('solver')}, "
+                         f"{scenario_name(run.get('problem'), run.get('size'), run.get('mode'))}, seed {run.get('seed')}: "
+                         + "; ".join(run["invalid"]))
+    return "\n".join(lines)
+
+
 def instructions_table(rows):
     """Instructions per evaluation, fewest first, as in the chart."""
     problem, size, mode = INSTRUCTIONS_SCENARIO
     lines = [
         f"{PROBLEM_NAMES[problem]} {size} ({mode}), counted by Callgrind: the framework and the fitness "
-        "function together, without the startup and imports.",
+        "function together, without the startup and imports. It's the cost per evaluation: a generation's work "
+        "is divided by the children the library evaluates in it, so it depends on how many it evaluates.",
         "",
         "| Library / solver | Instructions per evaluation |",
         "|---|---|",
@@ -677,7 +768,7 @@ def draw_charts(results, out_dir, formats=("svg",)):
         f"genoxide {genoxide}" if genoxide else "",
         results.get("platform", ""),
         "single-threaded",
-        f"median of {results['seeds']} seeds",
+        f"{results['seeds']} seeds",
         results_date(results),
     ) if part)
     order = {scenario_name(*scenario[:3]): index for index, scenario in enumerate(SCENARIOS)}
@@ -708,16 +799,25 @@ def draw_charts(results, out_dir, formats=("svg",)):
         names = list(dict.fromkeys(name for name in list(ADAPTERS) + sorted(versions) if name in libraries))
         columns = 5
         legend_rows = (len(names) + columns - 1) // columns
-        header = 0.62 + legend_rows * 0.19 + 0.12
+        # a long subtitle on several lines, the legend below it
+        lines = [""]
+        for part in subtitle.split(" · "):
+            if lines[-1] and len(lines[-1]) + len(part) + 3 > 230:
+                lines.append("")
+            lines[-1] += (" · " if lines[-1] else "") + part
+        subtitle = "\n".join(textwrap.fill(line, 230) for line in lines)
+        legend_top = 0.62 + subtitle.count("\n") * 0.14
+        header = legend_top + legend_rows * 0.19 + 0.12
         height = header + len(rows) * (title_height + panel_height + labels_height) + 0.05
         figure = plt.figure(figsize=(width, height))
         figure.patch.set_facecolor("white")
         figure.text(margin / width, 1 - 0.12 / height, title, fontsize=12.5, fontweight="bold", va="top")
-        figure.text(margin / width, 1 - 0.40 / height, subtitle, fontsize=7.8, color="#555555", va="top")
+        figure.text(margin / width, 1 - 0.40 / height, subtitle, fontsize=7.8, color="#555555", va="top",
+                    linespacing=1.3)
         handles = [Patch(color=colors[name], label=f"{LIBRARY_NAMES.get(name, name)} "
                                                    f"{versions.get(name, '').split('+')[0]} ({languages.get(name, '')})")
                    for name in names]
-        figure.legend(handles=handles, loc="upper left", bbox_to_anchor=(margin / width, 1 - 0.62 / height),
+        figure.legend(handles=handles, loc="upper left", bbox_to_anchor=(margin / width, 1 - legend_top / height),
                       ncol=columns, frameon=False, fontsize=7.5, handlelength=0.9, handleheight=0.9,
                       columnspacing=1.6, borderaxespad=0.0, labelspacing=0.35)
         axes = {}
@@ -805,20 +905,30 @@ def draw_charts(results, out_dir, formats=("svg",)):
     scenarios = sorted({row["scenario"] for row in rows}, key=lambda s: (order.get(s, len(order)), s))
 
     def reached(row):
-        return "" if row["success_rate"] >= 1 else f"  {round(row['success_rate'] * row['runs'])}/{row['runs']}"
+        """How many runs reached the target, and how many the time cap stopped, when not all
+        reached it."""
+        parts = [] if row["reached"] >= row["runs"] else [f"{row['reached']} of {row['runs']}"]
+        parts += [f"{row['capped']} capped"] if row.get("capped") else []
+        return "  " + ", ".join(parts) if parts else ""
 
-    for name, title, value, text, ticks in (
-        ("time_to_target", "Time to target (lower is better)",
-         lambda row: row["time_to_target"], format_seconds, time_ticks),
+    ert = ("expected running time (ERT): what all runs spent, up to the first hit in those that reached the target, "
+           "divided by the runs that reached it")
+    cap = f"{format_number(results.get('max_seconds', 60.0))} s"
+    for name, title, value, text, ticks, subtitle in (
+        ("time_to_target", "Expected time to target (lower is better)",
+         lambda row: row["ert_time"], format_seconds, time_ticks,
+         f" · {ert} · k of n: reached in k of n runs · c capped: stopped by the {cap} cap"),
         ("evaluations_to_target",
-         "Fitness evaluations to target (lower is better): search efficiency, whatever the language",
-         lambda row: row.get("evaluations_to_target"), short_number, count_ticks),
+         "Expected fitness evaluations to target (lower is better): search efficiency, whatever the language",
+         lambda row: row["ert_evaluations"], short_number, count_ticks,
+         f" · {ert} · k of n: reached in k of n runs · c capped: stopped by the {cap} cap before the budget, "
+         "so limited by speed, not by the search"),
     ):
         if not scenarios:
             break
         figure, axes = chart(
-            title, context + " · × didn't reach the target within the budget: see the distance chart · k/n: reached "
-            "in k of n runs · a missing library can't run the scenario: see notes.md",
+            title, context + subtitle + " · ×: never reached, see the distance chart · a missing library can't run "
+            "the scenario: see notes.md",
             [(scenario, len([row for row in rows if row["scenario"] == scenario])) for scenario in scenarios],
             {row["library"] for row in rows})
         for scenario in scenarios:
@@ -871,6 +981,12 @@ def draw_charts(results, out_dir, formats=("svg",)):
     # --- multi-objective ------------------------------------------------------------------------------
     front_rows = results.get("front_summary") or []
     front_scenarios = sorted({row["scenario"] for row in front_rows}, key=lambda s: (order.get(s, len(order)), s))
+
+    def front_note(row):
+        parts = [f"{row['errors']} of {row['runs']} failed"] if row.get("errors") else []
+        parts += [f"{row['capped']} capped"] if row.get("capped") else []
+        return "  " + ", ".join(parts) if parts else ""
+
     for name, title, value, text, log, better in (
         ("hypervolume", "Hypervolume of the final front (higher is better; the axes don't start at 0)",
          lambda row: row["median_hypervolume"], lambda v: f"{v:.4f}", False, "higher"),
@@ -880,15 +996,15 @@ def draw_charts(results, out_dir, formats=("svg",)):
         if not front_rows:
             break
         figure, axes = chart(
-            title, context + " · the same settings in every library where it has them · a missing library can't "
-            "run the scenario: see notes.md",
+            title, context + " · median of the runs · the same settings in every library where it has them · "
+            f"c capped: stopped by the {cap} cap before the budget · a missing library can't run the scenario: "
+            "see notes.md",
             [(scenario, len([row for row in front_rows if row["scenario"] == scenario])) for scenario in front_scenarios],
             {row["library"] for row in front_rows})
         for scenario in front_scenarios:
             axis = axes[scenario]
             bars(axis, [row for row in front_rows if row["scenario"] == scenario], value, text,
-                 log=log, better=better, zoom=not log,
-                 note=lambda row: f"  {row['errors']}/{row['runs']} failed" if row.get("errors") else "")
+                 log=log, better=better, zoom=not log, note=front_note)
             panel_title(axis, scenario, f"{short_number(budgets[scenario])} evaluations" if scenario in budgets else "")
             if log:
                 axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
@@ -984,8 +1100,9 @@ def draw_charts_of(results_file, out_dir, png=False):
     results = json.loads(Path(results_file).read_text(encoding="utf-8"))
     results.setdefault("timestamp", Path(results_file).stem)
     # the summaries from the runs, so the charts follow this code
-    results["summary"] = summarize(results["runs"])
-    results["front_summary"] = summarize_fronts(results["runs"])
+    max_seconds = results.get("max_seconds", 60.0)
+    results["summary"] = summarize(results["runs"], max_seconds)
+    results["front_summary"] = summarize_fronts(results["runs"], max_seconds)
     draw_charts(results, out_dir, formats=("svg", "png") if png else ("svg",))
 
 
@@ -996,10 +1113,16 @@ def markdown_report(report):
               f"Seeds per scenario: {report['seeds']}, wall time cap per run: {report['max_seconds']} s",
               report["platform"], ""]
     header += [f"- {name} {version}" for name, version in report["versions"].items()] + [""]
+    # every timed run is validated (check.check_run): the ones that failed are listed, not kept
+    header += [invalid_list(report["runs"]), ""]
     header += ["## Coverage", "",
-               "✓ ran, – can't run the scenario: why, and the bugs found in the libraries, in "
+               "✓ ran, ✗ every run invalid, – can't run the scenario: why, and the bugs found in the libraries, in "
                "[notes.md](notes.md).", "", coverage_table(report["runs"], report["versions"]), "",
-               "## Single-objective", ""]
+               "## Single-objective", "",
+               "Expected time and evaluations to target: the expected running time (ERT), what all runs spent, up "
+               "to the first hit of the target in the runs that reached it, divided by the number of runs that "
+               "reached it. Stopped by the time cap: runs that ended at the cap, not at the target or the budget.",
+               ""]
     table = markdown_table(report["summary"])
     if report["front_summary"]:
         table += "\n\n## Multi-objective\n\n" + front_table(report["front_summary"])
@@ -1014,6 +1137,60 @@ def latest_results():
     if not files:
         raise SystemExit("no results yet: run `python run.py` first")
     return files[-1]
+
+
+# --update keeps the other libraries' times, so the machine must still measure what it measured
+# then: a fixed reference, DEAP's GA in matched OneMax 100 with seeds 0 to 2, must take the same
+# median time as in the results file, within DRIFT
+DRIFT_REFERENCE = ("deap", "ga", ("onemax", 100, "matched"), 3)
+DRIFT = 0.03
+
+
+def check_drift(previous, max_seconds, allow):
+    """Measures the reference and refuses to go on, unless `allow`, if it differs from the results
+    file's."""
+    library, solver, scenario, seeds = DRIFT_REFERENCE
+    name = scenario_name(*scenario)
+
+    def reference(runs):
+        return {run["seed"]: run for run in valid(runs)
+                if (run.get("library"), run.get("solver")) == (library, solver)
+                and scenario_name(run.get("problem"), run.get("size"), run.get("mode")) == name
+                and run.get("seed") in range(seeds)}
+
+    def refuse(message):
+        if not allow:
+            raise SystemExit(f"--update: {message}. Pass --allow-drift to rerun anyway.")
+        print(f"warning: {message}; rerunning anyway (--allow-drift)", flush=True)
+
+    before = reference(previous["runs"])
+    if len(before) != seeds:
+        refuse(f"the results file has no runs of the reference, {library} {solver} in {name} with seeds 0 to "
+               f"{seeds - 1}, to check that this machine still measures the same")
+        return
+    print(f"drift reference: {name}: {library} ({seeds} seeds) ...", flush=True)
+    now = reference(run_adapter(ADAPTERS[library], *scenario, seeds, BUDGETS[name], max_seconds))
+    if len(now) != seeds:
+        refuse(f"the reference, {library} {solver} in {name}, didn't give {seeds} valid runs")
+        return
+    changed = [seed for seed in range(seeds) if now[seed]["evaluations"] != before[seed]["evaluations"]]
+    if changed:
+        refuse(f"the reference, {library} {solver} in {name}, doesn't make the same evaluations as in the results "
+               f"file (seed {changed[0]}: {now[changed[0]]['evaluations']} instead of "
+               f"{before[changed[0]]['evaluations']}): its adapter or the problem changed, so the times can't be "
+               "compared. Rerun every library")
+        return
+    old = median([run["time_s"] for run in before.values()])
+    new = median([run["time_s"] for run in now.values()])
+    drift = new / old - 1
+    print(f"drift reference: median {format_seconds(new)}, {format_seconds(old)} in the results file ({drift:+.1%})",
+          flush=True)
+    if abs(drift) > DRIFT:
+        refuse(f"the reference, {library} {solver} in {name}, takes {abs(drift):.1%} {'more' if drift > 0 else 'less'} "
+               f"time than in the results file (median {format_seconds(new)} against {format_seconds(old)}), over "
+               f"{DRIFT:.0%}: this machine "
+               "doesn't measure the same, so the rerun libraries' times wouldn't be comparable with the kept ones. "
+               "Check the load, the pinning and the versions of WSL and Python, or rerun every library")
 
 
 def main():
@@ -1032,6 +1209,9 @@ def main():
     parser.add_argument("--update", type=Path,
                         help="rerun only --libraries, with the seeds and every scenario of this results file, "
                              "and keep its results of the other libraries")
+    parser.add_argument("--allow-drift", action="store_true",
+                        help="with --update, rerun even if the reference run's time differs from the results "
+                             f"file's by more than {DRIFT:.0%}")
     parser.add_argument("--version-label", nargs="*", default=[], metavar="LIBRARY=VERSION",
                         help="the version to record for a library instead of the one it reports, e.g. "
                              "genoxide=0.7.0 before the release PR bumps Cargo.toml; genoxide's labels "
@@ -1108,6 +1288,9 @@ def main():
         versions[name] = library_version(*adapter["version"], label=labels.get(name))
         print(f"{name} {versions[name]}", flush=True)
 
+    if previous:
+        check_drift(previous, max_seconds, args.allow_drift)
+
     runs = []
     for problem, size, mode, max_evaluations in scenarios:
         for name in args.libraries:
@@ -1137,8 +1320,8 @@ def main():
             kept = [row for row in previous.get("instructions") or [] if row["library"] not in args.libraries]
             instructions = kept + instructions
 
-    rows = summarize(runs)
-    front_rows = summarize_fronts(runs)
+    rows = summarize(runs, max_seconds)
+    front_rows = summarize_fronts(runs, max_seconds)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     results = ROOT / "results"
     results.mkdir(exist_ok=True)

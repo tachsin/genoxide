@@ -4,15 +4,19 @@ docs/benchmarks/rules.md, without measuring anything that counts.
 For each library and scenario:
 - values (rule 1.2): the adapter's `values` command evaluates fixed points, including the optimum,
   and must agree with problems.py;
-- runs (rules 1.3, 2.1, 2.3): two short runs; each reported solution must evaluate to the reported
-  best (or front), stay within its problem's domain, and each run must end only at the target, its
-  budget (plus at most one generation) or its time cap;
+- runs (rules 1.3, 2.1, 2.3, 2.4, 3.3): two short runs; each reported solution must evaluate to the
+  reported best (or front), stay within its problem's domain, and each run must end only at the
+  target, its budget (plus at most one generation) or its time cap, with no evaluation outside the
+  bounds and a first hit of the target consistent with the run. `run.py` applies the same checks
+  (check_run) to every timed run;
 - threads (rule 4.3): the adapter's CPU time, over all its check runs, must stay within 10% of their
   wall time;
-- repeat (rule 5.2): the same seed, twice, must give the same evaluations and results.
+- repeat (rule 5.2): the same seed, twice, must give the same evaluations and results, and seed 1
+  must give the same alone as after seed 0 in the same process.
 
 A library passes when every scenario it runs passes. The result is saved with a hash of the
-adapter's files, and a timed run refuses a library whose adapter changed since it last passed.
+adapter's files, the reference problems, the pinned Python libraries and, for genoxide, its sources;
+a timed run refuses a library whose hash changed since it last passed.
 """
 
 import hashlib
@@ -52,15 +56,38 @@ def runs_of(stdout):
     return [json.loads(line) for line in stdout.splitlines() if line.strip()]
 
 
+BUILD_OUTPUTS = {"target", "__pycache__", "build", ".gradle"}
+# compiled extension modules, e.g. from `maturin develop` into python/genoxide
+BUILT_SUFFIXES = {".so", ".pyd", ".dll", ".dylib", ".pyc"}
+
+
+def fingerprint_files(name):
+    """The files a library's check depends on: its adapter, the reference problems, the pinned
+    Python libraries and, for genoxide, the sources it's built from."""
+    repository = run.ROOT.parent
+    trees = [run.ROOT / "adapters" / name]
+    files = [run.ROOT / "problems.py", run.ROOT / "requirements.txt"]
+    if name in ("genoxide", "genoxide_python"):
+        # the Python package builds the crate
+        trees.append(repository / "src")
+        files += [repository / "Cargo.toml", repository / "Cargo.lock"]
+    if name == "genoxide_python":
+        trees += [repository / "python" / "src", repository / "python" / "genoxide"]
+        files += [repository / "python" / "Cargo.toml", repository / "python" / "pyproject.toml"]
+    for tree in trees:
+        for path in tree.rglob("*"):
+            if (path.is_file() and not set(path.relative_to(tree).parts) & BUILD_OUTPUTS
+                    and path.suffix not in BUILT_SUFFIXES):
+                files.append(path)
+    return sorted({path for path in files if path.is_file()})
+
+
 def adapter_hash(name):
-    """A hash of the adapter's source files, without its build outputs."""
-    folder = run.ROOT / "adapters" / name
+    """A hash of the files of fingerprint_files, without build outputs."""
     digest = hashlib.sha256()
-    for path in sorted(folder.rglob("*")):
-        parts = set(path.relative_to(folder).parts)
-        if path.is_file() and not parts & {"target", "__pycache__", "build", ".gradle"}:
-            digest.update(str(path.relative_to(folder)).encode())
-            digest.update(path.read_bytes())
+    for path in fingerprint_files(name):
+        digest.update(path.relative_to(run.ROOT.parent).as_posix().encode())
+        digest.update(path.read_bytes())
     return digest.hexdigest()
 
 
@@ -99,14 +126,16 @@ def in_domain(problem, size, solution):
 
 
 def check_run(r, problem, size, budget, cap):
-    """The failures of one run."""
+    """The failures of one run, in `run.py check` and in every timed run."""
     where = f"{r.get('solver')} seed {r.get('seed')}"
     common = ["library", "solver", "problem", "size", "mode", "seed", "time_s", "generations", "evaluations"]
     front = problem in problems.FRONT_VARIABLES
-    fields = common + (["front", "solutions"] if front else ["best", "target", "success", "solution"])
+    fields = common + (["front", "solutions"] if front else ["best", "target", "success", "solution", "first_hit"])
     missing = [field for field in fields if field not in r]
     if missing:
         return [f"{where}: missing {', '.join(missing)}"]
+    if (r["problem"], r["size"]) != (problem, size):
+        return [f"{where}: a run of {r['problem']} {r['size']} in the scenario of {problem} {size}"]
     failures = []
     evaluations, generations = r["evaluations"], max(r["generations"], 1)
     # a generation's size: the average, or the last one's, which an adapter whose generations grow
@@ -123,7 +152,8 @@ def check_run(r, problem, size, budget, cap):
         elif r["outside"] != 0:
             failures.append(f"{where}: {r['outside']} evaluated solutions outside the bounds (rule 2.4)")
     if front:
-        if len(r["front"]) != len(r["solutions"]) or not r["front"]:
+        # an empty front only from a run the library ended with an error (hypervolume 0)
+        if len(r["front"]) != len(r["solutions"]) or not (r["front"] or r.get("error")):
             failures.append(f"{where}: {len(r['front'])} points in the front, {len(r['solutions'])} solutions")
         for solution, point in zip(r["solutions"], r["front"]):
             if not in_domain(problem, size, solution):
@@ -148,6 +178,28 @@ def check_run(r, problem, size, budget, cap):
     if not reached and evaluations < budget and not capped:
         failures.append(f"{where}: ended after {evaluations} of {budget} evaluations in {r['time_s']:.1f} s "
                         "without reaching the target (rule 2.2: it must keep going)")
+    return failures + check_first_hit(r, where, reached)
+
+
+def check_first_hit(r, where, reached):
+    """Rule 3.3: `first_hit` is {"evaluations": E, "time_s": T} of the first evaluation that reached the
+    target, within the run, or null when the target was never reached."""
+    hit = r["first_hit"]
+    if hit is None:
+        return [f"{where}: first_hit null, but the solution reaches the target"] if reached else []
+    if not reached:
+        return [f"{where}: first_hit {short(hit)}, but the solution doesn't reach the target"]
+    def number(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+    if (not isinstance(hit, dict) or set(hit) != {"evaluations", "time_s"} or not number(hit["evaluations"])
+            or not float(hit["evaluations"]).is_integer() or not number(hit["time_s"])):
+        return [f"{where}: first_hit {short(hit)} isn't {{\"evaluations\": integer, \"time_s\": number}}"]
+    failures = []
+    if not 1 <= hit["evaluations"] <= r["evaluations"]:
+        failures.append(f"{where}: first hit at evaluation {hit['evaluations']}, of {r['evaluations']}")
+    if not 0 <= hit["time_s"] <= r["time_s"]:
+        failures.append(f"{where}: first hit at {hit['time_s']} s, in a run of {r['time_s']} s")
     return failures
 
 
@@ -169,20 +221,28 @@ def check_scenario(name, adapter, problem, size, mode, budget, usage):
     usage[1] += cpu
     notes = [f"CPU/wall {cpu / wall:.2f}"] if wall > 0 else []
 
-    # the same seed twice, with a budget of evaluations only
-    repeat = adapter["command"] + [problem, str(size), mode, "0", "0", str(REPEAT_EVALUATIONS), "600"]
-    results = []
-    for _ in range(2):
-        stdout, stderr, code, _, _ = execute(repeat)
+    # with a budget of evaluations only: seed 0 alone, seeds 0 and 1 in one process, seed 1 alone.
+    # Seed 0 must repeat, and seed 1 must give the same after seed 0 as alone: no state may leak
+    # from one run into the next.
+    results = {}
+    for first, last in (("0", "0"), ("0", "1"), ("1", "1")):
+        command = adapter["command"] + [problem, str(size), mode, first, last, str(REPEAT_EVALUATIONS), "600"]
+        stdout, stderr, code, _, _ = execute(command)
         if code != 0:
             return True, failures + [f"repeat: the adapter failed: {stderr.strip()[-300:]}"], notes
-        results.append({r["solver"]: repeatable(r) for r in runs_of(stdout)})
-    if results[0] != results[1]:
-        differ = sorted(s for s in results[0] if results[0][s] != results[1].get(s))
+        results[first, last] = {(r["solver"], r["seed"]): repeatable(r) for r in runs_of(stdout)}
+    for (a, b, seed, what) in ((("0", "0"), ("0", "1"), 0, "seed 0 gives different results"),
+                               (("0", "1"), ("1", "1"), 1, "seed 1 gives different results after seed 0 "
+                                                           "than alone")):
+        alone = {solver: value for (solver, s), value in results[a].items() if s == seed}
+        other = {solver: value for (solver, s), value in results[b].items() if s == seed}
+        differ = sorted(solver for solver in alone.keys() | other.keys() if alone.get(solver) != other.get(solver))
+        if not differ:
+            continue
         if adapter.get("unseeded"):
             notes.append(f"not repeatable ({', '.join(differ)}): {adapter['unseeded']}")
         else:
-            failures.append(f"repeat: seed 0 gives different results for {', '.join(differ)}")
+            failures.append(f"repeat: {what} for {', '.join(differ)}")
 
     failures += check_values(adapter, problem, size)
     return True, failures, notes
@@ -192,7 +252,8 @@ def repeatable(r):
     """What must be the same for the same seed."""
     if "front" in r:
         return (r["evaluations"], json.dumps(r["front"]))
-    return (r["evaluations"], r["best"])
+    hit = r.get("first_hit")
+    return (r["evaluations"], r["best"], hit.get("evaluations") if isinstance(hit, dict) else None)
 
 
 def short(value, limit=80):
