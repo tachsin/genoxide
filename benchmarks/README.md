@@ -37,6 +37,18 @@ Libraries that check the stop between generations can go past the budget by up t
 
 **Time.** It's measured inside the adapter, around the optimization only. It doesn't include interpreter or JVM startup, imports or setup, and the Java and Julia adapters make an untimed run first, so JIT compilation isn't included either. Every library runs single-threaded, one run at a time, on one machine. Each scenario runs 10 seeds, and the charts show medians.
 
+**Cores.** The published results come from WSL on an Intel Core Ultra 7 265K, whose 8 P-cores and 12 E-cores run at different speeds, and whose P-cores don't all reach the same turbo frequency. Windows decides which core runs the WSL virtual machine, so without pinning, a run's time depends on where it lands. So the virtual machine is pinned to the two fastest P-cores, 8 and 19, and `run.py` refuses to measure times unless it is.
+
+Fixed single-threaded loops, each measured 30 times; the spread is the slowest run against the fastest:
+
+| Where it runs | C loop: spread | C loop: standard deviation | Python loop: spread |
+|---|---|---|---|
+| unpinned | not measured | not measured | 16.4% |
+| the 8 P-cores | 5.6% | 1.25% | 15.7% |
+| **P-cores 8 and 19** | **4.0%** | **0.99%** | **14.1%** |
+
+The C loop's remaining variation is the Windows host itself. Python adds its own variation on top, from memory management, which is part of what a Python library costs. With the median of 10 seeds, a time's noise is about 0.5%.
+
 **What time to target is made of.** Time to target is the number of evaluations multiplied by the cost of one evaluation, and the charts show both factors:
 - **Evaluations to target** measure how efficient the search is. They don't depend on the language, and they're what matters when the fitness function is expensive.
 - **Instructions per evaluation** measure the cost of one evaluation: the framework and the fitness function together. Callgrind counts them exactly, for every library it can run; it can't run the Java and Julia runtimes.
@@ -94,7 +106,13 @@ What each library doesn't run and why, the bugs found in the libraries, and how 
 
 ## Running
 
-This needs Linux or WSL, with Python 3.11+, Rust (cargo) and g++. The Java and Julia adapters download a JDK, Julia, their jars and their packages into `~/opt` on their first build. The C++, Java and Julia builds go to `~/bench-targets`. The charts use the [Inter](https://rsms.me/inter/) font if it's in `~/.local/share/fonts`, and DejaVu Sans otherwise.
+This needs Linux or WSL, with Python 3.11+, Rust (cargo) and g++. Under WSL, pin the virtual machine first, from an Administrator PowerShell. `-Install` adds a scheduled task that pins it at logon and every minute, since WSL's virtual machine restarts whenever WSL starts again. Another machine passes its own cores to both the script (`-Cores`) and `run.py` (`--cores`):
+
+```powershell
+benchmarks\pin-wsl.ps1 -Install
+```
+
+ The Java and Julia adapters download a JDK, Julia, their jars and their packages into `~/opt` on their first build. The C++, Java and Julia builds go to `~/bench-targets`. The charts use the [Inter](https://rsms.me/inter/) font if it's in `~/.local/share/fonts`, and DejaVu Sans otherwise.
 
 ```sh
 cd benchmarks
