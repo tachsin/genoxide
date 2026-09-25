@@ -17,8 +17,12 @@
  *   the serial garbage collector and with -Xbatch, so the JIT compiles on the calling thread's time.
  * - Seeds (rule 5.2): the engine's random generator is RandomRegistry's L64X256MixRandom (its
  *   default algorithm), created from the seed (manual 1.4.2 and 2.7).
- * - Time (rule 4.2): before the timed runs, every solver runs once untimed, with 1,000 evaluations
- *   and the seed 1,000,003, so the JIT has compiled the fitness function and the engine.
+ * - Time (rules 4.1 and 4.2): the clock starts before the engine creates its initial population and
+ *   stops when the run ends. Before the timed runs, every solver runs once untimed and unprinted,
+ *   with the seed 999,999, 50,000 evaluations and the scenario's time cap, so the JIT has compiled
+ *   the fitness function and the engine.
+ * - First hit: a single-objective run records the evaluation (and the time) at which the best value
+ *   first reaches the target, in the fitness function, and prints it as "first_hit".
  * - Keeping going (rule 2.2): an evolution stream has no end of its own; the examples end it with a
  *   generation limit (a budget, replaced by the scenario's) or with Limits.bySteadyFitness (a
  *   convergence criterion: the attempt ends and the run restarts from a new random population, see
@@ -76,8 +80,8 @@ public final class Bench {
 
     static final String LIBRARY = "jenetics";
     // the untimed JIT warm-up run of every solver (rule 4.2)
-    static final long WARM_UP_SEED = 1_000_003L;
-    static final long WARM_UP_EVALUATIONS = 1_000L;
+    static final long WARM_UP_SEED = 999_999L;
+    static final long WARM_UP_EVALUATIONS = 50_000L;
 
     // ---------------------------------------------------------------------------------------------
     // Fitness functions, identical to problems.py
@@ -104,11 +108,14 @@ public final class Bench {
         return conflicts;
     }
 
-    /** The shift of Rastrigin and Ackley: s_i = 2 ((37 i + 11) mod 101) / 101 - 1. */
-    static double[] shift(int n) {
+    /**
+     * The shift of Rastrigin and Ackley: s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1), with
+     * `upper` the box's upper bound, computed in this order (problems.py).
+     */
+    static double[] shift(int n, double upper) {
         double[] s = new double[n];
         for (int i = 0; i < n; i++) {
-            s[i] = (2 * ((37 * i + 11) % 101)) / 101.0 - 1.0;
+            s[i] = 0.8 * upper * ((2 * ((37 * i + 11) % 101)) / 101.0 - 1.0);
         }
         return s;
     }
@@ -202,11 +209,16 @@ public final class Bench {
     record RealProblem(ToDoubleFunction<double[]> function, double lower, double upper) {}
 
     static RealProblem realProblem(String name, int size) {
-        double[] s = shift(size);
         return switch (name) {
-            case "rastrigin" -> new RealProblem(x -> rastrigin(x, s), -5.12, 5.12);
+            case "rastrigin" -> {
+                double[] s = shift(size, 5.12);
+                yield new RealProblem(x -> rastrigin(x, s), -5.12, 5.12);
+            }
             case "rosenbrock" -> new RealProblem(Bench::rosenbrock, -5.0, 10.0);
-            case "ackley" -> new RealProblem(x -> ackley(x, s), -32.768, 32.768);
+            case "ackley" -> {
+                double[] s = shift(size, 32.768);
+                yield new RealProblem(x -> ackley(x, s), -32.768, 32.768);
+            }
             default -> null;
         };
     }
@@ -232,6 +244,8 @@ public final class Bench {
 
     static final class Budget {
         final long maxEvaluations;
+        // the clock: started when the budget is created, just before the run
+        final long start;
         final long deadline;
         final boolean minimize;
         final double target;
@@ -241,10 +255,14 @@ public final class Bench {
         Object solution;
         // evaluated solutions outside the problem's bounds (rule 2.4)
         long outside;
+        // the first evaluation whose value reaches the target, and the clock then (-1: not yet)
+        long firstHitEvaluations = -1;
+        double firstHitSeconds;
 
         Budget(long maxEvaluations, double maxSeconds, boolean minimize, double target) {
             this.maxEvaluations = maxEvaluations;
-            this.deadline = System.nanoTime() + (long) (maxSeconds * 1e9);
+            this.start = System.nanoTime();
+            this.deadline = start + (long) (maxSeconds * 1e9);
             this.minimize = minimize;
             this.target = target;
             this.best = minimize ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
@@ -255,9 +273,20 @@ public final class Bench {
             evaluations++;
             if (minimize ? value < best : value > best) {
                 best = value;
+                if (firstHitEvaluations < 0 && reached()) {
+                    firstHitEvaluations = evaluations;
+                    firstHitSeconds = (System.nanoTime() - start) / 1e9;
+                }
                 return true;
             }
             return false;
+        }
+
+        /** The "first_hit" field of a single-objective run. */
+        String firstHit() {
+            if (firstHitEvaluations < 0) return "null";
+            return "{\"evaluations\":" + firstHitEvaluations + ",\"time_s\":"
+                + String.format(Locale.ROOT, "%.6f", firstHitSeconds) + "}";
         }
 
         boolean reached() {
@@ -283,43 +312,6 @@ public final class Bench {
     // ---------------------------------------------------------------------------------------------
     // Operators Jenetics doesn't have (for the matched scenarios only)
     // ---------------------------------------------------------------------------------------------
-
-    /**
-     * DEAP's mutation in eaSimple: with probability `individualRate` a child is mutated, and then
-     * each bit flips with probability `geneRate`; a mutated child is evaluated again. (Jenetics'
-     * Mutator selects individuals, chromosomes and genes each with p^(1/3), and its BitGene
-     * mutation draws a new random bit instead of flipping it.)
-     */
-    static final class MatchedBitFlip implements Alterer<BitGene, Double> {
-        final double individualRate;
-        final double geneRate;
-
-        MatchedBitFlip(double individualRate, double geneRate) {
-            this.individualRate = individualRate;
-            this.geneRate = geneRate;
-        }
-
-        @Override
-        public AltererResult<BitGene, Double> alter(Seq<Phenotype<BitGene, Double>> population, long generation) {
-            RandomGenerator random = RandomRegistry.random();
-            MSeq<Phenotype<BitGene, Double>> result = MSeq.of(population);
-            int mutations = 0;
-            for (int i = 0; i < result.length(); i++) {
-                if (random.nextDouble() >= individualRate) continue;
-                BitChromosome chromosome = result.get(i).genotype().chromosome().as(BitChromosome.class);
-                int length = chromosome.length();
-                BitSet bits = chromosome.toBitSet();
-                for (int j = 0; j < length; j++) {
-                    if (random.nextDouble() < geneRate) {
-                        bits.flip(j);
-                        mutations++;
-                    }
-                }
-                result.set(i, Phenotype.of(Genotype.of(BitChromosome.of(bits, length)), generation));
-            }
-            return new AltererResult<>(result.toISeq(), mutations);
-        }
-    }
 
     /**
      * Polynomial mutation (Deb), with probability `rate` per gene and distribution index `eta`, as
@@ -400,14 +392,15 @@ public final class Bench {
      * `steadyGenerations` > 0, an attempt also ends after that many generations without a better
      * best fitness (Limits.bySteadyFitness, the convergence criterion of the documented example),
      * and the run starts again from a new random population, the generator seeded with
-     * seed * 1000 + restart (rule 2.2); the budget keeps the best and counts every evaluation.
+     * (seed + 1) * 1,000,000 + restart (rule 2.2); the budget keeps the best and counts every
+     * evaluation.
      */
     static <G extends Gene<?, G>, C extends Comparable<? super C>> long evolve(
             Engine<G, C> engine, Budget budget, List<EvolutionResult<G, C>> last, int steadyGenerations,
             long seed) {
         long generations = 0;
         for (int restart = 0; ; restart++) {
-            if (restart > 0) seed(seed * 1000 + restart);
+            if (restart > 0) seed((seed + 1) * 1_000_000 + restart);
             long[] attempt = {0};
             var stream = engine.stream();
             if (steadyGenerations > 0) stream = stream.limit(Limits.bySteadyFitness(steadyGenerations));
@@ -452,19 +445,24 @@ public final class Bench {
                 minimize[0] = false;
                 target[0] = size;
                 if (args.mode().equals("matched")) {
-                    // as DEAP's eaSimple: population 300, tournament of 3, two-point crossover,
-                    // bit-flip with probability 1 / size on 20% of the children, no elitism.
+                    // as DEAP's eaSimple, with Jenetics' own components: population 300, every
+                    // individual an offspring (no survivors, so generational without elitism),
+                    // TournamentSelector(3) (with replacement), two-point crossover
+                    // (MultiPointCrossover with 2 points), Mutator, no maximal age.
                     // Differences: Jenetics' crossover picks each individual with probability p
                     // and mates it with a random other one (DEAP: consecutive pairs with
                     // probability 0.5); p = 0.25 gives DEAP's expected number of crossovers
-                    // (N / 2 pairs * 0.5). The mutation is the custom MatchedBitFlip above.
+                    // (N / 2 pairs * 0.5). Jenetics has no bit-flip mutation: its Mutator(p)
+                    // gives a bit a new random value (a flip half the time), picking the
+                    // individual, the chromosome and the bit each with p^(1/3); p = 0.4 / size
+                    // gives DEAP's expected number of flipped bits per child (0.2 * size * 1 / size).
                     solvers.add(new Solver("ga", (budget, seed) -> evolve(
                         Engine.builder((Genotype<BitGene> gt) -> countOnes(gt, budget),
                                 Genotype.of(BitChromosome.of(size, 0.5)))
                             .populationSize(300)
                             .offspringFraction(1.0)
                             .offspringSelector(new TournamentSelector<>(3))
-                            .alterers(new MultiPointCrossover<>(0.25, 2), new MatchedBitFlip(0.2, 1.0 / size))
+                            .alterers(new MultiPointCrossover<>(0.25, 2), new Mutator<>(0.4 / size))
                             .maximalPhenotypeAge(Long.MAX_VALUE / 2)
                             .executor(Runnable::run)
                             .build(),
@@ -552,10 +550,10 @@ public final class Bench {
         for (long seed = args.seedFrom(); seed <= args.seedTo(); seed++) {
             for (Solver solver : solvers) {
                 seed(seed);
+                // the clock starts here (Budget.start), before the engine creates its population
                 Budget budget = new Budget(args.maxEvaluations(), args.maxSeconds(), minimize[0], target[0]);
-                long start = System.nanoTime();
                 long generations = solver.solver().run(budget, seed);
-                double time = (System.nanoTime() - start) / 1e9;
+                double time = (System.nanoTime() - budget.start) / 1e9;
                 if (!print) continue;
                 // the continuous problems report the solutions evaluated outside the bounds
                 String outside = realProblem(args.problem(), args.size()) != null
@@ -566,7 +564,7 @@ public final class Bench {
                     + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
                     + ",\"generations\":" + generations + ",\"evaluations\":" + budget.evaluations
                     + ",\"best\":" + number(budget.best) + ",\"target\":" + number(target[0])
-                    + ",\"success\":" + budget.reached() + outside
+                    + ",\"success\":" + budget.reached() + ",\"first_hit\":" + budget.firstHit() + outside
                     + ",\"solution\":" + json(budget.solution) + "}");
             }
         }
@@ -627,8 +625,9 @@ public final class Bench {
                     return vectors.newVec(problem.function().apply(x));
                 };
                 List<EvolutionResult<DoubleGene, Vec<double[]>>> last = new ArrayList<>();
-                long start = System.nanoTime();
+                // the clock started with the budget, above
                 long generations;
+                double time;
                 Seq<Phenotype<DoubleGene, Vec<double[]>>> result;
                 {
                     // NSGA-II with the matched settings, built from the Jenetics engine and the
@@ -640,11 +639,12 @@ public final class Bench {
                     // are NSGA-II's selection of N from them. The parents of the offspring are
                     // drawn from those same N by UFTournamentSelector, the crowded binary
                     // tournament (with unique fitnesses) of Fortin & Parizeau 2013.
-                    // Differences: the initial population has 2N random members; Jenetics'
-                    // SimulatedBinaryCrossover (η 15) changes one of the two parents only, so
-                    // probability 0.45 per individual gives NSGA-II's expected number of
-                    // crossovers (N / 2 pairs * 0.9); polynomial mutation (η 20, 1 / n) is the
-                    // custom PolynomialMutator above.
+                    // SBX is Jenetics' SimulatedBinaryCrossover (η 15) at the matched rate 0.9: it
+                    // picks each individual with that probability and mates it with a random other
+                    // one, and writes one child only, into one of the two mates (the other stays
+                    // unchanged, but is evaluated again), as the library does.
+                    // Differences: the initial population has 2N random members; polynomial
+                    // mutation (η 20, 1 / n) is the custom PolynomialMutator above.
                     NSGA2Selector<DoubleGene, Vec<double[]>> survival = NSGA2Selector.ofVec();
                     UFTournamentSelector<DoubleGene, Vec<double[]>> tournament = UFTournamentSelector.ofVec();
                     Selector<DoubleGene, Vec<double[]>> parents =
@@ -655,11 +655,12 @@ public final class Bench {
                         .offspringSize(population)
                         .offspringSelector(parents)
                         .survivorsSelector(survival)
-                        .alterers(new SimulatedBinaryCrossover<>(0.45, 15.0), new PolynomialMutator<>(1.0 / n, 20.0))
+                        .alterers(new SimulatedBinaryCrossover<>(0.9, 15.0), new PolynomialMutator<>(1.0 / n, 20.0))
                         .maximalPhenotypeAge(Long.MAX_VALUE / 2)
                         .executor(Runnable::run)
                         .build();
                     generations = evolve(engine, budget, last);
+                    time = (System.nanoTime() - budget.start) / 1e9;
                     // the last population holds N survivors and N children: NSGA-II's final
                     // selection of N from them is the final population
                     var end = last.get(0);
@@ -675,7 +676,6 @@ public final class Bench {
                     solutions.add(x);
                 }
                 List<Integer> front = nonDominated(points);
-                double time = (System.nanoTime() - start) / 1e9;
                 if (!print) continue;
                 StringBuilder frontJson = new StringBuilder("[");
                 StringBuilder solutionsJson = new StringBuilder("[");
