@@ -29,6 +29,12 @@ Nothing else ends a run.
 
 A user with time left would do the same. A converged method with its criterion turned off would only spend the rest of the budget where it's stuck.
 
+Which criteria count:
+- **They count** when they're part of the method's own settings, or when the docs' example for the problem type sets them.
+- **They count** when they stay in effect after the budget is set the documented way.
+- **They don't count** when they're a fallback that the documented way of setting a budget replaces. pymoo's default termination, for example, is replaced by `termination=("n_evals", N)`.
+- **Matched scenarios have none:** they run the matched configuration, which defines no convergence criterion.
+
 2.3. A library that checks the stop only between generations may go past the target or the budget by at most one generation. **[checked]** Evaluations beyond the budget plus one generation make the run invalid.
 
 2.4. **Only inside the bounds.** A problem is defined on its box of bounds, and every solution a method evaluates must lie inside it. The library's own bound handling is used: clipping, repair, a transformation or a bounded operator. The page says which. **[checked]** Each run of a continuous or multi-objective problem reports `outside`, the number of evaluated solutions outside the bounds, counted by the adapter's own counter, and it must be 0.
@@ -77,7 +83,8 @@ For each method, the adapter cites where the library recommends it: a page of th
 **The docs decide, not our tests.** Where a library documents several methods or settings, the choice follows what the docs say, in this order:
 1. a preference they state;
 2. their example for that problem type;
-3. otherwise, the default.
+3. otherwise, the default;
+4. with no preference, no example and no default, the first they list.
 
 The separate test runs are shown on the page, but they never pick a method or a setting.
 
