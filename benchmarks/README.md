@@ -5,6 +5,7 @@
 | Library | Language | Version | Solvers benchmarked |
 |---|---|---|---|
 | genoxide | Rust | this repository | GA, DE, CMA-ES, local search; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
+| genoxide (Python) | Python (Rust core) | this repository ([python/](../python)) | the same solvers and settings as genoxide, with Python fitness functions |
 | [genetic_algorithm](https://crates.io/crates/genetic_algorithm) | Rust | 0.27.3 | GA, hill climbing |
 | [radiate](https://crates.io/crates/radiate) | Rust | 1.3.1 | GA; NSGA-II/III |
 | [moors](https://crates.io/crates/moors) | Rust | 0.2.11 | GA; NSGA-II/III, SPEA2, AGE-MOEA, IBEA, REVEA |
