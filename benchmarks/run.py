@@ -63,7 +63,7 @@ ADAPTERS = {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "genoxide_python" / "bench.py")],
         # the package of this repository: its version and commit
         "version": ("python", "genoxide"),
-        "language": "Python (Rust core)",
+        "language": "Rust via Python",
     },
     "genetic_algorithm": {
         "build": ["cargo", "build", "--release", "--quiet", "--manifest-path", str(RUST_ADAPTER / "Cargo.toml")],

@@ -19,14 +19,14 @@ genoxide = "0.6"
 
 ## Benchmarks
 
-genoxide against 15 other libraries in Rust, C++, Python, Java and Julia, on 9 single-objective and 5 multi-objective scenarios:
+genoxide, and its Python package, against 15 other libraries in Rust, C++, Python, Java and Julia, on 9 single-objective and 5 multi-objective scenarios:
 - **Rust:** genetic_algorithm, radiate, moors
 - **C++:** openGA, pygmo (pagmo)
 - **Python:** DEAP, pymoo, PyGAD, pycma, Nevergrad, SciPy
 - **Java:** Jenetics, jMetal
 - **Julia:** Evolutionary.jl, Metaheuristics.jl
 
-Measured on 2026-09-25 with genoxide 0.5.1, on Linux with an Intel Core Ultra 7 265K, single-threaded, 10 seeds per scenario. The charts show medians.
+Measured on 2026-09-25 with genoxide 0.6.0, on Linux with an Intel Core Ultra 7 265K, single-threaded, 10 seeds per scenario. The other libraries were measured the same day on the same machine, and only the libraries that change are measured again. The charts show medians.
 
 ![Time to target](docs/benchmarks/time_to_target.svg)
 
@@ -35,22 +35,27 @@ Measured on 2026-09-25 with genoxide 0.5.1, on Linux with an Intel Core Ultra 7 
   | Scenario | genoxide | Next fastest | DEAP |
   |---|---|---|---|
   | OneMax 1000 | 15 ms | 59 ms (Evolutionary.jl) | 15.8 s |
-  | Rastrigin 30 | 39 ms | 70 ms (pygmo's SaDE) | 1.25 s (its CMA-ES, 8 of 10 runs) |
-  | Ackley 30 | 11 ms | 30 ms (Evolutionary.jl's ES) | 0.7 s (its CMA-ES) |
+  | Rastrigin 30 | 15 ms | 70 ms (pygmo's SaDE) | 1.25 s (its CMA-ES, 8 of 10 runs) |
+  | Rosenbrock 10 | 1.6 ms | 12 ms (Metaheuristics.jl's ECA) | 107 ms (its CMA-ES) |
+  | Ackley 30 | 6.3 ms | 30 ms (Evolutionary.jl's ES) | 0.7 s (its CMA-ES) |
 
   On OneMax 100, Evolutionary.jl's GA is slightly faster: 0.85 ms against 1.0 ms (matched), and 0.42 ms against 0.48 ms (idiomatic).
 - **Cost per evaluation:** genoxide needs 3,400 CPU instructions per OneMax 1000 evaluation, fitness function included:
   - 2.6 times fewer than genetic_algorithm;
   - 10 to 19 times fewer than moors, openGA and radiate;
   - 90 to 1,300 times fewer than pygmo, pymoo, PyGAD and DEAP.
-- **Evaluations to target:** genoxide needs the fewest in the matched OneMax scenarios, N-Queens and Ackley 30, but not everywhere:
-  - **Rastrigin:** pygmo's SaDE needs about 5 times fewer (4,780 against genoxide's 24,782 on Rastrigin 10, and 15,570 against 81,000 on Rastrigin 30).
+- **Evaluations to target:** genoxide needs the fewest in the matched OneMax scenarios, N-Queens, Rastrigin 10 and Ackley 30, but not everywhere:
+  - **Rastrigin 30:** pygmo's SaDE needs 15,570 against genoxide's 28,280. Its small population and exponential crossover suit separable functions like this one.
   - **Rosenbrock:** pycma's CMA-ES needs 4,491 against 5,945, and genoxide's GA doesn't reach the target.
   - **OneMax 100 (idiomatic):** pygmo needs 1,610 against 3,183.
 
   With an expensive fitness function, those libraries would win there.
-- **Multi-objective:** with the same settings, genoxide's SMS-EMOA is within 0.0013 of the best hypervolume in all five scenarios. It ranks 3rd to 5th of 36 to 40 algorithm runs, and the best is the SMS-EMOA of jMetal or Metaheuristics.jl.
-  - **Speed:** genoxide's NSGA-II takes 24 to 33 ms per run, against about 0.55 s for pymoo and 1.3 to 1.4 s for DEAP on ZDT1 and DTLZ2.
+- **The Python package**, with its fitness functions in Python:
+  - **Time to target:** it's second only to genoxide itself on Rastrigin 10, Rastrigin 30 and Ackley 30, at 2.4 ms, 18 ms and 8.1 ms. On OneMax 1000 it takes 81 ms, against 15.8 s for DEAP.
+  - **Cost per evaluation:** 29,000 CPU instructions, most of them the Python fitness function, against 1.0 million for pymoo and 4.4 million for DEAP.
+  - **Multi-objective:** its NSGA-II takes 28 to 40 ms per run, against 0.55 to 0.87 s for pymoo, with the same hypervolumes.
+- **Multi-objective:** with the same settings, genoxide's SMS-EMOA is within 0.0013 of the best hypervolume in all five scenarios. The best is the SMS-EMOA of jMetal or Metaheuristics.jl.
+  - **Speed:** genoxide's NSGA-II takes 25 to 34 ms per run, against 0.55 to 0.87 s for pymoo and 1.3 to 2.1 s for DEAP.
   - **moors:** only its NSGA-II is as fast, at 21 to 38 ms, with lower hypervolumes in all five scenarios. They're far lower on ZDT3 and DTLZ1. moors evaluates its parents again every generation, so the same budget gives it half the generations.
 
 How they're measured:
