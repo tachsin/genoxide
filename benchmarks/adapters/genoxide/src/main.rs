@@ -20,9 +20,15 @@
 //! - every call of a fitness function is counted by the adapter itself (rule 3), and that count
 //!   is the reported "evaluations"; genoxide's own `Outcome::evaluations()` must be the same, and
 //!   a difference is printed to stderr;
-//! - a run ends at the target, the evaluation budget or the time cap only (rule 2.1): every
-//!   solver here either runs by itself until a stop condition (GA, PSO, local search) or restarts
-//!   by itself when it converges (DE's restarts, CMA-ES with IPOP restarts);
+//! - a run ends at the target, the evaluation budget or the time cap only (rule 2.1). On
+//!   convergence a method starts again (rule 2.2): DE and CMA-ES (IPOP) with their own restarts;
+//!   the others have no convergence criterion but genoxide's stall (10,000 generations without a
+//!   genome to evaluate), after which `solve` starts them again with the seed
+//!   `seed * 1000 + restart`;
+//! - every evaluated solution stays inside the bounds, by genoxide's own bound handling, and the
+//!   adapter counts any outside them ("outside", rule 2.4);
+//! - where the docs offer several methods or settings, a preference they state decides, then
+//!   their example for the problem type, then the default (rule 6.2);
 //! - the clock covers building the algorithm, which creates the random initial population, and
 //!   the whole run (rule 4.1);
 //! - one thread: genoxide's `parallel` feature is off (Cargo.toml), and the engines evaluate
@@ -207,13 +213,6 @@ struct Args {
 }
 
 impl Args {
-    // the budget: the target, the evaluations or the time, whichever comes first (rule 2.1)
-    fn stop(&self, target: f64) -> Stop {
-        Stop::target(target)
-            .or(Stop::evaluations(self.max_evaluations))
-            .or(Stop::time(Duration::from_secs_f64(self.max_seconds)))
-    }
-
     fn header(
         &self,
         solver: &str,
@@ -243,23 +242,37 @@ fn compare_counts(args: &Args, solver: &str, seed: u64, counted: u64, reported: 
 // Single-objective runs
 // ---------------------------------------------------------------------------------------------
 
-/// Builds an algorithm and runs it with `fitness`, counting every call, and prints the run. The
-/// clock covers building the algorithm (its random initial population) and the run.
+/// Builds an algorithm with `build(seed)` and runs it with `fitness`, counting every call and every
+/// evaluated genome outside the bounds (`inside`), and prints the run. The clock covers building
+/// the algorithm (its random initial population) and the run.
+///
+/// Rule 2.2: genoxide's engine ends a run by itself only with `StopReason::Stalled`, when for
+/// 10,000 generations in a row every child was a copy of a parent, so nothing new was evaluated
+/// (AGENTS.md, Troubleshooting): a convergence criterion. The method then starts again from a new
+/// random start with the seed `seed * 1000 + restart`, keeping the best solution and counting
+/// every evaluation, until the target, the budget or the time cap. CMA-ES (IPOP) and DE restart
+/// by themselves on their own convergence criteria, inside one run.
 fn solve<A, G>(
     args: &Args,
     seed: u64,
     solver: &str,
     target: f64,
-    build: impl FnOnce() -> Result<A>,
+    build: impl Fn(u64) -> Result<A>,
     fitness: fn(&G) -> f64,
+    inside: impl Fn(&G) -> bool + Sync,
 ) -> Result<()>
 where
     A: Algorithm<Genome = G>,
     G: Genome + Json,
 {
-    let calls = AtomicU64::new(0);
+    let maximize = args.problem == "onemax";
+    let better = |a: f64, b: f64| if maximize { a > b } else { a < b };
+    let (calls, outside) = (AtomicU64::new(0), AtomicU64::new(0));
     let counted = |genome: &G| {
         calls.fetch_add(1, Ordering::Relaxed);
+        if !inside(genome) {
+            outside.fetch_add(1, Ordering::Relaxed);
+        }
         fitness(genome)
     };
     // CMA-ES with IPOP restarts doubles its population at each restart, so its last generation
@@ -267,34 +280,71 @@ where
     // other solvers' generations don't grow.
     let (evaluated, last_generation) = (Cell::new(0u64), Cell::new(0u64));
     let start = Instant::now();
-    let mut engine = Engine::new(build()?, counted).stop_when(args.stop(target));
-    if solver == "cma_es" {
-        engine = engine.on_generation(|snapshot| {
-            let evaluations = snapshot.progress().evaluations();
-            last_generation.set(evaluations - evaluated.replace(evaluations));
-        });
+    let (mut best, mut solution) = (f64::NAN, String::new());
+    let (mut generations, mut reported, mut restart) = (0, 0, 0);
+    loop {
+        let attempt_seed = if restart == 0 {
+            seed
+        } else {
+            seed * 1000 + restart
+        };
+        let used = calls.load(Ordering::Relaxed);
+        let left = Duration::from_secs_f64(args.max_seconds).saturating_sub(start.elapsed());
+        evaluated.set(0);
+        let mut engine = Engine::new(build(attempt_seed)?, &counted).stop_when(
+            Stop::target(target)
+                .or(Stop::evaluations(args.max_evaluations - used))
+                .or(Stop::time(left)),
+        );
+        if solver == "cma_es" {
+            engine = engine.on_generation(|snapshot| {
+                let evaluations = snapshot.progress().evaluations();
+                last_generation.set(evaluations - evaluated.replace(evaluations));
+            });
+        }
+        let outcome = engine.run()?;
+        generations += outcome.generations();
+        reported += outcome.evaluations();
+        let score = outcome.best_fitness().score().unwrap_or(f64::NAN);
+        if solution.is_empty() || better(score, best) {
+            (best, solution) = (score, outcome.best_genome().json());
+        }
+        let used = calls.load(Ordering::Relaxed);
+        if outcome.stop_reason() != StopReason::Stalled
+            || used >= args.max_evaluations
+            || start.elapsed().as_secs_f64() >= args.max_seconds
+        {
+            break;
+        }
+        restart += 1;
     }
-    let outcome = engine.run()?;
     let time_s = start.elapsed().as_secs_f64();
     let evaluations = calls.load(Ordering::Relaxed);
-    compare_counts(args, solver, seed, evaluations, outcome.evaluations());
-    let last_generation = if solver == "cma_es" {
-        format!(",\"last_generation\":{}", last_generation.get())
-    } else {
-        String::new()
-    };
-    let best = outcome.best_fitness().score().unwrap_or(f64::NAN);
-    let success = if args.problem == "onemax" {
+    compare_counts(args, solver, seed, evaluations, reported);
+    let mut extra = String::new();
+    if solver == "cma_es" {
+        extra += &format!(",\"last_generation\":{}", last_generation.get());
+    }
+    if args.problem != "onemax" && args.problem != "nqueens" {
+        extra += &format!(",\"outside\":{}", outside.load(Ordering::Relaxed));
+    }
+    if restart > 0 {
+        extra += &format!(",\"restarts\":{restart}");
+    }
+    let success = if maximize {
         best >= target
     } else {
         best <= target
     };
     println!(
-        "{{{}{last_generation},\"best\":{best:?},\"target\":{target:?},\"success\":{success},\"solution\":{}}}",
-        args.header(solver, seed, time_s, outcome.generations(), evaluations),
-        outcome.best_genome().json(),
+        "{{{}{extra},\"best\":{best:?},\"target\":{target:?},\"success\":{success},\"solution\":{solution}}}",
+        args.header(solver, seed, time_s, generations, evaluations),
     );
     Ok(())
+}
+
+fn anywhere<G>(_: &G) -> bool {
+    true
 }
 
 fn run_onemax(args: &Args, seed: u64) -> Result<()> {
@@ -304,7 +354,7 @@ fn run_onemax(args: &Args, seed: u64) -> Result<()> {
         // the matched settings (benchmarks/README.md), as DEAP's eaSimple: population 300,
         // tournament 3, two-point crossover with probability 0.5, bit-flip with probability
         // 1 / size per gene on 20% of the children, no elitism
-        let build = || {
+        let build = |seed| {
             Ga::builder(Binary::new(size)?)
                 .population_size(300)
                 .select(Tournament::new(3)?)
@@ -316,13 +366,13 @@ fn run_onemax(args: &Args, seed: u64) -> Result<()> {
                 .seed(seed)
                 .build()
         };
-        return solve(args, seed, "ga", target, build, onemax);
+        return solve(args, seed, "ga", target, build, onemax, anywhere);
     }
-    // idiomatic: genoxide's OneMax, the same in examples/one_max.rs (lines 15-21), README.md's
-    // "A first look", AGENTS.md's first program and python/README.md: population 100, tournament
-    // 3, uniform crossover, bit-flip at 1 / length per gene; the default rates (crossover 0.9,
-    // mutation 1) and scheme (generational, elitism 1)
-    let build = || {
+    // idiomatic: genoxide's example for OneMax, the same in examples/one_max.rs (lines 15-21),
+    // README.md's "A first look", AGENTS.md's first program and python/README.md: population
+    // 100, tournament 3, uniform crossover, bit-flip at 1 / length per gene; the default rates
+    // (crossover 0.9, mutation 1) and scheme (generational, elitism 1)
+    let build = |seed| {
         Ga::builder(Binary::new(size)?)
             .population_size(100)
             .select(Tournament::new(3)?)
@@ -331,15 +381,15 @@ fn run_onemax(args: &Args, seed: u64) -> Result<()> {
             .seed(seed)
             .build()
     };
-    solve(args, seed, "ga", target, build, onemax)
+    solve(args, seed, "ga", target, build, onemax, anywhere)
 }
 
 fn run_nqueens(args: &Args, seed: u64) -> Result<()> {
     let size = args.size;
-    // examples/n_queens.rs (lines 29-37), also AGENTS.md's permutation template and its scheme
-    // table ("(μ+λ): mutation-only search (with NoCrossover)"): (20 + 20) with tournament 2, no
-    // crossover and swap mutation
-    let build = || {
+    // genoxide's example for N-Queens, examples/n_queens.rs (lines 29-37), also AGENTS.md's
+    // permutation template and its scheme table ("(μ+λ): mutation-only search (with
+    // NoCrossover)"): (20 + 20) with tournament 2, no crossover and swap mutation
+    let build = |seed| {
         Ga::builder(Permutation::new(size)?)
             .population_size(20)
             .select(Tournament::new(2)?)
@@ -350,13 +400,13 @@ fn run_nqueens(args: &Args, seed: u64) -> Result<()> {
             .seed(seed)
             .build()
     };
-    solve(args, seed, "ga", 0.0, build, nqueens)?;
+    solve(args, seed, "ga", 0.0, build, nqueens, anywhere)?;
 
-    // the N-Queens example of LocalSearch's rustdoc (src/algorithm/local_search.rs, lines
-    // 110-115): hill climbing with swap neighbors, the best of 4 per step, and the default
-    // acceptance NotWorse, which moves to equal neighbors across plateaus. AGENTS.md: local search
-    // "often beats a GA on permutations"
-    let build = || {
+    // local search, which AGENTS.md prefers on permutations ("it often beats a GA on
+    // permutations"), as the rustdoc's example for N-Queens (src/algorithm/local_search.rs,
+    // lines 110-115) sets it: hill climbing with swap neighbors, the best of 4 per step, and the
+    // default acceptance NotWorse, which moves to equal neighbors across plateaus
+    let build = |seed| {
         LocalSearch::builder(Permutation::new(size)?)
             .neighbor(SwapMutation::new())
             .neighbors(4)
@@ -364,11 +414,11 @@ fn run_nqueens(args: &Args, seed: u64) -> Result<()> {
             .seed(seed)
             .build()
     };
-    solve(args, seed, "local_search", 0.0, build, nqueens)?;
+    solve(args, seed, "local_search", 0.0, build, nqueens, anywhere)?;
 
-    // tabu search, as python/examples/n_queens.py (N-Queens 64): swap neighbors, 32 per step,
-    // tenure 20. AGENTS.md: tabu search walks out of local optima; "use several neighbors"
-    let build = || {
+    // tabu search, the Python package's example for N-Queens (python/examples/n_queens.py, lines
+    // 17-24): swap neighbors, 32 per step, tenure 20
+    let build = |seed| {
         LocalSearch::builder(Permutation::new(size)?)
             .neighbor(SwapMutation::new())
             .neighbors(32)
@@ -377,12 +427,15 @@ fn run_nqueens(args: &Args, seed: u64) -> Result<()> {
             .seed(seed)
             .build()
     };
-    solve(args, seed, "tabu_search", 0.0, build, nqueens)
+    solve(args, seed, "tabu_search", 0.0, build, nqueens, anywhere)
 }
 
 const REAL_TARGET: f64 = 0.01;
 
-// the real-valued problems: Rastrigin and Ackley (multimodal), Rosenbrock (unimodal-ish)
+// the real-valued problems: Rastrigin and Ackley (multimodal), Rosenbrock (unimodal-ish). Every
+// solver keeps its genomes inside the bounds itself (rule 2.4): the GA's uniform crossover
+// exchanges genes and its polynomial mutation is bounded; CMA-ES draws a sample outside the
+// bounds again, up to 100 times, and then clips it; DE and PSO stop at the bounds.
 fn run_real(args: &Args, seed: u64) -> Result<()> {
     let (bounds, fitness): (std::ops::RangeInclusive<f64>, fn(&Reals) -> f64) =
         match args.problem.as_str() {
@@ -392,57 +445,70 @@ fn run_real(args: &Args, seed: u64) -> Result<()> {
             other => unreachable!("unknown problem {other}"),
         };
     let real = || Real::uniform(args.size, bounds.clone());
+    let inside = |genome: &Reals| genome.iter().all(|x| bounds.contains(x));
 
     // CMA-ES, AGENTS.md: "the strongest general choice for continuous problems", with the
     // defaults ("nothing needs tuning": population 4 + 3 ln n, initial step 0.3 of each range)
-    // and IPOP restarts, "for multimodal functions" (AGENTS.md's CMA-ES template, on Rastrigin;
-    // python/README.md; Restarts::Ipop in src/algorithm/cmaes.rs, "like Rastrigin"). Rosenbrock
-    // runs with them too: without restarts a converged CMA-ES samples around the same point
-    // until the budget, and rule 2.2 asks for the library's restarts
-    let cmaes = || {
+    // and IPOP restarts: "for multimodal functions, add restarts" (AGENTS.md), and the rustdoc of
+    // Restarts::Ipop says it "suits multimodal functions with a global structure, like
+    // Rastrigin", as AGENTS.md's CMA-ES template and python/README.md run it. Rosenbrock runs
+    // with them too: rule 2.2 restarts a converged method with the library's restarts
+    let cmaes = |seed| {
         Cmaes::builder(real()?)
             .restarts(cmaes::Restarts::Ipop)
             .minimize()
             .seed(seed)
             .build()
     };
-    // differential evolution with its defaults, AGENTS.md's DE template (on Rastrigin):
-    // current-to-pbest/1 with an archive, SHADE's adaptation, the number of genes + 10
-    // individuals, and restarts when the population converges or stalls
-    let de = || De::builder(real()?).minimize().seed(seed).build();
+    // differential evolution, AGENTS.md: "often needs far fewer evaluations than a GA", with the
+    // builder's defaults, as AGENTS.md's DE template runs Rastrigin: current-to-pbest/1 with an
+    // archive, SHADE's adaptation, the number of genes + 10 individuals, and restarts when the
+    // population converges or stalls
+    let de = |seed| De::builder(real()?).minimize().seed(seed).build();
 
     if args.problem == "rosenbrock" {
-        solve(args, seed, "cma_es", REAL_TARGET, cmaes, fitness)?;
-        solve(args, seed, "de", REAL_TARGET, de, fitness)?;
-        // particle swarm, AGENTS.md's PSO template (on Rosenbrock, target 0.01): 40 particles
-        // ("20 to 50"), the default global topology and constriction coefficients
-        let pso = || {
+        solve(args, seed, "cma_es", REAL_TARGET, cmaes, fitness, inside)?;
+        solve(args, seed, "de", REAL_TARGET, de, fitness, inside)?;
+        // particle swarm, AGENTS.md's example for this problem: its PSO template is Rosenbrock
+        // with the target 0.01, with 40 particles ("20 to 50"), the default global topology and
+        // constriction coefficients
+        let pso = |seed| {
             Pso::builder(real()?)
                 .population_size(40)
                 .minimize()
                 .seed(seed)
                 .build()
         };
-        return solve(args, seed, "pso", REAL_TARGET, pso, fitness);
+        return solve(args, seed, "pso", REAL_TARGET, pso, fitness, inside);
     }
 
-    // the GA of examples/rastrigin.rs (lines 27-36): population 100, tournament 3, uniform
-    // crossover, polynomial mutation with η 20 at 1 / length per gene ("the usual rate"), elitism
-    // 2; single-threaded like every adapter
-    let ga = || {
-        Ga::builder(real()?)
-            .population_size(100)
-            .select(Tournament::new(3)?)
-            .crossover(UniformCrossover::new())
-            .mutate(PolynomialMutation::per_gene(1.0 / args.size as f64, 20.0)?)
-            .scheme(Scheme::Generational { elitism: 2 })
-            .minimize()
-            .seed(seed)
+    // the GA as an island model, which AGENTS.md prefers on multimodal problems: "more diverse
+    // than one large population, and often faster on multimodal problems". Its template, on
+    // Rastrigin: 4 islands of 25, each with its own seed, tournament 3, uniform crossover,
+    // polynomial mutation with η 20 at 0.1 per gene, the default scheme (elitism 1); a ring,
+    // migration every 10 generations, 2 migrants
+    let islands = |seed: u64| {
+        let islands = (0..4)
+            .map(|island| {
+                Ga::builder(real()?)
+                    .population_size(25)
+                    .select(Tournament::new(3)?)
+                    .crossover(UniformCrossover::new())
+                    .mutate(PolynomialMutation::per_gene(0.1, 20.0)?)
+                    .minimize()
+                    .seed(4 * seed + island)
+                    .build()
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Islands::builder(islands)
+            .topology(genoxide::algorithm::islands::Topology::Ring)
+            .interval(10)
+            .migrants(2)
             .build()
     };
-    solve(args, seed, "ga", REAL_TARGET, ga, fitness)?;
-    solve(args, seed, "de", REAL_TARGET, de, fitness)?;
-    solve(args, seed, "cma_es", REAL_TARGET, cmaes, fitness)
+    solve(args, seed, "islands", REAL_TARGET, islands, fitness, inside)?;
+    solve(args, seed, "de", REAL_TARGET, de, fitness, inside)?;
+    solve(args, seed, "cma_es", REAL_TARGET, cmaes, fitness, inside)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -462,9 +528,14 @@ fn solve_front<A, const M: usize>(
 where
     A: genoxide::multi::MultiObjectiveAlgorithm<M, Genome = Reals>,
 {
-    let calls = AtomicU64::new(0);
+    // every variable is in [0, 1]: SBX and polynomial mutation keep the genes inside their
+    // bounds (rule 2.4), and the adapter counts any evaluated genome outside them
+    let (calls, outside) = (AtomicU64::new(0), AtomicU64::new(0));
     let counted = |genome: &Reals| {
         calls.fetch_add(1, Ordering::Relaxed);
+        if !genome.iter().all(|x| (0.0..=1.0).contains(x)) {
+            outside.fetch_add(1, Ordering::Relaxed);
+        }
         fitness(genome)
     };
     let start = Instant::now();
@@ -477,6 +548,9 @@ where
     let time_s = start.elapsed().as_secs_f64();
     let evaluations = calls.load(Ordering::Relaxed);
     compare_counts(args, solver, seed, evaluations, outcome.evaluations());
+    // none of these algorithms has a convergence criterion (rule 2.2). genoxide's stall, 10,000
+    // generations in a row without a genome to evaluate, would end a run before its budget, which
+    // run.py check reports; it happened in no test run
     // the non-dominated individuals of the final population, each with its solution
     let (front, solutions): (Vec<String>, Vec<String>) = outcome
         .front()
@@ -487,8 +561,9 @@ where
         })
         .unzip();
     println!(
-        "{{{},\"front\":[{}],\"solutions\":[{}]}}",
+        "{{{},\"outside\":{},\"front\":[{}],\"solutions\":[{}]}}",
         args.header(solver, seed, time_s, outcome.generations(), evaluations),
+        outside.load(Ordering::Relaxed),
         front.join(","),
         solutions.join(","),
     );

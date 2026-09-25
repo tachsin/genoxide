@@ -12,9 +12,10 @@ from stdin and prints its value (or its list of objectives), with the fitness fu
 third compares the fitness functions with problems.py at random points.
 
 The solvers and their settings are the Rust genoxide adapter's (../genoxide/src/main.rs), through
-the Python API; where genoxide's docs recommend each of them, and the separate test runs:
-docs/benchmarks/libraries/genoxide_python.md. The fitness functions are written as
-python/README.md and python/examples/ write them:
+the Python API, except the island model, which the package doesn't have: its GA runs as one
+population, with the settings of examples/rastrigin.rs. Where genoxide's docs recommend each of
+them, and the separate test runs: docs/benchmarks/libraries/genoxide_python.md. The fitness
+functions are written as python/README.md and python/examples/ write them:
 - `batch=True` with vectorized numpy functions, called with a generation at a time: what
   python/README.md recommends for vectorized numpy ("one call per generation"), as in
   python/examples/rastrigin.py and zdt1.py; used by the GA, DE, CMA-ES, PSO and the
@@ -28,8 +29,13 @@ The rules (docs/benchmarks/rules.md), as this adapter follows them:
 - each fitness function counts the genomes it evaluates itself (rule 3): that count is the
   reported "evaluations", and the package's own `result.evaluations` must be the same (a
   difference is printed to stderr);
-- a run ends at the target, the evaluation budget or the time cap only (rule 2.1); the solvers
-  either run until a stop condition or restart by themselves (DE, CMA-ES with IPOP);
+- a run ends at the target, the evaluation budget or the time cap only (rule 2.1). On convergence
+  a method starts again (rule 2.2): DE and CMA-ES (IPOP) with their own restarts; the others have
+  no convergence criterion but the package's stall ("stalled": 10,000 generations without a
+  genome to evaluate), after which the adapter starts them again with the seed
+  `seed * 1000 + restart`, keeping the best and counting every evaluation;
+- every evaluated solution stays inside the bounds, by genoxide's own bound handling, and the
+  fitness functions count any outside them ("outside", rule 2.4);
 - the clock covers creating the algorithm and the whole run, whose first step creates the random
   initial population (rule 4.1);
 - one thread: `parallel` is off, and numpy's BLAS runs with 1 thread, set below (rule 4.3);
@@ -52,10 +58,19 @@ import numpy as np
 import genoxide as gx
 
 # -------------------------------------------------------------------------------------------------
-# Fitness functions, identical to problems.py. Each counts the genomes it evaluates in EVALUATIONS.
+# Fitness functions, identical to problems.py. Each counts the genomes it evaluates in EVALUATIONS,
+# and the real-valued ones count the genomes outside the bounds in OUTSIDE (rule 2.4).
 # -------------------------------------------------------------------------------------------------
 
 EVALUATIONS = 0
+OUTSIDE = 0
+
+
+def count(x, low, high):
+    """Counts the rows of x, and those with a gene outside [low, high]."""
+    global EVALUATIONS, OUTSIDE
+    EVALUATIONS += len(x)
+    OUTSIDE += int(np.count_nonzero(((x < low) | (x > high)).any(axis=1)))
 
 
 def onemax(bits):
@@ -104,22 +119,19 @@ SHIFT = 2 * ((37 * np.arange(1000) + 11) % 101) / 101 - 1
 
 
 def rastrigin_batch(x):
-    global EVALUATIONS
-    EVALUATIONS += len(x)
+    count(x, -5.12, 5.12)
     y = x - SHIFT[: x.shape[1]]
     return 10 * x.shape[1] + np.sum(y**2 - 10 * np.cos(2 * np.pi * y), axis=1)
 
 
 def rosenbrock_batch(x):
-    global EVALUATIONS
-    EVALUATIONS += len(x)
+    count(x, -5.0, 10.0)
     a, b = x[:, :-1], x[:, 1:]
     return np.sum(100 * (b - a * a) ** 2 + (1 - a) ** 2, axis=1)
 
 
 def ackley_batch(x):
-    global EVALUATIONS
-    EVALUATIONS += len(x)
+    count(x, -32.768, 32.768)
     n = x.shape[1]
     y = x - SHIFT[:n]
     squares = np.sum(y**2, axis=1) / n
@@ -140,22 +152,19 @@ def zdt_g(x):
 
 
 def zdt1_batch(x):
-    global EVALUATIONS
-    EVALUATIONS += len(x)
+    count(x, 0.0, 1.0)
     f1, g = x[:, 0], zdt_g(x)
     return np.column_stack([f1, g * (1 - np.sqrt(f1 / g))])
 
 
 def zdt2_batch(x):
-    global EVALUATIONS
-    EVALUATIONS += len(x)
+    count(x, 0.0, 1.0)
     f1, g = x[:, 0], zdt_g(x)
     return np.column_stack([f1, g * (1 - (f1 / g) ** 2)])
 
 
 def zdt3_batch(x):
-    global EVALUATIONS
-    EVALUATIONS += len(x)
+    count(x, 0.0, 1.0)
     f1, g = x[:, 0], zdt_g(x)
     return np.column_stack([f1, g * (1 - np.sqrt(f1 / g) - f1 / g * np.sin(10 * np.pi * f1))])
 
@@ -175,15 +184,13 @@ def dtlz(x, scale, objectives, head, last):
 
 
 def dtlz2_batch(x, objectives=3):
-    global EVALUATIONS
-    EVALUATIONS += len(x)
+    count(x, 0.0, 1.0)
     g = np.sum((x[:, objectives - 1:] - 0.5) ** 2, axis=1)
     return dtlz(x, 1 + g, objectives, lambda v: np.cos(v * np.pi / 2), lambda v: np.sin(v * np.pi / 2))
 
 
 def dtlz1_batch(x, objectives=3):
-    global EVALUATIONS
-    EVALUATIONS += len(x)
+    count(x, 0.0, 1.0)
     tail = x[:, objectives - 1:]
     g = 100 * (tail.shape[1] + np.sum((tail - 0.5) ** 2 - np.cos(20 * np.pi * (tail - 0.5)), axis=1))
     return dtlz(x, 0.5 * (1 + g), objectives, lambda v: v, lambda v: 1 - v)
@@ -200,19 +207,20 @@ FRONT_PROBLEMS = {
 }
 
 # -------------------------------------------------------------------------------------------------
-# Solvers: the Rust genoxide adapter's, with the same settings and citations
+# Solvers: the Rust genoxide adapter's, with the same settings and citations. Each is made by a
+# function of the seed, so a restart can make it again with another seed.
 # -------------------------------------------------------------------------------------------------
 
 REAL_TARGET = 0.01
 
 
-def onemax_solvers(size, mode, seed):
-    """[(solver, make the algorithm, fitness, batch)]"""
+def onemax_solvers(size, mode):
+    """[(solver, make the algorithm from a seed, fitness, batch)]"""
     if mode == "matched":
         # the matched settings (benchmarks/README.md), as DEAP's eaSimple: population 300,
         # tournament 3, two-point crossover with probability 0.5, bit-flip with probability
         # 1 / size per gene on 20% of the children, no elitism; a Python function per genome
-        return [("ga", lambda: gx.Ga(
+        return [("ga", lambda seed: gx.Ga(
             gx.Binary(size),
             population_size=300,
             select=gx.Tournament(3),
@@ -223,10 +231,10 @@ def onemax_solvers(size, mode, seed):
             scheme=gx.Generational(elitism=0),
             seed=seed,
         ), onemax, False)]
-    # idiomatic: genoxide's OneMax, the same in python/README.md's first example,
+    # idiomatic: genoxide's example for OneMax, the same in python/README.md's first example,
     # examples/one_max.rs and AGENTS.md: population 100, tournament 3, uniform crossover, bit-flip
     # at 1 / length per gene; the default rates and scheme (generational, elitism 1)
-    return [("ga", lambda: gx.Ga(
+    return [("ga", lambda seed: gx.Ga(
         gx.Binary(size),
         population_size=100,
         select=gx.Tournament(3),
@@ -236,11 +244,11 @@ def onemax_solvers(size, mode, seed):
     ), onemax_batch, True)]
 
 
-def nqueens_solvers(size, seed):
+def nqueens_solvers(size):
     return [
-        # examples/n_queens.rs, AGENTS.md's permutation template: (20 + 20) with tournament 2, no
-        # crossover and swap mutation
-        ("ga", lambda: gx.Ga(
+        # genoxide's example for N-Queens, examples/n_queens.rs, and AGENTS.md's permutation
+        # template: (20 + 20) with tournament 2, no crossover and swap mutation
+        ("ga", lambda seed: gx.Ga(
             gx.Permutation(size),
             population_size=20,
             select=gx.Tournament(2),
@@ -250,17 +258,19 @@ def nqueens_solvers(size, seed):
             objective="minimize",
             seed=seed,
         ), nqueens_batch, True),
-        # the N-Queens example of LocalSearch's rustdoc: hill climbing with swap neighbors, the
-        # best of 4 per step, the default acceptance NotWorse
-        ("local_search", lambda: gx.LocalSearch(
+        # local search, which AGENTS.md prefers on permutations, as the rustdoc's example for
+        # N-Queens sets it: hill climbing with swap neighbors, the best of 4 per step, the default
+        # acceptance NotWorse
+        ("local_search", lambda seed: gx.LocalSearch(
             gx.Permutation(size),
             neighbor=gx.SwapMutation(),
             neighbors=4,
             objective="minimize",
             seed=seed,
         ), nqueens, False),
-        # python/examples/n_queens.py: tabu search with swap neighbors, 32 per step, tenure 20
-        ("tabu_search", lambda: gx.LocalSearch(
+        # tabu search, the package's example for N-Queens (python/examples/n_queens.py): swap
+        # neighbors, 32 per step, tenure 20
+        ("tabu_search", lambda seed: gx.LocalSearch(
             gx.Permutation(size),
             neighbor=gx.SwapMutation(),
             neighbors=32,
@@ -271,23 +281,26 @@ def nqueens_solvers(size, seed):
     ]
 
 
-def real_solvers(problem, size, seed):
+def real_solvers(problem, size):
     function, low, high = REAL_PROBLEMS[problem]
     genome = gx.Real((low, high), length=size)
     # CMA-ES with its defaults and IPOP restarts: python/README.md's first example and
     # python/examples/rastrigin.py, AGENTS.md's CMA-ES template; for Rosenbrock too (rule 2.2)
-    cmaes = ("cma_es", lambda: gx.Cmaes(genome, restarts="ipop", objective="minimize", seed=seed),
+    cmaes = ("cma_es", lambda seed: gx.Cmaes(genome, restarts="ipop", objective="minimize", seed=seed),
              function, True)
-    # differential evolution with its defaults (AGENTS.md's DE template): SHADE with
+    # differential evolution with the package's defaults (AGENTS.md's DE template): SHADE with
     # current-to-pbest/1 and an archive, the number of genes + 10 individuals, and restarts
-    de = ("de", lambda: gx.De(genome, objective="minimize", seed=seed), function, True)
+    de = ("de", lambda seed: gx.De(genome, objective="minimize", seed=seed), function, True)
     if problem == "rosenbrock":
-        # AGENTS.md's PSO template (on Rosenbrock): 40 particles, the global topology
-        pso = ("pso", lambda: gx.Pso(genome, population_size=40, objective="minimize", seed=seed),
+        # AGENTS.md's example for this problem, its PSO template (on Rosenbrock): 40 particles,
+        # the global topology
+        pso = ("pso", lambda seed: gx.Pso(genome, population_size=40, objective="minimize", seed=seed),
                function, True)
         return [cmaes, de, pso]
-    # the GA of examples/rastrigin.rs: polynomial mutation at the usual rate of 1 / length
-    ga = ("ga", lambda: gx.Ga(
+    # the Rust adapter runs the GA as AGENTS.md's island model, which the package doesn't have:
+    # here it's one population, the GA of examples/rastrigin.rs (polynomial mutation at the
+    # usual rate of 1 / length, elitism 2)
+    ga = ("ga", lambda seed: gx.Ga(
         genome,
         population_size=100,
         select=gx.Tournament(3),
@@ -300,12 +313,12 @@ def real_solvers(problem, size, seed):
     return [ga, de, cmaes]
 
 
-def front_solvers(problem, size, seed):
+def front_solvers(problem, size):
     """The matched settings (benchmarks/README.md): NSGA-II, SPEA2 and SMS-EMOA with SBX with eta
     15 at 0.9 (their default rate) and polynomial mutation with eta 20 at 1 / n; NSGA-III (3
     objectives only, as AGENTS.md presents it) with SBX with eta 30 at 1; MOEA/D with SBX with eta
     20 at 1, 20 neighbors and neighborhood mating 0.9 (its defaults), Tchebycheff, or PBI with
-    theta 5 with 3 objectives."""
+    theta 5 with 3 objectives. SBX and polynomial mutation keep the genes in [0, 1] (rule 2.4)."""
     function, variables, objectives, population, divisions = FRONT_PROBLEMS[problem]
     n = variables(size)
     genome = gx.Real((0.0, 1.0), length=n)
@@ -313,23 +326,23 @@ def front_solvers(problem, size, seed):
     mutation = gx.PolynomialMutation(20.0, rate=1.0 / n)
     sbx = gx.SimulatedBinaryCrossover(15.0)
     solvers = [
-        ("nsga2", lambda: gx.Nsga2(genome, objectives=minimize, population_size=population,
-                                   crossover=sbx, mutation=mutation, seed=seed)),
+        ("nsga2", lambda seed: gx.Nsga2(genome, objectives=minimize, population_size=population,
+                                        crossover=sbx, mutation=mutation, seed=seed)),
     ]
     if objectives > 2:
-        solvers.append(("nsga3", lambda: gx.Nsga3(
+        solvers.append(("nsga3", lambda seed: gx.Nsga3(
             genome, objectives=minimize, reference_directions=gx.das_dennis(objectives, divisions),
             population_size=population, crossover=gx.SimulatedBinaryCrossover(30.0),
             mutation=mutation, seed=seed)))
     solvers += [
-        ("spea2", lambda: gx.Spea2(genome, objectives=minimize, population_size=population,
-                                   crossover=sbx, mutation=mutation, seed=seed)),
-        ("sms_emoa", lambda: gx.SmsEmoa(genome, objectives=minimize, population_size=population,
+        ("spea2", lambda seed: gx.Spea2(genome, objectives=minimize, population_size=population,
                                         crossover=sbx, mutation=mutation, seed=seed)),
-        ("moead", lambda: gx.Moead(genome, objectives=minimize, weights=gx.das_dennis(objectives, divisions),
-                                   decomposition=gx.Tchebycheff() if objectives == 2 else gx.Pbi(5.0),
-                                   crossover=gx.SimulatedBinaryCrossover(20.0), mutation=mutation,
-                                   seed=seed)),
+        ("sms_emoa", lambda seed: gx.SmsEmoa(genome, objectives=minimize, population_size=population,
+                                             crossover=sbx, mutation=mutation, seed=seed)),
+        ("moead", lambda seed: gx.Moead(
+            genome, objectives=minimize, weights=gx.das_dennis(objectives, divisions),
+            decomposition=gx.Tchebycheff() if objectives == 2 else gx.Pbi(5.0),
+            crossover=gx.SimulatedBinaryCrossover(20.0), mutation=mutation, seed=seed)),
     ]
     return function, solvers
 
@@ -346,8 +359,59 @@ def compare(common, solver, seed, counted, reported):
               f"adapter counted {counted}, genoxide reports {reported}", file=sys.stderr, flush=True)
 
 
+def solve(common, solver, seed, make, function, batch, target, max_evaluations, max_seconds):
+    """Runs one solver, with restarts after a stall (rule 2.2), and prints the run."""
+    global EVALUATIONS, OUTSIDE
+    EVALUATIONS = OUTSIDE = 0
+    maximize = common["problem"] == "onemax"
+    # CMA-ES with IPOP restarts doubles its population at each restart, so its last generation
+    # can be larger than the average: the run reports it, for the budget check (rule 2.3). The
+    # other solvers' generations don't grow.
+    generation = {"evaluated": 0, "last": 0}
+
+    def track(progress):
+        generation["last"] = progress.evaluations - generation["evaluated"]
+        generation["evaluated"] = progress.evaluations
+
+    best = solution = None
+    generations = reported = restart = 0
+    # the clock covers creating the algorithm and the run, which creates the initial population
+    start = time.perf_counter()
+    while True:
+        generation["evaluated"] = 0
+        left = max_seconds - (time.perf_counter() - start)
+        result = make(seed if restart == 0 else seed * 1000 + restart).run(
+            function, batch=batch, target=target, evaluations=max_evaluations - EVALUATIONS,
+            time=max(left, 0.0), on_generation=track if solver == "cma_es" else None)
+        generations += result.generations
+        reported += result.evaluations
+        score = result.best_fitness
+        if score is not None and (best is None or (score > best if maximize else score < best)):
+            best, solution = score, result.best_genome
+        if (result.stop_reason != "stalled" or EVALUATIONS >= max_evaluations
+                or time.perf_counter() - start >= max_seconds):
+            break
+        restart += 1
+    elapsed = time.perf_counter() - start
+    compare(common, solver, seed, EVALUATIONS, reported)
+    extra = {}
+    if solver == "cma_es":
+        extra["last_generation"] = generation["last"]
+    if common["problem"] in REAL_PROBLEMS:
+        extra["outside"] = OUTSIDE
+    if restart:
+        extra["restarts"] = restart
+    success = best is not None and (best >= target if maximize else best <= target)
+    print(json.dumps({
+        **common, "solver": solver, "seed": seed, "time_s": round(elapsed, 6),
+        "generations": generations, "evaluations": EVALUATIONS, **extra,
+        "best": best, "target": target, "success": success,
+        "solution": (solution.astype(int) if maximize else solution).tolist(),
+    }), flush=True)
+
+
 def main():
-    global EVALUATIONS
+    global EVALUATIONS, OUTSIDE
     if sys.argv[1:] == ["--self-check"]:
         self_check()
         return
@@ -365,60 +429,36 @@ def main():
     for seed in range(seed_from, seed_to + 1):
         if problem in FRONT_PROBLEMS:
             # multi-objective runs have a budget and no target: they print the non-dominated
-            # individuals of the final population (rule 7.2) and their solutions
-            function, solvers = front_solvers(problem, size, seed)
+            # individuals of the final population (rule 7.2) and their solutions. None of these
+            # algorithms has a convergence criterion (rule 2.2); a stall would end a run before its
+            # budget, which run.py check reports, and happened in no test run
+            function, solvers = front_solvers(problem, size)
             for solver, make in solvers:
-                EVALUATIONS = 0
+                EVALUATIONS = OUTSIDE = 0
                 start = time.perf_counter()
-                result = make().run(function, batch=True, evaluations=max_evaluations, time=max_seconds)
+                result = make(seed).run(function, batch=True, evaluations=max_evaluations, time=max_seconds)
                 elapsed = time.perf_counter() - start
                 compare(common, solver, seed, EVALUATIONS, result.evaluations)
                 print(json.dumps({
                     **common, "solver": solver, "seed": seed, "time_s": round(elapsed, 6),
                     "generations": result.generations, "evaluations": EVALUATIONS,
+                    "outside": OUTSIDE,
                     "front": result.front_objectives.tolist(),
                     "solutions": result.front_genomes.tolist(),
                 }), flush=True)
             continue
 
         if problem == "onemax":
-            solvers, target = onemax_solvers(size, mode, seed), size
+            solvers, target = onemax_solvers(size, mode), size
         elif problem == "nqueens":
-            solvers, target = nqueens_solvers(size, seed), 0
+            solvers, target = nqueens_solvers(size), 0
         elif problem in REAL_PROBLEMS:
-            solvers, target = real_solvers(problem, size, seed), REAL_TARGET
+            solvers, target = real_solvers(problem, size), REAL_TARGET
         else:
             print(f"unknown problem {problem}", file=sys.stderr)
             sys.exit(2)
-
         for solver, make, function, batch in solvers:
-            EVALUATIONS = 0
-            # CMA-ES with IPOP restarts doubles its population at each restart, so its last
-            # generation can be larger than the average: the run reports it, for the budget check
-            # (rule 2.3). The other solvers' generations don't grow.
-            generation = {"evaluated": 0, "last": 0}
-
-            def track(progress):
-                generation["last"] = progress.evaluations - generation["evaluated"]
-                generation["evaluated"] = progress.evaluations
-
-            # the clock covers creating the algorithm and the run, which creates the initial
-            # population
-            start = time.perf_counter()
-            result = make().run(function, batch=batch, target=target, evaluations=max_evaluations,
-                                time=max_seconds, on_generation=track if solver == "cma_es" else None)
-            elapsed = time.perf_counter() - start
-            compare(common, solver, seed, EVALUATIONS, result.evaluations)
-            best = result.best_fitness
-            success = best is not None and (best >= target if problem == "onemax" else best <= target)
-            solution = result.best_genome
-            last = {"last_generation": generation["last"]} if solver == "cma_es" else {}
-            print(json.dumps({
-                **common, "solver": solver, "seed": seed, "time_s": round(elapsed, 6),
-                "generations": result.generations, "evaluations": EVALUATIONS, **last,
-                "best": best, "target": target, "success": success,
-                "solution": (solution.astype(int) if problem == "onemax" else solution).tolist(),
-            }), flush=True)
+            solve(common, solver, seed, make, function, batch, target, max_evaluations, max_seconds)
 
 
 def value(problem, size, solution):
@@ -474,6 +514,12 @@ def self_check():
         size = 30 if name.startswith("zdt") else 3
         for x in rng.random((20, variables(size))):
             close(value(name, size, x.tolist()), problems.value(name, size, x.tolist()), name)
+    # the outside count: a row with one gene past a bound counts once
+    global OUTSIDE
+    OUTSIDE = 0
+    rastrigin_batch(np.array([[0.0, 5.12], [0.0, 5.13], [-6.0, 6.0]]))
+    if OUTSIDE != 2:
+        raise SystemExit(f"outside: {OUTSIDE} instead of 2")
     print("the fitness functions match problems.py")
 
 

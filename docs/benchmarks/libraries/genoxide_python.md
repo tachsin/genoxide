@@ -7,33 +7,36 @@ Know a better way to solve one of these problems with genoxide's Python package?
 
 ## How the adapter runs the package
 
-It runs the same methods with the same settings as the [Rust adapter](genoxide.md), so the two measure the cost of the Python fitness functions and of the package's calls into them, not different searches. The methods, where genoxide's docs recommend them, what was left out and why are on the [genoxide page](genoxide.md); this page gives what differs, and the separate tests.
+It runs the same methods with the same settings as the [Rust adapter](genoxide.md), except one the package doesn't have (the island model, below), so the two measure the cost of the Python fitness functions and of the package's calls into them, not different searches. The methods, where genoxide's docs recommend them, what was left out and why are on the [genoxide page](genoxide.md); this page gives what differs, and the separate tests.
 
-- **Fitness functions:** those of [problems.py](../../../benchmarks/problems.py), in numpy, as the package's docs write them ([bench.py, lines 54-200](../../../benchmarks/adapters/genoxide_python/bench.py#L54-L200)):
+- **Fitness functions:** those of [problems.py](../../../benchmarks/problems.py), in numpy, as the package's docs write them ([bench.py, lines 61-207](../../../benchmarks/adapters/genoxide_python/bench.py#L61-L207)):
   - `batch=True`, with a generation per call as a 2-D array and vectorized numpy: what [python/README.md](../../../python/README.md#fitness-functions) recommends for vectorized numpy ("one call per generation"), as [python/examples/rastrigin.py](../../../python/examples/rastrigin.py) and [zdt1.py](../../../python/examples/zdt1.py) do. The GA, DE, CMA-ES, particle swarm and every multi-objective algorithm use it, and so does the idiomatic OneMax GA.
   - A function per genome for local search and tabu search, which evaluate 4 or 32 neighbors per step, as [python/examples/n_queens.py](../../../python/examples/n_queens.py) does.
   - A function per genome in the matched OneMax runs, like DEAP's: a Python call per genome that counts the ones with numpy's `sum`, as README.md's first example and [python/examples/onemax.py](../../../python/examples/onemax.py) do. The matched scenarios compare framework costs, and this is the cost of one Python call per evaluation.
   - A self-check (`bench.py --self-check`) compares every function with problems.py at random points, and the per-genome N-Queens function with the batch one.
-- **Evaluations:** each fitness function counts the genomes it evaluates itself: one per call, or the rows of a batch ([`EVALUATIONS`](../../../benchmarks/adapters/genoxide_python/bench.py#L58)). The adapter reports that count, compares it with the package's `result.evaluations` and prints any difference to stderr ([lines 342-346](../../../benchmarks/adapters/genoxide_python/bench.py#L342-L346)). In every separate test below, on every scenario, seed and solver, the two counts were equal.
-- **Stop:** `run(..., target=..., evaluations=..., time=...)`, checked after every generation, as in Rust.
+- **Evaluations:** each fitness function counts the genomes it evaluates itself: one per call, or the rows of a batch ([`EVALUATIONS`](../../../benchmarks/adapters/genoxide_python/bench.py#L65), [`count`](../../../benchmarks/adapters/genoxide_python/bench.py#L69-L73)). The adapter reports that count, compares it with the package's `result.evaluations` and prints any difference to stderr ([`solve`, lines 362-411](../../../benchmarks/adapters/genoxide_python/bench.py#L362-L411)). In every separate test below, on every scenario, seed and solver, the two counts were equal.
+- **Stop:** `run(..., target=..., evaluations=..., time=...)`, checked after every generation, as in Rust. CMA-ES with IPOP restarts also prints `last_generation`, from `on_generation`, for the budget check.
+- **Restarts on convergence (rule 2.2):** as in Rust: DE and CMA-ES (IPOP) restart by themselves; the others have no convergence criterion but the package's stall (`stop_reason` "stalled", 10,000 generations without a genome to evaluate), after which the adapter makes the algorithm again with the seed `seed * 1000 + restart` and runs it on the rest of the budget and time, keeping the best and counting every evaluation. No test run stalled.
+- **Bounds (rule 2.4):** the package's operators are genoxide's, with the same bound handling ([genoxide.md](genoxide.md#how-the-adapter-runs-genoxide)). The real-valued and multi-objective fitness functions count the evaluated genomes with a gene outside the bounds, as the package passed them, and each run prints `outside`: 0 in every run of the separate tests.
+- **Choosing among the docs' options (rule 6.2):** as in Rust; the separate tests decided nothing.
 - **Time:** from before the algorithm object is created to the end of `run`, whose first step creates the random initial population.
-- **One thread:** `parallel` is off, and the adapter sets numpy's BLAS (OpenMP, OpenBLAS, MKL) to 1 thread before importing numpy ([lines 41-43](../../../benchmarks/adapters/genoxide_python/bench.py#L41-L43)). Without that, OpenBLAS's threads took CPU time in the DTLZ2 runs: 1.55 times the wall time in `run.py check`. The v0.6.0 results were measured before the adapter set it.
+- **One thread:** `parallel` is off, and the adapter sets numpy's BLAS (OpenMP, OpenBLAS, MKL) to 1 thread before importing numpy ([lines 47-49](../../../benchmarks/adapters/genoxide_python/bench.py#L47-L49)). Without that, OpenBLAS's threads took CPU time in the DTLZ2 runs: 1.55 times the wall time in `run.py check`. The v0.6.0 results were measured before the adapter set it.
 - **Seeds:** each seed goes to the algorithm's `seed`; a seed repeats a run exactly.
 - **Solutions:** each run prints `result.best_genome` (bits as 0 and 1), and a multi-objective run `result.front_genomes` with `result.front_objectives`: the final non-dominated front of the population. Unlike the Rust `outcome.front()`, the package leaves out copies of the same solution (in MOEA/D's population); the hypervolume is the same.
 
 ## Differences from the Rust adapter's results
 
-With the same seed and the same fitness values, the package runs the same search as genoxide in Rust, evaluation for evaluation: the separate tests below match the Rust ones exactly for the GA, local search, tabu search, the particle swarm, and NSGA-II, NSGA-III, SPEA2 and SMS-EMOA. numpy adds up a row in another order than Rust's iterator, so some fitness values differ in the last bit; then DE, CMA-ES and MOEA/D can take other paths, e.g. a median of 4,500 evaluations for DE on Rastrigin 10 against 4,400 in Rust, and 76,980 against 80,200 for CMA-ES.
+With the same seed and the same fitness values, the package runs the same search as genoxide in Rust, evaluation for evaluation: the separate tests below match the Rust ones exactly for the GAs, local search, tabu search, the particle swarm, and NSGA-II, NSGA-III, SPEA2 and SMS-EMOA. numpy adds up a row in another order than Rust's iterator, so some fitness values differ in the last bit; then DE, CMA-ES and MOEA/D can take other paths, e.g. a median of 4,500 evaluations for DE on Rastrigin 10 against 4,400 in Rust, and 76,980 against 80,200 for CMA-ES.
 
 ## Binary: OneMax 100 and 1000
 
-**Methods:** the matched GA ([lines 211-225](../../../benchmarks/adapters/genoxide_python/bench.py#L211-L225)) and the idiomatic GA of every OneMax example in the docs: population 100, tournament 3, uniform crossover, bit-flip at 1 / n per gene, the default rates and scheme ([lines 226-236](../../../benchmarks/adapters/genoxide_python/bench.py#L226-L236)); see [genoxide.md](genoxide.md#binary-onemax-100-and-1000).
+**Methods:** the matched GA ([lines 219-232](../../../benchmarks/adapters/genoxide_python/bench.py#L219-L232)) and the idiomatic GA of every OneMax example in the docs: population 100, tournament 3, uniform crossover, bit-flip at 1 / n per gene, the default rates and scheme ([lines 234-244](../../../benchmarks/adapters/genoxide_python/bench.py#L234-L244)); see [genoxide.md](genoxide.md#binary-onemax-100-and-1000).
 
 **Keeping going:** a GA runs to the budget by itself.
 
 **Left out:** as in Rust. A per-genome function in the idiomatic run: README.md's first example writes one (`lambda bits: bits.sum()`), but its section on fitness functions recommends `batch=True` for vectorized numpy.
 
-**Separate tests** (2026-09-25, the package 0.6.0 built from ad4eaf5, seeds 0 to 4, the scenario's budget, 60 s cap):
+**Separate tests** (2026-09-25, the package 0.6.0 built from 4fff05e, seeds 0 to 4, the scenario's budget, 60 s cap):
 
 OneMax 100, matched (budget 200,000):
 
@@ -55,7 +58,7 @@ OneMax 100, idiomatic (budget 200,000):
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods** ([lines 239-271](../../../benchmarks/adapters/genoxide_python/bench.py#L239-L271)): the (20 + 20) GA of examples/n_queens.rs, hill climbing with 4 swap neighbors per step (the rustdoc's N-Queens example), and tabu search with 32 swap neighbors and tenure 20 ([python/examples/n_queens.py](../../../python/examples/n_queens.py)); see [genoxide.md](genoxide.md#permutation-n-queens-32-and-64).
+**Methods** ([lines 247-281](../../../benchmarks/adapters/genoxide_python/bench.py#L247-L281)): the (20 + 20) GA of examples/n_queens.rs, hill climbing with 4 swap neighbors per step (the rustdoc's N-Queens example), and tabu search with 32 swap neighbors and tenure 20 ([python/examples/n_queens.py](../../../python/examples/n_queens.py)); see [genoxide.md](genoxide.md#permutation-n-queens-32-and-64).
 
 **Keeping going:** all three run to the budget by themselves.
 
@@ -83,9 +86,9 @@ The tabu search of the package's own N-Queens example needs 40 times the evaluat
 
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
-**Methods** ([lines 274-300](../../../benchmarks/adapters/genoxide_python/bench.py#L274-L300)): the GA of examples/rastrigin.rs, DE with its defaults, and CMA-ES with its defaults and IPOP restarts, which python/README.md's first example and [python/examples/rastrigin.py](../../../python/examples/rastrigin.py) run on Rastrigin; see [genoxide.md](genoxide.md#continuous-multimodal-rastrigin-10-and-30-ackley-30), which also says where the DE defaults come from.
+**Methods** ([lines 284-313](../../../benchmarks/adapters/genoxide_python/bench.py#L284-L313)): DE with its defaults, and CMA-ES with its defaults and IPOP restarts, which python/README.md's first example and [python/examples/rastrigin.py](../../../python/examples/rastrigin.py) run on Rastrigin; see [genoxide.md](genoxide.md#continuous-multimodal-rastrigin-10-and-30-ackley-30), which also says where the DE defaults come from. The Rust adapter's third method is the GA as AGENTS.md's island model, which AGENTS.md prefers on multimodal problems; the package has no island model, so its GA runs as one population, with the settings of [examples/rastrigin.rs](../../../examples/rastrigin.rs) (population 100, tournament 3, uniform crossover, polynomial mutation with η 20 at 1 / n, elitism 2). That is the one place where the two adapters differ; the package's own docs don't present a GA for these problems (their examples for Rastrigin are CMA-ES with IPOP restarts and L-SHADE).
 
-**Keeping going:** the GA runs to the budget by itself; DE and CMA-ES (IPOP) restart by themselves.
+**Keeping going:** the GA has no convergence criterion and runs to the budget; DE and CMA-ES (IPOP) restart by themselves.
 
 **Left out:** as in Rust. L-SHADE (`gx.De(genome, l_shade=budget)`), which python/examples/rastrigin.py runs on Rastrigin 30, aims at the best value at the end of a budget, not the fewest evaluations to a target; the island model and the evolution strategy aren't in the package.
 
@@ -117,9 +120,9 @@ Ackley 30 (budget 1,000,000):
 
 ## Continuous, unimodal: Rosenbrock 10
 
-**Methods** ([lines 279-288](../../../benchmarks/adapters/genoxide_python/bench.py#L279-L288)): CMA-ES with IPOP restarts, DE with its defaults, and the particle swarm of AGENTS.md's Rosenbrock template (`gx.Pso(genome, population_size=40)`, the global topology); see [genoxide.md](genoxide.md#continuous-unimodal-rosenbrock-10), which also gives the result of the GA left out.
+**Methods** ([lines 285-299](../../../benchmarks/adapters/genoxide_python/bench.py#L285-L299)): CMA-ES with IPOP restarts, DE with its defaults, and the particle swarm of AGENTS.md's Rosenbrock template (`gx.Pso(genome, population_size=40)`, the global topology); see [genoxide.md](genoxide.md#continuous-unimodal-rosenbrock-10), which also gives the result of the GA left out.
 
-**Keeping going:** CMA-ES and DE restart by themselves; the particle swarm runs to the budget by itself.
+**Keeping going:** CMA-ES and DE restart by themselves; the particle swarm has no convergence criterion and runs to the budget.
 
 **Left out:** as in Rust.
 
@@ -135,9 +138,9 @@ Rosenbrock 10 (budget 500,000):
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1
 
-**Methods** ([lines 303-334](../../../benchmarks/adapters/genoxide_python/bench.py#L303-L334)): NSGA-II, SPEA2, SMS-EMOA and MOEA/D, and NSGA-III with 3 objectives, with the matched settings of the [README](../../../benchmarks/README.md#scenarios), as in Rust ([genoxide.md](genoxide.md#multi-objective-zdt1-zdt2-zdt3-dtlz2-dtlz1)); the fitness functions return a row of objective values per genome (`batch=True`), as [python/examples/zdt1.py](../../../python/examples/zdt1.py).
+**Methods** ([lines 316-347](../../../benchmarks/adapters/genoxide_python/bench.py#L316-L347)): NSGA-II, SPEA2, SMS-EMOA and MOEA/D, and NSGA-III with 3 objectives, with the matched settings of the [README](../../../benchmarks/README.md#scenarios), as in Rust ([genoxide.md](genoxide.md#multi-objective-zdt1-zdt2-zdt3-dtlz2-dtlz1)); the fitness functions return a row of objective values per genome (`batch=True`), as [python/examples/zdt1.py](../../../python/examples/zdt1.py).
 
-**Keeping going:** every run uses its whole budget.
+**Keeping going:** none of the five has a convergence criterion; every run uses its whole budget. `outside` was 0 in every run.
 
 **Separate tests** (2026-09-25, seeds 0 to 4; the hypervolume as `run.py` computes it):
 
