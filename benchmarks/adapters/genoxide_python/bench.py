@@ -393,19 +393,29 @@ def main():
 
         for solver, make, function, batch in solvers:
             EVALUATIONS = 0
+            # CMA-ES with IPOP restarts doubles its population at each restart, so its last
+            # generation can be larger than the average: the run reports it, for the budget check
+            # (rule 2.3). The other solvers' generations don't grow.
+            generation = {"evaluated": 0, "last": 0}
+
+            def track(progress):
+                generation["last"] = progress.evaluations - generation["evaluated"]
+                generation["evaluated"] = progress.evaluations
+
             # the clock covers creating the algorithm and the run, which creates the initial
             # population
             start = time.perf_counter()
             result = make().run(function, batch=batch, target=target, evaluations=max_evaluations,
-                                time=max_seconds)
+                                time=max_seconds, on_generation=track if solver == "cma_es" else None)
             elapsed = time.perf_counter() - start
             compare(common, solver, seed, EVALUATIONS, result.evaluations)
             best = result.best_fitness
             success = best is not None and (best >= target if problem == "onemax" else best <= target)
             solution = result.best_genome
+            last = {"last_generation": generation["last"]} if solver == "cma_es" else {}
             print(json.dumps({
                 **common, "solver": solver, "seed": seed, "time_s": round(elapsed, 6),
-                "generations": result.generations, "evaluations": EVALUATIONS,
+                "generations": result.generations, "evaluations": EVALUATIONS, **last,
                 "best": best, "target": target, "success": success,
                 "solution": (solution.astype(int) if problem == "onemax" else solution).tolist(),
             }), flush=True)

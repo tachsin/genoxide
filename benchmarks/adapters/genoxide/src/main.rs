@@ -32,6 +32,7 @@
 use genoxide::Objective::Minimize;
 use genoxide::multi::{Decomposition, Moead, Nsga3, SmsEmoa, Spea2, das_dennis};
 use genoxide::prelude::*;
+use std::cell::Cell;
 use std::f64::consts::{E, PI};
 use std::io::BufRead;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -261,13 +262,27 @@ where
         calls.fetch_add(1, Ordering::Relaxed);
         fitness(genome)
     };
+    // CMA-ES with IPOP restarts doubles its population at each restart, so its last generation
+    // can be larger than the average: the run reports it, for the budget check (rule 2.3). The
+    // other solvers' generations don't grow.
+    let (evaluated, last_generation) = (Cell::new(0u64), Cell::new(0u64));
     let start = Instant::now();
-    let outcome = Engine::new(build()?, counted)
-        .stop_when(args.stop(target))
-        .run()?;
+    let mut engine = Engine::new(build()?, counted).stop_when(args.stop(target));
+    if solver == "cma_es" {
+        engine = engine.on_generation(|snapshot| {
+            let evaluations = snapshot.progress().evaluations();
+            last_generation.set(evaluations - evaluated.replace(evaluations));
+        });
+    }
+    let outcome = engine.run()?;
     let time_s = start.elapsed().as_secs_f64();
     let evaluations = calls.load(Ordering::Relaxed);
     compare_counts(args, solver, seed, evaluations, outcome.evaluations());
+    let last_generation = if solver == "cma_es" {
+        format!(",\"last_generation\":{}", last_generation.get())
+    } else {
+        String::new()
+    };
     let best = outcome.best_fitness().score().unwrap_or(f64::NAN);
     let success = if args.problem == "onemax" {
         best >= target
@@ -275,7 +290,7 @@ where
         best <= target
     };
     println!(
-        "{{{},\"best\":{best:?},\"target\":{target:?},\"success\":{success},\"solution\":{}}}",
+        "{{{}{last_generation},\"best\":{best:?},\"target\":{target:?},\"success\":{success},\"solution\":{}}}",
         args.header(solver, seed, time_s, outcome.generations(), evaluations),
         outcome.best_genome().json(),
     );
