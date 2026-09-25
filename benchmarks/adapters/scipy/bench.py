@@ -45,20 +45,23 @@ class Stop(Exception):
 class Budget:
     """Counts the evaluations itself (rule 3.2), every call of the fitness function on one solution,
     whoever calls it: the solver, its restarts, its local searches, its polish and its finite
-    differences. Keeps the best solution, and raises Stop right after the evaluation that reaches
-    the target, and before an evaluation past the budget or the time cap. Counts the evaluated
-    solutions outside the bounds, as the solver gave them (rule 2.4)."""
+    differences. Keeps the best solution and the first evaluation that reaches the target
+    (first_hit), and raises Stop right after it, and before an evaluation past the budget or the
+    time cap. Counts the evaluated solutions outside the bounds, as the solver gave them (rule
+    2.4)."""
 
-    def __init__(self, function, lower, upper, max_evaluations, deadline):
+    def __init__(self, function, lower, upper, max_evaluations, start, max_seconds):
         self.function = function
         self.lower, self.upper = lower, upper
         self.max_evaluations = max_evaluations
-        self.deadline = deadline
+        self.start = start
+        self.deadline = start + max_seconds
         self.evaluations = 0
         self.generations = 0
         self.outside = 0
         self.best = math.inf
         self.best_x = None
+        self.first_hit = None
 
     def __call__(self, x):
         if self.evaluations >= self.max_evaluations or time.perf_counter() >= self.deadline:
@@ -70,6 +73,8 @@ class Budget:
             self.best = value
             self.best_x = np.array(x, dtype=float)
             if value <= TARGET:
+                self.first_hit = {"evaluations": self.evaluations,
+                                  "time_s": round(time.perf_counter() - self.start, 6)}
                 raise Stop
         return value
 
@@ -84,14 +89,15 @@ class Budget:
 
 
 @functools.cache
-def shift(n):
-    """The optimum of rastrigin and ackley, away from the origin: s_i = 2 ((37 i + 11) mod 101) / 101 - 1."""
-    return np.array([2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(n)])
+def shift(n, upper):
+    """The optimum of rastrigin and ackley, away from the origin:
+    s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1), computed in this order."""
+    return np.array([0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1) for i in range(n)])
 
 
 def rastrigin(x):
     """Shifted: 10 n + sum((x_i - s_i)^2 - 10 cos(2 pi (x_i - s_i)))."""
-    d = x - shift(len(x))
+    d = x - shift(len(x), 5.12)
     return 10 * len(x) + np.sum(d * d - 10 * np.cos(2 * np.pi * d))
 
 
@@ -102,7 +108,7 @@ def rosenbrock(x):
 def ackley(x):
     """Shifted: Ackley of x - s."""
     n = len(x)
-    d = x - shift(n)
+    d = x - shift(n, 32.768)
     return (-20 * np.exp(-0.2 * np.sqrt(np.sum(d * d) / n))
             - np.exp(np.sum(np.cos(2 * np.pi * d)) / n) + 20 + math.e)
 
@@ -132,14 +138,20 @@ def solve_de(size, lower, upper, seed, budget):
 
     Rule 2.2: maxiter (1000 generations by default), a limit that's only a budget, is lifted. Its
     convergence test, the default tol 0.01 (std of the population's values <= 0.01 * |mean|),
-    ends an attempt: it polishes, and starts again, with a new seed, seed * 1000 + restart (SciPy
-    has no restart mechanism)."""
+    ends an attempt: it polishes, and starts again (SciPy has no restart mechanism) with the seed
+    restart_seed(seed, restart)."""
     bounds = [(lower, upper)] * size
     restart = 0
     while True:
-        differential_evolution(budget, bounds, rng=seed * 1000 + restart, maxiter=budget.max_evaluations,
-                               callback=budget.next_generation)
+        differential_evolution(budget, bounds, rng=restart_seed(seed, restart),
+                               maxiter=budget.max_evaluations, callback=budget.next_generation)
         restart += 1
+
+
+def restart_seed(seed, restart):
+    """The seed of attempt `restart` of a run (rule 2.2): the run's seed first, then
+    (seed + 1) * 1_000_000 + restart, so no two runs share a seed."""
+    return seed if restart == 0 else (seed + 1) * 1_000_000 + restart
 
 
 def solve_dual_annealing(size, lower, upper, seed, budget):
@@ -191,13 +203,13 @@ def solve_minimize(method):
 
         Rule 2.2: the limits that are only budgets (maxiter, maxfun / maxfev) are lifted. Its
         convergence tests (ftol, gtol; xatol, fatol) end an attempt, and it starts again from a new
-        random point, drawn with seed * 1000 + restart (SciPy has no restart mechanism)."""
+        random point, drawn with restart_seed(seed, restart) (SciPy has no restart mechanism)."""
         limits = ({"maxiter": budget.max_evaluations, "maxfun": budget.max_evaluations}
                   if method == "L-BFGS-B" else
                   {"maxiter": budget.max_evaluations, "maxfev": budget.max_evaluations})
         restart = 0
         while True:
-            x0 = np.random.default_rng(seed * 1000 + restart).uniform(lower, upper, size)
+            x0 = np.random.default_rng(restart_seed(seed, restart)).uniform(lower, upper, size)
             minimize(budget, x0, method=method, bounds=[(lower, upper)] * size, options=limits,
                      callback=budget.next_generation)
             restart += 1
@@ -252,11 +264,12 @@ def main():
         for solver, solve in solvers(problem):
             # the clock starts before the initial population (rule 4.1)
             start = time.perf_counter()
-            budget = Budget(function, lower, upper, max_evaluations, start + max_seconds)
+            budget = Budget(function, lower, upper, max_evaluations, start, max_seconds)
             try:
                 solve(size, lower, upper, seed, budget)
             except Stop:
                 pass
+            # the clock stops when the run ends (rule 4.1)
             elapsed = time.perf_counter() - start
             print(json.dumps({
                 "library": "scipy",
@@ -274,6 +287,7 @@ def main():
                 "best": budget.best,
                 "target": TARGET,
                 "success": bool(budget.best <= TARGET),
+                "first_hit": budget.first_hit,
                 "solution": budget.best_x.tolist(),
             }), flush=True)
 
