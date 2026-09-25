@@ -348,6 +348,11 @@ end
 # everything the timed runs call
 const WARM_UP_EVALUATIONS = 1000
 
+# run.py's early stop: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took
+# CAPPED of it) without reaching the target runs no more seeds
+const EARLY_SEEDS = 3
+const CAPPED = 0.98
+
 non_dominated(points) = [p for p in points if !any(q -> all(q .<= p) && any(q .< p), points)]
 
 # -------------------------------------------------------------------------------------------------
@@ -389,11 +394,15 @@ function main(args)
         for (_, run) in solvers
             run(Budget(WARM_UP_EVALUATIONS, 10.0), 0)
         end
+        capped = Dict(solver => 0 for (solver, _) in solvers)
         for seed in seed_from:seed_to, (solver, run) in solvers
+            index = seed - seed_from
+            index >= EARLY_SEEDS && capped[solver] == EARLY_SEEDS && continue
             budget = Budget(max_evaluations, max_seconds)
             start = time_ns()
             status = run(budget, seed)
             elapsed = (time_ns() - start) / 1.0e9
+            capped[solver] += index < EARLY_SEEDS && elapsed >= CAPPED * max_seconds
             front = non_dominated([Metaheuristics.fval(s) for s in status.population])
             print_line([
                 "library" => "metaheuristics_jl", "solver" => solver, "problem" => problem, "size" => size,
@@ -423,13 +432,17 @@ function main(args)
         run(Budget(WARM_UP_EVALUATIONS, 10.0, target), 0)
     end
 
+    capped = Dict(solver => 0 for (solver, _) in solvers)
     for seed in seed_from:seed_to, (solver, run) in solvers
+        index = seed - seed_from
+        index >= EARLY_SEEDS && capped[solver] == EARLY_SEEDS && continue
         budget = Budget(max_evaluations, max_seconds, target)
         start = time_ns()
         status = run(budget, seed)
         elapsed = (time_ns() - start) / 1.0e9
         best = problem == "onemax" ? -Int(budget.best) : problem == "nqueens" ? Int(budget.best) : budget.best
         success = problem == "onemax" ? best >= size : budget.best <= target
+        capped[solver] += index < EARLY_SEEDS && !success && elapsed >= CAPPED * max_seconds
         print_line([
             "library" => "metaheuristics_jl", "solver" => solver, "problem" => problem, "size" => size,
             "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
