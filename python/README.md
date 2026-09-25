@@ -59,7 +59,7 @@ It returns one of these:
 
 The fitness function must be deterministic: genoxide doesn't evaluate a child identical to one of its parents again.
 
-With `batch=True`, the function takes a whole generation as a 2-D array, a genome per row, and returns an array of scores, or a tuple of scores and constraint violations. It's one call per generation, so vectorized numpy, a GPU or a remote service pays its cost per call once per generation instead of once per genome.
+With `batch=True`, the function takes a whole generation as a 2-D array, a genome per row, and returns an array of scores, or a tuple of scores and constraint violations. It's one call per generation (none for a generation whose children are all copies of their parents), so vectorized numpy, a GPU or a remote service pays its cost per call once per generation instead of once per genome.
 
 With `parallel=True`, genoxide calls a function that isn't a batch function from several threads at once. It pays off when the function releases the GIL, e.g. in numpy on large arrays or waiting for I/O, or on free-threaded Python.
 

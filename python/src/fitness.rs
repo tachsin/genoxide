@@ -212,7 +212,8 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
                 .map(|genome| FitnessFunction::<G>::evaluate(self, genome))
                 .collect();
         }
-        if shared.aborted() {
+        // no call after an error, or for a generation of copies, which inherit their fitness
+        if shared.aborted() || genomes.is_empty() {
             return vec![Value::Invalid; genomes.len()];
         }
         Python::attach(|py| {
@@ -342,7 +343,8 @@ impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_> {
                 .map(|genome| MultiFitnessFunction::<G, M>::evaluate(self, genome))
                 .collect();
         }
-        if shared.aborted() {
+        // no call after an error, or for a generation of copies, which inherit their scores
+        if shared.aborted() || genomes.is_empty() {
             return vec![MultiValue::Invalid; genomes.len()];
         }
         Python::attach(|py| {

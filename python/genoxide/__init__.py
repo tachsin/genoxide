@@ -22,7 +22,7 @@ A fitness function takes a genome as a numpy array (``bool`` for :class:`Binary`
 :class:`Real`, ``int64`` for :class:`Integer` and :class:`Permutation`) and returns a number,
 ``None`` for an invalid solution, or a tuple ``(score, constraint_violation)``. With
 ``batch=True``, it takes a whole generation as a 2-D array, a genome per row, and returns an array
-of scores: one call per generation, for vectorized numpy code.
+of scores: at most one call per generation, for vectorized numpy code.
 
 A run stops at the first of its stop conditions: ``generations``, ``evaluations``, ``target``,
 ``time`` (seconds) and ``stagnation`` (generations without improvement), or when its

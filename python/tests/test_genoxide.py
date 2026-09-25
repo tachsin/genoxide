@@ -381,6 +381,28 @@ def test_das_dennis():
         gx.das_dennis(7, 2)
 
 
+def test_a_generation_of_copies_makes_no_batch_call():
+    rows = []
+
+    def fitness(bits):
+        rows.append(len(bits))
+        return np.column_stack([bits[:, :4].sum(axis=1), bits[:, 4:].sum(axis=1)])
+
+    # one child per generation, often a copy of a parent
+    result = gx.SmsEmoa(
+        gx.Binary(8),
+        objectives=["maximize", "minimize"],
+        population_size=10,
+        offspring=1,
+        crossover=gx.UniformCrossover(),
+        mutation=gx.BitFlip(rate=0.05),
+        seed=12,
+    ).run(fitness, generations=100, batch=True)
+    assert all(count > 0 for count in rows)
+    assert sum(rows) == result.evaluations
+    assert len(rows) < result.generations + 1
+
+
 def test_multi_objective_settings_errors():
     genome = gx.Real((0.0, 1.0), length=4)
     two = ["minimize", "minimize"]
