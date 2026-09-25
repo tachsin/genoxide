@@ -2,8 +2,8 @@
 
 use super::{MultiObjectiveAlgorithm, Scores};
 use crate::engine::{
-    Batch, Checkpoint, NanPolicy, Progress, checkpoint, evaluate_all, evaluate_batch, trace,
-    validate_checkpoint,
+    Batch, Checkpoint, NanPolicy, Progress, checkpoint, evaluate_all, evaluate_batch, stalled,
+    trace, validate_checkpoint,
 };
 use crate::genome::Genome;
 use crate::{Error, Individual, Population, Result, Stop, StopReason};
@@ -220,6 +220,10 @@ type Callback<'o, G, const M: usize> = Box<dyn FnMut(&MultiSnapshot<'_, G, M>) +
 /// - [`Stop::stagnation`] counts the generations since the front last gained a solution that no
 ///   earlier front member dominated or equaled.
 /// - [`Stop::target`] needs a single objective: running with it is an error.
+/// - A run whose stop conditions can only be met with new evaluations ([`Stop::evaluations`])
+///   stops with [`StopReason::Stalled`] once the algorithm has asked for no genome to evaluate in
+///   [`STALL_GENERATIONS`](crate::engine::STALL_GENERATIONS) generations in a row, e.g. when every
+///   child is a copy of a parent.
 ///
 /// ```
 /// use genoxide::prelude::*;
@@ -253,6 +257,8 @@ where
     checkpoint: Option<Checkpoint<'o, A>>,
     results: Vec<Result<Scores<M>>>,
     scores: Vec<Scores<M>>,
+    // the generations in a row in which the algorithm asked for no genome to evaluate
+    idle: u64,
 }
 
 impl<'o, A, F, const M: usize> MultiEngine<'o, A, F, M>
@@ -273,6 +279,7 @@ where
             checkpoint: None,
             results: Vec::new(),
             scores: Vec::new(),
+            idle: 0,
         }
     }
 
@@ -351,7 +358,9 @@ where
     ///   checkpoints every 0 generations.
     /// - [`Error::NanFitness`] for a NaN with [`NanPolicy::Error`], and
     ///   [`Error::InvalidFitness`] for a negative constraint violation.
-    /// - The errors of the algorithm's [`tell`](MultiObjectiveAlgorithm::tell).
+    /// - [`Error::FitnessCount`] if a [`Batch`] returns a different number of scores than genomes.
+    /// - The errors of the algorithm's [`tell`](MultiObjectiveAlgorithm::tell) and of the
+    ///   checkpoint closure.
     pub fn run(&mut self) -> Result<MultiOutcome<A::Genome, M>> {
         if self.stop.is_none() && self.abort.is_none() {
             return Err(Error::MissingSetting {
@@ -387,7 +396,8 @@ where
                 Some(StopReason::Aborted)
             } else {
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
-            };
+            }
+            .or_else(|| stalled(self.stop.as_ref(), self.idle));
             if let Some(stop_reason) = reason {
                 return Ok(MultiOutcome {
                     front: self.algorithm.front().to_vec(),
@@ -402,6 +412,11 @@ where
         loop {
             self.evaluate()?;
             self.algorithm.tell(&self.scores)?;
+            self.idle = if self.scores.is_empty() {
+                self.idle + 1
+            } else {
+                0
+            };
             let progress = Progress::multi_objective(
                 self.algorithm.generation(),
                 self.algorithm.evaluations(),
@@ -428,7 +443,8 @@ where
                 Some(StopReason::Aborted)
             } else {
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
-            };
+            }
+            .or_else(|| stalled(self.stop.as_ref(), self.idle));
             checkpoint(
                 &mut self.checkpoint,
                 &self.algorithm,

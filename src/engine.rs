@@ -5,7 +5,7 @@ pub mod stop;
 pub(crate) mod trace;
 
 pub use asynchronous::AsyncEngine;
-pub use stop::{Stop, StopReason};
+pub use stop::{STALL_GENERATIONS, Stop, StopReason};
 
 use crate::algorithm::{Algorithm, Candidates};
 use crate::genome::Genome;
@@ -58,10 +58,10 @@ pub trait FitnessFunction<G>: Sync {
 /// [`IntoScores`](crate::multi::IntoScores) types.
 ///
 /// It's called once per generation, with the genomes to evaluate (none when every child is a
-/// copy that inherits its fitness). It decides how to evaluate them, so
-/// [`Engine::parallel`] doesn't apply. Returning a different number of scores than genomes stops
-/// the run with [`Error::FitnessCount`]. The repository's `examples/gpu` evaluates a generation of
-/// neural networks in one GPU dispatch with wgpu.
+/// copy that inherits its fitness). It decides how to evaluate them, so `Engine::parallel`
+/// doesn't apply. Returning a different number of scores than genomes stops the run with
+/// [`Error::FitnessCount`]. The repository's `examples/gpu` evaluates a generation of neural
+/// networks in one GPU dispatch with wgpu.
 ///
 /// ```
 /// use genoxide::prelude::*;
@@ -324,6 +324,11 @@ impl<G: Genome> Outcome<G> {
 /// Stop conditions count from the algorithm's start, so a run whose condition is already met
 /// returns at once.
 ///
+/// A run whose stop conditions can only be met with new evaluations (a target or an evaluation
+/// limit) stops with [`StopReason::Stalled`] once the algorithm has asked for no genome to
+/// evaluate in [`STALL_GENERATIONS`] generations in a row, e.g. a genetic algorithm whose children
+/// are all copies of their parents.
+///
 /// ```
 /// use genoxide::prelude::*;
 ///
@@ -354,6 +359,8 @@ pub struct Engine<'o, A: Algorithm, F> {
     checkpoint: Option<Checkpoint<'o, A>>,
     results: Vec<Result<Fitness>>,
     scores: Vec<Fitness>,
+    // the generations in a row in which the algorithm asked for no genome to evaluate
+    idle: u64,
 }
 
 // every how many generations to call a closure with the algorithm, and the closure
@@ -370,6 +377,13 @@ pub(crate) fn checkpoint<A>(
         Some((every, save)) if stopping || generation % *every == 0 => save(algorithm),
         _ => Ok(()),
     }
+}
+
+// `StopReason::Stalled` after `idle` generations in a row without a genome to evaluate, if they're
+// at least `STALL_GENERATIONS` and the stop condition can only be met with new evaluations
+pub(crate) fn stalled(stop: Option<&Stop>, idle: u64) -> Option<StopReason> {
+    (idle >= STALL_GENERATIONS && stop.is_some_and(Stop::needs_evaluations))
+        .then_some(StopReason::Stalled)
 }
 
 // the error for checkpoints every 0 generations
@@ -401,6 +415,7 @@ where
             checkpoint: None,
             results: Vec::new(),
             scores: Vec::new(),
+            idle: 0,
         }
     }
 
@@ -501,7 +516,9 @@ where
     /// - The errors of the algorithm's [`tell`](Algorithm::tell) and of the checkpoint closure.
     ///
     /// If the algorithm has run before and a stop condition is already met, it returns that
-    /// outcome without another generation.
+    /// outcome without another generation. A run whose stop conditions need new evaluations stops
+    /// with [`StopReason::Stalled`] after [`STALL_GENERATIONS`] generations in a row without a
+    /// genome to evaluate.
     pub fn run(&mut self) -> Result<Outcome<A::Genome>> {
         if self.stop.is_none() && self.abort.is_none() {
             return Err(Error::MissingSetting {
@@ -531,7 +548,8 @@ where
                 Some(StopReason::Aborted)
             } else {
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
-            };
+            }
+            .or_else(|| stalled(self.stop.as_ref(), self.idle));
             if let Some(stop_reason) = reason {
                 return Ok(Outcome {
                     best: best.clone(),
@@ -546,6 +564,11 @@ where
         loop {
             self.evaluate()?;
             self.algorithm.tell(&self.scores)?;
+            self.idle = if self.scores.is_empty() {
+                self.idle + 1
+            } else {
+                0
+            };
 
             let best = self
                 .algorithm
@@ -580,7 +603,8 @@ where
                 Some(StopReason::Aborted)
             } else {
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
-            };
+            }
+            .or_else(|| stalled(self.stop.as_ref(), self.idle));
             checkpoint(
                 &mut self.checkpoint,
                 &self.algorithm,

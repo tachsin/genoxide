@@ -3,6 +3,7 @@
 use super::{Algorithm, Candidates};
 use crate::genome::{Real, Reals, Representation};
 use crate::math::{exp, log};
+use crate::operator::check_size;
 use crate::operator::mutate::{MAX_STEP, reflect};
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
@@ -412,14 +413,14 @@ pub struct EsBuilder {
 }
 
 impl EsBuilder {
-    /// The number of parents μ, at least 1. Required.
+    /// The number of parents μ, at least 1 and at most 2^24. Required.
     pub fn parents(mut self, mu: usize) -> Self {
         self.parents = Some(mu);
         self
     }
 
     /// The number of offspring per generation λ, at least 1, and at least μ with comma
-    /// selection; e.g. 5 to 7 times μ. Required.
+    /// selection, at most 2^24; e.g. 5 to 7 times μ. Required.
     pub fn offspring(mut self, lambda: usize) -> Self {
         self.offspring = Some(lambda);
         self
@@ -484,9 +485,10 @@ impl EsBuilder {
     /// # Errors
     ///
     /// - [`Error::MissingSetting`] without the number of parents or offspring.
-    /// - [`Error::InvalidSetting`] for no parents or offspring, fewer offspring than parents with
-    ///   comma selection, `rho` out of range, an initial step size out of range, or a
-    ///   representation without a gene that has more than one value.
+    /// - [`Error::InvalidSetting`] for no parents or offspring, more than 2^24 of either, fewer
+    ///   offspring than parents with comma selection, `rho` out of range, an initial step size
+    ///   out of range, a representation without a gene that has more than one value, or more
+    ///   initial genomes than parents.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<Es> {
         let mu = self
@@ -499,6 +501,7 @@ impl EsBuilder {
         if mu == 0 {
             return invalid("parents", "must be at least 1".to_string());
         }
+        check_size("parents", mu)?;
         if lambda == 0 || (self.selection == Selection::Comma && lambda < mu) {
             return invalid(
                 "offspring",
@@ -507,6 +510,7 @@ impl EsBuilder {
                 ),
             );
         }
+        check_size("offspring", lambda)?;
         let recombination = self
             .recombination
             .unwrap_or(Recombination::Intermediate { rho: mu });

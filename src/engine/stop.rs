@@ -58,7 +58,19 @@ pub enum StopReason {
     Custom,
     /// The abort flag was set.
     Aborted,
+    /// The algorithm asked for no genome to evaluate in [`STALL_GENERATIONS`] generations in a
+    /// row, while the stop conditions could only be met with new evaluations (a
+    /// [`target`](Stop::target) or an [`evaluations`](Stop::evaluations) limit, with no
+    /// generation, time, stagnation or custom condition that could end the run instead): the run
+    /// would never end. It happens to a genetic algorithm whose children are all copies of their
+    /// parents, which inherit their fitness, e.g. a converged population without mutation, or a
+    /// representation with a single genome.
+    Stalled,
 }
+
+/// The number of generations in a row without a genome to evaluate after which a run stops with
+/// [`StopReason::Stalled`], if its stop conditions need new evaluations.
+pub const STALL_GENERATIONS: u64 = 10_000;
 
 impl Stop {
     /// Stops when the best fitness is at least as good as `score`: at least `score` when
@@ -197,6 +209,20 @@ impl Stop {
         }
     }
 
+    // whether the condition can only be met with new evaluations: a target or an evaluation
+    // limit, and no generation, time, stagnation or custom condition that could be met without
+    pub(crate) fn needs_evaluations(&self) -> bool {
+        match &self.condition {
+            Condition::Target(_) | Condition::Evaluations(_) => true,
+            Condition::Generations(_)
+            | Condition::Time(_)
+            | Condition::Stagnation(_)
+            | Condition::Custom(_) => false,
+            Condition::Any(stops) => stops.iter().all(Stop::needs_evaluations),
+            Condition::All(stops) => stops.iter().any(Stop::needs_evaluations),
+        }
+    }
+
     // whether a condition needs a single objective (a target)
     pub(crate) fn has_target(&self) -> bool {
         match &self.condition {
@@ -287,6 +313,32 @@ mod tests {
         assert_eq!(all.check(&at(5)), Some(StopReason::Evaluations));
         let nested = Stop::generations(10).or(Stop::generations(2).and(Stop::target(0.0)));
         assert_eq!(nested.check(&at(2)), Some(StopReason::Target));
+    }
+
+    #[test]
+    fn conditions_that_need_evaluations() {
+        assert!(Stop::evaluations(10).needs_evaluations());
+        assert!(Stop::target(1.0).needs_evaluations());
+        assert!(
+            Stop::evaluations(10)
+                .or(Stop::target(1.0))
+                .needs_evaluations()
+        );
+        assert!(
+            Stop::generations(10)
+                .and(Stop::evaluations(10))
+                .needs_evaluations()
+        );
+        for stop in [
+            Stop::generations(10),
+            Stop::time(Duration::from_secs(1)),
+            Stop::stagnation(10),
+            Stop::custom(|_| false),
+            Stop::evaluations(10).or(Stop::generations(10)),
+            Stop::target(1.0).or(Stop::stagnation(5)),
+        ] {
+            assert!(!stop.needs_evaluations(), "{stop:?}");
+        }
     }
 
     #[test]

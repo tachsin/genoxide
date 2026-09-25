@@ -132,7 +132,7 @@ where
 }
 
 /// No crossover: the children are copies of their parents, for algorithms that only mutate,
-/// e.g. (μ+λ). It fits every representation.
+/// e.g. (μ+λ). It fits every representation, and needs a mutation rate above 0.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NoCrossover;
@@ -145,6 +145,10 @@ impl<R: Representation> Crossover<R> for NoCrossover {
         _b: &mut R::Genome,
         _rng: &mut StreamRng,
     ) {
+    }
+
+    fn recombines(&self) -> bool {
+        false
     }
 }
 

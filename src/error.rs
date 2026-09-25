@@ -4,8 +4,10 @@ use std::fmt;
 
 /// Errors returned by genoxide.
 ///
-/// Library code doesn't panic on invalid input: invalid settings and values are reported as an
-/// `Error`, before a run starts where possible.
+/// Invalid settings and values are reported as an `Error`, before a run starts where possible,
+/// not as panics. The few functions that panic say so under `# Panics`: an index out of bounds
+/// (as with slices), and the constructors of the test problems in
+/// [`multi::problems`](crate::multi::problems).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Error {

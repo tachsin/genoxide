@@ -140,10 +140,15 @@ where
     ///   0 generations.
     /// - [`Error::NanFitness`] for a NaN with [`NanPolicy::Error`], and
     ///   [`Error::InvalidFitness`] for a negative constraint violation.
+    /// - [`Error::FitnessCount`] if a [`Batch`](super::Batch) doesn't return one score for one
+    ///   genome.
     /// - The errors of the algorithm's [`receive`](Incremental::receive) and of the checkpoint
     ///   closure.
     ///
-    /// The run stops at the first error, once the evaluations in flight are done.
+    /// The run stops at the first error, once the evaluations in flight are done. If the algorithm
+    /// has run before and a stop condition is already met, or its limit of evaluations was
+    /// reached before the initial population was complete, it returns that outcome at once,
+    /// without notifying the observers or calling the checkpoint closure again.
     pub fn run(&mut self) -> Result<Outcome<A::Genome>>
     where
         F: Sync,
@@ -188,13 +193,18 @@ where
             notified: None,
             discarded: Vec::new(),
         };
-        // a run that continues: its stop condition may already be met
-        if driver.algorithm.evaluations() >= driver.size {
+        // a run that continues: its stop condition may already be met, or its budget of
+        // evaluations spent before the initial population was complete
+        let evaluations = driver.algorithm.evaluations();
+        if evaluations > 0 {
             let progress = driver.progress();
             let aborted = driver
                 .abort
                 .is_some_and(|flag| flag.load(Ordering::Relaxed));
-            let reason = if aborted {
+            let reason = if evaluations < driver.size {
+                // like `finish`, a spent budget is the reason even if no condition says so
+                driver.budget_reached(0).then_some(StopReason::Evaluations)
+            } else if aborted {
                 Some(StopReason::Aborted)
             } else {
                 driver.stop.and_then(|stop| stop.check(&progress))

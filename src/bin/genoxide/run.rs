@@ -693,6 +693,7 @@ fn stop_reason(reason: StopReason) -> String {
         StopReason::Time => "time",
         StopReason::Stagnation => "stagnation",
         StopReason::Aborted => "aborted",
+        StopReason::Stalled => "stalled",
         _ => "other",
     }
     .to_string()

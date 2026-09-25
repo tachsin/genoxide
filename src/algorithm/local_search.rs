@@ -4,7 +4,7 @@ use super::ga::Unset;
 use super::{Algorithm, Candidates};
 use crate::genome::Representation;
 use crate::math::exp;
-use crate::operator::{Mutate, neighbor};
+use crate::operator::{MAX_SIZE, Mutate, check_size, neighbor};
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
 use std::collections::{HashSet, VecDeque};
@@ -472,8 +472,8 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
         }
     }
 
-    /// The number of neighbors evaluated per step, at least 1: 1 for first-improvement, more to
-    /// move to the best of them. 1 by default.
+    /// The number of neighbors evaluated per step, at least 1 and at most 2^24: 1 for
+    /// first-improvement, more to move to the best of them. 1 by default.
     pub fn neighbors(mut self, neighbors: usize) -> Self {
         self.neighbors = neighbors;
         self
@@ -508,7 +508,7 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
     }
 
     /// Iterated local search: after `patience` steps (at least 1) without a new best solution, the
-    /// search restarts from the best solution, changed by `kicks` (at least 1) random neighbor
+    /// search restarts from the best solution, changed by `kicks` (1 to 2^24) random neighbor
     /// moves. Strong enough kicks leave the basin of the local optimum, weak enough ones keep most
     /// of what was found; for a tour with 2-opt, 3 to 10 kicks are common. Off by default.
     pub fn restart(mut self, patience: u64, kicks: usize) -> Self {
@@ -526,8 +526,8 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
     ///
     /// # Errors
     ///
-    /// - [`Error::InvalidSetting`] for 0 neighbors, invalid annealing settings, a tabu tenure of
-    ///   0, or a restart patience or kicks of 0.
+    /// - [`Error::InvalidSetting`] for 0 neighbors or more than 2^24, invalid annealing settings,
+    ///   a tabu tenure of 0, a restart patience of 0, or restart kicks of 0 or more than 2^24.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<LocalSearch<R, M>>
     where
@@ -539,13 +539,14 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
                 reason: "must be at least 1".to_string(),
             });
         }
+        check_size("neighbors", self.neighbors)?;
         self.acceptance.validate()?;
         if let Some((patience, kicks)) = self.restart {
-            if patience == 0 || kicks == 0 {
+            if patience == 0 || kicks == 0 || kicks > MAX_SIZE {
                 return Err(Error::InvalidSetting {
                     setting: "restart",
                     reason: format!(
-                        "patience and kicks must be at least 1, got {patience} and {kicks}"
+                        "patience must be at least 1, and kicks between 1 and {MAX_SIZE}; got {patience} and {kicks}"
                     ),
                 });
             }

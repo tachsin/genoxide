@@ -3,6 +3,7 @@
 
 use super::{Algorithm, Candidates};
 use crate::genome::{Real, Reals, Representation};
+use crate::operator::check_size;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
 
@@ -303,7 +304,7 @@ pub struct PsoBuilder {
 }
 
 impl PsoBuilder {
-    /// The number of particles, at least 2; 20 to 50 is common. Required.
+    /// The number of particles, at least 2 and at most 2^24; 20 to 50 is common. Required.
     pub fn population_size(mut self, size: usize) -> Self {
         self.population_size = Some(size);
         self
@@ -371,8 +372,9 @@ impl PsoBuilder {
     /// # Errors
     ///
     /// - [`Error::MissingSetting`] without a population size.
-    /// - [`Error::InvalidSetting`] for a population size below 2, a ring without neighbors, or
-    ///   coefficients out of range.
+    /// - [`Error::InvalidSetting`] for a population size below 2 or above 2^24, a ring without
+    ///   neighbors, an inertia, acceleration or maximum velocity out of range, or more initial
+    ///   genomes than the population size.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<Pso> {
         let size = self.population_size.ok_or(Error::MissingSetting {
@@ -385,6 +387,7 @@ impl PsoBuilder {
                 format!("a swarm needs at least 2 particles, got {size}"),
             );
         }
+        check_size("population_size", size)?;
         if let Topology::Ring { neighbors: 0 } = self.topology {
             return invalid("topology", "a ring needs at least 1 neighbor".to_string());
         }

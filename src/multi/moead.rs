@@ -5,7 +5,7 @@ use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
 use crate::genome::Representation;
-use crate::operator::{Crossover, Mutate, check_probability};
+use crate::operator::{Crossover, Mutate, check_probability, check_rates};
 use crate::rng::Chance;
 use crate::{Error, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
@@ -571,9 +571,9 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
     ///
     /// - [`Error::InvalidSetting`] for no objectives, fewer than 2 weight vectors or one with a
     ///   negative, non-finite or all-zero component, fewer than 2 neighbors, no replacements, a
-    ///   probability or
-    ///   rate out of range, both rates 0, a negative or non-finite `theta`, or more initial
-    ///   genomes than weight vectors.
+    ///   probability or rate out of range, a mutation rate of 0 with a crossover rate of 0 or
+    ///   [`NoCrossover`](crate::operator::NoCrossover), a negative or non-finite `theta`, or more
+    ///   initial genomes than weight vectors.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<Moead<R, C, X, M>>
     where
@@ -616,14 +616,11 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
                 );
             }
         }
-        let crossover_rate = check_probability("crossover_rate", self.crossover_rate)?;
-        let mutation_rate = check_probability("mutation_rate", self.mutation_rate)?;
-        if crossover_rate == 0.0 && mutation_rate == 0.0 {
-            return invalid(
-                "mutation_rate",
-                "crossover_rate and mutation_rate are both 0, so every child would be a copy of a parent".to_string(),
-            );
-        }
+        let (crossover_rate, mutation_rate) = check_rates(
+            self.crossover_rate,
+            self.mutation_rate,
+            self.crossover.recombines(),
+        )?;
         if self.initial_genomes.len() > size {
             return invalid(
                 "initial_genomes",
