@@ -1,7 +1,7 @@
 [package]
 name = "genoxide-python"
 # genoxide's version: the release PR sets both
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
 rust-version = "1.86"
 description = "Python bindings of genoxide"
