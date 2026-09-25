@@ -3,7 +3,9 @@
 use genoxide::Objective::{Maximize, Minimize};
 use genoxide::engine::NanPolicy;
 use genoxide::multi::indicator::{hypervolume, igd_plus};
-use genoxide::operator::{PolynomialMutation, SimulatedBinaryCrossover};
+use genoxide::operator::{
+    BitFlip, Mutate, PolynomialMutation, SimulatedBinaryCrossover, UniformCrossover,
+};
 use genoxide::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -449,4 +451,83 @@ fn a_multi_objective_run_whose_stop_condition_is_met_returns_at_once() {
     let outcome = engine.run().unwrap();
     assert_eq!(outcome.generations(), 4);
     assert_eq!(outcome.evaluations(), first.evaluations());
+}
+
+// flips bits 63 and 68: a child two bits away from its parent, which FxHash's mixing gave the
+// parent's fingerprint
+#[derive(Clone, Debug)]
+struct FlipTwo;
+
+impl Mutate<Binary> for FlipTwo {
+    fn mutate(&self, _: &Binary, genome: &mut Bits, _: &mut StreamRng) {
+        genome.flip(63);
+        genome.flip(68);
+    }
+}
+
+#[test]
+fn distinct_children_are_not_dropped_as_copies() {
+    // 10 parents, each with one of the bits 0 to 9 set, and one possible child each
+    let parents: Vec<Bits> = (0..10)
+        .map(|k| {
+            let mut bits = Bits::zeros(70);
+            bits.flip(k);
+            bits
+        })
+        .collect();
+    let mut nsga2 = Nsga2::builder(Binary::new(70).unwrap(), [Minimize, Minimize])
+        .population_size(10)
+        .crossover(UniformCrossover::new())
+        .crossover_rate(0.0)
+        .mutate(FlipTwo)
+        .initial_genomes(parents)
+        .seed(1)
+        .build()
+        .unwrap();
+    let f = |x: &Bits| Scores::new([x.count_ones() as f64, 0.0]);
+    let told: Vec<Scores<2>> = nsga2.ask().iter().map(f).collect();
+    nsga2.tell(&told).unwrap();
+    // the 10 possible children, none a copy
+    let mut children: Vec<String> = nsga2.ask().iter().map(Bits::to_string).collect();
+    children.sort();
+    children.dedup();
+    assert_eq!(children.len(), 10);
+}
+
+// a hash of the final population of a seeded NSGA-II run on 70-bit genomes (two words), with and
+// without duplicate elimination
+fn binary_nsga2_digest(eliminate_duplicates: bool) -> u64 {
+    let f = |x: &Bits| {
+        [
+            x.count_ones() as f64,
+            x.iter().take(3).filter(|&bit| !bit).count() as f64,
+        ]
+    };
+    let nsga2 = Nsga2::builder(Binary::new(70).unwrap(), [Minimize, Minimize])
+        .population_size(30)
+        .crossover(UniformCrossover::new())
+        .mutate(BitFlip::count(1).unwrap())
+        .eliminate_duplicates(eliminate_duplicates)
+        .seed(2)
+        .build()
+        .unwrap();
+    let mut engine = MultiEngine::new(nsga2, f).stop_when(Stop::generations(40));
+    engine.run().unwrap();
+    // FNV-1a
+    let genomes: String = engine
+        .algorithm()
+        .population()
+        .iter()
+        .map(|x| x.genome().to_string())
+        .collect();
+    genomes.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+/// Fixed values: these must never change for the same major version, on any platform.
+#[test]
+fn portable_binary_runs() {
+    assert_eq!(binary_nsga2_digest(false), 0xb744_9594_d8f7_45b1);
+    assert_eq!(binary_nsga2_digest(true), 0x01fa_0b8c_9abc_7d5d);
 }
