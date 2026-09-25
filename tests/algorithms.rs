@@ -405,10 +405,14 @@ fn de_trials_change_a_gene_that_can_change() {
 
 #[test]
 fn a_huge_lambda_is_a_setting_error() {
-    for scheme in [
-        Scheme::MuPlusLambda { lambda: usize::MAX },
-        Scheme::MuCommaLambda { lambda: usize::MAX },
-    ] {
+    // more offspring than fit in memory, on 32 and 64 bits: an individual takes more than 2 bytes
+    let huge = [usize::MAX, isize::MAX as usize / 2];
+    for scheme in huge.into_iter().flat_map(|lambda| {
+        [
+            Scheme::MuPlusLambda { lambda },
+            Scheme::MuCommaLambda { lambda },
+        ]
+    }) {
         let result = Ga::builder(Binary::new(8).unwrap())
             .population_size(4)
             .select(Tournament::new(2).unwrap())
