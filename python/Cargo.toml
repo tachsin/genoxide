@@ -1,6 +1,6 @@
 [package]
 name = "genoxide-python"
-# genoxide's version: the release PR sets both
+# genoxide's version: the wheels take it from genoxide's Cargo.toml when they're built
 version = "0.5.2"
 edition = "2024"
 rust-version = "1.86"
