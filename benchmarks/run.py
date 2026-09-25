@@ -27,6 +27,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 import venv
 from pathlib import Path
@@ -294,18 +295,34 @@ def stop_early(runs, max_seconds):
     return [run for run in runs if run["solver"] not in stopped or run["seed"] in seeds]
 
 
+def run_outcome(run):
+    """How a run ended, for the log."""
+    if "success" not in run:
+        return "front"
+    return "target reached" if run["success"] else "target missed"
+
+
 def run_adapter(adapter, problem, size, mode, seeds, max_evaluations, max_seconds):
     command = adapter["command"] + [
         problem, str(size), mode, "0", str(seeds - 1), str(max_evaluations), str(max_seconds),
     ]
-    # run from this folder, so a library repository checked out next to it can't shadow a package
-    completed = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
-    if completed.returncode != 0:
-        print(completed.stderr, file=sys.stderr)
-        raise SystemExit(f"adapter failed: {' '.join(command)}")
-    runs = stop_early(
-        [json.loads(line) for line in completed.stdout.splitlines() if line.strip()], max_seconds
-    )
+    runs = []
+    # run from this folder, so a library repository checked out next to it can't shadow a package.
+    # Each run is logged as the adapter prints it, e.g. for a live view of the progress; stderr goes
+    # to a file, so an adapter that writes a lot there can't block.
+    with tempfile.TemporaryFile(mode="w+") as stderr:
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=stderr, text=True, cwd=ROOT)
+        for line in process.stdout:
+            if line.strip():
+                run = json.loads(line)
+                runs.append(run)
+                print(f"  run: {run['library']} {run['solver']} seed {run['seed']}: "
+                      f"{run['time_s']:.3f} s, {run_outcome(run)}", flush=True)
+        if process.wait() != 0:
+            stderr.seek(0)
+            print(stderr.read(), file=sys.stderr)
+            raise SystemExit(f"adapter failed: {' '.join(command)}")
+    runs = stop_early(runs, max_seconds)
     for run in runs:
         if is_front(run["problem"]):
             # the same hypervolume for every library; the front itself isn't kept
