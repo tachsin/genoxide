@@ -766,8 +766,11 @@ class Ga(_SingleObjective):
 class De(_SingleObjective):
     """Differential evolution. Real genomes.
 
-    By default DE/rand/1/bin with F 0.5 and CR 0.9, and ``population_size`` is needed, e.g. 10
-    times the number of genes. With ``l_shade``, L-SHADE (Tanabe and
+    By default DE/current-to-pbest/1 with an archive, SHADE's adaptation of F and CR, a
+    population of the number of genes + 10, and restarts when the population converges or
+    stalls: the settings that reached targets in the fewest evaluations in genoxide's
+    measurements. Non-separable, highly multimodal problems do better with a larger
+    ``population_size``, e.g. 100. With ``l_shade``, L-SHADE (Tanabe and
     Fukunaga, 2014) for a budget of that many evaluations: current-to-pbest/1, F and CR adapted
     during the run, and a population that shrinks linearly from 18 times the number of genes to 4.
     Stop the run at the same number of evaluations.

@@ -71,7 +71,7 @@ An exception in the fitness function stops the run and is raised by `run`, and s
 |---|---|---|
 | `Ga` | all | `population_size`, `select`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1), `scheme` |
 | `LocalSearch` | all | `neighbor` (a mutation), `neighbors` (1), `acceptance`, `restart=(patience, kicks)` |
-| `De` | real | `population_size` (needed without `l_shade`), `l_shade` (a budget of evaluations, for L-SHADE) |
+| `De` | real | `population_size` (the number of genes + 10), `l_shade` (a budget of evaluations, for L-SHADE) |
 | `Cmaes` | real | `population_size`, `restarts` (`"ipop"`, `"bipop"`), `initial_step` |
 | `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
 | `Nsga2` | all | `objectives`, `population_size`, `crossover`, `mutation`, `crossover_rate` |

@@ -73,6 +73,7 @@ def test_the_batch_function_gets_a_generation():
 @pytest.mark.parametrize(
     "algorithm",
     [
+        gx.De(gx.Real((-5.12, 5.12), length=5), objective="minimize", seed=1),
         gx.De(gx.Real((-5.12, 5.12), length=5), population_size=50, objective="minimize", seed=1),
         gx.De(gx.Real((-5.12, 5.12), length=5), l_shade=40_000, objective="minimize", seed=1),
         gx.Cmaes(gx.Real((-5.12, 5.12), length=5), restarts="ipop", objective="minimize", seed=1),
@@ -322,7 +323,7 @@ def test_settings_errors():
             mutation=gx.BitFlip(count=1),
         ).run(lambda bits: 0.0, generations=1)
     with pytest.raises(ValueError, match="`population_size` is needed"):
-        gx.De(gx.Real((0.0, 1.0), length=2)).run(lambda x: 0.0, generations=1)
+        gx.Pso(gx.Real((0.0, 1.0), length=2)).run(lambda x: 0.0, generations=1)
     with pytest.raises(ValueError, match="Real genome"):
         gx.Cmaes(gx.Binary(8)).run(lambda bits: 0.0, generations=1)
     with pytest.raises(ValueError, match="rate"):
