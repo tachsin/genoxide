@@ -103,3 +103,15 @@ A run that ends without reaching the target is reported as "not reached", with t
 8.3. Library versions are pinned and recorded with each result.
 
 8.4. Library bugs aren't worked around, except where the notes say so and show both results.
+
+## 9. Open documentation
+
+9.1. Every library has a page in [libraries/](libraries/). For each problem type, it gives:
+- the methods chosen, with where the library recommends them, and the settings, with where they come from;
+- the alternatives considered: other methods, settings or functions of the library, and why each was left out;
+- the separate test runs that checked the adapter before the benchmark: success rate, evaluations and the best value reached;
+- anything the library can't do here, and bugs found.
+
+9.2. Nothing about how a library is run is left to its code alone. The adapter points to its page, and the page points to the lines of the adapter.
+
+9.3. **Better ways are welcome.** If you know a better way to solve one of these problems with one of these libraries, open a [benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml). Examples: another method, a setting its docs recommend, or a function we missed. Say which library, problem and method, and where the library documents it. It's tested under these rules, and if it does better, it replaces the current one and the page records the change. That applies to genoxide too.

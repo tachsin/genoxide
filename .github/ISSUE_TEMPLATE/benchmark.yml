@@ -1,0 +1,34 @@
+name: Benchmark
+description: A better way to run a library in the benchmarks, or a mistake in them
+labels: [benchmarks]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The benchmarks follow [the rules](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md), and each library's page in [docs/benchmarks/libraries/](https://github.com/tachsin/genoxide/tree/main/docs/benchmarks/libraries) explains how it's run and why. A better way is tested under the same rules, and replaces the current one if it does better.
+  - type: input
+    id: library
+    attributes:
+      label: Library
+      description: e.g. pymoo, jMetal, genoxide
+    validations:
+      required: true
+  - type: input
+    id: problem
+    attributes:
+      label: Problem and mode
+      description: e.g. rastrigin-30, idiomatic
+    validations:
+      required: true
+  - type: textarea
+    id: better
+    attributes:
+      label: The better way
+      description: The method, function or settings, and where the library documents or recommends them (a link to its docs, an example or its README).
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Results you got, if any, e.g. success rate or evaluations to the target.
