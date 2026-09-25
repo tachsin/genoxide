@@ -11,14 +11,16 @@ next to the code below.
 pagmo's algorithms run in C++ and call the fitness of a Python user-defined problem (UDP), one
 decision vector at a time, single-threaded (no islands, archipelagos or batch evaluators). The UDP
 counts every call (rule 3), the initial populations and every restart included, and keeps the best
-solution. How a run ends (rule 2):
+solution. It also counts the evaluated solutions outside the bounds, as pagmo proposed them (rule
+2.4: pagmo's own bound handling keeps them inside, see the page). How a run ends (rule 2):
 - single-objective runs: the counter raises Stop from inside the fitness at the first of the target,
   the budget and the time limit, so a run ends at that evaluation, never past it;
-- an algorithm that ends by its own criteria (sade's and CMA-ES' ftol and xtol, CMA-ES' and xNES'
-  generations, GACO's impstop and evalstop) starts again from a new random population, the
+- a limit that's only a budget (every algorithm's gen) is lifted: gen covers the whole budget;
+- an algorithm that ends on convergence (sade's, CMA-ES' and xNES' ftol and xtol, GACO's impstop and
+  evalstop) starts again from a new random population with the seed seed * 1000 + restart, the
   procedure of pygmo's cmaes_vs_xnes tutorial for algorithms "with well defined exit conditions";
-  simulated annealing is annealed again from its best point, as in the solving_schwefel_20 tutorial;
-- the others (sga, ihs) are given the generations of the whole budget and run to it by themselves;
+- simulated annealing's cooling schedule has a fixed length; it's annealed again from its best
+  point, as in the solving_schwefel_20 tutorial;
 - multi-objective runs have no target and run the generations of the budget, see evolve_front.
 """
 
@@ -56,6 +58,8 @@ class Counter:
         self.best = math.inf
         self.best_x = None
         self.stopped = False
+        # evaluated solutions outside the bounds (rule 2.4)
+        self.outside = 0
 
     def start(self):
         self.deadline = time.perf_counter() + self.max_seconds
@@ -163,18 +167,16 @@ def dtlz1(x, objectives):
     return f.tolist()
 
 
-# (fitness function of x and the size, variables, objectives, population size of NSGA-II and NSPSO,
-# MOEA/D decomposition). NSGA-II needs a multiple of 4; MOEA/D's population is its 100 (2
-# objectives, 99 divisions) or 91 (3 objectives, 12 divisions) grid weights
+# (fitness function of x and the size, variables, objectives, population size of NSGA-II, a
+# multiple of 4)
 FRONT_PROBLEMS = {
-    "zdt1": (lambda x, size: zdt1(x), lambda size: size, 2, 100, "tchebycheff"),
-    "zdt2": (lambda x, size: zdt2(x), lambda size: size, 2, 100, "tchebycheff"),
-    "zdt3": (lambda x, size: zdt3(x), lambda size: size, 2, 100, "tchebycheff"),
-    # size: the number of objectives, with k = 10 (DTLZ2) and 5 (DTLZ1); pagmo's "bi" is PBI with θ 5
-    "dtlz2": (lambda x, size: dtlz2(x, size), lambda size: size + 9, 3, 92, "bi"),
-    "dtlz1": (lambda x, size: dtlz1(x, size), lambda size: size + 4, 3, 92, "bi"),
+    "zdt1": (lambda x, size: zdt1(x), lambda size: size, 2, 100),
+    "zdt2": (lambda x, size: zdt2(x), lambda size: size, 2, 100),
+    "zdt3": (lambda x, size: zdt3(x), lambda size: size, 2, 100),
+    # size: the number of objectives, with k = 10 (DTLZ2) and 5 (DTLZ1)
+    "dtlz2": (lambda x, size: dtlz2(x, size), lambda size: size + 9, 3, 92),
+    "dtlz1": (lambda x, size: dtlz1(x, size), lambda size: size + 4, 3, 92),
 }
-MOEAD_WEIGHTS = {2: 100, 3: 91}
 
 
 class Problem:
@@ -188,8 +190,12 @@ class Problem:
         self.objectives = objectives
         self.integers = integers
         self.sign = sign
+        self.low, self.high = np.array(lower, dtype=float), np.array(upper, dtype=float)
 
     def fitness(self, x):
+        # rule 2.4: x as pagmo proposed it, not clipped here
+        if np.any(x < self.low) or np.any(x > self.high):
+            counter.outside += 1
         if self.objectives == 1:
             value = self.sign * self.function(x)
             counter.count(x, value)
@@ -232,11 +238,12 @@ class ToBudget:
 
 
 class Restarts:
-    """Evolves a random population until the algorithm stops by its own criteria, then starts
-    again from a new random population; the counter keeps the best. This is the procedure of
+    """Evolves a random population until the algorithm stops on convergence (its gen covers the
+    whole budget), then starts again from a new random population; the counter keeps the best
+    (rule 2.2). pygmo has no restart mechanism of its own; this is the procedure of
     tutorials/cmaes_vs_xnes, "the best practice ... when algorithms have well defined exit
     conditions", which assembles "the results in single runs containing multiple restarts".
-    Restart r uses the seed seed * 100000 + r for its population and its algorithm."""
+    Restart r uses the seed seed * 1000 + r for its population and its algorithm."""
 
     def __init__(self, population_size, make_algorithm):
         self.population_size = population_size
@@ -246,7 +253,7 @@ class Restarts:
     def run(self, problem, seed):
         for restart in itertools.count():
             self.restarts = restart
-            restart_seed = seed * 100_000 + restart
+            restart_seed = seed * 1000 + restart
             population = pg.population(problem, self.population_size, seed=restart_seed)
             pg.algorithm(self.make_algorithm(restart_seed)).evolve(population)
 
@@ -254,7 +261,9 @@ class Restarts:
 class Reanneal:
     """Simulated annealing, annealed again from its best point after each annealing schedule, as in
     tutorials/solving_schwefel_20 ("since we will be using some reannealing": 5 calls of evolve on
-    the same population). Each call starts from the population's best and puts its best back."""
+    the same population). Each call starts from the population's best and puts its best back. The
+    schedule's length is part of its cooling rate ((Tf / Ts)^(1 / n_T_adj) per adjustment), so it
+    can't be lifted without changing the method."""
 
     def __init__(self, population_size, make_algorithm):
         self.population_size = population_size
@@ -269,30 +278,14 @@ class Reanneal:
             population = algorithm.evolve(population)
 
 
-# The population sizes of CMA-ES and xNES in tutorials/cmaes_vs_xnes. Its figures compare 3 sizes
-# per function and dimension (Rosenbrock 10: 10, 20, 30; Rosenbrock 20: 40, 60, 100; Rastrigin 10:
-# 40, 60, 100; Rastrigin 20: 100, 150, 200; Ackley 10: 10, 20, 30; Ackley 20: 20, 30, 40), and this
-# is the one with the fewest median evaluations to the target in each figure (where its curve
-# crosses 0.5). A dimension the tutorial doesn't show uses the nearest one it shows (Rastrigin 30
-# and Ackley 30: their dimension 20).
-TUTORIAL_POPULATIONS = {
-    # function: {dimension: (CMA-ES, xNES)}
-    "rosenbrock": {10: (10, 10), 20: (40, 40)},
-    "rastrigin": {10: (100, 100), 20: (200, 150)},
-    "ackley": {10: (10, 10), 20: (20, 20)},
-}
-
-
-def tutorial_population(problem, size, method):
-    dimensions = TUTORIAL_POPULATIONS[problem]
-    nearest = min(dimensions, key=lambda dimension: (abs(dimension - size), -dimension))
-    return dimensions[nearest][0 if method == "cmaes" else 1]
-
-
 # the population of 20 of pygmo's tutorials: tutorials/evolving_a_population (sade on Rosenbrock
 # 10), tutorials/solving_schwefel_20 (sade, de, de1220, pso, simulated annealing on Schwefel 20)
 # and pagmo's quick start (tutorials/getting_started.cpp: sade on Schwefel 30, islands of 20)
 TUTORIAL_POPULATION = 20
+# CMA-ES and xNES: the first of the population sizes of tutorials/cmaes_vs_xnes (Rosenbrock 10), and
+# the population of tutorials/cec2013_comp
+ROSENBROCK_POPULATION = 10
+CEC2013_POPULATION = 50
 
 
 def single_solvers(problem, size, mode):
@@ -340,18 +333,28 @@ def single_solvers(problem, size, mode):
             ("sade", udp, Restarts(TUTORIAL_POPULATION, lambda seed: pg.sade(
                 gen=budget_generations(TUTORIAL_POPULATION), seed=seed)), TUTORIAL_POPULATION),
         ]
-        # CMA-ES with the settings of tutorials/cmaes_vs_xnes (gen=4000, ftol=1e-8, xtol=1e-10,
-        # restarts), its population for the function, and force_bounds: the only way pagmo offers
-        # to keep it within the bounds ("The fitness will never be called outside the bounds")
-        cmaes_population = tutorial_population(problem, size, "cmaes")
-        solvers.append(("cma_es", udp, Restarts(cmaes_population, lambda seed: pg.cmaes(
-            gen=4000, ftol=1e-8, xtol=1e-10, force_bounds=True, seed=seed)), cmaes_population))
+        # CMA-ES and xNES with force_bounds, pagmo's only bound handling for them, which clips each
+        # sample to the bounds ("The fitness will never be called outside the bounds"). Their gen
+        # (4000 or 1000 in the tutorials) is only a budget, lifted (rule 2.2); ftol and xtol end an
+        # attempt, and they restart, as both tutorials say to
         if problem == "rosenbrock":
-            # xNES, the other method of tutorials/cmaes_vs_xnes, with the same settings
-            xnes_population = tutorial_population(problem, size, "xnes")
-            solvers.append(("xnes", udp, Restarts(xnes_population, lambda seed: pg.xnes(
-                gen=4000, ftol=1e-8, xtol=1e-10, force_bounds=True, seed=seed)), xnes_population))
+            # the example of tutorials/cmaes_vs_xnes, which runs exactly Rosenbrock 10: ftol=1e-8,
+            # xtol=1e-10, and popsizes = [10, 20, 30]. It states no preference between the three
+            # sizes, so the adapter takes the first, 10
+            solvers.append(("cma_es", udp, Restarts(ROSENBROCK_POPULATION, lambda seed: pg.cmaes(
+                gen=budget_generations(ROSENBROCK_POPULATION), ftol=1e-8, xtol=1e-10, force_bounds=True,
+                seed=seed)), ROSENBROCK_POPULATION))
+            # xNES, the other method of the same example, with the same settings
+            solvers.append(("xnes", udp, Restarts(ROSENBROCK_POPULATION, lambda seed: pg.xnes(
+                gen=budget_generations(ROSENBROCK_POPULATION), ftol=1e-8, xtol=1e-10, force_bounds=True,
+                seed=seed)), ROSENBROCK_POPULATION))
         else:
+            # the example of tutorials/cec2013_comp, on the CEC 2013 suite of multimodal functions:
+            # cmaes(gen=1000, ftol=1e-9, xtol=1e-9), "we choose a population of 50", and "a proper
+            # comparison ... should allow for restarts"
+            solvers.append(("cma_es", udp, Restarts(CEC2013_POPULATION, lambda seed: pg.cmaes(
+                gen=budget_generations(CEC2013_POPULATION), ftol=1e-9, xtol=1e-9, force_bounds=True,
+                seed=seed)), CEC2013_POPULATION))
             # simulated annealing, one of "the two most successful algorithms" of
             # tutorials/solving_schwefel_20, with its settings (Ts=10, Tf=0.01, n_T_adj=5, the
             # other parameters default), its population of 20 and its reannealing; one evaluation
@@ -375,29 +378,18 @@ def single_solvers(problem, size, mode):
 
 def front_solvers(problem, size):
     """[(solver, problem, population size, algorithm factory (gen, seed) -> UDA)]"""
-    function, variables, objectives, population, decomposition = FRONT_PROBLEMS[problem]
+    function, variables, objectives, population = FRONT_PROBLEMS[problem]
     n = variables(size)
     udp = Problem(functools.partial(function, size=size), [0.0] * n, [1.0] * n, objectives=objectives)
+    # The matched scenarios run only NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA (rule 6.1).
+    # pagmo 2.19.1 has no NSGA-III, SPEA2 or SMS-EMOA, and its MOEA/D (moead, moead_gen) is the DE
+    # variant, which can't use SBX; NSPSO and MACO aren't matched algorithms
     return [
-        # the matched settings: SBX with eta 15 at 0.9, polynomial mutation with eta 20 at 1 / n
+        # the matched settings: SBX with eta 15 at 0.9, polynomial mutation with eta 20 at 1 / n.
+        # Both of pagmo's operators keep the genes within the bounds: its SBX clips the children,
+        # and its polynomial mutation is Deb's bounded one
         ("nsga2", udp, population,
          lambda gen, seed: pg.nsga2(gen=gen, cr=0.9, eta_c=15, m=1.0 / n, eta_m=20, seed=seed)),
-        # 100 or 91 grid weights, 20 neighbors, parents from the neighborhood with probability
-        # 0.9, at most 2 replacements, Tchebycheff or PBI with θ 5. Difference: pagmo's MOEA/D
-        # is the DE variant (DE with CR 1 and F 0.5, then polynomial mutation with eta 20), there's
-        # no SBX
-        ("moead", udp, MOEAD_WEIGHTS[objectives],
-         lambda gen, seed: pg.moead(gen=gen, weight_generation="grid", decomposition=decomposition,
-                                    neighbours=20, CR=1.0, F=0.5, eta_m=20, realb=0.9, limit=2,
-                                    preserve_diversity=True, seed=seed)),
-        # the settings of tutorials/nspso_tutorial_zdt1_2 ("as recommended in the original paper"),
-        # with NSGA-II's population; memory keeps the velocities when evolve_front calls it once per
-        # generation ("NSPSO can be called either in one single call or iteratively in a for loop,
-        # by maintaining the same results")
-        ("nspso", udp, population,
-         lambda gen, seed: pg.nspso(gen=gen, omega=0.001, c1=2.0, c2=2.0, chi=1.0, v_coeff=0.5,
-                                    leader_selection_range=100, diversity_mechanism="crowding distance",
-                                    memory=True, seed=seed)),
     ]
 
 
@@ -405,9 +397,7 @@ def evolve_front(udp, population_size, make_algorithm, seed):
     """Multi-objective runs have no target: one call of evolve with the generations of the budget,
     as pagmo is used, when they fit in the time limit with room to spare (3 times the time of the
     initial population's evaluations per generation). Otherwise one generation per call, with the
-    time checked after each. (One call per generation would change moead, which recomputes its
-    weights, neighborhoods and ideal point in every call, and cost it ~50% more time.) Returns
-    (population, generations)."""
+    time checked after each. Returns (population, generations)."""
     initial = time.perf_counter()
     population = pg.population(udp, population_size, seed=seed)
     seconds_per_generation = time.perf_counter() - initial
@@ -480,6 +470,7 @@ def main():
                     "evaluations": counter.evaluations,
                     "front": [[float(v) for v in f[i]] for i in first],
                     "solutions": [[float(v) for v in x[i]] for i in first],
+                    "outside": counter.outside,
                 }), flush=True)
         return
 
@@ -517,6 +508,8 @@ def main():
                 "success": counter.best <= target,
                 "solution": solution,
             }
+            if problem in REAL_PROBLEMS:
+                run["outside"] = counter.outside
             if hasattr(method, "restarts"):
                 # restarts, or reannealings of simulated annealing
                 run["restarts"] = method.restarts
