@@ -14,7 +14,7 @@
 
 ```toml
 [dependencies]
-genoxide = "0.5"
+genoxide = "0.6"
 ```
 
 ## Benchmarks
@@ -86,7 +86,7 @@ The full methodology, every library's settings, and the bugs we found in the lib
 | **Correct** | Invalid settings are errors from `build()`, before anything runs. An operator that doesn't fit the genome is a compile error |
 | **Reproducible** | The same seed gives the same result, on any number of threads and on 32 or 64 bits: the random numbers and math are portable, and tests pin their values |
 | **Safe** | `#![forbid(unsafe_code)]`: memory safety from the compiler, and parallel code without data races |
-| **Also for Python** | A Python package with numpy genomes and vectorized fitness functions, in [`python/`](python/). `pip install genoxide` comes with 0.6 |
+| **Also for Python** | `pip install genoxide`: the algorithms, with numpy genomes and vectorized fitness functions, see [`python/`](python/) |
 | **Batteries included** | Statistics, hall of fame, progress reports, constraints, checkpoints to resume a run, cancellation, `tracing` |
 
 ## A first look
@@ -174,7 +174,11 @@ ga = gx.Ga(
 result = ga.run(lambda bits: bits.sum(), target=100, generations=1_000)
 ```
 
-It isn't on PyPI yet: build it with `maturin develop --release` in `python/`.
+```sh
+pip install genoxide
+```
+
+The wheels need no Rust: Linux, macOS and Windows, for CPython 3.10 and later.
 
 Using an AI coding assistant? Point it to [AGENTS.md](AGENTS.md): it has the decision tables, settings, templates and fixes for common errors.
 
@@ -187,8 +191,8 @@ Using an AI coding assistant? Point it to [AGENTS.md](AGENTS.md): it has the dec
 | 0.3 Evolution strategies & swarm | CMA-ES, DE (JADE, SHADE), PSO, (μ,λ) and (μ+λ)-ES | ✅ released |
 | 0.4 Multi-objective | NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA, hypervolume | ✅ released |
 | 0.5 Scale | Island model, checkpointing, batch/GPU and asynchronous evaluation, CLI | ✅ released |
-| 0.6 Python | PyO3 bindings with numpy support | 🚧 in progress |
-| 0.7 GP & neuroevolution | Typed tree GP, NEAT | planned |
+| 0.6 Python | PyO3 bindings with numpy support | ✅ released |
+| 0.7 GP & neuroevolution | Typed tree GP, NEAT | 🔜 next |
 | 0.8 Frontier | Quality-diversity (MAP-Elites), LLM-guided operators | planned |
 | 1.0 | Stable API and published benchmark report | planned |
 

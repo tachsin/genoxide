@@ -31,7 +31,11 @@ More in [examples/](examples/): OneMax, a knapsack with a constraint, N-Queens w
 
 ## Install
 
-It isn't on PyPI yet. Build it from the repository with Rust and [maturin](https://www.maturin.rs/):
+```sh
+pip install genoxide
+```
+
+The wheels are for Linux (x86_64 and aarch64, glibc and musl), macOS (Apple silicon and Intel) and Windows (x64), and CPython 3.10 or later, with numpy. To build it from the repository instead, with Rust and [maturin](https://www.maturin.rs/):
 
 ```sh
 cd python
