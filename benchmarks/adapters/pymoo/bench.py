@@ -53,7 +53,7 @@ class OneMax(CountingProblem):
         super().__init__(n_var=size, xl=0, xu=1, vtype=bool)
 
     def fitness(self, x):
-        return -int(sum(x))  # maximize the number of ones
+        return -int(x.sum())  # maximize the number of ones
 
 
 class NQueens(CountingProblem):
@@ -84,7 +84,7 @@ RASTRIGIN_TARGET = 0.01
 
 # Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
 # towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
-SHIFT = [2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(1000)]
+SHIFT = np.array([2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(1000)])
 
 
 class Rastrigin(CountingProblem):
@@ -92,7 +92,8 @@ class Rastrigin(CountingProblem):
         super().__init__(n_var=size, xl=-RASTRIGIN_BOUND, xu=RASTRIGIN_BOUND)
 
     def fitness(self, x):
-        return 10 * len(x) + sum((v - s) ** 2 - 10 * math.cos(2 * math.pi * (v - s)) for v, s in zip(x, SHIFT))
+        d = x - SHIFT[:len(x)]
+        return 10 * len(x) + np.sum(d ** 2 - 10 * np.cos(2 * np.pi * d))
 
 
 class Rosenbrock(CountingProblem):
@@ -100,7 +101,8 @@ class Rosenbrock(CountingProblem):
         super().__init__(n_var=size, xl=-5.0, xu=10.0)
 
     def fitness(self, x):
-        return sum(100 * (b - a * a) ** 2 + (1 - a) ** 2 for a, b in zip(x, x[1:]))
+        a, b = x[:-1], x[1:]
+        return np.sum(100 * (b - a * a) ** 2 + (1 - a) ** 2)
 
 
 class Ackley(CountingProblem):
@@ -109,8 +111,9 @@ class Ackley(CountingProblem):
 
     def fitness(self, x):
         n = len(x)
-        squares = sum((v - s) ** 2 for v, s in zip(x, SHIFT)) / n
-        cosines = sum(math.cos(2 * math.pi * (v - s)) for v, s in zip(x, SHIFT)) / n
+        d = x - SHIFT[:n]
+        squares = np.sum(d ** 2) / n
+        cosines = np.sum(np.cos(2 * np.pi * d)) / n
         return -20 * math.exp(-0.2 * math.sqrt(squares)) - math.exp(cosines) + 20 + math.e
 
 
@@ -136,7 +139,7 @@ class FrontProblem(ElementwiseProblem):
 
 
 def zdt_g(x):
-    return 1 + 9 * sum(x[1:]) / (len(x) - 1)
+    return 1 + 9 * np.sum(x[1:]) / (len(x) - 1)
 
 
 def zdt1(x):
@@ -155,7 +158,7 @@ def zdt3(x):
 
 
 def dtlz2(x, objectives=3):
-    g = sum((v - 0.5) ** 2 for v in x[objectives - 1:])
+    g = np.sum((x[objectives - 1:] - 0.5) ** 2)
     values = []
     for m in range(objectives):
         f = 1 + g
@@ -169,7 +172,7 @@ def dtlz2(x, objectives=3):
 
 def dtlz1(x, objectives=3):
     tail = x[objectives - 1:]
-    g = 100 * (len(tail) + sum((v - 0.5) ** 2 - math.cos(20 * math.pi * (v - 0.5)) for v in tail))
+    g = 100 * (len(tail) + np.sum((tail - 0.5) ** 2 - np.cos(20 * np.pi * (tail - 0.5))))
     values = []
     for m in range(objectives):
         f = 0.5 * (1 + g)

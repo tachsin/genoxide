@@ -3,8 +3,8 @@
 //! Evolutionary computation for Rust: genetic algorithms, evolution strategies, multi-objective
 //! optimization and more.
 //!
-//! **Pre-alpha:** see the [roadmap](https://github.com/tachsin/genoxide/blob/main/ROADMAP.md) for
-//! what is planned.
+//! **Alpha, pre-1.0:** the API changes between 0.x versions. See the
+//! [roadmap](https://github.com/tachsin/genoxide/blob/main/ROADMAP.md) for what is planned.
 //!
 //! ```
 //! use genoxide::prelude::*;

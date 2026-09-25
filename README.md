@@ -10,7 +10,7 @@
 
 **Evolutionary computation for Rust: genetic algorithms, evolution strategies, differential evolution, particle swarms, local search and multi-objective optimization in one library.**
 
-> **Pre-1.0:** the API changes between 0.x versions. See the [roadmap](ROADMAP.md), and share ideas in the issues.
+> **Alpha, pre-1.0:** the API changes between 0.x versions. See the [roadmap](ROADMAP.md), and share ideas in the issues.
 
 ```toml
 [dependencies]

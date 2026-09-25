@@ -2,7 +2,7 @@
 
 This guide is for AI assistants (and people) writing code that uses genoxide. Every Rust block below is a complete program, compiled and run in CI, so it matches the current API.
 
-genoxide is pre-alpha: the API changes between 0.x versions. Check the version in `Cargo.toml` and the [API docs](https://docs.rs/genoxide) when in doubt.
+genoxide is alpha, pre-1.0: the API changes between 0.x versions. Check the version in `Cargo.toml` and the [API docs](https://docs.rs/genoxide) when in doubt.
 
 ## The shape of every program
 

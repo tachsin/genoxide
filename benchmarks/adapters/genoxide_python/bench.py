@@ -6,7 +6,8 @@ Prints one JSON line per solver per seed, see ../../README.md for the fields.
 
 The solvers and their settings are the Rust genoxide adapter's (../genoxide/src/main.rs), through
 the Python API:
-- matched OneMax: a pure-Python fitness function, called with one genome at a time, like DEAP's;
+- matched OneMax: a fitness function called with one genome at a time, like DEAP's (a Python call per
+  genome, which counts the ones with numpy's sum);
 - idiomatic scenarios and multi-objective scenarios: what the package's README recommends,
   `batch=True` with vectorized numpy functions, called with a generation at a time.
 
@@ -29,7 +30,8 @@ import genoxide as gx
 
 
 def onemax(bits):
-    """One genome, a numpy bool array: the matched runs' pure-Python function, like DEAP's."""
+    """One genome, a numpy bool array: the matched runs' function, called once per genome like DEAP's,
+    whose sum is numpy's."""
     return int(bits.sum())
 
 

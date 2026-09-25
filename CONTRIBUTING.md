@@ -1,6 +1,6 @@
 # Contributing to genoxide
 
-Thanks for your interest! genoxide is at the design stage, so ideas and API feedback are as welcome as code. Please open an issue first for anything larger than a small fix.
+Thanks for your interest! genoxide is alpha, pre-1.0, so ideas and API feedback are as welcome as code. Please open an issue first for anything larger than a small fix.
 
 ## Pull requests
 
