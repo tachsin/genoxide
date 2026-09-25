@@ -21,8 +21,10 @@ use std::cmp::Ordering;
 ///    [crowding distance](crowding_distance), then a coin flip.
 /// 2. Pairs of parents are recombined with the [`Crossover`] with probability `crossover_rate`,
 ///    and each child is mutated with the [`Mutate`] operator with probability `mutation_rate`,
-///    as many children as the population size. A child that equals a parent inherits its scores
-///    and isn't evaluated again.
+///    as many children as the population size. A child that equals a member of the population
+///    or an earlier child is dropped and another bred instead (see
+///    [`eliminate_duplicates`](Nsga2Builder::eliminate_duplicates)); with copies allowed, a child
+///    that equals a parent inherits its scores and isn't evaluated again.
 /// 3. Parents and children compete: the next population takes whole fronts, best first, and
 ///    fills the rest from the next front by crowding distance (random on ties), which keeps the
 ///    front spread out.
@@ -79,6 +81,7 @@ impl<R: Representation, const M: usize> Nsga2<R, Unset, Unset, M> {
             crossover_rate: 0.9,
             mutation_rate: 1.0,
             seed: None,
+            eliminate_duplicates: true,
             initial_genomes: Vec::new(),
         }
     }
@@ -368,6 +371,7 @@ pub struct Nsga2Builder<R: Representation, const M: usize, C = Unset, X = Unset>
     crossover_rate: f64,
     mutation_rate: f64,
     seed: Option<u64>,
+    eliminate_duplicates: bool,
     initial_genomes: Vec<R::Genome>,
 }
 
@@ -383,6 +387,7 @@ impl<R: Representation, const M: usize, C, X> Nsga2Builder<R, M, C, X> {
             crossover_rate: self.crossover_rate,
             mutation_rate: self.mutation_rate,
             seed: self.seed,
+            eliminate_duplicates: self.eliminate_duplicates,
             initial_genomes: self.initial_genomes,
         }
     }
@@ -398,6 +403,7 @@ impl<R: Representation, const M: usize, C, X> Nsga2Builder<R, M, C, X> {
             crossover_rate: self.crossover_rate,
             mutation_rate: self.mutation_rate,
             seed: self.seed,
+            eliminate_duplicates: self.eliminate_duplicates,
             initial_genomes: self.initial_genomes,
         }
     }
@@ -424,6 +430,15 @@ impl<R: Representation, const M: usize, C, X> Nsga2Builder<R, M, C, X> {
     /// The seed of the random numbers, for a reproducible run. Random by default.
     pub fn seed(mut self, seed: u64) -> Self {
         self.seed = Some(seed);
+        self
+    }
+
+    /// Whether a child that equals a member of the population, or an earlier child of the same
+    /// generation, is dropped and another bred instead, which keeps the population and its front
+    /// free of copies. On by default, as in pymoo. When copies are all a population can breed,
+    /// after 100 dropped children per child needed, copies are accepted.
+    pub fn eliminate_duplicates(mut self, eliminate: bool) -> Self {
+        self.eliminate_duplicates = eliminate;
         self
     }
 
@@ -494,6 +509,7 @@ impl<R: Representation, const M: usize, C, X> Nsga2Builder<R, M, C, X> {
                 mutate: self.mutate,
                 crossover_chance: Chance::new(crossover_rate),
                 mutation_chance: Chance::new(mutation_rate),
+                eliminate_duplicates: self.eliminate_duplicates,
             },
             objectives: self.objectives,
             population_size: size,
@@ -521,9 +537,11 @@ impl<R: Representation, const M: usize, C, X> Nsga2Builder<R, M, C, X> {
 mod tests {
     use super::*;
     use crate::Objective::{Maximize, Minimize};
-    use crate::genome::{Real, Reals};
+    use crate::genome::{Binary, Bits, Real, Reals};
     use crate::multi::dominates;
-    use crate::operator::{PolynomialMutation, SimulatedBinaryCrossover};
+    use crate::operator::{
+        BitFlip, PolynomialMutation, SimulatedBinaryCrossover, UniformCrossover,
+    };
     use proptest::prelude::*;
 
     type Real2 = Nsga2<Real, SimulatedBinaryCrossover, PolynomialMutation, 2>;
@@ -652,10 +670,11 @@ mod tests {
             .unwrap();
         step(&mut nsga2);
         assert_eq!(nsga2.ask().len(), 10);
-        // without mutation, the parents that aren't recombined are copied
+        // without mutation, the parents that aren't recombined are copied, when copies are kept
         let mut nsga2 = builder(10, 3)
             .mutation_rate(0.0)
             .crossover_rate(0.5)
+            .eliminate_duplicates(false)
             .build()
             .unwrap();
         step(&mut nsga2);
@@ -664,6 +683,45 @@ mod tests {
         let told: Vec<Scores<2>> = nsga2.ask().iter().map(scores).collect();
         nsga2.tell(&told).unwrap();
         assert_eq!(nsga2.evaluations(), 10 + asked as u64);
+    }
+
+    #[test]
+    fn duplicates_are_eliminated() {
+        // without mutation, half the pairs would be copies of their parents
+        let mut nsga2 = builder(10, 3)
+            .mutation_rate(0.0)
+            .crossover_rate(0.5)
+            .build()
+            .unwrap();
+        for _ in 0..5 {
+            step(&mut nsga2);
+            let asked: Vec<Reals> = nsga2.ask().iter().cloned().collect();
+            assert_eq!(asked.len(), 10);
+            for (index, child) in asked.iter().enumerate() {
+                assert!(nsga2.population().iter().all(|x| x.genome() != child));
+                assert!(asked[..index].iter().all(|other| other != child));
+            }
+            let told: Vec<Scores<2>> = asked.iter().map(scores).collect();
+            nsga2.tell(&told).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_population_that_can_only_breed_copies_gets_its_children() {
+        // two genes of one bit: at most 4 distinct genomes for a population of 6
+        let mut nsga2 = Nsga2::builder(Binary::new(2).unwrap(), [Minimize, Minimize])
+            .population_size(6)
+            .crossover(UniformCrossover::new())
+            .mutate(BitFlip::count(1).unwrap())
+            .seed(3)
+            .build()
+            .unwrap();
+        let f = |x: &Bits| Scores::new([x.count_ones() as f64, 2.0 - x.count_ones() as f64]);
+        for _ in 0..5 {
+            let told: Vec<Scores<2>> = nsga2.ask().iter().map(f).collect();
+            nsga2.tell(&told).unwrap();
+            assert_eq!(nsga2.population().len(), 6);
+        }
     }
 
     #[test]
