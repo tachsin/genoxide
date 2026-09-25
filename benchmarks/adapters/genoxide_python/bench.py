@@ -51,6 +51,14 @@ def nqueens_batch(orders):
     return conflicts
 
 
+def nqueens(order):
+    """The diagonal conflicts of one genome, for local search, which evaluates one neighbor per
+    step: as the package's N-Queens example."""
+    size = len(order)
+    rows = np.arange(size)
+    return float(2 * size - len(np.unique(order + rows)) - len(np.unique(order - rows)))
+
+
 # Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
 # towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
 SHIFT = 2 * ((37 * np.arange(1000) + 11) % 101) / 101 - 1
@@ -196,7 +204,7 @@ def nqueens_solvers(size, seed):
     solved = lambda best: best == 0  # noqa: E731
     return [
         ("ga", ga, nqueens_batch, True, 0, solved),
-        ("local_search", search, nqueens_batch, True, 0, solved),
+        ("local_search", search, nqueens, False, 0, solved),
     ]
 
 

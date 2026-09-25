@@ -674,7 +674,7 @@ def draw_charts(results, out_dir, formats=("svg",)):
         axis.set_xticks(positions, [label(row["library"], row["solver"]) for row in group], rotation=60,
                         ha="right", rotation_mode="anchor", fontsize=6.5)
         for tick_label, row in zip(axis.get_xticklabels(), group):
-            if row["library"] == "genoxide":
+            if row["library"] in ("genoxide", "genoxide_python"):
                 tick_label.set_fontweight("bold")
         axis.tick_params(axis="x", length=0, pad=1.5)
         axis.tick_params(axis="y", labelsize=6.3, length=2, pad=1.5)
