@@ -928,7 +928,7 @@ mod tests {
             assert_eq!(nsga3.generation(), generation);
             assert_eq!(nsga3.population().len(), 8);
         }
-        // children that are copies of a parent inherit its scores
+        // every child is evaluated once
         assert_eq!(nsga3.evaluations(), asked);
         assert!(asked <= 40);
         assert!(nsga3.ideal_point().is_some());

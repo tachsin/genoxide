@@ -21,8 +21,10 @@ use std::cmp::Ordering;
 ///    [crowding distance](crowding_distance), then a coin flip.
 /// 2. Pairs of parents are recombined with the [`Crossover`] with probability `crossover_rate`,
 ///    and each child is mutated with the [`Mutate`] operator with probability `mutation_rate`,
-///    as many children as the population size. A child that equals a parent inherits its scores
-///    and isn't evaluated again.
+///    as many children as the population size. A child that equals a member of the population
+///    or an earlier child is dropped and another bred instead (see
+///    [`eliminate_duplicates`](Nsga2Builder::eliminate_duplicates)); with copies allowed, a child
+///    that equals a parent inherits its scores and isn't evaluated again.
 /// 3. Parents and children compete: the next population takes whole fronts, best first, and
 ///    fills the rest from the next front by crowding distance (random on ties), which keeps the
 ///    front spread out.
