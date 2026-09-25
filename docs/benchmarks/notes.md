@@ -32,6 +32,16 @@ A bug in a library's own operator isn't worked around: the benchmark runs what t
 | jMetal 7.5 | CMA-ES throws `ArrayIndexOutOfBoundsException` in `tql2` when its covariance degenerates | the run ends there | the run counts with what it reached | |
 | Nevergrad 1.0.12 | its metamodel crashes with NumPy 2.5 | no run at all | the adapter restores the old scalar conversion in that one module, which doesn't change the algorithm | |
 
+## Solvers that stop before the budget
+
+Some solvers stop by their own criteria, as their users get them, before the target and the evaluation budget. A failed run of these solvers can have used only part of the budget, so their median evaluations are below it:
+
+| Library / solver | Stops when | Example |
+|---|---|---|
+| genetic_algorithm | `with_max_stale_generations(50)`: 50 generations without improvement move its `RangeScaled` mutation to the next, narrower of its 6 ranges, and end the run in the last one | Rastrigin 30: 0% success, after a median of 202,786 of the 2,000,000 evaluations |
+| pygmo CMA-ES | its default stop criteria, `ftol` and `xtol` of 1e-6 | Rastrigin 10 and 30: 0% success, after a median of 3,790 of 500,000 and 7,700 of 2,000,000 evaluations |
+| SciPy `differential_evolution` | its defaults `maxiter` of 1,000 generations and `tol` of 0.01, then the L-BFGS-B polish | Rastrigin 30: 0% success, after a median of 450,822 of the 2,000,000 evaluations |
+
 ## Settings and differences
 
 Every adapter's source has its full settings, and where its idiomatic settings come from.
@@ -40,7 +50,7 @@ Every adapter's source has its full settings, and where its idiomatic settings c
   - A child identical to one of its parents inherits the parent's fitness, without an evaluation.
   - Its OneMax genomes are bit-packed.
 - **genoxide (Python):** genoxide's Python package, whose algorithms are genoxide's Rust, calling Python fitness functions, with the Rust adapter's solvers and settings.
-  - In the matched OneMax runs, the fitness function is pure Python, called with one genome at a time, as in DEAP. In the other runs, it's vectorized numpy, called with a generation at a time (`batch=True`), as the package's README recommends.
+  - In the matched OneMax runs, the fitness function is called with one genome at a time, as in DEAP: a Python call per genome, which counts the ones with numpy's `sum`. In the other runs, it's vectorized numpy, called with a generation at a time (`batch=True`), as the package's README recommends.
   - With the same seed and the same fitness values, it runs the same search as genoxide in Rust, evaluation for evaluation. numpy's `sum` adds in another order, so some fitness values differ in the last bit, and its CMA-ES, DE and MOEA/D runs take other paths with the same settings.
 - **genetic_algorithm:** it selects survivors from parents and offspring by tournament, without replacement.
 - **radiate:** its recommended settings don't reach the idiomatic OneMax, N-Queens and Rosenbrock targets.
@@ -62,11 +72,11 @@ Every adapter's source has its full settings, and where its idiomatic settings c
   - Its NSGA-II selects the parents before the survivors. So the adapter runs a population of 2N with N elites: the elites are the best N of the previous elites and their offspring, as in NSGA-II, but the parents' binary tournament draws from all 2N, and the initial population is 2N.
   - A child identical to an elite or a parent of the previous generation takes its fitness without an evaluation.
   - Its non-dominated sorting compares every pair of individuals in Python, three times per generation.
-- **pycma:** IPOP-CMA-ES through `fmin2`, with 9 restarts, each with twice the population.
+- **pycma:** CMA-ES with IPOP restarts (IPOP-CMA-ES) through `fmin2`: 9 restarts, each with twice the population. The charts call it CMA-ES.
 - **Nevergrad:**
   - NGOpt chooses from a portfolio of optimizers and costs about 10 ms per evaluation, so it reaches the 60-second limit after a few thousand evaluations.
   - It has no NSGA-II, SBX or polynomial mutation, so the multi-objective scenarios run the DE its docs recommend for several objectives, with its defaults: an idiomatic run in a matched scenario. Its front is the non-dominated set of every point it evaluated, not a final population.
-- **SciPy:** `differential_evolution` runs with its defaults. These include the L-BFGS-B polish at the end, whose evaluations count. Its default `maxiter` and `tol` often stop it before the budget.
+- **SciPy:** `differential_evolution` runs with its defaults. These include the L-BFGS-B polish at the end, whose evaluations count. Its default `maxiter` and `tol` often stop it before the budget (see below).
 - **Jenetics:**
   - Its crossover probability is per individual, not per pair, so the matched runs use half the rate.
   - It has no bit-flip or polynomial mutation, so the adapter adds them.

@@ -47,242 +47,242 @@ Linux, Intel(R) Core(TM) Ultra 7 265K
 
 ## Single-objective
 
-| Scenario | Library / solver | Success | Median time to target | Median evaluations | Median best | Evaluations/s | Throughput vs DEAP GA |
-|---|---|---|---|---|---|---|---|
-| ackley-30-idiomatic | deap / cma_es | 100% (10) | 698.8 ms | 82,200 | 0.009696 | 117,154 | - |
-| ackley-30-idiomatic | deap / ga | 0% (10) | - | 1,000,000 | 0.2235 | 70,174 | - |
-| ackley-30-idiomatic | evolutionary_jl / cma_es | 0% (10) | - | 583,451 | 19.46 | 358,767 | 5.1× |
-| ackley-30-idiomatic | evolutionary_jl / de | 100% (10) | 142.6 ms | 156,551 | 0.009673 | 1,081,226 | 15× |
-| ackley-30-idiomatic | evolutionary_jl / es | 100% (10) | 30.4 ms | 9,716 | 0.009161 | 314,841 | 4.5× |
-| ackley-30-idiomatic | evolutionary_jl / ga | 0% (10) | - | 1,000,011 | 7.871 | 1,439,255 | 21× |
-| ackley-30-idiomatic | genetic_algorithm / evolve | 100% (10) | 65.2 ms | 1.478e+05 | 0.009473 | 2,265,442 | 32× |
-| ackley-30-idiomatic | genoxide / cma_es | 100% (10) | 14.2 ms | 3,157 | 0.009242 | 217,456 | 3.1× |
-| ackley-30-idiomatic | genoxide / de | 100% (10) | 6.3 ms | 9,360 | 0.009509 | 1,453,165 | 21× |
-| ackley-30-idiomatic | genoxide / ga | 100% (10) | 111.0 ms | 254,537 | 0.009447 | 2,289,650 | 33× |
-| ackley-30-idiomatic | genoxide_python / cma_es | 100% (10) | 15.8 ms | 3,157 | 0.009242 | 201,987 | 2.9× |
-| ackley-30-idiomatic | genoxide_python / de | 100% (10) | 8.1 ms | 9,360 | 0.009509 | 1,145,853 | 16× |
-| ackley-30-idiomatic | genoxide_python / ga | 100% (10) | 138.0 ms | 254,537 | 0.009447 | 1,863,499 | 27× |
-| ackley-30-idiomatic | jenetics / ga | 0% (10) | - | 1,000,057 | 2.259 | 977,332 | 14× |
-| ackley-30-idiomatic | jmetal / cma_es | 0% (10) | - | 1,000,000 | 19.6 | 117,285 | 1.7× |
-| ackley-30-idiomatic | jmetal / de | 100% (10) | 184.8 ms | 5.734e+04 | 0.009534 | 304,417 | 4.3× |
-| ackley-30-idiomatic | jmetal / ga | 100% (10) | 838.1 ms | 146,981 | 0.00954 | 172,612 | 2.5× |
-| ackley-30-idiomatic | jmetal / pso | 0% (10) | - | 1,000,000 | 3.191 | 295,472 | 4.2× |
-| ackley-30-idiomatic | metaheuristics_jl / de | 100% (10) | 420.4 ms | 498,450 | 0.009499 | 1,173,087 | 17× |
-| ackley-30-idiomatic | metaheuristics_jl / eca | 100% (10) | 93.5 ms | 66,465 | 0.009478 | 712,451 | 10× |
-| ackley-30-idiomatic | metaheuristics_jl / ga | 100% (10) | 314.7 ms | 147,900 | 0.009554 | 466,773 | 6.7× |
-| ackley-30-idiomatic | metaheuristics_jl / pso | 0% (10) | - | 1,000,200 | 2.171 | 784,818 | 11× |
-| ackley-30-idiomatic | moors / ga | 0% (10) | - | 1,000,200 | 7.898 | 589,594 | 8.4× |
-| ackley-30-idiomatic | nevergrad / cma_es | 100% (10) | 15.04 s | 44,906 | 0.009697 | 2,993 | 0.0× |
-| ackley-30-idiomatic | nevergrad / de | 0% (10) | - | 4.983e+05 | 2.325 | 8,285 | 0.1× |
-| ackley-30-idiomatic | nevergrad / ngopt | 0% (10) | - | 7,001 | 2.562 | 117 | 0.0× |
-| ackley-30-idiomatic | nevergrad / pso | 0% (10) | - | 487,544 | 17.45 | 8,116 | 0.1× |
-| ackley-30-idiomatic | openga / ga | 0% (10) | - | 1,004,000 | 3.467 | 158,570 | 2.3× |
-| ackley-30-idiomatic | pycma / cma_es | 100% (10) | 150.0 ms | 3,361 | 0.007707 | 22,711 | 0.3× |
-| ackley-30-idiomatic | pygad / ga | 0% (10) | - | 1,000,000 | 9.705 | 54,392 | 0.8× |
-| ackley-30-idiomatic | pygmo / cma_es | 100% (10) | 35.4 ms | 3,890 | 0.009408 | 110,472 | 1.6× |
-| ackley-30-idiomatic | pygmo / ga | 90% (10) | 3.72 s | 837,240 | 0.009776 | 218,584 | 3.1× |
-| ackley-30-idiomatic | pygmo / pso | 100% (10) | 55.2 ms | 13,760 | 0.009746 | 250,216 | 3.6× |
-| ackley-30-idiomatic | pygmo / sade | 100% (10) | 56.4 ms | 11,950 | 0.00959 | 210,839 | 3.0× |
-| ackley-30-idiomatic | pymoo / cma_es | 100% (10) | 173.3 ms | 3,249 | 0.009733 | 18,531 | 0.3× |
-| ackley-30-idiomatic | pymoo / de | 100% (10) | 641.7 ms | 26,700 | 0.009817 | 41,598 | 0.6× |
-| ackley-30-idiomatic | pymoo / ga | 100% (10) | 3.57 s | 132,400 | 0.009826 | 37,027 | 0.5× |
-| ackley-30-idiomatic | radiate / ga | 10% (10) | 782.3 ms | 1e+06 | 0.01296 | 1,230,379 | 18× |
-| ackley-30-idiomatic | scipy / de | 100% (10) | 2.15 s | 117,185 | 1.822e-08 | 54,793 | 0.8× |
-| nqueens-32-idiomatic | deap / ga | 100% (10) | 523.5 ms | 3.949e+04 | 0 | 74,604 | - |
-| nqueens-32-idiomatic | evolutionary_jl / es | 20% (10) | 3.0 ms | 500,021 | 1 | 3,038,733 | 41× |
-| nqueens-32-idiomatic | evolutionary_jl / ga | 10% (10) | 905 µs | 500,001 | 1 | 2,828,475 | 38× |
-| nqueens-32-idiomatic | genetic_algorithm / evolve | 100% (10) | 1.1 ms | 4200 | 0 | 3,409,365 | 46× |
-| nqueens-32-idiomatic | genetic_algorithm / hill_climb | 100% (10) | 314 µs | 1494 | 0 | 4,709,035 | 63× |
-| nqueens-32-idiomatic | genoxide / ga | 100% (10) | 590 µs | 2,870 | 0 | 4,792,110 | 64× |
-| nqueens-32-idiomatic | genoxide / local_search | 100% (10) | 185 µs | 1136 | 0 | 5,947,835 | 80× |
-| nqueens-32-idiomatic | genoxide_python / ga | 100% (10) | 2.7 ms | 2,870 | 0 | 1,075,766 | 14× |
-| nqueens-32-idiomatic | genoxide_python / local_search | 100% (10) | 5.8 ms | 1136 | 0 | 185,673 | 2.5× |
-| nqueens-32-idiomatic | jenetics / ga | 80% (10) | 118.6 ms | 81,520 | 0 | 654,768 | 8.8× |
-| nqueens-32-idiomatic | jmetal / ga | 60% (10) | 132.6 ms | 1.039e+05 | 0 | 243,594 | 3.3× |
-| nqueens-32-idiomatic | metaheuristics_jl / ga | 10% (10) | 41.6 ms | 500,000 | 1 | 865,291 | 12× |
-| nqueens-32-idiomatic | moors / ga | 100% (10) | 125.4 ms | 72,800 | 0 | 560,077 | 7.5× |
-| nqueens-32-idiomatic | openga / ga | 30% (10) | 10.5 ms | 500,000 | 1 | 1,332,328 | 18× |
-| nqueens-32-idiomatic | pygad / ga | 100% (10) | 3.55 s | 8.749e+04 | 0 | 24,708 | 0.3× |
-| nqueens-32-idiomatic | pymoo / ga | 20% (10) | 783.6 ms | 500,000 | 1 | 25,030 | 0.3× |
-| nqueens-32-idiomatic | radiate / ga | 0% (10) | - | 5.001e+05 | 5 | 721,413 | 9.7× |
-| nqueens-64-idiomatic | deap / ga | 100% (10) | 1.38 s | 63,456 | 0 | 45,756 | - |
-| nqueens-64-idiomatic | evolutionary_jl / es | 0% (10) | - | 1,000,021 | 2.5 | 1,907,580 | 42× |
-| nqueens-64-idiomatic | evolutionary_jl / ga | 0% (10) | - | 1,000,001 | 3.5 | 1,362,783 | 30× |
-| nqueens-64-idiomatic | genetic_algorithm / evolve | 100% (10) | 5.0 ms | 1.487e+04 | 0 | 2,996,690 | 65× |
-| nqueens-64-idiomatic | genetic_algorithm / hill_climb | 100% (10) | 988 µs | 3728 | 0 | 3,792,797 | 83× |
-| nqueens-64-idiomatic | genoxide / ga | 100% (10) | 1.9 ms | 6048 | 0 | 2,738,585 | 60× |
-| nqueens-64-idiomatic | genoxide / local_search | 100% (10) | 558 µs | 2,455 | 0 | 3,893,579 | 85× |
-| nqueens-64-idiomatic | genoxide_python / ga | 100% (10) | 7.3 ms | 6048 | 0 | 868,481 | 19× |
-| nqueens-64-idiomatic | genoxide_python / local_search | 100% (10) | 19.9 ms | 2,455 | 0 | 125,504 | 2.7× |
-| nqueens-64-idiomatic | jenetics / ga | 60% (10) | 2.01 s | 7.861e+05 | 0 | 297,698 | 6.5× |
-| nqueens-64-idiomatic | jmetal / ga | 20% (10) | 856.8 ms | 1,000,000 | 1 | 232,190 | 5.1× |
-| nqueens-64-idiomatic | metaheuristics_jl / ga | 0% (10) | - | 1,000,000 | 4.5 | 549,845 | 12× |
-| nqueens-64-idiomatic | moors / ga | 100% (10) | 731.7 ms | 202,800 | 0 | 277,497 | 6.1× |
-| nqueens-64-idiomatic | openga / ga | 30% (10) | 25.5 ms | 1,000,080 | 1 | 1,097,632 | 24× |
-| nqueens-64-idiomatic | pygad / ga | 100% (10) | 32.82 s | 5.169e+05 | 0 | 15,673 | 0.3× |
-| nqueens-64-idiomatic | pymoo / ga | 20% (10) | 8.80 s | 1,000,000 | 2.5 | 21,891 | 0.5× |
-| nqueens-64-idiomatic | radiate / ga | 0% (10) | - | 1e+06 | 16 | 413,782 | 9.0× |
-| onemax-100-idiomatic | deap / ga | 100% (10) | 136.6 ms | 6,420 | 100 | 49,339 | - |
-| onemax-100-idiomatic | evolutionary_jl / ga | 100% (10) | 418 µs | 5,401 | 100 | 2,036,715 | 41× |
-| onemax-100-idiomatic | genetic_algorithm / evolve | 100% (10) | 450 µs | 1952 | 100 | 4,329,578 | 88× |
-| onemax-100-idiomatic | genoxide / ga | 100% (10) | 478 µs | 3,183 | 100 | 6,682,096 | 135× |
-| onemax-100-idiomatic | genoxide_python / ga | 100% (10) | 1.1 ms | 3,183 | 100 | 3,004,401 | 61× |
-| onemax-100-idiomatic | jenetics / ga | 0% (10) | - | 200,014 | 90.5 | 578,988 | 12× |
-| onemax-100-idiomatic | jmetal / ga | 100% (10) | 25.9 ms | 4,224 | 100 | 157,119 | 3.2× |
-| onemax-100-idiomatic | metaheuristics_jl / ga | 100% (10) | 820 µs | 2,000 | 100 | 898,876 | 18× |
-| onemax-100-idiomatic | moors / ga | 100% (10) | 56.7 ms | 11,584 | 100 | 208,140 | 4.2× |
-| onemax-100-idiomatic | nevergrad / discrete_one_plus_one | 100% (10) | 1.62 s | 2,876 | 100 | 1,801 | 0.0× |
-| onemax-100-idiomatic | nevergrad / ngopt | 100% (10) | 1.18 s | 1724 | 100 | 1,451 | 0.0× |
-| onemax-100-idiomatic | openga / ga | 100% (10) | 10.5 ms | 7,270 | 100 | 679,395 | 14× |
-| onemax-100-idiomatic | pygad / ga | 0% (10) | - | 2.001e+05 | 94.5 | 28,589 | 0.6× |
-| onemax-100-idiomatic | pygmo / ga | 100% (10) | 4.9 ms | 1,610 | 100 | 335,998 | 6.8× |
-| onemax-100-idiomatic | pymoo / ga | 100% (10) | 170.1 ms | 5,900 | 100 | 34,127 | 0.7× |
-| onemax-100-idiomatic | radiate / ga | 0% (10) | - | 200,019 | 95 | 1,094,077 | 22× |
-| onemax-100-matched | deap / ga | 100% (10) | 135.5 ms | 6,773 | 100 | 49,081 | - |
-| onemax-100-matched | evolutionary_jl / ga | 100% (10) | 852 µs | 9,601 | 100 | 2,815,559 | 57× |
-| onemax-100-matched | genetic_algorithm / evolve | 100% (10) | 2.1 ms | 9702 | 100 | 4,315,976 | 88× |
-| onemax-100-matched | genoxide / ga | 100% (10) | 1.0 ms | 4938 | 100 | 4,733,804 | 96× |
-| onemax-100-matched | genoxide_python / ga | 100% (10) | 4.7 ms | 4938 | 100 | 1,050,985 | 21× |
-| onemax-100-matched | jenetics / ga | 100% (10) | 15.0 ms | 6,005 | 100 | 389,107 | 7.9× |
-| onemax-100-matched | jmetal / ga | 100% (10) | 197.8 ms | 1.144e+04 | 100 | 57,953 | 1.2× |
-| onemax-100-matched | metaheuristics_jl / ga | 100% (10) | 3.4 ms | 10,950 | 100 | 1,562,342 | 32× |
-| onemax-100-matched | moors / ga | 100% (10) | 8.9 ms | 21,300 | 100 | 2,301,947 | 47× |
-| onemax-100-matched | openga / ga | 100% (10) | 6.8 ms | 11,550 | 100 | 1,671,381 | 34× |
-| onemax-100-matched | pygad / ga | 100% (10) | 134.4 ms | 6,900 | 100 | 52,064 | 1.1× |
-| onemax-100-matched | pygmo / ga | 100% (10) | 21.1 ms | 10,800 | 100 | 510,689 | 10× |
-| onemax-100-matched | pymoo / ga | 100% (10) | 182.7 ms | 10,350 | 100 | 56,037 | 1.1× |
-| onemax-100-matched | radiate / ga | 100% (10) | 3.9 ms | 5,648 | 100 | 1,364,524 | 28× |
-| onemax-1000-matched | deap / ga | 100% (10) | 15.82 s | 105,287 | 1,000 | 6,681 | - |
-| onemax-1000-matched | evolutionary_jl / ga | 100% (10) | 58.6 ms | 143,251 | 1,000 | 2,415,380 | 362× |
-| onemax-1000-matched | genetic_algorithm / evolve | 100% (10) | 131.9 ms | 1.105e+05 | 1,000 | 844,191 | 126× |
-| onemax-1000-matched | genoxide / ga | 100% (10) | 15.4 ms | 54,038 | 1,000 | 3,395,068 | 508× |
-| onemax-1000-matched | genoxide_python / ga | 100% (10) | 81.2 ms | 54,038 | 1,000 | 666,579 | 100× |
-| onemax-1000-matched | jenetics / ga | 100% (10) | 819.9 ms | 8.927e+04 | 1,000 | 108,231 | 16× |
-| onemax-1000-matched | jmetal / ga | 100% (10) | 5.09 s | 162,138 | 1,000 | 31,683 | 4.7× |
-| onemax-1000-matched | metaheuristics_jl / ga | 100% (10) | 276.3 ms | 170,250 | 1,000 | 599,502 | 90× |
-| onemax-1000-matched | moors / ga | 100% (10) | 939.7 ms | 337,200 | 1,000 | 329,021 | 49× |
-| onemax-1000-matched | openga / ga | 100% (10) | 418.3 ms | 173,100 | 1,000 | 410,338 | 61× |
-| onemax-1000-matched | pygad / ga | 100% (10) | 11.70 s | 147,150 | 1,000 | 12,623 | 1.9× |
-| onemax-1000-matched | pygmo / ga | 100% (10) | 2.45 s | 154,050 | 1,000 | 63,293 | 9.5× |
-| onemax-1000-matched | pymoo / ga | 100% (10) | 7.88 s | 172,200 | 1,000 | 21,785 | 3.3× |
-| onemax-1000-matched | radiate / ga | 100% (10) | 294.5 ms | 7.929e+04 | 1,000 | 266,572 | 40× |
-| rastrigin-10-idiomatic | deap / cma_es | 70% (10) | 67.4 ms | 16,900 | 0.008381 | 251,363 | - |
-| rastrigin-10-idiomatic | deap / ga | 0% (10) | - | 500,000 | 0.05966 | 133,498 | - |
-| rastrigin-10-idiomatic | evolutionary_jl / cma_es | 0% (10) | - | 500,001 | 72.13 | 1,521,428 | 11× |
-| rastrigin-10-idiomatic | evolutionary_jl / de | 40% (10) | 15.7 ms | 500,001 | 0.995 | 2,392,119 | 18× |
-| rastrigin-10-idiomatic | evolutionary_jl / es | 30% (10) | 97.7 ms | 500,016 | 1.404 | 521,701 | 3.9× |
-| rastrigin-10-idiomatic | evolutionary_jl / ga | 0% (10) | - | 500,061 | 7.96 | 3,480,780 | 26× |
-| rastrigin-10-idiomatic | genetic_algorithm / evolve | 100% (10) | 9.6 ms | 4.441e+04 | 0.009043 | 4,516,775 | 34× |
-| rastrigin-10-idiomatic | genoxide / cma_es | 100% (10) | 43.1 ms | 79,700 | 0.007527 | 1,788,884 | 13× |
-| rastrigin-10-idiomatic | genoxide / de | 100% (10) | 1.4 ms | 4,380 | 0.007977 | 3,142,612 | 24× |
-| rastrigin-10-idiomatic | genoxide / ga | 100% (10) | 6.9 ms | 24,782 | 0.007142 | 3,376,664 | 25× |
-| rastrigin-10-idiomatic | genoxide_python / cma_es | 100% (10) | 54.5 ms | 77,585 | 0.007961 | 1,450,077 | 11× |
-| rastrigin-10-idiomatic | genoxide_python / de | 100% (10) | 2.4 ms | 4,390 | 0.007947 | 1,888,865 | 14× |
-| rastrigin-10-idiomatic | genoxide_python / ga | 100% (10) | 8.8 ms | 24,782 | 0.007142 | 2,774,210 | 21× |
-| rastrigin-10-idiomatic | jenetics / ga | 80% (10) | 228.5 ms | 4.068e+05 | 0.007488 | 1,455,959 | 11× |
-| rastrigin-10-idiomatic | jmetal / cma_es | 0% (10) | - | 203,340 | 102.2 | 739,663 | 5.5× |
-| rastrigin-10-idiomatic | jmetal / de | 100% (10) | 110.7 ms | 8.501e+04 | 0.007706 | 737,438 | 5.5× |
-| rastrigin-10-idiomatic | jmetal / ga | 100% (10) | 74.5 ms | 14,732 | 0.008786 | 198,726 | 1.5× |
-| rastrigin-10-idiomatic | jmetal / pso | 0% (10) | - | 500,000 | 9.452 | 785,910 | 5.9× |
-| rastrigin-10-idiomatic | metaheuristics_jl / de | 100% (10) | 70.7 ms | 173,650 | 0.009076 | 2,474,019 | 19× |
-| rastrigin-10-idiomatic | metaheuristics_jl / eca | 10% (10) | 33.3 ms | 500,010 | 2.985 | 1,397,063 | 10× |
-| rastrigin-10-idiomatic | metaheuristics_jl / ga | 100% (10) | 16.5 ms | 12,150 | 0.009352 | 765,594 | 5.7× |
-| rastrigin-10-idiomatic | metaheuristics_jl / pso | 0% (10) | - | 500,000 | 10.94 | 1,167,054 | 8.7× |
-| rastrigin-10-idiomatic | moors / ga | 0% (10) | - | 500,200 | 2.487 | 727,110 | 5.4× |
-| rastrigin-10-idiomatic | nevergrad / cma_es | 0% (10) | - | 178,648 | 1.99 | 2,973 | 0.0× |
-| rastrigin-10-idiomatic | nevergrad / de | 0% (10) | - | 500,000 | 2.487 | 8,473 | 0.1× |
-| rastrigin-10-idiomatic | nevergrad / ngopt | 0% (10) | - | 4658 | 9.534 | 78 | 0.0× |
-| rastrigin-10-idiomatic | nevergrad / pso | 0% (10) | - | 4.908e+05 | 29.11 | 8,142 | 0.1× |
-| rastrigin-10-idiomatic | openga / ga | 0% (10) | - | 500,000 | 3.485 | 166,385 | 1.2× |
-| rastrigin-10-idiomatic | pycma / cma_es | 100% (10) | 1.35 s | 74,113 | 0.000541 | 50,323 | 0.4× |
-| rastrigin-10-idiomatic | pygad / ga | 0% (10) | - | 500,050 | 0.1598 | 108,955 | 0.8× |
-| rastrigin-10-idiomatic | pygmo / cma_es | 0% (10) | - | 3,790 | 4.975 | 373,878 | 2.8× |
-| rastrigin-10-idiomatic | pygmo / ga | 100% (10) | 184.3 ms | 85,770 | 0.008249 | 465,341 | 3.5× |
-| rastrigin-10-idiomatic | pygmo / pso | 20% (10) | 86.0 ms | 500,000 | 1.99 | 560,223 | 4.2× |
-| rastrigin-10-idiomatic | pygmo / sade | 100% (10) | 11.2 ms | 4,780 | 0.007378 | 423,910 | 3.2× |
-| rastrigin-10-idiomatic | pymoo / cma_es | 100% (10) | 1.61 s | 62,769 | 0.007352 | 39,298 | 0.3× |
-| rastrigin-10-idiomatic | pymoo / de | 100% (10) | 269.1 ms | 14,350 | 0.008325 | 52,774 | 0.4× |
-| rastrigin-10-idiomatic | pymoo / ga | 100% (10) | 252.9 ms | 11,900 | 0.008134 | 47,944 | 0.4× |
-| rastrigin-10-idiomatic | radiate / ga | 100% (10) | 76.2 ms | 149,735 | 0.008089 | 1,984,785 | 15× |
-| rastrigin-10-idiomatic | scipy / de | 80% (10) | 1.25 s | 97,030 | 2.842e-14 | 76,622 | 0.6× |
-| rastrigin-30-idiomatic | deap / cma_es | 80% (10) | 1.25 s | 134,700 | 0.009199 | 115,494 | - |
-| rastrigin-30-idiomatic | deap / ga | 0% (10) | - | 2,000,000 | 0.3558 | 69,819 | - |
-| rastrigin-30-idiomatic | evolutionary_jl / cma_es | 0% (10) | - | 575,701 | 223.3 | 343,765 | 4.9× |
-| rastrigin-30-idiomatic | evolutionary_jl / de | 0% (10) | - | 2,000,001 | 21.77 | 1,229,152 | 18× |
-| rastrigin-30-idiomatic | evolutionary_jl / es | 0% (10) | - | 2,000,016 | 11.44 | 313,603 | 4.5× |
-| rastrigin-30-idiomatic | evolutionary_jl / ga | 0% (10) | - | 2,000,021 | 27.87 | 1,494,863 | 21× |
-| rastrigin-30-idiomatic | genetic_algorithm / evolve | 0% (10) | - | 2.028e+05 | 2.487 | 2,721,242 | 39× |
-| rastrigin-30-idiomatic | genoxide / cma_es | 100% (10) | 1.78 s | 519,288 | 0.008782 | 287,806 | 4.1× |
-| rastrigin-30-idiomatic | genoxide / de | 100% (10) | 15.5 ms | 28,280 | 0.009415 | 1,792,364 | 26× |
-| rastrigin-30-idiomatic | genoxide / ga | 100% (10) | 40.6 ms | 99,683 | 0.009631 | 2,481,749 | 36× |
-| rastrigin-30-idiomatic | genoxide_python / cma_es | 100% (10) | 1.86 s | 542,024 | 0.008846 | 291,156 | 4.2× |
-| rastrigin-30-idiomatic | genoxide_python / de | 100% (10) | 18.3 ms | 28,280 | 0.00932 | 1,525,643 | 22× |
-| rastrigin-30-idiomatic | genoxide_python / ga | 100% (10) | 46.9 ms | 99,683 | 0.009631 | 2,093,077 | 30× |
-| rastrigin-30-idiomatic | jenetics / ga | 0% (10) | - | 2e+06 | 19.52 | 975,204 | 14× |
-| rastrigin-30-idiomatic | jmetal / cma_es | 0% (10) | - | 1,447,515 | 264.2 | 111,195 | 1.6× |
-| rastrigin-30-idiomatic | jmetal / de | 0% (10) | - | 2,000,000 | 68.81 | 309,131 | 4.4× |
-| rastrigin-30-idiomatic | jmetal / ga | 100% (10) | 360.3 ms | 5.66e+04 | 0.008953 | 157,711 | 2.3× |
-| rastrigin-30-idiomatic | jmetal / pso | 0% (10) | - | 2,000,000 | 42.29 | 296,909 | 4.3× |
-| rastrigin-30-idiomatic | metaheuristics_jl / de | 0% (10) | - | 2,000,100 | 113.5 | 973,908 | 14× |
-| rastrigin-30-idiomatic | metaheuristics_jl / eca | 0% (10) | - | 2,000,040 | 7.462 | 807,085 | 12× |
-| rastrigin-30-idiomatic | metaheuristics_jl / ga | 100% (10) | 126.7 ms | 57,450 | 0.009439 | 460,598 | 6.6× |
-| rastrigin-30-idiomatic | metaheuristics_jl / pso | 0% (10) | - | 2,000,100 | 35.82 | 769,703 | 11× |
-| rastrigin-30-idiomatic | moors / ga | 0% (10) | - | 2,000,200 | 16.91 | 615,782 | 8.8× |
-| rastrigin-30-idiomatic | nevergrad / cma_es | 0% (10) | - | 1.825e+05 | 11.44 | 3,041 | 0.0× |
-| rastrigin-30-idiomatic | nevergrad / de | 0% (10) | - | 5.002e+05 | 14.89 | 8,339 | 0.1× |
-| rastrigin-30-idiomatic | nevergrad / ngopt | 0% (10) | - | 5084 | 105.1 | 85 | 0.0× |
-| rastrigin-30-idiomatic | nevergrad / pso | 0% (10) | - | 4.894e+05 | 297 | 8,149 | 0.1× |
-| rastrigin-30-idiomatic | openga / ga | 0% (10) | - | 2,005,000 | 31.84 | 158,442 | 2.3× |
-| rastrigin-30-idiomatic | pycma / cma_es | 100% (10) | 18.37 s | 7.825e+05 | 0.0001442 | 42,999 | 0.6× |
-| rastrigin-30-idiomatic | pygad / ga | 0% (10) | - | 2,000,098 | 53.33 | 54,486 | 0.8× |
-| rastrigin-30-idiomatic | pygmo / cma_es | 0% (10) | - | 7,700 | 36.81 | 113,398 | 1.6× |
-| rastrigin-30-idiomatic | pygmo / ga | 100% (10) | 896.0 ms | 214,640 | 0.009409 | 239,164 | 3.4× |
-| rastrigin-30-idiomatic | pygmo / pso | 0% (10) | - | 2,000,000 | 58.7 | 231,403 | 3.3× |
-| rastrigin-30-idiomatic | pygmo / sade | 100% (10) | 70.0 ms | 15,570 | 0.008959 | 221,959 | 3.2× |
-| rastrigin-30-idiomatic | pymoo / cma_es | 100% (10) | 18.02 s | 670,293 | 0.009177 | 37,096 | 0.5× |
-| rastrigin-30-idiomatic | pymoo / de | 100% (10) | 2.93 s | 123,100 | 0.005351 | 41,654 | 0.6× |
-| rastrigin-30-idiomatic | pymoo / ga | 100% (10) | 1.65 s | 62,050 | 0.009649 | 37,365 | 0.5× |
-| rastrigin-30-idiomatic | radiate / ga | 100% (10) | 338.3 ms | 4.27e+05 | 0.009435 | 1,260,217 | 18× |
-| rastrigin-30-idiomatic | scipy / de | 0% (10) | - | 450,822 | 51.24 | 53,607 | 0.8× |
-| rosenbrock-10-idiomatic | deap / cma_es | 100% (10) | 107.2 ms | 25,700 | 0.008626 | 240,722 | - |
-| rosenbrock-10-idiomatic | deap / ga | 0% (10) | - | 500,000 | 1.926 | 136,425 | - |
-| rosenbrock-10-idiomatic | evolutionary_jl / cma_es | 70% (10) | 63.9 ms | 117,401 | 0.009977 | 1,757,996 | 13× |
-| rosenbrock-10-idiomatic | evolutionary_jl / de | 100% (10) | 28.7 ms | 89,401 | 0.009321 | 3,064,829 | 22× |
-| rosenbrock-10-idiomatic | evolutionary_jl / es | 0% (10) | - | 500,016 | 0.07397 | 1,697,636 | 12× |
-| rosenbrock-10-idiomatic | evolutionary_jl / ga | 0% (10) | - | 500,061 | 4.725 | 4,875,742 | 36× |
-| rosenbrock-10-idiomatic | genetic_algorithm / evolve | 10% (10) | 34.4 ms | 5e+05 | 0.08916 | 7,409,460 | 54× |
-| rosenbrock-10-idiomatic | genoxide / cma_es | 100% (10) | 3.3 ms | 5,945 | 0.009263 | 1,867,797 | 14× |
-| rosenbrock-10-idiomatic | genoxide / de | 100% (10) | 1.6 ms | 7,010 | 0.009055 | 4,266,180 | 31× |
-| rosenbrock-10-idiomatic | genoxide / ga | 0% (10) | - | 5e+05 | 1.761 | 4,646,268 | 34× |
-| rosenbrock-10-idiomatic | genoxide_python / cma_es | 100% (10) | 6.3 ms | 5,945 | 0.009263 | 979,746 | 7.2× |
-| rosenbrock-10-idiomatic | genoxide_python / de | 100% (10) | 3.8 ms | 7,200 | 0.009283 | 1,721,092 | 13× |
-| rosenbrock-10-idiomatic | genoxide_python / ga | 0% (10) | - | 5e+05 | 1.761 | 3,127,561 | 23× |
-| rosenbrock-10-idiomatic | jenetics / ga | 0% (10) | - | 500,110 | 1.065 | 1,514,035 | 11× |
-| rosenbrock-10-idiomatic | jmetal / cma_es | 0% (10) | - | 204,685 | 10.2 | 764,164 | 5.6× |
-| rosenbrock-10-idiomatic | jmetal / de | 0% (10) | - | 500,000 | 0.1329 | 864,303 | 6.3× |
-| rosenbrock-10-idiomatic | jmetal / ga | 0% (10) | - | 500,000 | 2.885 | 225,525 | 1.7× |
-| rosenbrock-10-idiomatic | jmetal / pso | 10% (10) | 606.3 ms | 500,000 | 0.02349 | 781,772 | 5.7× |
-| rosenbrock-10-idiomatic | metaheuristics_jl / de | 100% (10) | 42.2 ms | 194,000 | 0.009268 | 4,564,840 | 33× |
-| rosenbrock-10-idiomatic | metaheuristics_jl / eca | 100% (10) | 12.4 ms | 18,375 | 0.007773 | 1,397,100 | 10× |
-| rosenbrock-10-idiomatic | metaheuristics_jl / ga | 0% (10) | - | 500,000 | 5.182 | 834,437 | 6.1× |
-| rosenbrock-10-idiomatic | metaheuristics_jl / pso | 100% (10) | 67.5 ms | 91,200 | 0.008821 | 1,355,924 | 9.9× |
-| rosenbrock-10-idiomatic | moors / ga | 0% (10) | - | 500,200 | 3.104 | 869,419 | 6.4× |
-| rosenbrock-10-idiomatic | nevergrad / cma_es | 100% (10) | 7.97 s | 2.365e+04 | 0.009974 | 2,958 | 0.0× |
-| rosenbrock-10-idiomatic | nevergrad / de | 10% (10) | 4.83 s | 500,000 | 5.801 | 8,575 | 0.1× |
-| rosenbrock-10-idiomatic | nevergrad / ngopt | 0% (10) | - | 4748 | 137 | 79 | 0.0× |
-| rosenbrock-10-idiomatic | nevergrad / pso | 0% (10) | - | 500,000 | 1.303e+04 | 8,428 | 0.1× |
-| rosenbrock-10-idiomatic | openga / ga | 0% (10) | - | 500,000 | 7.367 | 178,115 | 1.3× |
-| rosenbrock-10-idiomatic | pycma / cma_es | 100% (10) | 174.0 ms | 4,491 | 0.008701 | 28,794 | 0.2× |
-| rosenbrock-10-idiomatic | pygad / ga | 0% (10) | - | 500,050 | 9.788 | 114,113 | 0.8× |
-| rosenbrock-10-idiomatic | pygmo / cma_es | 100% (10) | 16.2 ms | 6,530 | 0.008506 | 396,470 | 2.9× |
-| rosenbrock-10-idiomatic | pygmo / ga | 0% (10) | - | 500,000 | 2.935 | 479,949 | 3.5× |
-| rosenbrock-10-idiomatic | pygmo / pso | 90% (10) | 158.5 ms | 106,970 | 0.009983 | 646,844 | 4.7× |
-| rosenbrock-10-idiomatic | pygmo / sade | 100% (10) | 74.1 ms | 33,570 | 0.009786 | 459,266 | 3.4× |
-| rosenbrock-10-idiomatic | pymoo / cma_es | 100% (10) | 228.4 ms | 4,676 | 0.00912 | 21,156 | 0.2× |
-| rosenbrock-10-idiomatic | pymoo / de | 10% (10) | 3.51 s | 500,000 | 2.875 | 53,225 | 0.4× |
-| rosenbrock-10-idiomatic | pymoo / ga | 0% (10) | - | 500,000 | 3.969 | 44,617 | 0.3× |
-| rosenbrock-10-idiomatic | radiate / ga | 0% (10) | - | 500,036 | 6.875 | 2,476,021 | 18× |
-| rosenbrock-10-idiomatic | scipy / de | 90% (10) | 505.8 ms | 3.75e+04 | 1.694e-10 | 73,717 | 0.5× |
+| Scenario | Library / solver | Success | Median time to target | Median evaluations to target | Median evaluations | Median best | Evaluations/s | Throughput vs DEAP GA |
+|---|---|---|---|---|---|---|---|---|
+| ackley-30-idiomatic | deap / cma_es | 100% (10) | 698.8 ms | 82,200 | 82,200 | 0.009696 | 117,154 | - |
+| ackley-30-idiomatic | deap / ga | 0% (10) | - | - | 1,000,000 | 0.2235 | 70,174 | - |
+| ackley-30-idiomatic | evolutionary_jl / cma_es | 0% (10) | - | - | 583,451 | 19.46 | 358,767 | 5.1× |
+| ackley-30-idiomatic | evolutionary_jl / de | 100% (10) | 142.6 ms | 156,551 | 156,551 | 0.009673 | 1,081,226 | 15× |
+| ackley-30-idiomatic | evolutionary_jl / es | 100% (10) | 30.4 ms | 9,716 | 9,716 | 0.009161 | 314,841 | 4.5× |
+| ackley-30-idiomatic | evolutionary_jl / ga | 0% (10) | - | - | 1,000,011 | 7.871 | 1,439,255 | 21× |
+| ackley-30-idiomatic | genetic_algorithm / evolve | 100% (10) | 65.2 ms | 147,790 | 147,790 | 0.009473 | 2,265,442 | 32× |
+| ackley-30-idiomatic | genoxide / cma_es | 100% (10) | 14.2 ms | 3,157 | 3,157 | 0.009242 | 217,456 | 3.1× |
+| ackley-30-idiomatic | genoxide / de | 100% (10) | 6.3 ms | 9,360 | 9,360 | 0.009509 | 1,453,165 | 21× |
+| ackley-30-idiomatic | genoxide / ga | 100% (10) | 111.0 ms | 254,537 | 254,537 | 0.009447 | 2,289,650 | 33× |
+| ackley-30-idiomatic | genoxide_python / cma_es | 100% (10) | 15.8 ms | 3,157 | 3,157 | 0.009242 | 201,987 | 2.9× |
+| ackley-30-idiomatic | genoxide_python / de | 100% (10) | 8.1 ms | 9,360 | 9,360 | 0.009509 | 1,145,853 | 16× |
+| ackley-30-idiomatic | genoxide_python / ga | 100% (10) | 138.0 ms | 254,537 | 254,537 | 0.009447 | 1,863,499 | 27× |
+| ackley-30-idiomatic | jenetics / ga | 0% (10) | - | - | 1,000,057 | 2.259 | 977,332 | 14× |
+| ackley-30-idiomatic | jmetal / cma_es | 0% (10) | - | - | 1,000,000 | 19.6 | 117,285 | 1.7× |
+| ackley-30-idiomatic | jmetal / de | 100% (10) | 184.8 ms | 57,338 | 57,338 | 0.009534 | 304,417 | 4.3× |
+| ackley-30-idiomatic | jmetal / ga | 100% (10) | 838.1 ms | 146,981 | 146,981 | 0.00954 | 172,612 | 2.5× |
+| ackley-30-idiomatic | jmetal / pso | 0% (10) | - | - | 1,000,000 | 3.191 | 295,472 | 4.2× |
+| ackley-30-idiomatic | metaheuristics_jl / de | 100% (10) | 420.4 ms | 498,450 | 498,450 | 0.009499 | 1,173,087 | 17× |
+| ackley-30-idiomatic | metaheuristics_jl / eca | 100% (10) | 93.5 ms | 66,465 | 66,465 | 0.009478 | 712,451 | 10× |
+| ackley-30-idiomatic | metaheuristics_jl / ga | 100% (10) | 314.7 ms | 147,900 | 147,900 | 0.009554 | 466,773 | 6.7× |
+| ackley-30-idiomatic | metaheuristics_jl / pso | 0% (10) | - | - | 1,000,200 | 2.171 | 784,818 | 11× |
+| ackley-30-idiomatic | moors / ga | 0% (10) | - | - | 1,000,200 | 7.898 | 589,594 | 8.4× |
+| ackley-30-idiomatic | nevergrad / cma_es | 100% (10) | 15.04 s | 44,906 | 44,906 | 0.009697 | 2,993 | 0.0× |
+| ackley-30-idiomatic | nevergrad / de | 0% (10) | - | - | 498,254 | 2.325 | 8,285 | 0.1× |
+| ackley-30-idiomatic | nevergrad / ngopt | 0% (10) | - | - | 7,001 | 2.562 | 117 | 0.0× |
+| ackley-30-idiomatic | nevergrad / pso | 0% (10) | - | - | 487,544 | 17.45 | 8,116 | 0.1× |
+| ackley-30-idiomatic | openga / ga | 0% (10) | - | - | 1,004,000 | 3.467 | 158,570 | 2.3× |
+| ackley-30-idiomatic | pycma / cma_es | 100% (10) | 150.0 ms | 3,361 | 3,361 | 0.007707 | 22,711 | 0.3× |
+| ackley-30-idiomatic | pygad / ga | 0% (10) | - | - | 1,000,000 | 9.705 | 54,392 | 0.8× |
+| ackley-30-idiomatic | pygmo / cma_es | 100% (10) | 35.4 ms | 3,890 | 3,890 | 0.009408 | 110,472 | 1.6× |
+| ackley-30-idiomatic | pygmo / ga | 90% (10) | 3.72 s | 813,900 | 837,240 | 0.009776 | 218,584 | 3.1× |
+| ackley-30-idiomatic | pygmo / pso | 100% (10) | 55.2 ms | 13,760 | 13,760 | 0.009746 | 250,216 | 3.6× |
+| ackley-30-idiomatic | pygmo / sade | 100% (10) | 56.4 ms | 11,950 | 11,950 | 0.00959 | 210,839 | 3.0× |
+| ackley-30-idiomatic | pymoo / cma_es | 100% (10) | 173.3 ms | 3,249 | 3,249 | 0.009733 | 18,531 | 0.3× |
+| ackley-30-idiomatic | pymoo / de | 100% (10) | 641.7 ms | 26,700 | 26,700 | 0.009817 | 41,598 | 0.6× |
+| ackley-30-idiomatic | pymoo / ga | 100% (10) | 3.57 s | 132,400 | 132,400 | 0.009826 | 37,027 | 0.5× |
+| ackley-30-idiomatic | radiate / ga | 10% (10) | 782.3 ms | 952,030 | 1,000,122 | 0.01296 | 1,230,379 | 18× |
+| ackley-30-idiomatic | scipy / de | 100% (10) | 2.15 s | 117,185 | 117,185 | 1.822e-08 | 54,793 | 0.8× |
+| nqueens-32-idiomatic | deap / ga | 100% (10) | 523.5 ms | 39,486 | 39,486 | 0 | 74,604 | - |
+| nqueens-32-idiomatic | evolutionary_jl / es | 20% (10) | 3.0 ms | 9,521 | 500,021 | 1 | 3,038,733 | 41× |
+| nqueens-32-idiomatic | evolutionary_jl / ga | 10% (10) | 905 µs | 2,501 | 500,001 | 1 | 2,828,475 | 38× |
+| nqueens-32-idiomatic | genetic_algorithm / evolve | 100% (10) | 1.1 ms | 4,200 | 4,200 | 0 | 3,409,365 | 46× |
+| nqueens-32-idiomatic | genetic_algorithm / hill_climb | 100% (10) | 314 µs | 1,494 | 1,494 | 0 | 4,709,035 | 63× |
+| nqueens-32-idiomatic | genoxide / ga | 100% (10) | 590 µs | 2,870 | 2,870 | 0 | 4,792,110 | 64× |
+| nqueens-32-idiomatic | genoxide / local_search | 100% (10) | 185 µs | 1,136 | 1,136 | 0 | 5,947,835 | 80× |
+| nqueens-32-idiomatic | genoxide_python / ga | 100% (10) | 2.7 ms | 2,870 | 2,870 | 0 | 1,075,766 | 14× |
+| nqueens-32-idiomatic | genoxide_python / local_search | 100% (10) | 5.8 ms | 1,136 | 1,136 | 0 | 185,673 | 2.5× |
+| nqueens-32-idiomatic | jenetics / ga | 80% (10) | 118.6 ms | 72,176 | 81,520 | 0 | 654,768 | 8.8× |
+| nqueens-32-idiomatic | jmetal / ga | 60% (10) | 132.6 ms | 32,806 | 103,888 | 0 | 243,594 | 3.3× |
+| nqueens-32-idiomatic | metaheuristics_jl / ga | 10% (10) | 41.6 ms | 33,500 | 500,000 | 1 | 865,291 | 12× |
+| nqueens-32-idiomatic | moors / ga | 100% (10) | 125.4 ms | 72,800 | 72,800 | 0 | 560,077 | 7.5× |
+| nqueens-32-idiomatic | openga / ga | 30% (10) | 10.5 ms | 14,760 | 500,000 | 1 | 1,332,328 | 18× |
+| nqueens-32-idiomatic | pygad / ga | 100% (10) | 3.55 s | 87,486 | 87,486 | 0 | 24,708 | 0.3× |
+| nqueens-32-idiomatic | pymoo / ga | 20% (10) | 783.6 ms | 19,390 | 500,000 | 1 | 25,030 | 0.3× |
+| nqueens-32-idiomatic | radiate / ga | 0% (10) | - | - | 500,062 | 5 | 721,413 | 9.7× |
+| nqueens-64-idiomatic | deap / ga | 100% (10) | 1.38 s | 63,456 | 63,456 | 0 | 45,756 | - |
+| nqueens-64-idiomatic | evolutionary_jl / es | 0% (10) | - | - | 1,000,021 | 2.5 | 1,907,580 | 42× |
+| nqueens-64-idiomatic | evolutionary_jl / ga | 0% (10) | - | - | 1,000,001 | 3.5 | 1,362,783 | 30× |
+| nqueens-64-idiomatic | genetic_algorithm / evolve | 100% (10) | 5.0 ms | 14,874 | 14,874 | 0 | 2,996,690 | 65× |
+| nqueens-64-idiomatic | genetic_algorithm / hill_climb | 100% (10) | 988 µs | 3,728 | 3,728 | 0 | 3,792,797 | 83× |
+| nqueens-64-idiomatic | genoxide / ga | 100% (10) | 1.9 ms | 6,048 | 6,048 | 0 | 2,738,585 | 60× |
+| nqueens-64-idiomatic | genoxide / local_search | 100% (10) | 558 µs | 2,455 | 2,455 | 0 | 3,893,579 | 85× |
+| nqueens-64-idiomatic | genoxide_python / ga | 100% (10) | 7.3 ms | 6,048 | 6,048 | 0 | 868,481 | 19× |
+| nqueens-64-idiomatic | genoxide_python / local_search | 100% (10) | 19.9 ms | 2,455 | 2,455 | 0 | 125,504 | 2.7× |
+| nqueens-64-idiomatic | jenetics / ga | 60% (10) | 2.01 s | 593,590 | 786,114 | 0 | 297,698 | 6.5× |
+| nqueens-64-idiomatic | jmetal / ga | 20% (10) | 856.8 ms | 200,740 | 1,000,000 | 1 | 232,190 | 5.1× |
+| nqueens-64-idiomatic | metaheuristics_jl / ga | 0% (10) | - | - | 1,000,000 | 4.5 | 549,845 | 12× |
+| nqueens-64-idiomatic | moors / ga | 100% (10) | 731.7 ms | 202,800 | 202,800 | 0 | 277,497 | 6.1× |
+| nqueens-64-idiomatic | openga / ga | 30% (10) | 25.5 ms | 28,760 | 1,000,080 | 1 | 1,097,632 | 24× |
+| nqueens-64-idiomatic | pygad / ga | 100% (10) | 32.82 s | 516,860 | 516,860 | 0 | 15,673 | 0.3× |
+| nqueens-64-idiomatic | pymoo / ga | 20% (10) | 8.80 s | 194,320 | 1,000,000 | 2.5 | 21,891 | 0.5× |
+| nqueens-64-idiomatic | radiate / ga | 0% (10) | - | - | 1,000,048 | 16 | 413,782 | 9.0× |
+| onemax-100-idiomatic | deap / ga | 100% (10) | 136.6 ms | 6,420 | 6,420 | 100 | 49,339 | - |
+| onemax-100-idiomatic | evolutionary_jl / ga | 100% (10) | 418 µs | 5,401 | 5,401 | 100 | 2,036,715 | 41× |
+| onemax-100-idiomatic | genetic_algorithm / evolve | 100% (10) | 450 µs | 1,952 | 1,952 | 100 | 4,329,578 | 88× |
+| onemax-100-idiomatic | genoxide / ga | 100% (10) | 478 µs | 3,183 | 3,183 | 100 | 6,682,096 | 135× |
+| onemax-100-idiomatic | genoxide_python / ga | 100% (10) | 1.1 ms | 3,183 | 3,183 | 100 | 3,004,401 | 61× |
+| onemax-100-idiomatic | jenetics / ga | 0% (10) | - | - | 200,014 | 90.5 | 578,988 | 12× |
+| onemax-100-idiomatic | jmetal / ga | 100% (10) | 25.9 ms | 4,224 | 4,224 | 100 | 157,119 | 3.2× |
+| onemax-100-idiomatic | metaheuristics_jl / ga | 100% (10) | 820 µs | 2,000 | 2,000 | 100 | 898,876 | 18× |
+| onemax-100-idiomatic | moors / ga | 100% (10) | 56.7 ms | 11,584 | 11,584 | 100 | 208,140 | 4.2× |
+| onemax-100-idiomatic | nevergrad / discrete_one_plus_one | 100% (10) | 1.62 s | 2,876 | 2,876 | 100 | 1,801 | 0.0× |
+| onemax-100-idiomatic | nevergrad / ngopt | 100% (10) | 1.18 s | 1,724 | 1,724 | 100 | 1,451 | 0.0× |
+| onemax-100-idiomatic | openga / ga | 100% (10) | 10.5 ms | 7,270 | 7,270 | 100 | 679,395 | 14× |
+| onemax-100-idiomatic | pygad / ga | 0% (10) | - | - | 200,066 | 94.5 | 28,589 | 0.6× |
+| onemax-100-idiomatic | pygmo / ga | 100% (10) | 4.9 ms | 1,610 | 1,610 | 100 | 335,998 | 6.8× |
+| onemax-100-idiomatic | pymoo / ga | 100% (10) | 170.1 ms | 5,900 | 5,900 | 100 | 34,127 | 0.7× |
+| onemax-100-idiomatic | radiate / ga | 0% (10) | - | - | 200,019 | 95 | 1,094,077 | 22× |
+| onemax-100-matched | deap / ga | 100% (10) | 135.5 ms | 6,773 | 6,773 | 100 | 49,081 | - |
+| onemax-100-matched | evolutionary_jl / ga | 100% (10) | 852 µs | 9,601 | 9,601 | 100 | 2,815,559 | 57× |
+| onemax-100-matched | genetic_algorithm / evolve | 100% (10) | 2.1 ms | 9,702 | 9,702 | 100 | 4,315,976 | 88× |
+| onemax-100-matched | genoxide / ga | 100% (10) | 1.0 ms | 4,938 | 4,938 | 100 | 4,733,804 | 96× |
+| onemax-100-matched | genoxide_python / ga | 100% (10) | 4.7 ms | 4,938 | 4,938 | 100 | 1,050,985 | 21× |
+| onemax-100-matched | jenetics / ga | 100% (10) | 15.0 ms | 6,005 | 6,005 | 100 | 389,107 | 7.9× |
+| onemax-100-matched | jmetal / ga | 100% (10) | 197.8 ms | 11,438 | 11,438 | 100 | 57,953 | 1.2× |
+| onemax-100-matched | metaheuristics_jl / ga | 100% (10) | 3.4 ms | 10,950 | 10,950 | 100 | 1,562,342 | 32× |
+| onemax-100-matched | moors / ga | 100% (10) | 8.9 ms | 21,300 | 21,300 | 100 | 2,301,947 | 47× |
+| onemax-100-matched | openga / ga | 100% (10) | 6.8 ms | 11,550 | 11,550 | 100 | 1,671,381 | 34× |
+| onemax-100-matched | pygad / ga | 100% (10) | 134.4 ms | 6,900 | 6,900 | 100 | 52,064 | 1.1× |
+| onemax-100-matched | pygmo / ga | 100% (10) | 21.1 ms | 10,800 | 10,800 | 100 | 510,689 | 10× |
+| onemax-100-matched | pymoo / ga | 100% (10) | 182.7 ms | 10,350 | 10,350 | 100 | 56,037 | 1.1× |
+| onemax-100-matched | radiate / ga | 100% (10) | 3.9 ms | 5,648 | 5,648 | 100 | 1,364,524 | 28× |
+| onemax-1000-matched | deap / ga | 100% (10) | 15.82 s | 105,287 | 105,287 | 1,000 | 6,681 | - |
+| onemax-1000-matched | evolutionary_jl / ga | 100% (10) | 58.6 ms | 143,251 | 143,251 | 1,000 | 2,415,380 | 362× |
+| onemax-1000-matched | genetic_algorithm / evolve | 100% (10) | 131.9 ms | 110,526 | 110,526 | 1,000 | 844,191 | 126× |
+| onemax-1000-matched | genoxide / ga | 100% (10) | 15.4 ms | 54,038 | 54,038 | 1,000 | 3,395,068 | 508× |
+| onemax-1000-matched | genoxide_python / ga | 100% (10) | 81.2 ms | 54,038 | 54,038 | 1,000 | 666,579 | 100× |
+| onemax-1000-matched | jenetics / ga | 100% (10) | 819.9 ms | 89,270 | 89,270 | 1,000 | 108,231 | 16× |
+| onemax-1000-matched | jmetal / ga | 100% (10) | 5.09 s | 162,138 | 162,138 | 1,000 | 31,683 | 4.7× |
+| onemax-1000-matched | metaheuristics_jl / ga | 100% (10) | 276.3 ms | 170,250 | 170,250 | 1,000 | 599,502 | 90× |
+| onemax-1000-matched | moors / ga | 100% (10) | 939.7 ms | 337,200 | 337,200 | 1,000 | 329,021 | 49× |
+| onemax-1000-matched | openga / ga | 100% (10) | 418.3 ms | 173,100 | 173,100 | 1,000 | 410,338 | 61× |
+| onemax-1000-matched | pygad / ga | 100% (10) | 11.70 s | 147,150 | 147,150 | 1,000 | 12,623 | 1.9× |
+| onemax-1000-matched | pygmo / ga | 100% (10) | 2.45 s | 154,050 | 154,050 | 1,000 | 63,293 | 9.5× |
+| onemax-1000-matched | pymoo / ga | 100% (10) | 7.88 s | 172,200 | 172,200 | 1,000 | 21,785 | 3.3× |
+| onemax-1000-matched | radiate / ga | 100% (10) | 294.5 ms | 79,288 | 79,288 | 1,000 | 266,572 | 40× |
+| rastrigin-10-idiomatic | deap / cma_es | 70% (10) | 67.4 ms | 16,200 | 16,900 | 0.008381 | 251,363 | - |
+| rastrigin-10-idiomatic | deap / ga | 0% (10) | - | - | 500,000 | 0.05966 | 133,498 | - |
+| rastrigin-10-idiomatic | evolutionary_jl / cma_es | 0% (10) | - | - | 500,001 | 72.13 | 1,521,428 | 11× |
+| rastrigin-10-idiomatic | evolutionary_jl / de | 40% (10) | 15.7 ms | 33,601 | 500,001 | 0.995 | 2,392,119 | 18× |
+| rastrigin-10-idiomatic | evolutionary_jl / es | 30% (10) | 97.7 ms | 46,316 | 500,016 | 1.404 | 521,701 | 3.9× |
+| rastrigin-10-idiomatic | evolutionary_jl / ga | 0% (10) | - | - | 500,061 | 7.96 | 3,480,780 | 26× |
+| rastrigin-10-idiomatic | genetic_algorithm / evolve | 100% (10) | 9.6 ms | 44,408 | 44,408 | 0.009043 | 4,516,775 | 34× |
+| rastrigin-10-idiomatic | genoxide / cma_es | 100% (10) | 43.1 ms | 79,700 | 79,700 | 0.007527 | 1,788,884 | 13× |
+| rastrigin-10-idiomatic | genoxide / de | 100% (10) | 1.4 ms | 4,380 | 4,380 | 0.007977 | 3,142,612 | 24× |
+| rastrigin-10-idiomatic | genoxide / ga | 100% (10) | 6.9 ms | 24,782 | 24,782 | 0.007142 | 3,376,664 | 25× |
+| rastrigin-10-idiomatic | genoxide_python / cma_es | 100% (10) | 54.5 ms | 77,585 | 77,585 | 0.007961 | 1,450,077 | 11× |
+| rastrigin-10-idiomatic | genoxide_python / de | 100% (10) | 2.4 ms | 4,390 | 4,390 | 0.007947 | 1,888,865 | 14× |
+| rastrigin-10-idiomatic | genoxide_python / ga | 100% (10) | 8.8 ms | 24,782 | 24,782 | 0.007142 | 2,774,210 | 21× |
+| rastrigin-10-idiomatic | jenetics / ga | 80% (10) | 228.5 ms | 352,902 | 406,752 | 0.007488 | 1,455,959 | 11× |
+| rastrigin-10-idiomatic | jmetal / cma_es | 0% (10) | - | - | 203,340 | 102.2 | 739,663 | 5.5× |
+| rastrigin-10-idiomatic | jmetal / de | 100% (10) | 110.7 ms | 85,012 | 85,012 | 0.007706 | 737,438 | 5.5× |
+| rastrigin-10-idiomatic | jmetal / ga | 100% (10) | 74.5 ms | 14,732 | 14,732 | 0.008786 | 198,726 | 1.5× |
+| rastrigin-10-idiomatic | jmetal / pso | 0% (10) | - | - | 500,000 | 9.452 | 785,910 | 5.9× |
+| rastrigin-10-idiomatic | metaheuristics_jl / de | 100% (10) | 70.7 ms | 173,650 | 173,650 | 0.009076 | 2,474,019 | 19× |
+| rastrigin-10-idiomatic | metaheuristics_jl / eca | 10% (10) | 33.3 ms | 44,310 | 500,010 | 2.985 | 1,397,063 | 10× |
+| rastrigin-10-idiomatic | metaheuristics_jl / ga | 100% (10) | 16.5 ms | 12,150 | 12,150 | 0.009352 | 765,594 | 5.7× |
+| rastrigin-10-idiomatic | metaheuristics_jl / pso | 0% (10) | - | - | 500,000 | 10.94 | 1,167,054 | 8.7× |
+| rastrigin-10-idiomatic | moors / ga | 0% (10) | - | - | 500,200 | 2.487 | 727,110 | 5.4× |
+| rastrigin-10-idiomatic | nevergrad / cma_es | 0% (10) | - | - | 178,648 | 1.99 | 2,973 | 0.0× |
+| rastrigin-10-idiomatic | nevergrad / de | 0% (10) | - | - | 500,000 | 2.487 | 8,473 | 0.1× |
+| rastrigin-10-idiomatic | nevergrad / ngopt | 0% (10) | - | - | 4,658 | 9.534 | 78 | 0.0× |
+| rastrigin-10-idiomatic | nevergrad / pso | 0% (10) | - | - | 490,788 | 29.11 | 8,142 | 0.1× |
+| rastrigin-10-idiomatic | openga / ga | 0% (10) | - | - | 500,000 | 3.485 | 166,385 | 1.2× |
+| rastrigin-10-idiomatic | pycma / cma_es | 100% (10) | 1.35 s | 74,113 | 74,113 | 0.000541 | 50,323 | 0.4× |
+| rastrigin-10-idiomatic | pygad / ga | 0% (10) | - | - | 500,050 | 0.1598 | 108,955 | 0.8× |
+| rastrigin-10-idiomatic | pygmo / cma_es | 0% (10) | - | - | 3,790 | 4.975 | 373,878 | 2.8× |
+| rastrigin-10-idiomatic | pygmo / ga | 100% (10) | 184.3 ms | 85,770 | 85,770 | 0.008249 | 465,341 | 3.5× |
+| rastrigin-10-idiomatic | pygmo / pso | 20% (10) | 86.0 ms | 50,090 | 500,000 | 1.99 | 560,223 | 4.2× |
+| rastrigin-10-idiomatic | pygmo / sade | 100% (10) | 11.2 ms | 4,780 | 4,780 | 0.007378 | 423,910 | 3.2× |
+| rastrigin-10-idiomatic | pymoo / cma_es | 100% (10) | 1.61 s | 62,769 | 62,769 | 0.007352 | 39,298 | 0.3× |
+| rastrigin-10-idiomatic | pymoo / de | 100% (10) | 269.1 ms | 14,350 | 14,350 | 0.008325 | 52,774 | 0.4× |
+| rastrigin-10-idiomatic | pymoo / ga | 100% (10) | 252.9 ms | 11,900 | 11,900 | 0.008134 | 47,944 | 0.4× |
+| rastrigin-10-idiomatic | radiate / ga | 100% (10) | 76.2 ms | 149,735 | 149,735 | 0.008089 | 1,984,785 | 15× |
+| rastrigin-10-idiomatic | scipy / de | 80% (10) | 1.25 s | 96,505 | 97,030 | 2.842e-14 | 76,622 | 0.6× |
+| rastrigin-30-idiomatic | deap / cma_es | 80% (10) | 1.25 s | 129,300 | 134,700 | 0.009199 | 115,494 | - |
+| rastrigin-30-idiomatic | deap / ga | 0% (10) | - | - | 2,000,000 | 0.3558 | 69,819 | - |
+| rastrigin-30-idiomatic | evolutionary_jl / cma_es | 0% (10) | - | - | 575,701 | 223.3 | 343,765 | 4.9× |
+| rastrigin-30-idiomatic | evolutionary_jl / de | 0% (10) | - | - | 2,000,001 | 21.77 | 1,229,152 | 18× |
+| rastrigin-30-idiomatic | evolutionary_jl / es | 0% (10) | - | - | 2,000,016 | 11.44 | 313,603 | 4.5× |
+| rastrigin-30-idiomatic | evolutionary_jl / ga | 0% (10) | - | - | 2,000,021 | 27.87 | 1,494,863 | 21× |
+| rastrigin-30-idiomatic | genetic_algorithm / evolve | 0% (10) | - | - | 202,786 | 2.487 | 2,721,242 | 39× |
+| rastrigin-30-idiomatic | genoxide / cma_es | 100% (10) | 1.78 s | 519,288 | 519,288 | 0.008782 | 287,806 | 4.1× |
+| rastrigin-30-idiomatic | genoxide / de | 100% (10) | 15.5 ms | 28,280 | 28,280 | 0.009415 | 1,792,364 | 26× |
+| rastrigin-30-idiomatic | genoxide / ga | 100% (10) | 40.6 ms | 99,683 | 99,683 | 0.009631 | 2,481,749 | 36× |
+| rastrigin-30-idiomatic | genoxide_python / cma_es | 100% (10) | 1.86 s | 542,024 | 542,024 | 0.008846 | 291,156 | 4.2× |
+| rastrigin-30-idiomatic | genoxide_python / de | 100% (10) | 18.3 ms | 28,280 | 28,280 | 0.00932 | 1,525,643 | 22× |
+| rastrigin-30-idiomatic | genoxide_python / ga | 100% (10) | 46.9 ms | 99,683 | 99,683 | 0.009631 | 2,093,077 | 30× |
+| rastrigin-30-idiomatic | jenetics / ga | 0% (10) | - | - | 2,000,124 | 19.52 | 975,204 | 14× |
+| rastrigin-30-idiomatic | jmetal / cma_es | 0% (10) | - | - | 1,447,515 | 264.2 | 111,195 | 1.6× |
+| rastrigin-30-idiomatic | jmetal / de | 0% (10) | - | - | 2,000,000 | 68.81 | 309,131 | 4.4× |
+| rastrigin-30-idiomatic | jmetal / ga | 100% (10) | 360.3 ms | 56,602 | 56,602 | 0.008953 | 157,711 | 2.3× |
+| rastrigin-30-idiomatic | jmetal / pso | 0% (10) | - | - | 2,000,000 | 42.29 | 296,909 | 4.3× |
+| rastrigin-30-idiomatic | metaheuristics_jl / de | 0% (10) | - | - | 2,000,100 | 113.5 | 973,908 | 14× |
+| rastrigin-30-idiomatic | metaheuristics_jl / eca | 0% (10) | - | - | 2,000,040 | 7.462 | 807,085 | 12× |
+| rastrigin-30-idiomatic | metaheuristics_jl / ga | 100% (10) | 126.7 ms | 57,450 | 57,450 | 0.009439 | 460,598 | 6.6× |
+| rastrigin-30-idiomatic | metaheuristics_jl / pso | 0% (10) | - | - | 2,000,100 | 35.82 | 769,703 | 11× |
+| rastrigin-30-idiomatic | moors / ga | 0% (10) | - | - | 2,000,200 | 16.91 | 615,782 | 8.8× |
+| rastrigin-30-idiomatic | nevergrad / cma_es | 0% (10) | - | - | 182,540 | 11.44 | 3,041 | 0.0× |
+| rastrigin-30-idiomatic | nevergrad / de | 0% (10) | - | - | 500,168 | 14.89 | 8,339 | 0.1× |
+| rastrigin-30-idiomatic | nevergrad / ngopt | 0% (10) | - | - | 5,084 | 105.1 | 85 | 0.0× |
+| rastrigin-30-idiomatic | nevergrad / pso | 0% (10) | - | - | 489,378 | 297 | 8,149 | 0.1× |
+| rastrigin-30-idiomatic | openga / ga | 0% (10) | - | - | 2,005,000 | 31.84 | 158,442 | 2.3× |
+| rastrigin-30-idiomatic | pycma / cma_es | 100% (10) | 18.37 s | 782,502 | 782,502 | 0.0001442 | 42,999 | 0.6× |
+| rastrigin-30-idiomatic | pygad / ga | 0% (10) | - | - | 2,000,098 | 53.33 | 54,486 | 0.8× |
+| rastrigin-30-idiomatic | pygmo / cma_es | 0% (10) | - | - | 7,700 | 36.81 | 113,398 | 1.6× |
+| rastrigin-30-idiomatic | pygmo / ga | 100% (10) | 896.0 ms | 214,640 | 214,640 | 0.009409 | 239,164 | 3.4× |
+| rastrigin-30-idiomatic | pygmo / pso | 0% (10) | - | - | 2,000,000 | 58.7 | 231,403 | 3.3× |
+| rastrigin-30-idiomatic | pygmo / sade | 100% (10) | 70.0 ms | 15,570 | 15,570 | 0.008959 | 221,959 | 3.2× |
+| rastrigin-30-idiomatic | pymoo / cma_es | 100% (10) | 18.02 s | 670,293 | 670,293 | 0.009177 | 37,096 | 0.5× |
+| rastrigin-30-idiomatic | pymoo / de | 100% (10) | 2.93 s | 123,100 | 123,100 | 0.005351 | 41,654 | 0.6× |
+| rastrigin-30-idiomatic | pymoo / ga | 100% (10) | 1.65 s | 62,050 | 62,050 | 0.009649 | 37,365 | 0.5× |
+| rastrigin-30-idiomatic | radiate / ga | 100% (10) | 338.3 ms | 426,978 | 426,978 | 0.009435 | 1,260,217 | 18× |
+| rastrigin-30-idiomatic | scipy / de | 0% (10) | - | - | 450,822 | 51.24 | 53,607 | 0.8× |
+| rosenbrock-10-idiomatic | deap / cma_es | 100% (10) | 107.2 ms | 25,700 | 25,700 | 0.008626 | 240,722 | - |
+| rosenbrock-10-idiomatic | deap / ga | 0% (10) | - | - | 500,000 | 1.926 | 136,425 | - |
+| rosenbrock-10-idiomatic | evolutionary_jl / cma_es | 70% (10) | 63.9 ms | 104,901 | 117,401 | 0.009977 | 1,757,996 | 13× |
+| rosenbrock-10-idiomatic | evolutionary_jl / de | 100% (10) | 28.7 ms | 89,401 | 89,401 | 0.009321 | 3,064,829 | 22× |
+| rosenbrock-10-idiomatic | evolutionary_jl / es | 0% (10) | - | - | 500,016 | 0.07397 | 1,697,636 | 12× |
+| rosenbrock-10-idiomatic | evolutionary_jl / ga | 0% (10) | - | - | 500,061 | 4.725 | 4,875,742 | 36× |
+| rosenbrock-10-idiomatic | genetic_algorithm / evolve | 10% (10) | 34.4 ms | 249,699 | 500,038 | 0.08916 | 7,409,460 | 54× |
+| rosenbrock-10-idiomatic | genoxide / cma_es | 100% (10) | 3.3 ms | 5,945 | 5,945 | 0.009263 | 1,867,797 | 14× |
+| rosenbrock-10-idiomatic | genoxide / de | 100% (10) | 1.6 ms | 7,010 | 7,010 | 0.009055 | 4,266,180 | 31× |
+| rosenbrock-10-idiomatic | genoxide / ga | 0% (10) | - | - | 500,034 | 1.761 | 4,646,268 | 34× |
+| rosenbrock-10-idiomatic | genoxide_python / cma_es | 100% (10) | 6.3 ms | 5,945 | 5,945 | 0.009263 | 979,746 | 7.2× |
+| rosenbrock-10-idiomatic | genoxide_python / de | 100% (10) | 3.8 ms | 7,200 | 7,200 | 0.009283 | 1,721,092 | 13× |
+| rosenbrock-10-idiomatic | genoxide_python / ga | 0% (10) | - | - | 500,034 | 1.761 | 3,127,561 | 23× |
+| rosenbrock-10-idiomatic | jenetics / ga | 0% (10) | - | - | 500,110 | 1.065 | 1,514,035 | 11× |
+| rosenbrock-10-idiomatic | jmetal / cma_es | 0% (10) | - | - | 204,685 | 10.2 | 764,164 | 5.6× |
+| rosenbrock-10-idiomatic | jmetal / de | 0% (10) | - | - | 500,000 | 0.1329 | 864,303 | 6.3× |
+| rosenbrock-10-idiomatic | jmetal / ga | 0% (10) | - | - | 500,000 | 2.885 | 225,525 | 1.7× |
+| rosenbrock-10-idiomatic | jmetal / pso | 10% (10) | 606.3 ms | 482,129 | 500,000 | 0.02349 | 781,772 | 5.7× |
+| rosenbrock-10-idiomatic | metaheuristics_jl / de | 100% (10) | 42.2 ms | 194,000 | 194,000 | 0.009268 | 4,564,840 | 33× |
+| rosenbrock-10-idiomatic | metaheuristics_jl / eca | 100% (10) | 12.4 ms | 18,375 | 18,375 | 0.007773 | 1,397,100 | 10× |
+| rosenbrock-10-idiomatic | metaheuristics_jl / ga | 0% (10) | - | - | 500,000 | 5.182 | 834,437 | 6.1× |
+| rosenbrock-10-idiomatic | metaheuristics_jl / pso | 100% (10) | 67.5 ms | 91,200 | 91,200 | 0.008821 | 1,355,924 | 9.9× |
+| rosenbrock-10-idiomatic | moors / ga | 0% (10) | - | - | 500,200 | 3.104 | 869,419 | 6.4× |
+| rosenbrock-10-idiomatic | nevergrad / cma_es | 100% (10) | 7.97 s | 23,648 | 23,648 | 0.009974 | 2,958 | 0.0× |
+| rosenbrock-10-idiomatic | nevergrad / de | 10% (10) | 4.83 s | 41,189 | 500,000 | 5.801 | 8,575 | 0.1× |
+| rosenbrock-10-idiomatic | nevergrad / ngopt | 0% (10) | - | - | 4,748 | 137 | 79 | 0.0× |
+| rosenbrock-10-idiomatic | nevergrad / pso | 0% (10) | - | - | 500,000 | 13,027 | 8,428 | 0.1× |
+| rosenbrock-10-idiomatic | openga / ga | 0% (10) | - | - | 500,000 | 7.367 | 178,115 | 1.3× |
+| rosenbrock-10-idiomatic | pycma / cma_es | 100% (10) | 174.0 ms | 4,491 | 4,491 | 0.008701 | 28,794 | 0.2× |
+| rosenbrock-10-idiomatic | pygad / ga | 0% (10) | - | - | 500,050 | 9.788 | 114,113 | 0.8× |
+| rosenbrock-10-idiomatic | pygmo / cma_es | 100% (10) | 16.2 ms | 6,530 | 6,530 | 0.008506 | 396,470 | 2.9× |
+| rosenbrock-10-idiomatic | pygmo / ga | 0% (10) | - | - | 500,000 | 2.935 | 479,949 | 3.5× |
+| rosenbrock-10-idiomatic | pygmo / pso | 90% (10) | 158.5 ms | 102,480 | 106,970 | 0.009983 | 646,844 | 4.7× |
+| rosenbrock-10-idiomatic | pygmo / sade | 100% (10) | 74.1 ms | 33,570 | 33,570 | 0.009786 | 459,266 | 3.4× |
+| rosenbrock-10-idiomatic | pymoo / cma_es | 100% (10) | 228.4 ms | 4,676 | 4,676 | 0.00912 | 21,156 | 0.2× |
+| rosenbrock-10-idiomatic | pymoo / de | 10% (10) | 3.51 s | 187,600 | 500,000 | 2.875 | 53,225 | 0.4× |
+| rosenbrock-10-idiomatic | pymoo / ga | 0% (10) | - | - | 500,000 | 3.969 | 44,617 | 0.3× |
+| rosenbrock-10-idiomatic | radiate / ga | 0% (10) | - | - | 500,036 | 6.875 | 2,476,021 | 18× |
+| rosenbrock-10-idiomatic | scipy / de | 90% (10) | 505.8 ms | 37,508 | 37,502 | 1.694e-10 | 73,717 | 0.5× |
 
 ## Multi-objective
 
@@ -498,3 +498,20 @@ Linux, Intel(R) Core(TM) Ultra 7 265K
 | zdt3-30-matched | pymoo / sms_emoa | 1.3288 | 1.2455 to 1.3289 | 697.0 ms | 25,000 | 35,779 |
 | zdt3-30-matched | pymoo / spea2 | 1.3277 | 1.3269 to 1.3279 | 1.86 s | 25,000 | 13,473 |
 | zdt3-30-matched | radiate / nsga2 | 1.2068 | 1.1087 to 1.2792 | 84.8 ms | 25,028 | 292,936 |
+
+## Instructions per evaluation
+
+OneMax 1000 (matched), counted by Callgrind: the framework and the fitness function together, without the startup and imports.
+
+| Library / solver | Instructions per evaluation |
+|---|---|
+| genoxide / ga | 3,400 |
+| genetic_algorithm / evolve | 8,869 |
+| genoxide_python / ga | 29,019 |
+| moors / ga | 33,797 |
+| openga / ga | 36,372 |
+| radiate / ga | 65,947 |
+| pygmo / ga | 312,958 |
+| pymoo / ga | 1,016,245 |
+| pygad / ga | 2,133,695 |
+| deap / ga | 4,416,804 |

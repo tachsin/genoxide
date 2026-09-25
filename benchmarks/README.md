@@ -14,7 +14,7 @@
 | [DEAP](https://github.com/DEAP/deap) | Python | 1.4.4 | GA, CMA-ES; NSGA-II/III |
 | [pymoo](https://github.com/anyoptimization/pymoo) | Python | 0.6.2 | GA, DE, CMA-ES; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
 | [PyGAD](https://github.com/ahmedfgad/GeneticAlgorithmPython) | Python | 3.7.0 | GA; NSGA-II |
-| [pycma](https://github.com/CMA-ES/pycma) | Python | 4.5.0 | IPOP-CMA-ES |
+| [pycma](https://github.com/CMA-ES/pycma) | Python | 4.5.0 | CMA-ES, with IPOP restarts |
 | [Nevergrad](https://github.com/facebookresearch/nevergrad) | Python | 1.0.12 | NGOpt, CMA, DE, PSO, (1+1); DE |
 | [SciPy](https://scipy.org/) | Python | 1.18.1 | `differential_evolution` |
 | [Jenetics](https://jenetics.io/) | Java | 9.1.0 | GA; NSGA-II, MOEA |
@@ -45,9 +45,9 @@ The fitness functions here are cheap, so the time charts mostly show framework a
 
 | | Time to target | Evaluations | Evaluations per second |
 |---|---|---|---|
-| genoxide | 15.4 ms | 54,038 | 3,540,199 |
+| genoxide | 15.4 ms | 54,038 | 3,395,068 |
 | DEAP | 15.82 s | 105,287 | 6,681 |
-| Ratio | 1,000× | 1.9× | 530× |
+| Ratio | 1,000× | 1.9× | 508× |
 
 - **The evaluations:** genoxide needs half as many as DEAP, because it doesn't evaluate a child identical to its parent again; the child inherits the fitness.
 - **The evaluations per second:** genoxide stores the genome as packed bits in compiled Rust. DEAP keeps a Python object per individual, and its operators and fitness function are Python.
@@ -107,8 +107,18 @@ python run.py chart      # redraw the charts of the latest results (--png also d
 
 Each run writes:
 - the raw runs, with the date, the library versions and languages, and the platform, to `results/<timestamp>.json`
-- a table to `results/latest.md`
+- tables to `results/latest.md`, which becomes [docs/benchmarks/results.md](../docs/benchmarks/results.md): the coverage, the single-objective results with the evaluations to target, the multi-objective results, and the instructions per evaluation
 - charts to `results/charts/`: time and evaluations to target, instructions per evaluation, and the hypervolume and time of the multi-objective runs
+
+**Rerunning some libraries.** `--update` reruns only the libraries of `--libraries` and keeps the other libraries' results:
+
+```sh
+python run.py --update results/<timestamp>.json --libraries genoxide genoxide_python
+```
+
+The rerun libraries run every scenario of the results file, with its seeds and wall time cap, and their old runs, instruction counts and versions are replaced. The other libraries' runs are kept as they are. So `--update` can't be combined with `--scenarios` or `--quick`: some of a library's runs would be old ones under its new version. To add a scenario, rerun every library. If the platform differs from the file's, the new file records both. Without Valgrind, or with `--no-instructions`, the previous instruction counts are kept.
+
+**The version measured.** A minor release is benchmarked before its release PR bumps `Cargo.toml`, so `--version-label genoxide=0.7.0` records genoxide and its Python package as 0.7.0, still followed by the commit. Any library of `--libraries` can be labeled this way.
 
 ## Instructions per evaluation
 

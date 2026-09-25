@@ -167,7 +167,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [x] Runs described in TOML / JSON, with a small CLI
 - [x] `tracing` integration and progress reporting
 
-### 0.6: Python
+### 0.6: Python ✅
 - [x] `pip install genoxide` via PyO3 / maturin, wheels for Linux, macOS and Windows
 - [x] Python fitness functions and vectorized numpy batch fitness
 - Zero-copy numpy genomes: moved to 0.7. A batch copies a generation into one array, which costs little next to a Python fitness function.
@@ -196,7 +196,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 
 - **CI:** Linux, macOS and Windows; stable plus MSRV; clippy, fmt and rustdoc with `-D warnings`; a single-thread rayon job.
 - **Property-based tests (proptest)** for every operator: validity, e.g. permutations stay permutations; bounds; no no-op (a picked gene changes, a count mutation changes the genome); exact rates.
-- **Fuzzing** of builders and the configuration file format.
+- **Fuzzing** of builders and the configuration file format: planned.
 - **Performance:** from 0.1 on, every hot path has benchmarks, in two forms:
   - criterion benchmarks for wall time
   - gungraun (formerly iai-callgrind) for exact instruction counts, which are noise-free and fail CI on regressions
@@ -230,7 +230,7 @@ The benchmark suite ([`benchmarks/`](benchmarks/)) runs every library on the sam
 - **Success rate and time to target:** the user-facing result.
 - **Evaluations to target:** search efficiency, independent of language.
 - **Evaluations per second:** framework throughput.
-- **Instructions per evaluation:** measured with Callgrind as (I(2N) − I(N)) / N, so interpreter startup and setup cancel out. Exact and repeatable across languages.
+- **Instructions per evaluation:** measured with Callgrind as (I(2N) − I(N)) / (E(2N) − E(N)), with budgets of N and 2N evaluations and E the evaluations actually made, so interpreter startup and setup cancel out. Exact and repeatable across languages.
 - **Peak memory**, and scaling with population size, genome size and threads (parallel speedup).
 
 ### Two modes

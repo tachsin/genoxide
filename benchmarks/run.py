@@ -9,8 +9,9 @@ Usage:
     python run.py chart                      # redraw the charts of the latest results
     python run.py --libraries genoxide --update results/<file>.json
                                              # rerun one library, keep the others' results
-    python run.py --libraries genoxide pymoo deap --scenarios zdt1-30-matched --update results/<file>.json
-                                             # add a scenario to a results file
+    python run.py --version-label genoxide=0.7.0
+                                             # record genoxide as 0.7.0, e.g. before the release
+                                             # PR bumps Cargo.toml
 
 Results are written to results/<timestamp>.json (all runs), results/latest.md (table) and
 results/charts/*.svg (charts). On Linux with Valgrind, a run also measures instructions per
@@ -240,11 +241,14 @@ def setup():
     subprocess.run([str(VENV_PYTHON), "-m", "pip", "install", "-r", requirements], check=True)
 
 
-def library_version(kind, package, adapter=None):
-    if kind == "command":
+def library_version(kind, package, adapter=None, label=None):
+    """The version of a library, or `label` in its place; genoxide's has its commit too."""
+    if label:
+        version = label
+    elif kind == "command":
         # a command that prints the version, e.g. an adapter's --version
         return subprocess.run(package, capture_output=True, text=True, check=True, cwd=ROOT).stdout.strip()
-    if kind == "python":
+    elif kind == "python":
         version = subprocess.run(
             [str(VENV_PYTHON), "-c", f"import importlib.metadata as m; print(m.version('{package}'))"],
             capture_output=True, text=True, check=True, cwd=ROOT,
@@ -313,12 +317,22 @@ def measure_instructions(libraries):
         print(f"instructions: {name} (callgrind) ...", flush=True)
         low, low_evaluations = count_instructions(ADAPTERS[name], INSTRUCTIONS_EVALUATIONS)
         high, high_evaluations = count_instructions(ADAPTERS[name], 2 * INSTRUCTIONS_EVALUATIONS)
-        for solver, evaluations in high_evaluations.items():
-            rows.append({
-                "library": name,
-                "solver": solver,
-                "instructions_per_evaluation": (high - low) / (evaluations - low_evaluations[solver]),
-            })
+        if not high_evaluations:
+            # the library can't run the scenario
+            continue
+        # the instructions are the whole process's: they're one solver's only if it runs alone
+        if len(high_evaluations) != 1 or set(low_evaluations) != set(high_evaluations):
+            raise SystemExit(
+                f"instructions: the {name} adapter runs {len(high_evaluations)} solvers in "
+                f"{scenario_name(*INSTRUCTIONS_SCENARIO)} ({', '.join(sorted(high_evaluations))}), and the "
+                "instructions of the process can't be divided between them. Run one solver there, or set "
+                "\"instructions\": False on the adapter.")
+        (solver, evaluations), = high_evaluations.items()
+        rows.append({
+            "library": name,
+            "solver": solver,
+            "instructions_per_evaluation": (high - low) / (evaluations - low_evaluations[solver]),
+        })
     return rows
 
 
@@ -339,9 +353,15 @@ def format_seconds(seconds):
 def format_number(value):
     if value is None:
         return "-"
-    if isinstance(value, float) and not value.is_integer():
+    if isinstance(value, float) and not value.is_integer() and abs(value) < 1000:
         return f"{value:.4g}"
-    return f"{int(value):,}"
+    # from 1000, rounded: 13,027, not 1.303e+04
+    return f"{round(value):,}"
+
+
+def format_count(value):
+    """A count, or a median of counts, which can be halfway between two: rounded."""
+    return "-" if value is None else f"{round(value):,}"
 
 
 def summarize(runs):
@@ -423,8 +443,8 @@ def front_table(rows):
             f"| {row['median_hypervolume']:.4f} "
             f"| {row['worst_hypervolume']:.4f} to {row['best_hypervolume']:.4f} "
             f"| {format_seconds(row['median_time'])} "
-            f"| {format_number(round(row['median_evaluations']))} "
-            f"| {format_number(round(row['evaluations_per_second']))} |"
+            f"| {format_count(row['median_evaluations'])} "
+            f"| {format_count(row['evaluations_per_second'])} |"
         )
     return "\n".join(lines)
 
@@ -445,9 +465,12 @@ def coverage_table(runs, libraries):
 
 
 def markdown_table(rows):
+    """The single-objective results. The time and evaluations to target are medians of the
+    successful runs, as in the charts; the median evaluations are of all runs."""
     lines = [
-        "| Scenario | Library / solver | Success | Median time to target | Median evaluations | Median best | Evaluations/s | Throughput vs DEAP GA |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Scenario | Library / solver | Success | Median time to target | Median evaluations to target "
+        "| Median evaluations | Median best | Evaluations/s | Throughput vs DEAP GA |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for row in rows:
         ratio = row["throughput_vs_deap"]
@@ -456,11 +479,27 @@ def markdown_table(rows):
             f"| {row['scenario']} | {row['library']} / {row['solver']} "
             f"| {row['success_rate'] * 100:.0f}% ({row['runs']}) "
             f"| {format_seconds(row['time_to_target'])} "
-            f"| {format_number(row['median_evaluations'])} "
+            f"| {format_count(row.get('evaluations_to_target'))} "
+            f"| {format_count(row['median_evaluations'])} "
             f"| {format_number(row['median_best'])} "
-            f"| {format_number(round(row['evaluations_per_second']))} "
+            f"| {format_count(row['evaluations_per_second'])} "
             f"| {ratio} |"
         )
+    return "\n".join(lines)
+
+
+def instructions_table(rows):
+    """Instructions per evaluation, fewest first, as in the chart."""
+    problem, size, mode = INSTRUCTIONS_SCENARIO
+    lines = [
+        f"{PROBLEM_NAMES[problem]} {size} ({mode}), counted by Callgrind: the framework and the fitness "
+        "function together, without the startup and imports.",
+        "",
+        "| Library / solver | Instructions per evaluation |",
+        "|---|---|",
+    ]
+    for row in sorted(rows, key=lambda row: row["instructions_per_evaluation"]):
+        lines.append(f"| {row['library']} / {row['solver']} | {format_count(row['instructions_per_evaluation'])} |")
     return "\n".join(lines)
 
 
@@ -509,8 +548,10 @@ def scenario_title(scenario):
 
 
 def short_number(value):
+    """3 significant digits and a suffix, e.g. 1.23k or 45.6M. The rounding can reach the next
+    suffix: 999,600 is 1M, not 1e+03k."""
     for limit, suffix in ((1e9, "G"), (1e6, "M"), (1e3, "k")):
-        if value >= limit:
+        if float(f"{value:.3g}") >= limit:
             return f"{value / limit:.3g}{suffix}"
     return f"{value:.3g}"
 
@@ -794,6 +835,26 @@ def draw_charts_of(results_file, out_dir, png=False):
     draw_charts(results, out_dir, formats=("svg", "png") if png else ("svg",))
 
 
+def markdown_report(report):
+    """results/latest.md, which becomes docs/benchmarks/results.md: the coverage, and the tables of
+    the single-objective, multi-objective and instructions results."""
+    header = [f"# Results {report['timestamp']}", "",
+              f"Seeds per scenario: {report['seeds']}, wall time cap per run: {report['max_seconds']} s",
+              report["platform"], ""]
+    header += [f"- {name} {version}" for name, version in report["versions"].items()] + [""]
+    header += ["## Coverage", "",
+               "✓ ran, – can't run the scenario: why, and the bugs found in the libraries, in "
+               "[notes.md](notes.md).", "", coverage_table(report["runs"], report["versions"]), "",
+               "## Single-objective", ""]
+    table = markdown_table(report["summary"])
+    if report["front_summary"]:
+        table += "\n\n## Multi-objective\n\n" + front_table(report["front_summary"])
+    if report.get("instructions"):
+        table += "\n\n## Instructions per evaluation\n\n" + instructions_table(report["instructions"])
+    # a blank line between the list and the table, or the table becomes part of the list
+    return "\n".join(header) + "\n" + table + "\n"
+
+
 def latest_results():
     files = sorted((ROOT / "results").glob("*.json"))
     if not files:
@@ -815,9 +876,24 @@ def main():
     parser.add_argument("--no-instructions", action="store_true", help="skip the Callgrind measurement")
     parser.add_argument("--png", action="store_true", help="also draw the charts as PNG, e.g. to preview them")
     parser.add_argument("--update", type=Path,
-                        help="rerun only --libraries, with the seeds and scenarios of this results file, "
+                        help="rerun only --libraries, with the seeds and every scenario of this results file, "
                              "and keep its results of the other libraries")
+    parser.add_argument("--version-label", nargs="*", default=[], metavar="LIBRARY=VERSION",
+                        help="the version to record for a library instead of the one it reports, e.g. "
+                             "genoxide=0.7.0 before the release PR bumps Cargo.toml; genoxide's labels "
+                             "genoxide_python too, and genoxide's commit is still added")
     args = parser.parse_args()
+
+    labels = {}
+    for item in args.version_label:
+        name, _, version = item.partition("=")
+        if name not in args.libraries or not version:
+            raise SystemExit(f"--version-label {item}: expected LIBRARY=VERSION, with a library that runs, "
+                             f"one of {' '.join(args.libraries)}")
+        labels[name] = version
+    if "genoxide" in labels:
+        # the Python package has genoxide's version
+        labels.setdefault("genoxide_python", labels["genoxide"])
 
     if args.command == "setup":
         setup()
@@ -834,6 +910,11 @@ def main():
     if args.update:
         if set(args.libraries) == set(ADAPTERS):
             raise SystemExit("--update needs --libraries: the ones to rerun")
+        if args.scenarios or args.quick:
+            # the rerun libraries' other scenarios would keep their old runs, labeled with the new
+            # version, and a library new to the file would seem unable to run them
+            raise SystemExit("--update reruns the libraries on every scenario of the results file, so it can't "
+                             "be combined with --scenarios or --quick. To add a scenario, rerun every library.")
         previous = json.loads(args.update.read_text(encoding="utf-8"))
     seeds = previous["seeds"] if previous else 3 if args.quick and args.seeds == 10 else args.seeds
     max_seconds = previous.get("max_seconds", args.max_seconds) if previous else args.max_seconds
@@ -842,8 +923,8 @@ def main():
         scenario for scenario in SCENARIOS
         if (not args.quick or scenario_name(*scenario[:3]) in QUICK_SCENARIOS)
         and (not args.scenarios or scenario_name(*scenario[:3]) in args.scenarios)
-        # an update reruns the scenarios of its results file, or the ones named, which can be new
-        and (previous_scenarios is None or args.scenarios or scenario_name(*scenario[:3]) in previous_scenarios)
+        # an update reruns every scenario of its results file
+        and (previous_scenarios is None or scenario_name(*scenario[:3]) in previous_scenarios)
     ]
 
     versions = {}
@@ -852,7 +933,7 @@ def main():
         if adapter.get("build"):
             print(f"building {name} adapter ...", flush=True)
             subprocess.run(adapter["build"], check=True)
-        versions[name] = library_version(*adapter["version"])
+        versions[name] = library_version(*adapter["version"], label=labels.get(name))
         print(f"{name} {versions[name]}", flush=True)
 
     runs = []
@@ -898,19 +979,10 @@ def main():
               "runs": runs, "summary": rows, "front_summary": front_rows, "instructions": instructions}
     results_file = results / f"{timestamp}.json"
     results_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    header = [f"# Results {timestamp}", "", f"Seeds per scenario: {seeds}, wall time cap per run: {max_seconds} s", platform, ""]
-    header += [f"- {name} {version}" for name, version in versions.items()] + [""]
-    coverage = coverage_table(runs, versions)
-    header += ["## Coverage", "",
-               "✓ ran, – can't run the scenario: why, and the bugs found in the libraries, in "
-               "[notes.md](notes.md).", "", coverage, "", "## Single-objective", ""]
-    table = markdown_table(rows)
-    if front_rows:
-        table += "\n\n## Multi-objective\n\n" + front_table(front_rows)
-    # a blank line between the list and the table, or the table becomes part of the list
-    (results / "latest.md").write_text("\n".join(header) + "\n" + table + "\n", encoding="utf-8")
+    markdown = markdown_report(report)
+    (results / "latest.md").write_text(markdown, encoding="utf-8")
     print()
-    print(table)
+    print(markdown)
     draw_charts_of(results_file, args.charts)
 
 

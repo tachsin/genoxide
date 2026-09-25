@@ -39,7 +39,7 @@ class Budget:
 
 
 def onemax(solution):
-    return int(sum(solution))
+    return int(solution.sum())
 
 
 def nqueens(solution):
@@ -66,23 +66,24 @@ RASTRIGIN_TARGET = 0.01
 
 # Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
 # towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
-SHIFT = [2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(1000)]
+SHIFT = numpy.array([2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(1000)])
 
 
 def rastrigin(solution):
-    return 10 * len(solution) + sum(
-        (v - s) ** 2 - 10 * math.cos(2 * math.pi * (v - s)) for v, s in zip(solution, SHIFT)
-    )
+    d = solution - SHIFT[:len(solution)]
+    return 10 * len(solution) + numpy.sum(d ** 2 - 10 * numpy.cos(2 * numpy.pi * d))
 
 
 def rosenbrock(solution):
-    return sum(100 * (b - a * a) ** 2 + (1 - a) ** 2 for a, b in zip(solution, solution[1:]))
+    a, b = solution[:-1], solution[1:]
+    return numpy.sum(100 * (b - a * a) ** 2 + (1 - a) ** 2)
 
 
 def ackley(solution):
     n = len(solution)
-    squares = sum((v - s) ** 2 for v, s in zip(solution, SHIFT)) / n
-    cosines = sum(math.cos(2 * math.pi * (v - s)) for v, s in zip(solution, SHIFT)) / n
+    d = solution - SHIFT[:n]
+    squares = numpy.sum(d ** 2) / n
+    cosines = numpy.sum(numpy.cos(2 * numpy.pi * d)) / n
     return -20 * math.exp(-0.2 * math.sqrt(squares)) - math.exp(cosines) + 20 + math.e
 
 
@@ -96,7 +97,7 @@ REAL_PROBLEMS = {
 
 # multi-objective problems, minimized, all variables in [0, 1]
 def zdt_g(x):
-    return 1 + 9 * sum(x[1:]) / (len(x) - 1)
+    return 1 + 9 * numpy.sum(x[1:]) / (len(x) - 1)
 
 
 def zdt1(x):
@@ -115,7 +116,7 @@ def zdt3(x):
 
 
 def dtlz2(x, objectives=3):
-    g = sum((v - 0.5) ** 2 for v in x[objectives - 1:])
+    g = numpy.sum((x[objectives - 1:] - 0.5) ** 2)
     values = []
     for m in range(objectives):
         f = 1 + g
@@ -129,7 +130,7 @@ def dtlz2(x, objectives=3):
 
 def dtlz1(x, objectives=3):
     tail = x[objectives - 1:]
-    g = 100 * (len(tail) + sum((v - 0.5) ** 2 - math.cos(20 * math.pi * (v - 0.5)) for v in tail))
+    g = 100 * (len(tail) + numpy.sum((tail - 0.5) ** 2 - numpy.cos(20 * numpy.pi * (tail - 0.5))))
     values = []
     for m in range(objectives):
         f = 0.5 * (1 + g)
@@ -309,7 +310,7 @@ def run_fronts(problem, size, mode, seed_from, seed_to, max_evaluations, max_sec
 
         def fitness_func(ga, solution, solution_index):
             budget.evaluations += 1
-            return [-float(v) for v in function(solution.tolist())]
+            return [-float(v) for v in function(solution)]
 
         def on_generation(ga):
             if budget.exhausted():
