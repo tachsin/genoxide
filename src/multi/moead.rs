@@ -670,6 +670,8 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
                 mutate: self.mutate,
                 crossover_chance: Chance::new(crossover_rate),
                 mutation_chance: Chance::new(mutation_rate),
+                // MOEA/D replaces neighbors one child at a time, and doesn't eliminate duplicates
+                eliminate_duplicates: false,
             },
             objectives: self.objectives,
             weights: self.weights,

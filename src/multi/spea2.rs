@@ -96,6 +96,7 @@ impl<R: Representation, const M: usize> Spea2<R, Unset, Unset, M> {
             crossover_rate: 0.9,
             mutation_rate: 1.0,
             seed: None,
+            eliminate_duplicates: true,
             initial_genomes: Vec::new(),
         }
     }
@@ -454,6 +455,7 @@ pub struct Spea2Builder<R: Representation, const M: usize, C = Unset, X = Unset>
     crossover_rate: f64,
     mutation_rate: f64,
     seed: Option<u64>,
+    eliminate_duplicates: bool,
     initial_genomes: Vec<R::Genome>,
 }
 
@@ -469,6 +471,7 @@ impl<R: Representation, const M: usize, C, X> Spea2Builder<R, M, C, X> {
             crossover_rate: self.crossover_rate,
             mutation_rate: self.mutation_rate,
             seed: self.seed,
+            eliminate_duplicates: self.eliminate_duplicates,
             initial_genomes: self.initial_genomes,
         }
     }
@@ -484,6 +487,7 @@ impl<R: Representation, const M: usize, C, X> Spea2Builder<R, M, C, X> {
             crossover_rate: self.crossover_rate,
             mutation_rate: self.mutation_rate,
             seed: self.seed,
+            eliminate_duplicates: self.eliminate_duplicates,
             initial_genomes: self.initial_genomes,
         }
     }
@@ -509,6 +513,15 @@ impl<R: Representation, const M: usize, C, X> Spea2Builder<R, M, C, X> {
     /// The seed of the random numbers, for a reproducible run. Random by default.
     pub fn seed(mut self, seed: u64) -> Self {
         self.seed = Some(seed);
+        self
+    }
+
+    /// Whether a child that equals a member of the population, or an earlier child of the same
+    /// generation, is dropped and another bred instead, which keeps the population and its front
+    /// free of copies. On by default, as in pymoo. When copies are all a population can breed,
+    /// after 100 dropped children per child needed, copies are accepted.
+    pub fn eliminate_duplicates(mut self, eliminate: bool) -> Self {
+        self.eliminate_duplicates = eliminate;
         self
     }
 
@@ -579,6 +592,7 @@ impl<R: Representation, const M: usize, C, X> Spea2Builder<R, M, C, X> {
                 mutate: self.mutate,
                 crossover_chance: Chance::new(crossover_rate),
                 mutation_chance: Chance::new(mutation_rate),
+                eliminate_duplicates: self.eliminate_duplicates,
             },
             objectives: self.objectives,
             population_size: size,

@@ -5,6 +5,11 @@ use crate::genome::Representation;
 use crate::operator::{Crossover, Mutate};
 use crate::rng::Chance;
 use crate::{Individual, Population, StreamRng};
+use std::collections::HashSet;
+
+// with duplicate elimination, the children rejected as copies, per child needed, before copies
+// are accepted: a population of few distinct genomes still gets its children
+const REJECTIONS_PER_CHILD: usize = 100;
 
 // the operators and rates of a genetic algorithm
 #[derive(Clone, Debug)]
@@ -15,6 +20,10 @@ pub(crate) struct Variation<R, C, X> {
     pub(crate) mutate: X,
     pub(crate) crossover_chance: Chance,
     pub(crate) mutation_chance: Chance,
+    // whether a child that equals a member of the population or an earlier child is bred again;
+    // a checkpoint from before this setting resumes without it, as it was saved
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub(crate) eliminate_duplicates: bool,
 }
 
 impl<R, C, X> Variation<R, C, X>
@@ -24,7 +33,9 @@ where
     X: Mutate<R>,
 {
     // `count` children of pairs of parents chosen by `select`: recombined with the crossover
-    // chance, each mutated with the mutation chance; a child equal to a parent inherits its scores
+    // chance, each mutated with the mutation chance. With duplicate elimination, a child equal to
+    // a member of the population or to an earlier child is dropped. A child equal to a parent
+    // (only when copies are accepted) inherits its scores.
     pub(crate) fn breed<const M: usize>(
         &self,
         population: &Population<R::Genome, Scores<M>>,
@@ -34,6 +45,12 @@ where
         offspring: &mut Vec<Individual<R::Genome, Scores<M>>>,
     ) {
         offspring.clear();
+        let mut population_genomes: HashSet<&R::Genome> = HashSet::new();
+        let mut children: HashSet<R::Genome> = HashSet::new();
+        if self.eliminate_duplicates {
+            population_genomes.extend(population.iter().map(Individual::genome));
+        }
+        let mut rejections = count.saturating_mul(REJECTIONS_PER_CHILD);
         while offspring.len() < count {
             let parents = [select(rng), select(rng)];
             let mut a = population[parents[0]].genome().clone();
@@ -48,6 +65,13 @@ where
                 }
                 if rng.chance(self.mutation_chance) {
                     self.mutate.mutate(&self.representation, &mut genome, rng);
+                }
+                if self.eliminate_duplicates && rejections > 0 {
+                    if population_genomes.contains(&genome) || children.contains(&genome) {
+                        rejections -= 1;
+                        continue;
+                    }
+                    children.insert(genome.clone());
                 }
                 let inherited = parents
                     .iter()
