@@ -159,6 +159,8 @@ mutable struct Budget
     evaluations::Int
     best::Float64
     solution::Any
+    # evaluated solutions outside the bounds (rule 2.4), as the library proposed them
+    outside::Int
     const max_evaluations::Int
     const max_seconds::Float64
     const target::Float64
@@ -166,7 +168,9 @@ mutable struct Budget
 end
 
 Budget(max_evaluations, max_seconds, target = -Inf) =
-    Budget(0, Inf, nothing, max_evaluations, max_seconds, target, time())
+    Budget(0, Inf, nothing, 0, max_evaluations, max_seconds, target, time())
+
+outside(x, bounds) = bounds !== nothing && any(v -> v < bounds[1] || v > bounds[2], x)
 
 exhausted(budget::Budget) =
     budget.best <= budget.target ||
@@ -179,9 +183,11 @@ struct BudgetTermination <: Metaheuristics.AbstractTermination
 end
 Metaheuristics.stop_check(status, criterion::BudgetTermination) = exhausted(criterion.budget)
 
-function counted(f, budget::Budget)
+# `bounds`: (lower, upper) of every variable, to count the solutions outside them
+function counted(f, budget::Budget; bounds = nothing)
     return function (x)
         budget.evaluations += 1
+        outside(x, bounds) && (budget.outside += 1)
         value = f(x)
         if value < budget.best
             budget.best = value
@@ -196,34 +202,52 @@ end
 function counted_front(f, m, budget::Budget)
     return function (x)
         budget.evaluations += 1
+        outside(x, (0.0, 1.0)) && (budget.outside += 1)
         return f(x, m), [0.0], [0.0]
     end
 end
 
-# The options (Options docstring, docs/src/api.md): the seed, and the budget. f_calls_limit is the
-# evaluation budget, which ECA also uses to switch to exploitation at 95% of it (src/algorithms/
-# singleobjective/ECA/ECA.jl, eca_solution).
-#
-# Rule 2.2, the library's own stops are turned off:
-# - its convergence stop (default_stop_check in src/termination/default.jl: CheckConvergence, which
-#   needs all of AbsoluteFunctionConvergence(f_tol), RelativeFunctionConvergence(f_tol_rel),
-#   SmallStandardDeviation and RelativeParameterConvergence(x_tol)) can't pass with f_tol = -1;
-# - the default termination criterion (CheckConvergence for one objective, RobustConvergence for
-#   several, src/optimize/before.jl) is added only when the user gives none, and BudgetTermination
-#   is given;
-# - the iteration limit is out of reach.
-# The library's Restart (docs/src/algorithms/singleobjective.md, "Restart") replaces the population
-# every 100 iterations whatever happens, and keeps the base algorithm's stops: it isn't a restart
-# after a stop, so it isn't used.
+# The options (Options docstring, docs/src/api.md) of one attempt: its seed, and what is left of the
+# evaluations and of the time. f_calls_limit is also what ECA uses to switch to exploitation at 95%
+# of it (eca_solution in src/algorithms/singleobjective/ECA/ECA.jl). The tolerances are the
+# defaults (f_tol 1e-12, f_tol_rel eps(), x_tol 1e-8). The iteration limit, only a budget, is
+# lifted (rule 2.2).
 options(budget::Budget, seed) = Options(
-    f_calls_limit = budget.max_evaluations,
-    time_limit = budget.max_seconds,
+    f_calls_limit = budget.max_evaluations - budget.evaluations,
+    time_limit = budget.max_seconds - (time() - budget.start),
     iterations = typemax(Int) ÷ 4,
-    f_tol = -1.0,
     seed = seed,
 )
 
-algorithm_kwargs(budget, seed) = (options = options(budget, seed), termination = BudgetTermination(budget))
+# The termination: BudgetTermination, and the library's convergence criteria, which end the attempt
+# (rule 2.2): the one optimize checks always (default_stop_check in src/termination/default.jl:
+# CheckConvergence, all of AbsoluteFunctionConvergence(f_tol), RelativeFunctionConvergence(f_tol_rel),
+# SmallStandardDeviation and RelativeParameterConvergence(x_tol)), and the one it adds when the user
+# gives no termination (src/optimize/before.jl): the same CheckConvergence for one objective,
+# RobustConvergence(ftol = f_tol) for several.
+function algorithm_kwargs(budget, seed; front = false)
+    opts = options(budget, seed)
+    convergence = front ? Metaheuristics.RobustConvergence(ftol = opts.f_tol) :
+        Metaheuristics.CheckConvergence(f_tol_abs = opts.f_tol, f_tol_rel = opts.f_tol_rel, x_tol = opts.x_tol)
+    return (options = opts, termination = Metaheuristics.Termination(checkany = [BudgetTermination(budget), convergence]))
+end
+
+# An attempt that ends before the target, the budget or the cap has converged. The library has no
+# restart after convergence: its Restart (docs/src/algorithms/singleobjective.md, "Restart")
+# replaces the population every 100 iterations whatever happens, and keeps the base method's stops.
+# So the method starts again from a new random start, with the seed seed * 1000 + restart (rule
+# 2.2); `budget` keeps the best solution and counts every evaluation.
+# Returns (the last attempt's status, iterations, restarts).
+function run_restarting(start, budget::Budget, seed)
+    iterations = 0
+    restart = 0
+    while true
+        status = start(restart == 0 ? seed : seed * 1000 + restart)
+        iterations += status.iteration
+        exhausted(budget) && return status, iterations, restart
+        restart += 1
+    end
+end
 
 # -------------------------------------------------------------------------------------------------
 # Operators for the matched OneMax: the GA framework of Metaheuristics.jl dispatches on operator
@@ -333,7 +357,9 @@ end
 function real_solvers(problem, size)
     f, lower, upper = REAL_PROBLEMS[problem]
     bounds = boxconstraints(lb = fill(lower, size), ub = fill(upper, size))
-    solve(make) = (budget, seed) -> optimize(counted(f, budget), bounds, make(algorithm_kwargs(budget, seed)))
+    # the bounds: the initial population within them, and each method's own repair (ECA:
+    # evo_boundary_repairer!, DE and PSO: reset_to_violated_bounds!)
+    solve(make) = (budget, seed) -> optimize(counted(f, budget; bounds = (lower, upper)), bounds, make(algorithm_kwargs(budget, seed)))
     # the guide: "Box-constrained (continuous): Use ECA, DE, PSO, or SHADE", the first three, with
     # their defaults (their docstrings, docs/src/algorithms/singleobjective.md). ECA is also the
     # default of optimize and the Quick Start's method on Rastrigin (docs/src/index.md); DE and PSO
@@ -363,19 +389,22 @@ end
 #   one child at a time, N per iteration
 # - its SMS-EMOA estimates the hypervolume contributions with 3 objectives by Monte Carlo, with its
 #   default n_samples = 10,000 samples for every child
-# - its MOEA/D is MOEA/D-DE: DE/rand/1 (F 0.5, CR 1) with polynomial mutation, not SBX, at most
-#   2 replacements per child, and Tchebycheff also for DTLZ (no PBI)
+# - a converged attempt restarts (rule 2.2), and the front is the last attempt's final population
+# Not run (rule 6.1): the library's MOEA/D is MOEAD_DE, whose reproduction is DE/rand/1 with
+# polynomial mutation and can't take the matched SBX (MOEAD_DE_reproduction in
+# src/algorithms/multiobjective/MOEAD_DE/MOEAD_DE.jl); CCMO is for constrained problems.
 function front_solvers(problem, size)
     f, variables, objectives, population, divisions = FRONT_PROBLEMS[problem]
     n = variables(size)
     m = objectives(size)
+    # the bounds: the initial population within them, and the library's repair of the offspring
+    # (reset_to_violated_bounds! after SBX and polynomial mutation)
     bounds = boxconstraints(lb = zeros(n), ub = ones(n))
-    solve(make) = (budget, seed) -> optimize(counted_front(f, m, budget), bounds, make(algorithm_kwargs(budget, seed)))
+    solve(make) = (budget, seed) -> optimize(counted_front(f, m, budget), bounds, make(algorithm_kwargs(budget, seed; front = true)))
     return [
         ("nsga2", solve(kwargs -> NSGA2(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
         ("nsga3", solve(kwargs -> NSGA3(; N = population, η_cr = 30, p_cr = 1.0, η_m = 20, p_m = 1.0 / n, partitions = divisions, kwargs...))),
         ("spea2", solve(kwargs -> SPEA2(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
-        ("moead", solve(kwargs -> MOEAD_DE(gen_ref_dirs(m, divisions); T = 20, δ = 0.9, η = 20, p_m = 1.0 / n, kwargs...))),
         ("sms_emoa", solve(kwargs -> SMS_EMOA(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
     ]
 end
@@ -447,7 +476,8 @@ function main(args)
     if haskey(FRONT_PROBLEMS, problem)
         solvers = front_solvers(problem, size)
         for (_, run) in solvers
-            run(Budget(WARM_UP_EVALUATIONS, 10.0), WARM_UP_SEED)
+            budget = Budget(WARM_UP_EVALUATIONS, 10.0)
+            run_restarting(s -> run(budget, s), budget, WARM_UP_SEED)
         end
         capped = Dict(solver => 0 for (solver, _) in solvers)
         for seed in seed_from:seed_to, (solver, run) in solvers
@@ -455,17 +485,18 @@ function main(args)
             index >= EARLY_SEEDS && capped[solver] == EARLY_SEEDS && continue
             budget = Budget(max_evaluations, max_seconds)
             start = time_ns()
-            status = run(budget, seed)
+            status, iterations, restarts = run_restarting(s -> run(budget, s), budget, seed)
             elapsed = (time_ns() - start) / 1.0e9
             capped[solver] += index < EARLY_SEEDS && elapsed >= CAPPED * max_seconds
-            # the final population (rule 7.2): the objective values the library evaluated
+            # the final population of the last attempt (rule 7.2): the objective values the library
+            # evaluated
             points = [Metaheuristics.fval(s) for s in status.population]
             front = non_dominated(points)
             print_line([
                 "library" => "metaheuristics_jl", "solver" => solver, "problem" => problem, "size" => size,
                 "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-                "generations" => status.iteration, "evaluations" => budget.evaluations,
-                "population" => length(points), "front" => points[front],
+                "generations" => iterations, "evaluations" => budget.evaluations, "restarts" => restarts,
+                "outside" => budget.outside, "population" => length(points), "front" => points[front],
                 "solutions" => [Metaheuristics.get_position(status.population[i]) for i in front],
             ])
         end
@@ -487,7 +518,8 @@ function main(args)
     end
 
     for (_, run, _) in solvers
-        run(Budget(WARM_UP_EVALUATIONS, 10.0, target), WARM_UP_SEED)
+        budget = Budget(WARM_UP_EVALUATIONS, 10.0, target)
+        run_restarting(s -> run(budget, s), budget, WARM_UP_SEED)
     end
 
     capped = Dict(solver => 0 for (solver, _, _) in solvers)
@@ -496,7 +528,7 @@ function main(args)
         index >= EARLY_SEEDS && capped[solver] == EARLY_SEEDS && continue
         budget = Budget(max_evaluations, max_seconds, target)
         start = time_ns()
-        status = run(budget, seed)
+        _, iterations, restarts = run_restarting(s -> run(budget, s), budget, seed)
         elapsed = (time_ns() - start) / 1.0e9
         best = problem == "onemax" ? -Int(budget.best) : problem == "nqueens" ? Int(budget.best) : budget.best
         success = problem == "onemax" ? best >= size : budget.best <= target
@@ -504,7 +536,8 @@ function main(args)
         print_line([
             "library" => "metaheuristics_jl", "solver" => solver, "problem" => problem, "size" => size,
             "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-            "generations" => status.iteration, "evaluations" => budget.evaluations,
+            "generations" => iterations, "evaluations" => budget.evaluations, "restarts" => restarts,
+            (haskey(REAL_PROBLEMS, problem) ? ["outside" => budget.outside] : [])...,
             "best" => best, "target" => problem == "onemax" ? size : target, "success" => success,
             "solution" => decode(budget.solution),
         ])

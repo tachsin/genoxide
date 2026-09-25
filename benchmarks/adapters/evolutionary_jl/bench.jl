@@ -171,6 +171,8 @@ mutable struct Budget
     evaluations::Int
     best::Float64
     solution::Any
+    # evaluated solutions outside the bounds (rule 2.4), as the library proposed them
+    outside::Int
     const max_evaluations::Int
     const max_seconds::Float64
     const target::Float64
@@ -181,11 +183,15 @@ mutable struct Budget
 end
 
 Budget(max_evaluations, max_seconds, target = -Inf) =
-    Budget(0, Inf, nothing, max_evaluations, max_seconds, target, time(), Dict{Vector{Float64}, Vector{Float64}}())
+    Budget(0, Inf, nothing, 0, max_evaluations, max_seconds, target, time(), Dict{Vector{Float64}, Vector{Float64}}())
 
-function counted(f, budget::Budget)
+outside(x, bounds) = bounds !== nothing && any(v -> v < bounds[1] || v > bounds[2], x)
+
+# `bounds`: (lower, upper) of every variable, to count the solutions outside them
+function counted(f, budget::Budget; bounds = nothing)
     return function (x)
         budget.evaluations += 1
+        outside(x, bounds) && (budget.outside += 1)
         value = f(x)
         if value < budget.best
             budget.best = value
@@ -198,6 +204,7 @@ end
 function counted!(f!, budget::Budget)
     return function (F, x)
         budget.evaluations += 1
+        outside(x, (0.0, 1.0)) && (budget.outside += 1)
         f!(F, x)
         budget.values[copy(x)] = copy(F)
         return F
@@ -209,23 +216,25 @@ exhausted(budget::Budget) =
     budget.evaluations >= budget.max_evaluations ||
     time() - budget.start >= budget.max_seconds
 
-# Rule 2.2: the library's own stops are turned off. Its convergence test (a metric such as
-# AbsDiff(1e-12) below its tolerance for more than successive_f_tol generations, src/api/optimize.jl)
-# never passes with successive_f_tol = typemax(Int), and the iteration limit is typemax(Int). The
-# callback (docs/src/tutorial.md, "General options") ends the run at the target, the budget or the
-# time cap.
-options(budget::Budget, rng) = Evolutionary.Options(
+# Rule 2.2. The iteration limit, only a budget, is lifted (typemax(Int); the library's default is
+# 1,000, 1,500 for CMAES). The convergence test is the library's: each method's default metric
+# (AbsDiff(1e-12) for GA and CMAES, AbsDiff(1e-10) for DE and ES, GD for NSGA2) below its tolerance
+# for more than `successive_f_tol` generations (src/api/optimize.jl); `successive_f_tol` is the
+# default 10, or the value of the library's example for the problem type. It ends the attempt, and
+# run_restarting starts a new one. The callback of Options (docs/src/tutorial.md, "General
+# options") ends the run at the target, the budget or the time cap, after every generation.
+options(budget::Budget, rng; successive_f_tol = 10) = Evolutionary.Options(
     iterations = typemax(Int),
-    successive_f_tol = typemax(Int),
+    successive_f_tol = successive_f_tol,
     callback = record -> exhausted(budget),
     rng = rng,
 )
 
-# A run that ends before the budget, which only CMAES does (update_state! returns true when the
-# eigendecomposition of its covariance matrix fails, src/cmaes.jl), starts again from a new random
-# start with the seed seed * 1000 + restart (rule 2.2: Evolutionary.jl has no restart mechanism,
-# and this stop can't be turned off). The best solution and every evaluation are kept in `budget`.
-# Returns (generations, restarts).
+# An attempt that ends before the target, the budget or the cap has converged (the convergence
+# test above), or, for CMAES, its covariance matrix broke down (update_state! returns true when the
+# eigendecomposition fails, src/cmaes.jl). Evolutionary.jl has no restart mechanism, so the method
+# starts again from a new random start with the seed seed * 1000 + restart (rule 2.2). The best
+# solution and every evaluation are kept in `budget`. Returns (generations, restarts).
 function run_restarting(start, budget::Budget, seed)
     generations = 0
     restart = 0
@@ -274,7 +283,8 @@ function onemax_solvers(size, mode)
         # bit-flip with probability 1 / size on 20% of the children, no elitism (ɛ = 0).
         # Differences: Evolutionary's tournament draws its contestants without replacement from a
         # shuffled population (DEAP: with replacement); the crossover and bit-flip are the wrappers
-        # above (the library's own `flip` flips exactly one bit).
+        # above (the library's own `flip` flips exactly one bit). The GA's convergence test (AbsDiff
+        # of the best value, with the default successive_f_tol) restarts it, as in every scenario.
         method = () -> GA(
             populationSize = 300,
             selection = tournament(3),
@@ -305,7 +315,8 @@ end
 function nqueens_solvers(size)
     # test/n-queens.jl of Evolutionary.jl, its only permutation example: GA with population 100,
     # tournament(5), crossoverRate 0.89, mutationRate 0.06; the test tries 5 mutations × 5
-    # crossovers, this is its first pair (PMX, inversion)
+    # crossovers as equals, this is its first pair (PMX, inversion; the library's defaults, `genop`,
+    # aren't among them), with successive_f_tol = 30
     ga = (budget, seed) -> run_restarting(budget, seed) do rng
         method = GA(
             populationSize = 100,
@@ -315,10 +326,11 @@ function nqueens_solvers(size)
             mutation = inversion,
             mutationRate = 0.06,
         )
-        Evolutionary.optimize(counted(nqueens, budget), () -> randperm(rng, size), method, options(budget, rng))
+        Evolutionary.optimize(counted(nqueens, budget), () -> randperm(rng, size), method, options(budget, rng; successive_f_tol = 30))
     end
-    # test/n-queens.jl: (20+100)-ES with a GA mutation (mutationwrapper), ρ = 1; the test tries 5
-    # mutations with :plus and :comma, this is the first (inversion, :plus)
+    # test/n-queens.jl: (20+100)-ES with a GA mutation (mutationwrapper), ρ = 1, default options;
+    # the test tries 5 mutations with :plus and :comma: the first mutation (inversion), and the
+    # library's default selection, :plus
     es = (budget, seed) -> run_restarting(budget, seed) do rng
         method = ES(mutation = mutationwrapper(inversion), μ = 20, ρ = 1, λ = 100, selection = :plus)
         Evolutionary.optimize(counted(nqueens, budget), () -> randperm(rng, size), method, options(budget, rng))
@@ -330,39 +342,48 @@ function real_solvers(problem, size)
     f, lower, upper = REAL_PROBLEMS[problem]
     # the bounds (docs/src/constraints.md, "Box Constrained Optimization"): a random initial
     # population within them, and clipping of the offspring
-    solve(method) = (budget, seed) -> run_restarting(budget, seed) do rng
-        Evolutionary.optimize(counted(f, budget), BoxConstraints(lower, upper, size), method(), options(budget, rng))
+    solve(method; successive_f_tol = 10) = (budget, seed) -> run_restarting(budget, seed) do rng
+        Evolutionary.optimize(
+            counted(f, budget; bounds = (lower, upper)), BoxConstraints(lower, upper, size), method(),
+            options(budget, rng; successive_f_tol),
+        )
     end
 
-    # docs/src/es.md: the (μ/ρ(+/,)λ)-ES with self-adaptive strategies. Settings of the library's
-    # tests on the same problem types:
+    # Rule 6.2: the documentation states what two methods are for: CMA-ES (docs/src/cmaes.md: for
+    # "difficult (non-convex, ill-conditioned, multi-modal, rugged, noisy) optimization problems in
+    # continuous search spaces") and DE (docs/src/de.md: "used for multidimensional real-valued
+    # functions"). The third is the library's example for the problem type: the ES of
+    # test/rastrigin.jl for the multimodal problems, the GA of the getting-started example on the
+    # Sphere function (docs/src/index.md) for the unimodal one. Their settings are those examples'.
     if problem == "rosenbrock"
-        # test/rosenbrock.jl: (15/3+100)-ES, isotropic self-adaptive gaussian mutation (the first
-        # of the settings the test tries)
-        es = () -> ES(
-            initStrategy = IsotropicStrategy(size),
-            recombination = average, srecombination = average,
-            mutation = gaussian, smutation = gaussian,
-            μ = 15, ρ = 3, λ = 100, selection = :plus,
-        )
+        # docs/src/tutorial.md minimizes Rosenbrock with CMAES() and the default options: (10,20)-CMA-ES
+        # with σ0 = 0.5, from a random point of the domain
+        cma_es = solve(() -> CMAES())
+        # test/rosenbrock.jl: DE(populationSize = 100) with the default options, i.e. DE/rand/1/bin
+        # with F = 0.9, Cr = 0.5
+        de = solve(() -> DE(populationSize = 100))
+        # docs/src/index.md, "Getting started": GA(populationSize = 100, selection = susinv,
+        # crossover = DC, mutation = PLM()) on the Sphere function, with the default options and
+        # rates (crossover 0.8, mutation 0.1)
+        third = ("ga", solve(() -> GA(populationSize = 100, selection = susinv, crossover = DC, mutation = PLM())))
     else
-        # test/rastrigin.jl: (15/15,100)-σ-SA-ES, anisotropic self-adaptive gaussian mutation
-        es = () -> ES(
+        # test/rastrigin.jl: CMAES(lambda = 100) with the default options: (50,100)-CMA-ES with
+        # σ0 = 0.5, from a random point of the domain
+        cma_es = solve(() -> CMAES(lambda = 100))
+        # test/rastrigin.jl: DE with population 100 and F = 0.9, and successive_f_tol = 25; the
+        # test varies the selection, the recombination and n, which take the library's defaults
+        # (random, BINX(0.5), 1): DE/rand/1/bin
+        de = solve(() -> DE(populationSize = 100, F = 0.9); successive_f_tol = 25)
+        # test/rastrigin.jl, with iterations = 1000 (lifted): (15/15,100)-σ-SA-ES, anisotropic
+        # self-adaptive gaussian mutation
+        third = ("es", solve(() -> ES(
             initStrategy = AnisotropicStrategy(size),
             recombination = average, srecombination = average,
             mutation = gaussian, smutation = gaussian,
             μ = 15, λ = 100, selection = :comma,
-        )
+        )))
     end
-    # docs/src/cmaes.md: CMA-ES for "difficult (non-convex, ill-conditioned, multi-modal, rugged,
-    # noisy) optimization problems in continuous search spaces". test/rastrigin.jl and
-    # test/rosenbrock.jl: CMAES(lambda = 100), i.e. (50,100)-CMA-ES with the default σ0 = 0.5, from
-    # a random point of the domain
-    cma_es = () -> CMAES(lambda = 100)
-    # docs/src/de.md: DE "is used for multidimensional real-valued functions". test/rosenbrock.jl:
-    # DE(populationSize = 100) with the defaults, DE/rand/1/bin with F = 0.9, Cr = 0.5
-    de = () -> DE(populationSize = 100)
-    return [("es", solve(es)), ("cma_es", solve(cma_es)), ("de", solve(de))]
+    return [("cma_es", cma_es), ("de", de), third]
 end
 
 # -------------------------------------------------------------------------------------------------
@@ -392,22 +413,24 @@ function run_front(problem, size, budget, seed)
     f!, variables, objectives, population_size = FRONT_PROBLEMS[problem]
     n = variables(size)
     m = objectives(size)
-    method = NSGA2(
-        populationSize = population_size,
-        crossover = crossover_with_probability(SBX(0.5, 15), 0.9),
-        crossoverRate = 1.0,
-        mutation = PLM(1.0; η = 20, pm = 1.0 / n),
-        mutationRate = 1.0,
-    )
-    rng = Xoshiro(seed)
-    # the initial population, uniform in [0, 1]; NSGA2 replaces its members in place, so it
-    # holds the final population afterwards (rule 7.2). NSGA2 doesn't stop by itself with these
-    # options, so there is no restart.
-    population = [rand(rng, n) for _ in 1:population_size]
-    result = Evolutionary.optimize(
-        counted!(f!, budget), zeros(m), BoxConstraints(0.0, 1.0, n), method, population, options(budget, rng),
-    )
-    return Evolutionary.iterations(result), population
+    population = Vector{Float64}[]
+    generations, restarts = run_restarting(budget, seed) do rng
+        method = NSGA2(
+            populationSize = population_size,
+            crossover = crossover_with_probability(SBX(0.5, 15), 0.9),
+            crossoverRate = 1.0,
+            mutation = PLM(1.0; η = 20, pm = 1.0 / n),
+            mutationRate = 1.0,
+        )
+        # the initial population, uniform in [0, 1]; NSGA2 replaces its members in place, so it
+        # holds the final population afterwards (rule 7.2): after a restart, the last attempt's.
+        # The library's convergence test (its GD metrics, test/moea.jl's default options) applies.
+        population = [rand(rng, n) for _ in 1:population_size]
+        Evolutionary.optimize(
+            counted!(f!, budget), zeros(m), BoxConstraints(0.0, 1.0, n), method, population, options(budget, rng),
+        )
+    end
+    return generations, restarts, population
 end
 
 # -------------------------------------------------------------------------------------------------
@@ -473,15 +496,15 @@ function main(args)
             Random.seed!(seed)
             budget = Budget(max_evaluations, max_seconds)
             start = time_ns()
-            generations, population = run_front(problem, size, budget, seed)
+            generations, restarts, population = run_front(problem, size, budget, seed)
             elapsed = (time_ns() - start) / 1.0e9
             points = [budget.values[x] for x in population]
             front = non_dominated(points)
             print_line([
                 "library" => "evolutionary_jl", "solver" => "nsga2", "problem" => problem, "size" => size,
                 "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-                "generations" => generations, "evaluations" => budget.evaluations,
-                "front" => points[front], "solutions" => population[front],
+                "generations" => generations, "evaluations" => budget.evaluations, "restarts" => restarts,
+                "outside" => budget.outside, "front" => points[front], "solutions" => population[front],
             ])
         end
         return
@@ -524,6 +547,7 @@ function main(args)
             "library" => "evolutionary_jl", "solver" => solver, "problem" => problem, "size" => size,
             "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
             "generations" => generations, "evaluations" => budget.evaluations, "restarts" => restarts,
+            (haskey(REAL_PROBLEMS, problem) ? ["outside" => budget.outside] : [])...,
             "best" => best, "target" => problem == "onemax" ? size : target, "success" => success,
             "solution" => solution,
         ])
