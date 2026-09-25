@@ -53,13 +53,16 @@ pub trait Incremental {
 
 /// A steady-state genetic algorithm for asynchronous evaluation, from
 /// [`GaBuilder::build_steady`](super::GaBuilder::build_steady): the same settings as a [`Ga`](super::Ga), but
-/// it breeds one child at a time and every result takes the place of the worst individual when
+/// it proposes one child at a time and every result takes the place of the worst individual when
 /// it's not worse.
 ///
 /// - It first proposes the initial population: the initial genomes, then random ones. Once some of
 ///   them are evaluated, every proposal is a child of two parents chosen by the selection operator
-///   from the individuals evaluated so far, recombined and mutated at the usual rates. A child
-///   identical to a parent is bred again (up to 100 times): it would add nothing.
+///   from the individuals evaluated so far, recombined and mutated at the usual rates. A crossover
+///   gives two children: the first is proposed, and the second next, unless it's identical to the
+///   first, or in the population by then. When both children are already in the population (e.g.
+///   copies of their parents), the parents are chosen and bred again, up to 100 times: such a
+///   child would add nothing. After that, a child in the population is proposed anyway.
 /// - A result joins the population until it holds `population_size` individuals. After that it
 ///   replaces the worst individual (the earliest on ties) if it's at least as good. A genome
 ///   already in the population is not added twice.
@@ -228,8 +231,11 @@ where
         if self.population.is_empty() {
             return self.representation.random_genome(&mut self.rng);
         }
+        // the second child of the last crossover, unless it joined the population meanwhile
         if let Some(genome) = self.queued.take() {
-            return genome;
+            if !self.contains(&genome) {
+                return genome;
+            }
         }
         let mut children = self.breed();
         for _ in 1..ATTEMPTS {
@@ -241,7 +247,10 @@ where
         let [a, b] = children;
         match (self.contains(&a), self.contains(&b)) {
             (false, false) => {
-                self.queued = Some(b);
+                // twins would be the same evaluation twice
+                if b != a {
+                    self.queued = Some(b);
+                }
                 a
             }
             (true, false) => b,
@@ -314,5 +323,67 @@ where
 
     fn best_evaluation(&self) -> u64 {
         self.best_evaluation
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::algorithm::Ga;
+    use crate::genome::{Binary, Bits};
+    use crate::operator::{BitFlip, Tournament, UniformCrossover};
+
+    fn one_max(genome: &Bits) -> Fitness {
+        Fitness::new(genome.count_ones() as f64)
+    }
+
+    // With one worker, each result arrives before the next proposal: a proposal already in the
+    // population, e.g. the twin of the last one, would be an evaluation wasted.
+    #[test]
+    fn one_worker_never_gets_a_genome_already_in_the_population() {
+        let mut steady = Ga::builder(Binary::new(16).unwrap())
+            .population_size(10)
+            .select(Tournament::new(2).unwrap())
+            .crossover(UniformCrossover::new())
+            .mutate(BitFlip::count(1).unwrap())
+            .seed(3)
+            .build_steady()
+            .unwrap();
+        for step in 0..5_000 {
+            let genome = steady.propose();
+            // after the initial population
+            if step >= 10 {
+                assert!(
+                    !steady.contains(&genome),
+                    "proposed a genome already in the population at step {step}"
+                );
+            }
+            let fitness = one_max(&genome);
+            steady.receive(genome, fitness).unwrap();
+        }
+    }
+
+    // A population of one genome of one bit: both children of a crossover are the other genome,
+    // twins. Every result replaces the individual (the fitness is the same), so the second twin
+    // would be in the population when it's proposed.
+    #[test]
+    fn the_twin_of_a_child_is_not_proposed() {
+        let mut steady = Ga::builder(Binary::new(1).unwrap())
+            .population_size(1)
+            .select(Tournament::new(2).unwrap())
+            .crossover(UniformCrossover::new())
+            .mutate(BitFlip::count(1).unwrap())
+            .seed(0)
+            .build_steady()
+            .unwrap();
+        let first = steady.propose();
+        steady.receive(first.clone(), Fitness::new(0.0)).unwrap();
+        let mut proposals = vec![first];
+        for _ in 0..10 {
+            let genome = steady.propose();
+            assert!(!steady.contains(&genome), "{proposals:?}, then {genome:?}");
+            proposals.push(genome.clone());
+            steady.receive(genome, Fitness::new(0.0)).unwrap();
+        }
     }
 }

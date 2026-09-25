@@ -331,7 +331,8 @@ impl PsoBuilder {
     }
 
     /// The largest velocity of a gene, as a fraction of its range: greater than 0 and finite, e.g.
-    /// 0.1 to 1. 1 by default.
+    /// 0.1 to 1. 1 by default. It limits the initial velocities too, which are at most half the
+    /// range.
     pub fn max_velocity(mut self, fraction: f64) -> Self {
         self.max_velocity = fraction;
         self
@@ -367,7 +368,8 @@ impl PsoBuilder {
     }
 
     /// Validates the settings and creates the algorithm, with its initial swarm. Each initial
-    /// velocity is half the way from the particle to a random position.
+    /// velocity is half the way from the particle to a random position, limited by
+    /// [`max_velocity`](PsoBuilder::max_velocity).
     ///
     /// # Errors
     ///
@@ -432,6 +434,7 @@ impl PsoBuilder {
         let random = size - self.initial_genomes.len();
         let mut genomes = self.initial_genomes;
         genomes.extend((0..random).map(|_| self.real.random_genome(&mut rng)));
+        let bounds = self.real.bounds();
         let velocities = genomes
             .iter()
             .map(|genome| {
@@ -439,7 +442,11 @@ impl PsoBuilder {
                 genome
                     .iter()
                     .zip(target.iter())
-                    .map(|(x, y)| y / 2.0 - x / 2.0)
+                    .zip(bounds)
+                    .map(|((x, y), range)| {
+                        let limit = self.max_velocity * (range.end() - range.start());
+                        (y / 2.0 - x / 2.0).clamp(-limit, limit)
+                    })
                     .collect()
             })
             .collect();
@@ -475,6 +482,31 @@ mod tests {
 
     fn sphere(x: &Reals) -> f64 {
         x.iter().map(|xi| xi * xi).sum()
+    }
+
+    #[test]
+    fn initial_velocities_respect_max_velocity() {
+        let real = Real::new([0.0..=1.0, -10.0..=10.0, 3.0..=3.0]).unwrap();
+        let swarm = |max_velocity| {
+            Pso::builder(real.clone())
+                .population_size(10)
+                .max_velocity(max_velocity)
+                .seed(0)
+                .build()
+                .unwrap()
+        };
+        for max_velocity in [0.01, 0.3, 0.5, 1.0] {
+            for velocity in swarm(max_velocity).velocities() {
+                for (v, bounds) in velocity.iter().zip(real.bounds()) {
+                    let limit = max_velocity * (bounds.end() - bounds.start());
+                    assert!(v.abs() <= limit, "{v} with the limit {limit}");
+                }
+            }
+        }
+        // half the way to a random position is never faster than half the range: from 0.5 up,
+        // the limit changes nothing
+        assert_eq!(swarm(0.5).velocities(), swarm(1.0).velocities());
+        assert_ne!(swarm(0.1).velocities(), swarm(1.0).velocities());
     }
 
     fn builder(topology: Topology, seed: u64) -> PsoBuilder {
