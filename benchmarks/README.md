@@ -2,27 +2,27 @@
 
 16 evolutionary computation libraries in 5 languages, and genoxide's Python package, on the same problems, with the same fitness functions and evaluation budgets.
 
-| Library | Language | Version | Solvers benchmarked |
+| Library | Language | Version | Solvers benchmarked (single-objective; multi-objective) |
 |---|---|---|---|
-| genoxide | Rust | this repository | GA, DE, CMA-ES, local search; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
-| genoxide (Python) | Rust via Python | this repository ([python/](../python)) | the same solvers and settings as genoxide, with Python fitness functions |
-| [genetic_algorithm](https://crates.io/crates/genetic_algorithm) | Rust | 0.27.3 | GA, hill climbing |
-| [radiate](https://crates.io/crates/radiate) | Rust | 1.3.1 | GA; NSGA-II/III |
-| [moors](https://crates.io/crates/moors) | Rust | 0.2.11 | GA; NSGA-II/III, SPEA2, AGE-MOEA, IBEA, REVEA |
-| [openGA](https://github.com/Arash-codedev/openGA) | C++ | 1.0.5+f9b15e7 | GA; NSGA-III |
-| [pygmo](https://github.com/esa/pygmo2) | C++ via Python | 2.19.8 | SGA, SaDE, CMA-ES, PSO; NSGA-II, MOEA/D, NSPSO |
-| [DEAP](https://github.com/DEAP/deap) | Python | 1.4.4 | GA, CMA-ES; NSGA-II/III |
-| [pymoo](https://github.com/anyoptimization/pymoo) | Python | 0.6.2 | GA, DE, CMA-ES; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
-| [PyGAD](https://github.com/ahmedfgad/GeneticAlgorithmPython) | Python | 3.7.0 | GA; NSGA-II |
-| [pycma](https://github.com/CMA-ES/pycma) | Python | 4.5.0 | CMA-ES, with IPOP restarts |
-| [Nevergrad](https://github.com/facebookresearch/nevergrad) | Python | 1.0.12 | NGOpt, CMA, DE, PSO, (1+1); DE |
-| [SciPy](https://scipy.org/) | Python | 1.18.1 | `differential_evolution` |
-| [Jenetics](https://jenetics.io/) | Java | 9.1.0 | GA; NSGA-II, MOEA |
-| [jMetal](https://github.com/jMetal/jMetal) | Java | 7.5 | GA, DE, CMA-ES, PSO; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA, SMPSO |
-| [Evolutionary.jl](https://github.com/wildart/Evolutionary.jl) | Julia | 0.12.0 | GA, DE, CMA-ES, ES; NSGA-II |
-| [Metaheuristics.jl](https://github.com/jmejia8/Metaheuristics.jl) | Julia | 3.5.0 | GA, ECA, DE, PSO; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
+| [genoxide](../docs/benchmarks/libraries/genoxide.md) | Rust | this repository | GA, GA with islands, DE, CMA-ES (IPOP), PSO, local search, tabu search; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
+| [genoxide (Python)](../docs/benchmarks/libraries/genoxide_python.md) | Rust via Python | this repository ([python/](../python)) | GA, tabu search, CMA-ES (IPOP), L-SHADE, DE, PSO; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
+| [genetic_algorithm](../docs/benchmarks/libraries/genetic_algorithm.md) | Rust | 0.27.3 | GA, hill climbing |
+| [radiate](../docs/benchmarks/libraries/radiate.md) | Rust | 1.3.1 | GA, as its examples set it and with the crossovers its guide recommends; NSGA-II/III |
+| [moors](../docs/benchmarks/libraries/moors.md) | Rust | 0.2.11 | GA; NSGA-II/III, SPEA2 |
+| [openGA](../docs/benchmarks/libraries/openga.md) | C++ | 1.0.5+f9b15e7 | GA, as its Rastrigin example and its code generator set it; NSGA-III |
+| [pygmo](../docs/benchmarks/libraries/pygmo.md) | C++ via Python | 2.19.8 | SGA, IHS, GACO, SaDE, CMA-ES, simulated annealing, xNES; NSGA-II |
+| [DEAP](../docs/benchmarks/libraries/deap.md) | Python | 1.4.4 | GA, BIPOP-CMA-ES, DE; NSGA-II/III |
+| [pymoo](../docs/benchmarks/libraries/pymoo.md) | Python | 0.6.2 | GA, BRKGA, CMA-ES (IPOP), DE, ES, Nelder-Mead; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
+| [PyGAD](../docs/benchmarks/libraries/pygad.md) | Python | 3.7.0 | GA; NSGA-II/III |
+| [pycma](../docs/benchmarks/libraries/pycma.md) | Python | 4.5.0 | IPOP-CMA-ES, BIPOP-CMA-ES, lq-CMA-ES |
+| [Nevergrad](../docs/benchmarks/libraries/nevergrad.md) | Python | 1.0.12 | NgIohTuned, DiscreteOnePlusOne, PortfolioDiscreteOnePlusOne, RotatedTwoPointsDE, GeneticDE, ScrHammersleySearchPlusMiddlePoint, OnePlusOne, CMA |
+| [SciPy](../docs/benchmarks/libraries/scipy.md) | Python | 1.18.1 | `differential_evolution`, `dual_annealing`, `direct`, `minimize` (L-BFGS-B, Nelder-Mead) |
+| [Jenetics](../docs/benchmarks/libraries/jenetics.md) | Java | 9.1.0 | GA; NSGA-II |
+| [jMetal](../docs/benchmarks/libraries/jmetal.md) | Java | 7.5 | GA, ES, DE, CMA-ES; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
+| [Evolutionary.jl](../docs/benchmarks/libraries/evolutionary_jl.md) | Julia | 0.12.0 | GA, ES, CMA-ES, DE; NSGA-II |
+| [Metaheuristics.jl](../docs/benchmarks/libraries/metaheuristics_jl.md) | Julia | 3.5.0 | GA, BRKGA, ECA, DE, PSO; NSGA-II/III, SPEA2, SMS-EMOA |
 
-Every adapter's source lists its settings, where its idiomatic settings come from, and how it differs from the others.
+Each library's page in [docs/benchmarks/libraries/](../docs/benchmarks/libraries/) gives its methods and where its docs recommend them, the methods left out and why, its separate test runs, and the bugs found. [notes.md](../docs/benchmarks/notes.md) indexes what each library can't run, the bugs, and the rule-level choices that affect many libraries.
 
 ## Methodology
 
@@ -33,9 +33,9 @@ Every adapter's source lists its settings, where its idiomatic settings come fro
 - the scenario's evaluation budget is used up
 - 60 seconds have passed
 
-Libraries that check the stop between generations can go past the budget by up to one generation. Every result reports the true number of evaluations.
+Libraries that check the stop between generations can go past the budget by up to one generation. Every result reports the true number of evaluations. A method that ends by its own convergence criterion starts again, with the library's restart mechanism or from a new random start ([rule 2.2](../docs/benchmarks/rules.md#2-the-budget)); a limit that's only a budget, such as a number of generations, is lifted.
 
-A solver whose first 3 seeds all run for the full 60 seconds without reaching the target (a multi-objective run has none) stops there: the other 7 would take a minute each for the same result. Its result shows 3 runs instead of 10, e.g. "0% (3)". Only Nevergrad, metaheuristics_jl and PyGAD have solvers this slow, and their adapters skip those seeds themselves. `run.py` applies the same rule to every library's results.
+A solver whose first 3 seeds all run for the full 60 seconds without reaching the target (a multi-objective run has none) stops there: the other 7 would take a minute each for the same result. Its result shows 3 runs instead of 10, e.g. "0% (3)". The adapters of Nevergrad, PyGAD and Metaheuristics.jl skip those seeds themselves. `run.py` applies the same rule to every library's results.
 
 **Time.** It's measured inside the adapter, around the optimization only. It doesn't include interpreter or JVM startup, imports or setup, and the Java and Julia adapters make an untimed run first, so JIT compilation isn't included either. Every library runs single-threaded, one run at a time, on one machine. Each scenario runs 10 seeds, and the charts show medians.
 
@@ -68,12 +68,12 @@ The fitness functions here are cheap, so the time charts mostly show framework a
 - **An expensive fitness function:** with a fitness function that takes a millisecond, the second factor would nearly vanish, and genoxide would be about 2× faster, not 1,000×.
 
 **Matched and idiomatic.**
-- **Matched:** configurations as equal as the libraries allow. This measures framework cost and algorithm implementations. They're close, not identical: the [notes](../docs/benchmarks/notes.md) list the differences.
-- **Idiomatic:** each library's recommended configuration, from its docs and examples. This measures what its users get. A library can run several solvers here.
+- **Matched:** configurations as equal as the libraries allow. This measures framework cost and algorithm implementations. They're close, not identical: each library's page lists its differences.
+- **Idiomatic:** each library's recommended configuration, from its docs and examples. This measures what its users get. A library can run up to 3 solvers per problem type here.
 
 **Multi-objective quality.** These runs have no target: each one uses its evaluation budget. The adapter prints the objective values of its final non-dominated front. `run.py` computes the hypervolume of every front with the same exact code, so no library's own indicator is involved.
 
-**Bugs in the libraries** aren't worked around, except where the [notes](../docs/benchmarks/notes.md) say so. When a library's own operator is wrong, its results show it, and the notes list the bug with what the library reaches without it.
+**Bugs in the libraries** aren't worked around, except where the [notes](../docs/benchmarks/notes.md) say so. When a library's own operator is wrong, its results show it. The notes list the bug, and the library's page shows what the library reaches without it, where that was measured.
 
 ## Scenarios
 
@@ -104,7 +104,7 @@ They use the matched settings:
 
 ## Notes on the libraries
 
-What each library doesn't run and why, the bugs found in the libraries, and how their settings differ are in [docs/benchmarks/notes.md](../docs/benchmarks/notes.md).
+How each library is run, and how its settings differ from the others', is on its page in [docs/benchmarks/libraries/](../docs/benchmarks/libraries/). What each library doesn't run and why, and the bugs found in the libraries, are indexed in [docs/benchmarks/notes.md](../docs/benchmarks/notes.md).
 
 ## Running
 
