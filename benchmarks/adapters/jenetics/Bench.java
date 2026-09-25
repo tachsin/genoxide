@@ -470,13 +470,13 @@ public final class Bench {
                             .build(),
                         budget, null)));
                 } else {
-                    // The README's "Hello World (Ones counting)" (BitChromosome.of(n, 0.5)) and the
-                    // delivered example program jenetics.example/OnesCounting.java: the engine
-                    // defaults, population 50, TournamentSelector(3) for offspring and survivors,
-                    // SinglePointCrossover(0.2), Mutator(0.15), 60% offspring, maximal age 70.
-                    // Both end the stream with a generation limit only (limit(100), limit(10)),
-                    // which the budget replaces. (The manual's listing, section 6.1, sets other
-                    // values; see the page for why the delivered program decides.)
+                    // "Hello World (Ones counting)", the first example of jenetics.io and of the
+                    // README (BitChromosome.of(n, 0.5)), also the delivered program
+                    // jenetics.example/OnesCounting.java: the engine defaults, population 50,
+                    // TournamentSelector(3) for offspring and survivors, SinglePointCrossover(0.2),
+                    // Mutator(0.15), 60% offspring, maximal age 70. Both end the stream with a
+                    // generation limit only (limit(100), limit(10)), which the budget replaces.
+                    // (The manual's listing, section 6.1, sets other values; see the page.)
                     solvers.add(new Solver("ga", (budget, seed) -> evolve(
                         Engine.builder((Genotype<BitGene> gt) -> countOnes(gt, budget),
                                 Genotype.of(BitChromosome.of(size, 0.5)))
@@ -488,12 +488,14 @@ public final class Bench {
             case "nqueens" -> {
                 minimize[0] = true;
                 target[0] = 0;
-                // The delivered example program jenetics.example/TravelingSalesman.java, Jenetics'
-                // permutation example: Codecs.ofPermutation, SwapMutator(0.15),
-                // PartiallyMatchedCrossover(0.15), the other settings the engine defaults
-                // (population 50, TournamentSelector(3), 60% offspring, maximal age 70). It ends
-                // the stream with limit(1_000) only, which the budget replaces. (The manual's
-                // listing, section 6.5, sets other values; see the page.)
+                // The manual's "Traveling salesman" example (section 6.5), Jenetics' permutation
+                // example: Codecs.ofPermutation, population 500, maximal age 11, SwapMutator(0.2),
+                // PartiallyMatchedCrossover(0.35), the other settings the engine defaults
+                // (TournamentSelector(3), 60% offspring). It ends the stream with
+                // Limits.bySteadyFitness(25), a convergence criterion: an attempt ends after 25
+                // generations without a better best, and the run restarts (rule 2.2); its
+                // limit(250) is a budget, lifted. (The delivered program
+                // jenetics.example/TravelingSalesman.java sets other values; see the page.)
                 solvers.add(new Solver("ga", (budget, seed) -> evolve(
                     Engine.builder((int[] order) -> {
                                 double value = nqueens(order);
@@ -501,10 +503,12 @@ public final class Bench {
                                 return value;
                             }, Codecs.ofPermutation(size))
                         .optimize(Optimize.MINIMUM)
-                        .alterers(new SwapMutator<>(0.15), new PartiallyMatchedCrossover<>(0.15))
+                        .maximalPhenotypeAge(11)
+                        .populationSize(500)
+                        .alterers(new SwapMutator<>(0.2), new PartiallyMatchedCrossover<>(0.35))
                         .executor(Runnable::run)
                         .build(),
-                    budget, null)));
+                    budget, null, 25, seed)));
             }
             case "rastrigin", "rosenbrock", "ackley" -> {
                 minimize[0] = true;
