@@ -20,17 +20,17 @@ The runs that failed, as opposed to not running, are in the charts: a cross for 
 
 A bug in a library's own operator isn't worked around: the benchmark runs what the library's users get, and its results show the bug. The exceptions are in the last column.
 
-| Library | Bug | Effect | Worked around |
-|---|---|---|---|
-| radiate 1.3.1 | `SimulatedBinaryCrossover` centres the child on (a − b)/2 instead of (a + b)/2, and changes only one parent | lower multi-objective hypervolumes: with textbook operators, its NSGA-II reaches pymoo's (ZDT1: 0.868 against 0.870) | no |
-| radiate 1.3.1 | `PolynomialMutator` computes the new value from a bound instead of from the gene | as above | no |
-| Jenetics 9.1.0 | `SimulatedBinaryCrossover` centres the child on (a − b)/2 | with a corrected copy, the DTLZ2 hypervolume goes from 0.51 to 0.69 | no |
-| Evolutionary.jl 0.12.0 | `NSGA2` reorders the parents but not their objective values, ranks and crowding distances, so from the second generation it selects by other individuals' values | hypervolumes near 0 | no |
-| moors 0.2.11 | AGE-MOEA panics when its first front is degenerate: an assertion that the central point is positive, or a division of 0 by 0 | its ZDT2 and DTLZ1 runs fail, with a hypervolume of 0 | no |
-| openGA f9b15e7 | the single-objective survival's rank roulette can't pick a child, so children survive only through the elite slots | children are almost never kept | in the matched OneMax runs, every slot is elite: the best of parents and children survive |
-| PyGAD 3.7.0 | its `sbx` crossover always makes the child below the parents' midpoint, which pulls every gene towards the lower bound, and it can't cross a pair with probability 0.9 | a bias towards ZDT's optimum | yes: SBX is a PyGAD crossover function in the adapter |
-| jMetal 7.5 | CMA-ES throws `ArrayIndexOutOfBoundsException` in `tql2` when its covariance degenerates | the run ends there | the run counts with what it reached |
-| Nevergrad 1.0.12 | its metamodel crashes with NumPy 2.5 | no run at all | the adapter restores the old scalar conversion in that one module, which doesn't change the algorithm |
+| Library | Bug | Effect | Worked around | Reported |
+|---|---|---|---|---|
+| radiate 1.3.1 | `SimulatedBinaryCrossover` centres the child on (a − b)/2 instead of (a + b)/2, and changes only one parent | lower multi-objective hypervolumes: with textbook operators, its NSGA-II reaches pymoo's (ZDT1: 0.868 against 0.870) | no | [pkalivas/radiate#28](https://github.com/pkalivas/radiate/issues/28) |
+| radiate 1.3.1 | `PolynomialMutator` computes the new value from a bound instead of from the gene | as above | no | [pkalivas/radiate#28](https://github.com/pkalivas/radiate/issues/28) |
+| Jenetics 9.1.0 | `SimulatedBinaryCrossover` centres the child on (a − b)/2 | with a corrected copy, the DTLZ2 hypervolume goes from 0.51 to 0.69 | no | [jenetics/jenetics#969](https://github.com/jenetics/jenetics/issues/969) |
+| Evolutionary.jl 0.12.0 | `NSGA2` reorders the parents but not their objective values, ranks and crowding distances, so from the second generation it selects by other individuals' values | hypervolumes near 0 | no | [SciML/Evolutionary.jl#174](https://github.com/SciML/Evolutionary.jl/issues/174) |
+| moors 0.2.11 | AGE-MOEA panics when its first front is degenerate: an assertion that the central point is positive, or a division of 0 by 0 | its ZDT2 and DTLZ1 runs fail, with a hypervolume of 0 | no | [andresliszt/moo-rs#301](https://github.com/andresliszt/moo-rs/issues/301) |
+| openGA f9b15e7 | the single-objective survival's rank roulette can't pick a child, so children survive only through the elite slots | children are almost never kept | in the matched OneMax runs, every slot is elite: the best of parents and children survive | [Arash-codedev/openGA#30](https://github.com/Arash-codedev/openGA/issues/30) |
+| PyGAD 3.7.0 | its `sbx` crossover always makes the child below the parents' midpoint, which pulls every gene towards the lower bound, and it can't cross a pair with probability 0.9 | a bias towards ZDT's optimum | yes: SBX is a PyGAD crossover function in the adapter | [ahmedfgad/GeneticAlgorithmPython#369](https://github.com/ahmedfgad/GeneticAlgorithmPython/issues/369) |
+| jMetal 7.5 | CMA-ES throws `ArrayIndexOutOfBoundsException` in `tql2` when its covariance degenerates | the run ends there | the run counts with what it reached | |
+| Nevergrad 1.0.12 | its metamodel crashes with NumPy 2.5 | no run at all | the adapter restores the old scalar conversion in that one module, which doesn't change the algorithm | |
 
 ## Settings and differences
 
