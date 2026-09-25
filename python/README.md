@@ -85,6 +85,7 @@ Single-objective algorithms maximize, or minimize with `objective="minimize"`. T
 - `Nsga2` spreads the front by crowding distance, which works poorly beyond 2 or 3 objectives.
 - `Nsga3` spreads it along reference directions instead, and `Moead` solves a single-objective subproblem per weight vector. `das_dennis(objectives, divisions)` gives evenly spread directions or weights, a row each: 91 for 3 objectives and 12 divisions.
 - `Spea2` keeps an archive of the best solutions, the non-dominated ones first, truncated by the distance to their nearest neighbors.
+- `Nsga2`, `Nsga3`, `Spea2` and `SmsEmoa` drop a child that equals a member of the population or an earlier child, and breed another, as pymoo does: `eliminate_duplicates=False` keeps copies.
 - `SmsEmoa` removes, from the last front that fits partly, the solutions that contribute the least hypervolume. It costs more per generation than `Nsga2`: O(N log N) per removal for 2 objectives, O(N²) for 3, O(N³) for 4 and O(N⁴) for 5, where `Nsga3` or `Moead` are better choices.
 
 Every algorithm takes a `seed`: the same seed repeats a run exactly, with a genome at a time, in batches or in parallel.

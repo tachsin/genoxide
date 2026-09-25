@@ -447,6 +447,17 @@ macro_rules! variation {
     }};
 }
 
+// duplicate elimination, for the algorithms that have it
+macro_rules! duplicates {
+    ($builder:expr, $variation:expr) => {{
+        let mut builder = $builder;
+        if let Some(eliminate) = $variation.eliminate_duplicates {
+            builder = builder.eliminate_duplicates(eliminate);
+        }
+        builder
+    }};
+}
+
 impl<'py, R, C, X> WithObjectives for MultiObjective<'_, 'py, R, C, X>
 where
     R: Representation,
@@ -479,6 +490,7 @@ where
                 let builder =
                     Nsga2::builder(representation, objectives).population_size(population_size);
                 let builder = variation!(builder, crossover, mutate, variation, seed);
+                let builder = duplicates!(builder, variation);
                 multi_objective(py, setting(builder.build())?, context)
             }
             config::Algorithm::Nsga3 {
@@ -493,6 +505,7 @@ where
                     builder = builder.population_size(size);
                 }
                 let builder = variation!(builder, crossover, mutate, variation, seed);
+                let builder = duplicates!(builder, variation);
                 multi_objective(py, setting(builder.build())?, context)
             }
             config::Algorithm::Spea2 {
@@ -503,6 +516,7 @@ where
                 let builder =
                     Spea2::builder(representation, objectives).population_size(population_size);
                 let builder = variation!(builder, crossover, mutate, variation, seed);
+                let builder = duplicates!(builder, variation);
                 multi_objective(py, setting(builder.build())?, context)
             }
             config::Algorithm::Moead {
@@ -531,6 +545,14 @@ where
                         config::Decomposition::Pbi { theta } => Decomposition::Pbi { theta },
                     });
                 }
+                if variation.eliminate_duplicates.is_some() {
+                    return Err(
+                        "Moead has no eliminate_duplicates: it replaces its neighbors \
+                                one child at a time"
+                            .to_string()
+                            .into(),
+                    );
+                }
                 let builder = variation!(builder, crossover, mutate, variation, seed);
                 multi_objective(py, setting(builder.build())?, context)
             }
@@ -546,6 +568,7 @@ where
                     builder = builder.offspring(count);
                 }
                 let builder = variation!(builder, crossover, mutate, variation, seed);
+                let builder = duplicates!(builder, variation);
                 multi_objective(py, setting(builder.build())?, context)
             }
             _ => Err("not a multi-objective algorithm".to_string().into()),

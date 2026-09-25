@@ -105,6 +105,8 @@ pub struct Variation {
     pub mutate: Mutate,
     pub crossover_rate: Option<f64>,
     pub mutation_rate: Option<f64>,
+    /// Whether a child equal to a member of the population or an earlier child is bred again.
+    pub eliminate_duplicates: Option<bool>,
 }
 
 /// How MOEA/D turns the objectives into one value per weight vector.

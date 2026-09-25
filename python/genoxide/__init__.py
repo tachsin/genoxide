@@ -1036,6 +1036,7 @@ class _MultiObjective(_Algorithm):
             "mutate": self.mutation._describe(),
             "crossover_rate": self.crossover_rate,
             "mutation_rate": self.mutation_rate,
+            "eliminate_duplicates": getattr(self, "eliminate_duplicates", None),
         }
 
     def run(
@@ -1070,7 +1071,10 @@ class Nsga2(_MultiObjective):
     goes for every multi-objective algorithm.
 
     Pairs of parents are recombined with probability ``crossover_rate`` (default 0.9), and each
-    child is mutated with probability ``mutation_rate`` (default 1).
+    child is mutated with probability ``mutation_rate`` (default 1). With ``eliminate_duplicates``
+    (the default, as in pymoo), a child that equals a member of the population or an earlier child
+    is dropped and another bred instead, which keeps the population and its front free of copies;
+    :class:`Nsga3`, :class:`Spea2` and :class:`SmsEmoa` have it too.
     """
 
     def __init__(
@@ -1083,6 +1087,7 @@ class Nsga2(_MultiObjective):
         mutation: Mutation,
         crossover_rate: float | None = None,
         mutation_rate: float | None = None,
+        eliminate_duplicates: bool | None = None,
         seed: int | None = None,
     ) -> None:
         self._genome = genome
@@ -1092,6 +1097,7 @@ class Nsga2(_MultiObjective):
         self.mutation = mutation
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate
+        self.eliminate_duplicates = eliminate_duplicates
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
@@ -1128,6 +1134,7 @@ class Nsga3(_MultiObjective):
         population_size: int | None = None,
         crossover_rate: float | None = None,
         mutation_rate: float | None = None,
+        eliminate_duplicates: bool | None = None,
         seed: int | None = None,
     ) -> None:
         self._genome = genome
@@ -1138,6 +1145,7 @@ class Nsga3(_MultiObjective):
         self.mutation = mutation
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate
+        self.eliminate_duplicates = eliminate_duplicates
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
@@ -1171,6 +1179,7 @@ class Spea2(_MultiObjective):
         mutation: Mutation,
         crossover_rate: float | None = None,
         mutation_rate: float | None = None,
+        eliminate_duplicates: bool | None = None,
         seed: int | None = None,
     ) -> None:
         self._genome = genome
@@ -1180,6 +1189,7 @@ class Spea2(_MultiObjective):
         self.mutation = mutation
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate
+        self.eliminate_duplicates = eliminate_duplicates
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
@@ -1278,6 +1288,7 @@ class SmsEmoa(_MultiObjective):
         offspring: int | None = None,
         crossover_rate: float | None = None,
         mutation_rate: float | None = None,
+        eliminate_duplicates: bool | None = None,
         seed: int | None = None,
     ) -> None:
         self._genome = genome
@@ -1288,6 +1299,7 @@ class SmsEmoa(_MultiObjective):
         self.offspring = offspring
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate
+        self.eliminate_duplicates = eliminate_duplicates
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:

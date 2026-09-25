@@ -388,7 +388,7 @@ def test_a_generation_of_copies_makes_no_batch_call():
         rows.append(len(bits))
         return np.column_stack([bits[:, :4].sum(axis=1), bits[:, 4:].sum(axis=1)])
 
-    # one child per generation, often a copy of a parent
+    # one child per generation, often a copy of a parent when copies are kept
     result = gx.SmsEmoa(
         gx.Binary(8),
         objectives=["maximize", "minimize"],
@@ -396,11 +396,42 @@ def test_a_generation_of_copies_makes_no_batch_call():
         offspring=1,
         crossover=gx.UniformCrossover(),
         mutation=gx.BitFlip(rate=0.05),
+        eliminate_duplicates=False,
         seed=12,
     ).run(fitness, generations=100, batch=True)
     assert all(count > 0 for count in rows)
     assert sum(rows) == result.evaluations
     assert len(rows) < result.generations + 1
+
+
+def test_duplicates_are_eliminated_by_default():
+    def fitness(bits):
+        return np.column_stack([bits[:, :4].sum(axis=1), bits[:, 4:].sum(axis=1)])
+
+    def run(**settings):
+        return gx.Nsga2(
+            gx.Binary(12),
+            objectives=["maximize", "minimize"],
+            population_size=20,
+            crossover=gx.UniformCrossover(),
+            mutation=gx.BitFlip(rate=0.02),
+            seed=3,
+            **settings,
+        ).run(fitness, generations=30, batch=True)
+
+    # without copies, every child is evaluated; with them, copies of parents aren't
+    assert run().evaluations == 20 * 31
+    assert run(eliminate_duplicates=False).evaluations < 20 * 31
+    # MOEA/D replaces its neighbors one child at a time, without duplicate elimination
+    with pytest.raises(TypeError, match="eliminate_duplicates"):
+        gx.Moead(
+            gx.Binary(12),
+            objectives=["maximize", "minimize"],
+            weights=gx.das_dennis(2, 9),
+            crossover=gx.UniformCrossover(),
+            mutation=gx.BitFlip(rate=0.02),
+            eliminate_duplicates=True,
+        )
 
 
 def test_multi_objective_settings_errors():
