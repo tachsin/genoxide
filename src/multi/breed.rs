@@ -6,10 +6,71 @@ use crate::operator::{Crossover, Mutate};
 use crate::rng::Chance;
 use crate::{Individual, Population, StreamRng};
 use std::collections::HashSet;
+use std::hash::{BuildHasherDefault, Hash, Hasher};
 
 // with duplicate elimination, the children rejected as copies, per child needed, before copies
 // are accepted: a population of few distinct genomes still gets its children
 const REJECTIONS_PER_CHILD: usize = 100;
+
+// up to this many children, a child is compared with every genome instead of hashing the
+// population: SMS-EMOA breeds one child at a time
+const COMPARED_CHILDREN: usize = 8;
+
+// a fast, deterministic 64-bit hash of a genome (FxHash's mixing, and SplitMix64's finalizer so
+// that the low bits, which pick the set's bucket, depend on every bit). Two genomes with the same
+// fingerprint count as copies: at worst, a rare unique child is bred again.
+fn fingerprint<G: Hash>(genome: &G) -> u64 {
+    let mut hasher = FxHasher(0);
+    genome.hash(&mut hasher);
+    let mut x = hasher.0;
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
+}
+
+#[derive(Default)]
+struct FxHasher(u64);
+
+impl Hasher for FxHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        let mut chunks = bytes.chunks_exact(8);
+        for chunk in &mut chunks {
+            let word = u64::from_le_bytes(chunk.try_into().expect("8 bytes"));
+            self.write_u64(word);
+        }
+        for &byte in chunks.remainder() {
+            self.write_u64(u64::from(byte));
+        }
+    }
+
+    fn write_u64(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+// a set of fingerprints, which are hashes already
+#[derive(Default)]
+struct Identity(u64);
+
+impl Hasher for Identity {
+    fn write(&mut self, _bytes: &[u8]) {
+        unreachable!("only fingerprints are hashed")
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        self.0 = value;
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+type Fingerprints = HashSet<u64, BuildHasherDefault<Identity>>;
 
 // the operators and rates of a genetic algorithm
 #[derive(Clone, Debug)]
@@ -45,10 +106,12 @@ where
         offspring: &mut Vec<Individual<R::Genome, Scores<M>>>,
     ) {
         offspring.clear();
-        let mut population_genomes: HashSet<&R::Genome> = HashSet::new();
-        let mut children: HashSet<R::Genome> = HashSet::new();
-        if self.eliminate_duplicates {
-            population_genomes.extend(population.iter().map(Individual::genome));
+        // the fingerprints of the population and of the children so far, for many children
+        let hashed = self.eliminate_duplicates && count > COMPARED_CHILDREN;
+        let mut seen = Fingerprints::default();
+        if hashed {
+            seen.reserve(population.len() + count);
+            seen.extend(population.iter().map(|x| fingerprint(x.genome())));
         }
         let mut rejections = count.saturating_mul(REJECTIONS_PER_CHILD);
         while offspring.len() < count {
@@ -67,11 +130,16 @@ where
                     self.mutate.mutate(&self.representation, &mut genome, rng);
                 }
                 if self.eliminate_duplicates && rejections > 0 {
-                    if population_genomes.contains(&genome) || children.contains(&genome) {
+                    let copy = if hashed {
+                        !seen.insert(fingerprint(&genome))
+                    } else {
+                        population.iter().any(|x| x.genome() == &genome)
+                            || offspring.iter().any(|x| x.genome() == &genome)
+                    };
+                    if copy {
                         rejections -= 1;
                         continue;
                     }
-                    children.insert(genome.clone());
                 }
                 let inherited = parents
                     .iter()
