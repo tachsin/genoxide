@@ -43,6 +43,15 @@ import nevergrad as ng
 import numpy as np
 from nevergrad.optimization import metamodel
 
+# Nevergrad imports these inside the first run that uses them: pycma (with matplotlib) for the
+# CMA-ES of NgIohTuned and CMA, scikit-learn for NgIohTuned's metamodel, and SciPy's COBYLA
+# (which imports its PRIMA code when first called) for an optimizer inside NgIohTuned. Imported
+# here, so the imports stay outside the clock (rule 4.2)
+import cma  # noqa: F401
+from scipy._external.pyprima import minimize as _cobyla  # noqa: F401
+from sklearn.linear_model import LinearRegression  # noqa: F401
+from sklearn.preprocessing import PolynomialFeatures  # noqa: F401
+
 # e.g. the budget warnings of optimizers that don't use the whole budget
 warnings.filterwarnings("ignore")
 
@@ -73,14 +82,15 @@ def nqueens(order):
 
 
 @functools.cache
-def shift(n):
-    """The optimum of rastrigin and ackley, away from the origin: s_i = 2 ((37 i + 11) mod 101) / 101 - 1."""
-    return np.array([2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(n)])
+def shift(n, upper):
+    """The optimum of rastrigin and ackley, away from the origin:
+    s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1), computed in this order."""
+    return np.array([0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1) for i in range(n)])
 
 
 def rastrigin(x):
     """Shifted: 10 n + sum((x_i - s_i)^2 - 10 cos(2 pi (x_i - s_i)))."""
-    d = x - shift(len(x))
+    d = x - shift(len(x), 5.12)
     return float(10 * len(x) + np.sum(d * d - 10 * np.cos(2 * np.pi * d)))
 
 
@@ -91,7 +101,7 @@ def rosenbrock(x):
 def ackley(x):
     """Shifted: Ackley of x - s."""
     n = len(x)
-    d = x - shift(n)
+    d = x - shift(n, 32.768)
     return float(-20 * np.exp(-0.2 * np.sqrt(np.sum(d * d) / n))
                  - np.exp(np.sum(np.cos(2 * np.pi * d)) / n) + 20 + math.e)
 
@@ -206,10 +216,11 @@ def solvers(problem):
     ]
 
 
-def run(optimizer_class, problem, seed, max_evaluations, max_seconds):
+def run(optimizer_class, problem, seed, max_evaluations, start, max_seconds):
     """The docs' ask and tell loop with one worker (docs/optimization.rst, "Ask and tell
-    interface"), which stops at the target, at max_evaluations or at max_seconds.
-    Returns (best loss, its candidate's value, evaluations, evaluated values outside the bounds)."""
+    interface"), which stops at the target, at max_evaluations or at max_seconds after start.
+    Returns (best loss, its candidate's value, evaluations, evaluated values outside the bounds,
+    first_hit: the evaluation that reached the target and its time, or None)."""
     # the docs' two ways to seed (docs/optimization.rst, "Reproducibility"): numpy's global random
     # state and the parametrization's own
     np.random.seed(seed)
@@ -217,22 +228,24 @@ def run(optimizer_class, problem, seed, max_evaluations, max_seconds):
     parametrization.random_state = np.random.RandomState(seed)
     # the budget tells NgIohTuned which algorithm to choose, as a user would give it
     optimizer = optimizer_class(parametrization=parametrization, budget=max_evaluations, num_workers=1)
-    deadline = time.perf_counter() + max_seconds
-    best, best_value = math.inf, None
+    deadline = start + max_seconds
+    best, best_value, first_hit = math.inf, None, None
     evaluations = outside = 0
     while evaluations < max_evaluations and time.perf_counter() < deadline:
         candidate = optimizer.ask()
         value = candidate.value
         loss = problem.loss(value)
         evaluations += 1
+        if problem.is_success(loss):
+            first_hit = {"evaluations": evaluations, "time_s": round(time.perf_counter() - start, 6)}
         if problem.outside is not None:
             outside += problem.outside(value)
         optimizer.tell(candidate, loss)
         if loss < best:
             best, best_value = loss, value
-            if problem.is_success(best):
-                break
-    return best, best_value, evaluations, outside
+        if first_hit is not None:
+            break
+    return best, best_value, evaluations, outside, first_hit
 
 
 def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, max_seconds):
@@ -244,10 +257,11 @@ def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
             # rule 5.3
             if index >= EARLY_SEEDS and capped[solver] == EARLY_SEEDS:
                 continue
-            # the clock starts before the optimizer's first ask (rule 4.1)
+            # the clock starts before the optimizer is created, and stops when the run ends
+            # (rule 4.1)
             start = time.perf_counter()
-            loss, value, evaluations, outside = run(optimizer_class, problem, seed, max_evaluations,
-                                                    max_seconds)
+            loss, value, evaluations, outside, first_hit = run(optimizer_class, problem, seed,
+                                                               max_evaluations, start, max_seconds)
             elapsed = time.perf_counter() - start
             success = problem.is_success(loss)
             capped[solver] += index < EARLY_SEEDS and not success and elapsed >= CAPPED * max_seconds
@@ -265,6 +279,7 @@ def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
                 "best": problem.best(loss),
                 "target": problem.target,
                 "success": bool(success),
+                "first_hit": first_hit,
                 "solution": problem.solution(value),
             }
             if problem.outside is not None:
