@@ -27,6 +27,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import time
 import venv
 from pathlib import Path
 
@@ -804,8 +805,65 @@ def draw_charts(results, out_dir, formats=("svg",)):
         save(figure, name)
 
 
-def describe_platform():
-    """The operating system and processor, for the charts."""
+# The cores that times are measured on, under WSL: the two favoured P-cores (the highest turbo
+# frequency) of the Intel Core Ultra 7 265K the published benchmarks run on. pin-wsl.ps1 pins the
+# WSL virtual machine to them; Windows would otherwise move a run between P-cores of different
+# frequencies and E-cores. Other machines pass their own with --cores.
+PINNED_CORES = (8, 19)
+
+
+def is_wsl():
+    try:
+        return "microsoft" in Path("/proc/sys/kernel/osrelease").read_text(encoding="utf-8").lower()
+    except OSError:
+        return False
+
+
+def busy_windows_cores(loops, seconds=4):
+    """The Windows logical processors that are busy while `loops` busy loops run in WSL, from
+    Windows' own counters (no administrator rights needed)."""
+    spin = f"import time\nend = time.time() + {seconds + 3}\nwhile time.time() < end: pass"
+    processes = [subprocess.Popen([sys.executable, "-c", spin]) for _ in range(loops)]
+    script = (
+        f"$samples = Get-Counter '\\Processor(*)\\% Processor Time' -SampleInterval 1 -MaxSamples {seconds}; "
+        "$samples.CounterSamples | Where-Object InstanceName -ne '_total' | Group-Object InstanceName | "
+        "ForEach-Object { $_.Name + ' ' + [int]($_.Group | Measure-Object CookedValue -Average).Average }"
+    )
+    try:
+        # a second for the loops to start
+        time.sleep(1)
+        output = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                                capture_output=True, text=True, timeout=120).stdout
+    finally:
+        for process in processes:
+            process.wait()
+    load = {}
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0].isdigit():
+            load[int(parts[0])] = int(parts[1])
+    return sorted(core for core, percent in load.items() if percent > 50)
+
+
+def check_pinning(cores):
+    """Under WSL, that the virtual machine only runs on `cores`: with more busy loops than cores,
+    those cores and no others are busy."""
+    busy = busy_windows_cores(len(cores) + 2)
+    if not busy:
+        raise SystemExit("can't read Windows' processor counters from WSL (powershell.exe), to check that WSL "
+                         "is pinned; pass --allow-unpinned for a run whose times don't count")
+    if not set(busy) <= set(cores):
+        raise SystemExit(
+            f"WSL isn't pinned to cores {', '.join(map(str, cores))}: busy loops ran on processors "
+            f"{', '.join(map(str, busy))}. Run benchmarks/pin-wsl.ps1 in an Administrator PowerShell, or install "
+            "its scheduled task once with `pin-wsl.ps1 -Install`; or pass --allow-unpinned for a run whose times "
+            "don't count."
+        )
+    print(f"WSL is pinned to cores {', '.join(map(str, cores))}", flush=True)
+
+
+def describe_platform(cores=None):
+    """The operating system and processor, for the charts, and the cores times were measured on."""
     import platform
     processor = platform.processor()
     try:
@@ -813,7 +871,10 @@ def describe_platform():
             processor = next(line.split(":", 1)[1].strip() for line in cpuinfo if line.startswith("model name"))
     except (OSError, StopIteration):
         pass
-    return f"{platform.system()}, {processor}".rstrip(", ")
+    described = f"{platform.system()}, {processor}".rstrip(", ")
+    if cores:
+        described += f", WSL pinned to cores {', '.join(map(str, cores))}"
+    return described
 
 
 def draw_charts_of(results_file, out_dir, png=False):
@@ -882,6 +943,11 @@ def main():
                         help="the version to record for a library instead of the one it reports, e.g. "
                              "genoxide=0.7.0 before the release PR bumps Cargo.toml; genoxide's labels "
                              "genoxide_python too, and genoxide's commit is still added")
+    parser.add_argument("--cores", default=",".join(map(str, PINNED_CORES)),
+                        help="under WSL, the Windows cores the virtual machine must be pinned to (pin-wsl.ps1) "
+                             f"before times are measured; default {','.join(map(str, PINNED_CORES))}")
+    parser.add_argument("--allow-unpinned", action="store_true",
+                        help="measure under WSL without checking the pinning, for runs whose times don't count")
     args = parser.parse_args()
 
     labels = {}
@@ -905,6 +971,10 @@ def main():
         return
     if not VENV_PYTHON.exists():
         raise SystemExit("run `python run.py setup` first")
+    pinned = None
+    if is_wsl() and not args.allow_unpinned:
+        pinned = tuple(int(core) for core in args.cores.split(","))
+        check_pinning(pinned)
 
     previous = None
     if args.update:
@@ -970,7 +1040,7 @@ def main():
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     results = ROOT / "results"
     results.mkdir(exist_ok=True)
-    platform = describe_platform()
+    platform = describe_platform(pinned)
     if previous and previous.get("platform") not in (None, platform):
         platform = f"{previous['platform']}; {', '.join(args.libraries)} rerun on {platform}"
     languages = {name: ADAPTERS[name]["language"] for name in versions if name in ADAPTERS}
