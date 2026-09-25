@@ -178,17 +178,28 @@ pub struct De {
 
 impl De {
     /// A builder for a differential evolution on `real`.
+    ///
+    /// The defaults are the settings that reached targets in the fewest evaluations in
+    /// genoxide's measurements (shifted Rastrigin, Rosenbrock and Ackley with 10 and 30 genes):
+    /// current-to-pbest/1 with an archive, SHADE's adaptation, a population of the number of
+    /// genes + 10, and restarts on stagnation. See [`DeBuilder`].
     pub fn builder(real: Real) -> DeBuilder {
         DeBuilder {
             real,
             population_size: None,
-            strategy: Strategy::Rand1,
-            control: Control::default(),
+            strategy: Strategy::CurrentToPBest {
+                p: 0.1,
+                archive: 1.0,
+            },
+            control: Control::Shade { memory: 6 },
             objective: Objective::default(),
             seed: None,
             initial_genomes: Vec::new(),
             reduction: None,
-            restarts: Restarts::Never,
+            restarts: Restarts::OnStagnation {
+                tolerance: 1e-8,
+                patience: 200,
+            },
         }
     }
 
@@ -223,6 +234,7 @@ impl De {
             })
             .control(Control::Shade { memory: 6 })
             .linear_reduction(4, max_evaluations)
+            .restarts(Restarts::Never)
     }
 
     /// The means of `F` and `CR` of [`Control::Jade`], or the memory of (`F`, `CR`) pairs of
@@ -588,9 +600,7 @@ impl De {
         }
         self.archive.clear();
         self.means = (0.5, 0.5);
-        for slot in &mut self.memory {
-            *slot = (0.5, 0.5);
-        }
+        self.memory.fill((0.5, 0.5));
         self.memory_slot = 0;
         self.restart_count += 1;
         self.start_best = None;
@@ -800,8 +810,15 @@ impl Algorithm for De {
 
 /// A builder for a [`De`], from [`De::builder`].
 ///
-/// The population size is required. Defaults: DE/rand/1 with `F` 0.5 and `CR` 0.9, maximize, a
-/// random initial population and a random seed.
+/// Defaults: DE/current-to-pbest/1 with `p` 0.1 and an archive of the population's size,
+/// SHADE's adaptation with a memory of 6, a population of the number of genes + 10, restarts on
+/// stagnation (tolerance 1e-8, patience 200), maximize, a random initial population and a random
+/// seed.
+///
+/// Small populations reach a target in fewer evaluations, and the restarts keep them from
+/// getting stuck: with 10 and 30 genes, genes + 10 reached shifted Rastrigin, Rosenbrock and
+/// Ackley targets in 2 to 5 times fewer evaluations than a population of 100. Non-separable,
+/// highly multimodal problems (e.g. rotated Rastrigin) do better with larger populations, e.g. 100.
 #[derive(Clone, Debug)]
 pub struct DeBuilder {
     real: Real,
@@ -816,19 +833,20 @@ pub struct DeBuilder {
 }
 
 impl DeBuilder {
-    /// The population size, at least 4; 5 to 10 times the number of genes is common. Required.
+    /// The population size, at least 4. The number of genes + 10 by default.
     pub fn population_size(mut self, size: usize) -> Self {
         self.population_size = Some(size);
         self
     }
 
-    /// How mutant vectors are built. DE/rand/1 by default.
+    /// How mutant vectors are built. DE/current-to-pbest/1 with `p` 0.1 and an archive of the
+    /// population's size by default.
     pub fn strategy(mut self, strategy: Strategy) -> Self {
         self.strategy = strategy;
         self
     }
 
-    /// Where `F` and `CR` come from. `F` 0.5 and `CR` 0.9 by default.
+    /// Where `F` and `CR` come from. SHADE's adaptation with a memory of 6 by default.
     pub fn control(mut self, control: Control) -> Self {
         self.control = control;
         self
@@ -872,7 +890,8 @@ impl DeBuilder {
         self
     }
 
-    /// When the population starts over from new random individuals. Never by default.
+    /// When the population starts over from new random individuals. On stagnation by default,
+    /// with a tolerance of 1e-8 and a patience of 200 generations.
     pub fn restarts(mut self, restarts: Restarts) -> Self {
         self.restarts = restarts;
         self
@@ -882,14 +901,11 @@ impl DeBuilder {
     ///
     /// # Errors
     ///
-    /// - [`Error::MissingSetting`] without a population size.
-    /// - [`Error::InvalidSetting`] for a population size below 4, or strategy or control
-    ///   settings out of range.
+    /// - [`Error::InvalidSetting`] for a population size below 4, or strategy, control or
+    ///   restart settings out of range.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<De> {
-        let size = self.population_size.ok_or(Error::MissingSetting {
-            setting: "population_size",
-        })?;
+        let size = self.population_size.unwrap_or(self.real.genome_len() + 10);
         if size < 4 {
             return Err(Error::InvalidSetting {
                 setting: "population_size",
@@ -1079,7 +1095,8 @@ mod tests {
     #[test]
     fn validation() {
         let real = || Real::uniform(2, 0.0..=1.0).unwrap();
-        assert_eq!(setting(De::builder(real()).build()), "population_size");
+        // the number of genes + 10 by default
+        assert_eq!(De::builder(real()).build().unwrap().population().len(), 12);
         assert_eq!(
             setting(De::builder(real()).population_size(3).build()),
             "population_size"

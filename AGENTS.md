@@ -323,7 +323,11 @@ A GA can run an ES too, with other operators: `AdaptiveReal` genomes, `SelfAdapt
 
 ### Differential evolution
 
-For continuous problems on `Real` genomes, differential evolution often needs far fewer evaluations than a GA. `CR` (the crossover rate) matters most: small (e.g. 0.1) for separable functions, where each gene can be optimized on its own; large (0.9) for rotated or coupled ones.
+For continuous problems on `Real` genomes, differential evolution often needs far fewer evaluations than a GA. Its defaults are the settings that reached targets in the fewest evaluations in genoxide's measurements: current-to-pbest/1 with an archive, SHADE's adaptation of `F` and `CR`, a population of the number of genes + 10, and restarts when the population converges or stalls. Set only what the problem needs:
+
+- `.population_size(n)`: larger (e.g. 100) for non-separable, highly multimodal problems such as rotated Rastrigin.
+- `.control(de::Control::Fixed { f, cr })`: fixed `F` and `CR`; a small `CR` (e.g. 0.1) suits separable functions, a large one (0.9) rotated or coupled ones.
+- `.restarts(de::Restarts::Never)`: no restarts.
 
 ```rust
 use genoxide::prelude::*;
@@ -336,9 +340,6 @@ fn main() -> genoxide::Result<()> {
                 .sum::<f64>()
     };
     let de = De::builder(Real::uniform(5, -5.12..=5.12)?)
-        .population_size(50) // 5 to 10 times the number of genes
-        .strategy(de::Strategy::CurrentToPBest { p: 0.1, archive: 1.0 })
-        .control(de::Control::Fixed { f: 0.5, cr: 0.1 })
         .minimize()
         .seed(1)
         .build()?;
@@ -350,7 +351,7 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
-When `F` and `CR` are unknown, let them adapt: `.control(de::Control::Jade { c: 0.1 })`, `.control(de::Control::Shade { memory: 6 })`, or the whole L-SHADE setup for a known evaluation budget:
+For a known evaluation budget, L-SHADE shrinks a large population over the budget, which aims at the best final value rather than the fewest evaluations to a target:
 
 ```rust
 use genoxide::prelude::*;

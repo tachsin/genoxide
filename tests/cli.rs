@@ -269,7 +269,7 @@ fn run_files_are_checked() {
         "unknown field `color`",
     );
     expect(
-        &CMAES.replace("type = \"cmaes\"", "type = \"de\""),
+        &CMAES.replace("type = \"cmaes\"", "type = \"pso\""),
         "`algorithm.population_size` is needed",
     );
     expect(
