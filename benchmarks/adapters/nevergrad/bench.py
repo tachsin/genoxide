@@ -1,12 +1,28 @@
 """Benchmark adapter for Nevergrad.
 
-Usage: python bench.py <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
-Prints one JSON line per solver per seed, see ../../README.md for the fields.
+Usage:
+    python bench.py <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
+    python bench.py values <problem> <size>
 
-Nevergrad runs rastrigin, rosenbrock and ackley (NGOpt, CMA, TwoPointsDE and PSO), OneMax in the
-idiomatic mode (NGOpt and DiscreteOnePlusOne), and the multi-objective problems (DE, with its own
-settings, see run_front). It prints nothing for the other problems and modes: it has no permutation
-parameter for N-Queens, and no GA with DEAP's operators for the matched OneMax.
+The first prints one JSON line per solver per seed, see ../../README.md for the fields. The second
+reads one JSON solution per line and prints its value with this adapter's fitness functions.
+
+Which methods run and why, with the links to Nevergrad's docs, is on the page
+docs/benchmarks/libraries/nevergrad.md:
+- OneMax (idiomatic): NgIohTuned, DiscreteOnePlusOne and PortfolioDiscreteOnePlusOne, on the
+  docs' discrete parameter, a TransitionChoice;
+- N-Queens: NgIohTuned, RotatedTwoPointsDE and GeneticDE on a real array whose argsort is the
+  permutation, Nevergrad's documented way to optimize a permutation;
+- Rastrigin and Ackley: NgIohTuned, ScrHammersleySearchPlusMiddlePoint and OnePlusOne, and
+  Rosenbrock: NgIohTuned, OnePlusOne and CMA, on a bounded Array.
+It prints nothing for the matched OneMax (Nevergrad has no GA with the matched operators) and for
+the multi-objective scenarios, which run only NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA
+(rule 6.1): Nevergrad has none of them.
+
+Every run ends only at the target, the budget or the time cap (rules 2.1 and 2.2 of
+docs/benchmarks/rules.md): Nevergrad's optimizers have no stop criterion, they give a candidate at
+every ask (the CMA-ES inside NgIohTuned starts again when pycma's criteria end it), and the ask and
+tell loop stops at the target, the budget or the time cap.
 """
 
 import os
@@ -30,53 +46,60 @@ from nevergrad.optimization import metamodel
 # e.g. the budget warnings of optimizers that don't use the whole budget
 warnings.filterwarnings("ignore")
 
-# Compatibility with numpy >= 2.5: the metamodel that NGOpt uses on real-valued problems calls
+# Compatibility with numpy >= 2.5: the metamodel that NgIohTuned uses on real-valued problems calls
 # float() on a one-element array (nevergrad/optimization/metamodel.py, loss_function_sm), which
-# numpy 2.5 no longer allows, so NGOpt crashes with a TypeError. This restores the old conversion
-# in that module only; the algorithm is unchanged.
+# numpy 2.5 no longer allows, so it crashes with a TypeError. This restores the old conversion in
+# that module only; the algorithm is unchanged.
 metamodel.float = lambda value: builtins.float(np.asarray(value).item())
 
 
 # -------------------------------------------------------------------------------------------------
-# Fitness functions, identical to the other adapters (Nevergrad minimizes)
+# Fitness functions, identical to benchmarks/problems.py (Nevergrad minimizes). Nevergrad gives
+# each candidate's value on its own: a numpy array for an Array, a tuple for a TransitionChoice.
 # -------------------------------------------------------------------------------------------------
 
 
-def onemax(x):
-    return int(sum(x))
+def onemax(bits):
+    return int(np.sum(bits))
+
+
+def nqueens(order):
+    """Diagonal conflicts of queens at (i, order[i]): for each diagonal, its queens minus one."""
+    n = len(order)
+    rows = np.arange(n)
+    left = np.bincount(rows + order, minlength=2 * n - 1)
+    right = np.bincount(n - 1 - rows + order, minlength=2 * n - 1)
+    return int(np.sum(np.maximum(left - 1, 0)) + np.sum(np.maximum(right - 1, 0)))
 
 
 @functools.cache
 def shift(n):
     """The optimum of rastrigin and ackley, away from the origin: s_i = 2 ((37 i + 11) mod 101) / 101 - 1."""
-    return tuple(2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(n))
+    return np.array([2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(n)])
 
 
 def rastrigin(x):
     """Shifted: 10 n + sum((x_i - s_i)^2 - 10 cos(2 pi (x_i - s_i)))."""
-    d = [v - s for v, s in zip(x, shift(len(x)))]
-    return float(10 * len(d) + sum(v * v - 10 * math.cos(2 * math.pi * v) for v in d))
+    d = x - shift(len(x))
+    return float(10 * len(x) + np.sum(d * d - 10 * np.cos(2 * np.pi * d)))
 
 
 def rosenbrock(x):
-    return float(sum(100 * (x[i + 1] - x[i] * x[i]) ** 2 + (1 - x[i]) ** 2 for i in range(len(x) - 1)))
+    return float(np.sum(100 * (x[1:] - x[:-1] ** 2) ** 2 + (1 - x[:-1]) ** 2))
 
 
 def ackley(x):
     """Shifted: Ackley of x - s."""
     n = len(x)
-    d = [v - s for v, s in zip(x, shift(n))]
-    return float(
-        -20 * math.exp(-0.2 * math.sqrt(sum(v * v for v in d) / n))
-        - math.exp(sum(math.cos(2 * math.pi * v) for v in d) / n)
-        + 20 + math.e
-    )
+    d = x - shift(n)
+    return float(-20 * np.exp(-0.2 * np.sqrt(np.sum(d * d) / n))
+                 - np.exp(np.sum(np.cos(2 * np.pi * d)) / n) + 20 + math.e)
 
 
 TARGET = 0.01
 
-# run.py's early stop: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took
-# CAPPED of it) without reaching the target runs no more seeds
+# run.py's early stop (rule 5.3): a solver whose first EARLY_SEEDS runs all hit the time cap (a run
+# that took CAPPED of it) without reaching the target runs no more seeds
 EARLY_SEEDS = 3
 CAPPED = 0.98
 
@@ -86,168 +109,184 @@ REAL_PROBLEMS = {
     "rosenbrock": (rosenbrock, (-5.0, 10.0)),
     "ackley": (ackley, (-32.768, 32.768)),
 }
-UNSUPPORTED = {"nqueens"}
+UNSUPPORTED = {"zdt1", "zdt2", "zdt3", "dtlz1", "dtlz2"}
 
 
-# multi-objective problems, minimized, all variables in [0, 1]
-def zdt_g(x):
-    return 1 + 9 * sum(x[1:]) / (len(x) - 1)
+class Problem:
+    """A problem as Nevergrad sees it: the parametrization, the loss of a candidate's value (to
+    minimize), the solution printed for a value, the best value printed for a loss, and whether a
+    value lies outside the bounds (rule 2.4; None for the problems without bounds)."""
+
+    def __init__(self, problem, size):
+        self.outside = None
+        if problem == "onemax":
+            # the docs' discrete example is OneMax on a TransitionChoice with repetitions
+            # (docs/optimization.rst, "Basic example", test_doc.py DOC_BASE_4)
+            self.parametrization = lambda: ng.p.TransitionChoice(range(2), repetitions=size)
+            # Nevergrad minimizes the number of zeros; the best printed is the number of ones
+            self.loss = lambda bits: size - onemax(bits)
+            self.solution = lambda bits: [int(bit) for bit in bits]
+            self.best = lambda loss: size - loss
+            self.target = size
+            self.is_success = lambda loss: loss == 0
+        elif problem == "nqueens":
+            # "How to optimize permutations with Nevergrad" (the docs' "Example with permutation",
+            # docs/optimization.rst): a real Array, "ng.p.Array(shape=(500,)) if you consider
+            # permutations in [0,1,2,3,...,499]", whose argsort is the permutation, as in
+            # nevergrad/functions/stsp/core.py
+            self.parametrization = lambda: ng.p.Array(shape=(size,))
+            self.loss = lambda keys: nqueens(np.argsort(keys))
+            self.solution = lambda keys: np.argsort(keys).tolist()
+            self.best = lambda loss: loss
+            self.target = 0
+            self.is_success = lambda loss: loss == 0
+        else:
+            function, (lower, upper) = REAL_PROBLEMS[problem]
+            # a bounded Array, the docs' way to give bounds (ng.p.Array's docstring: "if both lower
+            # and upper bounds are provided, sigma will be adapted so that the range spans 6
+            # sigma", and the initial value is the middle of the range). Its bound handling (rule
+            # 2.4) is the Array's Bound layer, by default "bouncing" (set_bounds: "bounce on border
+            # (at most once). This is a variant of clipping"), so every value evaluated is inside
+            self.parametrization = lambda: ng.p.Array(shape=(size,), lower=lower, upper=upper)
+            self.loss = function
+            self.solution = lambda x: [float(v) for v in x]
+            self.best = lambda loss: loss
+            self.target = TARGET
+            self.is_success = lambda loss: loss <= TARGET
+            self.outside = lambda x: bool(np.any(x < lower) or np.any(x > upper))
 
 
-def zdt1(x):
-    g = zdt_g(x)
-    return [x[0], g * (1 - math.sqrt(x[0] / g))]
+def solvers(problem):
+    """(solver name, optimizer) of the problem type, see the page. Every optimizer with its
+    defaults.
 
-
-def zdt2(x):
-    g = zdt_g(x)
-    return [x[0], g * (1 - (x[0] / g) ** 2)]
-
-
-def zdt3(x):
-    g = zdt_g(x)
-    return [x[0], g * (1 - math.sqrt(x[0] / g) - x[0] / g * math.sin(10 * math.pi * x[0]))]
-
-
-def dtlz2(x, objectives=3):
-    g = sum((v - 0.5) ** 2 for v in x[objectives - 1:])
-    values = []
-    for m in range(objectives):
-        f = 1 + g
-        for v in x[:objectives - 1 - m]:
-            f *= math.cos(v * math.pi / 2)
-        if m > 0:
-            f *= math.sin(x[objectives - 1 - m] * math.pi / 2)
-        values.append(f)
-    return values
-
-
-def dtlz1(x, objectives=3):
-    tail = x[objectives - 1:]
-    g = 100 * (len(tail) + sum((v - 0.5) ** 2 - math.cos(20 * math.pi * (v - 0.5)) for v in tail))
-    values = []
-    for m in range(objectives):
-        f = 0.5 * (1 + g)
-        for v in x[:objectives - 1 - m]:
-            f *= v
-        if m > 0:
-            f *= 1 - x[objectives - 1 - m]
-        values.append(f)
-    return values
-
-
-# (fitness function, variables for the size)
-FRONT_PROBLEMS = {
-    "zdt1": (zdt1, lambda size: size),
-    "zdt2": (zdt2, lambda size: size),
-    "zdt3": (zdt3, lambda size: size),
-    # size: the number of objectives, with k = 10 (DTLZ2) and 5 (DTLZ1)
-    "dtlz2": (dtlz2, lambda size: size + 9),
-    "dtlz1": (dtlz1, lambda size: size + 4),
-}
-
-
-# -------------------------------------------------------------------------------------------------
-# Solvers
-# -------------------------------------------------------------------------------------------------
-
-
-def real_solvers():
-    """NGOpt, the optimizer the Nevergrad docs and README recommend (it chooses an algorithm from
-    the budget, the dimension and the parametrization; docs/optimization.rst), and the
-    single-algorithm optimizers it is known for, all with their defaults."""
+    NgIohTuned everywhere: the docs' stated default, a "'meta'-optimizer which adapts to the
+    provided settings (budget, number of workers, parametrization) and should therefore be a good
+    default" (docs/optimization.rst, "Choosing an optimizer")."""
+    if problem == "onemax":
+        return [
+            ("ngiohtuned", ng.optimizers.NgIohTuned),
+            # the docs' OneMax example (docs/optimization.rst, "Basic example")
+            ("discrete_one_plus_one", ng.optimizers.DiscreteOnePlusOne),
+            # "excellent in discrete settings" (docs/optimization.rst, "Choosing an optimizer")
+            ("portfolio_discrete_one_plus_one", ng.optimizers.PortfolioDiscreteOnePlusOne),
+        ]
+    if problem == "nqueens":
+        return [
+            ("ngiohtuned", ng.optimizers.NgIohTuned),
+            # the two optimizers "How to optimize permutations with Nevergrad" names: they "will
+            # cut and paste part of the permutation into other parts"
+            ("rotated_two_points_de", ng.optimizers.RotatedTwoPointsDE),
+            ("genetic_de", ng.optimizers.GeneticDE),
+        ]
+    # the continuous problems: the docs' list "Choosing an optimizer" states each optimizer's case.
+    # Two match every continuous scenario here, one worker and a budget over 1000 times the
+    # dimension: "OnePlusOne is a simple robust method for continuous parameters with
+    # num_workers < 8", and "CMA is excellent for control (e.g. neurocontrol) when the environment
+    # is not very noisy (num_workers ~50 ok) and when the budget is large (e.g. 1000 x the
+    # dimension)"
+    one_plus_one = ("one_plus_one", ng.optimizers.OnePlusOne)
+    if problem == "rosenbrock":
+        return [
+            ("ngiohtuned", ng.optimizers.NgIohTuned),
+            one_plus_one,
+            # with bounds it is CMAbounded (MetaCMA); it starts again from the middle of the box
+            # when pycma's own stop criteria end a run (optimizerlib.py, _CMA.es)
+            ("cma_es", ng.optimizers.CMA),
+        ]
     return [
-        ("ngopt", ng.optimizers.NGOpt),
-        ("cma_es", ng.optimizers.CMA),
-        ("de", ng.optimizers.TwoPointsDE),
-        ("pso", ng.optimizers.PSO),
+        ("ngiohtuned", ng.optimizers.NgIohTuned),
+        # "ScrHammersleySearchPlusMiddlePoint is excellent for super parallel cases (fully one-shot,
+        # i.e. num_workers = budget included) or for very multimodal cases": the only one the list
+        # gives for multimodal functions. A scrambled Hammersley sequence over the box, plus its
+        # middle point
+        ("scr_hammersley", ng.optimizers.ScrHammersleySearchPlusMiddlePoint),
+        # of the two that match, the first the list gives (rule 6.2)
+        one_plus_one,
     ]
 
 
-def onemax_solvers():
-    """OneMax as in the docs' discrete example (docs/optimization.rst, test_doc.py: a
-    TransitionChoice with repetitions and DiscreteOnePlusOne), and NGOpt on the same parameter."""
-    return [
-        ("ngopt", ng.optimizers.NGOpt),
-        ("discrete_one_plus_one", ng.optimizers.DiscreteOnePlusOne),
-    ]
-
-
-def run(optimizer_class, parametrization, function, is_success, seed, max_evaluations, max_seconds):
-    """The ask and tell loop of the docs with one worker, which stops at the target (Nevergrad
-    evaluates one candidate at a time), at max_evaluations or at max_seconds.
-    Returns (best loss, evaluations)."""
+def run(optimizer_class, problem, seed, max_evaluations, max_seconds):
+    """The docs' ask and tell loop with one worker (docs/optimization.rst, "Ask and tell
+    interface"), which stops at the target, at max_evaluations or at max_seconds.
+    Returns (best loss, its candidate's value, evaluations, evaluated values outside the bounds)."""
+    # the docs' two ways to seed (docs/optimization.rst, "Reproducibility"): numpy's global random
+    # state and the parametrization's own
+    np.random.seed(seed)
+    parametrization = problem.parametrization()
     parametrization.random_state = np.random.RandomState(seed)
-    # the budget tells NGOpt which algorithm to choose, as a user would give it
+    # the budget tells NgIohTuned which algorithm to choose, as a user would give it
     optimizer = optimizer_class(parametrization=parametrization, budget=max_evaluations, num_workers=1)
     deadline = time.perf_counter() + max_seconds
-    best = math.inf
-    evaluations = 0
+    best, best_value = math.inf, None
+    evaluations = outside = 0
     while evaluations < max_evaluations and time.perf_counter() < deadline:
         candidate = optimizer.ask()
-        loss = function(candidate.value)
+        value = candidate.value
+        loss = problem.loss(value)
         evaluations += 1
+        if problem.outside is not None:
+            outside += problem.outside(value)
         optimizer.tell(candidate, loss)
         if loss < best:
-            best = loss
-            if is_success(best):
+            best, best_value = loss, value
+            if problem.is_success(best):
                 break
-    return best, evaluations
+    return best, best_value, evaluations, outside
+
+
+def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, max_seconds):
+    problem = Problem(problem_name, size)
+    solver_list = solvers(problem_name)
+    capped = {solver: 0 for solver, _ in solver_list}
+    for index, seed in enumerate(range(seed_from, seed_to + 1)):
+        for solver, optimizer_class in solver_list:
+            # rule 5.3
+            if index >= EARLY_SEEDS and capped[solver] == EARLY_SEEDS:
+                continue
+            # the clock starts before the optimizer's first ask (rule 4.1)
+            start = time.perf_counter()
+            loss, value, evaluations, outside = run(optimizer_class, problem, seed, max_evaluations,
+                                                    max_seconds)
+            elapsed = time.perf_counter() - start
+            success = problem.is_success(loss)
+            capped[solver] += index < EARLY_SEEDS and not success and elapsed >= CAPPED * max_seconds
+            result = {
+                "library": "nevergrad",
+                "solver": solver,
+                "problem": problem_name,
+                "size": size,
+                "mode": mode,
+                "seed": seed,
+                "time_s": round(elapsed, 6),
+                # Nevergrad asks and tells one candidate at a time: one step per evaluation
+                "generations": evaluations,
+                "evaluations": evaluations,
+                "best": problem.best(loss),
+                "target": problem.target,
+                "success": bool(success),
+                "solution": problem.solution(value),
+            }
+            if problem.outside is not None:
+                result["outside"] = outside
+            print(json.dumps(result), flush=True)
 
 
 # -------------------------------------------------------------------------------------------------
-# Multi-objective: DE
-#
-# An idiomatic run in a matched scenario: Nevergrad has no NSGA-II and no SBX or polynomial
-# mutation, so it runs its own multi-objective optimizer with its defaults, not the matched
-# settings (population 100 or 92, SBX, polynomial mutation).
-#
-# The optimizer is DE, the one the docs recommend (docs/optimization.rst, "Multiobjective
-# minimization with Nevergrad"): most optimizers minimize a single loss derived from the
-# hypervolume of the Pareto front, but "DE and its variants have however been updated to make use
-# of the full multi-objective losses". NGOpt isn't used: with several losses it swaps its
-# sub-optimizer for a DE (optimizerlib.py, NGOpt8._num_objectives_set_callback), but the NGOpt
-# wrapper itself still turns every tell into a single loss derived from the hypervolume of its
-# archive (base.py, tell; multiobjective/core.py, HypervolumePareto.add, which computes the
-# hypervolume in Python for every point within its upper bounds), and passes that loss to the DE,
-# which then sees one objective and doesn't use its multi-objective adaptation. That is slower
-# than DE and gives up the multi-objective DE the docs recommend.
-#
-# DE's defaults (differentialevolution.py, DifferentialEvolution): population 30, uniform initial
-# points within the bounds, current-to-best/1 with F1 = F2 = 0.8, binomial crossover with CR 0.5.
-# With several losses (multiobjective_adaptation, on by default): the "best" of the donor is the
-# parent if it's on the Pareto front, else a random point of the front, and the two difference
-# points come from the front; a child replaces its parent with a probability equal to the share of
-# the objectives it improves.
-#
-# No reference point (ng.p.MultiobjectiveReference): the docs advise one "for all but DE
-# optimizers", since DE with multiobjective_adaptation computes no hypervolume.
-#
-# The front printed is optimizer.pareto_front(), the docs' way to get the result: the non-dominated
-# set of every point evaluated, an unbounded archive, not a final population of 100. DE filters
-# that archive at every ask, so its cost per evaluation grows with the front, and the time cap can
-# stop a run before the budget.
-# -------------------------------------------------------------------------------------------------
 
 
-def run_front(function, variables, seed, max_evaluations, max_seconds):
-    """The ask and tell loop of the docs with one worker and a list of losses, which stops at
-    max_evaluations or at max_seconds. Returns (front, evaluations)."""
-    parametrization = ng.p.Array(shape=(variables,), lower=0.0, upper=1.0)
-    parametrization.random_state = np.random.RandomState(seed)
-    optimizer = ng.optimizers.DE(parametrization=parametrization, budget=max_evaluations, num_workers=1)
-    deadline = time.perf_counter() + max_seconds
-    evaluations = 0
-    while evaluations < max_evaluations and time.perf_counter() < deadline:
-        candidate = optimizer.ask()
-        losses = function(candidate.value.tolist())
-        evaluations += 1
-        optimizer.tell(candidate, losses)
-    front = [[float(v) for v in param.losses] for param in optimizer.pareto_front()]
-    return front, evaluations
+def values(problem, size):
+    """Prints the value of each solution read from stdin, one JSON list per line (rule 1.2)."""
+    function = {"onemax": onemax, "nqueens": nqueens, **{k: v[0] for k, v in REAL_PROBLEMS.items()}}[problem]
+    for line in sys.stdin:
+        if line.strip():
+            print(json.dumps(float(function(np.array(json.loads(line))))), flush=True)
 
 
 def main():
+    if len(sys.argv) == 4 and sys.argv[1] == "values":
+        values(sys.argv[2], int(sys.argv[3]))
+        return
     if len(sys.argv) != 8:
         print(__doc__, file=sys.stderr)
         sys.exit(2)
@@ -257,85 +296,11 @@ def main():
 
     if problem in UNSUPPORTED or (problem == "onemax" and mode != "idiomatic"):
         return
-    if problem in FRONT_PROBLEMS:
-        function, variables = FRONT_PROBLEMS[problem]
-        capped = 0
-        for index, seed in enumerate(range(seed_from, seed_to + 1)):
-            if index >= EARLY_SEEDS and capped == EARLY_SEEDS:
-                break
-            np.random.seed(seed)
-            start = time.perf_counter()
-            front, evaluations = run_front(function, variables(size), seed, max_evaluations, max_seconds)
-            elapsed = time.perf_counter() - start
-            capped += index < EARLY_SEEDS and elapsed >= CAPPED * max_seconds
-            print(json.dumps({
-                "library": "nevergrad",
-                "solver": "de",
-                "problem": problem,
-                "size": size,
-                "mode": mode,
-                "seed": seed,
-                "time_s": round(elapsed, 6),
-                # Nevergrad asks and tells one candidate at a time: one step per evaluation
-                "generations": evaluations,
-                "evaluations": evaluations,
-                "front": front,
-            }), flush=True)
-        return
-    if problem == "onemax":
-        solvers = onemax_solvers()
-
-        def parametrization():
-            return ng.p.TransitionChoice(range(2), repetitions=size)
-
-        # Nevergrad minimizes the number of zeros; best is the number of ones
-        function = lambda x: size - onemax(x)
-        is_success = lambda loss: loss == 0
-        to_best = lambda loss: size - loss
-        target = size
-    elif problem in REAL_PROBLEMS:
-        solvers = real_solvers()
-        real_function, (lower, upper) = REAL_PROBLEMS[problem]
-
-        def parametrization():
-            # bounded arrays are the docs' way; the initial sigma spans the range
-            return ng.p.Array(shape=(size,), lower=lower, upper=upper)
-
-        function = real_function
-        is_success = lambda loss: loss <= TARGET
-        to_best = lambda loss: loss
-        target = TARGET
+    if problem in REAL_PROBLEMS or problem in ("onemax", "nqueens"):
+        run_single(problem, size, mode, seed_from, seed_to, max_evaluations, max_seconds)
     else:
         print(f"unknown problem {problem}", file=sys.stderr)
         sys.exit(2)
-
-    capped = {solver: 0 for solver, _ in solvers}
-    for index, seed in enumerate(range(seed_from, seed_to + 1)):
-        for solver, optimizer_class in solvers:
-            if index >= EARLY_SEEDS and capped[solver] == EARLY_SEEDS:
-                continue
-            np.random.seed(seed)
-            param = parametrization()
-            start = time.perf_counter()
-            loss, evaluations = run(optimizer_class, param, function, is_success, seed, max_evaluations, max_seconds)
-            elapsed = time.perf_counter() - start
-            best = to_best(loss)
-            capped[solver] += index < EARLY_SEEDS and not is_success(loss) and elapsed >= CAPPED * max_seconds
-            print(json.dumps({
-                "library": "nevergrad",
-                "solver": solver,
-                "problem": problem,
-                "size": size,
-                "mode": mode,
-                "seed": seed,
-                "time_s": round(elapsed, 6),
-                # Nevergrad asks and tells one candidate at a time: one step per evaluation
-                "generations": evaluations,
-                "evaluations": evaluations,
-                "best": best,
-                "target": target,
-                "success": bool(is_success(loss)),
-            }), flush=True)
 
 
 if __name__ == "__main__":
