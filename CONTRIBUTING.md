@@ -40,3 +40,5 @@ Releases are automated with [release-plz](https://release-plz.dev/):
 3. **Release.** Merging the release PR tags the version and creates the GitHub release with the same notes. From 0.1, it also publishes to crates.io.
 
 Nothing is released by accident: a release only happens when a maintainer merges the release PR.
+
+Every minor release (0.6.0, 0.7.0, …) is benchmarked before it's released: the full run of [`benchmarks/`](benchmarks/) against the other libraries, with the charts, [docs/benchmarks/](docs/benchmarks/) and the README's findings updated from it. Patch releases (0.x.y) aren't benchmarked again. The run takes about 5 hours, and nothing else may run on the machine while it measures times.
