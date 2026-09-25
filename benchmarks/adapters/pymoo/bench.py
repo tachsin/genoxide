@@ -19,11 +19,14 @@ How a run follows the rules (docs/benchmarks/rules.md):
 - A single-objective run stops at the target (checked after each generation), at the evaluation
   budget or at the time cap. The budget is exact: a batch that would go past it is evaluated only up
   to it, and the run stops there.
-- Rule 2.2: pymoo's default termination (docs/source/interface/termination.md) mixes budget
-  limits (n_max_gen, n_max_evals), which are lifted, with convergence criteria (xtol, ftol over a
-  window of `period` generations; Nelder-Mead's simplex tolerances), which are kept and end an
-  attempt. So do CMA-ES after its own IPOP restarts and a GA whose mating finds no new child. The
-  method then starts again from a new random start, seed * 1000 + restart, keeping the best and
+- Rule 2.2: the benchmark gives each run a budget, which in pymoo is minimize's termination
+  argument, ("n_evals", N) for instance (docs/source/interface/termination.md); it replaces pymoo's
+  default termination (xtol, ftol over 30 generations) entirely. So only the convergence criteria
+  that belong to a method's own settings end an attempt: those a docs example sets explicitly (the
+  flowshop example's DefaultSingleObjectiveTermination(period=50)), Nelder-Mead's own
+  NelderAndMeadTermination, and CMA-ES's own stops, after its IPOP restarts; so does a GA whose
+  mating finds no new child. Their budget limits (n_max_gen, n_max_evals, n_max_iter) are lifted.
+  The method then starts again from a new random start, seed * 1000 + restart, keeping the best and
   counting every evaluation.
 - Rule 2.4: every evaluated solution is inside the bounds through pymoo's own bound handling;
   `outside` counts those that aren't, as pymoo proposed them.
@@ -290,19 +293,19 @@ class BudgetTermination(Termination):
 
 # -------------------------------------------------------------------------------------------------
 # Single-objective solvers: (name, problem factory of a counter, algorithm factory, seed offset,
-# convergence factory). The convergence criteria end an attempt (rule 2.2); they're those of the
-# docs example the solver follows, or pymoo's default termination of the algorithm when the example
-# passes none, always without their budget limits (n_max_gen, n_max_evals, n_max_iter). An example
-# whose termination is only a budget, ("n_gen", 100) for instance, has none.
+# convergence factory). The convergence criteria end an attempt (rule 2.2); they're those a docs
+# example sets explicitly, or those of the method itself (Nelder-Mead), without their budget limits
+# (n_max_gen, n_max_evals, n_max_iter). A method whose example passes no termination, or only a
+# budget such as ("n_gen", 100), has none: the benchmark's budget replaces pymoo's default
+# termination, as ("n_evals", N) does for a pymoo user.
 # -------------------------------------------------------------------------------------------------
 
 
-def default_convergence(**kwargs):
-    """pymoo's default single-objective termination, which GA, DE and ES use when minimize gets
-    none: xtol 1e-8 and ftol 1e-6, each over a window of 30 generations (the code's defaults;
-    docs/source/interface/termination.md shows a window of 20), without its budget limits of
-    1,000 generations and 100,000 evaluations."""
-    return DefaultSingleObjectiveTermination(n_max_gen=math.inf, n_max_evals=math.inf, **kwargs)
+def flowshop_convergence():
+    """The termination of the flowshop example (docs/source/customization/permutation.md),
+    DefaultSingleObjectiveTermination(period=50, n_max_gen=10000), without its generation limit:
+    xtol 1e-8 and ftol 1e-6, each over a window of 50 generations."""
+    return DefaultSingleObjectiveTermination(period=50, n_max_gen=math.inf, n_max_evals=math.inf)
 
 
 def no_convergence():
@@ -389,7 +392,7 @@ def nqueens_solvers(size):
             eliminate_duplicates=PermutationDuplicateElimination(),
         )
 
-    return [("ga", ga_problem, ga, 0, lambda: default_convergence(period=50)),
+    return [("ga", ga_problem, ga, 0, flowshop_convergence),
             ("brkga", brkga_problem, brkga, 0, no_convergence)]
 
 
@@ -418,9 +421,9 @@ def real_solvers(problem_name, size):
         # page, and Nelder-Mead with its defaults, as on docs/source/algorithms/soo/nelder.md.
         # Hooke and Jeeves pattern search (docs/source/algorithms/soo/pattern.md) is left out:
         # pymoo 0.6.2 draws its coordinate order from an unseeded generator (rule 5.2).
-        # Nelder-Mead's page passes no termination, so its own NelderAndMeadTermination applies:
-        # x_tol and f_tol of 1e-6 and a degenerate simplex end an attempt; its budget limits
-        # (n_max_iter, n_max_evals) are lifted.
+        # Nelder-Mead's own termination, NelderAndMeadTermination, part of the method (NelderMead
+        # sets it itself): x_tol and f_tol of 1e-6 and a degenerate simplex end an attempt; its
+        # budget limits (n_max_iter, n_max_evals) are lifted.
         return [
             ("cma_es", problem, cma_es, 1, no_convergence),
             ("nelder_mead", problem, lambda: NelderMead(), 0,
@@ -431,7 +434,7 @@ def real_solvers(problem_name, size):
     # docs/source/algorithms/soo/de.md (keywords "Multi-modal Optimization", "known for its good
     # results for global optimization"): its example, on Ackley. `dither="vector"` of the example
     # is left out: DE doesn't use it (see the library's page). The example passes no termination,
-    # so DE's default applies, without its budget limits.
+    # so DE runs to the budget.
     def de():
         return DE(pop_size=100, sampling=LHS(), variant="DE/rand/1/bin", CR=0.3, jitter=False)
 
@@ -441,7 +444,7 @@ def real_solvers(problem_name, size):
     def es():
         return ES(n_offsprings=200, rule=1.0 / 7.0)
 
-    return [("cma_es", problem, cma_es, 1, no_convergence), ("de", problem, de, 0, default_convergence),
+    return [("cma_es", problem, cma_es, 1, no_convergence), ("de", problem, de, 0, no_convergence),
             ("es", problem, es, 0, no_convergence)]
 
 
