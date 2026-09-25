@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/tachsin/genoxide/compare/v0.5.2...v0.6.0) - 2026-09-25
+
+### <!-- 0 -->Added
+
+- [**breaking**] eliminate duplicate children in NSGA-II, NSGA-III, SPEA2 and SMS-EMOA ([#109](https://github.com/tachsin/genoxide/pull/109))
+- [**breaking**] restart differential evolution on stagnation, and default to SHADE with a small population ([#113](https://github.com/tachsin/genoxide/pull/113))
+- add a Python package with numpy genomes, batch and parallel fitness functions ([#105](https://github.com/tachsin/genoxide/pull/105))
+- add NSGA-III, SPEA2, MOEA/D, SMS-EMOA and a progress callback to the Python package ([#112](https://github.com/tachsin/genoxide/pull/112))
+
+### <!-- 1 -->Fixed
+
+- [**breaking**] shuffle the picks of stochastic universal sampling ([#103](https://github.com/tachsin/genoxide/pull/103))
+
+### <!-- 4 -->Documentation
+
+- benchmark every minor release ([#110](https://github.com/tachsin/genoxide/pull/110))
+- benchmark 0.6 and its Python package, and mark 0.6 as released ([#115](https://github.com/tachsin/genoxide/pull/115))
+
 ## [0.5.2](https://github.com/tachsin/genoxide/compare/v0.5.1...v0.5.2) - 2026-09-25
 
 ### <!-- 4 -->Documentation
