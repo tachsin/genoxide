@@ -23,6 +23,20 @@ jobs:
       - run: cargo build --all-targets --all-features
       - run: cargo test --all-features
 
+  # the same seed gives the same results on 32 bits: the tests pin the random numbers, the math
+  # and the results of seeded runs
+  i686:
+    name: Test (32-bit Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y gcc-multilib
+      - run: cargo test --all-features --target i686-unknown-linux-gnu
+
   features:
     name: Features and single thread
     runs-on: ubuntu-latest

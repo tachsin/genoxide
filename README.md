@@ -89,7 +89,7 @@ The full methodology, every library's settings, and the bugs we found in the lib
 | **Complete** | From a simple GA to NSGA-III, CMA-ES with restarts, L-SHADE and island models, see [what's there](#whats-there-so-far) |
 | **Fast** | Compiled Rust, bit-packed binary genomes, and parallel or batch evaluation. Measured against 15 libraries [above](#benchmarks), and guarded in CI: a PR that adds more than 5% instructions to a hot path fails ([gungraun](https://github.com/gungraun/gungraun)) |
 | **Correct** | Invalid settings are errors from `build()`, before anything runs. An operator that doesn't fit the genome is a compile error |
-| **Reproducible** | The same seed gives the same result, on any number of threads and on 32 or 64 bits: the random numbers and math are portable, and tests pin their values |
+| **Reproducible** | The same seed gives the same result, on any number of threads and on 32 or 64 bits: the random numbers and math are portable, and tests pin their values, which CI checks on 32-bit Linux too |
 | **Safe** | `#![forbid(unsafe_code)]`: memory safety from the compiler, and parallel code without data races |
 | **Also for Python** | `pip install genoxide`: the algorithms, with numpy genomes and vectorized fitness functions, see [`python/`](python/) |
 | **Batteries included** | Statistics, hall of fame, progress reports, constraints, checkpoints to resume a run, cancellation, `tracing` |
