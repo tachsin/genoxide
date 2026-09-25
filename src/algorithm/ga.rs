@@ -33,13 +33,15 @@ pub enum Scheme {
     /// (μ+λ): `lambda` offspring per generation, and the best μ of parents and offspring survive.
     /// On ties, offspring are preferred, which lets the population drift across plateaus.
     MuPlusLambda {
-        /// The number of offspring per generation, at least 1.
+        /// The number of offspring per generation, at least 1, and few enough that the parents
+        /// and offspring fit in memory: at most `isize::MAX` bytes of individuals.
         lambda: usize,
     },
     /// (μ,λ): `lambda` offspring per generation, and the best μ offspring survive. `lambda` is at
     /// least μ.
     MuCommaLambda {
-        /// The number of offspring per generation, at least μ.
+        /// The number of offspring per generation, at least μ, and few enough that the offspring
+        /// fit in memory: at most `isize::MAX` bytes of individuals.
         lambda: usize,
     },
 }
@@ -61,7 +63,9 @@ impl Scheme {
         }
     }
 
-    fn validate(self, size: usize) -> Result<()> {
+    // `individuals` is the most individuals a vector can hold: with more offspring, or with more
+    // parents and offspring for (μ+λ), which compete together, the allocation fails
+    fn validate(self, size: usize, individuals: usize) -> Result<()> {
         let invalid = |reason: String| {
             Err(Error::InvalidSetting {
                 setting: "scheme",
@@ -78,11 +82,15 @@ impl Scheme {
                 ))
             }
             Scheme::MuPlusLambda { lambda: 0 } => invalid("lambda must be at least 1".to_string()),
-            Scheme::MuPlusLambda { lambda } | Scheme::MuCommaLambda { lambda }
-                if lambda > u32::MAX as usize =>
-            {
-                invalid(format!("lambda must be at most {}, got {lambda}", u32::MAX))
+            Scheme::MuPlusLambda { lambda } if lambda > individuals.saturating_sub(size) => {
+                invalid(format!(
+                    "lambda must be at most {}, the most offspring that fit in memory with the                      population, got {lambda}",
+                    individuals.saturating_sub(size)
+                ))
             }
+            Scheme::MuCommaLambda { lambda } if lambda > individuals => invalid(format!(
+                "lambda must be at most {individuals}, the most offspring that fit in memory,                  got {lambda}"
+            )),
             Scheme::MuCommaLambda { lambda } if lambda < size => invalid(format!(
                 "lambda must be at least the population size {size}, got {lambda}"
             )),
@@ -775,7 +783,8 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
         M: Mutate<R>,
     {
         let (population_size, crossover_rate, mutation_rate) = self.check()?;
-        self.scheme.validate(population_size)?;
+        let individuals = isize::MAX as usize / mem::size_of::<Individual<R::Genome>>();
+        self.scheme.validate(population_size, individuals)?;
         if let Some((parents, neighbors)) = self.memetic {
             // the refined parents must survive the generation, or their refinement is lost
             let survivors = match self.scheme {
@@ -1000,6 +1009,16 @@ mod tests {
         ] {
             assert!(builder(4).scheme(scheme).build().is_ok(), "{scheme:?}");
         }
+    }
+
+    #[test]
+    fn lambda_is_at_most_the_offspring_that_fit_in_memory() {
+        // room for 100 individuals: λ offspring, and with (μ+λ) the μ = 10 parents too
+        let valid = |scheme: Scheme| scheme.validate(10, 100).is_ok();
+        assert!(valid(Scheme::MuPlusLambda { lambda: 90 }));
+        assert!(!valid(Scheme::MuPlusLambda { lambda: 91 }));
+        assert!(valid(Scheme::MuCommaLambda { lambda: 100 }));
+        assert!(!valid(Scheme::MuCommaLambda { lambda: 101 }));
     }
 
     #[test]
