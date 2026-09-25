@@ -14,6 +14,9 @@
 
     benchmarks/run.py checks the pinning before it measures times, and refuses to measure without it.
 
+    While the file %LOCALAPPDATA%\genoxide\pin-wsl.off exists, it unpins WSL instead (every core),
+    e.g. while adapters are tested in parallel; creating or deleting the file needs no admin rights.
+
 .PARAMETER Cores
     The logical processors to pin to: 8 and 19 by default, the two favoured P-cores (the highest
     turbo frequency) of the Intel Core Ultra 7 265K the published benchmarks run on. Measured there,
@@ -80,6 +83,11 @@ $mask = [int64]0
 foreach ($core in $Cores) {
     $mask = $mask -bor ([int64]1 -shl $core)
 }
+$where = "cores $($Cores -join ', ')"
+if (Test-Path (Join-Path $env:LOCALAPPDATA 'genoxide\pin-wsl.off')) {
+    $mask = ([int64]1 -shl [Environment]::ProcessorCount) - 1
+    $where = 'every core (pin-wsl.off)'
+}
 $vm = Get-Process -Name vmmemWSL -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $vm) {
     Write-Outcome 'WSL is not running: nothing to pin'
@@ -88,9 +96,9 @@ if (-not $vm) {
 try {
     if ([int64]$vm.ProcessorAffinity -ne $mask) {
         $vm.ProcessorAffinity = [IntPtr]$mask
-        Write-Outcome ('WSL (process {0}) pinned to cores {1} (mask 0x{2:X})' -f $vm.Id, ($Cores -join ', '), $mask)
+        Write-Outcome ('WSL (process {0}) pinned to {1} (mask 0x{2:X})' -f $vm.Id, $where, $mask)
     } else {
-        Write-Outcome ('WSL (process {0}) already pinned to cores {1}' -f $vm.Id, ($Cores -join ', '))
+        Write-Outcome ('WSL (process {0}) already pinned to {1}' -f $vm.Id, $where)
     }
 } catch {
     Write-Outcome "error: $($_.Exception.Message)"
