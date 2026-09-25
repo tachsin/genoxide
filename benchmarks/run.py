@@ -828,8 +828,7 @@ def draw_charts(results, out_dir, formats=("svg",)):
     if gap_rows:
         figure, axes = chart(
             "Distance to the optimum at the end of the run, median of all runs (lower is better)",
-            context + " · a run ends at the target, its evaluation budget or 60 s · 0: the optimum · the target is "
-            "0.01 on the continuous problems and the optimum on OneMax and N-Queens",
+            context + " · a run ends at the target, its budget or 60 s · dashed: the target, 0.01",
             [(scenario, len([row for row in gap_rows if row["scenario"] == scenario])) for scenario in scenarios],
             {row["library"] for row in gap_rows})
         for scenario in scenarios:
@@ -841,6 +840,8 @@ def draw_charts(results, out_dir, formats=("svg",)):
             bars(axis, group, lambda row, floor=floor: max(row["median_gap"], floor),
                  lambda v, floor=floor: "0" if v <= floor else short_number(v) if v >= 1000 else f"{v:.3g}")
             panel_title(axis, scenario, f"budget {short_number(budgets[scenario])} evaluations" if scenario in budgets else "")
+            if scenario.split("-")[0] in ("rastrigin", "rosenbrock", "ackley"):
+                axis.axhline(0.01, color="#444444", linewidth=0.7, linestyle=(0, (4, 3)), zorder=0)
             if axis.get_yscale() == "log":
                 axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
         save(figure, "distance_to_optimum")
