@@ -10,6 +10,32 @@ pr_labels = ["release"]
 # only release when the release PR is merged
 release_always = false
 
+# genoxide and its Python package share the version ([workspace.package] in Cargo.toml) and every
+# release: a release of genoxide to crates.io publishes the Python package to PyPI
+[[package]]
+name = "genoxide"
+# with two packages in the workspace, the default tags and release names start with the package
+# name: keep v0.6.0, v0.7.0, ...
+git_tag_name = "v{{ version }}"
+git_release_name = "v{{ version }}"
+# the Python package's changes are genoxide's: a commit that touches only python/ bumps genoxide's
+# version too, and is listed in its CHANGELOG.md and GitHub release
+changelog_include = ["genoxide-python"]
+
+# The Python package isn't published to crates.io, and has no changelog or GitHub release of its
+# own. It takes part in releases for its commits to be found: git_only finds them since its last
+# tag, python-v<version>, which each release creates next to genoxide's v<version>. git_only reads
+# the package at that tag, so the first one, python-v0.6.0, is on the commit that made python/ a
+# member of the workspace.
+[[package]]
+name = "genoxide-python"
+git_only = true
+publish = false
+git_tag_name = "python-v{{ version }}"
+git_release_enable = false
+changelog_update = false
+semver_check = false
+
 [changelog]
 protect_breaking_commits = true
 sort_commits = "oldest"

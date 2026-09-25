@@ -1,6 +1,19 @@
+[workspace]
+# the library, the root package, and its Python package, which share the version and Cargo.lock.
+# (With "." among the members, the members would include every directory, excluded ones too.)
+members = ["python"]
+# cargo commands at the root build the library only: maturin builds the Python package
+default-members = ["."]
+# crates of their own, with genoxide as a path dependency
+exclude = ["benchmarks", "examples/gpu"]
+
+[workspace.package]
+# genoxide's version, which the Python package has as well: release-plz bumps it here
+version = "0.6.0"
+
 [package]
 name = "genoxide"
-version = "0.6.0"
+version.workspace = true
 edition = "2024"
 rust-version = "1.86"
 description = "Evolutionary computation for Rust: genetic algorithms, evolution strategies, multi-objective optimization and more"
@@ -60,3 +73,9 @@ harness = false
 [[bench]]
 name = "instructions"
 harness = false
+
+# the Python package's wheels: `profile` in python/pyproject.toml
+[profile.wheel]
+inherits = "release"
+lto = "fat"
+codegen-units = 1

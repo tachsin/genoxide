@@ -114,6 +114,10 @@ jobs:
       - run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+      # docs.rs builds the documentation with all features
+      - run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
 
   python:
     name: Python (${{ matrix.os }})
@@ -131,9 +135,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      # the Python package is a member of the workspace: its target directory is the root's
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: python
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"

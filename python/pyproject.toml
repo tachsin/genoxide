@@ -30,6 +30,8 @@ test = ["pytest>=8"]
 
 [tool.maturin]
 module-name = "genoxide._genoxide"
+# the Cargo profile of the workspace in ../Cargo.toml, with fat LTO
+profile = "wheel"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
