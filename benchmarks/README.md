@@ -35,6 +35,8 @@ Every adapter's source lists its settings, where its idiomatic settings come fro
 
 Libraries that check the stop between generations can go past the budget by up to one generation. Every result reports the true number of evaluations.
 
+A solver whose first 3 seeds all run for the full 60 seconds without reaching the target (a multi-objective run has none) stops there: the other 7 would take a minute each for the same result. Its result shows 3 runs instead of 10, e.g. "0% (3)". Only Nevergrad, metaheuristics_jl and PyGAD have solvers this slow, and their adapters skip those seeds themselves. `run.py` applies the same rule to every library's results.
+
 **Time.** It's measured inside the adapter, around the optimization only. It doesn't include interpreter or JVM startup, imports or setup, and the Java and Julia adapters make an untimed run first, so JIT compilation isn't included either. Every library runs single-threaded, one run at a time, on one machine. Each scenario runs 10 seeds, and the charts show medians.
 
 **Cores.** The published results come from WSL on an Intel Core Ultra 7 265K, whose 8 P-cores and 12 E-cores run at different speeds, and whose P-cores don't all reach the same turbo frequency. Windows decides which core runs the WSL virtual machine, so without pinning, a run's time depends on where it lands. So the virtual machine is pinned to the two fastest P-cores, 8 and 19, and `run.py` refuses to measure times unless it is.
