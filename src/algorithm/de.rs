@@ -96,11 +96,16 @@ pub enum Restarts {
     /// individuals are evaluated in a generation of their own, and the best individual carries
     /// what was found into the new population.
     ///
+    /// The restart happens when the next generation is asked for: observers see the population
+    /// that converged or stalled, and migrants that arrive in between (see
+    /// [`Islands`](crate::algorithm::Islands)) are kept too.
+    ///
     /// Small populations need far fewer evaluations to reach a target, but converge early on
     /// hard problems; restarts make them reliable.
     OnStagnation {
         /// Converged: the scores of the population are within `tolerance` of each other,
-        /// relative to the best score (`max - min <= tolerance · (1 + |best|)`), e.g. 1e-8.
+        /// relative to the best score (`max - min <= tolerance · (1 + |best|)`), e.g. 1e-8, and
+        /// so are their constraint violations (`max - min <= tolerance · (1 + min)`).
         tolerance: f64,
         /// Stalled: the best score since the last restart hasn't improved for `patience`
         /// generations, at least 1, e.g. 200.
@@ -166,6 +171,12 @@ pub struct De {
     start_best: Option<Fitness>,
     #[cfg_attr(feature = "serde", serde(default))]
     start_best_generation: u64,
+    // a restart for the next ask, and the positions of the migrants since the last tell, which
+    // it keeps
+    #[cfg_attr(feature = "serde", serde(default))]
+    restart_due: bool,
+    #[cfg_attr(feature = "serde", serde(default))]
+    immigrated: Vec<usize>,
     discarded: Vec<Individual<Reals>>,
     started: bool,
     asked: bool,
@@ -522,9 +533,7 @@ impl De {
         self.adapt(&successes);
         self.reduce();
         self.track_start();
-        if self.stagnated() {
-            self.restart();
-        }
+        self.restart_due = self.stagnated();
     }
 
     // the index of the best individual, the first one on ties
@@ -566,33 +575,41 @@ impl De {
         if self.generation - self.start_best_generation >= patience {
             return true;
         }
-        let mut scores = (0..self.population.len()).map(|index| self.fitness(index).score());
-        let Some(Some(first)) = scores.next() else {
-            return false;
-        };
-        let (mut min, mut max) = (first, first);
-        for score in scores {
+        let mut scores = Vec::with_capacity(self.population.len());
+        let mut violations = Vec::with_capacity(self.population.len());
+        for index in 0..self.population.len() {
+            let fitness = self.fitness(index);
             // an invalid individual: not converged
-            let Some(score) = score else {
+            let Some(score) = fitness.score() else {
                 return false;
             };
-            min = min.min(score);
-            max = max.max(score);
+            scores.push(score);
+            violations.push(fitness.violation());
         }
+        let range = |values: &[f64]| {
+            values
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), &x| {
+                    (min.min(x), max.max(x))
+                })
+        };
+        let (min, max) = range(&scores);
         let best = match self.objective {
             Objective::Maximize => max,
             Objective::Minimize => min,
         };
+        let (min_violation, max_violation) = range(&violations);
         max - min <= tolerance * (1.0 + best.abs())
+            && max_violation - min_violation <= tolerance * (1.0 + min_violation)
     }
 
-    // every individual but the best is replaced by a random one; the adaptation and the archive
-    // start over
+    // every individual but the best and the migrants since the last tell is replaced by a random
+    // one; the adaptation and the archive start over
     fn restart(&mut self) {
         let best = self.best_index();
         self.fresh.clear();
         for index in 0..self.population.len() {
-            if index != best {
+            if index != best && !self.immigrated.contains(&index) {
                 let genome = self.real.random_genome(&mut self.rng);
                 self.population[index] = Individual::new(genome);
                 self.fresh.push(index);
@@ -603,6 +620,7 @@ impl De {
         self.memory.fill((0.5, 0.5));
         self.memory_slot = 0;
         self.restart_count += 1;
+        self.restart_due = false;
         self.start_best = None;
         self.start_best_generation = self.generation;
     }
@@ -680,6 +698,9 @@ impl super::Migrate for De {
                 improved = true;
             }
             self.population[position] = migrant;
+            if !self.immigrated.contains(&position) {
+                self.immigrated.push(position);
+            }
         }
         if improved {
             self.best_generation = self.generation;
@@ -702,6 +723,9 @@ impl Algorithm for De {
     fn ask(&mut self) -> Candidates<'_, Reals> {
         if !self.asked {
             self.pending.clear();
+            if self.started && self.restart_due {
+                self.restart();
+            }
             if !self.started {
                 self.pending.extend(0..self.population.len());
             } else if !self.fresh.is_empty() {
@@ -733,6 +757,7 @@ impl Algorithm for De {
         }
         self.asked = false;
         self.evaluations += fitness.len() as u64;
+        self.immigrated.clear();
         let objective = self.objective;
         // a generation of trials, or the evaluation of the initial population or of a restart
         let trials = self.started && self.fresh.is_empty();
@@ -1033,6 +1058,8 @@ impl DeBuilder {
             restart_count: 0,
             start_best: None,
             start_best_generation: 0,
+            restart_due: false,
+            immigrated: Vec::new(),
             discarded: Vec::new(),
             started: false,
             asked: false,
@@ -1376,18 +1403,23 @@ mod tests {
             .unwrap();
         step(&mut de);
         let mut generations = 0;
-        while de.restart_count() == 0 {
+        // a converged population is still what the last generation left
+        while !de.restart_due {
             step(&mut de);
             generations += 1;
             assert!(generations < 1_000, "no restart");
+            assert!(de.population().iter().all(Individual::is_evaluated));
         }
-        // the best individual stays, the others are new and evaluated in a generation of their own
+        assert_eq!(de.restart_count(), 0);
+        // at the next ask, the best individual stays, the others are new and evaluated in a
+        // generation of their own
         let best = de.best().unwrap().clone();
-        assert_eq!(de.archive().len(), 0);
-        assert!(de.adapted().iter().all(|&slot| slot == (0.5, 0.5)));
         let evaluations = de.evaluations();
         let fresh: Vec<Reals> = de.ask().iter().cloned().collect();
+        assert_eq!(de.restart_count(), 1);
         assert_eq!(fresh.len(), 19);
+        assert_eq!(de.archive().len(), 0);
+        assert!(de.adapted().iter().all(|&slot| slot == (0.5, 0.5)));
         assert!(de.population().iter().any(|x| x.genome() == best.genome()));
         let told: Vec<Fitness> = fresh.iter().map(|x| Fitness::new(sphere(x))).collect();
         de.tell(&told).unwrap();
@@ -1419,8 +1451,9 @@ mod tests {
         for generation in 1..=7 {
             let fitness = vec![Fitness::new(100.0); de.ask().len()];
             de.tell(&fitness).unwrap();
-            // 5 generations without improvement, then the new individuals' own generation
-            assert_eq!(de.restart_count(), u64::from(generation >= 5));
+            // 5 generations without improvement; the restart is at the next ask
+            assert_eq!(de.restart_due, generation == 5);
+            assert_eq!(de.restart_count(), u64::from(generation >= 6));
         }
     }
 
