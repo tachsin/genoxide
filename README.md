@@ -197,8 +197,9 @@ Using an AI coding assistant? Point it to [AGENTS.md](AGENTS.md): it has the dec
 | 0.4 Multi-objective | NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA, hypervolume | ✅ released |
 | 0.5 Scale | Island model, checkpointing, batch/GPU and asynchronous evaluation, CLI | ✅ released |
 | 0.6 Python | PyO3 bindings with numpy support | ✅ released |
-| 0.7 GP & neuroevolution | Typed tree GP, NEAT | 🔜 next |
-| 0.8 Frontier | Quality-diversity (MAP-Elites), LLM-guided operators | planned |
+| 0.7 Correctness | Fixes from an independent review of 0.6 | 🔜 next |
+| 0.8 GP & neuroevolution | Typed tree GP, NEAT | planned |
+| 0.9 Frontier | Quality-diversity (MAP-Elites), LLM-guided operators | planned |
 | 1.0 | Stable API and published benchmark report | planned |
 
 The details are in [ROADMAP.md](ROADMAP.md).

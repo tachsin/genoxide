@@ -170,11 +170,21 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 ### 0.6: Python ✅
 - [x] `pip install genoxide` via PyO3 / maturin, wheels for Linux, macOS and Windows
 - [x] Python fitness functions and vectorized numpy batch fitness
-- Zero-copy numpy genomes: moved to 0.7. A batch copies a generation into one array, which costs little next to a Python fitness function.
+- Zero-copy numpy genomes: moved to 0.8. A batch copies a generation into one array, which costs little next to a Python fitness function.
 - [x] Pythonic builders
 - [x] Parity examples with the DEAP / pymoo tutorials
 
-### 0.7: Genetic programming and neuroevolution
+### 0.7: Correctness
+Fixes from an independent review of 0.6.0 ([#116](https://github.com/tachsin/genoxide/issues/116)). Some change seeded results, so they wait for a minor release.
+- [x] DE restarts: trials stay visible to observers, constrained problems don't restart every other generation, and migrants aren't evaluated twice
+- [x] Duplicate elimination without fingerprint collisions, with the same results on 32-bit and 64-bit
+- [x] Runs that could never end stop as stalled
+- [x] Huge sizes are setting errors instead of panics or hangs
+- [x] The steady-state GA doesn't propose twins, and PSO's initial velocities respect `max_velocity`
+- [x] Clearer errors and stricter settings in the Python package, with license files in the wheels
+- [x] Fairer benchmark adapters (numpy fitness in pymoo and PyGAD), and timings on pinned P-cores
+
+### 0.8: Genetic programming and neuroevolution
 - [ ] Zero-copy numpy genomes in the Python package
 - [ ] Tree GP, strongly typed
 - [ ] Subtree crossover; point, subtree and hoist mutation; bloat control
@@ -182,7 +192,7 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 - [ ] NEAT (speciation, innovation numbers)
 - [ ] Neuroevolution with evolution strategies
 
-### 0.8: Frontier
+### 0.9: Frontier
 - [ ] Quality-diversity: MAP-Elites, CMA-ME, novelty search
 - [ ] LLM-guided evolution: async operators that call a language model
 - [ ] Adaptive operator selection and automatic parameter tuning
