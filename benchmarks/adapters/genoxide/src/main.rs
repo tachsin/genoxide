@@ -233,16 +233,10 @@ fn run_real(args: &Args, seed: u64) -> Result<()> {
     });
     report("ga", outcome, time_s)?;
 
-    // differential evolution without tuning, as AGENTS.md suggests when F and CR are unknown:
-    // SHADE with current-to-pbest/1 and an archive, and the usual population of 100
+    // differential evolution with its defaults, as AGENTS.md suggests: SHADE with
+    // current-to-pbest/1 and an archive, the number of genes + 10 individuals, and restarts
     let (outcome, time_s) = timed(|| {
         let de = De::builder(real()?)
-            .population_size(100)
-            .strategy(de::Strategy::CurrentToPBest {
-                p: 0.1,
-                archive: 1.0,
-            })
-            .control(de::Control::Shade { memory: 6 })
             .minimize()
             .seed(seed)
             .build()?;
