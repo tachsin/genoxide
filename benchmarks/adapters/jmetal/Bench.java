@@ -16,9 +16,11 @@
  * - One thread (rule 4.3): jMetal evaluates sequentially (SequentialEvaluation and
  *   SequentialSolutionListEvaluator, its defaults); run.sh runs the JVM with the serial garbage
  *   collector and with -Xbatch, so the JIT compiles on the calling thread's time.
- * - Seeds (rule 5.2): JMetalRandom's seed, before every run. jMetal's CMA-ES draws its samples from
- *   its own java.util.Random, seeded with System.currentTimeMillis(), which it doesn't let a user
- *   set: the adapter replaces it by a seeded one (see cmaes() below).
+ * - Seeds (rule 5.2): JMetalRandom's seed, before every run. Two parts of jMetal don't use it: its
+ *   CMA-ES draws its samples from its own java.util.Random, seeded with System.currentTimeMillis(),
+ *   which it doesn't let a user set (the adapter replaces it by a seeded one, see cmaes() below),
+ *   and its initial permutations are shuffled by Collections.shuffle's own generator (the adapter
+ *   shuffles them with JMetalRandom, see NQueensProblem.createSolution()).
  * - Time (rule 4.2): before the timed runs, every solver runs once untimed, with 1,000 evaluations
  *   and the seed 1,000,003, so the JIT has compiled the fitness function and the algorithm.
  */
@@ -53,6 +55,7 @@ import org.uma.jmetal.solution.Solution;
 import org.uma.jmetal.solution.binarysolution.BinarySolution;
 import org.uma.jmetal.solution.doublesolution.DoubleSolution;
 import org.uma.jmetal.solution.permutationsolution.PermutationSolution;
+import org.uma.jmetal.solution.permutationsolution.impl.IntegerPermutationSolution;
 import org.uma.jmetal.util.aggregationfunction.impl.PenaltyBoundaryIntersection;
 import org.uma.jmetal.util.aggregationfunction.impl.Tschebyscheff;
 import org.uma.jmetal.util.comparator.ObjectiveComparator;
@@ -358,6 +361,24 @@ public final class Bench {
         @Override public int numberOfConstraints() { return 0; }
         @Override public String name() { return "NQueens"; }
 
+        /**
+         * A random permutation, as jMetal's own createSolution() makes, but drawn with JMetalRandom:
+         * jMetal's IntegerPermutationSolution shuffles with Collections.shuffle(list), whose
+         * generator ignores JMetalRandom's seed, so the same seed wouldn't give the same run (rule
+         * 5.2). The same uniform shuffle (Fisher-Yates), with the seeded generator.
+         */
+        @Override
+        public PermutationSolution<Integer> createSolution() {
+            var solution = new IntegerPermutationSolution(size, 1, 0);
+            List<Integer> order = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) order.add(i);
+            for (int i = size - 1; i > 0; i--) {
+                Collections.swap(order, i, JMetalRandom.getInstance().nextInt(0, i));
+            }
+            for (int i = 0; i < size; i++) solution.variables().set(i, order.get(i));
+            return solution;
+        }
+
         @Override
         public PermutationSolution<Integer> evaluate(PermutationSolution<Integer> solution) {
             budget.before();
@@ -474,6 +495,9 @@ public final class Bench {
      * eigendecomposition fails its check (checkEigenCorrectness sets the evaluations to the maximum)
      * or throws (CMAESUtils.tql2 can throw ArrayIndexOutOfBoundsException once the covariance matrix
      * degenerates). Every restart keeps counting the evaluations; the best is kept by the budget.
+     * jMetal's CMA-ES has a bug: once it has converged, its σ grows without bound, every sample
+     * lands on the bounds and the run stalls without ending, often for 200,000 evaluations before
+     * tql2 throws. The adapter doesn't restart it then (rule 8.4), so the results show the bug.
      */
     static long cmaes(Budget budget, RealProblem problem, int size, double lower, double upper) {
         long generations = 0;
