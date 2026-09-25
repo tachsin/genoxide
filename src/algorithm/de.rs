@@ -83,6 +83,31 @@ impl Default for Control {
     }
 }
 
+/// When a differential evolution starts over from new random individuals.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum Restarts {
+    /// Never: a converged population goes on sampling around the same point.
+    #[default]
+    Never,
+    /// When the population has converged or stalled: every individual but the best is replaced
+    /// by a random one, and the adaptation of `F` and `CR` and the archive start over. The new
+    /// individuals are evaluated in a generation of their own, and the best individual carries
+    /// what was found into the new population.
+    ///
+    /// Small populations need far fewer evaluations to reach a target, but converge early on
+    /// hard problems; restarts make them reliable.
+    OnStagnation {
+        /// Converged: the scores of the population are within `tolerance` of each other,
+        /// relative to the best score (`max - min <= tolerance · (1 + |best|)`), e.g. 1e-8.
+        tolerance: f64,
+        /// Stalled: the best score since the last restart hasn't improved for `patience`
+        /// generations, at least 1, e.g. 200.
+        patience: u64,
+    },
+}
+
 /// Differential evolution on [`Real`] genomes, as an ask / tell [`Algorithm`].
 ///
 /// Every generation, each individual `x` gets a trial vector: a mutant vector from the
@@ -128,6 +153,19 @@ pub struct De {
     memory_slot: usize,
     // L-SHADE: (initial size, minimum size, evaluations)
     reduction: Option<(usize, usize, u64)>,
+    // restarts: a checkpoint from before them resumes without them, as it was saved
+    #[cfg_attr(feature = "serde", serde(default))]
+    restarts: Restarts,
+    // the new individuals of a restart, evaluated before the next generation is bred
+    #[cfg_attr(feature = "serde", serde(default))]
+    fresh: Vec<usize>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    restart_count: u64,
+    // the best fitness since the last restart, and when it last improved
+    #[cfg_attr(feature = "serde", serde(default))]
+    start_best: Option<Fitness>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    start_best_generation: u64,
     discarded: Vec<Individual<Reals>>,
     started: bool,
     asked: bool,
@@ -150,6 +188,7 @@ impl De {
             seed: None,
             initial_genomes: Vec::new(),
             reduction: None,
+            restarts: Restarts::Never,
         }
     }
 
@@ -219,6 +258,16 @@ impl De {
     /// The seed of the random numbers: the given one, or a random one if none was given.
     pub fn seed(&self) -> u64 {
         self.seed
+    }
+
+    /// When the population starts over.
+    pub fn restarts(&self) -> Restarts {
+        self.restarts
+    }
+
+    /// The number of restarts so far.
+    pub fn restart_count(&self) -> u64 {
+        self.restart_count
     }
 
     fn fitness(&self, index: usize) -> Fitness {
@@ -460,6 +509,92 @@ impl De {
         }
         self.adapt(&successes);
         self.reduce();
+        self.track_start();
+        if self.stagnated() {
+            self.restart();
+        }
+    }
+
+    // the index of the best individual, the first one on ties
+    fn best_index(&self) -> usize {
+        let objective = self.objective;
+        (0..self.population.len())
+            .reduce(|a, b| {
+                if objective.is_better(self.fitness(b), self.fitness(a)) {
+                    b
+                } else {
+                    a
+                }
+            })
+            .unwrap_or(0)
+    }
+
+    // the best fitness since the last restart, and when it last improved
+    fn track_start(&mut self) {
+        let best = self.fitness(self.best_index());
+        let objective = self.objective;
+        if self
+            .start_best
+            .is_none_or(|start_best| objective.is_better(best, start_best))
+        {
+            self.start_best = Some(best);
+            self.start_best_generation = self.generation;
+        }
+    }
+
+    // whether the population has converged or stalled, with restarts on
+    fn stagnated(&self) -> bool {
+        let Restarts::OnStagnation {
+            tolerance,
+            patience,
+        } = self.restarts
+        else {
+            return false;
+        };
+        if self.generation - self.start_best_generation >= patience {
+            return true;
+        }
+        let mut scores = (0..self.population.len()).map(|index| self.fitness(index).score());
+        let Some(Some(first)) = scores.next() else {
+            return false;
+        };
+        let (mut min, mut max) = (first, first);
+        for score in scores {
+            // an invalid individual: not converged
+            let Some(score) = score else {
+                return false;
+            };
+            min = min.min(score);
+            max = max.max(score);
+        }
+        let best = match self.objective {
+            Objective::Maximize => max,
+            Objective::Minimize => min,
+        };
+        max - min <= tolerance * (1.0 + best.abs())
+    }
+
+    // every individual but the best is replaced by a random one; the adaptation and the archive
+    // start over
+    fn restart(&mut self) {
+        let best = self.best_index();
+        self.fresh.clear();
+        for index in 0..self.population.len() {
+            if index != best {
+                let genome = self.real.random_genome(&mut self.rng);
+                self.population[index] = Individual::new(genome);
+                self.fresh.push(index);
+            }
+        }
+        self.archive.clear();
+        self.means = (0.5, 0.5);
+        for slot in &mut self.memory {
+            *slot = (0.5, 0.5);
+        }
+        self.memory_slot = 0;
+        self.restart_count += 1;
+        self.start_best = None;
+        self.start_best_generation = self.generation;
     }
 }
 
@@ -557,15 +692,18 @@ impl Algorithm for De {
     fn ask(&mut self) -> Candidates<'_, Reals> {
         if !self.asked {
             self.pending.clear();
-            if self.started {
+            if !self.started {
+                self.pending.extend(0..self.population.len());
+            } else if !self.fresh.is_empty() {
+                // the new individuals of a restart
+                self.pending.extend_from_slice(&self.fresh);
+            } else {
                 self.breed();
                 self.pending.extend(0..self.trials.len());
-            } else {
-                self.pending.extend(0..self.population.len());
             }
             self.asked = true;
         }
-        let individuals = if self.started {
+        let individuals = if self.started && self.fresh.is_empty() {
             &self.trials
         } else {
             self.population.as_slice()
@@ -586,22 +724,28 @@ impl Algorithm for De {
         self.asked = false;
         self.evaluations += fitness.len() as u64;
         let objective = self.objective;
-        let individuals = if self.started {
-            self.trials.as_mut_slice()
+        // a generation of trials, or the evaluation of the initial population or of a restart
+        let trials = self.started && self.fresh.is_empty();
+        if trials {
+            for (individual, &fitness) in self.trials.iter_mut().zip(fitness) {
+                individual.set_fitness(fitness);
+            }
         } else {
-            self.population.iter_mut().into_slice()
-        };
-        for (individual, &fitness) in individuals.iter_mut().zip(fitness) {
-            individual.set_fitness(fitness);
+            for (&index, &fitness) in self.pending.iter().zip(fitness) {
+                self.population[index].set_fitness(fitness);
+            }
         }
         if self.started {
             self.generation += 1;
         }
         // the best so far, the first one on ties
-        let candidates = if self.started {
-            &self.trials[..]
+        let candidates: Vec<&Individual<Reals>> = if trials {
+            self.trials.iter().collect()
         } else {
-            self.population.as_slice()
+            self.pending
+                .iter()
+                .map(|&index| &self.population[index])
+                .collect()
         };
         let mut improved = false;
         for candidate in candidates {
@@ -617,8 +761,13 @@ impl Algorithm for De {
         if improved {
             self.best_generation = self.generation;
         }
-        if self.started {
+        if trials {
             self.select();
+        } else {
+            // a restart's generation has no trials to discard
+            self.fresh.clear();
+            self.discarded.clear();
+            self.track_start();
         }
         self.started = true;
         Ok(())
@@ -663,6 +812,7 @@ pub struct DeBuilder {
     seed: Option<u64>,
     initial_genomes: Vec<Reals>,
     reduction: Option<(usize, u64)>,
+    restarts: Restarts,
 }
 
 impl DeBuilder {
@@ -719,6 +869,12 @@ impl DeBuilder {
     /// representation. The rest is random.
     pub fn initial_genomes<I: IntoIterator<Item = Reals>>(mut self, genomes: I) -> Self {
         self.initial_genomes = genomes.into_iter().collect();
+        self
+    }
+
+    /// When the population starts over from new random individuals. Never by default.
+    pub fn restarts(mut self, restarts: Restarts) -> Self {
+        self.restarts = restarts;
         self
     }
 
@@ -803,6 +959,20 @@ impl DeBuilder {
         if !(0.0..=1.0).contains(&cr) {
             return invalid("cr", format!("must be between 0 and 1, got {cr}"));
         }
+        if let Restarts::OnStagnation {
+            tolerance,
+            patience,
+        } = self.restarts
+        {
+            if !(tolerance >= 0.0 && tolerance.is_finite()) || patience == 0 {
+                return invalid(
+                    "restarts",
+                    format!(
+                        "the tolerance must be 0 or more and finite, and the patience at least 1; got {tolerance} and {patience}"
+                    ),
+                );
+            }
+        }
         if self.initial_genomes.len() > size {
             return invalid(
                 "initial_genomes",
@@ -842,6 +1012,11 @@ impl DeBuilder {
             reduction: self
                 .reduction
                 .map(|(min_size, max_evaluations)| (size, min_size, max_evaluations)),
+            restarts: self.restarts,
+            fresh: Vec::new(),
+            restart_count: 0,
+            start_best: None,
+            start_best_generation: 0,
             discarded: Vec::new(),
             started: false,
             asked: false,
@@ -1139,6 +1314,162 @@ mod tests {
         );
         assert_eq!(de.control(), Control::Shade { memory: 6 });
         assert_eq!(de.adapted().len(), 6);
+    }
+
+    #[test]
+    fn restarts_validation() {
+        let restarts = |tolerance, patience| {
+            setting(
+                builder(Strategy::Rand1, 0)
+                    .restarts(Restarts::OnStagnation {
+                        tolerance,
+                        patience,
+                    })
+                    .build(),
+            )
+        };
+        assert_eq!(restarts(-1.0, 10), "restarts");
+        assert_eq!(restarts(f64::NAN, 10), "restarts");
+        assert_eq!(restarts(1e-8, 0), "restarts");
+        assert!(
+            builder(Strategy::Rand1, 0)
+                .restarts(Restarts::OnStagnation {
+                    tolerance: 1e-8,
+                    patience: 10,
+                })
+                .build()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn a_converged_population_starts_over_from_its_best() {
+        let shade = Strategy::CurrentToPBest {
+            p: 0.1,
+            archive: 1.0,
+        };
+        let mut de = builder(shade, 3)
+            .control(Control::Shade { memory: 6 })
+            // converged as soon as the scores are within 1 of each other
+            .restarts(Restarts::OnStagnation {
+                tolerance: 1.0,
+                patience: 1_000,
+            })
+            .build()
+            .unwrap();
+        step(&mut de);
+        let mut generations = 0;
+        while de.restart_count() == 0 {
+            step(&mut de);
+            generations += 1;
+            assert!(generations < 1_000, "no restart");
+        }
+        // the best individual stays, the others are new and evaluated in a generation of their own
+        let best = de.best().unwrap().clone();
+        assert_eq!(de.archive().len(), 0);
+        assert!(de.adapted().iter().all(|&slot| slot == (0.5, 0.5)));
+        let evaluations = de.evaluations();
+        let fresh: Vec<Reals> = de.ask().iter().cloned().collect();
+        assert_eq!(fresh.len(), 19);
+        assert!(de.population().iter().any(|x| x.genome() == best.genome()));
+        let told: Vec<Fitness> = fresh.iter().map(|x| Fitness::new(sphere(x))).collect();
+        de.tell(&told).unwrap();
+        assert_eq!(de.evaluations(), evaluations + 19);
+        assert!(de.discarded().is_empty());
+        // the best so far is never lost
+        let (now, before) = (
+            de.best().unwrap().fitness().unwrap(),
+            best.fitness().unwrap(),
+        );
+        assert!(!Objective::Minimize.is_better(before, now));
+        // and the run goes on with trials again
+        assert_eq!(de.ask().len(), 20);
+    }
+
+    #[test]
+    fn a_stalled_population_starts_over() {
+        let mut de = builder(Strategy::Rand1, 4)
+            .restarts(Restarts::OnStagnation {
+                tolerance: 0.0,
+                patience: 5,
+            })
+            .build()
+            .unwrap();
+        // different scores, so not converged, and trials that are all worse: stalled
+        let fitness: Vec<Fitness> = (0..20).map(|i| Fitness::new(f64::from(i))).collect();
+        de.ask();
+        de.tell(&fitness).unwrap();
+        for generation in 1..=7 {
+            let fitness = vec![Fitness::new(100.0); de.ask().len()];
+            de.tell(&fitness).unwrap();
+            // 5 generations without improvement, then the new individuals' own generation
+            assert_eq!(de.restart_count(), u64::from(generation >= 5));
+        }
+    }
+
+    #[test]
+    fn restarts_repeat_with_a_seed() {
+        let run = |seed| {
+            let mut de = builder(Strategy::Rand1, seed)
+                .restarts(Restarts::OnStagnation {
+                    tolerance: 1e-3,
+                    patience: 20,
+                })
+                .build()
+                .unwrap();
+            for _ in 0..200 {
+                step(&mut de);
+            }
+            (
+                de.restart_count(),
+                de.evaluations(),
+                de.best().unwrap().clone(),
+            )
+        };
+        let (restarts, evaluations, best) = run(9);
+        assert!(restarts > 0);
+        assert_eq!(run(9), (restarts, evaluations, best));
+    }
+
+    #[test]
+    fn small_populations_with_restarts_solve_rastrigin() {
+        // shifted Rastrigin in 10 dimensions, as in the benchmarks
+        let shift = |i: usize| 2.0 * ((37 * i + 11) % 101) as f64 / 101.0 - 1.0;
+        let rastrigin = |x: &Reals| {
+            10.0 * x.len() as f64
+                + x.iter()
+                    .enumerate()
+                    .map(|(i, xi)| {
+                        let y = xi - shift(i);
+                        y * y - 10.0 * (2.0 * std::f64::consts::PI * y).cos()
+                    })
+                    .sum::<f64>()
+        };
+        let solved = (0..5)
+            .filter(|&seed| {
+                let de = De::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+                    .population_size(20)
+                    .strategy(Strategy::CurrentToPBest {
+                        p: 0.1,
+                        archive: 1.0,
+                    })
+                    .control(Control::Shade { memory: 6 })
+                    .restarts(Restarts::OnStagnation {
+                        tolerance: 1e-8,
+                        patience: 200,
+                    })
+                    .minimize()
+                    .seed(seed)
+                    .build()
+                    .unwrap();
+                let outcome = Engine::new(de, rastrigin)
+                    .stop_when(Stop::target(0.01).or(Stop::evaluations(100_000)))
+                    .run()
+                    .unwrap();
+                outcome.stop_reason() == StopReason::Target
+            })
+            .count();
+        assert_eq!(solved, 5);
     }
 
     #[test]
