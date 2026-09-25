@@ -1,19 +1,46 @@
 """Benchmark adapter for genoxide's Python package (../../../python), whose algorithms are genoxide's
 Rust, calling Python fitness functions.
 
-Usage: python bench.py <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
-Prints one JSON line per solver per seed, see ../../README.md for the fields.
+Usage:
+    python bench.py <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
+    python bench.py values <problem> <size>
+    python bench.py --self-check
+
+The first prints one JSON line per solver per seed, with the best solution (or the final front and
+its solutions), see ../../README.md for the fields. The second reads one JSON solution per line
+from stdin and prints its value (or its list of objectives), with the fitness functions below. The
+third compares the fitness functions with problems.py at random points.
 
 The solvers and their settings are the Rust genoxide adapter's (../genoxide/src/main.rs), through
-the Python API:
-- matched OneMax: a fitness function called with one genome at a time, like DEAP's (a Python call per
-  genome, which counts the ones with numpy's sum);
-- idiomatic scenarios and multi-objective scenarios: what the package's README recommends,
-  `batch=True` with vectorized numpy functions, called with a generation at a time.
+the Python API; where genoxide's docs recommend each of them, and the separate test runs:
+docs/benchmarks/libraries/genoxide_python.md. The fitness functions are written as
+python/README.md and python/examples/ write them:
+- `batch=True` with vectorized numpy functions, called with a generation at a time: what
+  python/README.md recommends for vectorized numpy ("one call per generation"), as in
+  python/examples/rastrigin.py and zdt1.py; used by the GA, DE, CMA-ES, PSO and the
+  multi-objective algorithms;
+- a function per genome for local search and tabu search, which evaluate a few neighbors per
+  step, as python/examples/n_queens.py;
+- a function per genome in the matched OneMax runs, like DEAP's: a Python call per genome, which
+  counts the ones with numpy's sum, as python/examples/onemax.py and README.md's first example.
 
-`python bench.py --self-check` compares the fitness functions with the DEAP adapter's at random
-points (it needs DEAP, as in the benchmarks' .venv).
+The rules (docs/benchmarks/rules.md), as this adapter follows them:
+- each fitness function counts the genomes it evaluates itself (rule 3): that count is the
+  reported "evaluations", and the package's own `result.evaluations` must be the same (a
+  difference is printed to stderr);
+- a run ends at the target, the evaluation budget or the time cap only (rule 2.1); the solvers
+  either run until a stop condition or restart by themselves (DE, CMA-ES with IPOP);
+- the clock covers creating the algorithm and the whole run, whose first step creates the random
+  initial population (rule 4.1);
+- one thread: `parallel` is off, and numpy's BLAS runs with 1 thread, set below (rule 4.3);
+- each seed goes to the algorithm's `seed`, so a seed repeats a run exactly (rule 5.2).
 """
+
+import os
+
+# single-threaded numpy (BLAS), before numpy is imported (rule 4.3)
+for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ[variable] = "1"
 
 import json
 import math
@@ -25,24 +52,32 @@ import numpy as np
 import genoxide as gx
 
 # -------------------------------------------------------------------------------------------------
-# Fitness functions, identical to the ones in the other adapters
+# Fitness functions, identical to problems.py. Each counts the genomes it evaluates in EVALUATIONS.
 # -------------------------------------------------------------------------------------------------
+
+EVALUATIONS = 0
 
 
 def onemax(bits):
-    """One genome, a numpy bool array: the matched runs' function, called once per genome like DEAP's,
-    whose sum is numpy's."""
+    """One genome, a numpy bool array: the matched runs' function, called once per genome like
+    DEAP's, whose sum is numpy's."""
+    global EVALUATIONS
+    EVALUATIONS += 1
     return int(bits.sum())
 
 
 def onemax_batch(bits):
     """A genome per row."""
+    global EVALUATIONS
+    EVALUATIONS += len(bits)
     return bits.sum(axis=1)
 
 
 def nqueens_batch(orders):
-    """Number of diagonal conflicts of each row: the queens on a diagonal, minus 1 if there are
-    any, summed over the diagonals, which is n minus the number of occupied diagonals."""
+    """Diagonal conflicts of each row: for each diagonal, its queens minus one, which is n minus
+    the number of occupied diagonals, summed over both directions."""
+    global EVALUATIONS
+    EVALUATIONS += len(orders)
     count, size = orders.shape
     rows = np.arange(size)
     conflicts = np.zeros(count)
@@ -54,8 +89,10 @@ def nqueens_batch(orders):
 
 
 def nqueens(order):
-    """The diagonal conflicts of one genome, for local search, which evaluates one neighbor per
-    step: as the package's N-Queens example."""
+    """The diagonal conflicts of one genome, for local search and tabu search, which evaluate a
+    few neighbors per step: as python/examples/n_queens.py."""
+    global EVALUATIONS
+    EVALUATIONS += 1
     size = len(order)
     rows = np.arange(size)
     return float(2 * size - len(np.unique(order + rows)) - len(np.unique(order - rows)))
@@ -67,16 +104,22 @@ SHIFT = 2 * ((37 * np.arange(1000) + 11) % 101) / 101 - 1
 
 
 def rastrigin_batch(x):
+    global EVALUATIONS
+    EVALUATIONS += len(x)
     y = x - SHIFT[: x.shape[1]]
     return 10 * x.shape[1] + np.sum(y**2 - 10 * np.cos(2 * np.pi * y), axis=1)
 
 
 def rosenbrock_batch(x):
+    global EVALUATIONS
+    EVALUATIONS += len(x)
     a, b = x[:, :-1], x[:, 1:]
     return np.sum(100 * (b - a * a) ** 2 + (1 - a) ** 2, axis=1)
 
 
 def ackley_batch(x):
+    global EVALUATIONS
+    EVALUATIONS += len(x)
     n = x.shape[1]
     y = x - SHIFT[:n]
     squares = np.sum(y**2, axis=1) / n
@@ -97,16 +140,22 @@ def zdt_g(x):
 
 
 def zdt1_batch(x):
+    global EVALUATIONS
+    EVALUATIONS += len(x)
     f1, g = x[:, 0], zdt_g(x)
     return np.column_stack([f1, g * (1 - np.sqrt(f1 / g))])
 
 
 def zdt2_batch(x):
+    global EVALUATIONS
+    EVALUATIONS += len(x)
     f1, g = x[:, 0], zdt_g(x)
     return np.column_stack([f1, g * (1 - (f1 / g) ** 2)])
 
 
 def zdt3_batch(x):
+    global EVALUATIONS
+    EVALUATIONS += len(x)
     f1, g = x[:, 0], zdt_g(x)
     return np.column_stack([f1, g * (1 - np.sqrt(f1 / g) - f1 / g * np.sin(10 * np.pi * f1))])
 
@@ -126,11 +175,15 @@ def dtlz(x, scale, objectives, head, last):
 
 
 def dtlz2_batch(x, objectives=3):
+    global EVALUATIONS
+    EVALUATIONS += len(x)
     g = np.sum((x[:, objectives - 1:] - 0.5) ** 2, axis=1)
     return dtlz(x, 1 + g, objectives, lambda v: np.cos(v * np.pi / 2), lambda v: np.sin(v * np.pi / 2))
 
 
 def dtlz1_batch(x, objectives=3):
+    global EVALUATIONS
+    EVALUATIONS += len(x)
     tail = x[:, objectives - 1:]
     g = 100 * (tail.shape[1] + np.sum((tail - 0.5) ** 2 - np.cos(20 * np.pi * (tail - 0.5)), axis=1))
     return dtlz(x, 0.5 * (1 + g), objectives, lambda v: v, lambda v: 1 - v)
@@ -147,19 +200,19 @@ FRONT_PROBLEMS = {
 }
 
 # -------------------------------------------------------------------------------------------------
-# Solvers: the Rust genoxide adapter's, with the same settings
+# Solvers: the Rust genoxide adapter's, with the same settings and citations
 # -------------------------------------------------------------------------------------------------
 
-RASTRIGIN_TARGET = 0.01
+REAL_TARGET = 0.01
 
 
 def onemax_solvers(size, mode, seed):
-    """[(solver, algorithm, fitness, batch, target, success)]"""
+    """[(solver, make the algorithm, fitness, batch)]"""
     if mode == "matched":
-        # as DEAP eaSimple: population 300, tournament 3, two-point crossover with probability
-        # 0.5, bit-flip with probability 1 / size on 20% of the children, no elitism; a Python
-        # function per genome
-        ga = gx.Ga(
+        # the matched settings (benchmarks/README.md), as DEAP's eaSimple: population 300,
+        # tournament 3, two-point crossover with probability 0.5, bit-flip with probability
+        # 1 / size per gene on 20% of the children, no elitism; a Python function per genome
+        return [("ga", lambda: gx.Ga(
             gx.Binary(size),
             population_size=300,
             select=gx.Tournament(3),
@@ -169,52 +222,72 @@ def onemax_solvers(size, mode, seed):
             mutation_rate=0.2,
             scheme=gx.Generational(elitism=0),
             seed=seed,
-        )
-        return [("ga", ga, onemax, False, size, lambda best: best >= size)]
-    # the binary template of AGENTS.md, with a numpy function per generation
-    ga = gx.Ga(
+        ), onemax, False)]
+    # idiomatic: genoxide's OneMax, the same in python/README.md's first example,
+    # examples/one_max.rs and AGENTS.md: population 100, tournament 3, uniform crossover, bit-flip
+    # at 1 / length per gene; the default rates and scheme (generational, elitism 1)
+    return [("ga", lambda: gx.Ga(
         gx.Binary(size),
         population_size=100,
         select=gx.Tournament(3),
-        crossover=gx.PointCrossover(2),
+        crossover=gx.UniformCrossover(),
         mutation=gx.BitFlip(rate=1.0 / size),
         seed=seed,
-    )
-    return [("ga", ga, onemax_batch, True, size, lambda best: best >= size)]
+    ), onemax_batch, True)]
 
 
 def nqueens_solvers(size, seed):
-    # the permutation template of AGENTS.md: (mu + lambda) with swap mutation
-    ga = gx.Ga(
-        gx.Permutation(size),
-        population_size=20,
-        select=gx.Tournament(2),
-        crossover=gx.NoCrossover(),
-        mutation=gx.SwapMutation(),
-        scheme=gx.MuPlusLambda(20),
-        objective="minimize",
-        seed=seed,
-    )
-    # the local search template of AGENTS.md: one neighbor per step, and moves to equal neighbors
-    search = gx.LocalSearch(
-        gx.Permutation(size),
-        neighbor=gx.SwapMutation(),
-        acceptance=gx.NotWorse(),
-        objective="minimize",
-        seed=seed,
-    )
-    solved = lambda best: best == 0  # noqa: E731
     return [
-        ("ga", ga, nqueens_batch, True, 0, solved),
-        ("local_search", search, nqueens, False, 0, solved),
+        # examples/n_queens.rs, AGENTS.md's permutation template: (20 + 20) with tournament 2, no
+        # crossover and swap mutation
+        ("ga", lambda: gx.Ga(
+            gx.Permutation(size),
+            population_size=20,
+            select=gx.Tournament(2),
+            crossover=gx.NoCrossover(),
+            mutation=gx.SwapMutation(),
+            scheme=gx.MuPlusLambda(20),
+            objective="minimize",
+            seed=seed,
+        ), nqueens_batch, True),
+        # the N-Queens example of LocalSearch's rustdoc: hill climbing with swap neighbors, the
+        # best of 4 per step, the default acceptance NotWorse
+        ("local_search", lambda: gx.LocalSearch(
+            gx.Permutation(size),
+            neighbor=gx.SwapMutation(),
+            neighbors=4,
+            objective="minimize",
+            seed=seed,
+        ), nqueens, False),
+        # python/examples/n_queens.py: tabu search with swap neighbors, 32 per step, tenure 20
+        ("tabu_search", lambda: gx.LocalSearch(
+            gx.Permutation(size),
+            neighbor=gx.SwapMutation(),
+            neighbors=32,
+            acceptance=gx.Tabu(20),
+            objective="minimize",
+            seed=seed,
+        ), nqueens, False),
     ]
 
 
 def real_solvers(problem, size, seed):
     function, low, high = REAL_PROBLEMS[problem]
     genome = gx.Real((low, high), length=size)
-    # the settings of examples/rastrigin.rs: polynomial mutation at the usual rate of 1 / length
-    ga = gx.Ga(
+    # CMA-ES with its defaults and IPOP restarts: python/README.md's first example and
+    # python/examples/rastrigin.py, AGENTS.md's CMA-ES template; for Rosenbrock too (rule 2.2)
+    cmaes = ("cma_es", lambda: gx.Cmaes(genome, restarts="ipop", objective="minimize", seed=seed),
+             function, True)
+    # differential evolution with its defaults (AGENTS.md's DE template): SHADE with
+    # current-to-pbest/1 and an archive, the number of genes + 10 individuals, and restarts
+    de = ("de", lambda: gx.De(genome, objective="minimize", seed=seed), function, True)
+    if problem == "rosenbrock":
+        # AGENTS.md's PSO template (on Rosenbrock): 40 particles, the global topology
+        pso = ("pso", lambda: gx.Pso(genome, population_size=40, objective="minimize", seed=seed),
+               function, True)
+        return [cmaes, de, pso]
+    # the GA of examples/rastrigin.rs: polynomial mutation at the usual rate of 1 / length
+    ga = ("ga", lambda: gx.Ga(
         genome,
         population_size=100,
         select=gx.Tournament(3),
@@ -223,22 +296,16 @@ def real_solvers(problem, size, seed):
         scheme=gx.Generational(elitism=2),
         objective="minimize",
         seed=seed,
-    )
-    # differential evolution with its defaults: SHADE with current-to-pbest/1 and an archive, the
-    # number of genes + 10 individuals, and restarts
-    de = gx.De(genome, objective="minimize", seed=seed)
-    # CMA-ES with its defaults and IPOP restarts, for a multimodal function
-    cmaes = gx.Cmaes(genome, restarts="ipop", objective="minimize", seed=seed)
-    reached = lambda best: best <= RASTRIGIN_TARGET  # noqa: E731
-    return [
-        (name, algorithm, function, True, RASTRIGIN_TARGET, reached)
-        for name, algorithm in (("ga", ga), ("de", de), ("cma_es", cmaes))
-    ]
+    ), function, True)
+    return [ga, de, cmaes]
 
 
 def front_solvers(problem, size, seed):
-    """The matched settings of every library: SBX with eta 15 at 0.9 and polynomial mutation with
-    eta 20 at 1 / n; MOEA/D and NSGA-III with their usual SBX (eta 20 and 30 at 1)."""
+    """The matched settings (benchmarks/README.md): NSGA-II, SPEA2 and SMS-EMOA with SBX with eta
+    15 at 0.9 (their default rate) and polynomial mutation with eta 20 at 1 / n; NSGA-III (3
+    objectives only, as AGENTS.md presents it) with SBX with eta 30 at 1; MOEA/D with SBX with eta
+    20 at 1, 20 neighbors and neighborhood mating 0.9 (its defaults), Tchebycheff, or PBI with
+    theta 5 with 3 objectives."""
     function, variables, objectives, population, divisions = FRONT_PROBLEMS[problem]
     n = variables(size)
     genome = gx.Real((0.0, 1.0), length=n)
@@ -246,23 +313,23 @@ def front_solvers(problem, size, seed):
     mutation = gx.PolynomialMutation(20.0, rate=1.0 / n)
     sbx = gx.SimulatedBinaryCrossover(15.0)
     solvers = [
-        ("nsga2", gx.Nsga2(genome, objectives=minimize, population_size=population, crossover=sbx,
-                           mutation=mutation, seed=seed)),
+        ("nsga2", lambda: gx.Nsga2(genome, objectives=minimize, population_size=population,
+                                   crossover=sbx, mutation=mutation, seed=seed)),
     ]
     if objectives > 2:
-        solvers.append(("nsga3", gx.Nsga3(genome, objectives=minimize,
-                                          reference_directions=gx.das_dennis(objectives, divisions),
-                                          population_size=population,
-                                          crossover=gx.SimulatedBinaryCrossover(30.0), mutation=mutation,
-                                          seed=seed)))
+        solvers.append(("nsga3", lambda: gx.Nsga3(
+            genome, objectives=minimize, reference_directions=gx.das_dennis(objectives, divisions),
+            population_size=population, crossover=gx.SimulatedBinaryCrossover(30.0),
+            mutation=mutation, seed=seed)))
     solvers += [
-        ("spea2", gx.Spea2(genome, objectives=minimize, population_size=population, crossover=sbx,
-                           mutation=mutation, seed=seed)),
-        ("sms_emoa", gx.SmsEmoa(genome, objectives=minimize, population_size=population, crossover=sbx,
-                                mutation=mutation, seed=seed)),
-        ("moead", gx.Moead(genome, objectives=minimize, weights=gx.das_dennis(objectives, divisions),
-                           decomposition=gx.Tchebycheff() if objectives == 2 else gx.Pbi(5.0),
-                           crossover=gx.SimulatedBinaryCrossover(20.0), mutation=mutation, seed=seed)),
+        ("spea2", lambda: gx.Spea2(genome, objectives=minimize, population_size=population,
+                                   crossover=sbx, mutation=mutation, seed=seed)),
+        ("sms_emoa", lambda: gx.SmsEmoa(genome, objectives=minimize, population_size=population,
+                                        crossover=sbx, mutation=mutation, seed=seed)),
+        ("moead", lambda: gx.Moead(genome, objectives=minimize, weights=gx.das_dennis(objectives, divisions),
+                                   decomposition=gx.Tchebycheff() if objectives == 2 else gx.Pbi(5.0),
+                                   crossover=gx.SimulatedBinaryCrossover(20.0), mutation=mutation,
+                                   seed=seed)),
     ]
     return function, solvers
 
@@ -272,9 +339,20 @@ def front_solvers(problem, size, seed):
 # -------------------------------------------------------------------------------------------------
 
 
+def compare(common, solver, seed, counted, reported):
+    """The adapter's own count (rule 3) against the package's: they must agree."""
+    if counted != reported:
+        print(f"evaluations differ: {common['problem']} {common['size']} {solver} seed {seed}: the "
+              f"adapter counted {counted}, genoxide reports {reported}", file=sys.stderr, flush=True)
+
+
 def main():
+    global EVALUATIONS
     if sys.argv[1:] == ["--self-check"]:
         self_check()
+        return
+    if len(sys.argv) == 4 and sys.argv[1] == "values":
+        values(sys.argv[2], int(sys.argv[3]))
         return
     if len(sys.argv) != 8:
         print(__doc__, file=sys.stderr)
@@ -286,79 +364,107 @@ def main():
 
     for seed in range(seed_from, seed_to + 1):
         if problem in FRONT_PROBLEMS:
-            # multi-objective runs have a budget and no target: they print their final front
+            # multi-objective runs have a budget and no target: they print the non-dominated
+            # individuals of the final population (rule 7.2) and their solutions
             function, solvers = front_solvers(problem, size, seed)
-            for solver, algorithm in solvers:
+            for solver, make in solvers:
+                EVALUATIONS = 0
                 start = time.perf_counter()
-                result = algorithm.run(function, batch=True, evaluations=max_evaluations, time=max_seconds)
+                result = make().run(function, batch=True, evaluations=max_evaluations, time=max_seconds)
                 elapsed = time.perf_counter() - start
+                compare(common, solver, seed, EVALUATIONS, result.evaluations)
                 print(json.dumps({
                     **common, "solver": solver, "seed": seed, "time_s": round(elapsed, 6),
-                    "generations": result.generations, "evaluations": result.evaluations,
+                    "generations": result.generations, "evaluations": EVALUATIONS,
                     "front": result.front_objectives.tolist(),
+                    "solutions": result.front_genomes.tolist(),
                 }), flush=True)
             continue
 
         if problem == "onemax":
-            solvers = onemax_solvers(size, mode, seed)
+            solvers, target = onemax_solvers(size, mode, seed), size
         elif problem == "nqueens":
-            solvers = nqueens_solvers(size, seed)
+            solvers, target = nqueens_solvers(size, seed), 0
         elif problem in REAL_PROBLEMS:
-            solvers = real_solvers(problem, size, seed)
+            solvers, target = real_solvers(problem, size, seed), REAL_TARGET
         else:
             print(f"unknown problem {problem}", file=sys.stderr)
             sys.exit(2)
 
-        for solver, algorithm, function, batch, target, is_success in solvers:
-            # times building the algorithm (the random initial population) and running it
+        for solver, make, function, batch in solvers:
+            EVALUATIONS = 0
+            # the clock covers creating the algorithm and the run, which creates the initial
+            # population
             start = time.perf_counter()
-            result = algorithm.run(function, batch=batch, target=target, evaluations=max_evaluations,
-                                   time=max_seconds)
+            result = make().run(function, batch=batch, target=target, evaluations=max_evaluations,
+                                time=max_seconds)
             elapsed = time.perf_counter() - start
+            compare(common, solver, seed, EVALUATIONS, result.evaluations)
             best = result.best_fitness
+            success = best is not None and (best >= target if problem == "onemax" else best <= target)
+            solution = result.best_genome
             print(json.dumps({
                 **common, "solver": solver, "seed": seed, "time_s": round(elapsed, 6),
-                "generations": result.generations, "evaluations": result.evaluations,
-                "best": best, "target": target, "success": best is not None and bool(is_success(best)),
+                "generations": result.generations, "evaluations": EVALUATIONS,
+                "best": best, "target": target, "success": success,
+                "solution": (solution.astype(int) if problem == "onemax" else solution).tolist(),
             }), flush=True)
 
 
+def value(problem, size, solution):
+    """The value of one solution (or its objectives), with the adapter's functions."""
+    if problem == "onemax":
+        return int(onemax_batch(np.array([solution], dtype=bool))[0])
+    if problem == "nqueens":
+        return float(nqueens_batch(np.array([solution], dtype=np.int64))[0])
+    x = np.array([solution], dtype=np.float64)
+    if problem in REAL_PROBLEMS:
+        return float(REAL_PROBLEMS[problem][0](x)[0])
+    function, variables, objectives, *_ = FRONT_PROBLEMS[problem]
+    if problem.startswith("dtlz"):
+        return function(x, size)[0].tolist()
+    return function(x)[0].tolist()
+
+
+def values(problem, size):
+    for line in sys.stdin:
+        if line.strip():
+            print(json.dumps(value(problem, size, json.loads(line))), flush=True)
+
+
 def self_check():
-    """Compares the fitness functions with the DEAP adapter's at random points: run it once after
-    changing them."""
-    import importlib.util
+    """Compares the fitness functions with problems.py at random points, and the per-genome
+    N-Queens function with the batch one: run it after changing them."""
     from pathlib import Path
 
-    path = Path(__file__).resolve().parent.parent / "deap" / "bench.py"
-    spec = importlib.util.spec_from_file_location("deap_bench", path)
-    reference = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(reference)
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    import problems
+
     rng = np.random.default_rng(7)
 
     def close(ours, theirs, name):
-        ours, theirs = np.asarray(ours, dtype=float), np.asarray(theirs, dtype=float)
-        if not np.allclose(ours, theirs, rtol=1e-12, atol=1e-12):
+        if not problems.close(ours, theirs):
             raise SystemExit(f"{name}: {ours} != {theirs}")
 
     for size in (100, 1000):
-        bits = rng.random((20, size)) < 0.5
-        close([onemax(row) for row in bits], [reference.onemax(list(row))[0] for row in bits], "onemax")
-        close(onemax_batch(bits), [reference.onemax(list(row))[0] for row in bits], "onemax batch")
+        for bits in rng.random((20, size)) < 0.5:
+            reference = problems.onemax(bits.tolist())
+            close(onemax(bits), reference, "onemax")
+            close(value("onemax", size, bits.tolist()), reference, "onemax batch")
     for size in (8, 32, 64):
-        orders = np.array([rng.permutation(size) for _ in range(50)])
-        close(nqueens_batch(orders), [reference.nqueens([int(v) for v in row])[0] for row in orders], "nqueens")
-    for name, (function, low, high) in REAL_PROBLEMS.items():
+        for order in (rng.permutation(size) for _ in range(50)):
+            reference = problems.nqueens(order.tolist())
+            close(nqueens(order), reference, "nqueens")
+            close(value("nqueens", size, order.tolist()), reference, "nqueens batch")
+    for name, (_, low, high) in REAL_PROBLEMS.items():
         for size in (10, 30):
-            x = rng.uniform(low, high, (20, size))
-            close(function(x), [reference.REAL_PROBLEMS[name][0](list(row))[0] for row in x], name)
-            if name != "rosenbrock":
-                close(function(SHIFT[:size][None, :]), [0.0], f"{name} at the shift")
-    close(rosenbrock_batch(np.ones((1, 10))), [0.0], "rosenbrock at 1")
-    for name, (function, variables, *_rest) in FRONT_PROBLEMS.items():
-        n = variables(30 if name.startswith("zdt") else 3)
-        x = rng.random((20, n))
-        close(function(x), [reference.FRONT_PROBLEMS[name][0](list(row)) for row in x], name)
-    print("the fitness functions match the DEAP adapter's")
+            for x in rng.uniform(low, high, (20, size)):
+                close(value(name, size, x.tolist()), problems.value(name, size, x.tolist()), name)
+    for name, (_, variables, *_rest) in FRONT_PROBLEMS.items():
+        size = 30 if name.startswith("zdt") else 3
+        for x in rng.random((20, variables(size))):
+            close(value(name, size, x.tolist()), problems.value(name, size, x.tolist()), name)
+    print("the fitness functions match problems.py")
 
 
 if __name__ == "__main__":

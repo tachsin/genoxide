@@ -1,24 +1,51 @@
-//! Benchmark adapter for genoxide.
+//! Benchmark adapter for genoxide, the library of this repository.
 //!
-//! Usage: ga_bench_genoxide <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
-//! Prints one JSON line per solver per seed, see ../../README.md for the fields.
+//! Usage:
+//!   ga_bench_genoxide <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
+//!   ga_bench_genoxide values <problem> <size>
+//!
+//! The first prints one JSON line per solver per seed, with the best solution (or the final front
+//! and its solutions), see ../../README.md for the fields. The second reads one JSON solution per
+//! line from stdin and prints its value (or its list of objectives), with the fitness functions
+//! below.
+//!
+//! How each problem is solved, where genoxide's docs recommend each method and setting, what was
+//! left out and why, and the separate test runs: docs/benchmarks/libraries/genoxide.md. The
+//! citations next to each solver below point to genoxide's own docs: README.md, AGENTS.md,
+//! examples/ and the rustdoc in src/.
+//!
+//! The rules (docs/benchmarks/rules.md), as this adapter follows them:
+//! - the fitness functions are those of problems.py, written in Rust as genoxide's users write
+//!   them: a closure per genome;
+//! - every call of a fitness function is counted by the adapter itself (rule 3), and that count
+//!   is the reported "evaluations"; genoxide's own `Outcome::evaluations()` must be the same, and
+//!   a difference is printed to stderr;
+//! - a run ends at the target, the evaluation budget or the time cap only (rule 2.1): every
+//!   solver here either runs by itself until a stop condition (GA, PSO, local search) or restarts
+//!   by itself when it converges (DE's restarts, CMA-ES with IPOP restarts);
+//! - the clock covers building the algorithm, which creates the random initial population, and
+//!   the whole run (rule 4.1);
+//! - one thread: genoxide's `parallel` feature is off (Cargo.toml), and the engines evaluate
+//!   sequentially (rule 4.3);
+//! - each seed goes to the algorithm's `.seed(...)`, so a seed repeats a run exactly (rule 5.2).
 
 use genoxide::Objective::Minimize;
-use genoxide::multi::problems::{Dtlz1, Dtlz2, TestProblem, Zdt1, Zdt2, Zdt3};
 use genoxide::multi::{Decomposition, Moead, Nsga3, SmsEmoa, Spea2, das_dennis};
 use genoxide::prelude::*;
 use std::f64::consts::{E, PI};
+use std::io::BufRead;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------------------------
-// Fitness functions, identical to the ones in the other adapters
+// Fitness functions, identical to problems.py
 // ---------------------------------------------------------------------------------------------
 
 fn onemax(genome: &Bits) -> f64 {
     genome.count_ones() as f64
 }
 
-/// Number of diagonal conflicts, O(n) (same as DEAP's examples/ga/nqueens.py)
+/// Diagonal conflicts of queens at (i, order[i]): for each diagonal, its queens minus one
 fn nqueens(genome: &Order) -> f64 {
     let size = genome.len();
     let mut left_diagonal = vec![0usize; 2 * size - 1];
@@ -67,9 +94,106 @@ fn ackley(genome: &Reals) -> f64 {
     -20.0 * (-0.2 * squares.sqrt()).exp() - cosines.exp() + 20.0 + E
 }
 
+// The multi-objective problems, all objectives minimized, all variables in [0, 1]
+
+fn zdt_g(x: &[f64]) -> f64 {
+    1.0 + 9.0 * x[1..].iter().sum::<f64>() / (x.len() - 1) as f64
+}
+
+fn zdt1(x: &Reals) -> [f64; 2] {
+    let g = zdt_g(x);
+    [x[0], g * (1.0 - (x[0] / g).sqrt())]
+}
+
+fn zdt2(x: &Reals) -> [f64; 2] {
+    let g = zdt_g(x);
+    [x[0], g * (1.0 - (x[0] / g).powi(2))]
+}
+
+fn zdt3(x: &Reals) -> [f64; 2] {
+    let g = zdt_g(x);
+    [
+        x[0],
+        g * (1.0 - (x[0] / g).sqrt() - x[0] / g * (10.0 * PI * x[0]).sin()),
+    ]
+}
+
+// DTLZ1 and DTLZ2 with M objectives: objective m is the scale times head(v) of each of the first
+// M - 1 - m variables, times last(v) of the next one for m > 0
+fn dtlz<const M: usize>(
+    x: &[f64],
+    scale: f64,
+    head: impl Fn(f64) -> f64,
+    last: impl Fn(f64) -> f64,
+) -> [f64; M] {
+    let mut values = [0.0; M];
+    for (m, value) in values.iter_mut().enumerate() {
+        let mut f = scale;
+        for &v in &x[..M - 1 - m] {
+            f *= head(v);
+        }
+        if m > 0 {
+            f *= last(x[M - 1 - m]);
+        }
+        *value = f;
+    }
+    values
+}
+
+fn dtlz2<const M: usize>(x: &Reals) -> [f64; M] {
+    let g = x[M - 1..].iter().map(|v| (v - 0.5).powi(2)).sum::<f64>();
+    dtlz::<M>(
+        x,
+        1.0 + g,
+        |v| (v * PI / 2.0).cos(),
+        |v| (v * PI / 2.0).sin(),
+    )
+}
+
+fn dtlz1<const M: usize>(x: &Reals) -> [f64; M] {
+    let tail = &x[M - 1..];
+    let g = 100.0
+        * (tail.len() as f64
+            + tail
+                .iter()
+                .map(|v| (v - 0.5).powi(2) - (20.0 * PI * (v - 0.5)).cos())
+                .sum::<f64>());
+    dtlz::<M>(x, 0.5 * (1.0 + g), |v| v, |v| 1.0 - v)
+}
+
 // ---------------------------------------------------------------------------------------------
-// Runs
+// Output
 // ---------------------------------------------------------------------------------------------
+
+/// A genome as JSON: bits as 0 and 1, a permutation, reals (Rust's shortest exact form)
+trait Json {
+    fn json(&self) -> String;
+}
+
+impl Json for Bits {
+    fn json(&self) -> String {
+        let bits: Vec<&str> = self.iter().map(|bit| if bit { "1" } else { "0" }).collect();
+        format!("[{}]", bits.join(","))
+    }
+}
+
+impl Json for Order {
+    fn json(&self) -> String {
+        let genes: Vec<String> = self.iter().map(usize::to_string).collect();
+        format!("[{}]", genes.join(","))
+    }
+}
+
+impl Json for Reals {
+    fn json(&self) -> String {
+        numbers(self)
+    }
+}
+
+fn numbers(values: &[f64]) -> String {
+    let values: Vec<String> = values.iter().map(|v| format!("{v:?}")).collect();
+    format!("[{}]", values.join(","))
+}
 
 struct Args {
     problem: String,
@@ -82,77 +206,126 @@ struct Args {
 }
 
 impl Args {
-    // the budget: the target, the evaluations or the time, whichever comes first
+    // the budget: the target, the evaluations or the time, whichever comes first (rule 2.1)
     fn stop(&self, target: f64) -> Stop {
         Stop::target(target)
             .or(Stop::evaluations(self.max_evaluations))
             .or(Stop::time(Duration::from_secs_f64(self.max_seconds)))
     }
+
+    fn header(
+        &self,
+        solver: &str,
+        seed: u64,
+        time_s: f64,
+        generations: u64,
+        evaluations: u64,
+    ) -> String {
+        format!(
+            "\"library\":\"genoxide\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{evaluations}",
+            self.problem, self.size, self.mode,
+        )
+    }
 }
 
-fn print_result<G: Genome>(
+// the adapter's own count (rule 3) against genoxide's: they must agree
+fn compare_counts(args: &Args, solver: &str, seed: u64, counted: u64, reported: u64) {
+    if counted != reported {
+        eprintln!(
+            "evaluations differ: {} {} {solver} seed {seed}: the adapter counted {counted}, genoxide reports {reported}",
+            args.problem, args.size,
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Single-objective runs
+// ---------------------------------------------------------------------------------------------
+
+/// Builds an algorithm and runs it with `fitness`, counting every call, and prints the run. The
+/// clock covers building the algorithm (its random initial population) and the run.
+fn solve<A, G>(
     args: &Args,
     seed: u64,
     solver: &str,
-    outcome: &Outcome<G>,
-    time_s: f64,
     target: f64,
-    success: bool,
-) {
-    println!(
-        "{{\"library\":\"genoxide\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{},\"evaluations\":{},\"best\":{},\"target\":{target},\"success\":{success}}}",
-        args.problem,
-        args.size,
-        args.mode,
-        outcome.generations(),
-        outcome.evaluations(),
-        outcome.best_fitness().score().unwrap_or(f64::NAN),
-    );
-}
-
-// times building the algorithm (the random initial population) and running it
-fn timed<T>(run: impl FnOnce() -> T) -> (T, f64) {
+    build: impl FnOnce() -> Result<A>,
+    fitness: fn(&G) -> f64,
+) -> Result<()>
+where
+    A: Algorithm<Genome = G>,
+    G: Genome + Json,
+{
+    let calls = AtomicU64::new(0);
+    let counted = |genome: &G| {
+        calls.fetch_add(1, Ordering::Relaxed);
+        fitness(genome)
+    };
     let start = Instant::now();
-    let result = run();
-    (result, start.elapsed().as_secs_f64())
+    let outcome = Engine::new(build()?, counted)
+        .stop_when(args.stop(target))
+        .run()?;
+    let time_s = start.elapsed().as_secs_f64();
+    let evaluations = calls.load(Ordering::Relaxed);
+    compare_counts(args, solver, seed, evaluations, outcome.evaluations());
+    let best = outcome.best_fitness().score().unwrap_or(f64::NAN);
+    let success = if args.problem == "onemax" {
+        best >= target
+    } else {
+        best <= target
+    };
+    println!(
+        "{{{},\"best\":{best:?},\"target\":{target:?},\"success\":{success},\"solution\":{}}}",
+        args.header(solver, seed, time_s, outcome.generations(), evaluations),
+        outcome.best_genome().json(),
+    );
+    Ok(())
 }
 
 fn run_onemax(args: &Args, seed: u64) -> Result<()> {
     let size = args.size;
     let target = size as f64;
-    let (outcome, time_s) = timed(|| {
-        let builder = Ga::builder(Binary::new(size)?)
-            .select(Tournament::new(3)?)
-            .crossover(PointCrossover::two_point())
-            .seed(seed);
-        let ga = match args.mode.as_str() {
-            // as DEAP eaSimple: population 300, tournament 3, two-point crossover with probability
-            // 0.5, bit-flip with probability 1 / size on 20% of the children, no elitism
-            "matched" => builder
+    if args.mode == "matched" {
+        // the matched settings (benchmarks/README.md), as DEAP's eaSimple: population 300,
+        // tournament 3, two-point crossover with probability 0.5, bit-flip with probability
+        // 1 / size per gene on 20% of the children, no elitism
+        let build = || {
+            Ga::builder(Binary::new(size)?)
                 .population_size(300)
+                .select(Tournament::new(3)?)
+                .crossover(PointCrossover::two_point())
                 .crossover_rate(0.5)
+                .mutate(BitFlip::per_gene(1.0 / size as f64)?)
                 .mutation_rate(0.2)
-                .mutate(BitFlip::per_gene(1.0 / size as f64)?)
                 .scheme(Scheme::Generational { elitism: 0 })
-                .build()?,
-            // the binary template of AGENTS.md
-            _ => builder
-                .population_size(100)
-                .mutate(BitFlip::per_gene(1.0 / size as f64)?)
-                .build()?,
+                .seed(seed)
+                .build()
         };
-        Engine::new(ga, onemax).stop_when(args.stop(target)).run()
-    });
-    let outcome = outcome?;
-    let success = outcome.best_fitness().score() >= Some(target);
-    print_result(args, seed, "ga", &outcome, time_s, target, success);
-    Ok(())
+        return solve(args, seed, "ga", target, build, onemax);
+    }
+    // idiomatic: genoxide's OneMax, the same in examples/one_max.rs (lines 15-21), README.md's
+    // "A first look", AGENTS.md's first program and python/README.md: population 100, tournament
+    // 3, uniform crossover, bit-flip at 1 / length per gene; the default rates (crossover 0.9,
+    // mutation 1) and scheme (generational, elitism 1)
+    let build = || {
+        Ga::builder(Binary::new(size)?)
+            .population_size(100)
+            .select(Tournament::new(3)?)
+            .crossover(UniformCrossover::new())
+            .mutate(BitFlip::per_gene(1.0 / size as f64)?)
+            .seed(seed)
+            .build()
+    };
+    solve(args, seed, "ga", target, build, onemax)
 }
 
 fn run_nqueens(args: &Args, seed: u64) -> Result<()> {
-    // the permutation template of AGENTS.md: (μ+λ) with swap mutation
-    let (outcome, time_s) = timed(|| {
-        let ga = Ga::builder(Permutation::new(args.size)?)
+    let size = args.size;
+    // examples/n_queens.rs (lines 29-37), also AGENTS.md's permutation template and its scheme
+    // table ("(μ+λ): mutation-only search (with NoCrossover)"): (20 + 20) with tournament 2, no
+    // crossover and swap mutation
+    let build = || {
+        Ga::builder(Permutation::new(size)?)
             .population_size(20)
             .select(Tournament::new(2)?)
             .crossover(NoCrossover)
@@ -160,33 +333,41 @@ fn run_nqueens(args: &Args, seed: u64) -> Result<()> {
             .scheme(Scheme::MuPlusLambda { lambda: 20 })
             .minimize()
             .seed(seed)
-            .build()?;
-        Engine::new(ga, nqueens).stop_when(args.stop(0.0)).run()
-    });
-    let outcome = outcome?;
-    let success = outcome.best_fitness().score() == Some(0.0);
-    print_result(args, seed, "ga", &outcome, time_s, 0.0, success);
+            .build()
+    };
+    solve(args, seed, "ga", 0.0, build, nqueens)?;
 
-    // the local search template of AGENTS.md, like genetic_algorithm's stochastic hill climbing:
-    // one neighbor per step, and moves to equal neighbors
-    let (outcome, time_s) = timed(|| {
-        let search = LocalSearch::builder(Permutation::new(args.size)?)
+    // the N-Queens example of LocalSearch's rustdoc (src/algorithm/local_search.rs, lines
+    // 110-115): hill climbing with swap neighbors, the best of 4 per step, and the default
+    // acceptance NotWorse, which moves to equal neighbors across plateaus. AGENTS.md: local search
+    // "often beats a GA on permutations"
+    let build = || {
+        LocalSearch::builder(Permutation::new(size)?)
             .neighbor(SwapMutation::new())
-            .acceptance(Acceptance::NotWorse)
+            .neighbors(4)
             .minimize()
             .seed(seed)
-            .build()?;
-        Engine::new(search, nqueens).stop_when(args.stop(0.0)).run()
-    });
-    let outcome = outcome?;
-    let success = outcome.best_fitness().score() == Some(0.0);
-    print_result(args, seed, "local_search", &outcome, time_s, 0.0, success);
-    Ok(())
+            .build()
+    };
+    solve(args, seed, "local_search", 0.0, build, nqueens)?;
+
+    // tabu search, as python/examples/n_queens.py (N-Queens 64): swap neighbors, 32 per step,
+    // tenure 20. AGENTS.md: tabu search walks out of local optima; "use several neighbors"
+    let build = || {
+        LocalSearch::builder(Permutation::new(size)?)
+            .neighbor(SwapMutation::new())
+            .neighbors(32)
+            .acceptance(Acceptance::Tabu { tenure: 20 })
+            .minimize()
+            .seed(seed)
+            .build()
+    };
+    solve(args, seed, "tabu_search", 0.0, build, nqueens)
 }
 
-const RASTRIGIN_TARGET: f64 = 0.01;
+const REAL_TARGET: f64 = 0.01;
 
-// the real-valued problems: Rastrigin, Rosenbrock and Ackley, with their bounds
+// the real-valued problems: Rastrigin and Ackley (multimodal), Rosenbrock (unimodal-ish)
 fn run_real(args: &Args, seed: u64) -> Result<()> {
     let (bounds, fitness): (std::ops::RangeInclusive<f64>, fn(&Reals) -> f64) =
         match args.problem.as_str() {
@@ -196,29 +377,45 @@ fn run_real(args: &Args, seed: u64) -> Result<()> {
             other => unreachable!("unknown problem {other}"),
         };
     let real = || Real::uniform(args.size, bounds.clone());
-    let rastrigin = fitness;
-    let report = |solver: &str, outcome: Result<Outcome<Reals>>, time_s: f64| -> Result<()> {
-        let outcome = outcome?;
-        let success = outcome
-            .best_fitness()
-            .score()
-            .is_some_and(|best| best <= RASTRIGIN_TARGET);
-        print_result(
-            args,
-            seed,
-            solver,
-            &outcome,
-            time_s,
-            RASTRIGIN_TARGET,
-            success,
-        );
-        Ok(())
-    };
 
-    // the settings of examples/rastrigin.rs: polynomial mutation at the usual rate of 1 / length,
-    // single-threaded like every adapter
-    let (outcome, time_s) = timed(|| {
-        let ga = Ga::builder(real()?)
+    // CMA-ES, AGENTS.md: "the strongest general choice for continuous problems", with the
+    // defaults ("nothing needs tuning": population 4 + 3 ln n, initial step 0.3 of each range)
+    // and IPOP restarts, "for multimodal functions" (AGENTS.md's CMA-ES template, on Rastrigin;
+    // python/README.md; Restarts::Ipop in src/algorithm/cmaes.rs, "like Rastrigin"). Rosenbrock
+    // runs with them too: without restarts a converged CMA-ES samples around the same point
+    // until the budget, and rule 2.2 asks for the library's restarts
+    let cmaes = || {
+        Cmaes::builder(real()?)
+            .restarts(cmaes::Restarts::Ipop)
+            .minimize()
+            .seed(seed)
+            .build()
+    };
+    // differential evolution with its defaults, AGENTS.md's DE template (on Rastrigin):
+    // current-to-pbest/1 with an archive, SHADE's adaptation, the number of genes + 10
+    // individuals, and restarts when the population converges or stalls
+    let de = || De::builder(real()?).minimize().seed(seed).build();
+
+    if args.problem == "rosenbrock" {
+        solve(args, seed, "cma_es", REAL_TARGET, cmaes, fitness)?;
+        solve(args, seed, "de", REAL_TARGET, de, fitness)?;
+        // particle swarm, AGENTS.md's PSO template (on Rosenbrock, target 0.01): 40 particles
+        // ("20 to 50"), the default global topology and constriction coefficients
+        let pso = || {
+            Pso::builder(real()?)
+                .population_size(40)
+                .minimize()
+                .seed(seed)
+                .build()
+        };
+        return solve(args, seed, "pso", REAL_TARGET, pso, fitness);
+    }
+
+    // the GA of examples/rastrigin.rs (lines 27-36): population 100, tournament 3, uniform
+    // crossover, polynomial mutation with η 20 at 1 / length per gene ("the usual rate"), elitism
+    // 2; single-threaded like every adapter
+    let ga = || {
+        Ga::builder(real()?)
             .population_size(100)
             .select(Tournament::new(3)?)
             .crossover(UniformCrossover::new())
@@ -226,192 +423,209 @@ fn run_real(args: &Args, seed: u64) -> Result<()> {
             .scheme(Scheme::Generational { elitism: 2 })
             .minimize()
             .seed(seed)
-            .build()?;
-        Engine::new(ga, rastrigin)
-            .stop_when(args.stop(RASTRIGIN_TARGET))
-            .run()
-    });
-    report("ga", outcome, time_s)?;
-
-    // differential evolution with its defaults, as AGENTS.md suggests: SHADE with
-    // current-to-pbest/1 and an archive, the number of genes + 10 individuals, and restarts
-    let (outcome, time_s) = timed(|| {
-        let de = De::builder(real()?)
-            .minimize()
-            .seed(seed)
-            .build()?;
-        Engine::new(de, rastrigin)
-            .stop_when(args.stop(RASTRIGIN_TARGET))
-            .run()
-    });
-    report("de", outcome, time_s)?;
-
-    // the CMA-ES template of AGENTS.md: the defaults, with IPOP restarts for a multimodal function
-    let (outcome, time_s) = timed(|| {
-        let cmaes = Cmaes::builder(real()?)
-            .restarts(cmaes::Restarts::Ipop)
-            .minimize()
-            .seed(seed)
-            .build()?;
-        Engine::new(cmaes, rastrigin)
-            .stop_when(args.stop(RASTRIGIN_TARGET))
-            .run()
-    });
-    report("cma_es", outcome, time_s)
+            .build()
+    };
+    solve(args, seed, "ga", REAL_TARGET, ga, fitness)?;
+    solve(args, seed, "de", REAL_TARGET, de, fitness)?;
+    solve(args, seed, "cma_es", REAL_TARGET, cmaes, fitness)
 }
 
-// multi-objective runs have a budget and no target: they print their final front, and run.py
-// computes its hypervolume the same way for every library
-fn print_front<G: Genome, const M: usize>(
+// ---------------------------------------------------------------------------------------------
+// Multi-objective runs
+// ---------------------------------------------------------------------------------------------
+
+// Builds and runs one multi-objective algorithm with `fitness`, counting every call, and prints
+// the non-dominated individuals of its final population (rule 7.2) and their solutions. A run
+// has a budget and no target; run.py computes the hypervolume the same way for every library.
+fn solve_front<A, const M: usize>(
     args: &Args,
     seed: u64,
     solver: &str,
-    outcome: &genoxide::multi::MultiOutcome<G, M>,
-    time_s: f64,
-) {
-    let front: Vec<String> = outcome
-        .front_values()
-        .iter()
-        .map(|values| {
-            let values: Vec<String> = values.iter().map(|v| format!("{v:?}")).collect();
-            format!("[{}]", values.join(","))
-        })
-        .collect();
-    println!(
-        "{{\"library\":\"genoxide\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{},\"evaluations\":{},\"front\":[{}]}}",
-        args.problem,
-        args.size,
-        args.mode,
-        outcome.generations(),
-        outcome.evaluations(),
-        front.join(","),
-    );
-}
-
-// the matched settings of every library: SBX with η 15 at 0.9 and polynomial mutation with η 20
-// at 1 / n; MOEA/D and NSGA-III with their usual SBX (η 20 and 30 at 1)
-fn run_front_problem<P, const M: usize>(
-    args: &Args,
-    seed: u64,
-    problem: P,
-    population: usize,
-    divisions: usize,
-    solvers: &[&str],
+    build: impl FnOnce() -> Result<A>,
+    fitness: fn(&Reals) -> [f64; M],
 ) -> Result<()>
 where
-    P: TestProblem<M> + Copy,
+    A: genoxide::multi::MultiObjectiveAlgorithm<M, Genome = Reals>,
 {
-    let real = problem.real();
-    let rate = 1.0 / real.bounds().len() as f64;
-    let stop = || {
-        Stop::evaluations(args.max_evaluations)
-            .or(Stop::time(Duration::from_secs_f64(args.max_seconds)))
+    let calls = AtomicU64::new(0);
+    let counted = |genome: &Reals| {
+        calls.fetch_add(1, Ordering::Relaxed);
+        fitness(genome)
     };
+    let start = Instant::now();
+    let outcome = MultiEngine::new(build()?, counted)
+        .stop_when(
+            Stop::evaluations(args.max_evaluations)
+                .or(Stop::time(Duration::from_secs_f64(args.max_seconds))),
+        )
+        .run()?;
+    let time_s = start.elapsed().as_secs_f64();
+    let evaluations = calls.load(Ordering::Relaxed);
+    compare_counts(args, solver, seed, evaluations, outcome.evaluations());
+    // the non-dominated individuals of the final population, each with its solution
+    let (front, solutions): (Vec<String>, Vec<String>) = outcome
+        .front()
+        .iter()
+        .filter_map(|individual| {
+            let values = individual.fitness()?.values()?;
+            Some((numbers(&values), individual.genome().json()))
+        })
+        .unzip();
+    println!(
+        "{{{},\"front\":[{}],\"solutions\":[{}]}}",
+        args.header(solver, seed, time_s, outcome.generations(), evaluations),
+        front.join(","),
+        solutions.join(","),
+    );
+    Ok(())
+}
+
+// The matched settings (benchmarks/README.md): NSGA-II, SPEA2 and SMS-EMOA with 100 individuals
+// (92 with 3 objectives), SBX with η 15 at 0.9 (their default rate) and polynomial mutation with
+// η 20 at 1 / n; NSGA-III with Das-Dennis directions (12 divisions with 3 objectives) and SBX
+// with η 30 at 1 (its default rate); MOEA/D with 100 weight vectors (91 with 3 objectives), 20
+// neighbors and parents from the neighborhood with probability 0.9 (its defaults), Tchebycheff
+// (PBI with θ 5 with 3 objectives), SBX with η 20 at 1 (its default rate). NSGA-III runs only
+// with 3 objectives: AGENTS.md presents it "for 3 or more objectives".
+fn run_front_problem<const M: usize>(
+    args: &Args,
+    seed: u64,
+    variables: usize,
+    fitness: fn(&Reals) -> [f64; M],
+) -> Result<()> {
+    let (population, divisions) = if M == 2 { (100, 99) } else { (92, 12) };
+    let real = || Real::uniform(variables, 0.0..=1.0);
+    let mutation = || PolynomialMutation::per_gene(1.0 / variables as f64, 20.0);
     let objectives = [Minimize; M];
-    for &solver in solvers {
-        let start = Instant::now();
-        let outcome = match solver {
-            "nsga2" => {
-                let algorithm = Nsga2::builder(real.clone(), objectives)
-                    .population_size(population)
-                    .crossover(SimulatedBinaryCrossover::new(15.0)?)
-                    .mutate(PolynomialMutation::per_gene(rate, 20.0)?)
-                    .seed(seed)
-                    .build()?;
-                MultiEngine::new(algorithm, problem)
-                    .stop_when(stop())
-                    .run()?
-            }
-            "spea2" => {
-                let algorithm = Spea2::builder(real.clone(), objectives)
-                    .population_size(population)
-                    .crossover(SimulatedBinaryCrossover::new(15.0)?)
-                    .mutate(PolynomialMutation::per_gene(rate, 20.0)?)
-                    .seed(seed)
-                    .build()?;
-                MultiEngine::new(algorithm, problem)
-                    .stop_when(stop())
-                    .run()?
-            }
-            "sms_emoa" => {
-                let algorithm = SmsEmoa::builder(real.clone(), objectives)
-                    .population_size(population)
-                    .crossover(SimulatedBinaryCrossover::new(15.0)?)
-                    .mutate(PolynomialMutation::per_gene(rate, 20.0)?)
-                    .seed(seed)
-                    .build()?;
-                MultiEngine::new(algorithm, problem)
-                    .stop_when(stop())
-                    .run()?
-            }
-            "moead" => {
-                let decomposition = if M == 2 {
-                    Decomposition::Tchebycheff
-                } else {
-                    Decomposition::Pbi { theta: 5.0 }
-                };
-                let algorithm =
-                    Moead::builder(real.clone(), objectives, das_dennis::<M>(divisions))
-                        .decomposition(decomposition)
-                        .crossover(SimulatedBinaryCrossover::new(20.0)?)
-                        .mutate(PolynomialMutation::per_gene(rate, 20.0)?)
-                        .seed(seed)
-                        .build()?;
-                MultiEngine::new(algorithm, problem)
-                    .stop_when(stop())
-                    .run()?
-            }
-            "nsga3" => {
-                let algorithm =
-                    Nsga3::builder(real.clone(), objectives, das_dennis::<M>(divisions))
-                        .population_size(population)
-                        .crossover(SimulatedBinaryCrossover::new(30.0)?)
-                        .mutate(PolynomialMutation::per_gene(rate, 20.0)?)
-                        .seed(seed)
-                        .build()?;
-                MultiEngine::new(algorithm, problem)
-                    .stop_when(stop())
-                    .run()?
-            }
-            other => unreachable!("unknown solver {other}"),
+
+    let nsga2 = || {
+        Nsga2::builder(real()?, objectives)
+            .population_size(population)
+            .crossover(SimulatedBinaryCrossover::new(15.0)?)
+            .mutate(mutation()?)
+            .seed(seed)
+            .build()
+    };
+    solve_front(args, seed, "nsga2", nsga2, fitness)?;
+    if M > 2 {
+        let nsga3 = || {
+            Nsga3::builder(real()?, objectives, das_dennis::<M>(divisions))
+                .population_size(population)
+                .crossover(SimulatedBinaryCrossover::new(30.0)?)
+                .mutate(mutation()?)
+                .seed(seed)
+                .build()
         };
-        print_front(args, seed, solver, &outcome, start.elapsed().as_secs_f64());
+        solve_front(args, seed, "nsga3", nsga3, fitness)?;
+    }
+    let spea2 = || {
+        Spea2::builder(real()?, objectives)
+            .population_size(population)
+            .crossover(SimulatedBinaryCrossover::new(15.0)?)
+            .mutate(mutation()?)
+            .seed(seed)
+            .build()
+    };
+    solve_front(args, seed, "spea2", spea2, fitness)?;
+    let sms_emoa = || {
+        SmsEmoa::builder(real()?, objectives)
+            .population_size(population)
+            .crossover(SimulatedBinaryCrossover::new(15.0)?)
+            .mutate(mutation()?)
+            .seed(seed)
+            .build()
+    };
+    solve_front(args, seed, "sms_emoa", sms_emoa, fitness)?;
+    let moead = || {
+        let decomposition = if M == 2 {
+            Decomposition::Tchebycheff
+        } else {
+            Decomposition::Pbi { theta: 5.0 }
+        };
+        Moead::builder(real()?, objectives, das_dennis::<M>(divisions))
+            .decomposition(decomposition)
+            .crossover(SimulatedBinaryCrossover::new(20.0)?)
+            .mutate(mutation()?)
+            .seed(seed)
+            .build()
+    };
+    solve_front(args, seed, "moead", moead, fitness)
+}
+
+fn run_front(args: &Args, seed: u64) -> Result<()> {
+    // ZDT: `size` variables; DTLZ: `size` objectives, with k = 10 (DTLZ2) and 5 (DTLZ1) distance
+    // variables (problems.py)
+    match (args.problem.as_str(), args.size) {
+        ("zdt1", n) => run_front_problem(args, seed, n, zdt1),
+        ("zdt2", n) => run_front_problem(args, seed, n, zdt2),
+        ("zdt3", n) => run_front_problem(args, seed, n, zdt3),
+        ("dtlz2", 3) => run_front_problem(args, seed, 3 + 9, dtlz2::<3>),
+        ("dtlz1", 3) => run_front_problem(args, seed, 3 + 4, dtlz1::<3>),
+        (other, size) => unreachable!("unsupported problem {other} {size}"),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The values command (rule 1.2)
+// ---------------------------------------------------------------------------------------------
+
+// a JSON array of numbers, e.g. [1, 0, 1] or [0.25, -1e-05]
+fn parse_numbers(line: &str) -> Vec<f64> {
+    let inner = line.trim().trim_start_matches('[').trim_end_matches(']');
+    if inner.trim().is_empty() {
+        return Vec::new();
+    }
+    inner
+        .split(',')
+        .map(|value| {
+            let value = value.trim();
+            match value {
+                "true" => 1.0,
+                "false" => 0.0,
+                _ => value.parse().expect("a number"),
+            }
+        })
+        .collect()
+}
+
+fn value(problem: &str, size: usize, x: Vec<f64>) -> Result<String> {
+    Ok(match (problem, size) {
+        ("onemax", _) => format!("{:?}", onemax(&x.iter().map(|&v| v != 0.0).collect())),
+        ("nqueens", _) => format!(
+            "{:?}",
+            nqueens(&Order::new(x.iter().map(|&v| v as usize).collect())?)
+        ),
+        ("rastrigin", _) => format!("{:?}", rastrigin(&Reals::from(x))),
+        ("rosenbrock", _) => format!("{:?}", rosenbrock(&Reals::from(x))),
+        ("ackley", _) => format!("{:?}", ackley(&Reals::from(x))),
+        ("zdt1", _) => numbers(&zdt1(&Reals::from(x))),
+        ("zdt2", _) => numbers(&zdt2(&Reals::from(x))),
+        ("zdt3", _) => numbers(&zdt3(&Reals::from(x))),
+        ("dtlz2", 3) => numbers(&dtlz2::<3>(&Reals::from(x))),
+        ("dtlz1", 3) => numbers(&dtlz1::<3>(&Reals::from(x))),
+        (other, size) => panic!("unsupported problem {other} {size}"),
+    })
+}
+
+fn values(problem: &str, size: usize) -> Result<()> {
+    for line in std::io::stdin().lock().lines() {
+        let line = line.expect("stdin");
+        if line.trim().is_empty() {
+            continue;
+        }
+        println!("{}", value(problem, size, parse_numbers(&line))?);
     }
     Ok(())
 }
 
-fn run_front(args: &Args, seed: u64) -> Result<()> {
-    let two = ["nsga2", "spea2", "sms_emoa", "moead"];
-    match args.problem.as_str() {
-        "zdt1" => run_front_problem(args, seed, Zdt1::new(args.size), 100, 99, &two),
-        "zdt2" => run_front_problem(args, seed, Zdt2::new(args.size), 100, 99, &two),
-        "zdt3" => run_front_problem(args, seed, Zdt3::new(args.size), 100, 99, &two),
-        "dtlz1" => run_front_problem(
-            args,
-            seed,
-            Dtlz1::<3>::default(),
-            92,
-            12,
-            &["nsga2", "nsga3", "spea2", "sms_emoa", "moead"],
-        ),
-        // size: the number of objectives
-        "dtlz2" => run_front_problem(
-            args,
-            seed,
-            Dtlz2::<3>::default(),
-            92,
-            12,
-            &["nsga2", "nsga3", "spea2", "sms_emoa", "moead"],
-        ),
-        other => unreachable!("unknown problem {other}"),
-    }
-}
-
 fn main() -> Result<()> {
     let raw: Vec<String> = std::env::args().skip(1).collect();
+    if raw.len() == 3 && raw[0] == "values" {
+        return values(&raw[1], raw[2].parse().expect("size"));
+    }
     if raw.len() != 7 {
         eprintln!(
-            "usage: ga_bench_genoxide <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>"
+            "usage: ga_bench_genoxide <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>\n       ga_bench_genoxide values <problem> <size>"
         );
         std::process::exit(2);
     }
@@ -440,8 +654,10 @@ fn main() -> Result<()> {
 }
 
 #[cfg(test)]
-mod shift_tests {
+mod tests {
     use super::*;
+    use genoxide::multi::MultiFitnessFunction;
+    use genoxide::multi::problems::{Dtlz1, Dtlz2, Zdt1, Zdt2, Zdt3};
 
     #[test]
     fn shifted_functions() {
@@ -452,5 +668,37 @@ mod shift_tests {
         assert!(ackley(&Reals::from(s.clone())).abs() < 1e-12);
         assert!((rastrigin(&Reals::from(x.clone())) - 87.78147018265213).abs() < 1e-9);
         assert!((ackley(&Reals::from(x.clone())) - 5.149902035382837).abs() < 1e-9);
+    }
+
+    // genoxide's own test problems (multi::problems) agree with the adapter's functions
+    #[test]
+    fn genoxide_test_problems_agree() {
+        let close = |a: &[f64], b: &[f64]| {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b)
+                    .all(|(a, b)| (a - b).abs() <= 1e-12 * a.abs().max(b.abs()).max(1.0))
+        };
+        for i in 0..50 {
+            let point = |n: usize| -> Reals {
+                (0..n)
+                    .map(|j| ((i * 7919 + j * 104_729) % 1000) as f64 / 999.0)
+                    .collect()
+            };
+            let x = point(30);
+            assert!(close(&zdt1(&x), Zdt1::new(30).evaluate(&x).as_ref()));
+            assert!(close(&zdt2(&x), Zdt2::new(30).evaluate(&x).as_ref()));
+            assert!(close(&zdt3(&x), Zdt3::new(30).evaluate(&x).as_ref()));
+            let x = point(12);
+            assert!(close(
+                &dtlz2::<3>(&x),
+                Dtlz2::<3>::default().evaluate(&x).as_ref()
+            ));
+            let x = point(7);
+            assert!(close(
+                &dtlz1::<3>(&x),
+                Dtlz1::<3>::default().evaluate(&x).as_ref()
+            ));
+        }
     }
 }
