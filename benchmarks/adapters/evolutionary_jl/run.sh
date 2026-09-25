@@ -8,8 +8,10 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JULIA="${JULIA:-$HOME/opt/julia/bin/julia}"
 export JULIA_DEPOT_PATH="${JULIA_DEPOT_PATH:-$HOME/opt/julia-depot}"
+# one thread (rule 4.3): one Julia thread, one GC mark thread and no concurrent GC sweep thread
+# (--gcthreads=1,0, Julia 1.10+), BLAS with one thread
 export JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 if [ "${1:-}" = "--build" ]; then
-    exec "$JULIA" --project="$DIR" --threads=1 -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
+    exec "$JULIA" --project="$DIR" --threads=1 --gcthreads=1,0 -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
 fi
-exec "$JULIA" --project="$DIR" --threads=1 "$DIR/bench.jl" "$@"
+exec "$JULIA" --project="$DIR" --threads=1 --gcthreads=1,0 "$DIR/bench.jl" "$@"
