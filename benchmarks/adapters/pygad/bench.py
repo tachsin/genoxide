@@ -300,10 +300,19 @@ def non_dominated(points):
     ]
 
 
+# run.py's early stop: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took
+# CAPPED of it) without reaching the target runs no more seeds
+EARLY_SEEDS = 3
+CAPPED = 0.98
+
+
 def run_fronts(problem, size, mode, seed_from, seed_to, max_evaluations, max_seconds):
     function, variables, objectives, population_size = FRONT_PROBLEMS[problem]
     n = variables(size)
-    for seed in range(seed_from, seed_to + 1):
+    capped = 0
+    for index, seed in enumerate(range(seed_from, seed_to + 1)):
+        if index >= EARLY_SEEDS and capped == EARLY_SEEDS:
+            break
         random.seed(seed)
         numpy.random.seed(seed)
         budget = Budget(max_evaluations, max_seconds)
@@ -341,6 +350,7 @@ def run_fronts(problem, size, mode, seed_from, seed_to, max_evaluations, max_sec
         ga.run()
         elapsed = time.perf_counter() - start
 
+        capped += index < EARLY_SEEDS and elapsed >= CAPPED * max_seconds
         # the final survivors: the N elites PyGAD selects from the last population
         survivors = numpy.asarray(ga.last_generation_elitism_indices, dtype=int)
         fitness = numpy.asarray(ga.last_generation_fitness, dtype=float)[survivors]
@@ -370,7 +380,10 @@ def main():
         run_fronts(problem, size, mode, seed_from, seed_to, max_evaluations, max_seconds)
         return
 
-    for seed in range(seed_from, seed_to + 1):
+    capped = 0
+    for index, seed in enumerate(range(seed_from, seed_to + 1)):
+        if index >= EARLY_SEEDS and capped == EARLY_SEEDS:
+            break
         random.seed(seed)
         numpy.random.seed(seed)
         config, score, is_success = config_for(problem, size, mode, seed)
@@ -395,6 +408,7 @@ def main():
         ga.run()
         elapsed = time.perf_counter() - start
 
+        capped += index < EARLY_SEEDS and not is_success(budget.best) and elapsed >= CAPPED * max_seconds
         best = budget.best
         if problem != "onemax":
             best = -best  # back to the minimized value

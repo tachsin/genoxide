@@ -269,6 +269,31 @@ def library_version(kind, package, adapter=None, label=None):
     return version
 
 
+# A solver whose first EARLY_SEEDS runs all hit the time cap, without reaching the target (a
+# multi-objective run has none), runs no more seeds: the others would take the whole cap each, for
+# the same result. The adapters whose solvers can hit the cap (nevergrad, metaheuristics_jl and
+# pygad) skip those seeds themselves; stop_early applies the same rule to every adapter's runs.
+EARLY_SEEDS = 3
+# a run that took this share of the cap was stopped by it
+CAPPED = 0.98
+
+
+def hit_the_cap(run, max_seconds):
+    return not run.get("success") and run["time_s"] >= CAPPED * max_seconds
+
+
+def stop_early(runs, max_seconds):
+    """The runs without the seeds after EARLY_SEEDS of a solver whose first EARLY_SEEDS runs all
+    hit the time cap."""
+    seeds = sorted({run["seed"] for run in runs})[:EARLY_SEEDS]
+    stopped = set()
+    for solver in {run["solver"] for run in runs}:
+        first = [run for run in runs if run["solver"] == solver and run["seed"] in seeds]
+        if len(first) == EARLY_SEEDS and all(hit_the_cap(run, max_seconds) for run in first):
+            stopped.add(solver)
+    return [run for run in runs if run["solver"] not in stopped or run["seed"] in seeds]
+
+
 def run_adapter(adapter, problem, size, mode, seeds, max_evaluations, max_seconds):
     command = adapter["command"] + [
         problem, str(size), mode, "0", str(seeds - 1), str(max_evaluations), str(max_seconds),
@@ -278,7 +303,9 @@ def run_adapter(adapter, problem, size, mode, seeds, max_evaluations, max_second
     if completed.returncode != 0:
         print(completed.stderr, file=sys.stderr)
         raise SystemExit(f"adapter failed: {' '.join(command)}")
-    runs = [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+    runs = stop_early(
+        [json.loads(line) for line in completed.stdout.splitlines() if line.strip()], max_seconds
+    )
     for run in runs:
         if is_front(run["problem"]):
             # the same hypervolume for every library; the front itself isn't kept

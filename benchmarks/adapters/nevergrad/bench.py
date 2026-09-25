@@ -75,6 +75,11 @@ def ackley(x):
 
 TARGET = 0.01
 
+# run.py's early stop: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took
+# CAPPED of it) without reaching the target runs no more seeds
+EARLY_SEEDS = 3
+CAPPED = 0.98
+
 # (fitness function, (lower, upper) of every variable)
 REAL_PROBLEMS = {
     "rastrigin": (rastrigin, (-5.12, 5.12)),
@@ -254,11 +259,15 @@ def main():
         return
     if problem in FRONT_PROBLEMS:
         function, variables = FRONT_PROBLEMS[problem]
-        for seed in range(seed_from, seed_to + 1):
+        capped = 0
+        for index, seed in enumerate(range(seed_from, seed_to + 1)):
+            if index >= EARLY_SEEDS and capped == EARLY_SEEDS:
+                break
             np.random.seed(seed)
             start = time.perf_counter()
             front, evaluations = run_front(function, variables(size), seed, max_evaluations, max_seconds)
             elapsed = time.perf_counter() - start
+            capped += index < EARLY_SEEDS and elapsed >= CAPPED * max_seconds
             print(json.dumps({
                 "library": "nevergrad",
                 "solver": "de",
@@ -300,14 +309,18 @@ def main():
         print(f"unknown problem {problem}", file=sys.stderr)
         sys.exit(2)
 
-    for seed in range(seed_from, seed_to + 1):
+    capped = {solver: 0 for solver, _ in solvers}
+    for index, seed in enumerate(range(seed_from, seed_to + 1)):
         for solver, optimizer_class in solvers:
+            if index >= EARLY_SEEDS and capped[solver] == EARLY_SEEDS:
+                continue
             np.random.seed(seed)
             param = parametrization()
             start = time.perf_counter()
             loss, evaluations = run(optimizer_class, param, function, is_success, seed, max_evaluations, max_seconds)
             elapsed = time.perf_counter() - start
             best = to_best(loss)
+            capped[solver] += index < EARLY_SEEDS and not is_success(loss) and elapsed >= CAPPED * max_seconds
             print(json.dumps({
                 "library": "nevergrad",
                 "solver": solver,
