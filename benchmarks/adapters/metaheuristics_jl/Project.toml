@@ -1,0 +1,6 @@
+[deps]
+Metaheuristics = "bcdb8e00-2c21-11e9-3065-2b553b22f898"
+
+[compat]
+Metaheuristics = "=3.5.0"
+julia = "1.10"

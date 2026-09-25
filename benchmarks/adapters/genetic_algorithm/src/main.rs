@@ -95,8 +95,43 @@ impl Fitness for NQueens {
 }
 
 const RASTRIGIN_PRECISION: f64 = 1e-6;
+// Rastrigin, Rosenbrock and Ackley
+// Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
+// towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
+fn shift(i: usize) -> f64 {
+    2.0 * ((37 * i + 11) % 101) as f64 / 101.0 - 1.0
+}
+
+fn rastrigin_value(x: &[f64]) -> f64 {
+    10.0 * x.len() as f64
+        + x.iter()
+            .enumerate()
+            .map(|(i, x)| {
+                let x = x - shift(i);
+                x * x - 10.0 * (2.0 * std::f64::consts::PI * x).cos()
+            })
+            .sum::<f64>()
+}
+
+fn rosenbrock_value(x: &[f64]) -> f64 {
+    x.windows(2)
+        .map(|pair| 100.0 * (pair[1] - pair[0] * pair[0]).powi(2) + (1.0 - pair[0]).powi(2))
+        .sum()
+}
+
+fn ackley_value(x: &[f64]) -> f64 {
+    let n = x.len() as f64;
+    let shifted = || x.iter().enumerate().map(|(i, x)| x - shift(i));
+    let squares = shifted().map(|x| x * x).sum::<f64>() / n;
+    let cosines = shifted()
+        .map(|x| (2.0 * std::f64::consts::PI * x).cos())
+        .sum::<f64>()
+        / n;
+    -20.0 * (-0.2 * squares.sqrt()).exp() - cosines.exp() + 20.0 + std::f64::consts::E
+}
+
 #[derive(Clone, Debug)]
-struct Rastrigin(Budget);
+struct Rastrigin(Budget, fn(&[f64]) -> f64);
 impl Fitness for Rastrigin {
     type Genotype = RangeGenotype<f64>;
     fn calculate_for_chromosome(
@@ -105,13 +140,7 @@ impl Fitness for Rastrigin {
         _genotype: &FitnessGenotype<Self>,
     ) -> Option<FitnessValue> {
         self.0.count();
-        let value = 10.0 * chromosome.genes.len() as f64
-            + chromosome
-                .genes
-                .iter()
-                .map(|x| x * x - 10.0 * (2.0 * std::f64::consts::PI * x).cos())
-                .sum::<f64>();
-        Some(fitness_value(value, RASTRIGIN_PRECISION))
+        Some(fitness_value((self.1)(&chromosome.genes), RASTRIGIN_PRECISION))
     }
 }
 
@@ -281,19 +310,29 @@ fn nqueens(args: &Args, seed: u64) {
 
 const RASTRIGIN_TARGET: f64 = 0.01;
 fn rastrigin(args: &Args, seed: u64) {
+    let (low, high, function): (f64, f64, fn(&[f64]) -> f64) = match args.problem.as_str() {
+        "rastrigin" => (-5.12, 5.12, rastrigin_value),
+        "rosenbrock" => (-5.0, 10.0, rosenbrock_value),
+        _ => (-32.768, 32.768, ackley_value),
+    };
     run(args, seed, |budget| {
         let genotype = RangeGenotype::<f64>::builder()
             .with_genes_size(args.size)
-            .with_allele_range(-5.12..=5.12)
+            .with_allele_range(low..=high)
             // full range first, then narrowing bandwidths, advancing when stale (AGENTS.md)
             .with_mutation_type(MutationType::RangeScaled(vec![
-                10.24, 5.0, 1.0, 0.1, 0.01, 0.001,
+                high - low,
+                (high - low) / 2.0,
+                1.0,
+                0.1,
+                0.01,
+                0.001,
             ]))
             .build()
             .unwrap();
         let evolve = Evolve::builder()
             .with_genotype(genotype)
-            .with_fitness(Rastrigin(budget.clone()))
+            .with_fitness(Rastrigin(budget.clone(), function))
             .with_fitness_ordering(FitnessOrdering::Minimize)
             .with_target_fitness_score(fitness_value(RASTRIGIN_TARGET, RASTRIGIN_PRECISION))
             .with_max_stale_generations(50)
@@ -337,11 +376,28 @@ fn main() {
         match args.problem.as_str() {
             "onemax" => onemax(&args, seed),
             "nqueens" => nqueens(&args, seed),
-            "rastrigin" => rastrigin(&args, seed),
+            "rastrigin" | "rosenbrock" | "ackley" => rastrigin(&args, seed),
+            "zdt1" | "zdt2" | "zdt3" | "dtlz1" | "dtlz2" => {}
             other => {
                 eprintln!("unknown problem {}", other);
                 std::process::exit(2);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod shift_tests {
+    use super::*;
+
+    #[test]
+    fn shifted_functions() {
+        // 0 at the shift, and the values of a Python reference at a fixed point
+        let s: Vec<f64> = (0..10).map(shift).collect();
+        let x: Vec<f64> = (0..10).map(|i| 0.5 * (i % 7) as f64 - 1.5).collect();
+        assert!(rastrigin_value(&s).abs() < 1e-12);
+        assert!(ackley_value(&s).abs() < 1e-12);
+        assert!((rastrigin_value(&x) - 87.78147018265213).abs() < 1e-9);
+        assert!((ackley_value(&x) - 5.149902035382837).abs() < 1e-9);
     }
 }

@@ -1,0 +1,19 @@
+[package]
+name = "ga_bench_moors"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# moors has no rayon or BLAS dependency: its linear algebra (faer, ndarray) runs single-threaded
+moors = "=0.2.11"
+# the ndarray of moors (its fitness functions take and return ndarray arrays)
+ndarray = "0.16.1"
+
+[target.'cfg(unix)'.dependencies]
+# moors prints warnings with println!: stdout is redirected to stderr during the runs
+libc = "0.2"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
