@@ -16,16 +16,17 @@ How a run follows the rules (docs/benchmarks/rules.md):
 - The fitness functions are vectorized numpy on a population matrix, pymoo's `Problem` (rule 1.2;
   docs/source/problems/definition.md, "Problem (vectorized)"). `Counter` counts every row
   (rule 3) and keeps the best solution evaluated.
-- The adapter's `Termination` replaces pymoo's default termination, which stops a single-objective
-  run after 100,000 evaluations, 1,000 generations or 20-30 generations without improvement
-  (docs/source/interface/termination.md). pymoo documents custom termination objects on the same
-  page, so the criteria are off (rule 2.2).
 - A single-objective run stops at the target (checked after each generation), at the evaluation
   budget or at the time cap. The budget is exact: a batch that would go past it is evaluated only up
   to it, and the run stops there.
-- A solver that still ends by itself (CMA-ES after its restarts, a GA whose mating finds no new
-  child) starts again from a new random start, seed * 1000 + restart, keeping the best and
-  counting every evaluation (rule 2.2).
+- Rule 2.2: pymoo's default termination (docs/source/interface/termination.md) mixes budget
+  limits (n_max_gen, n_max_evals), which are lifted, with convergence criteria (xtol, ftol over a
+  window of `period` generations; Nelder-Mead's simplex tolerances), which are kept and end an
+  attempt. So do CMA-ES after its own IPOP restarts and a GA whose mating finds no new child. The
+  method then starts again from a new random start, seed * 1000 + restart, keeping the best and
+  counting every evaluation.
+- Rule 2.4: every evaluated solution is inside the bounds through pymoo's own bound handling;
+  `outside` counts those that aren't, as pymoo proposed them.
 - A multi-objective run stops after the generation that reaches its budget, and its front is the
   non-dominated part of the final population (rule 7.2).
 """
@@ -52,10 +53,10 @@ from pymoo.algorithms.soo.nonconvex.cmaes import CMAES
 from pymoo.algorithms.soo.nonconvex.de import DE
 from pymoo.algorithms.soo.nonconvex.es import ES
 from pymoo.algorithms.soo.nonconvex.ga import GA, comp_by_cv_and_fitness
-from pymoo.algorithms.soo.nonconvex.nelder import NelderMead
+from pymoo.algorithms.soo.nonconvex.nelder import NelderAndMeadTermination, NelderMead
 from pymoo.core.duplicate import ElementwiseDuplicateElimination
 from pymoo.core.problem import Problem
-from pymoo.core.termination import Termination
+from pymoo.core.termination import TerminateIfAny, Termination
 from pymoo.decomposition.pbi import PBI
 from pymoo.decomposition.tchebicheff import Tchebicheff
 from pymoo.operators.crossover.ox import OrderCrossover
@@ -68,6 +69,7 @@ from pymoo.operators.sampling.lhs import LHS
 from pymoo.operators.sampling.rnd import BinaryRandomSampling, PermutationRandomSampling
 from pymoo.operators.selection.tournament import TournamentSelection
 from pymoo.optimize import minimize
+from pymoo.termination.default import DefaultSingleObjectiveTermination
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 from pymoo.util.ref_dirs import get_reference_directions
 
@@ -210,6 +212,12 @@ def values(problem_name, size):
 # -------------------------------------------------------------------------------------------------
 
 
+def count_outside(X, xl, xu):
+    """The rows of X with a variable outside [xl, xu] (rule 2.4)."""
+    X = np.asarray(X, dtype=float)
+    return int(np.count_nonzero(np.any((X < xl) | (X > xu), axis=1)))
+
+
 class Stop(Exception):
     """The budget or the time cap is reached in the middle of a batch."""
 
@@ -224,6 +232,8 @@ class Counter:
         self.target = target
         self.best = math.inf
         self.solution = None
+        # evaluated solutions outside the bounds, as pymoo proposed them (rule 2.4)
+        self.outside = 0
 
     def out_of_budget(self):
         return self.evaluations >= self.max_evaluations or time.perf_counter() >= self.deadline
@@ -253,6 +263,7 @@ class SingleProblem(Problem):
         solutions = self.decode(X) if self.decode else X
         F = self.function(solutions)
         counter.evaluations += len(X)
+        counter.outside += count_outside(X, self.xl, self.xu)
         best = int(np.argmin(F))
         if F[best] < counter.best:
             counter.best = float(F[best])
@@ -278,8 +289,24 @@ class BudgetTermination(Termination):
 
 
 # -------------------------------------------------------------------------------------------------
-# Single-objective solvers: (name, problem factory of a counter, algorithm factory, seed offset)
+# Single-objective solvers: (name, problem factory of a counter, algorithm factory, seed offset,
+# convergence factory). The convergence criteria end an attempt (rule 2.2); they're those of the
+# docs example the solver follows, or pymoo's default termination of the algorithm when the example
+# passes none, always without their budget limits (n_max_gen, n_max_evals, n_max_iter). An example
+# whose termination is only a budget, ("n_gen", 100) for instance, has none.
 # -------------------------------------------------------------------------------------------------
+
+
+def default_convergence(**kwargs):
+    """pymoo's default single-objective termination, which GA, DE and ES use when minimize gets
+    none: xtol 1e-8 and ftol 1e-6, each over a window of 30 generations (the code's defaults;
+    docs/source/interface/termination.md shows a window of 20), without its budget limits of
+    1,000 generations and 100,000 evaluations."""
+    return DefaultSingleObjectiveTermination(n_max_gen=math.inf, n_max_evals=math.inf, **kwargs)
+
+
+def no_convergence():
+    return None
 
 
 class PermutationDuplicateElimination(ElementwiseDuplicateElimination):
@@ -312,9 +339,12 @@ def onemax_solvers(size, mode):
                 mutation=BitflipMutation(prob=0.2, prob_var=1.0 / size),
                 eliminate_duplicates=False,
             )
-        return [("ga", problem, algorithm, 0)]
+        # the termination of the docs' binary GA (customization/binary.md), ("n_gen", 100), is only
+        # a budget: the GA runs to the budget
+        return [("ga", problem, algorithm, 0, no_convergence)]
 
-    # docs/source/customization/binary.md: GA for binary variables (the knapsack example)
+    # docs/source/customization/binary.md: GA for binary variables (the knapsack example). Its
+    # termination, ("n_gen", 100), is only a budget: the GA runs to the budget
     def algorithm():
         return GA(
             pop_size=200,
@@ -323,7 +353,7 @@ def onemax_solvers(size, mode):
             mutation=BitflipMutation(),
             eliminate_duplicates=True,
         )
-    return [("ga", problem, algorithm, 0)]
+    return [("ga", problem, algorithm, 0, no_convergence)]
 
 
 def nqueens_solvers(size):
@@ -332,7 +362,8 @@ def nqueens_solvers(size):
 
     # docs/source/customization/permutation.md: GA with random permutations, order crossover and
     # inversion mutation, population 20, duplicates eliminated (the flowshop example, without the
-    # TSP example's repair to start at city 0, which is for tours)
+    # TSP example's repair to start at city 0, which is for tours). Its termination:
+    # DefaultSingleObjectiveTermination(period=50, n_max_gen=10000), the generation limit lifted
     def ga():
         return GA(
             pop_size=20,
@@ -347,7 +378,8 @@ def nqueens_solvers(size):
 
     # docs/source/algorithms/soo/brkga.md: BRKGA, "known to perform well on combinatorial problems",
     # with its permutation example: random keys sorted into a permutation, 100 elites,
-    # 300 offspring, 50 mutants, bias 0.7, duplicates eliminated by the permutation
+    # 300 offspring, 50 mutants, bias 0.7, duplicates eliminated by the permutation. Its
+    # termination, ("n_gen", 50), is only a budget: BRKGA runs to the budget
     def brkga():
         return BRKGA(
             n_elites=100,
@@ -357,7 +389,8 @@ def nqueens_solvers(size):
             eliminate_duplicates=PermutationDuplicateElimination(),
         )
 
-    return [("ga", ga_problem, ga, 0), ("brkga", brkga_problem, brkga, 0)]
+    return [("ga", ga_problem, ga, 0, lambda: default_convergence(period=50)),
+            ("brkga", brkga_problem, brkga, 0, no_convergence)]
 
 
 def real_solvers(problem_name, size):
@@ -370,8 +403,11 @@ def real_solvers(problem_name, size):
     # on multi-modal functions. For instance, Rastrigin can be solved rather quickly by:
     # CMAES(restarts=10, restart_from_best=True)". Its other settings are the defaults: x0 the best
     # of 20 Latin hypercube samples, sigma 0.1 of the normalized bounds. The restarts are IPOP-CMA-ES
-    # (the CMAES docstring): each doubles the population.
-    # The library seed is seed + 1: pymoo passes it to pycma, where 0 means a seed from the clock.
+    # (the CMAES docstring): each doubles the population. pycma's own criteria (tolfun, tolx and
+    # others) end each of its runs; after the 10th restart, the adapter starts it again. The
+    # example's ("n_evals", 2500) is only a budget; CMAES has no pymoo-level criterion.
+    # The seed mapping: the library seed is seed + 1, because pymoo passes its seed to pycma, where
+    # 0 means a seed from the clock (not repeatable); every seed gets the next one, the same way.
     def cma_es():
         return CMAES(restarts=10, restart_from_best=True)
 
@@ -382,24 +418,31 @@ def real_solvers(problem_name, size):
         # page, and Nelder-Mead with its defaults, as on docs/source/algorithms/soo/nelder.md.
         # Hooke and Jeeves pattern search (docs/source/algorithms/soo/pattern.md) is left out:
         # pymoo 0.6.2 draws its coordinate order from an unseeded generator (rule 5.2).
+        # Nelder-Mead's page passes no termination, so its own NelderAndMeadTermination applies:
+        # x_tol and f_tol of 1e-6 and a degenerate simplex end an attempt; its budget limits
+        # (n_max_iter, n_max_evals) are lifted.
         return [
-            ("cma_es", problem, cma_es, 1),
-            ("nelder_mead", problem, lambda: NelderMead(), 0),
+            ("cma_es", problem, cma_es, 1, no_convergence),
+            ("nelder_mead", problem, lambda: NelderMead(), 0,
+             lambda: NelderAndMeadTermination(n_max_iter=math.inf, n_max_evals=math.inf)),
         ]
 
     # Continuous, multimodal: the pages whose algorithm pymoo labels for multi-modal optimization.
     # docs/source/algorithms/soo/de.md (keywords "Multi-modal Optimization", "known for its good
     # results for global optimization"): its example, on Ackley. `dither="vector"` of the example
-    # is left out: DE doesn't use it (see the library's page).
+    # is left out: DE doesn't use it (see the library's page). The example passes no termination,
+    # so DE's default applies, without its budget limits.
     def de():
         return DE(pop_size=100, sampling=LHS(), variant="DE/rand/1/bin", CR=0.3, jitter=False)
 
     # docs/source/algorithms/soo/es.md (keywords "Multi-modal Optimization"): its example, on
-    # Ackley, 200 offspring and the 1/7 rule, which are also the defaults
+    # Ackley, 200 offspring and the 1/7 rule, which are also the defaults. Its termination,
+    # ("n_gen", 200), is only a budget: ES runs to the budget
     def es():
         return ES(n_offsprings=200, rule=1.0 / 7.0)
 
-    return [("cma_es", problem, cma_es, 1), ("de", problem, de, 0), ("es", problem, es, 0)]
+    return [("cma_es", problem, cma_es, 1, no_convergence), ("de", problem, de, 0, default_convergence),
+            ("es", problem, es, 0, no_convergence)]
 
 
 def single_solvers(problem_name, size, mode):
@@ -410,17 +453,22 @@ def single_solvers(problem_name, size, mode):
     return real_solvers(problem_name, size)
 
 
-def solve(make_problem, make_algorithm, seed, counter):
-    """Runs the solver until the target, the budget or the time cap; a solver that ends by itself
-    starts again from a new random start (rule 2.2). Returns the generations of all its runs."""
+def solve(make_problem, make_algorithm, make_convergence, seed, counter):
+    """Runs the solver until the target, the budget or the time cap. An attempt that ends by
+    itself (a convergence criterion, CMA-ES after its restarts, a GA whose mating finds no new
+    child) starts again from a new random start (rule 2.2). Returns the generations of all attempts."""
     generations = 0
     restart = 0
     while True:
         run_seed = seed if restart == 0 else seed * 1000 + restart
         np.random.seed(run_seed)
         algorithm = make_algorithm()
+        convergence = make_convergence()
+        termination = BudgetTermination(counter)
+        if convergence is not None:
+            termination = TerminateIfAny(termination, convergence)
         try:
-            minimize(make_problem(counter), algorithm, BudgetTermination(counter), seed=run_seed,
+            minimize(make_problem(counter), algorithm, termination, seed=run_seed,
                      verbose=False, copy_algorithm=False, copy_termination=False)
         except Stop:
             pass
@@ -434,10 +482,11 @@ def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
     maximize = problem_name == "onemax"
     target = -size if maximize else (0 if problem_name == "nqueens" else TARGET)
     for seed in range(seed_from, seed_to + 1):
-        for solver, make_problem, make_algorithm, seed_offset in single_solvers(problem_name, size, mode):
+        for solver, make_problem, make_algorithm, seed_offset, make_convergence in single_solvers(
+                problem_name, size, mode):
             start = time.perf_counter()
             counter = Counter(max_evaluations, start + max_seconds, target)
-            generations = solve(make_problem, make_algorithm, seed + seed_offset, counter)
+            generations = solve(make_problem, make_algorithm, make_convergence, seed + seed_offset, counter)
             elapsed = time.perf_counter() - start
             if problem_name in REAL_PROBLEMS:
                 best, solution = counter.best, [float(v) for v in counter.solution]
@@ -459,6 +508,7 @@ def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
                 "target": -target if maximize else target,
                 "success": counter.reached(),
                 "solution": solution,
+                **({"outside": counter.outside} if problem_name in REAL_PROBLEMS else {}),
             }), flush=True)
 
 
@@ -475,9 +525,12 @@ class FrontProblem(Problem):
         self.function = function
         self.size = size
         self.evaluations = 0
+        # evaluated solutions outside the bounds, as pymoo proposed them (rule 2.4)
+        self.outside = 0
 
     def _evaluate(self, X, out, *args, **kwargs):
         self.evaluations += len(X)
+        self.outside += count_outside(X, self.xl, self.xu)
         out["F"] = self.function(X, self.size)
 
 
@@ -555,6 +608,7 @@ def run_fronts(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
                 "evaluations": problem.evaluations,
                 "front": [[float(v) for v in F[i]] for i in front],
                 "solutions": [[float(v) for v in X[i]] for i in front],
+                "outside": problem.outside,
             }), flush=True)
 
 
