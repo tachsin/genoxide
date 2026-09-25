@@ -32,9 +32,12 @@ FRONT_OBJECTIVES = {"zdt1": lambda size: 2, "zdt2": lambda size: 2, "zdt3": lamb
                     "dtlz2": lambda size: size, "dtlz1": lambda size: size}
 
 
-def shift(n):
-    """The optimum of Rastrigin and Ackley: s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]."""
-    return [2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(n)]
+def shift(problem, n):
+    """The optimum of Rastrigin and Ackley (rule 1.4): s_i = 0.8 * upper * (2 * ((37 i + 11) mod 101)
+    / 101 - 1), with `upper` the box's upper bound, so within 80% of the box. Computed in this order
+    in every language, for the same doubles."""
+    upper = REAL_BOUNDS[problem][1]
+    return [0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1) for i in range(n)]
 
 
 # ------------------------------------------------------------------------------------------------
@@ -57,7 +60,7 @@ def nqueens(order):
 
 
 def rastrigin(x):
-    d = [v - s for v, s in zip(x, shift(len(x)))]
+    d = [v - s for v, s in zip(x, shift("rastrigin", len(x)))]
     return 10 * len(d) + sum(v * v - 10 * math.cos(2 * math.pi * v) for v in d)
 
 
@@ -67,7 +70,7 @@ def rosenbrock(x):
 
 def ackley(x):
     n = len(x)
-    d = [v - s for v, s in zip(x, shift(n))]
+    d = [v - s for v, s in zip(x, shift("ackley", n))]
     return (-20 * math.exp(-0.2 * math.sqrt(sum(v * v for v in d) / n))
             - math.exp(sum(math.cos(2 * math.pi * v) for v in d) / n) + 20 + math.e)
 
@@ -171,7 +174,7 @@ def check_points(problem, size, count=20):
         return points
     if problem in REAL_BOUNDS:
         lower, upper = REAL_BOUNDS[problem]
-        optimum = [1.0] * size if problem == "rosenbrock" else shift(size)
+        optimum = [1.0] * size if problem == "rosenbrock" else shift(problem, size)
         return [optimum] + [[rng.uniform(lower, upper) for _ in range(size)] for _ in range(count)]
     n, m = FRONT_VARIABLES[problem](size), FRONT_OBJECTIVES[problem](size)
     # points on the optimal front: ZDT with the distance variables at 0, DTLZ at 0.5

@@ -35,9 +35,13 @@ Each library's page in [docs/benchmarks/libraries/](../docs/benchmarks/libraries
 
 Libraries that check the stop between generations can go past the budget by up to one generation. Every result reports the true number of evaluations. A method that ends by its own convergence criterion starts again, with the library's restart mechanism or from a new random start ([rule 2.2](../docs/benchmarks/rules.md#2-the-budget)); a limit that's only a budget, such as a number of generations, is lifted.
 
-A solver whose first 3 seeds all run for the full 60 seconds without reaching the target (a multi-objective run has none) stops there: the other 7 would take a minute each for the same result. Its result shows 3 runs instead of 10, e.g. "0% (3)". The adapters of Nevergrad, PyGAD and Metaheuristics.jl skip those seeds themselves. `run.py` applies the same rule to every library's results.
+A solver whose first 3 seeds all run for the full 60 seconds without reaching the target (a multi-objective run has none) stops there: the other 7 would take a minute each for the same result. Its result shows 3 runs instead of 10: "0 of 3". The adapters of Nevergrad, PyGAD and Metaheuristics.jl skip those seeds themselves. `run.py` applies the same rule to every library's results.
 
-**Time.** It's measured inside the adapter, around the optimization only. It doesn't include interpreter or JVM startup, imports or setup, and the Java and Julia adapters make an untimed run first, so JIT compilation isn't included either. Every library runs single-threaded, one run at a time, on one machine. Each scenario runs 10 seeds, and the charts show medians.
+**Time.** It's measured inside the adapter, around the optimization only. It doesn't include interpreter or JVM startup, imports or setup, and the Java and Julia adapters make an untimed run first, so JIT compilation isn't included either. Every library runs single-threaded, one run at a time, on one machine. Each scenario runs 10 seeds.
+
+**Time and evaluations to target** are the expected running time (ERT, [rule 8.1](../docs/benchmarks/rules.md#8-reporting)): what all runs spent, up to the first hit of the target in the runs that reached it and in full in the others, divided by the number of runs that reached it. Each run records its first hit at the evaluation itself, even where the library checks its stop only between generations. Runs stopped by the 60-second cap before their budget are counted as "capped": they're limited by speed, not by the search. The other results are medians.
+
+**Every timed run is validated** with the checks of `run.py check`: its solution re-evaluated, its evaluations within the budget, its first hit and its front consistent. A run that fails is left out of every table and chart, and the results list it.
 
 **Cores.** The published results come from WSL on an Intel Core Ultra 7 265K, whose 8 P-cores and 12 E-cores run at different speeds, and whose P-cores don't all reach the same turbo frequency. Windows decides which core runs the WSL virtual machine, so without pinning, a run's time depends on where it lands. So the virtual machine is pinned to the two fastest P-cores, 8 and 19, and `run.py` refuses to measure times unless it is.
 
@@ -71,7 +75,7 @@ The fitness functions here are cheap, so the time charts mostly show framework a
 - **Matched:** configurations as equal as the libraries allow. This measures framework cost and algorithm implementations. They're close, not identical: each library's page lists its differences.
 - **Idiomatic:** each library's recommended configuration, from its docs and examples. This measures what its users get. A library can run up to 3 solvers per problem type here.
 
-**Multi-objective quality.** These runs have no target: each one uses its evaluation budget. The adapter prints the objective values of its final non-dominated front. `run.py` computes the hypervolume of every front with the same exact code, so no library's own indicator is involved.
+**Multi-objective quality.** These runs have no target: each one uses its evaluation budget. The adapter prints its final non-dominated front and the solutions of its points. `run.py` computes the objectives of the solutions itself, keeps the non-dominated ones, and computes their hypervolume with the same exact code, so no library's own values or indicator are involved.
 
 **Bugs in the libraries** aren't worked around, except where the [notes](../docs/benchmarks/notes.md) say so. When a library's own operator is wrong, its results show it. The notes list the bug, and the library's page shows what the library reaches without it, where that was measured.
 
@@ -85,7 +89,17 @@ The fitness functions here are cheap, so the time charts mostly show framework a
 | Rosenbrock | reals in [−5, 10] | Σ 100 (xᵢ₊₁ − xᵢ²)² + (1 − xᵢ)² | ≤ 0.01 | 10 (500k) |
 | Ackley, shifted | reals in [−32.768, 32.768] | Ackley's function of yᵢ = xᵢ − sᵢ | ≤ 0.01 | 30 (1M) |
 
-**Why shifted:** Rastrigin and Ackley usually have their optimum at the origin, which favours operators that drift towards 0. radiate's arithmetic mutation, for example, solves Rastrigin 10 in 17,000 to 27,000 evaluations with the optimum at the origin, and needs 250,000 to 400,000 with it moved. So gene i is measured from sᵢ = 2 ((37 i + 11) mod 101) / 101 − 1, a fixed shift in [−1, 1] that every language computes exactly.
+**Why shifted:** Rastrigin and Ackley usually have their optimum at the origin, which favours operators that drift towards 0. radiate's arithmetic mutation, for example, solves Rastrigin 10 in 17,000 to 27,000 evaluations with the optimum at the origin, and needs 250,000 to 400,000 with it moved. So gene i, from 0, is measured from sᵢ = 0.8 · upper · (2 ((37 i + 11) mod 101) / 101 − 1), where upper is the box's upper bound, 5.12 or 32.768: a fixed shift spread over 80% of the box, that every language computes exactly in this order ([rule 1.4](../docs/benchmarks/rules.md#1-the-problems)).
+
+**Matched OneMax** is DEAP's `examples/ga/onemax.py` with `eaSimple`:
+- 300 individuals;
+- tournament selection of 3, with replacement;
+- two-point crossover on each consecutive pair, with probability 0.5;
+- each individual mutated with probability 0.2, each bit flipping with probability 1 / n;
+- generational replacement, no elitism;
+- an individual neither crossed nor mutated keeps its fitness, and isn't evaluated again.
+
+A library runs it with its own components only. One that lacks one, or can only run it with elitism, as (μ+λ) or with another replacement, doesn't run it ([rule 6.1](../docs/benchmarks/rules.md#6-which-methods-run)).
 
 Multi-objective scenarios:
 
@@ -95,12 +109,16 @@ Multi-objective scenarios:
 | ZDT2 (concave front) | 30 in [0, 1] | 2 | 25,000 | (1.1, 1.1) |
 | ZDT3 (disconnected front) | 30 in [0, 1] | 2 | 25,000 | (1.1, 1.1) |
 | DTLZ2 (spherical front) | 12 in [0, 1] | 3 | 25,000 | (1.1, 1.1, 1.1) |
-| DTLZ1 (linear front, multimodal) | 7 in [0, 1] | 3 | 40,000 | (1.1, 1.1, 1.1) |
+| DTLZ1 (linear front, multimodal) | 7 in [0, 1] | 3 | 40,000 | (0.55, 0.55, 0.55) |
+
+The reference point is 1.1 times the nadir of the optimal front: 1 for ZDT and DTLZ2, 0.5 for DTLZ1.
 
 They use the matched settings:
 - **NSGA-II, SPEA2 and SMS-EMOA:** 100 individuals (92 with 3 objectives), SBX with η 15 at 0.9, and polynomial mutation with η 20 at 1 / n.
-- **NSGA-III:** Das-Dennis reference directions (99 divisions with 2 objectives, 12 with 3), SBX with η 30 at 1.
+- **SMS-EMOA** is steady-state: one child per step. A library whose SMS-EMOA can't do that doesn't run it.
+- **NSGA-III:** Das-Dennis reference directions (99 divisions with 2 objectives, 12 with 3), SBX with η 30 at 1. It runs on the ZDT problems too, with 100 individuals, in every library that has it.
 - **MOEA/D:** 100 weight vectors (91 with 3 objectives), 20 neighbors, parents from the neighborhood with probability 0.9, Tchebycheff (PBI with θ 5 for DTLZ), SBX with η 20 at 1.
+- **In every algorithm:** the library's own SBX and polynomial mutation, bugs included, and no duplicate elimination.
 
 ## Notes on the libraries
 
@@ -139,11 +157,13 @@ python run.py --update results/<timestamp>.json --libraries genoxide genoxide_py
 
 The rerun libraries run every scenario of the results file, with its seeds and wall time cap, and their old runs, instruction counts and versions are replaced. The other libraries' runs are kept as they are. So `--update` can't be combined with `--scenarios` or `--quick`: some of a library's runs would be old ones under its new version. To add a scenario, rerun every library. If the platform differs from the file's, the new file records both. Without Valgrind, or with `--no-instructions`, the previous instruction counts are kept.
 
+The kept times must still be comparable, so `--update` first runs a reference, DEAP's GA in matched OneMax 100 with seeds 0 to 2, and refuses to go on if its median time differs from the file's by more than 3%, or if its evaluations differ. `--allow-drift` reruns anyway.
+
 **The version measured.** A minor release is benchmarked before its release PR bumps `Cargo.toml`, so `--version-label genoxide=0.7.0` records genoxide and its Python package as 0.7.0, still followed by the commit. Any library of `--libraries` can be labeled this way.
 
 ## Instructions per evaluation
 
-On Linux with [Valgrind](https://valgrind.org/), each run also counts CPU instructions with Callgrind. Instruction counts are exact and don't depend on the machine's load or clock speed, so they compare the cost of the libraries themselves.
+On Linux with [Valgrind](https://valgrind.org/), each run also counts CPU instructions with Callgrind. Instruction counts are exact and don't depend on the machine's load or clock speed. They're the cost per evaluation: a generation's work is divided by the children the library evaluates in it, so the count depends on how many children a library evaluates per generation.
 
 Each adapter runs OneMax 1000 in the matched configuration twice, with budgets of N and 2N evaluations. None of them can reach the target within that budget. The difference, I(2N) − I(N), divided by the difference in evaluations, cancels the interpreter startup, the imports and the setup. What's left is the cost of one evaluation, framework and fitness function together.
 
@@ -160,10 +180,12 @@ It prints one JSON line per solver per seed, with the best solution found:
 ```json
 {"library": "deap", "solver": "ga", "problem": "onemax", "size": 100, "mode": "matched", "seed": 0,
  "time_s": 0.21, "generations": 37, "evaluations": 7041, "best": 100, "target": 100, "success": true,
- "solution": [1, 1, 1, ...]}
+ "first_hit": {"evaluations": 6912, "time_s": 0.206}, "solution": [1, 1, 1, ...]}
 ```
 
-A run of a continuous or multi-objective problem also prints `"outside"`, the number of evaluated solutions outside the bounds, counted around the fitness function. It must be 0 (rule 2.4). A solver whose generations change size, such as CMA-ES with IPOP restarts, also prints `"last_generation"`, the evaluations of its last generation: a run may go past its budget by at most that (rule 2.3). A multi-objective run prints `"front": [[f1, f2], ...]` and `"solutions": [[x1, x2, ...], ...]`, the solutions of those points in the same order, instead of `best`, `target`, `success` and `solution`. For a problem its library can't do, an adapter prints nothing.
+`first_hit` is the first evaluation whose value reaches the target: its number, counting it, and the run's clock at that moment. It's `null` if the target is never reached. The adapter's counter records it at each evaluation ([rule 3.3](../docs/benchmarks/rules.md#3-counting-evaluations)).
+
+A run of a continuous or multi-objective problem also prints `"outside"`, the number of evaluated solutions outside the bounds, counted around the fitness function. It must be 0 (rule 2.4). A solver whose generations change size, such as CMA-ES with IPOP restarts, also prints `"last_generation"`, the evaluations of its last generation: a run may go past its budget by at most that (rule 2.3). A multi-objective run prints `"front": [[f1, f2], ...]` and `"solutions": [[x1, x2, ...], ...]`, the solutions of those points in the same order, instead of `best`, `target`, `success`, `first_hit` and `solution`. For a problem its library can't do, an adapter prints nothing.
 
 The second evaluates solutions with the adapter's own fitness functions:
 
@@ -173,4 +195,4 @@ The second evaluates solutions with the adapter's own fitness functions:
 
 It reads one JSON solution per line and prints its value, or its list of objectives, one per line.
 
-Register the adapter in `ADAPTERS` in `run.py`, with its language, write its page in [docs/benchmarks/libraries/](../docs/benchmarks/libraries/), and run `python run.py check --libraries <name>`. A timed run measures only adapters that passed the check as they are now.
+Register the adapter in `ADAPTERS` in `run.py`, with its language, write its page in [docs/benchmarks/libraries/](../docs/benchmarks/libraries/), and run `python run.py check --libraries <name>`. A timed run measures only adapters that passed the check as they are now: a change to the adapter, to `problems.py` or to `requirements.txt` (and, for genoxide, to its sources) needs a new check.
