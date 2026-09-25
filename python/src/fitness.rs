@@ -1,13 +1,13 @@
 //! Python fitness functions: called with a genome as a numpy array, or with a generation as a
-//! 2-D array (a batch).
+//! 2-D array (a batch). And the progress callback, called after every generation.
 //!
-//! An exception in the fitness function, or Ctrl+C, stops the run: the first exception is kept,
-//! the abort flag is set, and the genomes left get an invalid fitness without a call. The run
-//! raises the exception when it returns.
+//! An exception in the fitness function or the progress callback, or Ctrl+C, stops the run: the
+//! first exception is kept, the abort flag is set, and the genomes left get an invalid fitness
+//! without a call. The run raises the exception when it returns.
 
 use crate::genes::{self, Genes};
 use genoxide::Fitness;
-use genoxide::engine::{FitnessFunction, IntoFitness};
+use genoxide::engine::{FitnessFunction, IntoFitness, Progress};
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyTypeError, PyValueError};
@@ -16,19 +16,21 @@ use pyo3::types::PyTuple;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
-/// The fitness function of a run and what went wrong in it.
+/// The fitness function and progress callback of a run, and what went wrong in them.
 pub struct Shared {
     function: Py<PyAny>,
     batch: bool,
+    on_generation: Option<Py<PyAny>>,
     error: Mutex<Option<PyErr>>,
     abort: Arc<AtomicBool>,
 }
 
 impl Shared {
-    pub fn new(function: Py<PyAny>, batch: bool) -> Self {
+    pub fn new(function: Py<PyAny>, batch: bool, on_generation: Option<Py<PyAny>>) -> Self {
         Self {
             function,
             batch,
+            on_generation,
             error: Mutex::new(None),
             abort: Arc::new(AtomicBool::new(false)),
         }
@@ -60,12 +62,35 @@ impl Shared {
             .take()
     }
 
-    /// Stops the run on Ctrl+C: Python handles signals on the main thread, which runs the
-    /// engine, between generations.
-    pub fn check_signals(&self) {
+    /// After a generation, on the thread that runs the engine, the one that called `run`: stops
+    /// the run on Ctrl+C, which Python handles there, and calls the progress callback with the
+    /// generation, the evaluations, the seconds and `value` (the best fitness, or the size of
+    /// the front). The callback returns False to stop the run.
+    pub fn after_generation<V>(&self, progress: &Progress, value: V)
+    where
+        V: for<'py> IntoPyObject<'py>,
+    {
         Python::attach(|py| {
             if let Err(error) = py.check_signals() {
                 self.fail(error);
+            }
+            let Some(callback) = &self.on_generation else {
+                return;
+            };
+            if self.aborted() {
+                return;
+            }
+            let arguments = (
+                progress.generation(),
+                progress.evaluations(),
+                progress.elapsed().as_secs_f64(),
+                value,
+            );
+            let go_on = callback.bind(py).call1(arguments);
+            match go_on.and_then(|go_on| go_on.extract::<bool>()) {
+                Ok(true) => {}
+                Ok(false) => self.abort.store(true, Ordering::Relaxed),
+                Err(error) => self.fail(error),
             }
         });
     }

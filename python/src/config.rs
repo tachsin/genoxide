@@ -65,10 +65,54 @@ pub enum Algorithm {
     Nsga2 {
         population_size: usize,
         seed: Option<u64>,
-        crossover: Crossover,
-        mutate: Mutate,
-        crossover_rate: Option<f64>,
+        variation: Variation,
     },
+    Nsga3 {
+        /// A direction per row, a value per objective.
+        reference_directions: Vec<Vec<f64>>,
+        population_size: Option<usize>,
+        seed: Option<u64>,
+        variation: Variation,
+    },
+    Spea2 {
+        population_size: usize,
+        seed: Option<u64>,
+        variation: Variation,
+    },
+    Moead {
+        /// A weight vector per row, a value per objective.
+        weights: Vec<Vec<f64>>,
+        neighbors: Option<usize>,
+        neighbor_mating: Option<f64>,
+        max_replacements: Option<usize>,
+        decomposition: Option<Decomposition>,
+        seed: Option<u64>,
+        variation: Variation,
+    },
+    SmsEmoa {
+        population_size: usize,
+        offspring: Option<usize>,
+        seed: Option<u64>,
+        variation: Variation,
+    },
+}
+
+/// How a multi-objective algorithm makes children.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Variation {
+    pub crossover: Crossover,
+    pub mutate: Mutate,
+    pub crossover_rate: Option<f64>,
+    pub mutation_rate: Option<f64>,
+}
+
+/// How MOEA/D turns the objectives into one value per weight vector.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Decomposition {
+    Tchebycheff {},
+    Pbi { theta: f64 },
 }
 
 /// A genetic algorithm.

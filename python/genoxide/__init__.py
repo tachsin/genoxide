@@ -1,7 +1,8 @@
 """Evolutionary computation in Rust, for Python.
 
-Genetic algorithms, local search, differential evolution, CMA-ES, particle swarm optimization and
-NSGA-II from `genoxide <https://github.com/tachsin/genoxide>`_, with Python fitness functions::
+Genetic algorithms, local search, differential evolution, CMA-ES, particle swarm optimization,
+and NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives, from
+`genoxide <https://github.com/tachsin/genoxide>`_, with Python fitness functions::
 
     import genoxide as gx
 
@@ -24,7 +25,8 @@ A fitness function takes a genome as a numpy array (``bool`` for :class:`Binary`
 of scores: one call per generation, for vectorized numpy code.
 
 A run stops at the first of its stop conditions: ``generations``, ``evaluations``, ``target``,
-``time`` (seconds) and ``stagnation`` (generations without improvement).
+``time`` (seconds) and ``stagnation`` (generations without improvement), or when its
+``on_generation`` callback returns False.
 """
 
 from __future__ import annotations
@@ -82,6 +84,9 @@ __all__ = [
     "NotWorse",
     "Annealing",
     "Tabu",
+    # decompositions of MOEA/D
+    "Tchebycheff",
+    "Pbi",
     # algorithms
     "Ga",
     "De",
@@ -89,9 +94,16 @@ __all__ = [
     "Pso",
     "LocalSearch",
     "Nsga2",
-    # results
+    "Nsga3",
+    "Spea2",
+    "Moead",
+    "SmsEmoa",
+    "das_dennis",
+    # results and progress
     "Result",
     "MultiResult",
+    "Progress",
+    "MultiProgress",
 ]
 
 ObjectiveName = Literal["maximize", "minimize"]
@@ -538,6 +550,31 @@ class Tabu:
 
 Acceptance = Union[Improving, NotWorse, Annealing, Tabu]
 
+# --- decompositions of MOEA/D --------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Tchebycheff:
+    """The weighted Tchebycheff distance to the ideal point, ``max_j w_j |f_j - z_j|`` (the
+    default), for any front shape."""
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "tchebycheff"}
+
+
+@dataclass(frozen=True)
+class Pbi:
+    """Penalty-based boundary intersection: the distance along the weight vector plus ``theta``
+    times the distance from it. Spreads fronts of 3 or more objectives evenly."""
+
+    theta: float = 5.0
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "pbi", "theta": self.theta}
+
+
+Decomposition = Union[Tchebycheff, Pbi]
+
 # --- results -------------------------------------------------------------------------------------
 
 
@@ -555,7 +592,8 @@ class Result:
     evaluations: int
     seconds: float
     stop_reason: str
-    """What stopped the run: "target", "generations", "evaluations", "time" or "stagnation"."""
+    """What stopped the run: "target", "generations", "evaluations", "time", "stagnation" or
+    "aborted" (by ``on_generation``)."""
 
 
 @dataclass(frozen=True, eq=False)
@@ -572,7 +610,36 @@ class MultiResult:
     evaluations: int
     seconds: float
     stop_reason: str
-    """What stopped the run: "generations", "evaluations", "time" or "stagnation"."""
+    """What stopped the run: "generations", "evaluations", "time", "stagnation" or "aborted" (by
+    ``on_generation``)."""
+
+
+@dataclass(frozen=True)
+class Progress:
+    """A single-objective run after a generation, for ``on_generation``."""
+
+    generation: int
+    """The generations completed: 0 after the initial population."""
+    evaluations: int
+    """The fitness evaluations so far."""
+    seconds: float
+    """The time since the run started."""
+    best_fitness: float | None
+    """The best score so far, or None if no valid solution was found yet."""
+
+
+@dataclass(frozen=True)
+class MultiProgress:
+    """A multi-objective run after a generation, for ``on_generation``."""
+
+    generation: int
+    """The generations completed: 0 after the initial population."""
+    evaluations: int
+    """The fitness evaluations so far."""
+    seconds: float
+    """The time since the run started."""
+    front_size: int
+    """The number of non-dominated individuals in the population, copies included."""
 
 
 # --- running -------------------------------------------------------------------------------------
@@ -599,9 +666,25 @@ def _stop(
     return stop
 
 
-def _check_callable(fitness: Any) -> None:
-    if not callable(fitness):
-        raise TypeError(f"the fitness function isn't callable: {fitness!r}")
+def _check_callable(function: Any, name: str = "the fitness function") -> None:
+    if not callable(function):
+        raise TypeError(f"{name} isn't callable: {function!r}")
+
+
+def _on_generation(
+    callback: Callable[[Any], Any] | None, progress: type[Progress] | type[MultiProgress]
+) -> Callable[[int, int, float, Any], bool] | None:
+    """The callback, called with the generation, the evaluations, the seconds and the best
+    fitness or the size of the front, as a ``progress``; False from it stops the run."""
+    if callback is None:
+        return None
+    _check_callable(callback, "on_generation")
+
+    def call(generation: int, evaluations: int, seconds: float, value: Any) -> bool:
+        go_on = callback(progress(generation, evaluations, seconds, value))
+        return go_on is not False and go_on is not np.False_
+
+    return call
 
 
 def _json_number(value: Any) -> Any:
@@ -663,6 +746,7 @@ class _Algorithm:
         stop: dict[str, Any],
         batch: bool,
         parallel: bool,
+        on_generation: Callable[[int, int, float, Any], bool] | None,
     ) -> dict[str, Any]:
         run = {
             "genome": self._genome._describe(),
@@ -670,7 +754,8 @@ class _Algorithm:
             "objectives": self._objectives(),
             "stop": stop,
         }
-        return _genoxide.run(json.dumps(run, default=_json_number), fitness, batch, parallel)
+        description = json.dumps(run, default=_json_number)
+        return _genoxide.run(description, fitness, batch, parallel, on_generation)
 
 
 class _SingleObjective(_Algorithm):
@@ -692,6 +777,7 @@ class _SingleObjective(_Algorithm):
         stagnation: int | None = None,
         batch: bool = False,
         parallel: bool = False,
+        on_generation: Callable[[Progress], bool | None] | None = None,
     ) -> Result:
         """Runs until the first stop condition.
 
@@ -707,12 +793,17 @@ class _SingleObjective(_Algorithm):
         Stop conditions: ``generations``, ``evaluations``, ``target`` (a score at least as good),
         ``time`` (seconds) and ``stagnation`` (generations without improvement).
 
-        An exception in ``fitness``, or Ctrl+C, stops the run and is raised.
+        ``on_generation`` is called after every generation, the initial population's included,
+        with a :class:`Progress`, on the thread that called ``run``. If it returns False, the run
+        stops with the stop reason "aborted".
+
+        An exception in ``fitness`` or ``on_generation``, or Ctrl+C, stops the run and is raised.
         """
         _check_callable(fitness)
         stop = _stop(generations, evaluations, target, time, stagnation)
         function = _batch_scores(fitness) if batch else fitness
-        return Result(**self._run(function, stop, batch, parallel))
+        callback = _on_generation(on_generation, Progress)
+        return Result(**self._run(function, stop, batch, parallel, callback))
 
 
 class Ga(_SingleObjective):
@@ -905,48 +996,46 @@ class LocalSearch(_SingleObjective):
         }
 
 
-class Nsga2(_Algorithm):
-    """NSGA-II, for 2 to 6 objectives: non-dominated sorting and crowding distance.
-
-    ``objectives`` says, for each objective, whether to "maximize" or "minimize" it. The fitness
-    function returns a sequence of objective values, None (an invalid solution) or
-    ``(objective_values, constraint_violation)``; with ``batch=True``, a 2-D array with a row of
-    objective values per genome, or a tuple of it and an array of constraint violations.
+def das_dennis(objectives: int, divisions: int) -> np.ndarray:
+    """Points evenly spread on the unit simplex (Das and Dennis, 1998), a point per row: every
+    point with ``objectives`` coordinates (2 to 6) that are multiples of ``1 / divisions`` and sum
+    to 1, in lexicographic order. They serve as the reference directions of :class:`Nsga3` and the
+    weights of :class:`Moead`. There are ``(divisions + objectives - 1)! / (divisions!
+    (objectives - 1)!)`` of them: 91 for 3 objectives and 12 divisions, and none for 0 divisions.
     """
+    return _genoxide.das_dennis(objectives, divisions)
 
-    def __init__(
-        self,
-        genome: Genome,
-        *,
-        objectives: Sequence[ObjectiveName],
-        population_size: int,
-        crossover: Crossover,
-        mutation: Mutation,
-        crossover_rate: float | None = None,
-        seed: int | None = None,
-    ) -> None:
-        self._genome = genome
-        self.objectives = list(objectives)
-        self.population_size = population_size
-        self.crossover = crossover
-        self.mutation = mutation
-        self.crossover_rate = crossover_rate
-        self.seed = seed
+
+def _rows(name: str, rows: Any) -> list[list[float]]:
+    """Reference directions or weight vectors: a row each, with a value per objective."""
+    array = np.asarray(rows, dtype=np.float64)
+    if array.ndim != 2:
+        raise ValueError(f"{name} is a 2-D array, a row each with a value per objective")
+    return array.tolist()
+
+
+class _MultiObjective(_Algorithm):
+    """A multi-objective algorithm, whose children are made by ``crossover`` and ``mutation``."""
+
+    objectives: list[ObjectiveName]
+    crossover: Crossover
+    mutation: Mutation
+    crossover_rate: float | None
+    mutation_rate: float | None
+    seed: int | None
 
     def _objectives(self) -> list[str]:
         for objective in self.objectives:
             if objective not in ("maximize", "minimize"):
                 raise ValueError(f'an objective is "maximize" or "minimize", not {objective!r}')
-        return self.objectives
+        return list(self.objectives)
 
-    def _describe(self) -> dict[str, Any]:
+    def _variation(self) -> dict[str, Any]:
         return {
-            "type": "nsga2",
-            "population_size": self.population_size,
-            "seed": self.seed,
             "crossover": self.crossover._describe(),
             "mutate": self.mutation._describe(),
             "crossover_rate": self.crossover_rate,
+            "mutation_rate": self.mutation_rate,
         }
 
     def run(
@@ -959,10 +1048,253 @@ class Nsga2(_Algorithm):
         stagnation: int | None = None,
         batch: bool = False,
         parallel: bool = False,
+        on_generation: Callable[[MultiProgress], bool | None] | None = None,
     ) -> MultiResult:
         """Runs until the first stop condition: ``generations``, ``evaluations``, ``time``
-        (seconds) or ``stagnation``. See :meth:`Ga.run` for ``batch`` and ``parallel``."""
+        (seconds) or ``stagnation``. See :meth:`Ga.run` for ``batch``, ``parallel`` and
+        ``on_generation``, which gets a :class:`MultiProgress`."""
         _check_callable(fitness)
         stop = _stop(generations, evaluations, None, time, stagnation)
         function = _batch_objectives(fitness) if batch else fitness
-        return MultiResult(**self._run(function, stop, batch, parallel))
+        callback = _on_generation(on_generation, MultiProgress)
+        return MultiResult(**self._run(function, stop, batch, parallel, callback))
+
+
+class Nsga2(_MultiObjective):
+    """NSGA-II, for 2 to 6 objectives: non-dominated sorting and crowding distance.
+
+    ``objectives`` says, for each objective, whether to "maximize" or "minimize" it. The fitness
+    function returns a sequence of objective values, None (an invalid solution) or
+    ``(objective_values, constraint_violation)``; with ``batch=True``, a 2-D array with a row of
+    objective values per genome, or a tuple of it and an array of constraint violations. The same
+    goes for every multi-objective algorithm.
+
+    Pairs of parents are recombined with probability ``crossover_rate`` (default 0.9), and each
+    child is mutated with probability ``mutation_rate`` (default 1).
+    """
+
+    def __init__(
+        self,
+        genome: Genome,
+        *,
+        objectives: Sequence[ObjectiveName],
+        population_size: int,
+        crossover: Crossover,
+        mutation: Mutation,
+        crossover_rate: float | None = None,
+        mutation_rate: float | None = None,
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self.objectives = list(objectives)
+        self.population_size = population_size
+        self.crossover = crossover
+        self.mutation = mutation
+        self.crossover_rate = crossover_rate
+        self.mutation_rate = mutation_rate
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "nsga2",
+            "population_size": self.population_size,
+            "seed": self.seed,
+            "variation": self._variation(),
+        }
+
+
+class Nsga3(_MultiObjective):
+    """NSGA-III (Deb and Jain, 2014), for 2 to 6 objectives: NSGA-II for many objectives, which
+    spreads the front along reference directions instead of by crowding distance.
+
+    ``reference_directions`` is a 2-D array with a direction per row and a value per objective,
+    non-negative and not all 0, usually :func:`das_dennis` points, e.g. ``das_dennis(3, 12)``.
+    ``population_size`` is their number by default; smaller populations can't fill every
+    direction. Pairs of parents are recombined with probability ``crossover_rate`` and each child
+    is mutated with probability ``mutation_rate``, both 1 by default, as in Deb and Jain. For real
+    genomes, SBX with eta 30 is the usual crossover.
+
+    The fitness function is as for :class:`Nsga2`.
+    """
+
+    def __init__(
+        self,
+        genome: Genome,
+        *,
+        objectives: Sequence[ObjectiveName],
+        reference_directions: np.ndarray | Sequence[Sequence[float]],
+        crossover: Crossover,
+        mutation: Mutation,
+        population_size: int | None = None,
+        crossover_rate: float | None = None,
+        mutation_rate: float | None = None,
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self.objectives = list(objectives)
+        self.reference_directions = reference_directions
+        self.population_size = population_size
+        self.crossover = crossover
+        self.mutation = mutation
+        self.crossover_rate = crossover_rate
+        self.mutation_rate = mutation_rate
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "nsga3",
+            "reference_directions": _rows("reference_directions", self.reference_directions),
+            "population_size": self.population_size,
+            "seed": self.seed,
+            "variation": self._variation(),
+        }
+
+
+class Spea2(_MultiObjective):
+    """SPEA2 (Zitzler, Laumanns and Thiele, 2001), for 2 to 6 objectives: an archive of
+    ``population_size`` solutions, the non-dominated ones first. When they don't fit, the one
+    nearest to another is removed until they do, which keeps the extremes of the front and spreads
+    it evenly: O(N³) per generation at worst, fine for populations of a few hundred.
+
+    Pairs of parents are recombined with probability ``crossover_rate`` (default 0.9), and each
+    child is mutated with probability ``mutation_rate`` (default 1). The fitness function is as
+    for :class:`Nsga2`.
+    """
+
+    def __init__(
+        self,
+        genome: Genome,
+        *,
+        objectives: Sequence[ObjectiveName],
+        population_size: int,
+        crossover: Crossover,
+        mutation: Mutation,
+        crossover_rate: float | None = None,
+        mutation_rate: float | None = None,
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self.objectives = list(objectives)
+        self.population_size = population_size
+        self.crossover = crossover
+        self.mutation = mutation
+        self.crossover_rate = crossover_rate
+        self.mutation_rate = mutation_rate
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "spea2",
+            "population_size": self.population_size,
+            "seed": self.seed,
+            "variation": self._variation(),
+        }
+
+
+class Moead(_MultiObjective):
+    """MOEA/D (Zhang and Li, 2007), for 2 to 6 objectives: a single-objective subproblem per
+    weight vector, which shares good solutions with the subproblems of its nearest weight vectors.
+
+    ``weights`` is a 2-D array with a weight vector per row and a value per objective,
+    non-negative and not all 0, usually :func:`das_dennis` points; the population size is their
+    number, at least 2. ``decomposition`` turns the objectives into one value per subproblem:
+    :class:`Tchebycheff` (the default) or :class:`Pbi`, which spreads fronts of 3 or more
+    objectives well. Each generation, every subproblem gets a child, one of the crossover's two.
+
+    Settings, with their defaults:
+
+    - ``neighbors`` (20): the size of each neighborhood, itself included, at least 2;
+    - ``neighbor_mating`` (0.9): the probability that the parents come from the neighborhood
+      rather than the whole population;
+    - ``max_replacements`` (2): the most solutions a child replaces;
+    - ``crossover_rate`` and ``mutation_rate`` (1).
+
+    For real genomes, SBX with eta 20 is the usual crossover. The fitness function is as for
+    :class:`Nsga2`.
+    """
+
+    def __init__(
+        self,
+        genome: Genome,
+        *,
+        objectives: Sequence[ObjectiveName],
+        weights: np.ndarray | Sequence[Sequence[float]],
+        crossover: Crossover,
+        mutation: Mutation,
+        neighbors: int | None = None,
+        neighbor_mating: float | None = None,
+        max_replacements: int | None = None,
+        decomposition: Decomposition | None = None,
+        crossover_rate: float | None = None,
+        mutation_rate: float | None = None,
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self.objectives = list(objectives)
+        self.weights = weights
+        self.crossover = crossover
+        self.mutation = mutation
+        self.neighbors = neighbors
+        self.neighbor_mating = neighbor_mating
+        self.max_replacements = max_replacements
+        self.decomposition = decomposition
+        self.crossover_rate = crossover_rate
+        self.mutation_rate = mutation_rate
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "moead",
+            "weights": _rows("weights", self.weights),
+            "neighbors": self.neighbors,
+            "neighbor_mating": self.neighbor_mating,
+            "max_replacements": self.max_replacements,
+            "decomposition": None if self.decomposition is None else self.decomposition._describe(),
+            "seed": self.seed,
+            "variation": self._variation(),
+        }
+
+
+class SmsEmoa(_MultiObjective):
+    """SMS-EMOA (Beume, Naujoks and Emmerich, 2007), for 2 to 6 objectives: survival by
+    hypervolume contribution, for fronts that are well spread and converged, at a higher cost per
+    generation than NSGA-II: O(N log N) per removal for 2 objectives, O(N²) for 3, O(N³) for 4 and
+    O(N⁴) for 5, where :class:`Nsga3` or :class:`Moead` are better choices.
+
+    ``offspring``: the children per generation, ``population_size`` by default; 1 is the original
+    steady-state algorithm. Pairs of parents are recombined with probability ``crossover_rate``
+    (default 0.9), and each child is mutated with probability ``mutation_rate`` (default 1). The
+    fitness function is as for :class:`Nsga2`.
+    """
+
+    def __init__(
+        self,
+        genome: Genome,
+        *,
+        objectives: Sequence[ObjectiveName],
+        population_size: int,
+        crossover: Crossover,
+        mutation: Mutation,
+        offspring: int | None = None,
+        crossover_rate: float | None = None,
+        mutation_rate: float | None = None,
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self.objectives = list(objectives)
+        self.population_size = population_size
+        self.crossover = crossover
+        self.mutation = mutation
+        self.offspring = offspring
+        self.crossover_rate = crossover_rate
+        self.mutation_rate = mutation_rate
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "sms_emoa",
+            "population_size": self.population_size,
+            "offspring": self.offspring,
+            "seed": self.seed,
+            "variation": self._variation(),
+        }

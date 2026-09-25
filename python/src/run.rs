@@ -9,11 +9,11 @@ use crate::operators::{
 };
 use genoxide::algorithm::{GaBuilder, cmaes, pso};
 use genoxide::genome::Representation;
-use genoxide::multi::MultiObjectiveAlgorithm;
+use genoxide::multi::{self, Decomposition, MultiObjectiveAlgorithm, SmsEmoa};
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
 use numpy::ndarray::Array2;
-use numpy::{IntoPyArray, PyArray1};
+use numpy::{IntoPyArray, PyArray1, PyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -30,20 +30,23 @@ fn setting<T>(result: genoxide::Result<T>) -> Result<T> {
 
 /// Runs the optimization that `config` (JSON, from the Python package) describes, with
 /// `fitness`, called with a genome or, with `batch`, a generation of genomes; with `parallel`,
-/// from several threads at once. Returns the result as a dict.
+/// from several threads at once. `on_generation` is called after every generation with the
+/// generation, the evaluations, the seconds and the best fitness (or the size of the front), and
+/// returns False to stop the run. Returns the result as a dict.
 #[pyfunction]
-#[pyo3(signature = (config, fitness, batch = false, parallel = false))]
+#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None))]
 pub fn run<'py>(
     py: Python<'py>,
     config: &str,
     fitness: Py<PyAny>,
     batch: bool,
     parallel: bool,
+    on_generation: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let run: config::Run = serde_json::from_str(config)
         .map_err(|error| PyValueError::new_err(format!("invalid run description: {error}")))?;
     let context = Context {
-        shared: Shared::new(fitness, batch),
+        shared: Shared::new(fitness, batch, on_generation),
         objectives: run
             .objectives
             .iter()
@@ -91,7 +94,8 @@ pub fn run<'py>(
     })
 }
 
-// why a run failed: its description, or Python (the fitness function, Ctrl+C)
+// why a run failed: its description, or Python (the fitness function, the progress callback,
+// Ctrl+C)
 enum Failure {
     Setting(String),
     Python(PyErr),
@@ -125,7 +129,7 @@ impl Context {
         match self.objectives.as_slice() {
             [objective] => Ok(*objective),
             objectives => Err(format!(
-                "this algorithm optimizes one objective, not {}; use Nsga2 for several",
+                "this algorithm optimizes one objective, not {}; use Nsga2, Nsga3, Spea2, Moead or SmsEmoa for several",
                 objectives.len()
             )),
         }
@@ -305,28 +309,24 @@ where
             }
             generational(py, setting(builder.build())?, context)
         }
-        config::Algorithm::Nsga2 {
-            population_size,
-            seed,
-            crossover: crossover_setting,
-            mutate: mutate_setting,
-            crossover_rate,
-        } => {
-            let settings = Nsga2Settings {
-                population_size,
-                seed,
-                crossover_rate,
+        config::Algorithm::Nsga2 { variation, .. }
+        | config::Algorithm::Nsga3 { variation, .. }
+        | config::Algorithm::Spea2 { variation, .. }
+        | config::Algorithm::Moead { variation, .. }
+        | config::Algorithm::SmsEmoa { variation, .. } => {
+            let multi = MultiObjective {
+                py,
+                representation,
+                crossover: crossover(variation.crossover)?,
+                mutate: mutate(variation.mutate)?,
+                algorithm,
+                context,
             };
-            let crossover = crossover(crossover_setting)?;
-            let mutate = mutate(mutate_setting)?;
-            match context.objectives.len() {
-                2 => nsga2::<_, _, _, 2>(py, representation, crossover, mutate, &settings, context),
-                3 => nsga2::<_, _, _, 3>(py, representation, crossover, mutate, &settings, context),
-                4 => nsga2::<_, _, _, 4>(py, representation, crossover, mutate, &settings, context),
-                5 => nsga2::<_, _, _, 5>(py, representation, crossover, mutate, &settings, context),
-                6 => nsga2::<_, _, _, 6>(py, representation, crossover, mutate, &settings, context),
-                count => Err(format!("Nsga2 takes 2 to 6 objectives, not {count}").into()),
-            }
+            with_objectives(context.objectives.len(), multi).unwrap_or_else(|count| {
+                let message =
+                    format!("multi-objective algorithms take 2 to 6 objectives, not {count}");
+                Err(message.into())
+            })
         }
         config::Algorithm::De { .. } => Err("De needs a Real genome".to_string().into()),
         config::Algorithm::Cmaes { .. } => Err("Cmaes needs a Real genome".to_string().into()),
@@ -370,42 +370,201 @@ where
     Ok(builder)
 }
 
-struct Nsga2Settings {
-    population_size: usize,
-    seed: Option<u64>,
-    crossover_rate: Option<f64>,
+// something to do with the number of objectives as a constant
+trait WithObjectives {
+    type Output;
+
+    fn with<const N: usize>(self) -> Self::Output;
 }
 
-fn nsga2<'py, R, C, X, const N: usize>(
+// does `task` with `count` objectives, 2 to 6, or returns `Err(count)`
+fn with_objectives<T: WithObjectives>(
+    count: usize,
+    task: T,
+) -> std::result::Result<T::Output, usize> {
+    match count {
+        2 => Ok(task.with::<2>()),
+        3 => Ok(task.with::<3>()),
+        4 => Ok(task.with::<4>()),
+        5 => Ok(task.with::<5>()),
+        6 => Ok(task.with::<6>()),
+        count => Err(count),
+    }
+}
+
+/// Das-Dennis points for `objectives` objectives, 2 to 6, with `divisions` divisions: the
+/// reference directions of NSGA-III and the weights of MOEA/D, a point per row.
+#[pyfunction]
+pub fn das_dennis(
+    py: Python<'_>,
+    objectives: usize,
+    divisions: usize,
+) -> PyResult<Bound<'_, PyArray2<f64>>> {
+    let points = with_objectives(objectives, DasDennis(divisions)).map_err(|count| {
+        PyValueError::new_err(format!("das_dennis takes 2 to 6 objectives, not {count}"))
+    })?;
+    Ok(points.into_pyarray(py))
+}
+
+// Das-Dennis points with this many divisions
+struct DasDennis(usize);
+
+impl WithObjectives for DasDennis {
+    type Output = Array2<f64>;
+
+    fn with<const N: usize>(self) -> Array2<f64> {
+        let points = multi::das_dennis::<N>(self.0);
+        Array2::from_shape_fn((points.len(), N), |(point, objective)| {
+            points[point][objective]
+        })
+    }
+}
+
+// a multi-objective algorithm to build and run, with its operators
+struct MultiObjective<'a, 'py, R, C, X> {
     py: Python<'py>,
     representation: R,
     crossover: C,
     mutate: X,
-    settings: &Nsga2Settings,
-    context: &Context,
-) -> Returns<'py>
+    algorithm: config::Algorithm,
+    context: &'a Context,
+}
+
+// the settings every multi-objective builder has
+macro_rules! variation {
+    ($builder:expr, $crossover:expr, $mutate:expr, $variation:expr, $seed:expr) => {{
+        let mut builder = $builder.crossover($crossover).mutate($mutate);
+        if let Some(rate) = $variation.crossover_rate {
+            builder = builder.crossover_rate(rate);
+        }
+        if let Some(rate) = $variation.mutation_rate {
+            builder = builder.mutation_rate(rate);
+        }
+        if let Some(seed) = $seed {
+            builder = builder.seed(seed);
+        }
+        builder
+    }};
+}
+
+impl<'py, R, C, X> WithObjectives for MultiObjective<'_, 'py, R, C, X>
 where
     R: Representation,
     R::Genome: Genes,
     C: Crossover<R>,
     X: Mutate<R>,
 {
-    let objectives: [Objective; N] = context
-        .objectives
-        .clone()
-        .try_into()
-        .map_err(|_| "the number of objectives changed".to_string())?;
-    let mut builder = Nsga2::builder(representation, objectives)
-        .population_size(settings.population_size)
-        .crossover(crossover)
-        .mutate(mutate);
-    if let Some(seed) = settings.seed {
-        builder = builder.seed(seed);
+    type Output = Returns<'py>;
+
+    fn with<const N: usize>(self) -> Returns<'py> {
+        let MultiObjective {
+            py,
+            representation,
+            crossover,
+            mutate,
+            algorithm,
+            context,
+        } = self;
+        let objectives: [Objective; N] = context
+            .objectives
+            .clone()
+            .try_into()
+            .map_err(|_| "the number of objectives changed".to_string())?;
+        match algorithm {
+            config::Algorithm::Nsga2 {
+                population_size,
+                seed,
+                variation,
+            } => {
+                let builder =
+                    Nsga2::builder(representation, objectives).population_size(population_size);
+                let builder = variation!(builder, crossover, mutate, variation, seed);
+                multi_objective(py, setting(builder.build())?, context)
+            }
+            config::Algorithm::Nsga3 {
+                reference_directions,
+                population_size,
+                seed,
+                variation,
+            } => {
+                let directions = rows(reference_directions, "reference_directions")?;
+                let mut builder = Nsga3::builder(representation, objectives, directions);
+                if let Some(size) = population_size {
+                    builder = builder.population_size(size);
+                }
+                let builder = variation!(builder, crossover, mutate, variation, seed);
+                multi_objective(py, setting(builder.build())?, context)
+            }
+            config::Algorithm::Spea2 {
+                population_size,
+                seed,
+                variation,
+            } => {
+                let builder =
+                    Spea2::builder(representation, objectives).population_size(population_size);
+                let builder = variation!(builder, crossover, mutate, variation, seed);
+                multi_objective(py, setting(builder.build())?, context)
+            }
+            config::Algorithm::Moead {
+                weights,
+                neighbors,
+                neighbor_mating,
+                max_replacements,
+                decomposition,
+                seed,
+                variation,
+            } => {
+                let mut builder =
+                    Moead::builder(representation, objectives, rows(weights, "weights")?);
+                if let Some(neighbors) = neighbors {
+                    builder = builder.neighbors(neighbors);
+                }
+                if let Some(probability) = neighbor_mating {
+                    builder = builder.neighbor_mating(probability);
+                }
+                if let Some(count) = max_replacements {
+                    builder = builder.max_replacements(count);
+                }
+                if let Some(decomposition) = decomposition {
+                    builder = builder.decomposition(match decomposition {
+                        config::Decomposition::Tchebycheff {} => Decomposition::Tchebycheff,
+                        config::Decomposition::Pbi { theta } => Decomposition::Pbi { theta },
+                    });
+                }
+                let builder = variation!(builder, crossover, mutate, variation, seed);
+                multi_objective(py, setting(builder.build())?, context)
+            }
+            config::Algorithm::SmsEmoa {
+                population_size,
+                offspring,
+                seed,
+                variation,
+            } => {
+                let mut builder =
+                    SmsEmoa::builder(representation, objectives).population_size(population_size);
+                if let Some(count) = offspring {
+                    builder = builder.offspring(count);
+                }
+                let builder = variation!(builder, crossover, mutate, variation, seed);
+                multi_objective(py, setting(builder.build())?, context)
+            }
+            _ => Err("not a multi-objective algorithm".to_string().into()),
+        }
     }
-    if let Some(rate) = settings.crossover_rate {
-        builder = builder.crossover_rate(rate);
-    }
-    multi_objective(py, setting(builder.build())?, context)
+}
+
+// reference directions or weight vectors: a row each, with a value per objective
+fn rows<const N: usize>(rows: Vec<Vec<f64>>, setting: &str) -> Result<Vec<[f64; N]>> {
+    rows.into_iter()
+        .map(|row| {
+            <[f64; N]>::try_from(row).map_err(|row| {
+                format!(
+                    "each row of `{setting}` has a value per objective, {N}, not {}",
+                    row.len()
+                )
+            })
+        })
+        .collect()
 }
 
 // runs a single-objective algorithm, detached from Python so that other threads, and the fitness
@@ -423,7 +582,10 @@ where
             .stop_when(stop)
             .abort_flag(shared.abort_flag())
             .parallel(parallel)
-            .on_generation(|_| shared.check_signals())
+            .on_generation(|snapshot| {
+                let progress = snapshot.progress();
+                shared.after_generation(progress, progress.best().and_then(Fitness::score));
+            })
             .run()
     });
     if let Some(error) = shared.take_error() {
@@ -460,7 +622,9 @@ where
             .stop_when(stop)
             .abort_flag(shared.abort_flag())
             .parallel(parallel)
-            .on_generation(|_| shared.check_signals())
+            .on_generation(|snapshot| {
+                shared.after_generation(snapshot.progress(), snapshot.front().len());
+            })
             .run()
     });
     if let Some(error) = shared.take_error() {

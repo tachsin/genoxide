@@ -1,3 +1,4 @@
+import dataclasses
 import signal
 import threading
 
@@ -221,44 +222,287 @@ def test_batch_constraint_violations():
     assert result.best_genome[0] == pytest.approx(0.5, abs=0.01)
 
 
-def test_nsga2_finds_a_front():
-    def zdt1(x):
-        f1 = x[:, 0]
-        g = 1 + 9 * x[:, 1:].mean(axis=1)
-        return np.column_stack([f1, g * (1 - np.sqrt(f1 / g))])
+def zdt1(x):
+    f1 = x[:, 0]
+    g = 1 + 9 * x[:, 1:].mean(axis=1)
+    return np.column_stack([f1, g * (1 - np.sqrt(f1 / g))])
 
-    nsga2 = gx.Nsga2(
+
+def zdt1_one(x):
+    return zdt1(x[None, :])[0]
+
+
+def dtlz2(x, objectives=3):
+    g = ((x[:, objectives - 1 :] - 0.5) ** 2).sum(axis=1)
+    angles = x[:, : objectives - 1] * np.pi / 2
+    values = np.empty((len(x), objectives))
+    for i in range(objectives):
+        value = 1 + g
+        for j in range(objectives - 1 - i):
+            value = value * np.cos(angles[:, j])
+        if i > 0:
+            value = value * np.sin(angles[:, objectives - 1 - i])
+        values[:, i] = value
+    return values
+
+
+def assert_non_dominated(front):
+    for a in front:
+        assert not np.any(np.all(front <= a, axis=1) & np.any(front < a, axis=1))
+
+
+def hypervolume(front):
+    """The hypervolume of a front of 2 objectives to minimize, with the reference point
+    (1.1, 1.1)."""
+    front = front[np.argsort(front[:, 0])]
+    widths = np.diff(np.append(front[:, 0], 1.1))
+    return float(np.sum(widths * (1.1 - front[:, 1])))
+
+
+MULTI_OBJECTIVE = ["nsga2", "nsga3", "spea2", "moead", "sms_emoa"]
+
+
+def multi_objective(name, genome, objectives, divisions, **settings):
+    """The algorithm `name`, with a population of as many Das-Dennis points."""
+    settings = {"objectives": objectives, "seed": 10, **settings}
+    directions = gx.das_dennis(len(objectives), divisions)
+    if name == "nsga2":
+        return gx.Nsga2(genome, population_size=len(directions), **settings)
+    if name == "nsga3":
+        return gx.Nsga3(genome, reference_directions=directions, **settings)
+    if name == "spea2":
+        return gx.Spea2(genome, population_size=len(directions), **settings)
+    if name == "moead":
+        return gx.Moead(genome, weights=directions, **settings)
+    return gx.SmsEmoa(genome, population_size=len(directions), **settings)
+
+
+def zdt1_algorithm(name):
+    return multi_objective(
+        name,
         gx.Real((0.0, 1.0), length=10),
-        objectives=["minimize", "minimize"],
-        population_size=40,
+        ["minimize", "minimize"],
+        39,
         crossover=gx.SimulatedBinaryCrossover(15),
         mutation=gx.PolynomialMutation(20, rate=0.1),
-        seed=10,
     )
-    result = nsga2.run(zdt1, evaluations=8_000, batch=True)
+
+
+@pytest.mark.parametrize("name", MULTI_OBJECTIVE)
+def test_multi_objective_algorithms_find_a_front(name):
+    result = zdt1_algorithm(name).run(zdt1, evaluations=8_000, batch=True)
     front = result.front_objectives
     assert front.shape[1] == 2 and len(front) == len(result.front_genomes) > 5
     assert result.front_genomes.shape[1] == 10
     assert np.all(result.front_violations == 0)
-    # no member dominates another
-    for a in front:
-        assert not np.any(np.all(front <= a, axis=1) & np.any(front < a, axis=1))
-    # the same run, a genome at a time
-    one = nsga2.run(lambda x: zdt1(x[None, :])[0], evaluations=8_000)
-    assert np.allclose(np.sort(one.front_objectives, axis=0), np.sort(front, axis=0))
+    assert result.stop_reason == "evaluations"
+    assert_non_dominated(front)
+    # 40 points of the whole front, whose hypervolume is 0.8767
+    assert hypervolume(front) > 0.85
 
 
-def test_nsga2_with_three_objectives_and_tuples():
-    result = gx.Nsga2(
+@pytest.mark.parametrize("name", MULTI_OBJECTIVE)
+def test_a_seed_repeats_a_multi_objective_run(name):
+    first = zdt1_algorithm(name).run(zdt1, generations=30, batch=True)
+    second = zdt1_algorithm(name).run(zdt1, generations=30, batch=True)
+    assert np.array_equal(first.front_objectives, second.front_objectives)
+    assert np.array_equal(first.front_genomes, second.front_genomes)
+    assert first.evaluations == second.evaluations
+
+
+@pytest.mark.parametrize("name", MULTI_OBJECTIVE)
+def test_batch_and_per_genome_evaluation_give_the_same_front(name):
+    algorithm = zdt1_algorithm(name)
+    batch = algorithm.run(zdt1, evaluations=4_000, batch=True)
+    one = algorithm.run(zdt1_one, evaluations=4_000)
+    parallel = algorithm.run(zdt1_one, evaluations=4_000, parallel=True)
+    for other in (one, parallel):
+        assert np.allclose(
+            np.sort(other.front_objectives, axis=0), np.sort(batch.front_objectives, axis=0)
+        )
+        assert other.evaluations == batch.evaluations
+
+
+@pytest.mark.parametrize("name", MULTI_OBJECTIVE)
+def test_three_objectives_and_tuples(name):
+    result = multi_objective(
+        name,
         gx.Binary(20),
-        objectives=["maximize", "maximize", "minimize"],
-        population_size=20,
+        ["maximize", "maximize", "minimize"],
+        4,
         crossover=gx.UniformCrossover(),
         mutation=gx.BitFlip(rate=0.05),
-        seed=11,
     ).run(lambda bits: (bits[:10].sum(), bits[10:].sum(), bits.sum()), generations=10)
-    assert result.front_objectives.shape[1] == 3
+    front = result.front_objectives
+    assert front.shape[1] == 3
     assert result.front_genomes.dtype == np.bool_
+    assert_non_dominated(front * [-1, -1, 1])
+
+
+@pytest.mark.parametrize(
+    "algorithm",
+    [
+        gx.Nsga3(
+            gx.Real((0.0, 1.0), length=7),
+            objectives=["minimize"] * 3,
+            reference_directions=gx.das_dennis(3, 6),
+            crossover=gx.SimulatedBinaryCrossover(30),
+            mutation=gx.PolynomialMutation(20, rate=1 / 7),
+            seed=1,
+        ),
+        gx.Moead(
+            gx.Real((0.0, 1.0), length=7),
+            objectives=["minimize"] * 3,
+            weights=gx.das_dennis(3, 6),
+            decomposition=gx.Pbi(5.0),
+            neighbors=10,
+            neighbor_mating=0.8,
+            max_replacements=3,
+            crossover=gx.SimulatedBinaryCrossover(20),
+            mutation=gx.PolynomialMutation(20, rate=1 / 7),
+            seed=1,
+        ),
+    ],
+)
+def test_many_objectives_on_dtlz2(algorithm):
+    result = algorithm.run(dtlz2, generations=200, batch=True)
+    # the front of DTLZ2 is on the unit sphere
+    radius = np.linalg.norm(result.front_objectives, axis=1)
+    assert len(radius) > 20
+    assert np.all(np.abs(radius - 1) < 0.05)
+
+
+def test_das_dennis():
+    points = gx.das_dennis(3, 12)
+    assert points.shape == (91, 3)
+    assert np.allclose(points.sum(axis=1), 1)
+    assert np.array_equal(gx.das_dennis(2, 2), [[0.0, 1.0], [0.5, 0.5], [1.0, 0.0]])
+    with pytest.raises(ValueError, match="2 to 6 objectives, not 7"):
+        gx.das_dennis(7, 2)
+
+
+def test_multi_objective_settings_errors():
+    genome = gx.Real((0.0, 1.0), length=4)
+    two = ["minimize", "minimize"]
+    operators = {
+        "crossover": gx.SimulatedBinaryCrossover(),
+        "mutation": gx.PolynomialMutation(rate=0.25),
+    }
+    with pytest.raises(ValueError, match="has a value per objective, 2, not 3"):
+        gx.Nsga3(
+            genome, objectives=two, reference_directions=gx.das_dennis(3, 4), **operators
+        ).run(zdt1_one, generations=1)
+    with pytest.raises(ValueError, match="2-D array"):
+        gx.Moead(genome, objectives=two, weights=[0.5, 0.5], **operators).run(
+            zdt1_one, generations=1
+        )
+    with pytest.raises(ValueError, match="weights"):
+        gx.Moead(genome, objectives=two, weights=[[1.0, -1.0], [0.0, 1.0]], **operators).run(
+            zdt1_one, generations=1
+        )
+    with pytest.raises(ValueError, match="theta"):
+        gx.Moead(
+            genome,
+            objectives=two,
+            weights=gx.das_dennis(2, 9),
+            decomposition=gx.Pbi(-1.0),
+            **operators,
+        ).run(zdt1_one, generations=1)
+    with pytest.raises(ValueError, match="2 to 6 objectives, not 7"):
+        gx.Spea2(genome, objectives=["minimize"] * 7, population_size=10, **operators).run(
+            zdt1_one, generations=1
+        )
+    with pytest.raises(ValueError, match="2 to 6 objectives, not 1"):
+        gx.SmsEmoa(genome, objectives=["minimize"], population_size=10, **operators).run(
+            zdt1_one, generations=1
+        )
+    with pytest.raises(ValueError, match="offspring"):
+        gx.SmsEmoa(genome, objectives=two, population_size=10, offspring=0, **operators).run(
+            zdt1_one, generations=1
+        )
+
+
+def test_on_generation_is_called_after_every_generation():
+    main = threading.get_ident()
+    progress = []
+    threads = set()
+
+    def record(state):
+        progress.append(state)
+        threads.add(threading.get_ident())
+
+    result = onemax_ga().run(
+        lambda bits: bits.sum(), generations=15, parallel=True, on_generation=record
+    )
+    assert all(isinstance(state, gx.Progress) for state in progress)
+    # the initial population is generation 0
+    assert [state.generation for state in progress] == list(range(16))
+    # on the thread that called run, even with parallel=True
+    assert threads == {main}
+    evaluations = [state.evaluations for state in progress]
+    assert evaluations == sorted(evaluations) and evaluations[-1] == result.evaluations
+    seconds = [state.seconds for state in progress]
+    assert seconds == sorted(seconds) and seconds[-1] <= result.seconds
+    best = [state.best_fitness for state in progress]
+    assert best == sorted(best) and best[-1] == result.best_fitness
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        progress[0].generation = 3
+
+    progress.clear()
+    result = zdt1_algorithm("spea2").run(
+        zdt1, generations=10, batch=True, on_generation=progress.append
+    )
+    assert all(isinstance(state, gx.MultiProgress) for state in progress)
+    assert [state.generation for state in progress] == list(range(11))
+    assert progress[-1].evaluations == result.evaluations
+    assert all(1 <= state.front_size <= 40 for state in progress)
+    # the result's front is without copies
+    assert progress[-1].front_size >= len(result.front_objectives)
+
+
+def test_on_generation_returning_false_aborts():
+    result = onemax_ga().run(
+        lambda bits: bits.sum(), generations=100, on_generation=lambda state: state.generation < 5
+    )
+    assert result.stop_reason == "aborted"
+    assert result.generations == 5
+    # numpy's False too
+    result = zdt1_algorithm("moead").run(
+        zdt1,
+        generations=100,
+        batch=True,
+        on_generation=lambda state: np.bool_(state.generation < 3),
+    )
+    assert result.stop_reason == "aborted"
+    assert result.generations == 3
+    assert_non_dominated(result.front_objectives)
+    # anything else goes on
+    result = onemax_ga().run(lambda bits: bits.sum(), generations=5, on_generation=lambda state: 0)
+    assert result.stop_reason == "generations"
+
+
+def test_an_exception_in_on_generation_is_raised():
+    calls = []
+
+    def callback(state):
+        calls.append(state)
+        if state.generation == 3:
+            raise KeyError("enough")
+
+    with pytest.raises(KeyError, match="enough"):
+        onemax_ga().run(lambda bits: bits.sum(), generations=100, on_generation=callback)
+    # the run stops after the exception
+    assert len(calls) == 4
+
+    def multi_callback(state):
+        raise ZeroDivisionError
+
+    with pytest.raises(ZeroDivisionError):
+        zdt1_algorithm("nsga3").run(
+            zdt1, generations=100, batch=True, on_generation=multi_callback
+        )
+    with pytest.raises(TypeError, match="on_generation"):
+        onemax_ga().run(lambda bits: bits.sum(), generations=1, on_generation=42)
 
 
 def test_an_exception_in_the_fitness_function_is_raised():
