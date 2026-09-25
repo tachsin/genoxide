@@ -169,9 +169,9 @@ Progress is tracked with the checklists below. Every item is done when it's impl
 
 ### 0.6: Python
 - [ ] `pip install genoxide` via PyO3 / maturin, wheels for Linux, macOS and Windows
-- [ ] Python fitness functions and vectorized numpy batch fitness
+- [x] Python fitness functions and vectorized numpy batch fitness
 - [ ] Zero-copy numpy genomes
-- [ ] Pythonic builders
+- [x] Pythonic builders
 - [ ] Parity examples with the DEAP / pymoo tutorials
 
 ### 0.7: Genetic programming and neuroevolution
