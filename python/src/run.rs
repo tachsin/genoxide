@@ -43,8 +43,12 @@ pub fn run<'py>(
     parallel: bool,
     on_generation: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let run: config::Run = serde_json::from_str(config)
-        .map_err(|error| PyValueError::new_err(format!("invalid run description: {error}")))?;
+    // the error names the setting, e.g. `stop.generations`
+    let mut json = serde_json::Deserializer::from_str(config);
+    let run: config::Run = serde_path_to_error::deserialize(&mut json).map_err(|error| {
+        let (path, error) = (error.path().to_string(), error.into_inner());
+        PyValueError::new_err(format!("invalid setting `{path}`: {error}"))
+    })?;
     let context = Context {
         shared: Shared::new(fitness, batch, on_generation),
         objectives: run
@@ -619,7 +623,9 @@ where
     let result = PyDict::new(py);
     result.set_item("best_genome", genes::array(py, outcome.best_genome()))?;
     result.set_item("best_fitness", fitness.score())?;
-    result.set_item("violation", fitness.violation())?;
+    // no violation without a valid solution: NaN, as 0 means feasible
+    let violation = fitness.score().map_or(f64::NAN, |_| fitness.violation());
+    result.set_item("violation", violation)?;
     result.set_item("generations", outcome.generations())?;
     result.set_item("evaluations", outcome.evaluations())?;
     result.set_item("seconds", outcome.elapsed().as_secs_f64())?;
@@ -674,7 +680,9 @@ where
                 .and_then(|scores| scores.values())
                 .unwrap_or([f64::NAN; N]),
         );
-        violations.push(scores.map_or(f64::NAN, |scores| scores.violation()));
+        // no violation for an invalid solution: NaN, as 0 means feasible
+        let valid = scores.filter(|scores| scores.is_valid());
+        violations.push(valid.map_or(f64::NAN, |scores| scores.violation()));
     }
     let objectives = Array2::from_shape_vec((members.len(), N), objectives)
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))?

@@ -27,11 +27,18 @@ of scores: at most one call per generation, for vectorized numpy code.
 A run stops at the first of its stop conditions: ``generations``, ``evaluations``, ``target``,
 ``time`` (seconds) and ``stagnation`` (generations without improvement), or when its
 ``on_generation`` callback returns False.
+
+Settings are checked before a run: a count, a size or an integer bound is a whole number (an
+``int`` or a numpy integer, not a ``bool`` or a ``float``), and a real setting is a finite number.
+A wrong one is a ``ValueError`` that names it.
 """
 
 from __future__ import annotations
 
 import json
+import math
+import numbers
+import operator
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Union
@@ -110,25 +117,87 @@ ObjectiveName = Literal["maximize", "minimize"]
 Bounds = Union[tuple[float, float], Sequence[tuple[float, float]]]
 
 
-def _bounds(bounds: Any, length: int | None, cast: Callable[[Any], Any]) -> list[list[Any]]:
+def _whole(name: str, value: Any, *, minimum: int | None = 0, plural: bool = False) -> int:
+    """The setting ``name`` as an ``int``: an ``int`` or a numpy integer, not a ``bool`` (an
+    ``int`` to Python) nor a ``float``, even a whole one; at least ``minimum`` unless it's None."""
+    wrong = f"{name} {'are whole numbers' if plural else 'is a whole number'}, not {value!r}"
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(wrong)
+    try:
+        number = operator.index(value)
+    except TypeError:
+        raise ValueError(wrong) from None
+    if minimum is not None and number < minimum:
+        raise ValueError(f"{name} {'are' if plural else 'is'} at least {minimum}, not {number}")
+    return number
+
+
+def _number(name: str, value: Any, *, plural: bool = False) -> float:
+    """The setting ``name`` as a ``float``: a finite real number, not a ``bool``."""
+    wrong = f"{name} {'are finite numbers' if plural else 'is a finite number'}, not {value!r}"
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+        raise ValueError(wrong)
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(wrong)
+    return number
+
+
+def _optional_whole(name: str, value: Any) -> int | None:
+    """``_whole``, or None for a setting left to its default."""
+    return None if value is None else _whole(name, value)
+
+
+def _optional_number(name: str, value: Any) -> float | None:
+    """``_number``, or None for a setting left to its default."""
+    return None if value is None else _number(name, value)
+
+
+def _flag(name: str, value: Any) -> bool | None:
+    """A yes-or-no setting, or None for its default."""
+    if value is None:
+        return None
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    raise ValueError(f"{name} is True or False, not {value!r}")
+
+
+def _bounds(
+    name: str, bounds: Any, length: Any, cast: Callable[[str, Any], Any]
+) -> list[list[Any]]:
     """One ``[low, high]`` per gene, from one pair for every gene (with ``length``) or a pair per
-    gene."""
+    gene. ``cast`` checks each bound, with the setting's name."""
+    if length is not None:
+        length = _whole(f"{name}.length", length)
     pairs = np.asarray(bounds, dtype=object)
+    bound = f"{name}.bounds"
     if pairs.ndim == 1 and len(pairs) == 2:
         if length is None:
             raise ValueError("one pair of bounds for every gene needs the genome's length")
-        return [[cast(pairs[0]), cast(pairs[1])] for _ in range(length)]
+        low, high = cast(bound, pairs[0]), cast(bound, pairs[1])
+        return [[low, high] for _ in range(length)]
     if pairs.ndim != 2 or pairs.shape[1] != 2:
         raise ValueError("bounds are a pair (low, high), or a pair per gene")
     if length is not None and length != len(pairs):
         raise ValueError(f"length is {length}, but there are bounds for {len(pairs)} genes")
-    return [[cast(low), cast(high)] for low, high in pairs]
+    return [[cast(bound, low), cast(bound, high)] for low, high in pairs]
+
+
+def _integer_bound(name: str, value: Any) -> int:
+    return _whole(name, value, minimum=None, plural=True)
+
+
+def _real_bound(name: str, value: Any) -> float:
+    return _number(name, value, plural=True)
 
 
 def _rate_or_count(name: str, rate: float | None, count: int | None) -> dict[str, Any]:
     if (rate is None) == (count is None):
         raise ValueError(f"{name} needs either rate (per gene) or count (genes)")
-    return {"rate": rate, "count": count}
+    return {
+        "rate": _optional_number(f"{name}.rate", rate),
+        "count": _optional_whole(f"{name}.count", count),
+    }
 
 
 # --- genomes -------------------------------------------------------------------------------------
@@ -141,7 +210,7 @@ class Binary:
     length: int
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "binary", "length": self.length}
+        return {"type": "binary", "length": _whole("Binary.length", self.length)}
 
 
 @dataclass(frozen=True)
@@ -155,7 +224,10 @@ class Integer:
     length: int | None = None
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "integer", "bounds": _bounds(self.bounds, self.length, int)}
+        return {
+            "type": "integer",
+            "bounds": _bounds("Integer", self.bounds, self.length, _integer_bound),
+        }
 
 
 @dataclass(frozen=True)
@@ -169,7 +241,7 @@ class Real:
     length: int | None = None
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "real", "bounds": _bounds(self.bounds, self.length, float)}
+        return {"type": "real", "bounds": _bounds("Real", self.bounds, self.length, _real_bound)}
 
 
 @dataclass(frozen=True)
@@ -179,7 +251,7 @@ class Permutation:
     length: int
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "permutation", "length": self.length}
+        return {"type": "permutation", "length": _whole("Permutation.length", self.length)}
 
 
 Genome = Union[Binary, Integer, Real, Permutation]
@@ -194,7 +266,7 @@ class Tournament:
     size: int
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "tournament", "size": self.size}
+        return {"type": "tournament", "size": _whole("Tournament.size", self.size)}
 
 
 @dataclass(frozen=True)
@@ -204,7 +276,7 @@ class Rank:
     pressure: float = 1.5
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "rank", "pressure": self.pressure}
+        return {"type": "rank", "pressure": _number("Rank.pressure", self.pressure)}
 
 
 @dataclass(frozen=True)
@@ -230,7 +302,7 @@ class Truncation:
     fraction: float
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "truncation", "fraction": self.fraction}
+        return {"type": "truncation", "fraction": _number("Truncation.fraction", self.fraction)}
 
 
 @dataclass(frozen=True)
@@ -262,7 +334,7 @@ class PointCrossover:
     points: int = 1
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "point", "points": self.points}
+        return {"type": "point", "points": _whole("PointCrossover.points", self.points)}
 
 
 @dataclass(frozen=True)
@@ -281,7 +353,8 @@ class SimulatedBinaryCrossover:
     eta: float = 15.0
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "simulated_binary", "eta": self.eta}
+        eta = _number("SimulatedBinaryCrossover.eta", self.eta)
+        return {"type": "simulated_binary", "eta": eta}
 
 
 @dataclass(frozen=True)
@@ -292,7 +365,7 @@ class BlendCrossover:
     alpha: float = 0.5
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "blend", "alpha": self.alpha}
+        return {"type": "blend", "alpha": _number("BlendCrossover.alpha", self.alpha)}
 
 
 @dataclass(frozen=True)
@@ -386,7 +459,7 @@ class GaussianMutation:
     def _describe(self) -> dict[str, Any]:
         return {
             "type": "gaussian",
-            "sigma": self.sigma,
+            "sigma": _number("GaussianMutation.sigma", self.sigma),
             **_rate_or_count("GaussianMutation", self.rate, self.count),
         }
 
@@ -403,7 +476,7 @@ class PolynomialMutation:
     def _describe(self) -> dict[str, Any]:
         return {
             "type": "polynomial",
-            "eta": self.eta,
+            "eta": _number("PolynomialMutation.eta", self.eta),
             **_rate_or_count("PolynomialMutation", self.rate, self.count),
         }
 
@@ -415,7 +488,7 @@ class SwapMutation:
     count: int = 1
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "swap", "count": self.count}
+        return {"type": "swap", "count": _whole("SwapMutation.count", self.count)}
 
 
 @dataclass(frozen=True)
@@ -464,7 +537,7 @@ class Generational:
     elitism: int = 1
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "generational", "elitism": self.elitism}
+        return {"type": "generational", "elitism": _whole("Generational.elitism", self.elitism)}
 
 
 @dataclass(frozen=True)
@@ -474,7 +547,10 @@ class SteadyState:
     replacements: int
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "steady_state", "replacements": self.replacements}
+        return {
+            "type": "steady_state",
+            "replacements": _whole("SteadyState.replacements", self.replacements),
+        }
 
 
 @dataclass(frozen=True)
@@ -484,7 +560,8 @@ class MuPlusLambda:
     offspring: int
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "mu_plus_lambda", "lambda": self.offspring}
+        offspring = _whole("MuPlusLambda.offspring", self.offspring)
+        return {"type": "mu_plus_lambda", "lambda": offspring}
 
 
 @dataclass(frozen=True)
@@ -494,7 +571,8 @@ class MuCommaLambda:
     offspring: int
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "mu_comma_lambda", "lambda": self.offspring}
+        offspring = _whole("MuCommaLambda.offspring", self.offspring)
+        return {"type": "mu_comma_lambda", "lambda": offspring}
 
 
 Scheme = Union[Generational, SteadyState, MuPlusLambda, MuCommaLambda]
@@ -530,10 +608,11 @@ class Annealing:
     cooling: float
 
     def _describe(self) -> dict[str, Any]:
+        temperature = _number("Annealing.initial_temperature", self.initial_temperature)
         return {
             "type": "annealing",
-            "initial_temperature": self.initial_temperature,
-            "cooling": self.cooling,
+            "initial_temperature": temperature,
+            "cooling": _number("Annealing.cooling", self.cooling),
         }
 
 
@@ -545,7 +624,7 @@ class Tabu:
     tenure: int
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "tabu", "tenure": self.tenure}
+        return {"type": "tabu", "tenure": _whole("Tabu.tenure", self.tenure)}
 
 
 Acceptance = Union[Improving, NotWorse, Annealing, Tabu]
@@ -570,7 +649,7 @@ class Pbi:
     theta: float = 5.0
 
     def _describe(self) -> dict[str, Any]:
-        return {"type": "pbi", "theta": self.theta}
+        return {"type": "pbi", "theta": _number("Pbi.theta", self.theta)}
 
 
 Decomposition = Union[Tchebycheff, Pbi]
@@ -587,7 +666,8 @@ class Result:
     best_fitness: float | None
     """Its score, or None if no valid solution was found."""
     violation: float
-    """Its constraint violation: 0 for a feasible solution."""
+    """Its constraint violation: 0 for a feasible solution, and NaN if no valid solution was
+    found."""
     generations: int
     evaluations: int
     seconds: float
@@ -605,7 +685,7 @@ class MultiResult:
     front_objectives: np.ndarray
     """Their objective values, a row each."""
     front_violations: np.ndarray
-    """Their constraint violations: 0 for feasible solutions."""
+    """Their constraint violations: 0 for feasible solutions, and NaN for invalid ones."""
     generations: int
     evaluations: int
     seconds: float
@@ -653,17 +733,31 @@ def _stop(
     stagnation: int | None,
 ) -> dict[str, Any]:
     stop = {
-        "generations": generations,
-        "evaluations": evaluations,
-        "target": None if target is None else float(target),
-        "seconds": None if time is None else float(time),
-        "stagnation": stagnation,
+        "generations": _optional_whole("generations", generations),
+        "evaluations": _optional_whole("evaluations", evaluations),
+        "target": _optional_number("target", target),
+        "seconds": _seconds(time),
+        "stagnation": _optional_whole("stagnation", stagnation),
     }
     if all(value is None for value in stop.values()):
         raise ValueError(
             "a run needs a stop condition: generations, evaluations, target, time or stagnation"
         )
     return stop
+
+
+def _seconds(time: Any) -> float | None:
+    """The time limit in seconds: None for none, with ``time`` None or infinite."""
+    if time is None:
+        return None
+    if isinstance(time, (bool, np.bool_)) or not isinstance(time, numbers.Real):
+        raise ValueError(f"time is a number of seconds, not {time!r}")
+    seconds = float(time)
+    if seconds == math.inf:
+        return None
+    if not seconds >= 0:
+        raise ValueError(f"time is a number of seconds, at least 0, not {time!r}")
+    return seconds
 
 
 def _check_callable(function: Any, name: str = "the fitness function") -> None:
@@ -699,8 +793,8 @@ def _batch_scores(function: Callable[[np.ndarray], Any]) -> Callable[[np.ndarray
 
     def evaluate(genomes: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
         result = function(genomes)
-        # (scores, violations): two arrays, not a pair of scores
-        if isinstance(result, tuple) and len(result) == 2 and np.ndim(result[0]) == 1:
+        # (scores, violations): two arrays or columns, not a pair of scores
+        if isinstance(result, tuple) and len(result) == 2 and np.ndim(result[0]) in (1, 2):
             scores, violations = result
             return (
                 np.asarray(scores, dtype=np.float64).reshape(-1),
@@ -721,12 +815,23 @@ def _batch_objectives(function: Callable[[np.ndarray], Any]) -> Callable[[np.nda
         if isinstance(result, tuple) and len(result) == 2 and np.ndim(result[0]) == 2:
             objectives, violations = result
             return (
-                np.asarray(objectives, dtype=np.float64),
+                _objective_rows(objectives),
                 np.asarray(violations, dtype=np.float64).reshape(-1),
             )
-        return np.asarray(result, dtype=np.float64), None
+        return _objective_rows(result), None
 
     return evaluate
+
+
+def _objective_rows(objectives: Any) -> np.ndarray:
+    """The objective values of a batch, a row per genome."""
+    rows = np.asarray(objectives, dtype=np.float64)
+    if rows.ndim != 2:
+        raise ValueError(
+            "a multi-objective batch fitness function returns a 2-D array, a row of objective "
+            f"values per genome, not an array of shape {rows.shape}"
+        )
+    return rows
 
 
 class _Algorithm:
@@ -754,8 +859,9 @@ class _Algorithm:
             "objectives": self._objectives(),
             "stop": stop,
         }
-        description = json.dumps(run, default=_json_number)
-        return _genoxide.run(description, fitness, batch, parallel, on_generation)
+        # NaN and infinity aren't JSON: the settings are finite, or an error names them
+        description = json.dumps(run, default=_json_number, allow_nan=False)
+        return _genoxide.run(description, fitness, bool(batch), bool(parallel), on_generation)
 
 
 class _SingleObjective(_Algorithm):
@@ -784,14 +890,16 @@ class _SingleObjective(_Algorithm):
         ``fitness`` takes a genome as a numpy array and returns a number, None (an invalid
         solution) or ``(score, constraint_violation)``. With ``batch=True`` it takes a generation
         as a 2-D array, a genome per row, and returns an array of scores (NaN for an invalid
-        solution), or a tuple of an array of scores and an array of constraint violations.
+        solution), or a tuple of an array of scores and an array of constraint violations; a
+        column, of shape ``(n, 1)``, does for an array.
 
         ``parallel=True`` calls a (non-batch) fitness function from several threads at once: it
         pays off when the function releases the GIL, e.g. in numpy or I/O, or on free-threaded
         Python.
 
         Stop conditions: ``generations``, ``evaluations``, ``target`` (a score at least as good),
-        ``time`` (seconds) and ``stagnation`` (generations without improvement).
+        ``time`` (seconds; ``math.inf`` for no limit) and ``stagnation`` (generations without
+        improvement).
 
         ``on_generation`` is called after every generation, the initial population's included,
         with a :class:`Progress`, on the thread that called ``run``. If it returns False, the run
@@ -843,13 +951,13 @@ class Ga(_SingleObjective):
     def _describe(self) -> dict[str, Any]:
         return {
             "type": "ga",
-            "population_size": self.population_size,
-            "seed": self.seed,
+            "population_size": _whole("population_size", self.population_size),
+            "seed": _optional_whole("seed", self.seed),
             "select": self.select._describe(),
             "crossover": self.crossover._describe(),
             "mutate": self.mutation._describe(),
-            "crossover_rate": self.crossover_rate,
-            "mutation_rate": self.mutation_rate,
+            "crossover_rate": _optional_number("crossover_rate", self.crossover_rate),
+            "mutation_rate": _optional_number("mutation_rate", self.mutation_rate),
             "scheme": None if self.scheme is None else self.scheme._describe(),
         }
 
@@ -885,9 +993,9 @@ class De(_SingleObjective):
     def _describe(self) -> dict[str, Any]:
         return {
             "type": "de",
-            "population_size": self.population_size,
-            "seed": self.seed,
-            "l_shade": self.l_shade,
+            "population_size": _optional_whole("population_size", self.population_size),
+            "seed": _optional_whole("seed", self.seed),
+            "l_shade": _optional_whole("l_shade", self.l_shade),
         }
 
 
@@ -917,12 +1025,14 @@ class Cmaes(_SingleObjective):
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
+        if self.restarts not in (None, "never", "ipop", "bipop"):
+            raise ValueError(f'restarts is "never", "ipop" or "bipop", not {self.restarts!r}')
         return {
             "type": "cmaes",
-            "population_size": self.population_size,
-            "seed": self.seed,
+            "population_size": _optional_whole("population_size", self.population_size),
+            "seed": _optional_whole("seed", self.seed),
             "restarts": self.restarts,
-            "initial_step": self.initial_step,
+            "initial_step": _optional_number("initial_step", self.initial_step),
         }
 
 
@@ -951,9 +1061,9 @@ class Pso(_SingleObjective):
     def _describe(self) -> dict[str, Any]:
         return {
             "type": "pso",
-            "population_size": self.population_size,
-            "seed": self.seed,
-            "ring": self.ring,
+            "population_size": _optional_whole("population_size", self.population_size),
+            "seed": _optional_whole("seed", self.seed),
+            "ring": _optional_whole("ring", self.ring),
         }
 
 
@@ -986,13 +1096,22 @@ class LocalSearch(_SingleObjective):
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
+        restart = None
+        if self.restart is not None:
+            try:
+                patience, kicks = self.restart
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"restart is a pair (patience, kicks), not {self.restart!r}"
+                ) from None
+            restart = [_whole("restart patience", patience), _whole("restart kicks", kicks)]
         return {
             "type": "local_search",
-            "seed": self.seed,
+            "seed": _optional_whole("seed", self.seed),
             "neighbor": self.neighbor._describe(),
-            "neighbors": self.neighbors,
+            "neighbors": _optional_whole("neighbors", self.neighbors),
             "acceptance": None if self.acceptance is None else self.acceptance._describe(),
-            "restart": None if self.restart is None else list(self.restart),
+            "restart": restart,
         }
 
 
@@ -1003,7 +1122,7 @@ def das_dennis(objectives: int, divisions: int) -> np.ndarray:
     weights of :class:`Moead`. There are ``(divisions + objectives - 1)! / (divisions!
     (objectives - 1)!)`` of them: 91 for 3 objectives and 12 divisions, and none for 0 divisions.
     """
-    return _genoxide.das_dennis(objectives, divisions)
+    return _genoxide.das_dennis(_whole("objectives", objectives), _whole("divisions", divisions))
 
 
 def _rows(name: str, rows: Any) -> list[list[float]]:
@@ -1011,6 +1130,8 @@ def _rows(name: str, rows: Any) -> list[list[float]]:
     array = np.asarray(rows, dtype=np.float64)
     if array.ndim != 2:
         raise ValueError(f"{name} is a 2-D array, a row each with a value per objective")
+    if not np.isfinite(array).all():
+        raise ValueError(f"{name} are finite numbers, not {array[~np.isfinite(array)][0]}")
     return array.tolist()
 
 
@@ -1034,9 +1155,11 @@ class _MultiObjective(_Algorithm):
         return {
             "crossover": self.crossover._describe(),
             "mutate": self.mutation._describe(),
-            "crossover_rate": self.crossover_rate,
-            "mutation_rate": self.mutation_rate,
-            "eliminate_duplicates": getattr(self, "eliminate_duplicates", None),
+            "crossover_rate": _optional_number("crossover_rate", self.crossover_rate),
+            "mutation_rate": _optional_number("mutation_rate", self.mutation_rate),
+            "eliminate_duplicates": _flag(
+                "eliminate_duplicates", getattr(self, "eliminate_duplicates", None)
+            ),
         }
 
     def run(
@@ -1052,8 +1175,8 @@ class _MultiObjective(_Algorithm):
         on_generation: Callable[[MultiProgress], bool | None] | None = None,
     ) -> MultiResult:
         """Runs until the first stop condition: ``generations``, ``evaluations``, ``time``
-        (seconds) or ``stagnation``. See :meth:`Ga.run` for ``batch``, ``parallel`` and
-        ``on_generation``, which gets a :class:`MultiProgress`."""
+        (seconds; ``math.inf`` for no limit) or ``stagnation``. See :meth:`Ga.run` for
+        ``batch``, ``parallel`` and ``on_generation``, which gets a :class:`MultiProgress`."""
         _check_callable(fitness)
         stop = _stop(generations, evaluations, None, time, stagnation)
         function = _batch_objectives(fitness) if batch else fitness
@@ -1103,8 +1226,8 @@ class Nsga2(_MultiObjective):
     def _describe(self) -> dict[str, Any]:
         return {
             "type": "nsga2",
-            "population_size": self.population_size,
-            "seed": self.seed,
+            "population_size": _whole("population_size", self.population_size),
+            "seed": _optional_whole("seed", self.seed),
             "variation": self._variation(),
         }
 
@@ -1152,8 +1275,8 @@ class Nsga3(_MultiObjective):
         return {
             "type": "nsga3",
             "reference_directions": _rows("reference_directions", self.reference_directions),
-            "population_size": self.population_size,
-            "seed": self.seed,
+            "population_size": _optional_whole("population_size", self.population_size),
+            "seed": _optional_whole("seed", self.seed),
             "variation": self._variation(),
         }
 
@@ -1195,8 +1318,8 @@ class Spea2(_MultiObjective):
     def _describe(self) -> dict[str, Any]:
         return {
             "type": "spea2",
-            "population_size": self.population_size,
-            "seed": self.seed,
+            "population_size": _whole("population_size", self.population_size),
+            "seed": _optional_whole("seed", self.seed),
             "variation": self._variation(),
         }
 
@@ -1256,11 +1379,11 @@ class Moead(_MultiObjective):
         return {
             "type": "moead",
             "weights": _rows("weights", self.weights),
-            "neighbors": self.neighbors,
-            "neighbor_mating": self.neighbor_mating,
-            "max_replacements": self.max_replacements,
+            "neighbors": _optional_whole("neighbors", self.neighbors),
+            "neighbor_mating": _optional_number("neighbor_mating", self.neighbor_mating),
+            "max_replacements": _optional_whole("max_replacements", self.max_replacements),
             "decomposition": None if self.decomposition is None else self.decomposition._describe(),
-            "seed": self.seed,
+            "seed": _optional_whole("seed", self.seed),
             "variation": self._variation(),
         }
 
@@ -1305,8 +1428,8 @@ class SmsEmoa(_MultiObjective):
     def _describe(self) -> dict[str, Any]:
         return {
             "type": "sms_emoa",
-            "population_size": self.population_size,
-            "offspring": self.offspring,
-            "seed": self.seed,
+            "population_size": _whole("population_size", self.population_size),
+            "offspring": _optional_whole("offspring", self.offspring),
+            "seed": _optional_whole("seed", self.seed),
             "variation": self._variation(),
         }
