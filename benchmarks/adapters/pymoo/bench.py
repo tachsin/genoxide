@@ -233,12 +233,32 @@ class Stop(Exception):
     """The budget or the time cap is reached in the middle of a batch."""
 
 
-class Counter:
+class Generations:
+    """The evaluations of the last generation (rule 2.3): pymoo updates the termination after
+    every generation, the initial population included (Algorithm._post_advance), and the
+    termination marks its end here."""
+
+    def __init__(self):
+        self.evaluations = 0
+        self.generation_end = 0
+        self.last = 0
+
+    def end_generation(self):
+        self.last = self.evaluations - self.generation_end
+        self.generation_end = self.evaluations
+
+    def last_generation(self):
+        """The evaluations since the start of the last generation: of one cut short, or of the
+        last one that ended."""
+        return self.evaluations - self.generation_end or self.last
+
+
+class Counter(Generations):
     """Counts the evaluations of a run, across its restarts, and keeps its best solution."""
 
     def __init__(self, start, max_evaluations, max_seconds, target):
+        super().__init__()
         self.start = start
-        self.evaluations = 0
         self.max_evaluations = max_evaluations
         self.deadline = start + max_seconds
         self.target = target
@@ -304,6 +324,7 @@ class BudgetTermination(Termination):
         self.counter = counter
 
     def _update(self, algorithm):
+        self.counter.end_generation()
         return 1.0 if self.counter.reached() or self.counter.out_of_budget() else 0.0
 
 
@@ -524,6 +545,7 @@ def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
                 "time_s": round(elapsed, 6),
                 "generations": generations,
                 "evaluations": counter.evaluations,
+                "last_generation": counter.last_generation(),
                 "best": best,
                 "target": -target if maximize else target,
                 "success": counter.reached(),
@@ -539,14 +561,14 @@ def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
 # -------------------------------------------------------------------------------------------------
 
 
-class FrontProblem(Problem):
+class FrontProblem(Problem, Generations):
     """A multi-objective problem whose evaluations are counted."""
 
     def __init__(self, function, size, n_var, n_obj):
-        super().__init__(n_var=n_var, n_obj=n_obj, xl=0.0, xu=1.0)
+        Problem.__init__(self, n_var=n_var, n_obj=n_obj, xl=0.0, xu=1.0)
+        Generations.__init__(self)
         self.function = function
         self.size = size
-        self.evaluations = 0
         # evaluated solutions outside the bounds, as pymoo proposed them (rule 2.4)
         self.outside = 0
 
@@ -566,6 +588,7 @@ class FrontTermination(Termination):
         self.deadline = deadline
 
     def _update(self, algorithm):
+        self.problem.end_generation()
         if self.problem.evaluations >= self.max_evaluations or time.perf_counter() >= self.deadline:
             return 1.0
         return 0.0
@@ -634,6 +657,7 @@ def run_fronts(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
                 "time_s": round(elapsed, 6),
                 "generations": algorithm.n_gen,
                 "evaluations": problem.evaluations,
+                "last_generation": problem.last_generation(),
                 "front": [[float(v) for v in F[i]] for i in front],
                 "solutions": [[float(v) for v in X[i]] for i in front],
                 "outside": problem.outside,

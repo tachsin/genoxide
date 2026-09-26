@@ -217,6 +217,10 @@ struct Counters {
     outside: Rc<Cell<usize>>,
     // (evaluations, seconds) at the first evaluation whose value reaches the target
     first_hit: Rc<Cell<Option<(usize, f64)>>>,
+    // the rows of the latest call of the fitness function (rule 2.3): moors evaluates the initial
+    // population in one call and each generation's population and offspring in one call
+    // (initialization.rs, ga.rs `next`)
+    last_generation: Rc<Cell<usize>>,
 }
 
 /// Whether a solution has a gene outside [lower, upper]
@@ -268,7 +272,9 @@ fn soo_fitness(
     let evaluations = counters.evaluations.clone();
     let outside = counters.outside.clone();
     let first_hit = counters.first_hit.clone();
+    let last_generation = counters.last_generation.clone();
     move |genes: &Array2<f64>| {
+        last_generation.set(genes.nrows());
         genes
             .rows()
             .into_iter()
@@ -602,12 +608,13 @@ fn run_single(output: &mut dyn Write, args: &Args, seed: u64) {
     emit(
         output,
         format!(
-            "{{\"library\":\"moors\",\"solver\":\"ga\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{},\"evaluations\":{},\"restarts\":{restart}{},\"best\":{},\"target\":{},\"success\":{},\"first_hit\":{first_hit},\"solution\":{}}}",
+            "{{\"library\":\"moors\",\"solver\":\"ga\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{},\"evaluations\":{},\"last_generation\":{},\"restarts\":{restart}{},\"best\":{},\"target\":{},\"success\":{},\"first_hit\":{first_hit},\"solution\":{}}}",
             args.problem,
             args.size,
             args.mode,
             counters.generations.get(),
             counters.evaluations.get(),
+            counters.last_generation.get(),
             // rule 2.4, continuous problems
             match problem.bounds {
                 Some(_) => format!(",\"outside\":{}", counters.outside.get()),

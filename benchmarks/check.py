@@ -128,7 +128,8 @@ def in_domain(problem, size, solution):
 def check_run(r, problem, size, budget, cap):
     """The failures of one run, in `run.py check` and in every timed run."""
     where = f"{r.get('solver')} seed {r.get('seed')}"
-    common = ["library", "solver", "problem", "size", "mode", "seed", "time_s", "generations", "evaluations"]
+    common = ["library", "solver", "problem", "size", "mode", "seed", "time_s", "generations", "evaluations",
+              "last_generation"]
     front = problem in problems.FRONT_VARIABLES
     fields = common + (["front", "solutions"] if front else ["best", "target", "success", "solution", "first_hit"])
     missing = [field for field in fields if field not in r]
@@ -138,9 +139,14 @@ def check_run(r, problem, size, budget, cap):
         return [f"{where}: a run of {r['problem']} {r['size']} in the scenario of {problem} {size}"]
     failures = []
     evaluations, generations = r["evaluations"], max(r["generations"], 1)
-    # a generation's size: the average, or the last one's, which an adapter whose generations grow
-    # (e.g. CMA-ES with IPOP restarts) reports as last_generation
-    per_generation = max(math.ceil(evaluations / generations), r.get("last_generation", 0))
+    # a generation's size: the average, or the last one's, which can be larger (a restart's initial
+    # population, IPOP's growing populations, a library that evaluates only changed children), as
+    # the adapter counted it; no generation has more evaluations than the run
+    last = r["last_generation"]
+    if isinstance(last, bool) or not isinstance(last, int) or not 0 <= last <= evaluations:
+        failures.append(f"{where}: last_generation {last}, in a run of {evaluations} evaluations")
+        last = 0
+    per_generation = max(math.ceil(evaluations / generations), last)
     if evaluations > budget + per_generation:
         failures.append(f"{where}: {evaluations} evaluations, over the budget of {budget} by more than "
                         f"a generation ({per_generation})")

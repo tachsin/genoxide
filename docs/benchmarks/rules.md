@@ -37,7 +37,7 @@ Which criteria count:
 - **They don't count** when they're a fallback that the documented way of setting a budget replaces. pymoo's default termination, for example, is replaced by `termination=("n_evals", N)`.
 - **Matched scenarios have none:** the matched configuration defines no convergence criterion.
 
-2.3. A library that checks the stop only between generations may go past the target or the budget by at most one generation. **[checked]** Evaluations beyond the budget plus one generation make the run invalid.
+2.3. A library that checks the stop only between generations may go past the target or the budget by at most one generation. **[checked]** Evaluations beyond the budget plus one generation make the run invalid. Every run reports `last_generation`, the evaluations its adapter counted since the start of its last generation (a restart's initial population is a generation), and a generation is the larger of that and the run's average.
 
 2.4. **Only inside the bounds.** Every solution a method evaluates must lie inside the problem's box. The library's own bound handling is used: clipping, repair, a transformation or a bounded operator. The page says which. **[checked]** Each run of a continuous or multi-objective problem reports `outside`, the number of evaluated solutions outside the bounds, from the adapter's own counter. It must be 0.
 

@@ -58,6 +58,9 @@ class Budget:
         self.deadline = start + max_seconds
         self.evaluations = 0
         self.generations = 0
+        # the evaluations at the end of the last generation, and that generation's (rule 2.3)
+        self.generation_end = 0
+        self.last = 0
         self.outside = 0
         self.best = math.inf
         self.best_x = None
@@ -79,7 +82,19 @@ class Budget:
         return value
 
     def next_generation(self, *args, **kwargs):
+        """The callback of differential_evolution and minimize, called after every generation or
+        iteration."""
         self.generations += 1
+        self.last = self.evaluations - self.generation_end
+        self.generation_end = self.evaluations
+
+    def last_generation(self, stepwise):
+        """The evaluations since the start of the last generation (rule 2.3): of one cut short, or
+        of the last one that ended. `stepwise`: a solver without the callback, whose generation is
+        an evaluation."""
+        if stepwise:
+            return min(self.evaluations, 1)
+        return self.evaluations - self.generation_end or self.last
 
 
 # -------------------------------------------------------------------------------------------------
@@ -216,6 +231,10 @@ def solve_minimize(method):
     return solve
 
 
+# the solvers without a callback: a generation is an evaluation
+STEPWISE = {"dual_annealing", "direct"}
+
+
 def solvers(problem):
     """(solver name, function) of the problem type, see the page."""
     if problem == "rosenbrock":
@@ -283,6 +302,7 @@ def main():
                 # direct report their evaluations
                 "generations": budget.generations or budget.evaluations,
                 "evaluations": budget.evaluations,
+                "last_generation": budget.last_generation(solver in STEPWISE),
                 "outside": budget.outside,
                 "best": budget.best,
                 "target": TARGET,

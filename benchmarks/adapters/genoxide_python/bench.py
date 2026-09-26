@@ -67,6 +67,8 @@ import genoxide as gx
 
 EVALUATIONS = 0
 OUTSIDE = 0
+# the rows of the latest batch: with batch=True a call is a generation (rule 2.3)
+BATCH = 0
 # the target of the run (None outside a single-objective run), whether it's a maximum, the start
 # of the run's clock, and the first hit: {"evaluations": E, "time_s": T}
 HIT = {"target": None, "maximize": False, "start": 0.0, "first": None}
@@ -74,8 +76,9 @@ HIT = {"target": None, "maximize": False, "start": 0.0, "first": None}
 
 def count(x, low, high):
     """Counts the rows of x, and those with a gene outside [low, high]."""
-    global EVALUATIONS, OUTSIDE
+    global EVALUATIONS, OUTSIDE, BATCH
     EVALUATIONS += len(x)
+    BATCH = len(x)
     OUTSIDE += int(np.count_nonzero(((x < low) | (x > high)).any(axis=1)))
 
 
@@ -387,23 +390,21 @@ def attempt_seed(seed, restart):
 
 def solve(common, solver, seed, make, function, batch, target, max_evaluations, max_seconds):
     """Runs one solver, with restarts after a stall (rule 2.2), and prints the run."""
-    global EVALUATIONS, OUTSIDE
-    EVALUATIONS = OUTSIDE = 0
+    global EVALUATIONS, OUTSIDE, BATCH
+    EVALUATIONS = OUTSIDE = BATCH = 0
     maximize = common["problem"] == "onemax"
-    # CMA-ES with IPOP restarts doubles its population at each restart, so its last generation
-    # can be larger than the average: the run reports it, for the budget check (rule 2.3). The
-    # other solvers' generations don't grow.
-    generation = {"evaluated": 0, "last": 0}
     # the GA is the one solver here that can stall (every child a copy of a parent): the others
     # evaluate new genomes every generation (local search redraws a neighbor that didn't change).
     # Its time cap is this callback, so that a stall can end the run and the GA can start again
     can_stall = solver == "ga"
-
-    def track(progress):
-        generation["last"] = progress.evaluations - generation["evaluated"]
-        generation["evaluated"] = progress.evaluations
+    # the last generation's evaluations, for the budget check (rule 2.3): the GA's callback, called
+    # after every generation (each attempt's initial population included), records the count and
+    # the generation's size; see the end of the run for the other solvers
+    generation = {"end": 0, "last": 0}
 
     def in_time(progress):
+        generation["last"] = EVALUATIONS - generation["end"]
+        generation["end"] = EVALUATIONS
         return time.perf_counter() - start < max_seconds
 
     best = solution = None
@@ -412,13 +413,11 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
     # the clock starts before the algorithm is made and its initial population created
     start = HIT["start"] = time.perf_counter()
     while True:
-        generation["evaluated"] = 0
         budget = max_evaluations - EVALUATIONS
         if can_stall:
             limits = {"on_generation": in_time}
         else:
-            limits = {"time": max(max_seconds - (time.perf_counter() - start), 0.0),
-                      "on_generation": track if solver == "cma_es" else None}
+            limits = {"time": max(max_seconds - (time.perf_counter() - start), 0.0)}
         result = make(attempt_seed(seed, restart)).run(
             function, batch=batch, target=target, evaluations=budget, **limits)
         generations += result.generations
@@ -433,9 +432,13 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
     elapsed = time.perf_counter() - start
     HIT["target"] = None
     compare(common, solver, seed, EVALUATIONS, reported)
-    extra = {}
-    if solver == "cma_es":
-        extra["last_generation"] = generation["last"]
+    if can_stall:
+        last_generation = EVALUATIONS - generation["end"] or generation["last"]
+    else:
+        # with batch=True a call is a generation; local search on N-Queens, the other solver that
+        # evaluates a genome at a time, evaluates one neighbor per step
+        last_generation = BATCH if batch else min(EVALUATIONS, 1)
+    extra = {"last_generation": last_generation}
     if common["problem"] in REAL_PROBLEMS:
         extra["outside"] = OUTSIDE
     if restart:
@@ -450,7 +453,7 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
 
 
 def main():
-    global EVALUATIONS, OUTSIDE
+    global EVALUATIONS, OUTSIDE, BATCH
     if sys.argv[1:] == ["--self-check"]:
         self_check()
         return
@@ -473,7 +476,7 @@ def main():
             # doesn't stall: every run ends at its budget or the time cap
             function, solvers = front_solvers(problem, size)
             for solver, make in solvers:
-                EVALUATIONS = OUTSIDE = 0
+                EVALUATIONS = OUTSIDE = BATCH = 0
                 start = time.perf_counter()
                 result = make(seed).run(function, batch=True, evaluations=max_evaluations, time=max_seconds)
                 elapsed = time.perf_counter() - start
@@ -481,7 +484,8 @@ def main():
                 print(json.dumps({
                     **common, "solver": solver, "seed": seed, "time_s": round(elapsed, 6),
                     "generations": result.generations, "evaluations": EVALUATIONS,
-                    "outside": OUTSIDE,
+                    # a batch is a generation (rule 2.3)
+                    "last_generation": BATCH, "outside": OUTSIDE,
                     "front": result.front_objectives.tolist(),
                     "solutions": result.front_genomes.tolist(),
                 }), flush=True)

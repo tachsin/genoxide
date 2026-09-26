@@ -166,6 +166,9 @@ mutable struct Budget
     # the first evaluation whose value reaches the target, and the clock then (-1: not yet)
     first_hit_evaluations::Int
     first_hit_seconds::Float64
+    # the evaluations at the end of the last generation, and that generation's (rule 2.3)
+    generation_end::Int
+    last_generation::Int
     const max_evaluations::Int
     const max_seconds::Float64
     const target::Float64
@@ -173,9 +176,25 @@ mutable struct Budget
 end
 
 Budget(max_evaluations, max_seconds, target = -Inf) =
-    Budget(0, Inf, nothing, 0, -1, 0.0, max_evaluations, max_seconds, target, time_ns())
+    Budget(0, Inf, nothing, 0, -1, 0.0, 0, 0, max_evaluations, max_seconds, target, time_ns())
 
 seconds(budget::Budget) = (time_ns() - budget.start) / 1.0e9
+
+# marks the end of a generation
+function end_generation!(budget::Budget)
+    budget.last_generation = budget.evaluations - budget.generation_end
+    budget.generation_end = budget.evaluations
+    return
+end
+
+# the evaluations since the start of the last generation (rule 2.3): of one cut short, or of the
+# last one that ended
+last_generation(budget::Budget) =
+    budget.evaluations > budget.generation_end ? budget.evaluations - budget.generation_end : budget.last_generation
+
+# optimize's logger, called after the initial population and after every iteration
+# (optimize/before.jl and during.jl): it marks the generation's end
+generation_logger(budget::Budget) = status -> end_generation!(budget)
 
 outside(x, bounds) = bounds !== nothing && any(v -> v < bounds[1] || v > bounds[2], x)
 
@@ -287,7 +306,7 @@ function onemax_solvers(size, mode)
         # population 100, binary tournament, uniform crossover 0.5, BitFlipMutation(1e-5),
         # elitist replacement
         algorithm = GA(; algorithm_kwargs(budget, seed)...)
-        return optimize(counted(onemax, budget), BitArraySpace(size), algorithm)
+        return optimize(counted(onemax, budget), BitArraySpace(size), algorithm; logger = generation_logger(budget))
     end
     return [("ga", run, bits)]
 end
@@ -308,13 +327,16 @@ function nqueens_solvers(size)
             environmental_selection = ElitistReplacement(),
             algorithm_kwargs(budget, seed)...,
         )
-        return optimize(counted(nqueens, budget), PermutationSpace(size), algorithm)
+        return optimize(counted(nqueens, budget), PermutationSpace(size), algorithm; logger = generation_logger(budget))
     end
     # the BRKGA docstring (docs/src/algorithms/combinatorial.md, "BRKGA"): random keys in [0, 1]^n
     # decoded by sortperm, with the defaults (20 elites, 10 mutants, 70 offspring, bias 0.7)
     brkga = function (budget, seed)
         bounds = boxconstraints(lb = zeros(size), ub = ones(size))
-        return optimize(counted(keys -> nqueens(sortperm(keys)), budget), bounds, BRKGA(; algorithm_kwargs(budget, seed)...))
+        return optimize(
+            counted(keys -> nqueens(sortperm(keys)), budget), bounds, BRKGA(; algorithm_kwargs(budget, seed)...);
+            logger = generation_logger(budget),
+        )
     end
     return [("ga", ga, zero_based), ("brkga", brkga, keys -> sortperm(keys) .- 1)]
 end
@@ -324,7 +346,10 @@ function real_solvers(problem, size)
     bounds = boxconstraints(lb = fill(lower, size), ub = fill(upper, size))
     # the bounds: the initial population within them, and each method's own repair (ECA and DE:
     # evo_boundary_repairer!, ECA.jl and DE.jl; PSO: reset_to_violated_bounds!, PSO.jl)
-    solve(make) = (budget, seed) -> optimize(counted(f, budget; bounds = (lower, upper)), bounds, make(algorithm_kwargs(budget, seed)))
+    solve(make) = (budget, seed) -> optimize(
+        counted(f, budget; bounds = (lower, upper)), bounds, make(algorithm_kwargs(budget, seed));
+        logger = generation_logger(budget),
+    )
     # the guide: "Box-constrained (continuous): Use ECA, DE, PSO, or SHADE", the first three, with
     # their defaults (their docstrings, docs/src/algorithms/singleobjective.md). ECA is also the
     # default of optimize and the Quick Start's method on Rastrigin (docs/src/index.md); DE and PSO
@@ -364,7 +389,10 @@ function front_solvers(problem, size)
     # the bounds: the initial population within them, and the library's repair of the offspring
     # (reset_to_violated_bounds! after SBX and polynomial mutation)
     bounds = boxconstraints(lb = zeros(n), ub = ones(n))
-    solve(make) = (budget, seed) -> optimize(counted_front(f, m, budget), bounds, make(algorithm_kwargs(budget, seed; matched = true)))
+    solve(make) = (budget, seed) -> optimize(
+        counted_front(f, m, budget), bounds, make(algorithm_kwargs(budget, seed; matched = true));
+        logger = generation_logger(budget),
+    )
     return [
         ("nsga2", solve(kwargs -> NSGA2(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
         ("nsga3", solve(kwargs -> NSGA3(; N = population, η_cr = 30, p_cr = 1.0, η_m = 20, p_m = 1.0 / n, partitions = divisions, kwargs...))),
@@ -461,7 +489,8 @@ function main(args)
             print_line([
                 "library" => "metaheuristics_jl", "solver" => solver, "problem" => problem, "size" => size,
                 "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-                "generations" => iterations, "evaluations" => budget.evaluations, "restarts" => restarts,
+                "generations" => iterations, "evaluations" => budget.evaluations,
+                "last_generation" => last_generation(budget), "restarts" => restarts,
                 "outside" => budget.outside, "population" => length(points), "front" => points[front],
                 "solutions" => [Metaheuristics.get_position(status.population[i]) for i in front],
             ])
@@ -502,7 +531,8 @@ function main(args)
         print_line([
             "library" => "metaheuristics_jl", "solver" => solver, "problem" => problem, "size" => size,
             "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-            "generations" => iterations, "evaluations" => budget.evaluations, "restarts" => restarts,
+            "generations" => iterations, "evaluations" => budget.evaluations,
+            "last_generation" => last_generation(budget), "restarts" => restarts,
             (haskey(REAL_PROBLEMS, problem) ? ["outside" => budget.outside] : [])...,
             "best" => best, "target" => problem == "onemax" ? size : target, "success" => success,
             "first_hit" => first_hit(budget), "solution" => decode(budget.solution),

@@ -9,16 +9,16 @@ Know a better way to solve one of these problems with radiate? [Open a benchmark
 
 - **Generation:** radiate evaluates only individuals whose genome changed ([engine/index.md, "Life of an epoch"](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/engine/index.md#L42-L63)). A crossover that writes one parent (`MeanCrossover`, `SimulatedBinaryCrossover`) marks both as changed ([alter.rs](https://github.com/pkalivas/radiate/blob/v1.3.1/crates/radiate-core/src/alter.rs#L263-L266)), so one unchanged individual is evaluated again.
 - **Defaults** ([engine/index.md, "Engine Defaults"](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/engine/index.md#L7-L26)): population 100, roulette offspring selection, a tournament of 3 for the survivors, offspring fraction 0.8, `UniformCrossover(0.5)`, `UniformMutator(0.1)`. Individuals older than `max_age` = 20 generations are replaced by random ones ([builder/mod.rs](https://github.com/pkalivas/radiate/blob/v1.3.1/crates/radiate-engines/src/builder/mod.rs#L552-L556), [steps/filter.rs](https://github.com/pkalivas/radiate/blob/v1.3.1/crates/radiate-engines/src/steps/filter.rs#L27-L52)); the idiomatic runs keep this.
-- **Evaluations:** the fitness wrapper counts every call and records the first hit in `f64` ([Budget::record](../../../benchmarks/adapters/radiate/src/main.rs#L236-L251)).
-- **Stop and keeping going (rule 2.2):** radiate has no stop criterion of its own ("an engine with no limit attached runs forever in Rust", [engine/index.md](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/engine/index.md#L88-L90)). The adapter's `until` ([run_engine](../../../benchmarks/adapters/radiate/src/main.rs#L304-L316)) ends the run after the generation that reaches the target, the budget or 60 s ([Budget::done](../../../benchmarks/adapters/radiate/src/main.rs#L281-L287)). No run restarts.
-- **Bounds (rule 2.4): clipping.** `FloatCodec::vector` sets the problem's range as the genes' bounds, and the float alterers clip to them (`FloatGene::set_allele`, `safe_clamp`, [float.rs](https://github.com/pkalivas/radiate/blob/v1.3.1/crates/radiate-core/src/genome/chromosomes/float.rs#L82-L85)). The wrapper counts solutions outside the bounds ([Budget::check_bounds](../../../benchmarks/adapters/radiate/src/main.rs#L262-L267)).
-- **Best solution:** `Generation::value`, radiate's best by its `f32` scores, recomputed in `f64` ([run_single](../../../benchmarks/adapters/radiate/src/main.rs#L353-L391)). If it misses the target in `f64` while an evaluated solution reached it, the run reports the first hit's solution; no test run needed this.
+- **Evaluations:** the fitness wrapper counts every call and records the first hit in `f64` ([Budget::record](../../../benchmarks/adapters/radiate/src/main.rs#L241-L256)).
+- **Stop and keeping going (rule 2.2):** radiate has no stop criterion of its own ("an engine with no limit attached runs forever in Rust", [engine/index.md](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/engine/index.md#L88-L90)). The adapter's `until` ([run_engine](../../../benchmarks/adapters/radiate/src/main.rs#L326-L342)) ends the run after the generation that reaches the target, the budget or 60 s ([Budget::done](../../../benchmarks/adapters/radiate/src/main.rs#L303-L309)). No run restarts.
+- **Bounds (rule 2.4): clipping.** `FloatCodec::vector` sets the problem's range as the genes' bounds, and the float alterers clip to them (`FloatGene::set_allele`, `safe_clamp`, [float.rs](https://github.com/pkalivas/radiate/blob/v1.3.1/crates/radiate-core/src/genome/chromosomes/float.rs#L82-L85)). The wrapper counts solutions outside the bounds ([Budget::check_bounds](../../../benchmarks/adapters/radiate/src/main.rs#L267-L272)).
+- **Best solution:** `Generation::value`, radiate's best by its `f32` scores, recomputed in `f64` ([run_single](../../../benchmarks/adapters/radiate/src/main.rs#L380-L418)). If it misses the target in `f64` while an evaluated solution reached it, the run reports the first hit's solution; no test run needed this.
 - **Fitness:** `raw_fitness_fn`, the documented way to skip decoding ([fitness.md](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/fitness.md#L81-L96)), in `f64` ([fitness functions](../../../benchmarks/adapters/radiate/src/main.rs#L50-L165)).
 - **One thread:** no `rayon` feature, default `Executor::Serial` ([executors.md](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/executors.md)).
 - **Seeds:** each run is inside `random_provider::scoped_seed(seed, ..)`, which reseeds radiate's thread-local generator ([random_provider.rs](https://github.com/pkalivas/radiate/blob/v1.3.1/crates/radiate-core/src/domain/random_provider.rs#L40-L58)). `random_provider::seed`, which the examples call, only seeds new threads.
 - **Separate tests:** 2026-09-25, radiate 1.3.1, seeds 0 to 4, the scenario's budget, 60 s cap. `outside` was 0 in every run.
 
-**The idiomatic methods** ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L398-L421)), up to 3 per problem type:
+**The idiomatic methods** ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L425-L448)), up to 3 per problem type:
 - `ga`: radiate's example for the problem type, as it is.
 - one solver per crossover in the guide's recipe for the genome type, the alterers' "Best Practices" ([alters/index.md, lines 30-48](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/alters/index.md#L30-L48)):
 
@@ -43,14 +43,14 @@ A recipe solver is the problem type's example (population, selectors) with the r
 ## Binary: OneMax 100 and 1000
 
 **Methods:**
-- **Matched** ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L437-L476)): population 300, offspring fraction 1.0 (no survivors: generational, no elitism), `TournamentSelector(3)` (with replacement), `MultiPointCrossover(0.5, 2)`, `BitFlipMutator(0.2 / size)`, max age off. Differences from eaSimple:
+- **Matched** ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L464-L503)): population 300, offspring fraction 1.0 (no survivors: generational, no elitism), `TournamentSelector(3)` (with replacement), `MultiPointCrossover(0.5, 2)`, `BitFlipMutator(0.2 / size)`, max age off. Differences from eaSimple:
   - no per-individual mutation probability: each bit flips with probability 0.2 / size, the same mean of 0.2 flips per child (18% of children mutated instead of 12.6%);
   - each child is crossed with probability 0.5 with a random other child, so a child can be crossed more than once (DEAP: disjoint pairs); the same expected 150 crossovers per generation;
   - cut points are drawn from 0..size (a cut at 0 changes nothing), DEAP's from 1..size.
-- **Idiomatic**, radiate's binary example, the knapsack ([examples/rust/knapsack](https://github.com/pkalivas/radiate/blob/v1.3.1/examples/rust/knapsack/src/main.rs#L11-L18)): a `SubSetCodec` (a `BitChromosome`, one bit per item), `max_age(50)`, the other engine defaults ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L477-L515)):
-  - `ga` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L489-L492)): the default alterers `UniformCrossover(0.5)` and `UniformMutator(0.1)`, which redraws a bit, flipping it with probability 0.05;
-  - `ga_uniform` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L493-L496)): `UniformCrossover(0.5)`, `UniformMutator(0.01)`;
-  - `ga_multipoint` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L497-L500)): `MultiPointCrossover(0.5, 2)`, `UniformMutator(0.01)`.
+- **Idiomatic**, radiate's binary example, the knapsack ([examples/rust/knapsack](https://github.com/pkalivas/radiate/blob/v1.3.1/examples/rust/knapsack/src/main.rs#L11-L18)): a `SubSetCodec` (a `BitChromosome`, one bit per item), `max_age(50)`, the other engine defaults ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L504-L542)):
+  - `ga` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L516-L519)): the default alterers `UniformCrossover(0.5)` and `UniformMutator(0.1)`, which redraws a bit, flipping it with probability 0.05;
+  - `ga_uniform` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L520-L523)): `UniformCrossover(0.5)`, `UniformMutator(0.01)`;
+  - `ga_multipoint` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L524-L527)): `MultiPointCrossover(0.5, 2)`, `UniformMutator(0.01)`.
 
 **Keeping going:** runs to the target or the budget.
 
@@ -72,9 +72,9 @@ A recipe solver is the problem type's example (population, selectors) with the r
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods**, radiate's permutation example, the TSP ([examples/rust/TSP](https://github.com/pkalivas/radiate/blob/v1.3.1/examples/rust/TSP/src/main.rs#L13-L19)): `PermutationCodec`, population 250, the other engine defaults ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L526-L540)):
-- `ga` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L542-L545)): `PMXCrossover(0.4)`, `SwapMutator(0.05)`, as in the example;
-- `ga_pmx` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L546-L552)): the recipe, `PMXCrossover(0.5)`, `SwapMutator(0.01)`.
+**Methods**, radiate's permutation example, the TSP ([examples/rust/TSP](https://github.com/pkalivas/radiate/blob/v1.3.1/examples/rust/TSP/src/main.rs#L13-L19)): `PermutationCodec`, population 250, the other engine defaults ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L553-L567)):
+- `ga` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L569-L572)): `PMXCrossover(0.4)`, `SwapMutator(0.05)`, as in the example;
+- `ga_pmx` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L573-L579)): the recipe, `PMXCrossover(0.5)`, `SwapMutator(0.01)`.
 
 **Keeping going:** runs to the target or the budget.
 
@@ -96,10 +96,10 @@ A recipe solver is the problem type's example (population, selectors) with the r
 
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
-**Methods**, radiate's Rastrigin example ([examples/rust/rastrigin](https://github.com/pkalivas/radiate/blob/v1.3.1/examples/rust/rastrigin/src/main.rs#L10-L17), [examples page](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/examples.md#L57-L85)): population 500, the other engine defaults, `f64` genes in the bounds ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L573-L597)). Ackley, which has no example, uses it too.
-- `ga` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L607-L609)): `UniformCrossover(0.5)`, `ArithmeticMutator(0.01)`, as in the example;
-- `ga_blend` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L610-L614)): `BlendCrossover(0.5, 0.5)`, `ArithmeticMutator(0.01)`;
-- `ga_intermediate` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L615-L622)): `IntermediateCrossover(0.5, 0.5)`, `ArithmeticMutator(0.01)`.
+**Methods**, radiate's Rastrigin example ([examples/rust/rastrigin](https://github.com/pkalivas/radiate/blob/v1.3.1/examples/rust/rastrigin/src/main.rs#L10-L17), [examples page](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/examples.md#L57-L85)): population 500, the other engine defaults, `f64` genes in the bounds ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L600-L624)). Ackley, which has no example, uses it too.
+- `ga` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L634-L636)): `UniformCrossover(0.5)`, `ArithmeticMutator(0.01)`, as in the example;
+- `ga_blend` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L637-L641)): `BlendCrossover(0.5, 0.5)`, `ArithmeticMutator(0.01)`;
+- `ga_intermediate` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L642-L649)): `IntermediateCrossover(0.5, 0.5)`, `ArithmeticMutator(0.01)`.
 
 **Keeping going:** runs to the target or the budget.
 
@@ -126,8 +126,8 @@ radiate's Blend crossover puts the child outside the segment between the parents
 
 ## Continuous, unimodal: Rosenbrock 10
 
-**Methods**, radiate's Rosenbrock example ([examples/rust/rosenbrock](https://github.com/pkalivas/radiate/blob/v1.3.1/examples/rust/rosenbrock/src/main.rs#L13-L20), for 2 variables in [−2, 2]): `BoltzmannSelector(4)` for the offspring, the other engine defaults ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L585-L597)):
-- `ga` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L604-L606)): `MeanCrossover(0.75)`, `ArithmeticMutator(0.1)`, as in the example;
+**Methods**, radiate's Rosenbrock example ([examples/rust/rosenbrock](https://github.com/pkalivas/radiate/blob/v1.3.1/examples/rust/rosenbrock/src/main.rs#L13-L20), for 2 variables in [−2, 2]): `BoltzmannSelector(4)` for the offspring, the other engine defaults ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L612-L624)):
+- `ga` ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L631-L633)): `MeanCrossover(0.75)`, `ArithmeticMutator(0.1)`, as in the example;
 - `ga_blend`, `ga_intermediate`: the recipe at the example's rate, `BlendCrossover(0.75, 0.5)` or `IntermediateCrossover(0.75, 0.5)`, with `ArithmeticMutator(0.01)`.
 
 **Keeping going** and **Left out:** as for the multimodal problems.
@@ -144,7 +144,7 @@ radiate's Blend crossover puts the child outside the segment between the parents
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1
 
-**Methods** ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L661-L788)): the matched settings with radiate's own selectors, SBX and polynomial mutation, bugs included (rule 8.4):
+**Methods** ([adapter](../../../benchmarks/adapters/radiate/src/main.rs#L688-L816)): the matched settings with radiate's own selectors, SBX and polynomial mutation, bugs included (rule 8.4):
 - `nsga2`: `TournamentNSGA2Selector` for mating, `NSGA2Selector` for survivors, `SimulatedBinaryCrossover(0.9, 15)`, `PolynomialMutator(1 / n, 20)`; population 100, 92 with 3 objectives.
 - `nsga3`: `RandomSelector` for mating, `NSGA3Selector` with Das-Dennis directions (99 divisions: 100, population 100; 12 divisions: 91, population 92), `SimulatedBinaryCrossover(1.0, 30)`, `PolynomialMutator(1 / n, 20)`. It runs on ZDT too, as radiate's own ZDT example does (`nsga3(12)`, [zdt.py](https://github.com/pkalivas/radiate/blob/v1.3.1/examples/python/zdt.py#L30-L36)); the guide lists NSGA-III for "many objectives" ([selectors/index.md](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/selectors/index.md#L29)).
 - Survival from parents and offspring: `population_size(2 mu)` with `offspring_fraction(0.5)` keeps mu of 2 mu and breeds mu.

@@ -278,6 +278,9 @@ public final class Bench {
         // the first evaluation whose value reaches the target, and the clock then (-1: not yet)
         long firstHitEvaluations = -1;
         double firstHitSeconds;
+        // the evaluations at the end of the last generation, and that generation's (rule 2.3)
+        long generationEnd;
+        long lastGeneration;
 
         Budget(long maxEvaluations, double maxSeconds, boolean minimize, double target) {
             this.maxEvaluations = maxEvaluations;
@@ -313,6 +316,28 @@ public final class Bench {
                 }
                 throw STOP;
             }
+        }
+
+        /** Marks the end of a generation. */
+        void endGeneration() {
+            lastGeneration = evaluations - generationEnd;
+            generationEnd = evaluations;
+        }
+
+        /**
+         * The evaluations since the start of the last generation (rule 2.3): of one cut short, or
+         * of the last one that ended.
+         */
+        long lastGeneration() {
+            return evaluations > generationEnd ? evaluations - generationEnd : lastGeneration;
+        }
+
+        /**
+         * The generations of a method that doesn't call back between them: after `from`
+         * evaluations, generations of `size` (rule 2.3).
+         */
+        void fixedGenerations(long from, long size) {
+            if (evaluations > from) generationEnd = from + (evaluations - from - 1) / size * size;
         }
 
         /** The "first_hit" field of a single-objective run. */
@@ -502,21 +527,35 @@ public final class Bench {
 
     record Solver(String name, SingleSolver solver) {}
 
-    /** jMetal's sequential evaluator, counting the generations. */
+    /**
+     * jMetal's sequential evaluator, counting the generations: a call evaluates the initial
+     * population or a generation, and ends the previous one.
+     */
     static final class CountingEvaluator<S extends Solution<?>> extends SequentialSolutionListEvaluator<S> {
+        final Budget budget;
         long calls;
+
+        CountingEvaluator(Budget budget) {
+            this.budget = budget;
+        }
 
         @Override
         public List<S> evaluate(List<S> solutionList, org.uma.jmetal.problem.Problem<S> problem) {
             calls++;
+            budget.endGeneration();
             return super.evaluate(solutionList, problem);
         }
     }
 
-    /** Runs a component algorithm; the termination only counts the generations (Stop ends it). */
-    static <S extends Solution<?>> long runComponent(Function<Termination, EvolutionaryAlgorithm<S>> build) {
+    /**
+     * Runs a component algorithm; the termination, checked after the initial population and after
+     * every generation, only counts the generations and marks their ends (Stop ends the run).
+     */
+    static <S extends Solution<?>> long runComponent(Budget budget,
+                                                     Function<Termination, EvolutionaryAlgorithm<S>> build) {
         long[] generations = {0};
         EvolutionaryAlgorithm<S> algorithm = build.apply(status -> {
+            budget.endGeneration();
             generations[0]++;
             return false;
         });
@@ -574,12 +613,18 @@ public final class Bench {
             try {
                 algorithm.run();
             } catch (Stop stop) {
+                budget.fixedGenerations(before, algorithm.getLambda());
                 return generations + (budget.evaluations - before) / algorithm.getLambda();
             } catch (ArrayIndexOutOfBoundsException error) {
                 // the crash of tql2 on NaN in the covariance matrix: the workaround goes on with a
                 // new attempt (see above); as is, the run ends here
-                if (CMAES_AS_IS) return generations + (budget.evaluations - before) / algorithm.getLambda();
+                if (CMAES_AS_IS) {
+                    budget.fixedGenerations(before, algorithm.getLambda());
+                    return generations + (budget.evaluations - before) / algorithm.getLambda();
+                }
             }
+            // λ evaluations a generation, the initial population included
+            budget.fixedGenerations(before, algorithm.getLambda());
             generations += (budget.evaluations - before) / algorithm.getLambda();
             if (budget.done()) return generations;
         }
@@ -613,7 +658,7 @@ public final class Bench {
                     // GenerationalGeneticAlgorithmBinaryExample.java (on OneMax): population 100,
                     // 100 children, binary tournament, SinglePointCrossover(0.9),
                     // BitFlipMutation(1 / bits), (μ + λ) replacement (GeneticAlgorithmBuilder's)
-                    solvers.add(new Solver("ga", (budget, seed) -> runComponent(termination ->
+                    solvers.add(new Solver("ga", (budget, seed) -> runComponent(budget, termination ->
                         new GeneticAlgorithmBuilder<>("GGA", new OneMaxProblem(size, budget), 100, 100,
                                 new SinglePointCrossover<>(0.9), new BitFlipMutation<>(1.0 / size))
                             .setTermination(termination)
@@ -629,6 +674,8 @@ public final class Bench {
                             .setLambda(10)
                             .build();
                         runClassic(es::run);
+                        // μ = 1 initial solution, then λ = 10 a generation
+                        budget.fixedGenerations(1, 10);
                         return Math.max(0, budget.evaluations - 1) / 10;
                     }));
                 }
@@ -639,7 +686,7 @@ public final class Bench {
                 // jmetal-component examples/singleobjective/geneticalgorithm/GeneticAlgorithmTSPExample.java:
                 // population 100, 100 children, binary tournament, PMXCrossover(0.9),
                 // PermutationSwapMutation(1 / n), (μ + λ) replacement
-                solvers.add(new Solver("ga", (budget, seed) -> runComponent(termination ->
+                solvers.add(new Solver("ga", (budget, seed) -> runComponent(budget, termination ->
                     new GeneticAlgorithmBuilder<>("GGA", new NQueensProblem(size, budget), 100, 100,
                             new PMXCrossover(0.9), new PermutationSwapMutation<Integer>(1.0 / size))
                         .setTermination(termination)
@@ -656,7 +703,7 @@ public final class Bench {
                 // jmetal-component examples/singleobjective/geneticalgorithm/GenerationalGeneticAlgorithmExample.java:
                 // population 100, 100 children, binary tournament, SBXCrossover(0.9, η 20),
                 // PolynomialMutation(1 / n, η 20), (μ + λ) replacement
-                solvers.add(new Solver("ga", (budget, seed) -> runComponent(termination ->
+                solvers.add(new Solver("ga", (budget, seed) -> runComponent(budget, termination ->
                     new GeneticAlgorithmBuilder<>("GGA", problem.apply(budget), 100, 100,
                             new SBXCrossover(0.9, 20.0), new PolynomialMutation(1.0 / size, 20.0))
                         .setTermination(termination)
@@ -664,7 +711,7 @@ public final class Bench {
                 // jmetal-algorithm examples/singleobjective/DifferentialEvolutionRunner.java:
                 // DE/rand/1/bin with CR 0.5 and F 0.5, population 100
                 solvers.add(new Solver("de", (budget, seed) -> {
-                    var evaluator = new CountingEvaluator<DoubleSolution>();
+                    var evaluator = new CountingEvaluator<DoubleSolution>(budget);
                     var de = new DifferentialEvolution(problem.apply(budget), Integer.MAX_VALUE, 100,
                         new DifferentialEvolutionCrossover(0.5, 0.5, DifferentialEvolutionCrossover.DE_VARIANT.RAND_1_BIN),
                         new DifferentialEvolutionSelection(), evaluator);
@@ -704,6 +751,7 @@ public final class Bench {
                     + ",\"mode\":\"" + args.mode() + "\",\"seed\":" + seed
                     + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
                     + ",\"generations\":" + generations + ",\"evaluations\":" + budget.evaluations
+                    + ",\"last_generation\":" + budget.lastGeneration()
                     + ",\"best\":" + number(budget.best) + ",\"target\":" + number(target[0])
                     + ",\"success\":" + budget.reached() + ",\"first_hit\":" + budget.firstHit() + outside
                     + ",\"solution\":" + json(budget.solution) + "}");
@@ -750,6 +798,7 @@ public final class Bench {
 
         @Override
         protected boolean isStoppingConditionReached() {
+            budget.endGeneration();
             return budget.exhausted();
         }
 
@@ -797,7 +846,9 @@ public final class Bench {
                 Budget budget = new Budget(args.maxEvaluations(), args.maxSeconds(), true, Double.NEGATIVE_INFINITY);
                 FrontProblem problem = new FrontProblem(args.problem(), front, budget);
                 long[] generations = {0};
+                // checked after the initial population and after every generation
                 Termination termination = status -> {
+                    budget.endGeneration();
                     if (budget.exhausted()) return true;
                     generations[0]++;
                     return false;
@@ -886,6 +937,7 @@ public final class Bench {
                     + ",\"mode\":\"" + args.mode() + "\",\"seed\":" + seed
                     + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
                     + ",\"generations\":" + generations[0] + ",\"evaluations\":" + budget.evaluations
+                    + ",\"last_generation\":" + budget.lastGeneration()
                     + ",\"outside\":" + budget.outside
                     + ",\"front\":" + frontJson.append(']') + ",\"solutions\":" + solutionsJson.append(']') + "}");
             }

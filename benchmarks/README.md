@@ -133,13 +133,14 @@ It prints one JSON line per solver per seed, with the best solution found:
 
 ```json
 {"library": "deap", "solver": "ga", "problem": "onemax", "size": 100, "mode": "matched", "seed": 0,
- "time_s": 0.21, "generations": 37, "evaluations": 7041, "best": 100, "target": 100, "success": true,
- "first_hit": {"evaluations": 6912, "time_s": 0.206}, "solution": [1, 1, 1, ...]}
+ "time_s": 0.21, "generations": 37, "evaluations": 7041, "last_generation": 183, "best": 100,
+ "target": 100, "success": true, "first_hit": {"evaluations": 6912, "time_s": 0.206},
+ "solution": [1, 1, 1, ...]}
 ```
 
 - `first_hit`: the number and clock of the first evaluation that reaches the target, or `null` ([rule 3.3](../docs/benchmarks/rules.md#3-counting-evaluations)).
 - `outside`, in a continuous or multi-objective run: the evaluated solutions outside the bounds, which must be 0 (rule 2.4).
-- `last_generation`, for a solver whose generations change size: the evaluations of its last generation (rule 2.3).
+- `last_generation`: the evaluations the adapter counted since the start of the run's last generation, in every run ([rule 2.3](../docs/benchmarks/rules.md#2-the-budget)). A restart's initial population counts as a generation, and a method that evaluates one solution per step has generations of 1.
 - A multi-objective run prints `"front": [[f1, f2], ...]` and `"solutions": [[x1, x2, ...], ...]` instead of `best`, `target`, `success`, `first_hit` and `solution`.
 - For a problem its library can't do, an adapter prints nothing.
 

@@ -217,6 +217,9 @@ struct Budget {
     max_evaluations: usize,
     start: Instant,
     deadline: Instant,
+    // the evaluations at the end of the last generation, and that generation's (rule 2.3)
+    generation_end: AtomicUsize,
+    last_generation: AtomicUsize,
 }
 
 impl Budget {
@@ -230,6 +233,8 @@ impl Budget {
             max_evaluations: args.max_evaluations,
             start,
             deadline: start + Duration::from_secs_f64(args.max_seconds),
+            generation_end: AtomicUsize::new(0),
+            last_generation: AtomicUsize::new(0),
         })
     }
 
@@ -278,6 +283,23 @@ impl Budget {
         self.evaluations.load(Ordering::Relaxed)
     }
 
+    /// Marks the end of a generation: radiate evaluates only the individuals whose genome changed,
+    /// so generations differ in size
+    fn end_generation(&self) {
+        let evaluations = self.evaluations();
+        let end = self.generation_end.swap(evaluations, Ordering::Relaxed);
+        self.last_generation.store(evaluations - end, Ordering::Relaxed);
+    }
+
+    /// The evaluations since the start of the last generation (rule 2.3): of a generation cut
+    /// short, or of the last one that ended
+    fn last_generation(&self) -> usize {
+        match self.evaluations() - self.generation_end.load(Ordering::Relaxed) {
+            0 => self.last_generation.load(Ordering::Relaxed),
+            partial => partial,
+        }
+    }
+
     // checked by the engine after every generation: the target (an evaluated solution reached
     // it), the budget or the time
     fn done(&self) -> bool {
@@ -302,7 +324,8 @@ struct Args {
 }
 
 /// Builds the engine (the random initial population) and runs it until the budget is done,
-/// checked after every generation. Returns the last generation.
+/// checked after every generation, where the generation's end is marked too. Returns the last
+/// generation.
 fn run_engine<C, T>(budget: &Arc<Budget>, engine: GeneticEngine<C, T>) -> Generation<C, T>
 where
     C: Chromosome + Clone + PartialEq + 'static,
@@ -311,7 +334,10 @@ where
     let stop = Arc::clone(budget);
     engine
         .iter()
-        .until(move |_: GenerationView<C, T>| stop.done())
+        .until(move |_: GenerationView<C, T>| {
+            stop.end_generation();
+            stop.done()
+        })
         .last()
         .expect("radiate engine failed")
 }
@@ -340,11 +366,12 @@ fn print_single(
         None => "null".to_string(),
     };
     println!(
-        "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"best\":{best:?},\"target\":{:?},\"success\":{},\"first_hit\":{first_hit},\"solution\":{solution}{outside}}}",
+        "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"last_generation\":{},\"best\":{best:?},\"target\":{:?},\"success\":{},\"first_hit\":{first_hit},\"solution\":{solution}{outside}}}",
         args.problem,
         args.size,
         args.mode,
         budget.evaluations(),
+        budget.last_generation(),
         budget.target,
         budget.reaches(best),
     );
@@ -775,11 +802,12 @@ fn run_front(args: &Args, seed: u64) {
         let front_points: Vec<Vec<f64>> = front.iter().map(|&i| points[i].clone()).collect();
         let front_solutions: Vec<Vec<f64>> = front.iter().map(|&i| solutions[i].clone()).collect();
         println!(
-            "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"outside\":{},\"front\":{},\"solutions\":{}}}",
+            "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"last_generation\":{},\"outside\":{},\"front\":{},\"solutions\":{}}}",
             args.problem,
             args.size,
             args.mode,
             counter.evaluations(),
+            counter.last_generation(),
             counter.outside(),
             json_rows(&front_points),
             json_rows(&front_solutions),

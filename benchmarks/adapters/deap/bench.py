@@ -56,6 +56,8 @@ class Budget:
         self.solution = None
         # the first evaluation that reaches the target: (its number, seconds since the start)
         self.first_hit = None
+        # the evaluations when the last generation started (rule 2.3), marked by the solvers below
+        self.generation_start = 0
         # the box of a continuous or multi-objective problem, and the evaluated solutions outside it
         # (rule 2.4)
         if problem in REAL_PROBLEMS:
@@ -89,6 +91,14 @@ class Budget:
             return values
 
         return counted
+
+    def new_generation(self):
+        """Marks the start of a generation: an initial population, or a loop of a solver below."""
+        self.generation_start = self.evaluations
+
+    def last_generation(self):
+        """The evaluations since the start of the last generation (rule 2.3)."""
+        return self.evaluations - self.generation_start
 
     def reached(self):
         return self.best >= self.target if self.maximize else self.best <= self.target
@@ -244,11 +254,13 @@ def ea_simple(toolbox, population_size, cxpb, mutpb, budget):
     is invalid (varAnd keeps the fitness of an individual it neither crossed nor mutated), replace
     the population."""
     population = toolbox.population(n=population_size)
+    budget.new_generation()
     for individual in population:
         individual.fitness.values = toolbox.evaluate(individual)
     generations = 0
     while not budget.done():
         generations += 1
+        budget.new_generation()
         offspring = toolbox.select(population, len(population))
         offspring = algorithms.varAnd(offspring, toolbox, cxpb, mutpb)
         for individual in offspring:
@@ -394,6 +406,7 @@ def solve_bipop_cmaes(problem, size, budget):
 
         while not any(conditions.values()) and not budget.done():
             generations += 1
+            budget.new_generation()
             # Generate a new population
             population = strategy.generate(creator.IndividualMin)
 
@@ -521,11 +534,13 @@ def solve_de(problem, size, budget):
         mu = 300
 
     pop = toolbox.population(n=mu)
+    budget.new_generation()
     for ind in pop:
         ind.fitness.values = toolbox.evaluate(ind)
     generations = 0
     while not budget.done():
         generations += 1
+        budget.new_generation()
         if multimodal:
             # examples/de/sphere.py
             children = []
@@ -591,6 +606,7 @@ def solve_front(problem, size, solver, budget):
         toolbox.register("select", tools.selNSGA3, ref_points=reference)
 
     population = toolbox.population(n=population_size)
+    budget.new_generation()
     for member in population:
         member.fitness.values = toolbox.evaluate(member)
     if solver == "nsga2":
@@ -600,6 +616,7 @@ def solve_front(problem, size, solver, budget):
     generations = 0
     while not budget.exhausted():
         generations += 1
+        budget.new_generation()
         if solver == "nsga2":
             # nsga2.py: crowded binary tournament, then each pair crossed with probability 0.9 and
             # both children mutated
@@ -680,7 +697,8 @@ def main():
                 print(json.dumps({
                     "library": "deap", "solver": solver, "problem": problem, "size": size, "mode": mode,
                     "seed": seed, "time_s": round(elapsed, 6), "generations": generations,
-                    "evaluations": budget.evaluations, "outside": budget.outside,
+                    "evaluations": budget.evaluations, "last_generation": budget.last_generation(),
+                    "outside": budget.outside,
                     "front": [list(member.fitness.values) for member in front],
                     "solutions": [list(member) for member in front],
                 }), flush=True)
@@ -701,7 +719,7 @@ def main():
             result = {
                 "library": "deap", "solver": solver, "problem": problem, "size": size, "mode": mode,
                 "seed": seed, "time_s": round(elapsed, 6), "generations": generations,
-                "evaluations": budget.evaluations,
+                "evaluations": budget.evaluations, "last_generation": budget.last_generation(),
             }
             if problem in REAL_PROBLEMS:
                 result.update(outside=budget.outside, best=float(budget.best),

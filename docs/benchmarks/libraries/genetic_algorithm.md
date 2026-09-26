@@ -7,13 +7,13 @@ Know a better way to solve one of these problems with genetic_algorithm? [Open a
 
 ## How the adapter runs genetic_algorithm
 
-- **Evaluations:** counted in the fitness functions ([main.rs#L171](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L171)), with the first hit ([#L71](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L71)).
+- **Evaluations:** counted in the fitness functions ([main.rs#L221](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L221)), with the first hit ([#L90](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L90)).
 - **Stop:** `with_target_fitness_score`, or `with_abort_flag` (checked once per generation), set when the budget or the time is used up ([#L48](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L48)). No run uses `with_max_generations`.
-- **Real values:** a value is divided by the precision 1e-5 of AGENTS.md and the examples, rounded up, so the target of 1000 units means at most 0.01 ([#L208](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L208)). The reported `best` is the f64 value.
-- **Keeping going (rule 2.2):** `with_max_stale_generations` ends an attempt. The library's restart mechanism, `call_repeatedly(n)` (AGENTS.md, "Choosing a call variant"), repeats the same run when seeded (see [Bugs found](#bugs-found)), so the adapter's `restarts` ([#L328](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L328)) does the same with the seeds of rule 2.2 ([#L316](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L316)): attempts until the target or the abort flag, keeping the best genes by the library's score.
-- **Bounds (rule 2.4):** a `RangeGenotype` draws its initial genes in the allele range and clamps every mutation to it ([genotype/range.rs](https://docs.rs/crate/genetic_algorithm/0.27.3/source/src/genotype/range.rs), `clamped_add`, `clamped_sub`); uniform crossover only exchanges genes. Counted as `outside` ([#L221](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L221)).
-- **Shift** (rule 1.4): computed once ([#L134](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L134)).
-- **Time:** from before the strategy is built to its return ([run](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L297)).
+- **Real values:** a value is divided by the precision 1e-5 of AGENTS.md and the examples, rounded up, so the target of 1000 units means at most 0.01 ([#L258](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L258)). The reported `best` is the f64 value.
+- **Keeping going (rule 2.2):** `with_max_stale_generations` ends an attempt. The library's restart mechanism, `call_repeatedly(n)` (AGENTS.md, "Choosing a call variant"), repeats the same run when seeded (see [Bugs found](#bugs-found)), so the adapter's `restarts` ([#L379](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L379)) does the same with the seeds of rule 2.2 ([#L367](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L367)): attempts until the target or the abort flag, keeping the best genes by the library's score.
+- **Bounds (rule 2.4):** a `RangeGenotype` draws its initial genes in the allele range and clamps every mutation to it ([genotype/range.rs](https://docs.rs/crate/genetic_algorithm/0.27.3/source/src/genotype/range.rs), `clamped_add`, `clamped_sub`); uniform crossover only exchanges genes. Counted as `outside` ([#L271](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L271)).
+- **Shift** (rule 1.4): computed once ([#L184](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L184)).
+- **Time:** from before the strategy is built to its return ([run](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L348)).
 - **One thread:** no `with_par_fitness`, no `call_par_*`; the only other thread is the sleeping timer.
 - **Seeds:** `with_rng_seed_from_u64`.
 - **Separate tests:** 2026-09-25, 0.27.3, seeds 0 to 4, the scenario's budget, 60 s cap. `outside` was 0 in every run.
@@ -21,8 +21,8 @@ Know a better way to solve one of these problems with genetic_algorithm? [Open a
 ## Binary: OneMax 100 and 1000
 
 **Methods:**
-- **Matched: not run** ([#L360](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L360)). Evolve has no generational replacement without elitism: its selection keeps the survivors from parents and offspring together ([select/tournament.rs](https://docs.rs/crate/genetic_algorithm/0.27.3/source/src/select/tournament.rs)), and the crossover breeds from them. With a replacement rate of 1.0 all offspring survive and nothing is selected; below it, parents compete with offspring.
-- **Idiomatic** ([#L355](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L355)): Evolve with AGENTS.md's binary preset ("If unsure, start here"): `SelectTournament(0.5, 0.02, 4)`, `CrossoverUniform(0.7, 0.8)`, `MutateSingleGene(0.2)`, and population 100, the default and the README's "Quick Usage" example, which is this problem.
+- **Matched: not run** ([#L411](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L411)). Evolve has no generational replacement without elitism: its selection keeps the survivors from parents and offspring together ([select/tournament.rs](https://docs.rs/crate/genetic_algorithm/0.27.3/source/src/select/tournament.rs)), and the crossover breeds from them. With a replacement rate of 1.0 all offspring survive and nothing is selected; below it, parents compete with offspring.
+- **Idiomatic** ([#L406](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L406)): Evolve with AGENTS.md's binary preset ("If unsure, start here"): `SelectTournament(0.5, 0.02, 4)`, `CrossoverUniform(0.7, 0.8)`, `MutateSingleGene(0.2)`, and population 100, the default and the README's "Quick Usage" example, which is this problem.
 
 **Keeping going:** runs to the target or the budget.
 
@@ -38,7 +38,7 @@ Know a better way to solve one of these problems with genetic_algorithm? [Open a
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods:** HillClimb, Stochastic ([#L416](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L416)): the README recommends HillClimb for "permutation problems (ordering, assignment)"; AGENTS.md's "Which HillClimb Variant?" says "Use Stochastic with call_repeatedly for genomes >20 genes". The settings are [examples/hill_climb_nqueens.rs](https://docs.rs/crate/genetic_algorithm/0.27.3/source/examples/hill_climb_nqueens.rs)'s: `UniqueGenotype<u8>`, `with_max_stale_generations(10000)`, `with_replace_on_equal_fitness(true)` ("crucial for this problem").
+**Methods:** HillClimb, Stochastic ([#L468](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L468)): the README recommends HillClimb for "permutation problems (ordering, assignment)"; AGENTS.md's "Which HillClimb Variant?" says "Use Stochastic with call_repeatedly for genomes >20 genes". The settings are [examples/hill_climb_nqueens.rs](https://docs.rs/crate/genetic_algorithm/0.27.3/source/examples/hill_climb_nqueens.rs)'s: `UniqueGenotype<u8>`, `with_max_stale_generations(10000)`, `with_replace_on_equal_fitness(true)` ("crucial for this problem").
 
 **Keeping going:** an attempt ends after 10,000 steps without improvement and restarts (above). No test run restarted.
 
@@ -57,8 +57,8 @@ Know a better way to solve one of these problems with genetic_algorithm? [Open a
 ## Continuous: Rastrigin 10 and 30, Ackley 30 (multimodal), Rosenbrock 10 (unimodal)
 
 **Methods:**
-- **`evolve`** (all four, [#L495](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L495)): a `RangeGenotype<f64>`, population 100, `SelectTournament(0.5, 0.02, 4)`, `CrossoverUniform(0.7, 0.8)`, `MutateMultiGene(2, 0.2)`, `MutationType::StepScaled` with steps of 0.1, 0.01, 0.001 and 0.0001 of the range, `with_max_stale_generations(100)`, precision 1e-5.
-- **`hill_climb`** (Rosenbrock, [#L562](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L562)): `SteepestAscent`, `StepScaled` with steps of 0.1 to 0.00001 of the range, `with_max_stale_generations(1)`; each step evaluates the 2n neighbours.
+- **`evolve`** (all four, [#L548](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L548)): a `RangeGenotype<f64>`, population 100, `SelectTournament(0.5, 0.02, 4)`, `CrossoverUniform(0.7, 0.8)`, `MutateMultiGene(2, 0.2)`, `MutationType::StepScaled` with steps of 0.1, 0.01, 0.001 and 0.0001 of the range, `with_max_stale_generations(100)`, precision 1e-5.
+- **`hill_climb`** (Rosenbrock, [#L616](../../../benchmarks/adapters/genetic_algorithm/src/main.rs#L616)): `SteepestAscent`, `StepScaled` with steps of 0.1 to 0.00001 of the range, `with_max_stale_generations(1)`; each step evaluates the 2n neighbours.
 
 **Where the settings come from** (rule 6.2):
 - *Strategies:* the README's table recommends Evolve for "general optimization" and HillClimb for a "convex search space, few local optima", so HillClimb for Rosenbrock too. AGENTS.md prefers SteepestAscent for a small genome.

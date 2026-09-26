@@ -7,7 +7,7 @@ Know a better way to solve one of these problems with pycma? [Open a benchmark i
 
 ## How the adapter runs pycma
 
-Every method is `cma.fmin2` or its surrogate variant ([`solve`](../../../benchmarks/adapters/pycma/bench.py#L148-L201)), with settings from the `fmin2` docstring or the defaults:
+Every method is `cma.fmin2` or its surrogate variant ([`solve`](../../../benchmarks/adapters/pycma/bench.py#L159-L212)), with settings from the `fmin2` docstring or the defaults:
 - `restarts=9`: "the recommended setting is `restarts <= 9` and `x0` passed as a `callable`";
 - `x0` a callable drawing a uniform point in the box, "to restart from different points (recommended)";
 - `sigma0` a quarter of the box width: "`sigma0` should be about 1/4th of the search domain width";
@@ -16,7 +16,7 @@ Every method is `cma.fmin2` or its surrogate variant ([`solve`](../../../benchma
 - `parallel_objective`, the batch interface (rule 3.4): each population in one numpy call, with the same solutions, order and first hit as one call per solution.
 
 The rest:
-- **Evaluations and stop:** the counter ([`Budget`](../../../benchmarks/adapters/pycma/bench.py#L44-L96)) counts every solution, including the final mean `fmin2` evaluates after each run (`eval_final_mean`), and records the first hit. It ends the run after the population that reaches 0.01, or before one past the budget (a population is cut at the budget) or the time cap.
+- **Evaluations and stop:** the counter ([`Budget`](../../../benchmarks/adapters/pycma/bench.py#L44-L107)) counts every solution, including the final mean `fmin2` evaluates after each run (`eval_final_mean`), and records the first hit. It ends the run after the population that reaches 0.01, or before one past the budget (a population is cut at the budget) or the time cap.
 - **Keeping going (rule 2.2):** pycma's restarts. The stop criteria stay in effect with `maxfevals`, so each ends a run and `fmin2` restarts. The limit of 9 restarts is a budget: if all 9 ended early, the adapter would call `fmin2` again from its first population size, with a note on stderr; it never happened.
 - **Bounds (rule 2.4):** `BoundTransform` maps every sample into the box.
 - **Seeds:** pycma samples from numpy's global random state, which the adapter seeds with the run's seed, and with `(seed + 1) * 1_000_000 + call` for a further `fmin2` call. The `seed` option is `np.nan` ("do nothing"), because pycma reads 0 as "seed from the clock"; the restarts continue the same random stream.
@@ -52,7 +52,7 @@ The Rastrigin 30 runs reached the cap after about 300,000 evaluations. On Ackley
 
 ## Continuous, unimodal: Rosenbrock 10
 
-**Methods** ([`solvers`](../../../benchmarks/adapters/pycma/bench.py#L204-L208)): both are the docs' examples on Rosenbrock, with no stated preference:
+**Methods** ([`solvers`](../../../benchmarks/adapters/pycma/bench.py#L215-L219)): both are the docs' examples on Rosenbrock, with no stated preference:
 - **`cma_es`:** `cma.fmin2` as in its docstring's Rosenbrock example, with the settings above and IPOP restarts.
 - **`lq_cma_es`:** [`cma.fmin_lq_surr2`](https://cma-es.github.io/apidocs-pycma/cma.evolution_strategy.html#fmin_lq_surr2) ([page](https://cma-es.github.io/lq-cma/)): a linear or quadratic model decides which part of each population to evaluate, one solution at a time (no `parallel_objective`). Same arguments; its restarts also double the population.
 
