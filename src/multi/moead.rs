@@ -67,25 +67,25 @@ impl Decomposition {
 /// 1. Each subproblem gets a child: two parents from its neighborhood (with probability
 ///    `neighbor_mating`, 0.9) or from the whole population, recombined with the crossover (one
 ///    of its two children, at random) and mutated.
-/// 2. The children are evaluated together, so a generation can be evaluated in parallel (like
-///    pymoo's `ParallelMOEAD`). The ideal point moves to the best feasible values seen.
+/// 2. The children are evaluated together, so a generation can be evaluated in parallel. The
+///    ideal point moves to the best feasible values seen.
 /// 3. In a random order, each child replaces the solutions of its neighborhood that it improves
 ///    on, for their subproblems: at most `max_replacements` (2, as in MOEA/D-DE, Li and Zhang,
 ///    2009), visiting the neighbors in a random order. The limit keeps one good child from taking
 ///    over a whole neighborhood, which matters more when a generation's children are applied
-///    together; pymoo's MOEA/D has no limit.
+///    together.
 ///
 /// Between solutions with different constraint violations, the smaller violation is better, so
-/// constraints are handled too (unlike pymoo's MOEA/D).
+/// constraints are handled too.
 ///
 /// ```
 /// use genoxide::Objective::Minimize;
-/// use genoxide::multi::problems::{TestProblem, Zdt1};
+/// use genoxide::multi::problems::{MultiProblem, Zdt1};
 /// use genoxide::multi::{Moead, das_dennis};
 /// use genoxide::prelude::*;
 ///
 /// let problem = Zdt1::new(30);
-/// let moead = Moead::builder(problem.real(), [Minimize; 2], das_dennis::<2>(99))
+/// let moead = Moead::builder(problem.representation(), [Minimize; 2], das_dennis::<2>(99))
 ///     .crossover(SimulatedBinaryCrossover::new(20.0)?)
 ///     .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0)?)
 ///     .seed(1)
@@ -453,8 +453,8 @@ where
 ///
 /// The crossover and the mutation are required. Defaults: 20 neighbors, parents from the
 /// neighborhood with probability 0.9, at most 2 replacements per child, Tchebycheff
-/// decomposition, `crossover_rate` and `mutation_rate` 1.0 (as in pymoo), a random initial
-/// population and a random seed.
+/// decomposition, `crossover_rate` and `mutation_rate` 1.0 (every child is recombined and
+/// mutated), a random initial population and a random seed.
 #[derive(Clone, Debug)]
 pub struct MoeadBuilder<R: Representation, const M: usize, C = Unset, X = Unset> {
     representation: R,
@@ -527,7 +527,7 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
     }
 
     /// The most solutions a child replaces, at least 1. 2 by default (MOEA/D-DE); the
-    /// neighborhood size (or more) removes the limit, as in pymoo.
+    /// neighborhood size (or more) removes the limit.
     pub fn max_replacements(mut self, count: usize) -> Self {
         self.max_replacements = count;
         self

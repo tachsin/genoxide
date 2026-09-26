@@ -36,8 +36,8 @@ fn zdt1(x: &Reals) -> [f64; 2] {
 
 #[test]
 fn nsga2_approximates_the_zdt1_front() {
-    // the optimal front has a hypervolume of 0.8716 (reference point 1.1, 1.1); pymoo's NSGA-II
-    // reaches 0.8696 to 0.8699 with these settings, genoxide 0.8689 to 0.8700 (5 seeds)
+    // the optimal front has a hypervolume of 0.8716 (reference point 1.1, 1.1); genoxide reaches
+    // 0.8689 to 0.8700 with these settings (5 seeds)
     let algorithm = nsga2(
         Real::uniform(30, 0.0..=1.0).unwrap(),
         [Minimize, Minimize],
@@ -262,12 +262,12 @@ fn nsga2_runs_in_parallel_with_the_same_results() {
 #[test]
 fn nsga3_spreads_a_three_objective_front() {
     use genoxide::multi::indicator::igd;
-    use genoxide::multi::problems::{Dtlz2, TestProblem};
+    use genoxide::multi::problems::{Dtlz2, MultiProblem};
     use genoxide::multi::{Nsga3, das_dennis};
     // DTLZ2 with 91 reference directions (Deb and Jain's settings): an IGD to the 91 optimal
-    // points of 0.0009 to 0.0015 for pymoo, 0.0012 to 0.0016 for genoxide (5 seeds)
+    // points of 0.0012 to 0.0016 (5 seeds)
     let problem = Dtlz2::<3>::default();
-    let nsga3 = Nsga3::builder(problem.real(), [Minimize; 3], das_dennis::<3>(12))
+    let nsga3 = Nsga3::builder(problem.representation(), [Minimize; 3], das_dennis::<3>(12))
         .population_size(92)
         .crossover(SimulatedBinaryCrossover::new(30.0).unwrap())
         .mutate(PolynomialMutation::per_gene(1.0 / 12.0, 20.0).unwrap())
@@ -278,17 +278,20 @@ fn nsga3_spreads_a_three_objective_front() {
         .stop_when(Stop::generations(249))
         .run()
         .unwrap();
-    let distance = igd(&outcome.front_values(), &problem.optimal_front(91));
+    let distance = igd(
+        &outcome.front_values(),
+        &problem.optimal_front(91).expect("known"),
+    );
     assert!(distance < 0.002, "{distance}");
 }
 
 #[test]
 fn spea2_approximates_the_zdt1_front() {
     use genoxide::multi::Spea2;
-    use genoxide::multi::problems::{TestProblem, Zdt1};
-    // a hypervolume of 0.8697 to 0.8704 over 5 seeds; pymoo's SPEA2 reaches 0.8703 to 0.8706
+    use genoxide::multi::problems::{MultiProblem, Zdt1};
+    // a hypervolume of 0.8697 to 0.8704 over 5 seeds
     let problem = Zdt1::new(30);
-    let spea2 = Spea2::builder(problem.real(), [Minimize, Minimize])
+    let spea2 = Spea2::builder(problem.representation(), [Minimize, Minimize])
         .population_size(100)
         .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
         .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0).unwrap())
@@ -306,12 +309,11 @@ fn spea2_approximates_the_zdt1_front() {
 #[test]
 fn moead_approximates_two_and_three_objective_fronts() {
     use genoxide::multi::indicator::igd;
-    use genoxide::multi::problems::{Dtlz2, TestProblem, Zdt1};
+    use genoxide::multi::problems::{Dtlz2, MultiProblem, Zdt1};
     use genoxide::multi::{Decomposition, Moead, das_dennis};
     // ZDT1 with 100 weights and Tchebycheff: a hypervolume of 0.8683 to 0.8688 over 5 seeds
-    // (pymoo's sequential MOEA/D 0.8693 to 0.8705, its ParallelMOEAD 0.78 to 0.83)
     let problem = Zdt1::new(30);
-    let moead = Moead::builder(problem.real(), [Minimize; 2], das_dennis::<2>(99))
+    let moead = Moead::builder(problem.representation(), [Minimize; 2], das_dennis::<2>(99))
         .crossover(SimulatedBinaryCrossover::new(20.0).unwrap())
         .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0).unwrap())
         .seed(0)
@@ -323,9 +325,9 @@ fn moead_approximates_two_and_three_objective_fronts() {
         .unwrap();
     let volume = hypervolume(&outcome.front_values(), &[1.1, 1.1], &[Minimize; 2]);
     assert!(volume > 0.867, "{volume}");
-    // DTLZ2 with 91 weights and PBI: an IGD of 0.0008 to 0.0010 (pymoo 0.0005 to 0.0006)
+    // DTLZ2 with 91 weights and PBI: an IGD of 0.0008 to 0.0010 over 5 seeds
     let problem = Dtlz2::<3>::default();
-    let moead = Moead::builder(problem.real(), [Minimize; 3], das_dennis::<3>(12))
+    let moead = Moead::builder(problem.representation(), [Minimize; 3], das_dennis::<3>(12))
         .decomposition(Decomposition::Pbi { theta: 5.0 })
         .crossover(SimulatedBinaryCrossover::new(20.0).unwrap())
         .mutate(PolynomialMutation::per_gene(1.0 / 12.0, 20.0).unwrap())
@@ -336,18 +338,20 @@ fn moead_approximates_two_and_three_objective_fronts() {
         .stop_when(Stop::generations(249))
         .run()
         .unwrap();
-    let distance = igd(&outcome.front_values(), &problem.optimal_front(91));
+    let distance = igd(
+        &outcome.front_values(),
+        &problem.optimal_front(91).expect("known"),
+    );
     assert!(distance < 0.0012, "{distance}");
 }
 
 #[test]
 fn sms_emoa_reaches_the_optimal_zdt1_hypervolume() {
     use genoxide::multi::SmsEmoa;
-    use genoxide::multi::problems::{TestProblem, Zdt1};
-    // the optimal front's hypervolume is 0.8716: 0.8713 to 0.8716 over 5 seeds, like pymoo's
-    // SMS-EMOA (0.8715 to 0.8718)
+    use genoxide::multi::problems::{MultiProblem, Zdt1};
+    // the optimal front's hypervolume is 0.8716: 0.8713 to 0.8716 over 5 seeds
     let problem = Zdt1::new(30);
-    let sms_emoa = SmsEmoa::builder(problem.real(), [Minimize, Minimize])
+    let sms_emoa = SmsEmoa::builder(problem.representation(), [Minimize, Minimize])
         .population_size(100)
         .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
         .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0).unwrap())

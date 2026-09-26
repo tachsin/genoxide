@@ -44,7 +44,7 @@ What genoxide has, as of 0.6. The [API documentation](https://docs.rs/genoxide) 
 - **Algorithms:** NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA.
 - **With:** constraints, duplicate elimination, a Pareto archive.
 - **Indicators:** hypervolume, IGD, IGD+, GD, spread.
-- **Test problems:** ZDT and DTLZ.
+- **Test problems** (`multi::problems`): ZDT1-4 and ZDT6, DTLZ1-4, Schaffer's two, Fonseca and Fleming's, Kursawe's, Poloni's and Viennet's three, and the constrained BNH, SRN, TNK, OSY and CONSTR, each with its optimal front where it's known and its reference, in Rust and Python.
 
 ## Engine
 
@@ -83,6 +83,8 @@ cargo run --release --example function_suite      # CMA-ES, SHADE and PSO on twe
 cargo run --release --example himmelblau          # four global minima, by restarts of a local search
 cargo run --release --example pressure_vessel     # constrained mixed discrete-continuous design, SHADE
 cargo run --release --example zdt1                # two objectives, NSGA-II, hypervolume
+cargo run --release --example bnh                 # two objectives and two constraints, NSGA-II, IGD+
+cargo run --release --example kursawe             # a disconnected front, SPEA2 and NSGA-II
 cargo run --release --example dtlz2_3obj          # three objectives, NSGA-III, hypervolume
 cargo run --release --example xor_neuroevolution  # a 2-2-1 neural network's weights, CMA-ES
 cargo run --release --example asynchronous        # a slow fitness function, asynchronous evaluation

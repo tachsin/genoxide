@@ -4,7 +4,7 @@
 use genoxide::Objective::Minimize;
 use genoxide::algorithm::islands::Topology;
 use genoxide::checkpoint;
-use genoxide::multi::problems::{Dtlz2, TestProblem, Zdt1};
+use genoxide::multi::problems::{Dtlz2, MultiProblem, Zdt1};
 use genoxide::multi::{Decomposition, MultiObjectiveAlgorithm, SmsEmoa, das_dennis};
 use genoxide::prelude::*;
 use serde::Serialize;
@@ -262,7 +262,7 @@ fn multi_objective_algorithms_resume_exactly() {
     let sbx = || SimulatedBinaryCrossover::new(15.0).unwrap();
     let mutation = |n: usize| PolynomialMutation::per_gene(1.0 / n as f64, 20.0).unwrap();
     let nsga2 = || {
-        Nsga2::builder(zdt1.real(), [Minimize; 2])
+        Nsga2::builder(zdt1.representation(), [Minimize; 2])
             .population_size(20)
             .crossover(sbx())
             .mutate(mutation(10))
@@ -272,7 +272,7 @@ fn multi_objective_algorithms_resume_exactly() {
     };
     resumes_multi(nsga2, zdt1, 8, 20);
     let nsga3 = || {
-        Nsga3::builder(dtlz2.real(), [Minimize; 3], das_dennis::<3>(4))
+        Nsga3::builder(dtlz2.representation(), [Minimize; 3], das_dennis::<3>(4))
             .population_size(16)
             .crossover(sbx())
             .mutate(mutation(12))
@@ -282,7 +282,7 @@ fn multi_objective_algorithms_resume_exactly() {
     };
     resumes_multi(nsga3, dtlz2, 8, 20);
     let spea2 = || {
-        Spea2::builder(zdt1.real(), [Minimize; 2])
+        Spea2::builder(zdt1.representation(), [Minimize; 2])
             .population_size(20)
             .crossover(sbx())
             .mutate(mutation(10))
@@ -292,7 +292,7 @@ fn multi_objective_algorithms_resume_exactly() {
     };
     resumes_multi(spea2, zdt1, 8, 20);
     let moead = || {
-        Moead::builder(dtlz2.real(), [Minimize; 3], das_dennis::<3>(4))
+        Moead::builder(dtlz2.representation(), [Minimize; 3], das_dennis::<3>(4))
             .decomposition(Decomposition::Pbi { theta: 5.0 })
             .crossover(sbx())
             .mutate(mutation(12))
@@ -302,7 +302,7 @@ fn multi_objective_algorithms_resume_exactly() {
     };
     resumes_multi(moead, dtlz2, 8, 20);
     let sms_emoa = || {
-        SmsEmoa::builder(zdt1.real(), [Minimize; 2])
+        SmsEmoa::builder(zdt1.representation(), [Minimize; 2])
             .population_size(20)
             .crossover(sbx())
             .mutate(mutation(10))
@@ -377,7 +377,7 @@ fn checkpoint_every_saves_on_schedule_and_at_the_end() {
         }
     ));
     let zdt1 = Zdt1::new(10);
-    let nsga2 = Nsga2::builder(zdt1.real(), [Minimize; 2])
+    let nsga2 = Nsga2::builder(zdt1.representation(), [Minimize; 2])
         .population_size(8)
         .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
         .mutate(PolynomialMutation::per_gene(0.1, 20.0).unwrap())

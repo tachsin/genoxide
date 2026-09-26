@@ -35,6 +35,8 @@ python examples/tsp_berlin52/main.py
 | [Himmelblau's function](himmelblau/) | continuous | Rust, Python |
 | [Pressure vessel design](pressure_vessel/) | constrained | Rust, Python |
 | [ZDT1](zdt1/) | multi-objective | Rust, Python |
+| [BNH, a constrained two-objective problem](bnh/) | multi-objective | Rust, Python |
+| [Kursawe's disconnected front](kursawe/) | multi-objective | Rust, Python |
 | [DTLZ2 with 3 objectives](dtlz2_3obj/) | multi-objective | Rust, Python |
 | [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python |
 | [Asynchronous evaluation](asynchronous/) | engine | Rust |

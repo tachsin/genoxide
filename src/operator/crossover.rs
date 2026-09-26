@@ -160,8 +160,10 @@ impl<R: Representation> Crossover<R> for NoCrossover {
     }
 }
 
-/// Simulated binary crossover (SBX) for [`Real`] genomes: Deb and Agrawal's bounded version, as in
-/// NSGA-II and pymoo.
+/// Simulated binary crossover (SBX) for [`Real`] genomes: Deb and Agrawal's crossover (1995,
+/// Complex Systems 9(2): 115-148), in a bounded version, as in NSGA-II (Deb, Pratap, Agarwal and
+/// Meyarivan, 2002, IEEE Transactions on Evolutionary Computation 6(2): 182-197,
+/// doi:10.1109/4235.996017).
 ///
 /// Each gene is recombined with probability one half. The two child values are spread
 /// symmetrically around the parents' mean, like one-point crossover spreads bit strings, with the
