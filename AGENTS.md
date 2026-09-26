@@ -93,7 +93,7 @@ Any selection fits any representation; usually `Tournament` of size 2 to 5.
 |---|---|
 | `.stop_when(stop)` | required without an abort flag; calls combine with "or" |
 | `.observe(observer)` | `&mut observer` to read it afterwards |
-| `.on_generation(|snapshot| ...)` | after every generation |
+| `.on_generation(\|snapshot\| ...)` | after every generation |
 | `.parallel(true)` | rayon, same results; for expensive fitness functions; no effect on a `Batch` |
 | `.abort_flag(Arc<AtomicBool>)` | stops after the current generation once set |
 | `.nan_policy(NanPolicy::Error)` | NaN is an error, not invalid (`NanPolicy::Invalid`, default) |
