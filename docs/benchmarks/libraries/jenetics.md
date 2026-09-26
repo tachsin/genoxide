@@ -1,25 +1,23 @@
 # Jenetics (Java, 9.1.0)
 
-Jenetics is a genetic algorithm, evolutionary algorithm and genetic programming library for Java 25. An `Engine` evolves a population through an `EvolutionStream`, which runs until the user limits it; the module `jenetics.ext` adds multi-objective selectors (`NSGA2Selector`, `UFTournamentSelector`) and more operators, such as `SimulatedBinaryCrossover`. Its documentation is the [user's manual](https://jenetics.io/manual/manual-9.1.0.pdf) (PDF, 9.1.0), the [README](https://github.com/jenetics/jenetics/blob/v9.1.0/README.md), the [javadoc](https://jenetics.io/javadoc/jenetics/9.1/io.jenetics.base/module-summary.html) and the example programs delivered with the library, [jenetics.example](https://github.com/jenetics/jenetics/tree/v9.1.0/jenetics.example/src/main/java/io/jenetics/example).
+Jenetics is a genetic algorithm, evolutionary algorithm and genetic programming library for Java 25. An `Engine` evolves a population through an `EvolutionStream`, which runs until the user limits it; `jenetics.ext` adds multi-objective selectors (`NSGA2Selector`, `UFTournamentSelector`) and operators such as `SimulatedBinaryCrossover`. Its docs are the [user's manual](https://jenetics.io/manual/manual-9.1.0.pdf) (PDF, 9.1.0), the [README](https://github.com/jenetics/jenetics/blob/v9.1.0/README.md), the [javadoc](https://jenetics.io/javadoc/jenetics/9.1/io.jenetics.base/module-summary.html) and the example programs, [jenetics.example](https://github.com/jenetics/jenetics/tree/v9.1.0/jenetics.example/src/main/java/io/jenetics/example).
 
 Adapter: [benchmarks/adapters/jenetics/](../../../benchmarks/adapters/jenetics/).
 Know a better way to solve one of these problems with Jenetics? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
 
 ## How the adapter runs Jenetics
 
-- **Fitness functions:** those of [problems.py](../../../benchmarks/problems.py), in Java, as the fitness functions of the Jenetics examples: of the decoded `double[]` or `int[]` of a codec, or of the `BitChromosome` ([Bench.java, lines 79-159](../../../benchmarks/adapters/jenetics/Bench.java#L79-L159)). `run.sh values <problem> <size>` evaluates solutions with them ([lines 445-469](../../../benchmarks/adapters/jenetics/Bench.java#L445-L469)).
-- **Evaluations:** the adapter counts every call of the fitness function, and records there the first evaluation that reaches the target (rule 3.3) ([`Budget`, lines 165-230](../../../benchmarks/adapters/jenetics/Bench.java#L165-L230)). Jenetics calls it only for individuals it hasn't evaluated: survivors, and offspring the alterers left alone, keep their fitness. But a crossover replaces both mates by new individuals even when it changed one of them only (`Recombinator`), and `Mutator` replaces an individual it picked even when it changed none of its genes; those are evaluated again, as Jenetics' users get it.
-- **Stop:** an evolution stream never ends by itself ("If you don't limit the stream, the EvolutionStream will not terminate and run forever", README). The adapter limits it with the target, the budget and the time cap, checked after every generation, so a run can go past the budget by one generation ([`evolve`, lines 245-275](../../../benchmarks/adapters/jenetics/Bench.java#L245-L275)). The examples also limit it: a generation limit such as `limit(100)` is a budget, and the scenario's budget replaces it; `Limits.bySteadyFitness(n)`, which the permutation and continuous examples set, is a convergence criterion, and ends an attempt (rule 2.2, see those problems).
-- **Time:** the clock starts when the run's `Budget` is created, before the stream creates its random initial population, and stops when the run ends, before the output ([`runSingle`, lines 400-426](../../../benchmarks/adapters/jenetics/Bench.java#L400-L426)).
-- **Seeds:** each run seeds the engine's generator, `RandomRegistry.random(...)` with Jenetics' default algorithm `L64X256MixRandom` (manual 1.4.2 and 2.7, "Reproducibility") ([lines 239-242](../../../benchmarks/adapters/jenetics/Bench.java#L239-L242)). The same seed gives the same run.
-- **Solutions:** the best solution is kept when it's evaluated.
-- **Bounds (rule 2.4):** a `DoubleGene` always lies in its range: `Mutator` draws a new value in it, and `MeanAlterer` takes the mean of two values in it. The continuous runs count the solutions evaluated outside the bounds (`outside`); it was 0 in every run below.
+- **Fitness functions:** in Java, as in the Jenetics examples, of a codec's decoded `double[]` or `int[]`, or of the `BitChromosome` ([Bench.java, lines 79-159](../../../benchmarks/adapters/jenetics/Bench.java#L79-L159); `values`, [lines 445-469](../../../benchmarks/adapters/jenetics/Bench.java#L445-L469)).
+- **Evaluations:** every call counts, with the first hit ([`Budget`, lines 165-230](../../../benchmarks/adapters/jenetics/Bench.java#L165-L230)). Survivors and untouched offspring keep their fitness. A crossover replaces both mates even when it changed one (`Recombinator`), and `Mutator` replaces an individual it picked even when no gene changed; those are evaluated again.
+- **Stop:** a stream never ends by itself ("If you don't limit the stream, the EvolutionStream will not terminate", README). The adapter limits it at the target, the budget or the time cap, after every generation ([`evolve`, lines 245-275](../../../benchmarks/adapters/jenetics/Bench.java#L245-L275)).
+- **Keeping going (rule 2.2):** an example's generation limit (`limit(100)`) is replaced by the budget. `Limits.bySteadyFitness(n)`, which the permutation and continuous examples set, ends an attempt, and the run starts again from a new random population with the seeds of rule 2.2 ([`evolve`, lines 250-275](../../../benchmarks/adapters/jenetics/Bench.java#L250-L275)). Jenetics has no restart mechanism: `CyclicEngine` (manual 3.1.6.2) continues from the previous population.
+- **Bounds (rule 2.4):** a `DoubleGene` stays in its range: `Mutator` draws in it, `MeanAlterer` averages two values in it.
+- **Seeds:** `RandomRegistry.random(...)` with the default `L64X256MixRandom` (manual 1.4.2 and 2.7), seeded per run ([lines 239-242](../../../benchmarks/adapters/jenetics/Bench.java#L239-L242)).
+- **Time:** from the run's `Budget`, before the initial population, to the end of the run ([`runSingle`, lines 400-426](../../../benchmarks/adapters/jenetics/Bench.java#L400-L426)).
+- **One thread and the JIT (rule 4.3):** `.executor(Runnable::run)` (manual 2.7) keeps everything on the calling thread (the default is the ForkJoin common pool). The JVM runs with `-XX:+UseSerialGC -Xbatch` ([run.sh](../../../benchmarks/adapters/jenetics/run.sh)): the serial collector, and the JIT compiling while the calling thread waits. Each solver first makes the warm-up run of rule 4.2 ([lines 499-518](../../../benchmarks/adapters/jenetics/Bench.java#L499-L518)).
+- **Separate tests:** 2026-09-25, Jenetics 9.1.0, seeds 0 to 4, the scenario's budget, 60 s cap, on a shared machine. `outside` was 0 in every run.
 
-### One thread and the JIT (rule 4.3)
-
-The engine gets `.executor(Runnable::run)` (manual 2.7), so selection, alteration and evaluation run on the calling thread; by default Jenetics uses the ForkJoin common pool. The JVM runs with `-XX:+UseSerialGC -Xbatch` ([run.sh](../../../benchmarks/adapters/jenetics/run.sh)): the serial collector collects on the calling thread, and `-Xbatch` (`-XX:-BackgroundCompilation`) makes the calling thread wait while the JIT compiles a method, so the JIT's compiler threads never run beside it. Before the timed runs, every solver runs once untimed and unprinted, with the seed 999,999, 50,000 evaluations and the scenario's time cap (rule 4.2, [lines 499-518](../../../benchmarks/adapters/jenetics/Bench.java#L499-L518)).
-
-The flags measured on the same JVM invocation (Rastrigin 10, seeds 0 to 4, 500,000 evaluations, then ZDT1 with 25,000, after a warm-up of 1,000 evaluations; 2026-09-25, on a machine shared with other work, so the times are noisy):
+JVM flags on one invocation (Rastrigin 10, seeds 0 to 4, 500,000 evaluations, then ZDT1 with 25,000, after a 1,000-evaluation warm-up):
 
 | JVM flags | CPU / wall, Rastrigin 10 | CPU / wall, ZDT1 | Time of the 5 Rastrigin runs (s) |
 |---|---|---|---|
@@ -29,28 +27,24 @@ The flags measured on the same JVM invocation (Rastrigin 10, seeds 0 to 4, 500,0
 | `+ -XX:TieredStopAtLevel=1` (C1 only) | 1.03 | 1.04 | 1.52, 1.20, 0.54, 0.68, 1.23 |
 | **`+ -Xbatch`** (chosen) | **0.97** | **0.98** | 1.21, 0.45, 0.54, 0.25, 0.48 |
 
-Only C1-only compilation and `-Xbatch` stay within 10%. C1 alone makes the code 2 to 3 times slower for good. `-Xbatch` keeps the same compilers and the same compiled code; its cost is that the compilations the warm-up didn't trigger happen inside the first timed run (seed 0 above, after the 1,000-evaluation warm-up of the time: 1.21 s against 0.68 s), and nowhere else.
+Only C1-only and `-Xbatch` stay within 10%. C1-only makes the code 2 to 3 times slower throughout; `-Xbatch` keeps the same compiled code, and moves the compilations the warm-up didn't trigger into the first timed run.
 
 ## Binary: OneMax 100 and 1000
 
 **Methods:**
-- **Matched (OneMax 100 and 1000):** the matched GA with Jenetics' own components: population 300, `TournamentSelector(3)` for the parents (it draws with replacement), no survivors (`offspringFraction(1.0)`, so generational without elitism), two-point crossover (`MultiPointCrossover` with 2 points), `Mutator`, no maximal age ([lines 302-324](../../../benchmarks/adapters/jenetics/Bench.java#L302-L324)). Differences, where Jenetics can't express the setting exactly:
-  - Jenetics' crossover picks each individual with probability p and mates it with a random other one, so p = 0.25 gives the matched expected number of crossovers (N / 2 pairs at 0.5).
-  - Jenetics has no bit-flip mutation. `Mutator(p)` gives a bit a new random value, which flips it half the time, and picks the individual, the chromosome and the bit each with probability p^(1/3). p = 0.4 / n gives the matched expected number of flipped bits per child, 0.2. The flips come in bursts: with n = 100, 2.5% of the children get a new chromosome, with about 16 bits redrawn and 8 flipped each (the matched GA: 20% of the children, 1 flip each on average).
-  - `Mutator` replaces the individuals it picks, and `Recombinator` both mates, even when a bit didn't change; those are evaluated again.
-- **Idiomatic (OneMax 100), `ga`:** the README's "Hello World (Ones counting)" and the delivered example program [OnesCounting.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/OnesCounting.java): a `BitChromosome` and the engine defaults ([lines 325-340](../../../benchmarks/adapters/jenetics/Bench.java#L325-L340)). The defaults ([Engine.Builder](https://jenetics.io/javadoc/jenetics/9.1/io.jenetics.base/io/jenetics/engine/Engine.Builder.html)): population 50, `TournamentSelector(3)` for the offspring and the survivors, `SinglePointCrossover(0.2)` and `Mutator(0.15)`, 60% offspring, maximal age 70. The bits start random (the README's `BitChromosome.of(10, 0.5)`).
+- **Matched:** Jenetics' own components: population 300, `TournamentSelector(3)` for the parents (with replacement), no survivors (`offspringFraction(1.0)`), `MultiPointCrossover` with 2 points, `Mutator`, no maximal age ([lines 302-324](../../../benchmarks/adapters/jenetics/Bench.java#L302-L324)). Differences:
+  - the crossover picks each individual with probability p and mates it with a random other; p = 0.25 gives the matched N / 2 pairs at 0.5;
+  - there's no bit flip: `Mutator(p)` redraws a bit (flipping it half the time), picking the individual, chromosome and bit each with probability p^(1/3). p = 0.4 / n gives the matched mean of 0.2 flipped bits per child, in bursts: with n = 100, 2.5% of the children get about 16 bits redrawn and 8 flipped;
+  - picked or mated individuals are evaluated again even when unchanged.
+- **Idiomatic, `ga`:** the README's "Hello World (Ones counting)" and [OnesCounting.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/OnesCounting.java): a `BitChromosome` with random bits and the engine defaults ([lines 325-340](../../../benchmarks/adapters/jenetics/Bench.java#L325-L340); [Engine.Builder](https://jenetics.io/javadoc/jenetics/9.1/io.jenetics.base/io/jenetics/engine/Engine.Builder.html)): population 50, `TournamentSelector(3)`, `SinglePointCrossover(0.2)`, `Mutator(0.15)` (about 7.5% of the bits flipped), 60% offspring, maximal age 70. Of the three OneMax examples, with no stated preference, it's listed first, on [jenetics.io](https://jenetics.io/) and in the README.
 
-**How the docs decided:** three examples count ones, with no stated preference. The README and OnesCounting.java use the engine defaults; the manual's listing (section 6.1) sets population 500, `RouletteWheelSelector`, `Mutator(0.55)` and `SinglePointCrossover(0.06)`. The first listed is the Hello World: the first example of [jenetics.io](https://jenetics.io/) and of the README.
-
-**Keeping going:** the README ends the stream with `limit(100)` and OnesCounting.java with `limit(10)`, generation limits, which the budget replaces. Neither sets a convergence criterion, so a run goes to the budget. The matched GA has none either.
+**Keeping going:** the examples' `limit(100)` and `limit(10)` are replaced by the budget; no convergence criterion.
 
 **Left out:**
-- The manual's settings (section 6.1): see above. In a separate test, run to the budget without the listing's `bySteadyFitness(7)`, they reached no target either (5 seeds, the best at the end 73, from 72 to 74).
-- Evolution strategies (manual 2.9): the manual shows how to configure the engine as a (μ, λ) or (μ + λ) ES, without values for μ, λ or the mutation rate, and not for a problem type.
+- The manual's listing (section 6.1: population 500, `RouletteWheelSelector`, `Mutator(0.55)`, `SinglePointCrossover(0.06)`): listed after the Hello World. Without its `bySteadyFitness(7)` (5 seeds), it reached no target (best 73, from 72 to 74).
+- Evolution strategies (manual 2.9): no values for μ, λ or the mutation rate, and no problem type.
 
-**Why the idiomatic run likely misses the target:** `Mutator(0.15)` gives each bit of an offspring a new random value with probability 0.15 (0.15^(1/3) for the individual, for its chromosome and for the bit), so it flips about 7.5% of the bits, 7 or 8 of 100. Near the optimum, nearly every mutated child loses ones, and with 50 individuals selection doesn't keep up.
-
-**Separate tests** (2026-09-25, Jenetics 9.1.0, seeds 0 to 4, the scenario's budget, 60 s cap; the machine was shared with other work, so the capped runs depend on its load):
+**Separate tests:**
 
 OneMax 100, matched (budget 200,000):
 
@@ -72,17 +66,15 @@ OneMax 100, idiomatic (budget 200,000):
 
 ## Permutation: N-Queens 32 and 64
 
-**Method, `ga`:** the manual's "Traveling salesman" example (section 6.5), Jenetics' permutation example: `Codecs.ofPermutation(n)`, population 500, maximal age 11, `SwapMutator(0.2)` and `PartiallyMatchedCrossover(0.35)`, the other settings the engine defaults (tournament of 3, 60% offspring) ([lines 341-365](../../../benchmarks/adapters/jenetics/Bench.java#L341-L365)).
+**Methods:** `ga`, the manual's "Traveling salesman" example (section 6.5): `Codecs.ofPermutation(n)`, population 500, maximal age 11, `SwapMutator(0.2)`, `PartiallyMatchedCrossover(0.35)`, the other engine defaults ([lines 341-365](../../../benchmarks/adapters/jenetics/Bench.java#L341-L365)). Of the two permutation examples, with no stated preference, the docs list only the manual's; the program [TravelingSalesman.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/TravelingSalesman.java) is only in the source tree. The engine's default crossover and `Mutator` break a permutation.
 
-**How the docs decided:** two examples solve a permutation problem with their own settings, with no stated preference: the manual's listing (section 6.5) and the delivered program [TravelingSalesman.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/TravelingSalesman.java), which sets `SwapMutator(0.15)` and `PartiallyMatchedCrossover(0.15)` and keeps the other defaults (population 50, maximal age 70). The engine defaults themselves don't fit a permutation (their crossover and `Mutator` break it). The one the documentation lists is the manual's; the example programs aren't listed anywhere but in the source tree.
-
-**Keeping going:** the example ends the stream with `Limits.bySteadyFitness(25)` and `limit(250)`. The generation limit is a budget, lifted; the steady fitness is a convergence criterion the example sets, so an attempt ends after 25 generations without a better best, and the run starts again from a new random population (rule 2.2, [`evolve`, lines 250-275](../../../benchmarks/adapters/jenetics/Bench.java#L250-L275)). Attempt 0 uses the run's seed, restart r the seed (seed + 1) × 1,000,000 + r.
+**Keeping going:** the example's `limit(250)` is lifted; `Limits.bySteadyFitness(25)` ends an attempt.
 
 **Left out:**
-- The delivered program's settings (see above). In a separate test, with its `limit(1_000)` lifted: N-Queens 32, 4 of 5 runs reached the target (median 50,934 evaluations); N-Queens 64, 2 of 5 (median 526,007).
-- Other permutation operators of Jenetics (`ShiftMutator`, `ShuffleMutator`, `UniformOderBasedCrossover`, ...): no example uses them for a permutation problem.
+- TravelingSalesman.java's settings (`SwapMutator(0.15)`, `PartiallyMatchedCrossover(0.15)`, population 50, maximal age 70). With its `limit(1_000)` lifted: N-Queens 32, 4 of 5 runs reached the target (median 50,934 evaluations); N-Queens 64, 2 of 5 (median 526,007).
+- `ShiftMutator`, `ShuffleMutator`, `UniformOderBasedCrossover` and other permutation operators: no example uses them.
 
-**Separate tests** (2026-09-25, Jenetics 9.1.0, seeds 0 to 4):
+**Separate tests:**
 
 N-Queens 32 (budget 500,000):
 
@@ -98,17 +90,15 @@ N-Queens 64 (budget 1,000,000):
 
 ## Continuous: Rastrigin 10 and 30, Ackley 30 (multimodal), Rosenbrock 10 (unimodal)
 
-**Method, `ga`:** the manual's "Rastrigin function" example (section 6.3), whose engine is the one of its "Real function" example (section 6.2, the delivered program [RealFunction.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/RealFunction.java)): `Codecs.ofVector(new DoubleRange(lower, upper), n)`, population 500, `Mutator(0.03)` and `MeanAlterer(0.6)`, the other settings the defaults ([lines 366-392](../../../benchmarks/adapters/jenetics/Bench.java#L366-L392)). Jenetics has no other recommendation for real functions, so Rosenbrock runs the same.
+**Methods:** `ga`, the manual's "Rastrigin function" example (section 6.3), with the engine of its "Real function" example (section 6.2, [RealFunction.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/RealFunction.java)): `Codecs.ofVector(new DoubleRange(lower, upper), n)`, population 500, `Mutator(0.03)`, `MeanAlterer(0.6)`, the other defaults ([lines 366-392](../../../benchmarks/adapters/jenetics/Bench.java#L366-L392)). Jenetics has no other recommendation for real functions, so Rosenbrock runs the same.
 
-**Keeping going:** both examples end the stream with `Limits.bySteadyFitness(7)`: 7 generations without a better best. That's a convergence criterion, so it ends an attempt, and the run starts again from a new random population, with the seeds above, keeping the best and counting every evaluation (rule 2.2). Jenetics has no restart mechanism: `CyclicEngine` (manual 3.1.6.2) starts each stream from the previous one's population. The "Real function" example's `limit(100)` is a generation limit, lifted.
-
-Before rule 2.2 was amended, the adapter ran without the criterion, with the optimum then at the old shift. Then, in separate tests (5 seeds): Rastrigin 10 reached the target in 4 of 5 runs (median 327,618 evaluations), and the best at the end was a median of 16.1 on Rastrigin 30, 1.05 on Rosenbrock and 2.04 on Ackley. With the restarts, below, no run reaches the target: 7 steady generations end most attempts long before the search has converged.
+**Keeping going:** both examples set `Limits.bySteadyFitness(7)`, which ends an attempt; `limit(100)` is lifted.
 
 **Left out:**
 - Evolution strategies (manual 2.9): no values for μ, λ or the mutation rate.
-- Jenetics' other real-valued alterers (`GaussianMutator`, `LineCrossover`, `IntermediateCrossover`), described in the manual's alterer section (1.3.2.2): no example uses them for a real function.
+- `GaussianMutator`, `LineCrossover`, `IntermediateCrossover` (manual 1.3.2.2): no example uses them for a real function.
 
-**Separate tests** (2026-09-25, Jenetics 9.1.0, seeds 0 to 4; `outside` was 0 in every run):
+**Separate tests:**
 
 Rastrigin 10 (budget 500,000):
 
@@ -136,9 +126,9 @@ Ackley 30 (budget 1,000,000):
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3 (30 variables), DTLZ2 and DTLZ1 (3 objectives)
 
-**Not run (rule 6.1).** The matched scenarios run NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA with the library's own SBX and polynomial mutation. Jenetics has no polynomial mutation (its mutators are `Mutator`, `GaussianMutator`, `SwapMutator`, `ShiftMutator`, `ShuffleMutator` and, in jenetics.ext, `HPRMutator`, `RSMutator` and the tree and weasel mutators), and no NSGA-III, SPEA2, MOEA/D or SMS-EMOA. The adapter prints nothing for these scenarios.
+**Not run (rule 6.1).** Jenetics has no polynomial mutation (its mutators: `Mutator`, `GaussianMutator`, `SwapMutator`, `ShiftMutator`, `ShuffleMutator`, and in jenetics.ext `HPRMutator`, `RSMutator` and the tree and weasel mutators), and no NSGA-III, SPEA2, MOEA/D or SMS-EMOA.
 
-An NSGA-II can be built from the engine, `NSGA2Selector`, `UFTournamentSelector` and `SimulatedBinaryCrossover` (η 15), but it needs a polynomial mutation written by the adapter, which matched mode doesn't allow. For reference, with such a mutation and `SimulatedBinaryCrossover` at 0.9 (separate tests, 5 seeds, the hypervolume by run.py's code):
+An NSGA-II can be built from the engine, `NSGA2Selector`, `UFTournamentSelector` and `SimulatedBinaryCrossover`, but only with a polynomial mutation written by the adapter. With one, and SBX η 15 at 0.9 (5 seeds, run.py's hypervolume), for reference:
 
 | Problem (budget) | Solver | Runs | Hypervolume: median | best | worst | Median evaluations |
 |---|---|---|---|---|---|---|
@@ -148,16 +138,16 @@ An NSGA-II can be built from the engine, `NSGA2Selector`, `UFTournamentSelector`
 | DTLZ2 (25,000) | nsga2 | 5 | 0.4835 | 0.5270 | 0.4600 | 25,036 |
 | DTLZ1 (40,000) | nsga2 | 5 | 0 | 0 | 0 | 40,023 |
 
-Also not run: Jenetics' own multi-objective setup, the manual's DTLZ1 example (section 6.9: population 100, `SimulatedBinaryCrossover(1)`, `Mutator(1 / n)`, `TournamentSelector(5)` for the offspring and `NSGA2Selector` for the survivors), and the setup of the `MOEA` javadoc (`Mutator(0.1)`, `MeanAlterer`, `TournamentSelector(2)`, `UFTournamentSelector` for the survivors): the matched scenarios run only the matched algorithms.
+**Left out:** Jenetics' own multi-objective setups, the manual's DTLZ1 example (section 6.9: population 100, `SimulatedBinaryCrossover(1)`, `Mutator(1 / n)`, `TournamentSelector(5)`, `NSGA2Selector`) and the `MOEA` javadoc's (`Mutator(0.1)`, `MeanAlterer`, `TournamentSelector(2)`, `UFTournamentSelector`): not the matched algorithms.
 
 ## Can't run
 
-- The 5 multi-objective scenarios: Jenetics has no polynomial mutation, which every matched multi-objective algorithm uses, and no NSGA-III, SPEA2, MOEA/D or SMS-EMOA (see above).
+- The 5 multi-objective scenarios: no polynomial mutation, and no NSGA-III, SPEA2, MOEA/D or SMS-EMOA.
 
 ## Bugs found
 
 | Bug | Effect here | Worked around | Reported |
 |---|---|---|---|
 | `SimulatedBinaryCrossover` centres the child on (a − b) / 2 instead of (a + b) / 2, and clamps it to the range | none, as the multi-objective scenarios don't run; the NSGA-II above reaches a hypervolume of 0 on DTLZ1 | no | [jenetics/jenetics#969](https://github.com/jenetics/jenetics/issues/969) |
-| With the engine minimizing (`.minimizing()`) and `Vec.of(...)`, the crowding distance is 0 for every individual but the extremes of each objective: `CrowdedComparator` reverses the element comparator for `Optimize.MINIMUM` but not the element distance, so `Pareto.crowdingDistance` sees a negative range (max − min ≤ 0) and adds nothing. `NSGA2Selector` and `UFTournamentSelector` then lose their diversity. The manual's DTLZ1 example is written this way | none, as the multi-objective scenarios don't run; in an earlier separate test of the NSGA-II above, with SBX at 0.45 (5 seeds): ZDT1 0.236 instead of 0.868, DTLZ2 0.358 instead of 0.586 | the NSGA-II above minimizes through `VecFactory` (another documented way, manual 3.1.7.4), whose element distance follows the direction | not yet |
-| `UFTournamentSelector` pairs the individuals by their position: `Subsets.next` returns its sample sorted, and when it samples the whole population (every call that selects half the population or more), the same fixed pairs are drawn in every round | none, as the multi-objective scenarios don't run; in an earlier separate test of the NSGA-II above, with SBX at 0.45, small: with the survivors shuffled before the tournament (5 seeds), ZDT1 0.8679 and DTLZ2 0.552, against 0.8680 and 0.586 | no | not yet |
+| With `.minimizing()` and `Vec.of(...)`, the crowding distance is 0 for all but each objective's extremes: `CrowdedComparator` reverses the element comparator for `Optimize.MINIMUM` but not the element distance, so `Pareto.crowdingDistance` sees a range max − min ≤ 0 and adds nothing. `NSGA2Selector` and `UFTournamentSelector` lose their diversity. The manual's DTLZ1 example is written this way | none, as the multi-objective scenarios don't run; the NSGA-II above with SBX at 0.45 (5 seeds): ZDT1 0.236 instead of 0.868, DTLZ2 0.358 instead of 0.586 | the NSGA-II above minimizes through `VecFactory` (manual 3.1.7.4), whose distance follows the direction | not yet |
+| `UFTournamentSelector` pairs individuals by position: `Subsets.next` returns its sample sorted, so when it samples the whole population (selecting half of it or more), the same pairs are drawn every round | none, as the multi-objective scenarios don't run; small: with the survivors shuffled first (SBX at 0.45, 5 seeds), ZDT1 0.8679 and DTLZ2 0.552, against 0.8680 and 0.586 | no | not yet |
