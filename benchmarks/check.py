@@ -266,7 +266,6 @@ def short(value, limit=80):
 
 def check(libraries, scenarios):
     """Checks the libraries, prints and saves the outcome; returns whether they all passed."""
-    saved = json.loads(CHECK_FILE.read_text(encoding="utf-8")) if CHECK_FILE.exists() else {}
     all_passed = True
     for name in libraries:
         adapter = run.ADAPTERS[name]
@@ -298,11 +297,17 @@ def check(libraries, scenarios):
         print(f"{name}: {'PASSED' if passed else f'FAILED ({library_failures} failures)'}", flush=True)
         # only a check of every scenario counts for a timed run
         if len(scenarios) == len(run.SCENARIOS):
-            saved[name] = {"hash": adapter_hash(name), "passed": passed,
-                           "date": time.strftime("%Y-%m-%d %H:%M")}
-    CHECK_FILE.parent.mkdir(exist_ok=True)
-    CHECK_FILE.write_text(json.dumps(saved, indent=2), encoding="utf-8")
+            save(name, {"hash": adapter_hash(name), "passed": passed, "date": time.strftime("%Y-%m-%d %H:%M")})
     return all_passed
+
+
+def save(name, entry):
+    """Records one library's check, re-reading the file first, so checks of other libraries running
+    at the same time aren't overwritten."""
+    CHECK_FILE.parent.mkdir(exist_ok=True)
+    saved = json.loads(CHECK_FILE.read_text(encoding="utf-8")) if CHECK_FILE.exists() else {}
+    saved[name] = entry
+    CHECK_FILE.write_text(json.dumps(saved, indent=2), encoding="utf-8")
 
 
 def unchecked(libraries):
