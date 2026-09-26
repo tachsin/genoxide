@@ -17,4 +17,5 @@ origin. The example minimizes it in 30 dimensions with two algorithms, each with
 1,000,000 evaluations and a target of 1e-8: CMA-ES with IPOP restarts, whose population doubles
 at each restart, and L-SHADE, a differential evolution whose population shrinks over the budget.
 It prints the best value each one found and the evaluations it took. The Python version evaluates
-a whole generation per call of a vectorized numpy function.
+a whole generation per call of a vectorized numpy function, whose cosines and sums can differ from
+Rust's in the last bit, so the evaluations CMA-ES takes can differ between the two languages.

@@ -6,6 +6,10 @@ README's YAML front matter (`title`, `category`, `summary`, `reference`, `refere
 `optimum`, `languages`, `order`) is what the [docs site](https://tachsin.github.io/genoxide/)
 builds its example pages from. CI runs every example in both languages.
 
+Both versions use the same algorithm, settings and seed, and print the same output. The exception
+is a fitness function with functions such as cosine, whose last bit can differ between Rust and
+numpy: the runs then drift apart, as in the Rastrigin example.
+
 Run a Rust example from the root of the repository:
 
 ```sh

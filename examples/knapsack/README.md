@@ -4,7 +4,7 @@ category: constrained
 summary: Choose the items with the highest total value whose total weight fits a capacity.
 reference: "Martello, S. and Toth, P. (1990). Knapsack Problems: Algorithms and Computer Implementations. Wiley."
 reference_url: null
-optimum: "OPTIMUM_PLACEHOLDER (total value)"
+optimum: "625 (total value)"
 languages: [rust, python]
 order: 20
 ---
