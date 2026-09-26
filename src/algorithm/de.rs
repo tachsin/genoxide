@@ -5,6 +5,7 @@ use crate::genome::{Real, Reals, Representation};
 use crate::operator::check_size;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
+use std::ops::RangeInclusive;
 
 /// How a differential evolution builds the mutant vector `v` for an individual `x`, from random
 /// distinct other individuals `r1`, `r2` (and `r3`) and the scale factor `F`.
@@ -205,6 +206,9 @@ pub struct De {
     #[cfg_attr(feature = "serde", serde(default))]
     immigrated: Vec<usize>,
     discarded: Vec<Individual<Reals>>,
+    // genomes no longer in use, whose memory the next trials reuse
+    #[cfg_attr(feature = "serde", serde(skip))]
+    spare: Spare,
     started: bool,
     asked: bool,
     pending: Vec<usize>,
@@ -471,77 +475,113 @@ impl De {
         }
     }
 
-    // the trial vector for individual `target`
+    // how many of the best individuals, best first, the trials of a generation of `size` can pick
+    // from: `pbest` is one of at most the best `top` (at least 1, at most `size`), with the `p`
+    // of `pbest_fraction` at most `min_p + (max_p - min_p).max(0)`, and DE/best/1 takes the best
+    fn ranked(&self, size: usize) -> usize {
+        let top = |p: f64| ((p * size as f64).round() as usize).clamp(1, size);
+        match self.strategy {
+            Strategy::Rand1 => 0,
+            Strategy::Best1 => 1,
+            Strategy::CurrentToPBest { p, .. } => top(p),
+            Strategy::CurrentToPBestRandomP { max_p, .. } => {
+                let min_p = 2.0 / size as f64;
+                // one more, in case of a rounding in the bound
+                (top(min_p + (max_p - min_p).max(0.0)) + 1).min(size)
+            }
+        }
+    }
+
+    // the trial vector for individual `target`; `order` starts with the best `ranked` individuals,
+    // best first
     fn trial(&mut self, target: usize, f: f64, cr: f64, order: &[usize]) -> Reals {
         let size = self.population.len();
-        let x = self.population[target].genome().clone();
-        let genes = |de: &Self, index: usize| de.population[index].genome().clone();
-        let mutant: Vec<f64> = match self.strategy {
+        // the random individuals, then the gene that comes from the mutant for sure
+        let (mutant, donors) = match self.strategy {
             Strategy::Rand1 => {
                 let r1 = self.other_than(size, &[target]);
                 let r2 = self.other_than(size, &[target, r1]);
                 let r3 = self.other_than(size, &[target, r1, r2]);
-                let (a, b, c) = (genes(self, r1), genes(self, r2), genes(self, r3));
-                (0..x.len()).map(|j| a[j] + f * (b[j] - c[j])).collect()
+                (Mutant::Difference, [r1, r2, r3])
             }
             Strategy::Best1 => {
                 let best = order[0];
                 let r1 = self.other_than(size, &[target, best]);
                 let r2 = self.other_than(size, &[target, best, r1]);
-                let (a, b, c) = (genes(self, best), genes(self, r1), genes(self, r2));
-                (0..x.len()).map(|j| a[j] + f * (b[j] - c[j])).collect()
+                (Mutant::Difference, [best, r1, r2])
             }
             Strategy::CurrentToPBest { .. } | Strategy::CurrentToPBestRandomP { .. } => {
                 let p = self.pbest_fraction(size);
                 let top = ((p * size as f64).round() as usize).clamp(1, size);
+                debug_assert!(top <= order.len(), "pbest from the ranked individuals");
                 let pbest = order[self.rng.below(top)];
                 let r1 = self.other_than(size, &[target]);
                 // r2 from the population and the archive
                 let r2 = self.other_than(size + self.archive.len(), &[target, r1]);
-                let (best, a) = (genes(self, pbest), genes(self, r1));
-                let b = if r2 < size {
-                    genes(self, r2)
-                } else {
-                    self.archive[r2 - size].clone()
-                };
-                (0..x.len())
-                    .map(|j| x[j] + f * (best[j] - x[j]) + f * (a[j] - b[j]))
-                    .collect()
+                (Mutant::CurrentToPBest, [pbest, r1, r2])
             }
         };
-        // binomial crossover, with at least one gene from the mutant, and bounce-back at the bounds
-        let bounds = self.real.bounds();
         // one of the genes that can change: a fixed one would leave the trial a copy
         let variable = self.real.variable_genes();
         let forced = match variable.len() {
             0 => usize::MAX,
             len => variable[self.rng.below(len)],
         };
-        (0..x.len())
-            .map(|j| {
-                let from_mutant = j == forced || self.rng.unit_f64() < cr;
-                let (start, end) = (*bounds[j].start(), *bounds[j].end());
-                if !from_mutant || start == end {
-                    x[j]
-                } else if mutant[j] < start {
-                    midpoint(start, x[j])
-                } else if mutant[j] > end {
-                    midpoint(end, x[j])
-                } else if mutant[j].is_nan() {
-                    x[j]
-                } else {
-                    mutant[j]
-                }
-            })
-            .collect()
+        // by position in the population, and past it in the archive
+        let genes = |index: usize| -> &[f64] {
+            if index < size {
+                self.population[index].genome()
+            } else {
+                &self.archive[index - size]
+            }
+        };
+        let crossover = Crossover {
+            x: genes(target),
+            bounds: self.real.bounds(),
+            forced,
+            cr,
+        };
+        let genome = self.spare.0.pop();
+        let donors = genes(donors[0])
+            .iter()
+            .zip(genes(donors[1]))
+            .zip(genes(donors[2]))
+            .map(|((&d0, &d1), &d2)| [d0, d1, d2]);
+        // the mutant's genes, from the target's and the donors'
+        match mutant {
+            Mutant::Difference => crossover.trial(&mut self.rng, genome, donors, |_, [a, b, c]| {
+                a + f * (b - c)
+            }),
+            Mutant::CurrentToPBest => {
+                crossover.trial(&mut self.rng, genome, donors, |x, [pbest, a, b]| {
+                    x + f * (pbest - x) + f * (a - b)
+                })
+            }
+        }
     }
 
     fn breed(&mut self) {
         let objective = self.objective;
         let size = self.population.len();
-        // best first, the earlier one on ties
-        let mut order: Vec<usize> = (0..size).collect();
-        order.sort_by(|&a, &b| objective.compare(self.fitness(b), self.fitness(a)));
+        // the positions of the best `ranked` individuals, best first, the earlier one on ties:
+        // with the position in the key, the order is total, so they're the same as the first of a
+        // stable sort of the whole population
+        let ranked = self.ranked(size);
+        let mut order = Vec::with_capacity(ranked);
+        if ranked > 0 {
+            let mut keys: Vec<(u64, u64, usize)> = (0..size)
+                .map(|index| {
+                    let (first, second) = rank_key(objective, self.fitness(index));
+                    (first, second, index)
+                })
+                .collect();
+            if ranked < size {
+                keys.select_nth_unstable(ranked - 1);
+                keys.truncate(ranked);
+            }
+            keys.sort_unstable();
+            order.extend(keys.iter().map(|&(_, _, index)| index));
+        }
         self.trials.clear();
         self.parameters.clear();
         for target in 0..size {
@@ -557,10 +597,10 @@ impl De {
         let objective = self.objective;
         let archive_size =
             (self.strategy.archive_rate() * self.population.len() as f64).round() as usize;
-        self.discarded.clear();
-        let trials = std::mem::take(&mut self.trials);
+        self.spare.recycle_discarded(&mut self.discarded);
+        let mut trials = std::mem::take(&mut self.trials);
         let mut successes = Vec::new();
-        for (target, trial) in trials.into_iter().enumerate() {
+        for (target, trial) in trials.drain(..).enumerate() {
             let trial_fitness = trial.fitness().unwrap_or(Fitness::invalid());
             let target_fitness = self.fitness(target);
             if objective.is_better(target_fitness, trial_fitness) {
@@ -576,11 +616,15 @@ impl De {
             if archive_size > 0 {
                 if self.archive.len() >= archive_size {
                     let random = self.rng.below(self.archive.len());
-                    self.archive.swap_remove(random);
+                    self.spare.0.push(self.archive.swap_remove(random));
                 }
                 self.archive.push(replaced.into_genome());
+            } else {
+                self.spare.0.push(replaced.into_genome());
             }
         }
+        // empty, with its memory for the next trials
+        self.trials = trials;
         self.adapt(&successes);
         self.reduce();
         self.track_start();
@@ -626,30 +670,23 @@ impl De {
         if self.generation - self.start_best_generation >= patience {
             return true;
         }
-        let mut scores = Vec::with_capacity(self.population.len());
-        let mut violations = Vec::with_capacity(self.population.len());
+        let (mut min, mut max) = (f64::INFINITY, f64::NEG_INFINITY);
+        let (mut min_violation, mut max_violation) = (f64::INFINITY, f64::NEG_INFINITY);
         for index in 0..self.population.len() {
             let fitness = self.fitness(index);
             // an invalid individual: not converged
             let Some(score) = fitness.score() else {
                 return false;
             };
-            scores.push(score);
-            violations.push(fitness.violation());
+            (min, max) = (min.min(score), max.max(score));
+            let violation = fitness.violation();
+            (min_violation, max_violation) =
+                (min_violation.min(violation), max_violation.max(violation));
         }
-        let range = |values: &[f64]| {
-            values
-                .iter()
-                .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), &x| {
-                    (min.min(x), max.max(x))
-                })
-        };
-        let (min, max) = range(&scores);
         let best = match self.objective {
             Objective::Maximize => max,
             Objective::Minimize => min,
         };
-        let (min_violation, max_violation) = range(&violations);
         max - min <= tolerance * (1.0 + best.abs())
             && max_violation - min_violation <= tolerance * (1.0 + min_violation)
     }
@@ -674,6 +711,111 @@ impl De {
         self.restart_due = false;
         self.start_best = None;
         self.start_best_generation = self.generation;
+    }
+}
+
+// a key whose ascending order is the order of `objective.compare`, best first: invalid last, then
+// by violation, the smaller first, then by score
+fn rank_key(objective: Objective, fitness: Fitness) -> (u64, u64) {
+    let Some(score) = fitness.score() else {
+        return (u64::MAX, 0);
+    };
+    // the scores in the order of `f64::total_cmp`, the smallest first
+    let bits = score.to_bits();
+    let ascending = if bits >> 63 == 1 {
+        !bits
+    } else {
+        bits | 1 << 63
+    };
+    let score = match objective {
+        Objective::Minimize => ascending,
+        Objective::Maximize => !ascending,
+    };
+    // a violation is 0 or more (not -0 or NaN), so its bits are in its order, all below u64::MAX
+    (fitness.violation().to_bits(), score)
+}
+
+// how a mutant vector comes from the target `x` and three donors
+enum Mutant {
+    // `a + F · (b − c)`: DE/rand/1 and DE/best/1
+    Difference,
+    // `x + F · (pbest − x) + F · (a − b)`
+    CurrentToPBest,
+}
+
+// binomial crossover of the target `x` with a mutant vector, with at least the gene `forced` from
+// the mutant, and bounce-back at the bounds
+struct Crossover<'a> {
+    x: &'a [f64],
+    bounds: &'a [RangeInclusive<f64>],
+    forced: usize,
+    cr: f64,
+}
+
+impl Crossover<'_> {
+    // the trial vector, in the memory of `genome` if it has the length, with `mutant(x_j, d_j)`
+    // the mutant's gene `j` from the target's gene `x_j` and the donors' genes `d_j`
+    fn trial(
+        &self,
+        rng: &mut StreamRng,
+        genome: Option<Reals>,
+        donors: impl Iterator<Item = [f64; 3]>,
+        mutant: impl Fn(f64, [f64; 3]) -> f64,
+    ) -> Reals {
+        let x = self.x;
+        let mut trial = match genome {
+            Some(genome) if genome.len() == x.len() => genome,
+            _ => Reals::from(vec![0.0; x.len()]),
+        };
+        let genes = trial.iter_mut().zip(x).zip(self.bounds).zip(donors);
+        for (j, (((value, &x), bounds), donors)) in genes.enumerate() {
+            let from_mutant = j == self.forced || rng.unit_f64() < self.cr;
+            let (start, end) = (*bounds.start(), *bounds.end());
+            // the mutant's gene is computed for every gene and chosen without a branch, which the
+            // random choice would make the processor mispredict often: by a mask of bits, which
+            // `black_box` keeps the compiler from turning back into a branch
+            // (`std::hint::select_unpredictable` does that from Rust 1.88, above the minimum
+            // supported version)
+            let mutant = mutant(x, donors);
+            let bounced = if mutant < start {
+                midpoint(start, x)
+            } else if mutant > end {
+                midpoint(end, x)
+            } else if mutant.is_nan() {
+                x
+            } else {
+                mutant
+            };
+            let take = from_mutant & (start != end);
+            let mask = std::hint::black_box(u64::from(take).wrapping_neg());
+            *value = f64::from_bits((bounced.to_bits() & mask) | (x.to_bits() & !mask));
+        }
+        trial
+    }
+}
+
+// genomes no longer in use, whose memory is reused: none in a clone, a checkpoint or its debug
+// output
+#[derive(Default)]
+struct Spare(Vec<Reals>);
+
+impl Spare {
+    // takes the genomes of the discarded individuals, leaving none
+    fn recycle_discarded(&mut self, discarded: &mut Vec<Individual<Reals>>) {
+        self.0
+            .extend(discarded.drain(..).map(Individual::into_genome));
+    }
+}
+
+impl Clone for Spare {
+    fn clone(&self) -> Self {
+        Spare::default()
+    }
+}
+
+impl std::fmt::Debug for Spare {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Spare")
     }
 }
 
@@ -852,7 +994,7 @@ impl Algorithm for De {
         } else {
             // a restart's generation has no trials to discard
             self.fresh.clear();
-            self.discarded.clear();
+            self.spare.recycle_discarded(&mut self.discarded);
             self.track_start();
         }
         self.started = true;
@@ -1119,6 +1261,7 @@ impl DeBuilder {
             restart_due: false,
             immigrated: Vec::new(),
             discarded: Vec::new(),
+            spare: Spare::default(),
             started: false,
             asked: false,
             pending: Vec::new(),
@@ -1684,6 +1827,49 @@ mod tests {
     }
 
     #[test]
+    fn pbest_comes_from_the_ranked_individuals() {
+        // the largest unit number, below 1
+        let largest = 1.0 - f64::EPSILON / 2.0;
+        for max_p in [
+            0.01,
+            0.05,
+            0.1,
+            0.11,
+            0.2,
+            0.25,
+            1.0 / 3.0,
+            0.5,
+            0.7,
+            0.99,
+            1.0,
+        ] {
+            for size in 4..300 {
+                for strategy in [
+                    Strategy::CurrentToPBest {
+                        p: max_p,
+                        archive: 1.0,
+                    },
+                    Strategy::CurrentToPBestRandomP {
+                        max_p,
+                        archive: 1.0,
+                    },
+                ] {
+                    let de = builder(strategy, 0).population_size(size).build().unwrap();
+                    let p = match strategy {
+                        Strategy::CurrentToPBestRandomP { max_p, .. } => {
+                            let min_p = 2.0 / size as f64;
+                            min_p + (max_p - min_p).max(0.0) * largest
+                        }
+                        _ => max_p,
+                    };
+                    let top = ((p * size as f64).round() as usize).clamp(1, size);
+                    assert!(top <= de.ranked(size), "{strategy:?} {size}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn random_p_uses_the_current_population_size() {
         // with linear reduction, 2 / NP grows as the population shrinks, down to 4 individuals
         let mut de = builder(
@@ -1727,7 +1913,44 @@ mod tests {
         assert_ne!(run(3), run(4));
     }
 
+    fn any_fitness() -> impl proptest::strategy::Strategy<Value = Fitness> {
+        use proptest::strategy::Strategy as _;
+        prop_oneof![
+            1 => Just(Fitness::invalid()),
+            1 => Just(Fitness::new(-0.0)),
+            1 => Just(Fitness::new(f64::INFINITY)),
+            1 => Just(Fitness::new(f64::NEG_INFINITY)),
+            1 => Just(Fitness::constrained(1.0, f64::INFINITY)),
+            10 => any::<f64>().prop_map(Fitness::new),
+            // small sets of scores and violations, for ties
+            10 => ((-2i32..2), (0i32..3)).prop_map(|(score, violation)| {
+                Fitness::constrained(f64::from(score), f64::from(violation) / 2.0)
+            }),
+        ]
+    }
+
     proptest! {
+        #[test]
+        fn rank_keys_sort_like_a_stable_sort_by_compare(
+            fitness in prop::collection::vec(any_fitness(), 0..40),
+            maximize: bool,
+        ) {
+            let objective = if maximize { Objective::Maximize } else { Objective::Minimize };
+            let mut expected: Vec<usize> = (0..fitness.len()).collect();
+            expected.sort_by(|&a, &b| objective.compare(fitness[b], fitness[a]));
+            let mut keys: Vec<(u64, u64, usize)> = fitness
+                .iter()
+                .enumerate()
+                .map(|(index, &fitness)| {
+                    let (first, second) = rank_key(objective, fitness);
+                    (first, second, index)
+                })
+                .collect();
+            keys.sort_unstable();
+            let order: Vec<usize> = keys.iter().map(|&(_, _, index)| index).collect();
+            prop_assert_eq!(order, expected);
+        }
+
         #[test]
         fn trials_stay_in_bounds_and_targets_never_get_worse(
             strategy in prop::sample::select(STRATEGIES.to_vec()),
