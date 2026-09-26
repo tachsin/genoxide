@@ -4,9 +4,11 @@ Usage:
     python run.py setup                      # create .venv and install the Python libraries
     python run.py                            # all scenarios, 10 seeds
     python run.py --quick                    # small scenarios, 3 seeds
+    python run.py --max-seconds 10           # one time cap for every scenario, instead of each one's
     python run.py --seeds 5 --scenarios onemax-100-matched nqueens-32-idiomatic
     python run.py --libraries deap genetic_algorithm
-    python run.py check                      # test the adapters against the rules, before a run
+    python run.py check                      # test the adapters against the rules, before a run,
+                                             # --jobs scenarios at a time
     python run.py chart                      # redraw the charts of the latest results
     python run.py instructions               # count the instructions per evaluation with Callgrind
                                              # into the latest results (--results <file>), --jobs
@@ -178,28 +180,30 @@ ADAPTERS = {
     },
 }
 
-# (problem, size, mode, max_evaluations). A run stops at the target, at max_evaluations or at
-# max_seconds, whichever comes first.
+# (problem, size, mode, max_evaluations, max_seconds). A run stops at the target, at max_evaluations
+# or at max_seconds, its time cap, whichever comes first.
 #   matched:   configurations as equal as the libraries allow (framework cost)
 #   idiomatic: each library's own recommended configuration (what a user gets)
 SCENARIOS = [
-    ("onemax", 100, "matched", 200_000),
-    ("onemax", 1000, "matched", 2_000_000),
-    ("onemax", 100, "idiomatic", 200_000),
-    ("nqueens", 32, "idiomatic", 500_000),
-    ("nqueens", 64, "idiomatic", 1_000_000),
-    ("rastrigin", 10, "idiomatic", 500_000),
-    ("rastrigin", 30, "idiomatic", 2_000_000),
-    ("rosenbrock", 10, "idiomatic", 500_000),
-    ("ackley", 30, "idiomatic", 1_000_000),
-    # multi-objective: a budget and no target; the quality is the hypervolume of the final front
-    ("zdt1", 30, "matched", 25_000),
-    ("zdt2", 30, "matched", 25_000),
-    ("zdt3", 30, "matched", 25_000),
-    ("dtlz2", 3, "matched", 25_000),
-    ("dtlz1", 3, "matched", 40_000),
+    ("onemax", 100, "matched", 200_000, 60),
+    ("onemax", 1000, "matched", 2_000_000, 60),
+    ("onemax", 100, "idiomatic", 200_000, 60),
+    ("nqueens", 32, "idiomatic", 500_000, 60),
+    ("nqueens", 64, "idiomatic", 1_000_000, 60),
+    ("rastrigin", 10, "idiomatic", 500_000, 60),
+    ("rastrigin", 30, "idiomatic", 2_000_000, 60),
+    ("rosenbrock", 10, "idiomatic", 500_000, 60),
+    ("ackley", 30, "idiomatic", 1_000_000, 60),
+    # multi-objective: a budget and no target; the quality is the hypervolume of the final front.
+    # Each run must use its whole budget (rule 7.1), so the cap is longer.
+    ("zdt1", 30, "matched", 25_000, 600),
+    ("zdt2", 30, "matched", 25_000, 600),
+    ("zdt3", 30, "matched", 25_000, 600),
+    ("dtlz2", 3, "matched", 25_000, 600),
+    ("dtlz1", 3, "matched", 40_000, 600),
 ]
-BUDGETS = {f"{problem}-{size}-{mode}": budget for problem, size, mode, budget in SCENARIOS}
+BUDGETS = {f"{problem}-{size}-{mode}": budget for problem, size, mode, budget, _ in SCENARIOS}
+CAPS = {f"{problem}-{size}-{mode}": cap for problem, size, mode, _, cap in SCENARIOS}
 QUICK_SCENARIOS = {"onemax-100-matched", "onemax-100-idiomatic", "nqueens-32-idiomatic", "rastrigin-10-idiomatic",
                    "zdt1-30-matched"}
 
@@ -296,39 +300,58 @@ def library_version(kind, package, adapter=None, label=None):
     return version
 
 
-# A solver whose first EARLY_SEEDS runs all hit the time cap, without reaching the target (a
-# multi-objective run has none), runs no more seeds: the others would take the whole cap each, for
-# the same result. The adapters whose solvers can hit the cap (nevergrad, metaheuristics_jl and
-# pygad) skip those seeds themselves; stop_early applies the same rule to every adapter's runs.
+# In a scenario with a target, a solver whose first EARLY_SEEDS runs all hit the time cap without
+# reaching it runs no more seeds (rule 5.3): the others would take the whole cap each, for the same
+# result. A multi-objective scenario runs every seed. The adapters whose solvers can hit the cap
+# (nevergrad, metaheuristics_jl and pygad) skip those seeds themselves; stop_early applies the same
+# rule to every adapter's runs.
 EARLY_SEEDS = 3
 # a run that took this share of the cap was stopped by it
 CAPPED = 0.98
+# the fewest runs reaching the target that give an ERT (rule 8.1); with fewer, the results show how
+# many reached it
+ERT_REACHED = 3
+
+
+def scenario_caps(max_seconds, runs=()):
+    """Each scenario's time cap, from a results file's "max_seconds": a cap per scenario, or one
+    number for every scenario in the files from before the caps were per scenario."""
+    if isinstance(max_seconds, dict):
+        return max_seconds
+    names = set(CAPS) | {scenario_name(run.get("problem"), run.get("size"), run.get("mode")) for run in runs}
+    return {name: max_seconds for name in names}
+
+
+def run_cap(run, caps):
+    """The time cap of a run's scenario."""
+    return caps[scenario_name(run.get("problem"), run.get("size"), run.get("mode"))]
 
 
 def stop_early(runs, max_seconds):
     """The runs without the seeds after EARLY_SEEDS of a solver whose first EARLY_SEEDS runs all
-    hit the time cap."""
+    hit the time cap, in a scenario with a target."""
     seeds = sorted({run.get("seed") for run in runs if isinstance(run.get("seed"), int)})[:EARLY_SEEDS]
     stopped = set()
     for solver in {run.get("solver") for run in runs}:
-        first = [run for run in runs if run.get("solver") == solver and run.get("seed") in seeds]
+        first = [run for run in runs if run.get("solver") == solver and run.get("seed") in seeds
+                 and not is_front(run.get("problem"))]
         if len(first) == EARLY_SEEDS and all(capped(run, max_seconds) for run in first):
             stopped.add(solver)
     return [run for run in runs if run.get("solver") not in stopped or run.get("seed") in seeds]
 
 
 def capped(run, max_seconds):
-    """Whether the time cap stopped a run: it took the cap without reaching the target (a
-    multi-objective run has none) or using its evaluation budget."""
+    """Whether the time cap stopped a run: it took the cap without reaching the target within the
+    cap (a multi-objective run has none) or using its evaluation budget."""
     budget = BUDGETS.get(scenario_name(run.get("problem"), run.get("size"), run.get("mode")))
-    return (run.get("time_s", 0) >= CAPPED * max_seconds and not run.get("success")
+    return (run.get("time_s", 0) >= CAPPED * max_seconds and not first_hit(run, max_seconds)
             and (budget is None or run.get("evaluations", 0) < budget))
 
 
 def run_outcome(run, max_seconds):
     """How a run ended, for the log."""
-    if "success" in run and run["success"]:
-        return "target reached"
+    if run.get("success"):
+        return "target reached" if first_hit(run, max_seconds) else "target reached after the time cap: not reached"
     ended = "front" if "success" not in run else "not reached"
     return f"{ended}, stopped by the time cap" if capped(run, max_seconds) else ended
 
@@ -339,7 +362,7 @@ def run_adapter(adapter, problem, size, mode, seeds, max_evaluations, max_second
     summary."""
     import check
     command = adapter["command"] + [
-        problem, str(size), mode, "0", str(seeds - 1), str(max_evaluations), str(max_seconds),
+        problem, str(size), mode, "0", str(seeds - 1), str(max_evaluations), str(float(max_seconds)),
     ]
     runs = []
     # run from this folder, so a library repository checked out next to it can't shadow a package.
@@ -479,63 +502,92 @@ def gap_to_optimum(run):
     return run["size"] - run["best"] if run["problem"] == "onemax" else run["best"]
 
 
-def first_hit(run):
-    """(evaluations, seconds) at the run's first hit of the target, or None. A run from before
-    first_hit was recorded stopped at the target: its end."""
-    if not run["success"]:
+def first_hit(run, max_seconds):
+    """(evaluations, seconds) at the run's first hit of the target, or None. A hit after the time
+    cap counts as not reached (rule 3.3). A run from before first_hit was recorded stopped at the
+    target: its end."""
+    if not run.get("success"):
         return None
     hit = run.get("first_hit")
-    return (hit["evaluations"], hit["time_s"]) if hit else (run["evaluations"], run["time_s"])
+    evaluations, seconds = (hit["evaluations"], hit["time_s"]) if hit else (run["evaluations"], run["time_s"])
+    return (evaluations, seconds) if seconds <= max_seconds else None
 
 
-def expected_to_target(group):
+def expected_to_target(group, max_seconds):
     """The expected running time (ERT, Hansen et al., COCO) of a solver in evaluations and in seconds:
     what all its runs spent, up to the first hit in the runs that reached the target and in full in
-    the others, divided by the number of runs that reached it. (None, None) if none did."""
-    hits = [first_hit(run) for run in group]
+    the others, divided by the number of runs that reached it. (None, None) if fewer than
+    ERT_REACHED did."""
+    hits = [first_hit(run, max_seconds) for run in group]
     reached = sum(1 for hit in hits if hit)
-    if not reached:
+    if reached < ERT_REACHED:
         return None, None
     evaluations = sum(hit[0] if hit else run["evaluations"] for run, hit in zip(group, hits))
     seconds = sum(hit[1] if hit else run["time_s"] for run, hit in zip(group, hits))
     return evaluations / reached, seconds / reached
 
 
-def summarize(runs, max_seconds=60.0):
-    """The single-objective results of the valid runs, per scenario and solver."""
+def budget_share(runs):
+    """The median share of its scenario's evaluation budget that a run used, over `runs`, or None."""
+    shares = [run["evaluations"] / budget for run in runs
+              if (budget := BUDGETS.get(scenario_name(run["problem"], run["size"], run["mode"])))]
+    return median(shares)
+
+
+def solver_groups(runs, caps, front, split):
+    """The valid runs of the single-objective (or, with `front`, multi-objective) scenarios, per
+    (scenario, library, solver), and with `split` per whether the time cap stopped them too."""
     groups = {}
     for run in valid(runs):
-        if is_front(run["problem"]):
+        if is_front(run["problem"]) != front:
             continue
         key = (scenario_name(run["problem"], run["size"], run["mode"]), run["library"], run["solver"])
+        if split:
+            key += (capped(run, run_cap(run, caps)),)
         groups.setdefault(key, []).append(run)
+    return groups
 
+
+def capped_runs(group, caps):
+    """The runs of a group that the time cap stopped."""
+    return [run for run in group if capped(run, run_cap(run, caps))]
+
+
+def summarize(runs, caps, split=False):
+    """The single-objective results of the valid runs, per scenario and solver. `caps` has each
+    scenario's time cap. With `split`, the runs the time cap stopped are a row of their own, with
+    "ended_on_cap" true."""
     def evaluations_per_second(group):
         return sum(run["evaluations"] for run in group) / max(sum(run["time_s"] for run in group), 1e-9)
 
-    # reference for the throughput ratio: DEAP's GA in the same scenario
+    # reference for the throughput ratio: DEAP's GA in the same scenario, all its runs
     reference = {
         scenario: evaluations_per_second(group)
-        for (scenario, library, solver), group in groups.items()
+        for (scenario, library, solver), group in solver_groups(runs, caps, False, False).items()
         if library == "deap" and solver == "ga"
     }
 
     rows = []
-    for (scenario, library, solver), group in groups.items():
-        successes = [run for run in group if run["success"]]
+    for key, group in solver_groups(runs, caps, False, split).items():
+        scenario, library, solver = key[:3]
+        cap = caps[scenario]
+        stopped = capped_runs(group, caps)
         rate = evaluations_per_second(group)
         # how far each run's best is from the optimum (rule 8.1): every problem's optimum is 0,
         # except OneMax's, all ones
         gaps = sorted(gap_to_optimum(run) for run in group)
-        ert_evaluations, ert_time = expected_to_target(group)
+        ert_evaluations, ert_time = expected_to_target(group, cap)
         rows.append({
             "scenario": scenario,
             "library": library,
             "solver": solver,
+            **({"ended_on_cap": key[3]} if split else {}),
             "runs": len(group),
-            "reached": len(successes),
+            # a first hit after the cap counts as not reached (rule 3.3)
+            "reached": sum(1 for run in group if first_hit(run, cap)),
             # runs the time cap stopped, not the budget: limited by speed, not by the search
-            "capped": sum(1 for run in group if capped(run, max_seconds)),
+            "capped": len(stopped),
+            "capped_share": budget_share(stopped),
             "ert_time": ert_time,
             "ert_evaluations": ert_evaluations,
             "median_evaluations": median([run["evaluations"] for run in group]),
@@ -546,24 +598,24 @@ def summarize(runs, max_seconds=60.0):
             "evaluations_per_second": rate,
             "throughput_vs_deap": rate / reference[scenario] if scenario in reference and library != "deap" else None,
         })
-    rows.sort(key=lambda row: (row["scenario"], row["library"], row["solver"]))
+    rows.sort(key=lambda row: (row["scenario"], row["library"], row["solver"], row.get("ended_on_cap", False)))
     return rows
 
 
-def summarize_fronts(runs, max_seconds=60.0):
-    """Median hypervolume and time of each multi-objective solver, over its valid runs."""
-    groups = {}
-    for run in valid(runs):
-        if is_front(run["problem"]):
-            key = (scenario_name(run["problem"], run["size"], run["mode"]), run["library"], run["solver"])
-            groups.setdefault(key, []).append(run)
+def summarize_fronts(runs, caps, split=False):
+    """Median hypervolume and time of each multi-objective solver, over its valid runs. `caps` has
+    each scenario's time cap. With `split`, the runs the time cap stopped are a row of their own,
+    with "ended_on_cap" true."""
     rows = []
-    for (scenario, library, solver), group in groups.items():
+    for key, group in solver_groups(runs, caps, True, split).items():
+        scenario, library, solver = key[:3]
+        stopped = capped_runs(group, caps)
         volumes = sorted(run["hypervolume"] for run in group)
         rows.append({
             "scenario": scenario,
             "library": library,
             "solver": solver,
+            **({"ended_on_cap": key[3]} if split else {}),
             "runs": len(group),
             "median_hypervolume": median(volumes),
             "worst_hypervolume": volumes[0],
@@ -572,12 +624,13 @@ def summarize_fronts(runs, max_seconds=60.0):
             "median_evaluations": median([run["evaluations"] for run in group]),
             # runs where the library failed (an adapter's "error"): an empty front, hypervolume 0
             "errors": sum(1 for run in group if run.get("error")),
-            # runs the time cap stopped before their evaluation budget
-            "capped": sum(1 for run in group if capped(run, max_seconds)),
+            # runs the time cap stopped before their evaluation budget, and the share of it they used
+            "capped": len(stopped),
+            "capped_share": budget_share(stopped),
             "evaluations_per_second": sum(run["evaluations"] for run in group)
             / max(sum(run["time_s"] for run in group), 1e-9),
         })
-    rows.sort(key=lambda row: (row["scenario"], row["library"], row["solver"]))
+    rows.sort(key=lambda row: (row["scenario"], row["library"], row["solver"], row.get("ended_on_cap", False)))
     return rows
 
 
@@ -590,7 +643,7 @@ def front_table(rows):
     for row in rows:
         lines.append(
             f"| {row['scenario']} | {row['library']} / {row['solver']} "
-            f"| {row['runs']} | {row.get('capped', 0)} "
+            f"| {row['runs']} | {format_capped(row)} "
             f"| {row['median_hypervolume']:.4f} "
             f"| {row['worst_hypervolume']:.4f} to {row['best_hypervolume']:.4f} "
             f"| {format_seconds(row['median_time'])} "
@@ -634,18 +687,32 @@ def markdown_table(rows):
     for row in rows:
         ratio = row["throughput_vs_deap"]
         ratio = "-" if ratio is None else (f"{ratio:.1f}×" if ratio < 10 else f"{ratio:.0f}×")
+        # no ERT from fewer than ERT_REACHED runs that reached the target: how many did instead
+        too_few = f"{row['reached']}/{row['runs']} reached"
         lines.append(
             f"| {row['scenario']} | {row['library']} / {row['solver']} "
             f"| {row['reached']} of {row['runs']} "
-            f"| {row['capped']} "
-            f"| {format_seconds(row['ert_time']) if row['ert_time'] is not None else 'not reached'} "
-            f"| {format_count(row['ert_evaluations']) if row['ert_evaluations'] is not None else 'not reached'} "
+            f"| {format_capped(row)} "
+            f"| {format_seconds(row['ert_time']) if row['ert_time'] is not None else too_few} "
+            f"| {format_count(row['ert_evaluations']) if row['ert_evaluations'] is not None else too_few} "
             f"| {format_count(row['median_evaluations'])} "
             f"| {format_gap(row, 'median_gap')} ({format_gap(row, 'best_gap')} to {format_gap(row, 'worst_gap')}) "
             f"| {format_count(row['evaluations_per_second'])} "
             f"| {ratio} |"
         )
     return "\n".join(lines)
+
+
+def format_share(share):
+    """A share of the budget, rounded down: a run the time cap stopped didn't use all of it."""
+    return "<1%" if share < 0.01 else f"{int(share * 100)}%"
+
+
+def format_capped(row):
+    """The runs the time cap stopped, and the median share of the budget they used."""
+    share = row.get("capped_share")
+    return f"{row.get('capped', 0)}" + (f" (at {format_share(share)} of the budget)"
+                                        if row.get("capped") and share is not None else "")
 
 
 def format_gap(row, key):
@@ -751,8 +818,8 @@ def results_date(results):
 
 
 def draw_charts(results, out_dir, formats=("svg",)):
-    """Vertical bar charts of a results file: time and evaluations to target, cost per evaluation,
-    and the hypervolume and time of the multi-objective fronts."""
+    """Vertical bar charts of a results file: time and evaluations to target, the distance to the
+    optimum, cost per evaluation, and the hypervolume and time of the multi-objective fronts."""
     import matplotlib
     matplotlib.use("agg")
     import matplotlib.pyplot as plt
@@ -796,7 +863,10 @@ def draw_charts(results, out_dir, formats=("svg",)):
         results_date(results),
     ) if part)
     order = {scenario_name(*scenario[:3]): index for index, scenario in enumerate(SCENARIOS)}
-    budgets = {scenario_name(*scenario[:3]): scenario[3] for scenario in SCENARIOS}
+    budgets = BUDGETS
+    # the summaries from the runs, so the charts follow this code
+    runs = results["runs"]
+    caps = scenario_caps(results.get("max_seconds", 60.0), runs)
 
     # sizes in inches
     width, margin, gap = 12.0, 0.1, 0.5
@@ -859,14 +929,19 @@ def draw_charts(results, out_dir, formats=("svg",)):
             y -= labels_height
         return figure, axes
 
-    def bars(axis, group, value, text, log=True, better="lower", note=None, zoom=False):
-        """Vertical bars of one scenario, best first; missing values (e.g. the target never reached)
-        last, as a cross."""
-        present = [row for row in group if value(row) is not None]
-        missing = [row for row in group if value(row) is None]
-        present.sort(key=lambda row: value(row), reverse=better == "higher")
-        group = present + missing
-        values = [value(row) for row in present]
+    def bars(axis, group, value, text, log=True, better="lower", note=None, zoom=False, missing_text=None):
+        """Vertical bars of one scenario, best first; missing values (e.g. no ERT) last, as a cross,
+        labelled with `missing_text`. The rows of runs the time cap stopped ("ended_on_cap") come
+        after the others, past a dotted line, cross-hatched."""
+        def ordered(rows):
+            present = sorted((row for row in rows if value(row) is not None), key=value, reverse=better == "higher")
+            return present + [row for row in rows if value(row) is None]
+
+        apart = [row for row in group if row.get("ended_on_cap")]
+        group = ordered([row for row in group if not row.get("ended_on_cap")]) + ordered(apart)
+        present = [(position, row, value(row)) for position, row in enumerate(group) if value(row) is not None]
+        missing = [(position, row) for position, row in enumerate(group) if value(row) is None]
+        values = [v for _, _, v in present]
         positions = list(range(len(group)))
         axis.set_xlim(-0.65, len(group) - 0.35)
         base = 0.0
@@ -889,24 +964,35 @@ def draw_charts(results, out_dir, formats=("svg",)):
             # a value below a zoomed axis is a hatched stub, with its value as its label
             stub = (axis.get_ylim()[1] - base) * 0.04
             heights = [max(v - base, stub) for v in values] if zoom else values
-            bars_drawn = axis.bar(positions[:len(present)], heights, bottom=base if zoom else None, width=0.74,
-                                  color=[colors[row["library"]] for row in present], linewidth=0)
-            if zoom:
-                for patch, v in zip(bars_drawn, values):
-                    if v < base:
-                        patch.set_hatch("////")
-                        patch.set_alpha(0.45)
-            for position, row, v in zip(positions, present, values):
+            bars_drawn = axis.bar([position for position, _, _ in present], heights, bottom=base if zoom else None,
+                                  width=0.74, color=[colors[row["library"]] for _, row, _ in present], linewidth=0)
+            for patch, (_, row, v) in zip(bars_drawn, present):
+                if row.get("ended_on_cap"):
+                    patch.set_hatch("xxxx")
+                    patch.set_alpha(0.55)
+                elif zoom and v < base:
+                    patch.set_hatch("////")
+                    patch.set_alpha(0.45)
+            for position, row, v in present:
                 label_text = text(v) + (note(row) if note else "")
                 top = (v * 1.15 if log else max(v, base + stub if zoom else v)
                        + (axis.get_ylim()[1] - axis.get_ylim()[0]) * 0.015)
                 axis.text(position, top, label_text, rotation=90, ha="center", va="bottom", fontsize=6.2,
                           color="#222222")
         if missing:
-            bottom = axis.get_ylim()[0]
-            marker_y = bottom * 1.6 if axis.get_yscale() == "log" else bottom + (axis.get_ylim()[1] - bottom) * 0.04
-            axis.scatter(positions[len(present):], [marker_y] * len(missing), marker="x", s=14, linewidths=1.1,
-                         color=[colors[row["library"]] for row in missing], zorder=3, clip_on=False)
+            bottom, ceiling = axis.get_ylim()
+            logarithmic = axis.get_yscale() == "log"
+            marker_y = bottom * 1.6 if logarithmic else bottom + (ceiling - bottom) * 0.04
+            axis.scatter([position for position, _ in missing], [marker_y] * len(missing), marker="x", s=14,
+                         linewidths=1.1, color=[colors[row["library"]] for _, row in missing], zorder=3, clip_on=False)
+            if missing_text:
+                label_y = marker_y * 1.6 if logarithmic else marker_y + (ceiling - bottom) * 0.03
+                for position, row in missing:
+                    axis.text(position, label_y, missing_text(row), rotation=90, ha="center", va="bottom",
+                              fontsize=6.2, color="#222222")
+        if apart and len(apart) < len(group):
+            axis.axvline(len(group) - len(apart) - 0.5, color="#9a9a9a", linewidth=0.7, linestyle=(0, (1, 2)),
+                         zorder=0)
         axis.set_xticks(positions, [label(row["library"], row["solver"]) for row in group], rotation=60,
                         ha="right", rotation_mode="anchor", fontsize=6.5)
         for tick_label, row in zip(axis.get_xticklabels(), group):
@@ -921,55 +1007,73 @@ def draw_charts(results, out_dir, formats=("svg",)):
         axis.set_title(scenario_title(scenario), fontsize=8.2, loc="left", fontweight="bold", pad=11)
         axis.text(0, 1.015, detail, transform=axis.transAxes, fontsize=6.6, color="#666666", va="bottom")
 
+    def limits(scenario, budget_word="budget "):
+        """A panel's budget and time cap."""
+        parts = [f"{budget_word}{short_number(budgets[scenario])} evaluations"] if scenario in budgets else []
+        parts += [f"cap {format_number(caps[scenario])} s"] if scenario in caps else []
+        return " · ".join(parts)
+
+    def capped_note(row):
+        """How many runs the time cap stopped, and the median share of the budget they used."""
+        if not row.get("capped"):
+            return []
+        share = row.get("capped_share")
+        return [f"{row['capped']} capped" + (f" at {format_share(share)}" if share is not None else "")]
+
     time_ticks = FuncFormatter(lambda value, _position: format_seconds(value).replace(".0 ", " ").replace(".00 ", " "))
     count_ticks = FuncFormatter(lambda value, _position: short_number(value))
+    capped_legend = ("c capped at p%: c runs stopped by the scenario's time cap before the budget, after a median p% "
+                     "of it, so limited by speed, not by the search")
 
     # --- single objective: time and evaluations to target -------------------------------------
-    rows = [row for row in results["summary"] if not is_front(row["scenario"].split("-")[0])]
+    rows = summarize(runs, caps)
     scenarios = sorted({row["scenario"] for row in rows}, key=lambda s: (order.get(s, len(order)), s))
 
     def reached(row):
-        """How many runs reached the target, and how many the time cap stopped, when not all
-        reached it."""
+        """How many runs reached the target, when not all did, and how many the time cap stopped."""
         parts = [] if row["reached"] >= row["runs"] else [f"{row['reached']} of {row['runs']}"]
-        parts += [f"{row['capped']} capped"] if row.get("capped") else []
+        parts += capped_note(row)
         return "  " + ", ".join(parts) if parts else ""
 
+    def too_few(row):
+        """The label of a solver with no ERT: how many runs reached the target."""
+        return ", ".join([f"{row['reached']}/{row['runs']} reached"] + capped_note(row))
+
     ert = ("expected running time (ERT): what all runs spent, up to the first hit in those that reached the target, "
-           "divided by the runs that reached it")
-    cap = f"{format_number(results.get('max_seconds', 60.0))} s"
-    for name, title, value, text, ticks, subtitle in (
+           f"divided by the runs that reached it; at least {ERT_REACHED} must have")
+    for name, title, value, text, ticks in (
         ("time_to_target", "Expected time to target (lower is better)",
-         lambda row: row["ert_time"], format_seconds, time_ticks,
-         f" · {ert} · k of n: reached in k of n runs · c capped: stopped by the {cap} cap"),
+         lambda row: row["ert_time"], format_seconds, time_ticks),
         ("evaluations_to_target",
          "Expected fitness evaluations to target (lower is better): search efficiency, whatever the language",
-         lambda row: row["ert_evaluations"], short_number, count_ticks,
-         f" · {ert} · k of n: reached in k of n runs · c capped: stopped by the {cap} cap before the budget, "
-         "so limited by speed, not by the search"),
+         lambda row: row["ert_evaluations"], short_number, count_ticks),
     ):
         if not scenarios:
             break
         figure, axes = chart(
-            title, context + subtitle + " · ×: never reached, see the distance chart · a missing library can't run "
-            "the scenario: see notes.md",
+            title, context + f" · {ert} · k of n: reached in k of n runs · {capped_legend} · ×: fewer than "
+            f"{ERT_REACHED} runs reached the target, k/n: how many did · a missing library can't run the scenario: "
+            "see notes.md",
             [(scenario, len([row for row in rows if row["scenario"] == scenario])) for scenario in scenarios],
             {row["library"] for row in rows})
         for scenario in scenarios:
             axis = axes[scenario]
-            bars(axis, [row for row in rows if row["scenario"] == scenario], value, text, note=reached)
-            panel_title(axis, scenario, f"budget {short_number(budgets[scenario])} evaluations" if scenario in budgets else "")
+            bars(axis, [row for row in rows if row["scenario"] == scenario], value, text, note=reached,
+                 missing_text=too_few)
+            panel_title(axis, scenario, limits(scenario))
             if axis.get_yscale() == "log":
                 axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
                 axis.yaxis.set_major_formatter(ticks)
         save(figure, name)
 
     # --- how close every run got: the distance to the optimum at the end (rule 8.1) -----------------
-    gap_rows = [row for row in rows if "median_gap" in row]
+    # the runs the time cap stopped apart from the others
+    gap_rows = summarize(runs, caps, split=True)
     if gap_rows:
         figure, axes = chart(
-            "Distance to the optimum at the end of the run, median of all runs (lower is better)",
-            context + " · a run ends at the target, its budget or 60 s · dashed: the target, 0.01",
+            "Distance to the optimum at the end of the run, median of the runs (lower is better)",
+            context + " · a run ends at the target, its budget or its time cap · dashed: the target, 0.01 · "
+            f"cross-hatched, past the dotted line: the runs stopped by the time cap · {capped_legend}",
             [(scenario, len([row for row in gap_rows if row["scenario"] == scenario])) for scenario in scenarios],
             {row["library"] for row in gap_rows})
         for scenario in scenarios:
@@ -979,8 +1083,9 @@ def draw_charts(results, out_dir, formats=("svg",)):
             positive = [row["median_gap"] for row in group if row["median_gap"] > 0]
             floor = min(positive) / 10 if positive else 1e-3
             bars(axis, group, lambda row, floor=floor: max(row["median_gap"], floor),
-                 lambda v, floor=floor: "0" if v <= floor else short_number(v) if v >= 1000 else f"{v:.3g}")
-            panel_title(axis, scenario, f"budget {short_number(budgets[scenario])} evaluations" if scenario in budgets else "")
+                 lambda v, floor=floor: "0" if v <= floor else short_number(v) if v >= 1000 else f"{v:.3g}",
+                 note=lambda row: "  " + ", ".join(capped_note(row)) if row.get("ended_on_cap") else "")
+            panel_title(axis, scenario, limits(scenario))
             if scenario.split("-")[0] in ("rastrigin", "rosenbrock", "ackley"):
                 axis.axhline(0.01, color="#444444", linewidth=0.7, linestyle=(0, (4, 3)), zorder=0)
             if axis.get_yscale() == "log":
@@ -1003,12 +1108,13 @@ def draw_charts(results, out_dir, formats=("svg",)):
         save(figure, "instructions")
 
     # --- multi-objective ------------------------------------------------------------------------------
-    front_rows = results.get("front_summary") or []
+    # the runs the time cap stopped apart from the others
+    front_rows = summarize_fronts(runs, caps, split=True)
     front_scenarios = sorted({row["scenario"] for row in front_rows}, key=lambda s: (order.get(s, len(order)), s))
 
     def front_note(row):
         parts = [f"{row['errors']} of {row['runs']} failed"] if row.get("errors") else []
-        parts += [f"{row['capped']} capped"] if row.get("capped") else []
+        parts += capped_note(row)
         return "  " + ", ".join(parts) if parts else ""
 
     for name, title, value, text, log, better in (
@@ -1021,15 +1127,15 @@ def draw_charts(results, out_dir, formats=("svg",)):
             break
         figure, axes = chart(
             title, context + " · median of the runs · the same settings in every library where it has them · "
-            f"c capped: stopped by the {cap} cap before the budget · a missing library can't run the scenario: "
-            "see notes.md",
+            f"cross-hatched, past the dotted line: the runs stopped by the time cap · {capped_legend} · a missing "
+            "library can't run the scenario: see notes.md",
             [(scenario, len([row for row in front_rows if row["scenario"] == scenario])) for scenario in front_scenarios],
             {row["library"] for row in front_rows})
         for scenario in front_scenarios:
             axis = axes[scenario]
             bars(axis, [row for row in front_rows if row["scenario"] == scenario], value, text,
                  log=log, better=better, zoom=not log, note=front_note)
-            panel_title(axis, scenario, f"{short_number(budgets[scenario])} evaluations" if scenario in budgets else "")
+            panel_title(axis, scenario, limits(scenario, budget_word=""))
             if log:
                 axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
                 axis.yaxis.set_major_formatter(time_ticks)
@@ -1123,10 +1229,6 @@ def draw_charts_of(results_file, out_dir, png=False):
         return
     results = json.loads(Path(results_file).read_text(encoding="utf-8"))
     results.setdefault("timestamp", Path(results_file).stem)
-    # the summaries from the runs, so the charts follow this code
-    max_seconds = results.get("max_seconds", 60.0)
-    results["summary"] = summarize(results["runs"], max_seconds)
-    results["front_summary"] = summarize_fronts(results["runs"], max_seconds)
     draw_charts(results, out_dir, formats=("svg", "png") if png else ("svg",))
 
 
@@ -1134,7 +1236,8 @@ def markdown_report(report):
     """results/latest.md, which becomes docs/benchmarks/results.md: the coverage, and the tables of
     the single-objective, multi-objective and instructions results."""
     header = [f"# Results {report['timestamp']}", "",
-              f"Seeds per scenario: {report['seeds']}, wall time cap per run: {report['max_seconds']} s",
+              f"Seeds per scenario: {report['seeds']}, wall time cap per run: "
+              f"{describe_caps(scenario_caps(report['max_seconds'], report['runs']))}",
               report["platform"], ""]
     header += [f"- {name} {version}" for name, version in report["versions"].items()] + [""]
     # every timed run is validated (check.check_run): the ones that failed are listed, not kept
@@ -1145,7 +1248,9 @@ def markdown_report(report):
                "## Single-objective", "",
                "Expected time and evaluations to target: the expected running time (ERT), what all runs spent, up "
                "to the first hit of the target in the runs that reached it, divided by the number of runs that "
-               "reached it. Stopped by the time cap: runs that ended at the cap, not at the target or the budget.",
+               f"reached it; with fewer than {ERT_REACHED}, how many reached it. A first hit after the time cap "
+               "counts as not reached. Stopped by the time cap: runs that ended at the cap, not at the target or "
+               "the budget, and the median share of the budget they used.",
                ""]
     table = markdown_table(report["summary"])
     if report["front_summary"]:
@@ -1154,6 +1259,18 @@ def markdown_report(report):
         table += "\n\n## Instructions per evaluation\n\n" + instructions_table(report["instructions"])
     # a blank line between the list and the table, or the table becomes part of the list
     return "\n".join(header) + "\n" + table + "\n"
+
+
+def describe_caps(caps):
+    """The time caps of a results file's scenarios, e.g. "60 s with a target, 600 s multi-objective"."""
+    def seconds(values):
+        return ", ".join(f"{format_number(value)} s" for value in sorted(set(values)))
+
+    single = [cap for name, cap in caps.items() if not is_front(name.split("-")[0])]
+    front = [cap for name, cap in caps.items() if is_front(name.split("-")[0])]
+    if set(single) == set(front) or not single or not front:
+        return seconds(single + front)
+    return f"{seconds(single)} with a target, {seconds(front)} multi-objective"
 
 
 def latest_results():
@@ -1170,7 +1287,7 @@ DRIFT_REFERENCE = ("deap", "ga", ("onemax", 100, "matched"), 3)
 DRIFT = 0.03
 
 
-def check_drift(previous, max_seconds, allow):
+def check_drift(previous, caps, allow):
     """Measures the reference and refuses to go on, unless `allow`, if it differs from the results
     file's."""
     library, solver, scenario, seeds = DRIFT_REFERENCE
@@ -1193,7 +1310,7 @@ def check_drift(previous, max_seconds, allow):
                f"{seeds - 1}, to check that this machine still measures the same")
         return
     print(f"drift reference: {name}: {library} ({seeds} seeds) ...", flush=True)
-    now = reference(run_adapter(ADAPTERS[library], *scenario, seeds, BUDGETS[name], max_seconds))
+    now = reference(run_adapter(ADAPTERS[library], *scenario, seeds, BUDGETS[name], caps[name]))
     if len(now) != seeds:
         refuse(f"the reference, {library} {solver} in {name}, didn't give {seeds} valid runs")
         return
@@ -1245,10 +1362,10 @@ def count_into(results_file, libraries, labels, jobs, charts):
     report["instructions"] = sorted(kept + instructions, key=lambda row: order.index(row["library"]))
     results_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
     # the summaries from the runs, as for the charts: the file's may come from older code
-    max_seconds = report.get("max_seconds", 60.0)
+    caps = scenario_caps(report.get("max_seconds", 60.0), report["runs"])
     markdown = markdown_report({"timestamp": results_file.stem, **report,
-                                "summary": summarize(report["runs"], max_seconds),
-                                "front_summary": summarize_fronts(report["runs"], max_seconds)})
+                                "summary": summarize(report["runs"], caps),
+                                "front_summary": summarize_fronts(report["runs"], caps)})
     (ROOT / "results" / "latest.md").write_text(markdown, encoding="utf-8")
     print()
     print(markdown)
@@ -1262,7 +1379,8 @@ def main():
     parser.add_argument("command", nargs="?", choices=["run", "setup", "check", "chart", "instructions"],
                         default="run")
     parser.add_argument("--seeds", type=int, default=10)
-    parser.add_argument("--max-seconds", type=float, default=60.0, help="wall time cap per run")
+    parser.add_argument("--max-seconds", type=float,
+                        help="wall time cap per run, in every scenario (default: each scenario's own)")
     parser.add_argument("--quick", action="store_true", help="small scenarios, 3 seeds")
     parser.add_argument("--scenarios", nargs="*", help="scenario names, e.g. onemax-100-matched (default all)")
     parser.add_argument("--libraries", nargs="*", choices=list(ADAPTERS),
@@ -1273,14 +1391,14 @@ def main():
     parser.add_argument("--instructions", action="store_true",
                         help="count the instructions with Callgrind right after the timed runs")
     parser.add_argument("--jobs", type=int, default=os.cpu_count(),
-                        help="Callgrind runs at a time (default: the number of cores)")
+                        help="Callgrind runs, or check scenarios, at a time (default: the number of cores)")
     parser.add_argument("--png", action="store_true", help="also draw the charts as PNG, e.g. to preview them")
     parser.add_argument("--update", type=Path,
                         help="rerun only --libraries, with the seeds and every scenario of this results file, "
                              "and keep its results of the other libraries")
     parser.add_argument("--allow-drift", action="store_true",
                         help="with --update, rerun even if the reference run's time differs from the results "
-                             f"file's by more than {DRIFT:.0%}")
+                             f"file's by more than {DRIFT * 100:.0f}%%")
     parser.add_argument("--version-label", nargs="*", default=[], metavar="LIBRARY=VERSION",
                         help="the version to record for a library instead of the one it reports, e.g. "
                              "genoxide=0.7.0 before the release PR bumps Cargo.toml; genoxide's labels "
@@ -1333,7 +1451,7 @@ def main():
     import check
     if args.command == "check":
         scenarios = [s for s in SCENARIOS if not args.scenarios or scenario_name(*s[:3]) in args.scenarios]
-        raise SystemExit(0 if check.check(args.libraries, scenarios) else 1)
+        raise SystemExit(0 if check.check(args.libraries, scenarios, args.jobs) else 1)
     # the rules come first: only adapters that passed `run.py check` as they are now are measured
     unchecked = check.unchecked(args.libraries)
     if unchecked:
@@ -1362,7 +1480,9 @@ def main():
                              "be combined with --scenarios or --quick. To add a scenario, rerun every library.")
         previous = json.loads(args.update.read_text(encoding="utf-8"))
     seeds = previous["seeds"] if previous else 3 if args.quick and args.seeds == 10 else args.seeds
-    max_seconds = previous.get("max_seconds", args.max_seconds) if previous else args.max_seconds
+    # each scenario's time cap: an update keeps the results file's
+    caps = (scenario_caps(previous.get("max_seconds", 60.0), previous["runs"]) if previous
+            else {name: args.max_seconds or cap for name, cap in CAPS.items()})
     previous_scenarios = {scenario_name(r["problem"], r["size"], r["mode"]) for r in previous["runs"]} if previous else None
     scenarios = [
         scenario for scenario in SCENARIOS
@@ -1375,14 +1495,15 @@ def main():
     versions = build(args.libraries, labels)
 
     if previous:
-        check_drift(previous, max_seconds, args.allow_drift)
+        check_drift(previous, caps, args.allow_drift)
 
     runs = []
-    for problem, size, mode, max_evaluations in scenarios:
+    for problem, size, mode, max_evaluations, _ in scenarios:
         for name in args.libraries:
             # an adapter prints nothing for the problems its library can't do
             print(f"{scenario_name(problem, size, mode)}: {name} ({seeds} seeds) ...", flush=True)
-            runs += run_adapter(ADAPTERS[name], problem, size, mode, seeds, max_evaluations, max_seconds)
+            runs += run_adapter(ADAPTERS[name], problem, size, mode, seeds, max_evaluations,
+                                caps[scenario_name(problem, size, mode)])
 
     instructions = measure_instructions(args.libraries, args.jobs) if args.instructions else None
 
@@ -1399,8 +1520,10 @@ def main():
         kept = [row for row in previous.get("instructions") or [] if row["library"] not in args.libraries]
         instructions = kept + (instructions or [])
 
-    rows = summarize(runs, max_seconds)
-    front_rows = summarize_fronts(runs, max_seconds)
+    # the time cap of each scenario of the results
+    caps = {name: caps[name] for name in dict.fromkeys(scenario_name(r["problem"], r["size"], r["mode"]) for r in runs)}
+    rows = summarize(runs, caps)
+    front_rows = summarize_fronts(runs, caps)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     results = ROOT / "results"
     results.mkdir(exist_ok=True)
@@ -1409,7 +1532,7 @@ def main():
         platform = f"{previous['platform']}; {', '.join(args.libraries)} rerun on {platform}"
     languages = {name: ADAPTERS[name]["language"] for name in versions if name in ADAPTERS}
     report = {"date": datetime.date.today().isoformat(), "timestamp": timestamp, "versions": versions,
-              "languages": languages, "seeds": seeds, "max_seconds": max_seconds, "platform": platform,
+              "languages": languages, "seeds": seeds, "max_seconds": caps, "platform": platform,
               "runs": runs, "summary": rows, "front_summary": front_rows, "instructions": instructions}
     results_file = results / f"{timestamp}.json"
     results_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
