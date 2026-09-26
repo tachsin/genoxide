@@ -1,4 +1,4 @@
-# Evolutionary.jl (Julia, 0.12.0)
+# Evolutionary.jl (Julia, 0.12.1)
 
 Evolutionary.jl is a Julia package of evolution strategies (ES), CMA-ES, genetic algorithms (GA), differential evolution (DE), NSGA-II and genetic programming, with mutation, crossover and selection operators. Its docs are at [docs.sciml.ai/Evolutionary](https://docs.sciml.ai/Evolutionary/stable/), from `docs/src` of [SciML/Evolutionary.jl](https://github.com/SciML/Evolutionary.jl); its tests (`test/*.jl`) are its other worked examples for these problem types.
 

@@ -2,7 +2,7 @@
 
 julia_version = "1.13.0"
 manifest_format = "2.1"
-project_hash = "ebb43d07cd1f655aed146e08869711f8db33b63c"
+project_hash = "730f58b3a829ed7fcd6db222ab3e11c39f6ce95c"
 
 [[deps.ADTypes]]
 deps = ["PrecompileTools"]
@@ -162,10 +162,10 @@ version = "0.7.21"
 
 [[deps.Evolutionary]]
 deps = ["LinearAlgebra", "NLSolversBase", "PrecompileTools", "Random", "StackViews", "Statistics", "UnPack"]
-git-tree-sha1 = "7ae57829968b422e83b1f68f6ca194546ed2aade"
+git-tree-sha1 = "22a4ece3c03b44f859cae29e41d983f85b43e229"
 registries = "General"
 uuid = "86b6b26d-c046-49b6-aa0b-5f0f74682bd6"
-version = "0.12.0"
+version = "0.12.1"
 
 [[deps.FiniteDiff]]
 deps = ["ArrayInterface", "LinearAlgebra", "Setfield"]

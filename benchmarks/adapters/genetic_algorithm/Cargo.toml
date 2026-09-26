@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-genetic_algorithm = "=0.27.3"
+genetic_algorithm = "=0.27.4"
 
 [profile.release]
 codegen-units = 1

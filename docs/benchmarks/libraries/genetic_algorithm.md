@@ -1,4 +1,4 @@
-# genetic_algorithm (Rust, 0.27.3)
+# genetic_algorithm (Rust, 0.27.4)
 
 A Rust genetic algorithm library with three strategies: Evolve (a GA), HillClimb (local search, Stochastic or SteepestAscent) and Permutate (exhaustive search). The fitness is an `isize`, so real values are scaled by a precision. Its docs are the [README](https://docs.rs/crate/genetic_algorithm/0.27.3/source/README.md), [AGENTS.md](https://docs.rs/crate/genetic_algorithm/0.27.3/source/AGENTS.md) (decision matrices and recommended settings), [AGENTS_TEMPLATES.md](https://docs.rs/crate/genetic_algorithm/0.27.3/source/AGENTS_TEMPLATES.md), the [examples](https://docs.rs/crate/genetic_algorithm/0.27.3/source/examples/) and [docs.rs](https://docs.rs/genetic_algorithm/0.27.3/genetic_algorithm/).
 
