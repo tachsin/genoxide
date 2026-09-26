@@ -1,6 +1,7 @@
 //! The operators of a run: an enum per kind of genome, with only the operators that fit it.
 
 use crate::config;
+use crate::errors::setting;
 use genoxide::genome::{Binary, Genome, Integer, Permutation, Real, Representation};
 use genoxide::operator::{
     ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, CycleCrossover,
@@ -13,10 +14,6 @@ use genoxide::operator::{
 use genoxide::{Objective, Population, StreamRng};
 
 type Result<T> = std::result::Result<T, String>;
-
-fn setting<T>(result: genoxide::Result<T>) -> Result<T> {
-    result.map_err(|error| error.to_string())
-}
 
 #[derive(Clone, Debug)]
 pub enum AnySelect {

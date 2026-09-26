@@ -1,6 +1,7 @@
 //! Building the algorithm a run describes, and running it with a Python fitness function.
 
 use crate::config;
+use crate::errors::{genome_setting, setting};
 use crate::fitness::{Multi, Shared, Single};
 use crate::genes::{self, Genes};
 use crate::operators::{
@@ -20,13 +21,6 @@ use pyo3::types::PyDict;
 use std::time::Duration;
 
 type Result<T> = std::result::Result<T, String>;
-
-fn setting<T>(result: genoxide::Result<T>) -> Result<T> {
-    result.map_err(|error| match error {
-        genoxide::Error::MissingSetting { setting } => format!("`{setting}` is needed"),
-        error => error.to_string(),
-    })
-}
 
 /// Runs the optimization that `config` (JSON, from the Python package) describes, with
 /// `fitness`, called with a genome or, with `batch`, a generation of genomes; with `parallel`,
@@ -65,7 +59,7 @@ pub fn run<'py>(
     let result = match run.genome {
         config::Genome::Binary { length } => with_operators(
             py,
-            setting(Binary::new(length)),
+            genome_setting(Binary::new(length), "Binary"),
             run.algorithm,
             &context,
             |crossover| ListCrossover::new(crossover, "binary"),
@@ -73,19 +67,25 @@ pub fn run<'py>(
         ),
         config::Genome::Integer { bounds } => with_operators(
             py,
-            setting(Integer::new(bounds.iter().map(|&(low, high)| low..=high))),
+            genome_setting(
+                Integer::new(bounds.iter().map(|&(low, high)| low..=high)),
+                "Integer",
+            ),
             run.algorithm,
             &context,
             |crossover| ListCrossover::new(crossover, "integer"),
             integer_mutation,
         ),
         config::Genome::Real { bounds } => {
-            let real = setting(Real::new(bounds.iter().map(|&(low, high)| low..=high)));
+            let real = genome_setting(
+                Real::new(bounds.iter().map(|&(low, high)| low..=high)),
+                "Real",
+            );
             real_algorithm(py, real, run.algorithm, &context)
         }
         config::Genome::Permutation { length } => with_operators(
             py,
-            setting(Permutation::new(length)),
+            genome_setting(Permutation::new(length), "Permutation"),
             run.algorithm,
             &context,
             OrderCrossovers::new,

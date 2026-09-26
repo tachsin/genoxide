@@ -635,8 +635,8 @@ def test_settings_errors():
             crossover=gx.OrderCrossover(),
             mutation=gx.BitFlip(count=1),
         ).run(lambda bits: 0.0, generations=1)
-    with pytest.raises(ValueError, match="`population_size` is needed"):
-        gx.Pso(gx.Real((0.0, 1.0), length=2)).run(lambda x: 0.0, generations=1)
+    with pytest.raises(TypeError, match="population_size"):
+        gx.Pso(gx.Real((0.0, 1.0), length=2))
     with pytest.raises(ValueError, match="Real genome"):
         gx.Cmaes(gx.Binary(8)).run(lambda bits: 0.0, generations=1)
     with pytest.raises(ValueError, match="rate"):
@@ -774,6 +774,60 @@ def test_a_wrong_type_is_an_error_that_names_the_setting():
         ).run(lambda bits: (0.0, 0.0), generations=1)
     with pytest.raises(ValueError, match="divisions is a whole number"):
         gx.das_dennis(3, 12.0)
+
+
+@pytest.mark.parametrize(
+    "algorithm, name",
+    [
+        (onemax_ga(select=gx.Tournament(0)), "`Tournament.size`"),
+        (onemax_ga(select=gx.Rank(2.5)), "`Rank.pressure`"),
+        (onemax_ga(crossover=gx.PointCrossover(0)), "`PointCrossover.points`"),
+        (onemax_ga(mutation=gx.BitFlip(rate=1.5)), "`BitFlip.rate`"),
+        (onemax_ga(scheme=gx.MuPlusLambda(0)), "`scheme`: offspring must be at least 1"),
+        (
+            gx.Ga(
+                gx.Real((0.0, 1.0), length=3),
+                population_size=10,
+                select=gx.Tournament(2),
+                crossover=gx.SimulatedBinaryCrossover(-1.0),
+                mutation=gx.GaussianMutation(0.1, rate=0.5),
+            ),
+            "`SimulatedBinaryCrossover.eta`",
+        ),
+        (
+            gx.Ga(
+                gx.Real((0.0, 1.0), length=3),
+                population_size=10,
+                select=gx.Tournament(2),
+                crossover=gx.ArithmeticCrossover(),
+                mutation=gx.GaussianMutation(0.0, count=1),
+            ),
+            "`GaussianMutation.sigma`",
+        ),
+        (
+            gx.LocalSearch(gx.Permutation(0), neighbor=gx.SwapMutation()),
+            "`Permutation.length`",
+        ),
+        (
+            gx.LocalSearch(gx.Integer([(3, 1)]), neighbor=gx.UniformMutation(count=1)),
+            "`Integer.bounds`",
+        ),
+        (
+            gx.LocalSearch(gx.Binary(8), neighbor=gx.BitFlip(count=1), acceptance=gx.Tabu(0)),
+            "`Tabu.tenure`",
+        ),
+        (gx.Pso(gx.Real((0.0, 1.0), length=2), population_size=10, ring=0), "`ring`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), l_shade=0), "`l_shade`"),
+    ],
+)
+def test_a_wrong_setting_is_named_as_in_python(algorithm, name):
+    with pytest.raises(ValueError, match=name):
+        algorithm.run(lambda genome: 0.0, generations=1)
+
+
+def test_a_negative_constraint_violation_is_an_error():
+    with pytest.raises(ValueError, match="violation can't be negative"):
+        onemax_ga().run(lambda bits: (bits.sum(), -1.0), generations=1)
 
 
 def test_the_native_run_names_a_wrong_setting():
