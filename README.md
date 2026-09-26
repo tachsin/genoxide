@@ -44,6 +44,7 @@ fn main() -> genoxide::Result<()> {
 - **Evolution strategies, CMA-ES, differential evolution, particle swarms:** with IPOP and BIPOP restarts, JADE, SHADE and L-SHADE.
 - **Local search:** hill climbing, simulated annealing, tabu search, iterated local search.
 - **Multi-objective:** NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA, with quality indicators.
+- **Test problems:** classic continuous functions such as Rastrigin, Rosenbrock and Branin, with their bounds, known optima and references; ZDT and DTLZ.
 - **Engine:** parallel, batch and asynchronous evaluation, island models, constraints, checkpoints, reproducible seeds.
 - **Beyond Rust:** a Python package, and a [command-line program](docs/cli.md) for fitness functions in any language.
 
