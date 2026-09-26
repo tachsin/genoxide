@@ -73,7 +73,7 @@ genoxide and its Python package are benchmarked with 15 other libraries in Rust,
 - [AGENTS.md](AGENTS.md): a guide for AI coding assistants
 - [ROADMAP.md](ROADMAP.md): what's planned
 - [docs/cli.md](docs/cli.md): the `genoxide` program
-- [Benchmarks](benchmarks/README.md): rules, methodology and results
+- [Benchmarks](docs/benchmarks/): rules, methodology and results
 - [CONTRIBUTING.md](CONTRIBUTING.md): pull requests and releases
 
 ## Status
