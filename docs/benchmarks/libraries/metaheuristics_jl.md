@@ -7,15 +7,15 @@ Know a better way to solve one of these problems with Metaheuristics.jl? [Open a
 
 ## How the adapter runs Metaheuristics.jl
 
-- **Evaluations:** `counted` and `counted_front` count every call; `counted` records the first hit ([bench.jl, lines 198-223](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L198-L223)).
-- **Stop:** each attempt gets the rest of the budget as `f_calls_limit` and of the cap as `time_limit`; a user-defined `BudgetTermination` ([lines 192-195](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L192-L195)) ends the run at the target, the budget or the cap after every iteration.
-- **Keeping going (rule 2.2)** (`options`, `algorithm_kwargs`, `run_restarting`, [lines 225-270](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L225-L270)):
+- **Evaluations:** `counted` and `counted_front` count every call; `counted` records the first hit ([bench.jl, lines 217-242](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L217-L242)).
+- **Stop:** each attempt gets the rest of the budget as `f_calls_limit` and of the cap as `time_limit`; a user-defined `BudgetTermination` ([lines 211-214](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L211-L214)) ends the run at the target, the budget or the cap after every iteration.
+- **Keeping going (rule 2.2)** (`options`, `algorithm_kwargs`, `run_restarting`, [lines 244-289](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L244-L289)):
   - the iteration limit is lifted;
   - the library's convergence criteria count, with the default tolerances (`f_tol` 1e-12, `f_tol_rel` eps, `x_tol` 1e-8): `default_stop_check`'s `CheckConvergence` (`src/termination/default.jl`), which needs all of `AbsoluteFunctionConvergence`, `RelativeFunctionConvergence`, `SmallStandardDeviation` and `RelativeParameterConvergence`, and the one `optimize` adds without a user termination (`src/optimize/before.jl`): `CheckConvergence` for one objective, `RobustConvergence(ftol = f_tol)` for several. The documented budget (`Options(f_calls_limit = …)`, [FAQ](https://jmejia8.github.io/Metaheuristics.jl/stable/faq/#How-to-set-stopping-criteria?)) leaves them in effect;
   - a converged attempt restarts from a new random start with the seeds of rule 2.2; runs print `restarts`. The library's [`Restart`](https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/singleobjective/#Restart) replaces the population every 100 iterations whatever happens and keeps the base method's stops, so it isn't used;
   - the matched (multi-objective) scenarios have no convergence criterion: `BudgetTermination` only, and `f_tol = -1`.
 - **Bounds (rule 2.4):** `boxconstraints` for the continuous problems and BRKGA's random keys; the initial population within the bounds; repairs by `evo_boundary_repairer!` (ECA, DE: `DE.jl` line 205) and `reset_to_violated_bounds!` (PSO; the multi-objective algorithms through `GA_reproduction` in `NSGA2.jl`, and `SMS_EMOA.jl`).
-- **Rule 5.3:** `EARLY_SEEDS` ([line 383](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L383)) and `main`.
+- **Rule 5.3:** `EARLY_SEEDS` ([line 411](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L411)) and `main`.
 - **Time:** from the run's `Budget`, before `optimize` creates the initial population. Warm-up as rule 4.2.
 - **One thread:** [run.sh](../../../benchmarks/adapters/metaheuristics_jl/run.sh) runs Julia 1.13 with `--threads=1 --gcthreads=1,0` and BLAS with one thread.
 - **Seeds:** `Options(seed = seed)`, which seeds Julia's global generator, the library's own (`default_rng_mh`).
@@ -24,7 +24,7 @@ Know a better way to solve one of these problems with Metaheuristics.jl? [Open a
 
 ## Binary: OneMax 100 (idiomatic)
 
-**Methods** (`onemax_solvers`, [lines 279-293](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L279-L293)): the guide: "Binary: Use GA with BitFlipMutation". The [GA docstring](https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/singleobjective/#GA)'s binary example: `GA()` on a `BitArraySpace` with its defaults: population 100, binary tournament, uniform crossover at 0.5, `BitFlipMutation` at 1e-5, `ElitistReplacement`.
+**Methods** (`onemax_solvers`, [lines 298-312](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L298-L312)): the guide: "Binary: Use GA with BitFlipMutation". The [GA docstring](https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/singleobjective/#GA)'s binary example: `GA()` on a `BitArraySpace` with its defaults: population 100, binary tournament, uniform crossover at 0.5, `BitFlipMutation` at 1e-5, `ElitistReplacement`.
 
 **Keeping going:** no attempt converged here.
 
@@ -40,7 +40,7 @@ Know a better way to solve one of these problems with Metaheuristics.jl? [Open a
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods** (`nqueens_solvers`, [lines 295-320](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L295-L320)): the guide: "Permutation-based: Use GA with OrderCrossover or BRKGA".
+**Methods** (`nqueens_solvers`, [lines 314-342](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L314-L342)): the guide: "Permutation-based: Use GA with OrderCrossover or BRKGA".
 - **`ga`:** the [N-Queens tutorial](https://jmejia8.github.io/Metaheuristics.jl/stable/tutorials/n-queens/)'s `optimize(attacks, PermutationSpace(N), GA)`, the GA's permutation defaults (`get_parameters`, `GA.jl`): population 100, binary tournament, `OrderCrossover`, `SlightMutation`, `ElitistReplacement`, built explicitly to pass the options.
 - **`brkga`:** [`BRKGA`](https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/combinatorial/#BRKGA) with its defaults (20 elites, 10 mutants, 70 offspring, bias 0.7), random keys in [0, 1]ⁿ decoded by `sortperm`, as in its docstring; the decoded permutation is reported.
 
@@ -59,7 +59,7 @@ Know a better way to solve one of these problems with Metaheuristics.jl? [Open a
 
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
-**Methods** (`real_solvers`, [lines 322-341](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L322-L341)): the guide: "Box-constrained (continuous): Use ECA, DE, PSO, or SHADE"; the [FAQ](https://jmejia8.github.io/Metaheuristics.jl/stable/faq/#How-to-choose-between-algorithms?): "ECA, DE, PSO are good starting points". The first three, with their defaults ([docstrings](https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/singleobjective/)):
+**Methods** (`real_solvers`, [lines 344-366](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L344-L366)): the guide: "Box-constrained (continuous): Use ECA, DE, PSO, or SHADE"; the [FAQ](https://jmejia8.github.io/Metaheuristics.jl/stable/faq/#How-to-choose-between-algorithms?): "ECA, DE, PSO are good starting points". The first three, with their defaults ([docstrings](https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/singleobjective/)):
 - **`eca`:** the default of `optimize`, run on Rastrigin in the [Quick Start](https://jmejia8.github.io/Metaheuristics.jl/stable/#Quick-Start): K = 7, population K·D, η_max = 2, p_exploit = 0.95, p_bin = 0.02. It switches to exploitation after 95% of `f_calls_limit`, the rest of the budget at the attempt's start.
 - **`de`:** DE/rand/1/bin, population 10·D, F = 0.7, CR = 0.5 ("Good for multimodal").
 - **`pso`:** population 10·D, C1 = C2 = 2, ω = 0.8 ("Good for multimodal").
@@ -103,7 +103,7 @@ Know a better way to solve one of these problems with Metaheuristics.jl? [Open a
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1 (matched)
 
-**Methods** (`front_solvers`, [lines 343-374](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L343-L374)): NSGA-II, NSGA-III, SPEA2 and SMS-EMOA with the matched settings; the guide recommends NSGA2, SPEA2 or SMS_EMOA for 2 and 3 objectives. Objectives are returned as `(f, [0.0], [0.0])`, the unconstrained form of the [docstrings](https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/multiobjective/).
+**Methods** (`front_solvers`, [lines 368-402](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L368-L402)): NSGA-II, NSGA-III, SPEA2 and SMS-EMOA with the matched settings; the guide recommends NSGA2, SPEA2 or SMS_EMOA for 2 and 3 objectives. Objectives are returned as `(f, [0.0], [0.0])`, the unconstrained form of the [docstrings](https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/multiobjective/).
 - **`nsga2`, `spea2`, `sms_emoa`:** population 100 (92), SBX η 15 with `p_cr = 0.9`, polynomial mutation η 20 with `p_m = 1/n`.
 - **`nsga3`:** population 100 (92), Das-Dennis directions with 99 (12) partitions, SBX η 30 with `p_cr = 1`, the same mutation.
 

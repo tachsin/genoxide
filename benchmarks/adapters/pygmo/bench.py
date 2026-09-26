@@ -129,6 +129,16 @@ class Counter:
 counter = Counter(0, 0.0, 0.0)
 
 
+def last_generation(evaluations, initial, per_generation):
+    """The evaluations since the start of the last generation (rule 2.3). pagmo's algorithms run
+    in C++ and don't call back between generations, but each of these evaluates an initial
+    population of `initial` solutions, then per_generation solutions a generation; a restart
+    starts after a whole generation, with a population of per_generation."""
+    if evaluations <= initial:
+        return evaluations
+    return (evaluations - initial - 1) % per_generation + 1
+
+
 def restart_seed(seed, restart):
     """The seed of attempt `restart` of a run (rule 2.2): the run's seed first, then
     (seed + 1) * 1_000_000 + restart, so no two runs share a seed."""
@@ -546,6 +556,7 @@ def main():
                     "time_s": round(elapsed, 6),
                     "generations": generations,
                     "evaluations": counter.evaluations,
+                    "last_generation": last_generation(counter.evaluations, population_size, population_size),
                     "front": [[float(v) for v in f[i]] for i in first],
                     "solutions": [[float(v) for v in x[i]] for i in first],
                     "outside": counter.outside,
@@ -581,6 +592,7 @@ def main():
                 # generations of per_generation evaluations (1 for ihs and simulated annealing)
                 "generations": counter.evaluations // per_generation,
                 "evaluations": counter.evaluations,
+                "last_generation": last_generation(counter.evaluations, method.population_size, per_generation),
                 "best": best,
                 "target": size if problem == "onemax" else TARGET,
                 "success": counter.best <= target,

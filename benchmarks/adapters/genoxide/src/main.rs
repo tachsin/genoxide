@@ -303,9 +303,9 @@ where
     let first_hit = OnceLock::<(u64, f64)>::new();
     let cap = Duration::from_secs_f64(args.max_seconds);
     let abort = Arc::new(AtomicBool::new(false));
-    // CMA-ES with IPOP restarts doubles its population at each restart, so its last generation
-    // can be larger than the average: the run reports it, for the budget check (rule 2.3). The
-    // other solvers' generations don't grow.
+    // the last generation's evaluations, for the budget check (rule 2.3): the count after each
+    // generation (the engine calls on_generation after every generation, each attempt's initial
+    // population included, and stops only after one) and the generation's size
     let (evaluated, last_generation) = (Cell::new(0u64), Cell::new(0u64));
     let start = Instant::now();
     let counted = |genome: &G| {
@@ -323,22 +323,17 @@ where
     let (mut generations, mut reported, mut restart) = (0, 0, 0);
     loop {
         let used = calls.load(Ordering::Relaxed);
-        evaluated.set(0);
-        let mut engine = Engine::new(build(attempt_seed(seed, restart))?, &counted)
+        let outcome = Engine::new(build(attempt_seed(seed, restart))?, &counted)
             .stop_when(Stop::target(target).or(Stop::evaluations(args.max_evaluations - used)))
             .abort_flag(Arc::clone(&abort))
             .on_generation(|_| {
+                let evaluations = calls.load(Ordering::Relaxed);
+                last_generation.set(evaluations - evaluated.replace(evaluations));
                 if start.elapsed() >= cap {
                     abort.store(true, Ordering::Relaxed);
                 }
-            });
-        if solver == "cma_es" {
-            engine = engine.on_generation(|snapshot| {
-                let evaluations = snapshot.progress().evaluations();
-                last_generation.set(evaluations - evaluated.replace(evaluations));
-            });
-        }
-        let outcome = engine.run()?;
+            })
+            .run()?;
         generations += outcome.generations();
         reported += outcome.evaluations();
         let stalled = outcome.stop_reason() == StopReason::Stalled;
@@ -361,10 +356,7 @@ where
     let best = best.expect("a run");
     let evaluations = calls.load(Ordering::Relaxed);
     compare_counts(args, solver, seed, evaluations, reported);
-    let mut extra = String::new();
-    if solver == "cma_es" {
-        extra += &format!(",\"last_generation\":{}", last_generation.get());
-    }
+    let mut extra = format!(",\"last_generation\":{}", last_generation.get());
     if args.problem != "onemax" && args.problem != "nqueens" {
         extra += &format!(",\"outside\":{}", outside.load(Ordering::Relaxed));
     }
@@ -575,12 +567,19 @@ where
         }
         fitness(genome)
     };
+    // the last generation's evaluations (rule 2.3): the count after each generation, and the
+    // generation's size
+    let (evaluated, last_generation) = (Cell::new(0u64), Cell::new(0u64));
     let start = Instant::now();
     let outcome = MultiEngine::new(build()?, counted)
         .stop_when(
             Stop::evaluations(args.max_evaluations)
                 .or(Stop::time(Duration::from_secs_f64(args.max_seconds))),
         )
+        .on_generation(|_| {
+            let evaluations = calls.load(Ordering::Relaxed);
+            last_generation.set(evaluations - evaluated.replace(evaluations));
+        })
         .run()?;
     let time_s = start.elapsed().as_secs_f64();
     let evaluations = calls.load(Ordering::Relaxed);
@@ -597,8 +596,9 @@ where
         })
         .unzip();
     println!(
-        "{{{},\"outside\":{},\"front\":[{}],\"solutions\":[{}]}}",
+        "{{{},\"last_generation\":{},\"outside\":{},\"front\":[{}],\"solutions\":[{}]}}",
         args.header(solver, seed, time_s, outcome.generations(), evaluations),
+        last_generation.get(),
         outside.load(Ordering::Relaxed),
         front.join(","),
         solutions.join(","),

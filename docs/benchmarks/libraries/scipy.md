@@ -8,16 +8,16 @@ Know a better way to solve one of these problems with SciPy? [Open a benchmark i
 ## How the adapter runs SciPy
 
 - **Fitness functions:** numpy, like SciPy's `scipy.optimize.rosen`.
-- **Evaluations and stop:** the counter ([`Budget`](../../../benchmarks/adapters/scipy/bench.py#L45-L82)) counts every call, from the method, its restarts, local searches, polish and finite differences, keeps the best and records the first hit. It ends the run right after the evaluation that reaches 0.01, or before one past the budget or the time cap.
-- **Seeds:** `rng` for the stochastic methods; restarts as rule 2.2 ([`restart_seed`](../../../benchmarks/adapters/scipy/bench.py#L151-L154)).
+- **Evaluations and stop:** the counter ([`Budget`](../../../benchmarks/adapters/scipy/bench.py#L45-L97)) counts every call, from the method, its restarts, local searches, polish and finite differences, keeps the best and records the first hit. It ends the run right after the evaluation that reaches 0.01, or before one past the budget or the time cap.
+- **Seeds:** `rng` for the stochastic methods; restarts as rule 2.2 ([`restart_seed`](../../../benchmarks/adapters/scipy/bench.py#L166-L169)).
 - **Separate tests:** 2026-09-25, SciPy 1.18.1, 5 seeds, the scenario's budget, 60 s cap, rule 5.3, with other tests on the machine (capped runs stopped after fewer evaluations than in a benchmark run). `outside` was 0 in every run.
 
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
-**Methods** ([`solvers`](../../../benchmarks/adapters/scipy/bench.py#L219-L231)): the tutorial's [Global optimization](https://docs.scipy.org/doc/scipy/tutorial/optimize.html#global-optimization) shows `shgo`, `dual_annealing` and `differential_evolution` on a function with many local minima, and its table gives `direct`, `dual_annealing`, `differential_evolution` and `shgo` for bounds ("If there are multiple candidates, try several"). Without `shgo` (below):
-- **`de`:** [`differential_evolution`](../../../benchmarks/adapters/scipy/bench.py#L132-L148) with its defaults, as its docstring examples call it (on `rosen` and Ackley): `best1bin`, 15 n individuals, mutation (0.5, 1) with dithering, recombination 0.7, Latin hypercube initialization, `updating='immediate'`, the final L-BFGS-B polish.
-- **`dual_annealing`:** [`dual_annealing`](../../../benchmarks/adapters/scipy/bench.py#L157-L170) with its defaults; its docstring example is "a 10-D problem, with many local minima ... called Rastrigin". Generalized simulated annealing with an L-BFGS-B local search.
-- **`direct`:** [`direct`](../../../benchmarks/adapters/scipy/bench.py#L173-L192) with `locally_biased=False` ("For hard problems with many local minima, `False` is recommended") and `vol_tol=0` ("`vol_tol` should be decreased to avoid premature termination of the algorithm for higher dimensions"; with the default 1e-16 it ended Rastrigin 10 after 1,965 evaluations, at 33). Deterministic: every seed gives the same run.
+**Methods** ([`solvers`](../../../benchmarks/adapters/scipy/bench.py#L238-L250)): the tutorial's [Global optimization](https://docs.scipy.org/doc/scipy/tutorial/optimize.html#global-optimization) shows `shgo`, `dual_annealing` and `differential_evolution` on a function with many local minima, and its table gives `direct`, `dual_annealing`, `differential_evolution` and `shgo` for bounds ("If there are multiple candidates, try several"). Without `shgo` (below):
+- **`de`:** [`differential_evolution`](../../../benchmarks/adapters/scipy/bench.py#L147-L163) with its defaults, as its docstring examples call it (on `rosen` and Ackley): `best1bin`, 15 n individuals, mutation (0.5, 1) with dithering, recombination 0.7, Latin hypercube initialization, `updating='immediate'`, the final L-BFGS-B polish.
+- **`dual_annealing`:** [`dual_annealing`](../../../benchmarks/adapters/scipy/bench.py#L172-L185) with its defaults; its docstring example is "a 10-D problem, with many local minima ... called Rastrigin". Generalized simulated annealing with an L-BFGS-B local search.
+- **`direct`:** [`direct`](../../../benchmarks/adapters/scipy/bench.py#L188-L207) with `locally_biased=False` ("For hard problems with many local minima, `False` is recommended") and `vol_tol=0` ("`vol_tol` should be decreased to avoid premature termination of the algorithm for higher dimensions"; with the default 1e-16 it ended Rastrigin 10 after 1,965 evaluations, at 33). Deterministic: every seed gives the same run.
 
 **Bounds (rule 2.4):** `differential_evolution` replaces a mutant coordinate outside the box by a random one, and polishes within bounds; `dual_annealing` wraps a visit back into the box and bounds its local search; `direct` samples centres of hyperrectangles of the box.
 
@@ -51,7 +51,7 @@ On Rastrigin 30, `de` reached the cap after about 370,000 evaluations and `direc
 ## Continuous, unimodal: Rosenbrock 10
 
 **Methods:** the tutorial's [local minimization](https://docs.scipy.org/doc/scipy/tutorial/optimize.html#local-minimization-of-multivariate-scalar-functions-minimize) section uses Rosenbrock as its example, and `differential_evolution`'s docstring example is `rosen`:
-- **`lbfgsb`:** [`minimize`](../../../benchmarks/adapters/scipy/bench.py#L195-L216) from a uniform random point with the box as `bounds`, so L-BFGS-B, its default then; the gradient is estimated by finite differences, counted. The tutorial says BFGS "typically requires fewer function calls than the simplex algorithm even when the gradient must be estimated"; L-BFGS-B is its bounded form.
+- **`lbfgsb`:** [`minimize`](../../../benchmarks/adapters/scipy/bench.py#L210-L231) from a uniform random point with the box as `bounds`, so L-BFGS-B, its default then; the gradient is estimated by finite differences, counted. The tutorial says BFGS "typically requires fewer function calls than the simplex algorithm even when the gradient must be estimated"; L-BFGS-B is its bounded form.
 - **`nelder_mead`:** `method='Nelder-Mead'`, the tutorial's first Rosenbrock example, with `bounds` and the default tolerances (the example's `xatol: 1e-8` is left at 1e-4).
 - **`de`:** as above.
 

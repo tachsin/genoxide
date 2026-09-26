@@ -7,9 +7,9 @@ Know a better way to solve one of these problems with Evolutionary.jl? [Open a b
 
 ## How the adapter runs Evolutionary.jl
 
-- **Evaluations:** `counted` and `counted!` count every call, including the one `EvolutionaryObjective` makes before each attempt to learn the value's type (`zero(f(x))`), and record the first hit ([bench.jl, lines 196-219](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L196-L219)).
+- **Evaluations:** `counted` and `counted!` count every call, including the one `EvolutionaryObjective` makes before each attempt to learn the value's type (`zero(f(x))`), and record the first hit ([bench.jl, lines 211-234](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L211-L234)).
 - **Stop:** the `callback` of [`Options`](https://docs.sciml.ai/Evolutionary/stable/tutorial/#General-options), after every generation.
-- **Keeping going (rule 2.2)** ([lines 230-259](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L230-L259)):
+- **Keeping going (rule 2.2)** ([lines 245-276](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L245-L276)):
   - the iteration limit (1,000; 1,500 for CMA-ES) is lifted;
   - the library's convergence test counts: each method's default metric (`AbsDiff(1e-12)` for GA and CMA-ES, `AbsDiff(1e-10)` for DE and ES, `GD` and `GD(true)` for NSGA2) within tolerance for more than `successive_f_tol` generations (`src/api/optimize.jl`): 10 by default, or the example's value (25 for DE on Rastrigin, 30 for the GA on N-Queens). It's part of each method's settings (`metrics`) and stays in effect with `iterations`, `time_limit` or a `callback`;
   - CMA-ES also ends when the eigendecomposition fails (`update_state!` returns `true`, `src/cmaes.jl`);
@@ -24,7 +24,7 @@ Know a better way to solve one of these problems with Evolutionary.jl? [Open a b
 
 ## Binary: OneMax 100 and 1000 (matched), OneMax 100 (idiomatic)
 
-**Methods** (`onemax_solvers`, [lines 265-299](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L265-L299)):
+**Methods** (`onemax_solvers`, [lines 282-316](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L282-L316)):
 - **Matched:** `GA` with its own operators: population 300, `tournament(3)`, `TPX` with `crossoverRate = 0.5`, `flip` with `mutationRate = 0.2`, `ɛ = 0`. Differences:
   - `flip` flips exactly one random bit of a mutated child (the same mean as 1/n per bit);
   - `tournament` draws without replacement from a shuffled population;
@@ -46,7 +46,7 @@ Know a better way to solve one of these problems with Evolutionary.jl? [Open a b
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods** (`nqueens_solvers`, [lines 301-325](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L301-L325)), from the only permutation example, `test/n-queens.jl`:
+**Methods** (`nqueens_solvers`, [lines 318-342](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L318-L342)), from the only permutation example, `test/n-queens.jl`:
 - **`ga`:** `GA(populationSize = 100, selection = tournament(5), crossover = PMX, crossoverRate = 0.89, mutation = inversion, mutationRate = 0.06)`, `successive_f_tol = 30`. The test tries 5 mutations × 5 crossovers; the defaults (`genop`, which does nothing) aren't among them, so the first of each list.
 - **`es`:** `ES(mutation = mutationwrapper(inversion), μ = 20, ρ = 1, λ = 100, selection = :plus)`: the first mutation of the test, and `:plus`, the default selection.
 
@@ -65,7 +65,7 @@ Know a better way to solve one of these problems with Evolutionary.jl? [Open a b
 
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
-**Methods** (`real_solvers`, [lines 327-373](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L327-L373)): the [README](https://github.com/SciML/Evolutionary.jl#algorithms) and the [docs' index](https://docs.sciml.ai/Evolutionary/stable/) list four methods for real numbers (ES, CMA-ES, GA, DE). The docs say what two are for, so they come first; the third is the first method of the example `test/rastrigin.jl`:
+**Methods** (`real_solvers`, [lines 344-390](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L344-L390)): the [README](https://github.com/SciML/Evolutionary.jl#algorithms) and the [docs' index](https://docs.sciml.ai/Evolutionary/stable/) list four methods for real numbers (ES, CMA-ES, GA, DE). The docs say what two are for, so they come first; the third is the first method of the example `test/rastrigin.jl`:
 - **`cma_es`:** for "difficult (non-convex, ill-conditioned, multi-modal, rugged, noisy) optimization problems" ([CMA-ES page](https://docs.sciml.ai/Evolutionary/stable/cmaes/)). `CMAES(lambda = 100)` as in `test/rastrigin.jl`: a (50,100)-CMA-ES, σ0 0.5, from a random point.
 - **`de`:** "used for multidimensional real-valued functions" ([DE page](https://docs.sciml.ai/Evolutionary/stable/de/)). `test/rastrigin.jl`'s population 100, F = 0.9, `successive_f_tol = 25`, and the defaults for what it varies (`random`, `BINX(0.5)`, 1 difference): DE/rand/1/bin.
 - **`es`:** `test/rastrigin.jl`'s (15/15,100)-σ-SA-ES ([ES page](https://docs.sciml.ai/Evolutionary/stable/es/)): `AnisotropicStrategy`, `average` recombination, `gaussian` mutation, comma selection.
@@ -111,7 +111,7 @@ Know a better way to solve one of these problems with Evolutionary.jl? [Open a b
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1 (matched)
 
-**Methods:** [`NSGA2`](https://docs.sciml.ai/Evolutionary/stable/moea/), the only multi-objective algorithm, with the matched settings (`run_front`, [lines 401-424](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L401-L424)): population 100 (92), SBX η 15 at 0.9, polynomial mutation η 20 at 1/n, binary tournament on rank and crowding distance (the default); objectives in the tutorial's in-place form `f!(F, x)` ([tutorial](https://docs.sciml.ai/Evolutionary/stable/tutorial/#Objective-Function-Definition)). Differences:
+**Methods:** [`NSGA2`](https://docs.sciml.ai/Evolutionary/stable/moea/), the only multi-objective algorithm, with the matched settings (`run_front`, [lines 418-441](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L418-L441)): population 100 (92), SBX η 15 at 0.9, polynomial mutation η 20 at 1/n, binary tournament on rank and crowding distance (the default); objectives in the tutorial's in-place form `f!(F, x)` ([tutorial](https://docs.sciml.ai/Evolutionary/stable/tutorial/#Objective-Function-Definition)). Differences:
 - `SBX` and `PLM` are unbounded; the box constraints clip the offspring to [0, 1].
 - `SBX` crosses each variable with probability 0.5, as pymoo's.
 - An uncrossed pair passes the parents themselves, which `PLM` then mutates in place (see [Bugs found](#bugs-found)), included (rule 6.1).

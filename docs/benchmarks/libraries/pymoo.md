@@ -10,20 +10,20 @@ Know a better way to solve one of these problems with pymoo? [Open a benchmark i
 ## How the adapter runs pymoo
 
 - **Fitness functions:** numpy, vectorized over the population, as pymoo's `Problem` evaluates "a **set** of solutions" ([problems/definition.md](https://pymoo.org/problems/definition.html); [bench.py, lines 84-195](../../../benchmarks/adapters/pymoo/bench.py#L84-L195)).
-- **Evaluations:** every row of every batch counts ([`SingleProblem`, lines 259-296](../../../benchmarks/adapters/pymoo/bench.py#L259-L296); [`FrontProblem`, lines 542-556](../../../benchmarks/adapters/pymoo/bench.py#L542-L556)), CMA-ES's initial samples, final mean and restarts included; the first hit is recorded ([lines 279-283](../../../benchmarks/adapters/pymoo/bench.py#L279-L283)).
-- **Stop:** after the generation that reaches the target, or at the budget (a batch that would pass it is cut there) or the time cap ([lines 259-307](../../../benchmarks/adapters/pymoo/bench.py#L259-L307)). A multi-objective run stops after the generation that reaches its budget ([lines 559-571](../../../benchmarks/adapters/pymoo/bench.py#L559-L571)).
-- **Keeping going (rule 2.2):** a user sets a budget with `minimize`'s termination, such as `("n_evals", N)` ([interface/termination.md](https://pymoo.org/interface/termination.html)). It replaces pymoo's default termination and an algorithm's own (such as Nelder-Mead's), so a method whose example passes no termination runs to the budget. Convergence criteria end an attempt only where an example sets them, or as CMA-ES's own stops inside pycma ([lines 310-328](../../../benchmarks/adapters/pymoo/bench.py#L310-L328)); their budget limits are lifted. An attempt also ends when CMA-ES has used its restarts, or when a GA's mating can't produce a non-duplicate child. The adapter then restarts from a new random start ([`solve`, lines 475-498](../../../benchmarks/adapters/pymoo/bench.py#L475-L498)).
+- **Evaluations:** every row of every batch counts ([`SingleProblem`, lines 279-316](../../../benchmarks/adapters/pymoo/bench.py#L279-L316); [`FrontProblem`, lines 564-578](../../../benchmarks/adapters/pymoo/bench.py#L564-L578)), CMA-ES's initial samples, final mean and restarts included; the first hit is recorded ([lines 299-303](../../../benchmarks/adapters/pymoo/bench.py#L299-L303)).
+- **Stop:** after the generation that reaches the target, or at the budget (a batch that would pass it is cut there) or the time cap ([lines 279-328](../../../benchmarks/adapters/pymoo/bench.py#L279-L328)). A multi-objective run stops after the generation that reaches its budget ([lines 581-594](../../../benchmarks/adapters/pymoo/bench.py#L581-L594)).
+- **Keeping going (rule 2.2):** a user sets a budget with `minimize`'s termination, such as `("n_evals", N)` ([interface/termination.md](https://pymoo.org/interface/termination.html)). It replaces pymoo's default termination and an algorithm's own (such as Nelder-Mead's), so a method whose example passes no termination runs to the budget. Convergence criteria end an attempt only where an example sets them, or as CMA-ES's own stops inside pycma ([lines 331-349](../../../benchmarks/adapters/pymoo/bench.py#L331-L349)); their budget limits are lifted. An attempt also ends when CMA-ES has used its restarts, or when a GA's mating can't produce a non-duplicate child. The adapter then restarts from a new random start ([`solve`, lines 496-519](../../../benchmarks/adapters/pymoo/bench.py#L496-L519)).
 - **Bounds (rule 2.4):** pymoo's own, per section; counted as `outside` ([`count_outside`, lines 226-229](../../../benchmarks/adapters/pymoo/bench.py#L226-L229)).
 - **One thread:** numpy's BLAS set to one thread before import ([lines 41-43](../../../benchmarks/adapters/pymoo/bench.py#L41-L43)).
-- **Seeds** ([lines 331-341](../../../benchmarks/adapters/pymoo/bench.py#L331-L341)): `minimize(..., seed=seed)`; restarts as rule 2.2. CMA-ES attempt r, from 0, gets (seed + 1) × 1,000,000 + 1,000 r, because pycma reads 0 as "seed from the clock" (see [Bugs found](#bugs-found)), and pymoo's vendored `fmin` adds 1 to the seed at each IPOP restart ([vendor_cmaes.py, lines 293-296](https://github.com/anyoptimization/pymoo/blob/0.6.2/pymoo/vendor/vendor_cmaes.py#L293-L296)). An attempt and its 10 restarts use 11 seeds no other run uses.
-- **Solutions:** the best evaluated; a multi-objective run prints the non-dominated part of its final population ([lines 501-534](../../../benchmarks/adapters/pymoo/bench.py#L501-L534), [lines 623-640](../../../benchmarks/adapters/pymoo/bench.py#L623-L640)).
+- **Seeds** ([lines 352-362](../../../benchmarks/adapters/pymoo/bench.py#L352-L362)): `minimize(..., seed=seed)`; restarts as rule 2.2. CMA-ES attempt r, from 0, gets (seed + 1) × 1,000,000 + 1,000 r, because pycma reads 0 as "seed from the clock" (see [Bugs found](#bugs-found)), and pymoo's vendored `fmin` adds 1 to the seed at each IPOP restart ([vendor_cmaes.py, lines 293-296](https://github.com/anyoptimization/pymoo/blob/0.6.2/pymoo/vendor/vendor_cmaes.py#L293-L296)). An attempt and its 10 restarts use 11 seeds no other run uses.
+- **Solutions:** the best evaluated; a multi-objective run prints the non-dominated part of its final population ([lines 522-556](../../../benchmarks/adapters/pymoo/bench.py#L522-L556), [lines 646-664](../../../benchmarks/adapters/pymoo/bench.py#L646-L664)).
 - **Separate tests:** 2026-09-25, pymoo 0.6.2, numpy 2.5.3, Python 3.13.9, seeds 0 to 4, the scenario's budget, 60 s cap, with other processes on the machine. `outside` was 0 in every run.
 
 ## Binary: OneMax 100 and 1000
 
 **Methods:**
-- **Matched: not run** ([lines 361-364](../../../benchmarks/adapters/pymoo/bench.py#L361-L364)). pymoo's `GA` is (μ+λ): `FitnessSurvival` keeps the best of parents and children ([algorithms/soo/ga.md](https://pymoo.org/algorithms/soo/ga.html)), and pymoo has no generational survival.
-- **Idiomatic:** `ga`, the binary GA of [customization/binary.md](https://pymoo.org/customization/binary.html), the docs' only binary example: population 200, `BinaryRandomSampling`, `TwoPointCrossover`, `BitflipMutation` (every child, 1 / n per bit), `eliminate_duplicates=True` ([lines 366-376](../../../benchmarks/adapters/pymoo/bench.py#L366-L376)).
+- **Matched: not run** ([lines 382-385](../../../benchmarks/adapters/pymoo/bench.py#L382-L385)). pymoo's `GA` is (μ+λ): `FitnessSurvival` keeps the best of parents and children ([algorithms/soo/ga.md](https://pymoo.org/algorithms/soo/ga.html)), and pymoo has no generational survival.
+- **Idiomatic:** `ga`, the binary GA of [customization/binary.md](https://pymoo.org/customization/binary.html), the docs' only binary example: population 200, `BinaryRandomSampling`, `TwoPointCrossover`, `BitflipMutation` (every child, 1 / n per bit), `eliminate_duplicates=True` ([lines 387-397](../../../benchmarks/adapters/pymoo/bench.py#L387-L397)).
 
 **Keeping going:** the example's `("n_gen", 100)` is replaced by the budget.
 
@@ -43,8 +43,8 @@ OneMax 100, idiomatic (budget 200,000):
 ## Permutation: N-Queens 32 and 64
 
 **Methods:**
-- **`ga`:** the permutation GA of [customization/permutation.md](https://pymoo.org/customization/permutation.html), its flowshop example, which "is purely optimizing the permutations": population 20, `PermutationRandomSampling`, `OrderCrossover`, `InversionMutation`, `eliminate_duplicates=True` ([lines 383-394](../../../benchmarks/adapters/pymoo/bench.py#L383-L394)).
-- **`brkga`:** [algorithms/soo/brkga.md](https://pymoo.org/algorithms/soo/brkga.html) ("known to perform well on combinatorial problems", with a permutation example): random keys in [0, 1] decoded by `np.argsort`, 100 elites, 300 offspring, 50 mutants, bias 0.7, duplicates eliminated on the decoded permutations ([lines 344-354](../../../benchmarks/adapters/pymoo/bench.py#L344-L354), [lines 396-413](../../../benchmarks/adapters/pymoo/bench.py#L396-L413)).
+- **`ga`:** the permutation GA of [customization/permutation.md](https://pymoo.org/customization/permutation.html), its flowshop example, which "is purely optimizing the permutations": population 20, `PermutationRandomSampling`, `OrderCrossover`, `InversionMutation`, `eliminate_duplicates=True` ([lines 404-415](../../../benchmarks/adapters/pymoo/bench.py#L404-L415)).
+- **`brkga`:** [algorithms/soo/brkga.md](https://pymoo.org/algorithms/soo/brkga.html) ("known to perform well on combinatorial problems", with a permutation example): random keys in [0, 1] decoded by `np.argsort`, 100 elites, 300 offspring, 50 mutants, bias 0.7, duplicates eliminated on the decoded permutations ([lines 365-375](../../../benchmarks/adapters/pymoo/bench.py#L365-L375), [lines 417-434](../../../benchmarks/adapters/pymoo/bench.py#L417-L434)).
 
 **Keeping going:**
 - `ga`: the example's `DefaultSingleObjectiveTermination(period=50, n_max_gen=10000)`, without the generation limit: an attempt ends after 50 generations without change of the best solution (xtol 1e-8) or improvement of the best value by more than 1e-6 (ftol).
@@ -75,9 +75,9 @@ BRKGA's `ElementwiseDuplicateElimination`, as the docs write it, compares indivi
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
 **Methods:** pymoo labels the DE and ES pages "Multi-modal Optimization", and the CMA-ES page says restarts "are known to work very well on multi-modal functions". Each runs its page's example (DE and ES on Ackley, CMA-ES on Rastrigin):
-- **`cma_es`:** [algorithms/soo/cmaes.md](https://pymoo.org/algorithms/soo/cmaes.html): "`Rastrigin` can be solved rather quickly by: `CMAES(restarts=10, restart_from_best=True)`" ([lines 422-431](../../../benchmarks/adapters/pymoo/bench.py#L422-L431)). Start: the best of 20 Latin hypercube samples; σ 0.1 of the bounds, normalized to [0, 1]. The restarts are IPOP (docstring: "Number of restarts with increasing population size").
-- **`de`:** [algorithms/soo/de.md](https://pymoo.org/algorithms/soo/de.html), its example: population 100, Latin hypercube sampling, `DE/rand/1/bin`, CR 0.3, F 0.5, no jitter ([lines 448-454](../../../benchmarks/adapters/pymoo/bench.py#L448-L454)). The example's `dither="vector"` does nothing (see [Bugs found](#bugs-found)) and is left out.
-- **`es`:** [algorithms/soo/es.md](https://pymoo.org/algorithms/soo/es.html), its example: a (μ, λ) ES with self-adapted steps, 200 offspring and the 1/7 rule (29 parents), also the defaults ([lines 456-460](../../../benchmarks/adapters/pymoo/bench.py#L456-L460)).
+- **`cma_es`:** [algorithms/soo/cmaes.md](https://pymoo.org/algorithms/soo/cmaes.html): "`Rastrigin` can be solved rather quickly by: `CMAES(restarts=10, restart_from_best=True)`" ([lines 443-452](../../../benchmarks/adapters/pymoo/bench.py#L443-L452)). Start: the best of 20 Latin hypercube samples; σ 0.1 of the bounds, normalized to [0, 1]. The restarts are IPOP (docstring: "Number of restarts with increasing population size").
+- **`de`:** [algorithms/soo/de.md](https://pymoo.org/algorithms/soo/de.html), its example: population 100, Latin hypercube sampling, `DE/rand/1/bin`, CR 0.3, F 0.5, no jitter ([lines 469-475](../../../benchmarks/adapters/pymoo/bench.py#L469-L475)). The example's `dither="vector"` does nothing (see [Bugs found](#bugs-found)) and is left out.
+- **`es`:** [algorithms/soo/es.md](https://pymoo.org/algorithms/soo/es.html), its example: a (μ, λ) ES with self-adapted steps, 200 offspring and the 1/7 rule (29 parents), also the defaults ([lines 477-481](../../../benchmarks/adapters/pymoo/bench.py#L477-L481)).
 
 **Keeping going:**
 - `cma_es`: pycma's criteria end each run and pymoo restarts it with twice the population, 10 times; then the adapter restarts it. The example's `("n_evals", 2500)` is a budget.
@@ -127,8 +127,8 @@ pymoo's ES recombines its step sizes in a Python loop over every offspring and v
 ## Continuous, unimodal: Rosenbrock 10
 
 **Methods:** pymoo's preface says point-by-point methods "can be highly efficient for rather unimodal fitness landscapes" ([getting_started/preface.md](https://pymoo.org/getting_started/preface.html)). Its local searches are CMA-ES, Nelder-Mead and pattern search, each starting from the best of 20 Latin hypercube samples.
-- **`cma_es`:** as above ([lines 422-431](../../../benchmarks/adapters/pymoo/bench.py#L422-L431)); its page's first example is the sphere.
-- **`nelder_mead`:** [algorithms/soo/nelder.md](https://pymoo.org/algorithms/soo/nelder.html), with its defaults ([lines 433-446](../../../benchmarks/adapters/pymoo/bench.py#L433-L446)).
+- **`cma_es`:** as above ([lines 443-452](../../../benchmarks/adapters/pymoo/bench.py#L443-L452)); its page's first example is the sphere.
+- **`nelder_mead`:** [algorithms/soo/nelder.md](https://pymoo.org/algorithms/soo/nelder.html), with its defaults ([lines 454-467](../../../benchmarks/adapters/pymoo/bench.py#L454-L467)).
 
 **Keeping going:** `cma_es` as above. `nelder_mead`: `minimize`'s termination replaces `NelderAndMeadTermination` ([nelder.py, line 136](https://github.com/anyoptimization/pymoo/blob/0.6.2/pymoo/algorithms/soo/nonconvex/nelder.py#L136-L137)), and the example passes none, so it runs to the budget.
 
@@ -149,7 +149,7 @@ Rosenbrock 10 (budget 500,000):
 
 ## Multi-objective: ZDT1, ZDT2, ZDT3 (30 variables), DTLZ2 and DTLZ1 (3 objectives)
 
-**Methods:** the matched settings of the [README](../../../benchmarks/README.md#scenarios), with pymoo's own operators ([`front_solvers`, lines 574-607](../../../benchmarks/adapters/pymoo/bench.py#L574-L607)):
+**Methods:** the matched settings of the [README](../../../benchmarks/README.md#scenarios), with pymoo's own operators ([`front_solvers`, lines 597-630](../../../benchmarks/adapters/pymoo/bench.py#L597-L630)):
 - **`nsga2`, `spea2`:** 100 individuals (92 with 3 objectives), `SBX(prob=0.9, eta=15)`, `PM(eta=20, prob_var=1/n)`. SPEA2 gets a new `SPEA2Survival(normalize=True)`, its default, in each run (see [Bugs found](#bugs-found)).
 - **`sms_emoa`:** the same, with `n_offsprings=1`.
 - **`nsga3`** (every problem): Das-Dennis directions, 99 divisions (100, population 100) or 12 (91, population 92), `SBX(prob=1.0, eta=30)`, the same mutation.
@@ -160,7 +160,7 @@ Rosenbrock 10 (budget 500,000):
 
 **Bounds:** SBX clamps (`repair_clamp`), polynomial mutation clips (`set_to_bounds_if_outside`).
 
-**The front:** the non-dominated part of the final population (SPEA2: its archive), by `NonDominatedSorting` after the clock ([lines 623-626](../../../benchmarks/adapters/pymoo/bench.py#L623-L626)). Not `res.opt`, which for NSGA-III holds only the first-front solutions closest to its directions.
+**The front:** the non-dominated part of the final population (SPEA2: its archive), by `NonDominatedSorting` after the clock ([lines 646-649](../../../benchmarks/adapters/pymoo/bench.py#L646-L649)). Not `res.opt`, which for NSGA-III holds only the first-front solutions closest to its directions.
 
 **Left out (rule 6.1):** R-NSGA-II, R-NSGA-III, U-NSGA-III, PI-NSGA-II, AGE-MOEA, AGE-MOEA2, C-TAEA, RVEA, Omni-Optimizer, CMOPSO, MOPSO-CD, NSDE, GDE3, NSDE-R, D-NSGA-II and KGB-DMOEA.
 

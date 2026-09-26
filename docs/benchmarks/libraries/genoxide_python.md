@@ -9,9 +9,9 @@ Know a better way to solve one of these problems with genoxide's Python package?
 
 ## How the adapter runs the package
 
-- **Fitness functions:** numpy, as the docs write them ([bench.py, lines 62-221](../../../benchmarks/adapters/genoxide_python/bench.py#L62-L221)): a function per genome for OneMax and N-Queens, as python/README.md's first example, [onemax.py](../../../python/examples/onemax.py) and [n_queens.py](../../../python/examples/n_queens.py); `batch=True` (a generation per call, "one call per generation") for the real-valued and multi-objective problems, as [rastrigin.py](../../../python/examples/rastrigin.py) and [zdt1.py](../../../python/examples/zdt1.py). A batch doesn't change the algorithm ("The same seed repeats a run exactly: one genome at a time, in batches or in parallel"). `bench.py --self-check` compares every function with problems.py.
-- **Evaluations:** each function counts its genomes, one per call or the rows of a batch ([`count`](../../../benchmarks/adapters/genoxide_python/bench.py#L75-L79)), and records the first hit. Any difference from `result.evaluations` is printed to stderr ([`solve`, lines 382-449](../../../benchmarks/adapters/genoxide_python/bench.py#L382-L449)).
-- **Stop:** `run(..., target=..., evaluations=...)` after every generation, and the 60 s cap: `time=...` for CMA-ES, DE and local search, and an `on_generation` callback returning False for the GA. CMA-ES with IPOP prints `last_generation`.
+- **Fitness functions:** numpy, as the docs write them ([bench.py, lines 62-224](../../../benchmarks/adapters/genoxide_python/bench.py#L62-L224)): a function per genome for OneMax and N-Queens, as python/README.md's first example, [onemax.py](../../../python/examples/onemax.py) and [n_queens.py](../../../python/examples/n_queens.py); `batch=True` (a generation per call, "one call per generation") for the real-valued and multi-objective problems, as [rastrigin.py](../../../python/examples/rastrigin.py) and [zdt1.py](../../../python/examples/zdt1.py). A batch doesn't change the algorithm ("The same seed repeats a run exactly: one genome at a time, in batches or in parallel"). `bench.py --self-check` compares every function with problems.py.
+- **Evaluations:** each function counts its genomes, one per call or the rows of a batch ([`count`](../../../benchmarks/adapters/genoxide_python/bench.py#L77-L82)), and records the first hit. Any difference from `result.evaluations` is printed to stderr ([`solve`, lines 385-452](../../../benchmarks/adapters/genoxide_python/bench.py#L385-L452)).
+- **Stop:** `run(..., target=..., evaluations=...)` after every generation, and the 60 s cap: `time=...` for CMA-ES, DE and local search, and an `on_generation` callback returning False for the GA.
 - **Keeping going (rule 2.2):** DE and CMA-ES (IPOP) restart by themselves. Local search redraws a neighbor that didn't change, so it can't stall. The GA has no convergence criterion; the package ends a run by itself only as "stalled" (10,000 generations with nothing to evaluate), and then the adapter restarts it with the seeds of rule 2.2. The GA's time cap is a callback because the package stalls only when every stop condition needs new evaluations. No test run stalled.
 - **Bounds (rule 2.4):** genoxide's: CMA-ES redraws a sample outside the bounds up to 100 times, then clips it; DE sets an outside trial gene halfway between the parent's gene and the bound; SBX and polynomial mutation are bounded.
 - **Time:** from before the algorithm object is created to the return of `run`, which creates the initial population.
@@ -20,7 +20,7 @@ Know a better way to solve one of these problems with genoxide's Python package?
 - **Solutions:** `result.best_genome`; for several objectives, `result.front_genomes` and `result.front_objectives`, the final non-dominated front without copies.
 - **Separate tests:** 2026-09-25, the package 0.6.0 built from 03e237b, seeds 0 to 4, the scenario's budget, 60 s cap. The counts equalled `result.evaluations`, and `outside` was 0, in every run.
 
-**Settings from the literature**, for settings without a default ([lines 223-240](../../../benchmarks/adapters/genoxide_python/bench.py#L223-L240)):
+**Settings from the literature**, for settings without a default ([lines 226-243](../../../benchmarks/adapters/genoxide_python/bench.py#L226-L243)):
 - a GA's population of 100, binary tournament (`Tournament(2)`), SBX η 20 and polynomial mutation η 20 at 1 / n per gene: Deb, Pratap, Agarwal and Meyarivan, "A fast and elitist multiobjective genetic algorithm: NSGA-II", IEEE Transactions on Evolutionary Computation 6(2), 2002;
 - bit-flip mutation at 1 / n per gene: Mühlenbein, "How genetic algorithms really work: mutation and hillclimbing", PPSN 1992;
 - swap mutation (`SwapMutation()`, one swap) for permutations; for local search on reals, the GA's polynomial mutation as the neighbor.
@@ -30,8 +30,8 @@ A GA's crossover is the first python/README.md lists for the genome: `UniformCro
 ## Binary: OneMax 100 and 1000
 
 **Methods:**
-- **Matched:** the [README](../../../benchmarks/README.md)'s matched GA with the package's components: population 300, `Tournament(3)` (with replacement), `PointCrossover(2)` on each consecutive pair at 0.5, each child mutated at 0.2 by `BitFlip(rate=1 / n)`, `Generational(elitism=0)` ([lines 245-260](../../../benchmarks/adapters/genoxide_python/bench.py#L245-L260)). Difference from eaSimple: a child identical to a parent isn't evaluated, also one crossed or mutated back to it.
-- **Idiomatic (OneMax 100):** the GA, the method of both OneMax examples: population 100, `Tournament(2)`, `UniformCrossover()`, `BitFlip(rate=1 / n)`, the default rates and scheme, a function per genome, `bits.sum()` ([lines 261-272](../../../benchmarks/adapters/genoxide_python/bench.py#L261-L272)).
+- **Matched:** the [README](../../../benchmarks/README.md)'s matched GA with the package's components: population 300, `Tournament(3)` (with replacement), `PointCrossover(2)` on each consecutive pair at 0.5, each child mutated at 0.2 by `BitFlip(rate=1 / n)`, `Generational(elitism=0)` ([lines 248-263](../../../benchmarks/adapters/genoxide_python/bench.py#L248-L263)). Difference from eaSimple: a child identical to a parent isn't evaluated, also one crossed or mutated back to it.
+- **Idiomatic (OneMax 100):** the GA, the method of both OneMax examples: population 100, `Tournament(2)`, `UniformCrossover()`, `BitFlip(rate=1 / n)`, the default rates and scheme, a function per genome, `bits.sum()` ([lines 264-275](../../../benchmarks/adapters/genoxide_python/bench.py#L264-L275)).
 
 **Keeping going:** to the target or the budget.
 
@@ -59,7 +59,7 @@ OneMax 100, idiomatic (budget 200,000):
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods:** no stated preference for permutations, so the methods the docs list first for every genome, `Ga` and `LocalSearch` ([lines 275-297](../../../benchmarks/adapters/genoxide_python/bench.py#L275-L297)):
+**Methods:** no stated preference for permutations, so the methods the docs list first for every genome, `Ga` and `LocalSearch` ([lines 278-300](../../../benchmarks/adapters/genoxide_python/bench.py#L278-L300)):
 - **`ga`:** population 100, `Tournament(2)`, `OrderCrossover()`, `SwapMutation()`, the default rates and scheme.
 - **`local_search`:** hill climbing with its defaults (1 neighbor per step, `NotWorse()` acceptance), `SwapMutation()` neighbors.
 
@@ -85,7 +85,7 @@ N-Queens 64 (budget 1,000,000):
 
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
-**Methods:** the package's Rastrigin example, [rastrigin.py](../../../python/examples/rastrigin.py), runs CMA-ES and DE ([lines 300-330](../../../benchmarks/adapters/genoxide_python/bench.py#L300-L330)):
+**Methods:** the package's Rastrigin example, [rastrigin.py](../../../python/examples/rastrigin.py), runs CMA-ES and DE ([lines 303-333](../../../benchmarks/adapters/genoxide_python/bench.py#L303-L333)):
 - **`cma_es`:** `gx.Cmaes(genome, restarts="ipop")`, with the defaults (4 + ⌊3 ln n⌋ samples, an initial step of 0.3 of each range); the example, python/README.md's first example and the `Cmaes` docstring ("for multimodal functions") use IPOP.
 - **`de`:** `gx.De(genome)` with its defaults (python/README.md, the `De` docstring): SHADE's published settings (Tanabe and Fukunaga, IEEE CEC 2013: current-to-pbest/1 with an archive, SHADE's adaptation of F and CR, 100 individuals), and genoxide's own restarts when the population converges or stalls (#113).
 
@@ -120,7 +120,7 @@ Ackley 30 (budget 1,000,000):
 
 ## Continuous, unimodal: Rosenbrock 10
 
-**Methods:** no example or stated preference for a unimodal function, so the first three methods python/README.md lists for real genomes, with their defaults ([lines 300-323](../../../benchmarks/adapters/genoxide_python/bench.py#L300-L323)):
+**Methods:** no example or stated preference for a unimodal function, so the first three methods python/README.md lists for real genomes, with their defaults ([lines 303-326](../../../benchmarks/adapters/genoxide_python/bench.py#L303-L326)):
 - **`ga`:** population 100, `Tournament(2)`, `SimulatedBinaryCrossover(20)` at the default 0.9, `PolynomialMutation(20, rate=1 / n)`, the default scheme.
 - **`local_search`:** hill climbing with its defaults, `PolynomialMutation(20, rate=1 / n)` as the neighbor.
 - **`de`:** `gx.De(genome)` (above).
@@ -143,7 +143,7 @@ Rosenbrock 10 (budget 500,000):
 
 The matched settings of the [README](../../../benchmarks/README.md#scenarios), with the package's own operators.
 
-**Methods** ([lines 333-367](../../../benchmarks/adapters/genoxide_python/bench.py#L333-L367)), with `batch=True` functions returning a row of objectives per genome, as [zdt1.py](../../../python/examples/zdt1.py):
+**Methods** ([lines 336-370](../../../benchmarks/adapters/genoxide_python/bench.py#L336-L370)), with `batch=True` functions returning a row of objectives per genome, as [zdt1.py](../../../python/examples/zdt1.py):
 - **`nsga2`, `spea2`, `sms_emoa`:** 100 individuals (92 with 3 objectives), `SimulatedBinaryCrossover(15)` at the default 0.9, `PolynomialMutation(20, rate=1 / n)`. SMS-EMOA breeds one child per generation (`offspring=1`).
 - **`nsga3`:** `das_dennis(2, 99)` (100 directions, population 100) or `das_dennis(3, 12)` (91, population 92), SBX η 30 at the default 1, the same mutation.
 - **`moead`:** `das_dennis(2, 99)` or `das_dennis(3, 12)` weights, its defaults of 20 neighbors, neighborhood parents at 0.9 and at most 2 replacements; `Tchebycheff()` with 2 objectives, `Pbi(5.0)` with 3; SBX η 20 at the default 1, the same mutation.

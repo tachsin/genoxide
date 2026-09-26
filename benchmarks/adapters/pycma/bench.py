@@ -59,6 +59,9 @@ class Budget:
         self.deadline = start + max_seconds
         self.evaluations = 0
         self.generations = 0
+        # the evaluations at the end of the last generation, and that generation's (rule 2.3)
+        self.generation_end = 0
+        self.last = 0
         self.outside = 0
         self.best = math.inf
         self.best_x = None
@@ -93,7 +96,15 @@ class Budget:
         return self.batch([x])[0]
 
     def next_generation(self, es):
+        """fmin2's callback, called after every iteration."""
         self.generations += 1
+        self.last = self.evaluations - self.generation_end
+        self.generation_end = self.evaluations
+
+    def last_generation(self):
+        """The evaluations since the start of the last generation (rule 2.3): of one cut short, or
+        of the last one that ended."""
+        return self.evaluations - self.generation_end or self.last
 
 
 # -------------------------------------------------------------------------------------------------
@@ -258,6 +269,7 @@ def main():
                 "time_s": round(elapsed, 6),
                 "generations": budget.generations,
                 "evaluations": budget.evaluations,
+                "last_generation": budget.last_generation(),
                 "outside": budget.outside,
                 "best": budget.best,
                 "target": TARGET,

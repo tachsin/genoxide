@@ -276,6 +276,7 @@ def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
                 # Nevergrad asks and tells one candidate at a time: one step per evaluation
                 "generations": evaluations,
                 "evaluations": evaluations,
+                "last_generation": min(evaluations, 1),
                 "best": problem.best(loss),
                 "target": problem.target,
                 "success": bool(success),

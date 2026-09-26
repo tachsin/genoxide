@@ -179,6 +179,9 @@ mutable struct Budget
     # the first evaluation whose value reaches the target, and the clock then (-1: not yet)
     first_hit_evaluations::Int
     first_hit_seconds::Float64
+    # the evaluations at the end of the last generation, and that generation's (rule 2.3)
+    generation_end::Int
+    last_generation::Int
     const max_evaluations::Int
     const max_seconds::Float64
     const target::Float64
@@ -186,9 +189,21 @@ mutable struct Budget
 end
 
 Budget(max_evaluations, max_seconds, target = -Inf) =
-    Budget(0, Inf, nothing, 0, -1, 0.0, max_evaluations, max_seconds, target, time_ns())
+    Budget(0, Inf, nothing, 0, -1, 0.0, 0, 0, max_evaluations, max_seconds, target, time_ns())
 
 seconds(budget::Budget) = (time_ns() - budget.start) / 1.0e9
+
+# marks the end of a generation
+function end_generation!(budget::Budget)
+    budget.last_generation = budget.evaluations - budget.generation_end
+    budget.generation_end = budget.evaluations
+    return
+end
+
+# the evaluations since the start of the last generation (rule 2.3): of one cut short, or of the
+# last one that ended
+last_generation(budget::Budget) =
+    budget.evaluations > budget.generation_end ? budget.evaluations - budget.generation_end : budget.last_generation
 
 outside(x, bounds) = bounds !== nothing && any(v -> v < bounds[1] || v > bounds[2], x)
 
@@ -237,7 +252,9 @@ first_hit(budget::Budget) = budget.first_hit_evaluations < 0 ? nothing :
 options(budget::Budget, rng; successive_f_tol = 10) = Evolutionary.Options(
     iterations = typemax(Int),
     successive_f_tol = successive_f_tol,
-    callback = record -> exhausted(budget),
+    # called after the initial population and after every generation (optimize, api/optimize.jl),
+    # where it marks the generation's end too
+    callback = record -> (end_generation!(budget); exhausted(budget)),
     rng = rng,
 )
 
@@ -496,7 +513,8 @@ function main(args)
             print_line([
                 "library" => "evolutionary_jl", "solver" => "nsga2", "problem" => problem, "size" => size,
                 "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-                "generations" => generations, "evaluations" => budget.evaluations, "restarts" => restarts,
+                "generations" => generations, "evaluations" => budget.evaluations,
+                "last_generation" => last_generation(budget), "restarts" => restarts,
                 "outside" => budget.outside, "front" => points[front], "solutions" => population[front],
             ])
         end
@@ -538,7 +556,8 @@ function main(args)
         print_line([
             "library" => "evolutionary_jl", "solver" => solver, "problem" => problem, "size" => size,
             "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-            "generations" => generations, "evaluations" => budget.evaluations, "restarts" => restarts,
+            "generations" => generations, "evaluations" => budget.evaluations,
+            "last_generation" => last_generation(budget), "restarts" => restarts,
             (haskey(REAL_PROBLEMS, problem) ? ["outside" => budget.outside] : [])...,
             "best" => best, "target" => problem == "onemax" ? size : target, "success" => success,
             "first_hit" => first_hit(budget), "solution" => solution,

@@ -178,6 +178,9 @@ public final class Bench {
         // the first evaluation whose value reaches the target, and the clock then (-1: not yet)
         long firstHitEvaluations = -1;
         double firstHitSeconds;
+        // the evaluations at the end of the last generation, and that generation's (rule 2.3)
+        long generationEnd;
+        long lastGeneration;
 
         Budget(long maxEvaluations, double maxSeconds, boolean minimize, double target) {
             this.maxEvaluations = maxEvaluations;
@@ -200,6 +203,20 @@ public final class Bench {
                 return true;
             }
             return false;
+        }
+
+        /** Marks the end of a generation. */
+        void endGeneration() {
+            lastGeneration = evaluations - generationEnd;
+            generationEnd = evaluations;
+        }
+
+        /**
+         * The evaluations since the start of the last generation (rule 2.3): of one cut short, or
+         * of the last one that ended.
+         */
+        long lastGeneration() {
+            return evaluations > generationEnd ? evaluations - generationEnd : lastGeneration;
         }
 
         /** The "first_hit" field of a single-objective run. */
@@ -261,7 +278,13 @@ public final class Bench {
         for (int restart = 0; ; restart++) {
             if (restart > 0) seed((seed + 1) * 1_000_000 + restart);
             long[] attempt = {0};
-            var stream = engine.stream();
+            // every generation's end, the first of each attempt (its initial population and its
+            // first offspring) included: this limit comes first, so it sees every result, also
+            // the one that the steady-fitness limit ends the attempt at
+            var stream = engine.stream().limit(result -> {
+                budget.endGeneration();
+                return true;
+            });
             if (steadyGenerations > 0) stream = stream.limit(Limits.bySteadyFitness(steadyGenerations));
             stream
                 .limit(result -> {
@@ -418,6 +441,7 @@ public final class Bench {
                     + ",\"mode\":\"" + args.mode() + "\",\"seed\":" + seed
                     + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
                     + ",\"generations\":" + generations + ",\"evaluations\":" + budget.evaluations
+                    + ",\"last_generation\":" + budget.lastGeneration()
                     + ",\"best\":" + number(budget.best) + ",\"target\":" + number(target[0])
                     + ",\"success\":" + budget.reached() + ",\"first_hit\":" + budget.firstHit() + outside
                     + ",\"solution\":" + json(budget.solution) + "}");

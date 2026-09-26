@@ -55,6 +55,9 @@ struct Budget {
     abort_flag: Arc<AtomicBool>,
     // the start of the clock
     start: Instant,
+    // the evaluations at the end of the last generation, and that generation's (rule 2.3)
+    generation_end: Arc<AtomicUsize>,
+    last_generation: Arc<AtomicUsize>,
 }
 impl Budget {
     fn new(max_evaluations: usize, abort_flag: Arc<AtomicBool>) -> Self {
@@ -65,6 +68,22 @@ impl Budget {
             max_evaluations,
             abort_flag,
             start: Instant::now(),
+            generation_end: Arc::new(AtomicUsize::new(0)),
+            last_generation: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+    /// Marks the end of a generation, from the reporter
+    fn end_generation(&self) {
+        let evaluations = self.evaluations();
+        let end = self.generation_end.swap(evaluations, Ordering::Relaxed);
+        self.last_generation.store(evaluations - end, Ordering::Relaxed);
+    }
+    /// The evaluations since the start of the last generation (rule 2.3): of a generation cut
+    /// short, or of the last one that ended
+    fn last_generation(&self) -> usize {
+        match self.evaluations() - self.generation_end.load(Ordering::Relaxed) {
+            0 => self.last_generation.load(Ordering::Relaxed),
+            partial => partial,
         }
     }
     /// Counts one evaluation, whose value reaches the target or not
@@ -101,6 +120,37 @@ fn start_timer(
         }
     });
     (sender, handle)
+}
+
+/// Marks the generations for `Budget::last_generation` (rule 2.3): the strategies call `on_start`
+/// after evaluating the initial population (or chromosome) and `on_generation_complete` after
+/// every generation (strategy/evolve.rs and strategy/hill_climb.rs, `call`)
+#[derive(Clone)]
+struct Generations<G: Genotype> {
+    budget: Budget,
+    genotype: std::marker::PhantomData<G>,
+}
+impl<G: Genotype> Generations<G> {
+    fn new(budget: &Budget) -> Self {
+        Self {
+            budget: budget.clone(),
+            genotype: std::marker::PhantomData,
+        }
+    }
+}
+impl<G: Genotype> StrategyReporter for Generations<G> {
+    type Genotype = G;
+    fn on_start<S: StrategyState<G>, C: StrategyConfig>(&mut self, _: &G, _: &S, _: &C) {
+        self.budget.end_generation();
+    }
+    fn on_generation_complete<S: StrategyState<G>, C: StrategyConfig>(
+        &mut self,
+        _: &G,
+        _: &S,
+        _: &C,
+    ) {
+        self.budget.end_generation();
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -274,7 +324,7 @@ fn print_result(args: &Args, seed: u64, outcome: &Outcome, time_s: f64, budget: 
         None => "null".to_string(),
     };
     println!(
-        "{{\"library\":\"genetic_algorithm\",\"solver\":\"{}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{},\"time_s\":{:.6},\"generations\":{},\"evaluations\":{},\"best\":{},\"target\":{},\"success\":{},\"first_hit\":{},\"solution\":{}{}}}",
+        "{{\"library\":\"genetic_algorithm\",\"solver\":\"{}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{},\"time_s\":{:.6},\"generations\":{},\"evaluations\":{},\"last_generation\":{},\"best\":{},\"target\":{},\"success\":{},\"first_hit\":{},\"solution\":{}{}}}",
         outcome.solver,
         args.problem,
         args.size,
@@ -283,6 +333,7 @@ fn print_result(args: &Args, seed: u64, outcome: &Outcome, time_s: f64, budget: 
         time_s,
         outcome.generations,
         budget.evaluations(),
+        budget.last_generation(),
         outcome.best,
         outcome.target,
         outcome.success,
@@ -385,6 +436,7 @@ fn onemax(args: &Args, seed: u64) {
                 .with_select(SelectTournament::new(0.5, 0.02, 4))
                 .with_crossover(CrossoverUniform::new(0.7, 0.8))
                 .with_mutate(MutateSingleGene::new(0.2))
+                .with_reporter(Generations::new(budget))
                 .call()
                 .unwrap();
             (evolve.best_genes(), evolve.state.current_generation)
@@ -435,6 +487,7 @@ fn nqueens(args: &Args, seed: u64) {
                     .with_replace_on_equal_fitness(true)
                     .with_abort_flag(budget.abort_flag.clone())
                     .with_rng_seed_from_u64(run_seed)
+                    .with_reporter(Generations::new(budget))
                     .call()
                     .unwrap();
                 let score = hill_climb.best_fitness_score();
@@ -542,6 +595,7 @@ fn real_evolve(args: &Args, seed: u64) {
                 .with_mutate(MutateMultiGene::new(2, 0.2))
                 .with_abort_flag(budget.abort_flag.clone())
                 .with_rng_seed_from_u64(run_seed)
+                .with_reporter(Generations::new(budget))
                 .call()
                 .unwrap();
             let score = evolve.best_fitness_score();
@@ -596,6 +650,7 @@ fn real_hill_climb(args: &Args, seed: u64) {
                 .with_target_fitness_score(scaled(REAL_TARGET))
                 .with_abort_flag(budget.abort_flag.clone())
                 .with_rng_seed_from_u64(run_seed)
+                .with_reporter(Generations::new(budget))
                 .call()
                 .unwrap();
             let score = hill_climb.best_fitness_score();
