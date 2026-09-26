@@ -49,11 +49,12 @@ generation 0: 10 evaluations, best 41.28 (generation 0), 0.004 s
 
 ## The fitness program
 
-`fitness.command` is the program and its arguments. genoxide starts one copy per worker, in the run file's directory, and keeps them running:
+`fitness.command` is the program and its arguments. genoxide starts one copy per worker, in the run file's directory, and keeps them running.
 
-- It writes one genome per line to the program's stdin, the genes separated by spaces. Bits are `0` and `1`, integers and permutations are whole numbers, and reals are written so they read back exactly.
-- The program writes one line per genome to stdout: the objective values, then optionally a constraint violation, separated by spaces. The violation is 0 when the genome is feasible, otherwise how far it is from feasible. `nan` marks a genome that can't be scored.
-- The program must flush its output after each line: genoxide waits for each answer, so a program whose output sits in a buffer (Python's, when stdout is a pipe, without `flush=True`) makes the run wait forever. Anything it writes to stderr shows on genoxide's stderr.
+- **Input:** genoxide writes one genome per line to the program's stdin, the genes separated by spaces. Bits are `0` and `1`. Integers and permutations are whole numbers. Reals are written so they read back exactly.
+- **Output:** the program writes one line per genome to stdout: the objective values, then optionally a constraint violation, separated by spaces. The violation is 0 for a feasible genome, otherwise how far it is from feasible. `nan` marks a genome that can't be scored.
+- **Flush after each line.** genoxide waits for each answer, so output left in a buffer makes the run wait forever. Python buffers stdout when it's a pipe: use `flush=True`.
+- **stderr:** anything the program writes there shows on genoxide's stderr.
 
 A Python fitness function, minimizing the sum of squares with the first gene at least 1:
 
@@ -73,11 +74,13 @@ objectives = ["minimize"]
 workers = 8
 ```
 
-If the program exits, can't be started, or writes something else, the run stops with an error naming the program and the line it wrote, and no checkpoint is saved after the failure. A relative program path with a directory, like `./fitness`, is relative to the run file.
+If the program exits, can't be started, or writes something else, the run stops with an error. The error names the program and the line it wrote. No checkpoint is saved after the failure.
+
+A relative program path with a directory, like `./fitness`, is relative to the run file.
 
 ## The run file
 
-TOML, or JSON for files ending in `.json`, with the same structure. Unknown settings are errors, so typos don't go unnoticed.
+TOML, or JSON for files ending in `.json`, with the same structure. Unknown settings are errors, so typos are caught.
 
 ### `[genome]`
 
@@ -157,7 +160,11 @@ The run stops at the first condition met. At least one is needed.
 
 ### `report`
 
-Progress lines on stderr: `report = "1s"` (the default) prints one every second, `report = 10` every 10 generations, and `report = "off"` none. Put it before the first table.
+Progress lines on stderr. Put `report` before the first table.
+
+- `report = "1s"` (the default): one line every second
+- `report = 10`: one line every 10 generations
+- `report = "off"`: none
 
 ### `[checkpoint]`
 
@@ -167,7 +174,11 @@ path = "run.ckpt"   # relative to the run file
 every = 50          # generations
 ```
 
-genoxide saves the run every `every` generations and when it stops. `genoxide run <file> --resume` continues from the checkpoint, with exactly the results of an uninterrupted run (for `steady-ga`, with one worker: with more, the results depend on timing, and the evaluations in flight aren't in a checkpoint). You can change `fitness.command`, `fitness.builtin`, `fitness.workers`, `fitness.nan`, `stop`, `report` and `checkpoint` in between, e.g. to run longer. A change to `genome`, `fitness.objectives` or `algorithm` is an error.
+genoxide saves the run every `every` generations and when it stops. `genoxide run <file> --resume` continues from the checkpoint, with exactly the results of an uninterrupted run.
+
+For `steady-ga`, that holds with one worker only. With more, the results depend on timing, and the evaluations in flight aren't in a checkpoint.
+
+Between runs, you can change `fitness.command`, `fitness.builtin`, `fitness.workers`, `fitness.nan`, `stop`, `report` and `checkpoint`, e.g. to run longer. A change to `genome`, `fitness.objectives` or `algorithm` is an error.
 
 ## The result
 
@@ -175,14 +186,14 @@ On stdout, as JSON:
 
 - `stop_reason`
 - `generations`, `evaluations` and `seconds`
-- For one objective: `fitness` (`null` if invalid), `violation` and `genome`. Infinite values, which JSON has no numbers for, are the text `"inf"` or `"-inf"`.
-- For several objectives: `front`, the trade-offs found. Each has its `objectives`, `violation` and `genome`, without copies of a genome.
+- For one objective: `fitness` (`null` if invalid), `violation` and `genome`. Infinite values are the text `"inf"` or `"-inf"`, since JSON has no numbers for them.
+- For several objectives: `front`, the trade-offs found, without copies of a genome. Each has its `objectives`, `violation` and `genome`.
 
 The exit code is 0 after a run and 1 after an error, with the error on stderr.
 
 ## Built-in fitness programs
 
-`genoxide fitness` lists them, and `genoxide fitness <name>` runs one on stdin and stdout, speaking the same protocol:
+`genoxide fitness` lists them. `genoxide fitness <name>` runs one on stdin and stdout, with the same protocol:
 
 | Name | Genome | Scores |
 |---|---|---|
