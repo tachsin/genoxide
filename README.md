@@ -12,7 +12,7 @@
 
 ```toml
 [dependencies]
-genoxide = "0.6"
+genoxide = "0.7"
 ```
 
 ```rust

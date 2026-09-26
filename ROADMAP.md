@@ -164,7 +164,7 @@ Done means implemented, documented, tested (property tests for operators) and be
 - [x] Examples matching the DEAP / pymoo tutorials
 - Zero-copy numpy genomes: moved to 0.8.
 
-### 0.7: Correctness
+### 0.7: Correctness ✅
 Fixes from the review of 0.6.0 ([#116](https://github.com/tachsin/genoxide/issues/116)). Some change seeded results.
 - [x] DE restarts: trials visible to observers, no restart every other generation on constrained problems, migrants evaluated once
 - [x] Duplicate elimination without fingerprint collisions, same on 32 and 64 bits
