@@ -17,15 +17,16 @@ Every library is measured under these rules. An adapter that breaks one isn't be
 2.1. A run ends at the first of:
 - the target, reached by the best solution found;
 - the scenario's evaluation budget;
-- 60 seconds.
+- the scenario's time cap: 60 seconds in a scenario with a target, 600 seconds in a multi-objective scenario.
 
-Nothing else ends a run.
+Nothing else ends a run. A multi-objective run must use its whole budget (rule 7.1), so its cap is longer.
 
 2.2. **Methods that stop by themselves keep going.**
 - **A limit that's only a budget,** such as a maximum number of generations or iterations, is lifted.
 - **A criterion that detects convergence,** such as a tolerance or a number of generations without improvement, ends that attempt, and the method starts again:
   - with the library's restart mechanism for the method, if it has one (IPOP for CMA-ES, for example);
   - otherwise from a new random start. The adapter keeps the best solution and counts every evaluation.
+- **A stalled attempt has converged.** An attempt that makes no new fitness evaluation for 10 consecutive generations has converged, whatever the library's own criteria. The adapter ends it and starts a new attempt from a new random start, with the next restart seed. The run keeps its budget and time cap. A library that evaluates every offspring never stalls. This applies in matched scenarios too.
 
 Seeds: attempt 0 uses the run's seed. Restart r, from 1, uses `(seed + 1) * 1_000_000 + r`, so no two runs share a seed. A library's own restart mechanism keeps its own seeding, but any seed the adapter passes follows this formula.
 
@@ -47,7 +48,7 @@ Which criteria count:
 
 3.2. The adapter counts them itself, with a counter around the fitness function, not with the library's own count. Every call counts: copies, restarts, local search and final polishing. A library that doesn't evaluate a copy again saves that evaluation. That's a real saving, and it's reported.
 
-3.3. **The first hit.** Every single-objective run prints `"first_hit": {"evaluations": E, "time_s": T}`. E is the number of the first evaluation whose true value reaches the target, counting that evaluation. T is the run's clock at that evaluation. A run that never reaches the target prints `"first_hit": null`. The adapter's counter records it at each evaluation, whatever the library's stop granularity. The run still stops as rules 2.1 and 2.3 say. **[checked]** `first_hit` is present when the solution reaches the target and null otherwise; E is at most the run's evaluations, and T at most its time.
+3.3. **The first hit.** Every single-objective run prints `"first_hit": {"evaluations": E, "time_s": T}`. E is the number of the first evaluation whose true value reaches the target, counting that evaluation. T is the run's clock at that evaluation. A run that never reaches the target prints `"first_hit": null`. The adapter's counter records it at each evaluation, whatever the library's stop granularity. The run still stops as rules 2.1 and 2.3 say. A first hit later than the scenario's time cap counts as not reached. **[checked]** `first_hit` is present when the solution reaches the target and null otherwise; E is at most the run's evaluations, and T at most its time.
 
 3.4. **Batch evaluation.** A Python library with a documented batch or vectorized evaluation interface evaluates a generation at once with numpy, as its users would: pycma's `fmin2(parallel_objective=...)`, PyGAD's `fitness_batch_size`, pygmo's `batch_fitness` with a `bfe` where the algorithm accepts one. An interface that changes the algorithm isn't used: SciPy's `vectorized=True` forces deferred updating. Each row of a batch counts as one evaluation.
 
@@ -73,7 +74,7 @@ Which criteria count:
 
 5.2. **[checked]** The same seed gives the same evaluations, the same best value and the same first hit, where the library supports seeding. A run doesn't depend on the runs before it in the same process: seed 1 gives the same alone as after seed 0. A library that can't be seeded says so on its page.
 
-5.3. A solver whose first 3 seeds all run the full 60 seconds without reaching the target runs no more seeds. Its result shows 3 runs.
+5.3. In a scenario with a target, a solver whose first 3 seeds all run to the time cap without reaching the target runs no more seeds. Its result shows 3 runs. A multi-objective scenario runs every seed.
 
 ## 6. Which methods run
 
@@ -104,7 +105,8 @@ The separate test runs are shown on the page, but they never pick a method or a 
 6.3. **Not allowed in idiomatic mode:**
 - tuning settings to the benchmark problems;
 - a method the library doesn't present for the problem type;
-- a method its own docs say doesn't suit it, such as CMA-ES without restarts on a multimodal function when the library offers restarts.
+- a method its own docs say doesn't suit it, such as CMA-ES without restarts on a multimodal function when the library offers restarts;
+- in a scenario with a target, a one-shot sampler that ignores the fitness values, such as a quasi-random sequence. It can reach the target only by covering the box densely, so its result measures the sampling, not a search.
 
 6.4. At most 3 methods per library and problem type: the library's first recommendations.
 
@@ -114,7 +116,7 @@ The separate test runs are shown on the page, but they never pick a method or a 
 
 ## 7. Multi-objective runs
 
-7.1. They have no target, and each run uses its whole evaluation budget.
+7.1. They have no target. Each run ends at its evaluation budget or at its time cap (rule 2.1).
 
 7.2. The front reported is the non-dominated part of the algorithm's final population, of the size the scenario sets. For SPEA2, that's its archive of that size. An unbounded archive of every solution ever evaluated isn't comparable: it would always look better.
 
@@ -124,11 +126,13 @@ The separate test runs are shown on the page, but they never pick a method or a 
 
 8.1. For every solver and scenario the results show:
 - the number of runs, and how many reached the target, as "k of n";
-- how many runs the time cap stopped before the target and the budget ("capped"): those are limited by speed, not by the search;
-- the expected running time (ERT) to the target, in evaluations and in seconds. It's the sum over all runs of the first hit's evaluations (time) in a run that reached the target and of all its evaluations (time) in a run that didn't, divided by the number of runs that reached it. With no run reaching it, the result is "not reached". The charts sort by it;
+- how many runs the time cap stopped before the target and the budget ("capped"), and the median share of the budget they used: those are limited by speed, not by the search;
+- the expected running time (ERT) to the target, in evaluations and in seconds. It's the sum over all runs of the first hit's evaluations (time) in a run that reached the target and of all its evaluations (time) in a run that didn't, divided by the number of runs that reached it. It needs at least 3 runs that reached the target. With fewer, the result shows how many reached it, such as "2/10 reached". The charts sort by it;
 - for all runs, the best value at the end: median, best and worst.
 
 A run that ends without reaching the target is reported as "not reached", with the value it got to. It's not a crash: it shows how close the method came within the budget.
+
+The charts show the capped runs apart from the runs that ended at the target or the budget, with the share of the budget they used.
 
 8.2. A scenario a library can't run is shown as such, with the reason.
 

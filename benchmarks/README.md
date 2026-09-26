@@ -29,10 +29,10 @@ Each library's page gives its methods, their sources, what it leaves out, its se
 The full protocol is in [rules.md](../docs/benchmarks/rules.md). In short:
 
 - **Problems:** every adapter implements the fitness functions below in its library's language. `run.py check` compares them with a Python reference.
-- **Stop:** the target, the evaluation budget or 60 seconds, whichever comes first. A method that converges starts again ([rule 2.2](../docs/benchmarks/rules.md#2-the-budget)).
-- **Seeds:** 10 per scenario. A solver whose first 3 seeds all reach the 60-second cap without the target stops there; `run.py` applies this to every library.
+- **Stop:** the target, the evaluation budget or the time cap, whichever comes first. The cap is 60 seconds with a target and 600 seconds for a multi-objective scenario. A method that converges or stalls starts again ([rule 2.2](../docs/benchmarks/rules.md#2-the-budget)).
+- **Seeds:** 10 per scenario. In a scenario with a target, a solver whose first 3 seeds all reach the time cap without the target stops there; `run.py` applies this to every library.
 - **Time:** measured inside the adapter, around the optimization only. Every library runs single-threaded, one run at a time.
-- **Results:** time and evaluations to target are the expected running time (ERT, [rule 8.1](../docs/benchmarks/rules.md#8-reporting)). Runs stopped by the time cap before their budget are "capped". The other results are medians.
+- **Results:** time and evaluations to target are the expected running time (ERT, [rule 8.1](../docs/benchmarks/rules.md#8-reporting)), given when at least 3 runs reached the target. A first hit after the time cap counts as not reached. Runs stopped by the time cap before their budget are "capped", and the charts show them apart. The other results are medians.
 - **Validation:** every timed run passes the checks of `run.py check`, or it's left out and listed.
 - **Matched:** configurations as equal as the libraries allow, with each library's own components. They measure framework cost and algorithm implementations.
 - **Idiomatic:** each library's recommended configuration, from its docs and examples, up to 3 solvers per problem type. They measure what its users get.
@@ -93,7 +93,7 @@ The Java and Julia adapters download their runtimes and packages into `~/opt` on
 ```sh
 cd benchmarks
 python run.py setup      # .venv with the Python libraries from requirements.txt (uses uv if installed)
-python run.py check     # test the adapters against the rules (a timed run needs it)
+python run.py check     # test the adapters against the rules (a timed run needs it), --jobs at a time
 python run.py --quick    # small scenarios, 3 seeds
 python run.py            # all scenarios, 10 seeds
 python run.py --scenarios nqueens-64-idiomatic --seeds 20 --libraries genetic_algorithm deap
@@ -107,7 +107,7 @@ A benchmark takes two steps. The timed run measures times and evaluations on the
 
 Each run writes the raw runs to `results/<timestamp>.json`, tables to `results/latest.md` (published as [docs/benchmarks/results.md](../docs/benchmarks/results.md)), and charts to `results/charts/`.
 
-**Rerunning some libraries.** `--update` reruns only the libraries of `--libraries`, on every scenario of the file with its seeds and time cap, and keeps the others' results:
+**Rerunning some libraries.** `--update` reruns only the libraries of `--libraries`, on every scenario of the file with its seeds and time caps, and keeps the others' results:
 
 ```sh
 python run.py --update results/<timestamp>.json --libraries genoxide genoxide_python

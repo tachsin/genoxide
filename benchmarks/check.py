@@ -14,16 +14,22 @@ For each library and scenario:
 - repeat (rule 5.2): the same seed, twice, must give the same evaluations and results, and seed 1
   must give the same alone as after seed 0 in the same process.
 
-A library passes when every scenario it runs passes. The result is saved with a hash of the
-adapter's files, the reference problems, the pinned Python libraries and, for genoxide, its sources;
-a timed run refuses a library whose hash changed since it last passed.
+The (library, scenario) pairs are checked in parallel, `--jobs` at a time, each in a process of its
+own; the output is grouped per library. A library passes when every scenario it runs passes. The
+result is saved with a hash of the adapter's files, the reference problems, the pinned Python
+libraries and, for genoxide, its sources; a timed run refuses a library whose hash changed since it
+last passed.
 """
 
+import concurrent.futures
+import fcntl
 import hashlib
 import json
 import math
+import os
 import resource
 import subprocess
+import tempfile
 import time
 
 import problems
@@ -209,22 +215,23 @@ def check_first_hit(r, where, reached):
     return failures
 
 
-def check_scenario(name, adapter, problem, size, mode, budget, usage):
-    """(ran, failures, notes) of one library in one scenario; adds the short runs' wall and CPU
-    seconds to `usage`."""
+def check_scenario(name, problem, size, mode, budget, cap):
+    """(ran, failures, notes, wall seconds, CPU seconds) of one library in one scenario, the seconds
+    of its short runs. It runs in a worker process of its own: RUSAGE_CHILDREN then counts only its
+    adapter processes."""
+    adapter = run.ADAPTERS[name]
     budget = min(budget, CHECK_EVALUATIONS)
-    command = adapter["command"] + [problem, str(size), mode, "0", "1", str(budget), str(CHECK_SECONDS)]
+    cap = min(cap, CHECK_SECONDS)
+    command = adapter["command"] + [problem, str(size), mode, "0", "1", str(budget), str(float(cap))]
     stdout, stderr, code, wall, cpu = execute(command)
     if code != 0:
-        return True, [f"the adapter failed: {stderr.strip()[-300:]}"], []
+        return True, [f"the adapter failed: {stderr.strip()[-300:]}"], [], 0.0, 0.0
     runs = runs_of(stdout)
     if not runs:
-        return False, [], []
+        return False, [], [], 0.0, 0.0
     failures = []
     for r in runs:
-        failures += check_run(r, problem, size, budget, CHECK_SECONDS)
-    usage[0] += wall
-    usage[1] += cpu
+        failures += check_run(r, problem, size, budget, cap)
     notes = [f"CPU/wall {cpu / wall:.2f}"] if wall > 0 else []
 
     # with a budget of evaluations only: seed 0 alone, seeds 0 and 1 in one process, seed 1 alone.
@@ -235,7 +242,7 @@ def check_scenario(name, adapter, problem, size, mode, budget, usage):
         command = adapter["command"] + [problem, str(size), mode, first, last, str(REPEAT_EVALUATIONS), "600"]
         stdout, stderr, code, _, _ = execute(command)
         if code != 0:
-            return True, failures + [f"repeat: the adapter failed: {stderr.strip()[-300:]}"], notes
+            return True, failures + [f"repeat: the adapter failed: {stderr.strip()[-300:]}"], notes, wall, cpu
         results[first, last] = {(r["solver"], r["seed"]): repeatable(r) for r in runs_of(stdout)}
     for (a, b, seed, what) in ((("0", "0"), ("0", "1"), 0, "seed 0 gives different results"),
                                (("0", "1"), ("1", "1"), 1, "seed 1 gives different results after seed 0 "
@@ -251,7 +258,7 @@ def check_scenario(name, adapter, problem, size, mode, budget, usage):
             failures.append(f"repeat: {what} for {', '.join(differ)}")
 
     failures += check_values(adapter, problem, size)
-    return True, failures, notes
+    return True, failures, notes, wall, cpu
 
 
 def repeatable(r):
@@ -270,50 +277,74 @@ def short(value, limit=80):
 # ------------------------------------------------------------------------------------------------
 
 
-def check(libraries, scenarios):
-    """Checks the libraries, prints and saves the outcome; returns whether they all passed."""
-    all_passed = True
+def check(libraries, scenarios, jobs=None):
+    """Checks the libraries, `jobs` scenarios at a time (default: one per core), prints the outcome
+    grouped per library and saves it; returns whether they all passed."""
     for name in libraries:
         adapter = run.ADAPTERS[name]
         if adapter.get("build"):
             print(f"building {name} adapter ...", flush=True)
             subprocess.run(adapter["build"], check=True)
-        library_failures = 0
-        usage = [0.0, 0.0]
-        for problem, size, mode, budget in scenarios:
-            scenario = run.scenario_name(problem, size, mode)
-            ran, failures, notes = check_scenario(name, adapter, problem, size, mode, budget, usage)
-            if not ran:
-                print(f"  {name} {scenario}: doesn't run", flush=True)
-                continue
-            status = "FAIL" if failures else "pass"
-            print(f"  {name} {scenario}: {status}{'  (' + ', '.join(notes) + ')' if notes else ''}", flush=True)
-            for failure in failures:
-                print(f"      {failure}", flush=True)
-            library_failures += len(failures)
-        wall, cpu = usage
-        if wall > 0:
-            ratio = cpu / wall
-            verdict = "FAIL: it used more than one thread" if ratio > THREADS else "pass"
-            print(f"  {name} threads: CPU {cpu:.1f} s over {wall:.1f} s of wall time ({ratio:.2f}): {verdict}",
-                  flush=True)
-            library_failures += ratio > THREADS
-        passed = library_failures == 0
-        all_passed &= passed
-        print(f"{name}: {'PASSED' if passed else f'FAILED ({library_failures} failures)'}", flush=True)
-        # only a check of every scenario counts for a timed run
-        if len(scenarios) == len(run.SCENARIOS):
-            save(name, {"hash": adapter_hash(name), "passed": passed, "date": time.strftime("%Y-%m-%d %H:%M")})
+    jobs = jobs or os.cpu_count()
+    print(f"checking {len(libraries)} libraries in {len(scenarios)} scenarios, {jobs} at a time ...", flush=True)
+    all_passed = True
+    with concurrent.futures.ProcessPoolExecutor(max_workers=jobs) as pool:
+        # each library's scenarios, in the order of the libraries, so the first ones finish first
+        futures = {name: [(scenario, pool.submit(check_scenario, name, *scenario))
+                          for scenario in scenarios]
+                   for name in libraries}
+        for name in libraries:
+            all_passed &= report(name, futures[name], len(scenarios) == len(run.SCENARIOS))
     return all_passed
 
 
+def report(name, futures, complete):
+    """Prints one library's checks, once they're all done, and saves the outcome if `complete`, a
+    check of every scenario; returns whether it passed."""
+    library_failures = 0
+    wall = cpu = 0.0
+    for (problem, size, mode, *_), future in futures:
+        scenario = run.scenario_name(problem, size, mode)
+        try:
+            ran, failures, notes, scenario_wall, scenario_cpu = future.result()
+        except Exception as error:  # the check itself failed: a failure of the library's check
+            ran, failures, notes, scenario_wall, scenario_cpu = True, [f"the check failed: {error!r}"], [], 0.0, 0.0
+        if not ran:
+            print(f"  {name} {scenario}: doesn't run", flush=True)
+            continue
+        wall += scenario_wall
+        cpu += scenario_cpu
+        status = "FAIL" if failures else "pass"
+        print(f"  {name} {scenario}: {status}{'  (' + ', '.join(notes) + ')' if notes else ''}", flush=True)
+        for failure in failures:
+            print(f"      {failure}", flush=True)
+        library_failures += len(failures)
+    if wall > 0:
+        ratio = cpu / wall
+        verdict = "FAIL: it used more than one thread" if ratio > THREADS else "pass"
+        print(f"  {name} threads: CPU {cpu:.1f} s over {wall:.1f} s of wall time ({ratio:.2f}): {verdict}",
+              flush=True)
+        library_failures += ratio > THREADS
+    passed = library_failures == 0
+    print(f"{name}: {'PASSED' if passed else f'FAILED ({library_failures} failures)'}", flush=True)
+    # only a check of every scenario counts for a timed run
+    if complete:
+        save(name, {"hash": adapter_hash(name), "passed": passed, "date": time.strftime("%Y-%m-%d %H:%M")})
+    return passed
+
+
 def save(name, entry):
-    """Records one library's check, re-reading the file first, so checks of other libraries running
-    at the same time aren't overwritten."""
+    """Records one library's check. The file is locked while it's re-read and replaced, so checks of
+    other libraries saved at the same time, from this process or another, aren't overwritten, and a
+    reader never sees it half written."""
     CHECK_FILE.parent.mkdir(exist_ok=True)
-    saved = json.loads(CHECK_FILE.read_text(encoding="utf-8")) if CHECK_FILE.exists() else {}
-    saved[name] = entry
-    CHECK_FILE.write_text(json.dumps(saved, indent=2), encoding="utf-8")
+    with open(CHECK_FILE.with_suffix(".lock"), "w", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        saved = json.loads(CHECK_FILE.read_text(encoding="utf-8")) if CHECK_FILE.exists() else {}
+        saved[name] = entry
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=CHECK_FILE.parent, delete=False) as file:
+            file.write(json.dumps(saved, indent=2))
+        os.replace(file.name, CHECK_FILE)
 
 
 def unchecked(libraries):
