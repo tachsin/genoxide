@@ -8,11 +8,13 @@ use crate::operators::{
     AnySelect, ListCrossover, OrderCrossovers, OrderMutation, RealCrossover, RealMutation,
     bit_flip, integer_mutation,
 };
+use crate::problems;
 use genoxide::algorithm::{GaBuilder, cmaes, pso};
 use genoxide::genome::Representation;
 use genoxide::multi::{self, Decomposition, MultiObjectiveAlgorithm, SmsEmoa};
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
+use genoxide::problems::DynProblem;
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -24,11 +26,13 @@ type Result<T> = std::result::Result<T, String>;
 
 /// Runs the optimization that `config` (JSON, from the Python package) describes, with
 /// `fitness`, called with a genome or, with `batch`, a generation of genomes; with `parallel`,
-/// from several threads at once. `on_generation` is called after every generation with the
-/// generation, the evaluations, the seconds and the best fitness (or the size of the front), and
-/// returns False to stop the run. Returns the result as a dict.
+/// from several threads at once. With `problem`, a test problem of `genoxide::problems` (JSON),
+/// the problem is evaluated in Rust instead, and `fitness` and `batch` aren't used.
+/// `on_generation` is called after every generation with the generation, the evaluations, the
+/// seconds and the best fitness (or the size of the front), and returns False to stop the run.
+/// Returns the result as a dict.
 #[pyfunction]
-#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None))]
+#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None))]
 pub fn run<'py>(
     py: Python<'py>,
     config: &str,
@@ -36,6 +40,7 @@ pub fn run<'py>(
     batch: bool,
     parallel: bool,
     on_generation: Option<Py<PyAny>>,
+    problem: Option<&str>,
 ) -> PyResult<Bound<'py, PyDict>> {
     // the error names the setting, e.g. `stop.generations`
     let mut json = serde_json::Deserializer::from_str(config);
@@ -43,6 +48,10 @@ pub fn run<'py>(
         let (path, error) = (error.path().to_string(), error.into_inner());
         PyValueError::new_err(format!("invalid setting `{path}`: {error}"))
     })?;
+    let problem = problem.map(problems::parse).transpose()?;
+    if let Some(problem) = &problem {
+        check_problem(problem.as_ref(), &run).map_err(PyValueError::new_err)?;
+    }
     let context = Context {
         shared: Shared::new(fitness, batch, on_generation),
         objectives: run
@@ -55,6 +64,7 @@ pub fn run<'py>(
             .collect(),
         stop: run.stop,
         parallel,
+        problem,
     };
     let result = match run.genome {
         config::Genome::Binary { length } => with_operators(
@@ -119,12 +129,34 @@ impl From<PyErr> for Failure {
 
 type Returns<'py> = std::result::Result<Bound<'py, PyDict>, Failure>;
 
+// a test problem runs with one objective and a real genome of its dimensions
+fn check_problem(problem: &dyn DynProblem, run: &config::Run) -> Result<()> {
+    if run.objectives.len() != 1 {
+        return Err(format!(
+            "{} has one objective: use a single-objective algorithm",
+            problem.name()
+        ));
+    }
+    let dimensions = problem.real().genome_len();
+    match &run.genome {
+        config::Genome::Real { bounds } if bounds.len() == dimensions => Ok(()),
+        config::Genome::Real { bounds } => Err(format!(
+            "{} has {dimensions} dimensions, but the genome has {} genes",
+            problem.name(),
+            bounds.len()
+        )),
+        _ => Err(format!("{} needs a Real genome", problem.name())),
+    }
+}
+
 // what a run needs besides the algorithm
 struct Context {
     shared: Shared,
     objectives: Vec<Objective>,
     stop: config::Stop,
     parallel: bool,
+    // a test problem, evaluated in Rust instead of the Python function
+    problem: Option<Box<dyn DynProblem>>,
 }
 
 impl Context {
@@ -374,15 +406,15 @@ where
     Ok(builder)
 }
 
-// something to do with the number of objectives as a constant
-trait WithObjectives {
+/// Something to do with the number of objectives as a constant.
+pub trait WithObjectives {
     type Output;
 
     fn with<const N: usize>(self) -> Self::Output;
 }
 
-// does `task` with `count` objectives, 2 to 6, or returns `Err(count)`
-fn with_objectives<T: WithObjectives>(
+/// Does `task` with `count` objectives, 2 to 6, or returns `Err(count)`.
+pub fn with_objectives<T: WithObjectives>(
     count: usize,
     task: T,
 ) -> std::result::Result<T::Output, usize> {
@@ -604,8 +636,12 @@ where
     let stop = context.stop(true)?;
     let shared = &context.shared;
     let parallel = context.parallel;
+    let fitness = Single {
+        shared,
+        problem: context.problem.as_deref(),
+    };
     let outcome = py.detach(|| {
-        Engine::new(algorithm, Single(shared))
+        Engine::new(algorithm, fitness)
             .stop_when(stop)
             .abort_flag(shared.abort_flag())
             .parallel(parallel)

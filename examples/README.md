@@ -7,8 +7,9 @@ README's YAML front matter (`title`, `category`, `summary`, `reference`, `refere
 builds its example pages from. CI runs every example in both languages.
 
 Both versions use the same algorithm, settings and seed, and print the same output. The exception
-is a fitness function with functions such as cosine, whose last bit can differ between Rust and
-numpy: the runs then drift apart, as in the Rastrigin example.
+is a fitness function in numpy with functions such as cosine, whose last bit can differ from
+Rust's: the runs then drift apart. The test problems of `genoxide.problems` are evaluated in Rust
+in both languages, so their runs don't.
 
 Run a Rust example from the root of the repository:
 
@@ -30,6 +31,8 @@ python examples/tsp_berlin52/main.py
 | [Travelling salesman (berlin52)](tsp_berlin52/) | permutation | Rust, Python |
 | [Job shop scheduling (ft06)](jobshop_ft06/) | permutation | Rust, Python |
 | [Rastrigin function](rastrigin/) | continuous | Rust, Python |
+| [Function suite](function_suite/) | continuous | Rust, Python |
+| [Himmelblau's function](himmelblau/) | continuous | Rust, Python |
 | [Pressure vessel design](pressure_vessel/) | constrained | Rust, Python |
 | [ZDT1](zdt1/) | multi-objective | Rust, Python |
 | [DTLZ2 with 3 objectives](dtlz2_3obj/) | multi-objective | Rust, Python |

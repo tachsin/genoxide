@@ -37,6 +37,7 @@ What genoxide has, as of 0.6. The [API documentation](https://docs.rs/genoxide) 
 - **Differential evolution:** rand/1, best/1, and current-to-pbest/1 with an archive. Fixed, dithered or adaptive parameters (JADE, SHADE, L-SHADE).
 - **Particle swarm optimization:** global or ring topology, constriction coefficients, velocity limits.
 - **Local search:** hill climbing (first-improvement or best-of-k, with plateau moves), simulated annealing, tabu search, iterated local search. Any mutation serves as the neighborhood.
+- **Test problems** (`problems`): Sphere, the axis-parallel ellipsoid, Schwefel 1.2 and 2.26, Rastrigin, Rosenbrock, Ackley, Griewank, Levy, Zakharov, Styblinski-Tang, Michalewicz, Himmelblau, Branin, Goldstein-Price and the six-hump camel, each with its bounds, known optimum and reference, in Rust and Python.
 
 ## Multi-objective
 
@@ -78,6 +79,8 @@ cargo run --release --example n_queens            # permutation, (μ+λ)
 cargo run --release --example tsp_berlin52        # TSPLIB berlin52, simulated annealing with 2-opt moves
 cargo run --release --example jobshop_ft06        # job shop ft06, permutation with repetition
 cargo run --release --example rastrigin           # real-valued, CMA-ES with IPOP restarts and L-SHADE
+cargo run --release --example function_suite      # CMA-ES, SHADE and PSO on twelve test functions
+cargo run --release --example himmelblau          # four global minima, by restarts of a local search
 cargo run --release --example pressure_vessel     # constrained mixed discrete-continuous design, SHADE
 cargo run --release --example zdt1                # two objectives, NSGA-II, hypervolume
 cargo run --release --example dtlz2_3obj          # three objectives, NSGA-III, hypervolume

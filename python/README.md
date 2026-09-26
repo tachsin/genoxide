@@ -38,6 +38,7 @@ More in [examples/](https://github.com/tachsin/genoxide/tree/main/examples), eac
 - OneMax, a knapsack with a constraint, and N-Queens
 - the travelling salesman (TSPLIB berlin52) and job shop scheduling (ft06)
 - Rastrigin with CMA-ES and L-SHADE, and the pressure vessel design with constraints
+- CMA-ES, SHADE and PSO on twelve test functions, and Himmelblau's four minima by restarts of a local search
 - ZDT1 with NSGA-II, and DTLZ2 with NSGA-III
 - XOR neuroevolution with CMA-ES
 
@@ -136,6 +137,25 @@ Operators:
 - **Local search acceptance:** `NotWorse()` (the default), `Improving()`, `Annealing(initial_temperature, cooling)`, `Tabu(tenure)`
 - **MOEA/D decomposition:** `Tchebycheff()` (the default), `Pbi(theta)` (penalty-based boundary intersection, `theta` 5 by default). `Pbi` spreads fronts of 3 or more objectives well.
 
+## Test problems and indicators
+
+`gx.problems` has classic test functions from the literature, such as `Rastrigin(dimensions)`,
+`Rosenbrock(dimensions)` and `Branin()`, all minimized. Each gives its `genome`, `objective`,
+`optimum` (`value`, `solutions`, `proven`) and `reference`, and is a fitness function that `run`
+evaluates in Rust, with no Python call: `parallel=True` uses every core, and a seed gives the same
+result as in Rust. `problem(x)` and `problem.evaluate(genomes)` run the same code.
+
+```python
+problem = gx.problems.Rastrigin(10)
+de = gx.De(problem.genome, objective=problem.objective, seed=1)
+result = de.run(problem, target=problem.optimum.value + 1e-8, evaluations=200_000)
+print(result.best_fitness, result.evaluations, problem.reference)
+```
+
+`gx.indicators` measures multi-objective fronts, a point per row: `hypervolume(front,
+reference_point)`, `igd`, `igd_plus`, `gd` and `spread` against a reference front, each with
+`objectives` ("minimize" by default).
+
 ## Stopping
 
 `run` stops at the first of its stop conditions, and needs at least one:
@@ -173,7 +193,7 @@ The package covers a subset of the Rust library. These parts are only in Rust:
 - operators of your own
 - checkpoints, to save and resume a run
 - observers: statistics, a hall of fame and reports
-- the multi-objective indicators (hypervolume, IGD and others) and test problems
+- the multi-objective test problems (ZDT and DTLZ)
 - stop conditions combined with `and`, and custom ones
 - penalty functions for constraints, and the NaN policy: in Python, NaN is always an invalid solution
 - advanced settings:
