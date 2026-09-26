@@ -17,5 +17,5 @@ ft06 has 6 jobs and 6 machines, and its optimal makespan is 55. The example uses
 the 36 operations as a sequence of jobs (operation k counts for job k / 6), and decodes it into a
 semi-active schedule: the n-th time a job appears, its n-th operation starts as early as its job
 and its machine allow. A genetic algorithm with a population of 100, order crossover and swap
-mutation searches the sequences until it reaches 55; the example prints the best makespan and each machine's jobs in
-order.
+mutation searches the sequences until it reaches 55. The example prints the best makespan and
+each machine's jobs in order.

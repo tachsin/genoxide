@@ -16,4 +16,5 @@ distances in TSPLIB's EUC_2D metric (the Euclidean distance rounded to the neare
 an optimal tour of length 7542. A permutation genome is the order of the visits. The example runs
 local search with inversion neighbors, a random 2-opt move that reverses a segment of the tour,
 and simulated annealing from a temperature of 100 cooled by 0.99996 per step, until it finds the
-optimum or for at most 200,000 evaluations. It prints the length of the best tour and the tour from location 1.
+optimum or for at most 200,000 evaluations. It prints the length of the best tour and the tour
+from location 1.
