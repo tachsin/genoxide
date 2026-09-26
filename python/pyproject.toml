@@ -24,7 +24,7 @@ dynamic = ["version"]
 
 [project.urls]
 Repository = "https://github.com/tachsin/genoxide"
-Documentation = "https://tachsin.github.io/genoxide/"
+Documentation = "https://tachsin.github.io/genoxide/api/python/"
 
 [project.optional-dependencies]
 test = ["pytest>=8"]

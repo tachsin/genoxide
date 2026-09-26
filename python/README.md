@@ -6,7 +6,7 @@ The algorithms of [genoxide](https://github.com/tachsin/genoxide), a Rust librar
 - differential evolution, CMA-ES and particle swarm optimization
 - NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives
 
-The API reference: [tachsin.github.io/genoxide](https://tachsin.github.io/genoxide/)
+The API reference: [tachsin.github.io/genoxide/api/python](https://tachsin.github.io/genoxide/api/python/)
 
 ```python
 import numpy as np
