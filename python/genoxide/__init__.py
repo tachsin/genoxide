@@ -24,6 +24,10 @@ A fitness function takes a genome as a numpy array (``bool`` for :class:`Binary`
 ``batch=True``, it takes a whole generation as a 2-D array, a genome per row, and returns an array
 of scores: at most one call per generation, for vectorized numpy code.
 
+:mod:`genoxide.problems` has test problems from the literature, single- and multi-objective,
+which ``run`` evaluates in Rust, and :mod:`genoxide.indicators` the quality indicators of
+multi-objective fronts.
+
 A run stops at the first of its stop conditions: ``generations``, ``evaluations``, ``target``,
 ``time`` (seconds) and ``stagnation`` (generations without improvement), or when its
 ``on_generation`` callback returns False.
@@ -111,6 +115,9 @@ __all__ = [
     "MultiResult",
     "Progress",
     "MultiProgress",
+    # submodules
+    "problems",
+    "indicators",
 ]
 
 ObjectiveName = Literal["maximize", "minimize"]
@@ -903,6 +910,7 @@ class _Algorithm:
         batch: bool,
         parallel: bool,
         on_generation: Callable[[int, int, float, Any], bool] | None,
+        problem: str | None = None,
     ) -> dict[str, Any]:
         run = {
             "genome": self._genome._describe(),
@@ -912,7 +920,9 @@ class _Algorithm:
         }
         # NaN and infinity aren't JSON: the settings are finite, or an error names them
         description = json.dumps(run, default=_json_number, allow_nan=False)
-        return _genoxide.run(description, fitness, bool(batch), bool(parallel), on_generation)
+        return _genoxide.run(
+            description, fitness, bool(batch), bool(parallel), on_generation, problem
+        )
 
 
 class _SingleObjective(_Algorithm):
@@ -944,14 +954,16 @@ class _SingleObjective(_Algorithm):
 
         Parameters
         ----------
-        fitness : callable
+        fitness : callable or problems.Problem
             Takes a genome as a 1-D numpy array and returns a number, None or NaN (an invalid
             solution), or a tuple ``(score, constraint_violation)``. The violation is 0 for a
             feasible solution and positive for an infeasible one. With ``batch=True``, it takes a
             generation as a 2-D array, a genome per row, and returns an array of scores (NaN for
             an invalid solution), or a tuple of an array of scores and an array of constraint
             violations; a column of shape ``(n, 1)`` does for an array. The function must be
-            deterministic.
+            deterministic. A problem of :mod:`genoxide.problems` is evaluated in Rust, with no
+            Python call: ``batch`` doesn't apply, and the genome must be a :class:`Real` with a
+            gene per dimension of the problem.
         generations : int, optional
             Stops after this many generations, 0 or more. 0 evaluates only the initial
             population.
@@ -970,7 +982,8 @@ class _SingleObjective(_Algorithm):
             copies of their parents.
         parallel : bool, default False
             Calls a non-batch ``fitness`` from several threads at once. It pays off when the
-            function releases the GIL (numpy on large arrays, I/O), or on free-threaded Python.
+            function releases the GIL (numpy on large arrays, I/O), or on free-threaded Python,
+            and for a problem of :mod:`genoxide.problems`, which runs without the GIL.
         on_generation : callable, optional
             Called with a :class:`Progress` after every generation, the initial population
             (generation 0) included, on the thread that called ``run``. If it returns False, the
@@ -989,8 +1002,10 @@ class _SingleObjective(_Algorithm):
         ValueError
             Without a stop condition; for a wrong setting of the run, the algorithm, its genome
             or its operators, or an operator that doesn't fit the genome (the message names the
-            setting); and for a wrong fitness result: a negative constraint violation, or a
-            batch result with a length other than the number of genomes.
+            setting); for a problem whose genome isn't a :class:`Real` of its dimensions, or a
+            multi-objective problem; and for
+            a wrong fitness result: a negative constraint violation, or a batch result with a
+            length other than the number of genomes.
         TypeError
             If ``fitness`` or ``on_generation`` isn't callable, or ``fitness`` returns something
             that isn't a number. Another error converting a result, e.g. an ``OverflowError`` for
@@ -1000,9 +1015,17 @@ class _SingleObjective(_Algorithm):
             raises it. So does ``KeyboardInterrupt`` on Ctrl+C.
         """
         _check_callable(fitness)
+        if isinstance(fitness, problems.MultiProblem):
+            raise ValueError(
+                f"{type(fitness).__name__} has {len(fitness.objectives)} objectives: use a "
+                "multi-objective algorithm"
+            )
         stop = _stop(generations, evaluations, target, time, stagnation)
-        function = _batch_scores(fitness) if batch else fitness
         callback = _on_generation(on_generation, Progress)
+        if isinstance(fitness, problems.Problem):
+            description = fitness._json()
+            return Result(**self._run(fitness, stop, False, parallel, callback, description))
+        function = _batch_scores(fitness) if batch else fitness
         return Result(**self._run(function, stop, batch, parallel, callback))
 
 
@@ -1379,7 +1402,10 @@ class _MultiObjective(_Algorithm):
             solution and positive for an infeasible one. With ``batch=True``, it takes a
             generation as a 2-D array, a genome per row, and returns a 2-D array with a row of
             objective values per genome, or a tuple of it and an array of constraint violations.
-            The function must be deterministic.
+            The function must be deterministic. A multi-objective problem of
+            :mod:`genoxide.problems` is evaluated in Rust, with no Python call: ``batch`` doesn't
+            apply, and the genome must be a :class:`Real` with a gene per variable of the
+            problem, and the objectives the problem's, all "minimize".
         generations : int, optional
             Stops after this many generations, 0 or more. 0 evaluates only the initial
             population.
@@ -1415,7 +1441,9 @@ class _MultiObjective(_Algorithm):
         ValueError
             Without a stop condition; for a wrong setting of the run, the algorithm, its genome
             or its operators, an operator that doesn't fit the genome, or other than 2 to 6
-            objectives (the message names the setting); and for a wrong fitness result: the
+            objectives (the message names the setting); for a single-objective problem of
+            :mod:`genoxide.problems`, or a multi-objective one whose objectives, number of genes
+            or genome don't match the algorithm's; and for a wrong fitness result: the
             wrong number of objective values, a negative constraint violation, a batch result
             that isn't a 2-D array, or one with a number of rows other than the number of genomes.
         TypeError
@@ -1427,9 +1455,16 @@ class _MultiObjective(_Algorithm):
             raises it. So does ``KeyboardInterrupt`` on Ctrl+C.
         """
         _check_callable(fitness)
+        if isinstance(fitness, problems.Problem):
+            raise ValueError(
+                f"{type(fitness).__name__} has one objective: use a single-objective algorithm"
+            )
         stop = _stop(generations, evaluations, None, time, stagnation)
-        function = _batch_objectives(fitness) if batch else fitness
         callback = _on_generation(on_generation, MultiProgress)
+        if isinstance(fitness, problems.MultiProblem):
+            description = fitness._json()
+            return MultiResult(**self._run(fitness, stop, False, parallel, callback, description))
+        function = _batch_objectives(fitness) if batch else fitness
         return MultiResult(**self._run(function, stop, batch, parallel, callback))
 
 
@@ -1444,8 +1479,8 @@ class Nsga2(_MultiObjective):
 
     Pairs of parents are recombined with probability ``crossover_rate`` (default 0.9), and each
     child is mutated with probability ``mutation_rate`` (default 1). With ``eliminate_duplicates``
-    (the default, as in pymoo), a child that equals a member of the population or an earlier child
-    is dropped and another bred instead, which keeps the population and its front free of copies;
+    (the default), a child that equals a member of the population or an earlier child is dropped
+    and another bred instead, which keeps the population and its front free of copies;
     :class:`Nsga3`, :class:`Spea2` and :class:`SmsEmoa` have it too.
 
     Parameters
@@ -1805,3 +1840,7 @@ class SmsEmoa(_MultiObjective):
             "seed": _optional_whole("seed", self.seed),
             "variation": self._variation(),
         }
+
+
+# the submodules use the classes above
+from . import indicators, problems  # noqa: E402

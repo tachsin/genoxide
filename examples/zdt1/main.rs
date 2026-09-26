@@ -9,12 +9,12 @@
 
 use genoxide::Objective::Minimize;
 use genoxide::multi::indicator::hypervolume;
-use genoxide::multi::problems::{TestProblem, Zdt1};
+use genoxide::multi::problems::{MultiProblem, Zdt1};
 use genoxide::prelude::*;
 
 fn main() -> Result<()> {
     let problem = Zdt1::new(30);
-    let nsga2 = Nsga2::builder(problem.real(), [Minimize; 2])
+    let nsga2 = Nsga2::builder(problem.representation(), [Minimize; 2])
         .population_size(100)
         .crossover(SimulatedBinaryCrossover::new(15.0)?)
         .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0)?)

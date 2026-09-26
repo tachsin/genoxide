@@ -106,6 +106,7 @@ Stops: `Stop::target(score)` (at least as good), `generations(n)`, `evaluations(
 - Maximize is the default; use `.minimize()`, don't negate.
 - `None`, `Fitness::invalid()` and NaN are invalid: worse than everything.
 - **Constraints:** return `(score, violation)`, 0 when feasible, adding up `constraint::at_most(value, limit)`, `at_least`, `equal(value, target, tolerance)`. Deb's rules: feasible beats infeasible, then score or violation decides. Select with `Tournament` or `Rank`: roulette and SUS give infeasible solutions no weight. `Penalty::new(weight)?.fitness(objective, score, violation)` is a static penalty instead.
+- **Test problems:** `problems::{Sphere, AxisParallelEllipsoid, Schwefel1_2, Rastrigin, Rosenbrock, Ackley, Griewank, Schwefel2_26, Levy, Zakharov, StyblinskiTang, Michalewicz}::new(n)` and `problems::{Himmelblau, Branin, GoldsteinPrice, SixHumpCamel}` are fitness functions for `Engine::new(algorithm, problem)`, all minimized. The `problems::Problem` trait gives `representation()` (the bounds), `optimum()` (`value()`, `solutions()`), `reference()`; `problems::all()` lists them as `Box<dyn DynProblem>`.
 - **Batch:** `Batch(|genomes: &[&G]| -> Vec<T>)` scores a generation in one call, in order (SIMD, GPU, remote), in `Engine` or `MultiEngine`; the slice can be empty. A wrong count is `Error::FitnessCount`. See `examples/gpu` (wgpu).
 
 ## Templates
@@ -560,7 +561,7 @@ fn main() -> genoxide::Result<()> {
 - Objective counts are typed: `[f64; 3]` for 2 objectives doesn't compile.
 - Constrained dominance: feasible first, then the smaller violation (`multi::dominates`). `Stop::stagnation` counts generations without a new non-dominated solution; `Stop::target` isn't available.
 - `multi::non_dominated_sort`, `multi::crowding_distance`; `multi::ParetoArchive::new(objectives)` with `.on_generation(|snapshot| archive.update(snapshot))` keeps every non-dominated solution.
-- Test problems: `multi::problems::{Zdt1, Zdt2, Zdt3, Zdt4, Zdt6, Dtlz1, Dtlz2, Dtlz3, Dtlz4}`, with `TestProblem::real()` and `optimal_front(points)`.
+- Test problems: `multi::problems::{Zdt1, Zdt2, Zdt3, Zdt4, Zdt6}::new(n)`, `{Dtlz1, Dtlz2, Dtlz3, Dtlz4}::<M>::new(n)`, `{FonsecaFleming, Kursawe}::new(n)`, `Schaffer1`, `Schaffer2`, `Poloni`, `Viennet1`/`2`/`3` (3 objectives), and the constrained `Bnh`, `Srn`, `Tnk`, `Osy`, `Constr` (fitness `([f64; 2], violation)`), all minimized, for `MultiEngine::new(algorithm, problem)`. The `multi::problems::MultiProblem<M>` trait gives `representation()`, `optimal_front(points)` (`Option`: `None` for KUR, POL, VNT2, VNT3), `ideal_point()`, `nadir_point()`, `constraints(&x)` (`g <= 0`), `reference()`; `multi::problems::all::<M>()` lists them as `Box<dyn DynMultiProblem<M>>`.
 - `multi::indicator`: `hypervolume(&front, &reference_point, &objectives)`, `hypervolume_contributions`; `igd_plus`, `igd`, `gd`, `spread` against a reference front.
 
 ### Local search: hill climbing and simulated annealing
@@ -696,4 +697,4 @@ every = 50
 - **Reproducible:** a seed gives the same results on every platform and thread count, parallel or not.
 - **Ties:** the earlier individual wins.
 - **The best is kept:** `outcome.best()` is the best individual ever evaluated.
-- **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `multi::problems` constructor with too few variables, and a `Batch` returning no score for a single genome.
+- **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `problems` or `multi::problems` constructor with too few dimensions or variables, and a `Batch` returning no score for a single genome.

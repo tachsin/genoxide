@@ -38,7 +38,9 @@ More in [examples/](https://github.com/tachsin/genoxide/tree/main/examples), eac
 - OneMax, a knapsack with a constraint, and N-Queens
 - the travelling salesman (TSPLIB berlin52) and job shop scheduling (ft06)
 - Rastrigin with CMA-ES and L-SHADE, and the pressure vessel design with constraints
+- CMA-ES, SHADE and PSO on twelve test functions, and Himmelblau's four minima by restarts of a local search
 - ZDT1 with NSGA-II, and DTLZ2 with NSGA-III
+- the constrained BNH with NSGA-II, and Kursawe's disconnected front with SPEA2 and NSGA-II
 - XOR neuroevolution with CMA-ES
 
 ## Install
@@ -130,7 +132,7 @@ A solution that couldn't be scored has NaN objective values and a NaN violation.
 - `Moead` solves a single-objective subproblem per weight vector.
 - `das_dennis(objectives, divisions)` gives evenly spread directions or weights for `Nsga3` and `Moead`, a row each: 91 for 3 objectives and 12 divisions.
 - `Spea2` keeps an archive of the best solutions, the non-dominated ones first, truncated by the distance to their nearest neighbors.
-- `Nsga2`, `Nsga3`, `Spea2` and `SmsEmoa` drop a child that equals a member of the population or an earlier child, and breed another, as pymoo does. `eliminate_duplicates=False` keeps copies.
+- `Nsga2`, `Nsga3`, `Spea2` and `SmsEmoa` drop a child that equals a member of the population or an earlier child, and breed another. `eliminate_duplicates=False` keeps copies.
 - `SmsEmoa` removes the solutions that contribute the least hypervolume, from the last front that fits partly. It costs more per generation than `Nsga2`: O(N log N) per removal for 2 objectives, O(N²) for 3, O(N³) for 4 and O(N⁴) for 5. For 4 or 5 objectives, `Nsga3` or `Moead` are better choices.
 
 Every algorithm takes a `seed`. The same seed repeats a run exactly: one genome at a time, in batches or in parallel.
@@ -149,6 +151,46 @@ Operators:
 - **Genetic algorithm schemes:** `Generational(elitism)` (the default, with 1), `SteadyState(replacements)`, `MuPlusLambda(offspring)`, `MuCommaLambda(offspring)`
 - **Local search acceptance:** `NotWorse()` (the default), `Improving()`, `Annealing(initial_temperature, cooling)`, `Tabu(tenure)`
 - **MOEA/D decomposition:** `Tchebycheff()` (the default), `Pbi(theta)` (penalty-based boundary intersection, `theta` 5 by default). `Pbi` spreads fronts of 3 or more objectives well.
+
+## Test problems and indicators
+
+`gx.problems` has classic test functions from the literature, such as `Rastrigin(dimensions)`,
+`Rosenbrock(dimensions)` and `Branin()`, all minimized. Each gives its `genome`, `objective`,
+`optimum` (`value`, `solutions`, `proven`) and `reference`, and is a fitness function that `run`
+evaluates in Rust, with no Python call: `parallel=True` uses every core, and a seed gives the same
+result as in Rust. `problem(x)` and `problem.evaluate(genomes)` run the same code.
+
+```python
+problem = gx.problems.Rastrigin(10)
+de = gx.De(problem.genome, objective=problem.objective, seed=1)
+result = de.run(problem, target=problem.optimum.value + 1e-8, evaluations=200_000)
+print(result.best_fitness, result.evaluations, problem.reference)
+```
+
+The multi-objective problems, `Zdt1` to `Zdt6`, `Dtlz1(objectives, variables)` to `Dtlz4`,
+`Schaffer1`, `Schaffer2`, `FonsecaFleming`, `Kursawe`, `Poloni`, `Viennet1` to `Viennet3` and the
+constrained `Bnh`, `Srn`, `Tnk`, `Osy` and `Constr`, run with the multi-objective algorithms in the
+same way. Each gives its `objectives`, for the algorithm, and `optimal_front(points)`, None where
+the front isn't known; a constrained one returns `(objectives, violation)` and gives its
+`constraints(x)`.
+
+```python
+problem = gx.problems.Dtlz2(objectives=3)
+nsga3 = gx.Nsga3(
+    problem.genome,
+    objectives=problem.objectives,
+    reference_directions=gx.das_dennis(3, 12),
+    crossover=gx.SimulatedBinaryCrossover(30),
+    mutation=gx.PolynomialMutation(20, rate=1 / problem.dimensions),
+    seed=1,
+)
+result = nsga3.run(problem, generations=100)
+print(gx.indicators.igd(result.front_objectives, problem.optimal_front(91)))
+```
+
+`gx.indicators` measures multi-objective fronts, a point per row: `hypervolume(front,
+reference_point)`, `igd`, `igd_plus`, `gd` and `spread` against a reference front, each with
+`objectives` ("minimize" by default).
 
 ## Stopping
 
@@ -187,7 +229,6 @@ The package covers a subset of the Rust library. These parts are only in Rust:
 - operators of your own
 - checkpoints, to save and resume a run
 - observers: statistics, a hall of fame and reports
-- the multi-objective indicators (hypervolume, IGD and others) and test problems
 - stop conditions combined with `and`, and custom ones
 - penalty functions for constraints, and the NaN policy: in Python, NaN is always an invalid solution
 - advanced settings:

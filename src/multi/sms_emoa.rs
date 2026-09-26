@@ -18,16 +18,18 @@ use rand::Rng;
 ///
 /// 1. Parents are chosen by binary tournament: the smaller constraint violation, then Pareto
 ///    dominance, then a coin flip. Pairs are recombined and mutated as in
-///    [`Nsga2`](super::Nsga2): `offspring` children (the population size by default, as in
-///    pymoo; 1 for the original steady-state algorithm).
+///    [`Nsga2`](super::Nsga2): `offspring` children (the population size by default, a
+///    generational variant; 1 for the original steady-state algorithm of Beume, Naujoks and
+///    Emmerich, 2007, European Journal of Operational Research 181(3): 1653-1669,
+///    doi:10.1016/j.ejor.2006.08.008).
 /// 2. Parents and children compete: the next population takes whole fronts, best first. From the
 ///    last front that fits partly, the member with the smallest
 ///    [hypervolume contribution](super::indicator::hypervolume_contributions) is removed, one at
 ///    a time, until the rest fits. The contributions are computed with the objectives normalized
 ///    by the best and worst feasible values of parents and children, and the reference point at
-///    11 in each normalized objective (pymoo's), so every point is inside it and the extremes of
-///    the front are kept. (pymoo normalizes by the parents only, which can put a far child beyond
-///    the reference point and drop it first, even when it's the best in another objective.)
+///    11 in each normalized objective, so every point is inside it and the extremes of the front
+///    are kept. Normalizing by the parents only could put a far child beyond the reference point
+///    and drop it first, even when it's the best in another objective.
 ///
 /// Maximizing the hypervolume gives fronts that are well spread and converged, at a higher cost
 /// per generation than NSGA-II: O(N log N) per removal for 2 objectives, O(N²) for 3, O(N³) for
@@ -39,11 +41,11 @@ use rand::Rng;
 /// ```
 /// use genoxide::Objective::Minimize;
 /// use genoxide::multi::SmsEmoa;
-/// use genoxide::multi::problems::{TestProblem, Zdt1};
+/// use genoxide::multi::problems::{MultiProblem, Zdt1};
 /// use genoxide::prelude::*;
 ///
 /// let problem = Zdt1::new(30);
-/// let sms_emoa = SmsEmoa::builder(problem.real(), [Minimize; 2])
+/// let sms_emoa = SmsEmoa::builder(problem.representation(), [Minimize; 2])
 ///     .population_size(100)
 ///     .crossover(SimulatedBinaryCrossover::new(15.0)?)
 ///     .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0)?)
@@ -517,7 +519,7 @@ impl<R: Representation, const M: usize, C, X> SmsEmoaBuilder<R, M, C, X> {
 
     /// Whether a child that equals a member of the population, or an earlier child of the same
     /// generation, is dropped and another bred instead, which keeps the population and its front
-    /// free of copies. On by default, as in pymoo. When copies are all a population can breed,
+    /// free of copies. On by default. When copies are all a population can breed,
     /// after 100 dropped children per child needed, copies are accepted.
     pub fn eliminate_duplicates(mut self, eliminate: bool) -> Self {
         self.eliminate_duplicates = eliminate;

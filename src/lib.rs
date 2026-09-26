@@ -44,6 +44,8 @@
 //! - [`multi`]: multi-objective optimization: NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA, the
 //!   [`MultiEngine`](multi::MultiEngine), Pareto dominance and non-dominated sorting
 //! - [`observer`]: statistics, hall of fame, progress lines and custom callbacks
+//! - [`problems`]: single-objective test problems from the literature, with their bounds, known
+//!   optima and references
 //! - [`prelude`]: everything above in one import
 //!
 //! Cargo features:
@@ -81,6 +83,7 @@ pub mod observer;
 pub mod operator;
 pub mod population;
 pub mod prelude;
+pub mod problems;
 pub mod rng;
 #[cfg(feature = "serde")]
 mod serde_arrays;

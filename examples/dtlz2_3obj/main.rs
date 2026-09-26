@@ -11,7 +11,7 @@
 
 use genoxide::Objective::Minimize;
 use genoxide::multi::indicator::hypervolume;
-use genoxide::multi::problems::{Dtlz2, TestProblem};
+use genoxide::multi::problems::{Dtlz2, MultiProblem};
 use genoxide::prelude::*;
 
 const VARIABLES: usize = 12;
@@ -19,7 +19,7 @@ const VARIABLES: usize = 12;
 fn main() -> Result<()> {
     let problem = Dtlz2::<3>::new(VARIABLES);
     let directions = multi::das_dennis::<3>(12);
-    let nsga3 = Nsga3::builder(problem.real(), [Minimize; 3], directions)
+    let nsga3 = Nsga3::builder(problem.representation(), [Minimize; 3], directions)
         .population_size(92)
         .crossover(SimulatedBinaryCrossover::new(30.0)?)
         .mutate(PolynomialMutation::per_gene(1.0 / VARIABLES as f64, 20.0)?)

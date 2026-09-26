@@ -16,6 +16,6 @@ sphere, which puts a local minimum at every integer point around the global mini
 origin. The example minimizes it in 30 dimensions with two algorithms, each with a budget of
 1,000,000 evaluations and a target of 1e-8: CMA-ES with IPOP restarts, whose population doubles
 at each restart, and L-SHADE, a differential evolution whose population shrinks over the budget.
-It prints the best value each one found and the evaluations it took. The Python version evaluates
-a whole generation per call of a vectorized numpy function, whose cosines and sums can differ from
-Rust's in the last bit, so the evaluations CMA-ES takes can differ between the two languages.
+It prints the best value each one found and the evaluations it took. The function is genoxide's
+`problems::Rastrigin`, which the Python version's `run` evaluates in Rust, so both versions print
+the same output.
