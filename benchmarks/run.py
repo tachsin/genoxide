@@ -1066,6 +1066,71 @@ def draw_charts(results, out_dir, formats=("svg",)):
                 axis.yaxis.set_major_formatter(ticks)
         save(figure, name)
 
+    # --- the summary: each library's fastest method in each scenario ------------------------------
+    best = {}
+    for row in rows:
+        key = (row["scenario"], row["library"])
+        if row["ert_time"] is not None and (key not in best or row["ert_time"] < best[key]["ert_time"]):
+            best[key] = row
+    if best:
+        columns, column_width, label_width, bar_height = 3, 3.93, 1.45, 0.17
+        rows_of_panels = [scenarios[i:i + columns] for i in range(0, len(scenarios), columns)]
+        tallest = [max(len([key for key in best if key[0] == scenario]) for scenario in row) for row in rows_of_panels]
+        subtitle = (f"{context} · the fastest method of each library, by expected running time (ERT): what all runs "
+                    f"spent, up to the first hit in those that reached the target, divided by the runs that reached "
+                    f"it · matched: the same algorithm in every library; idiomatic: each library's recommended "
+                    f"methods · every method, the budgets and the rules: docs/benchmarks")
+        subtitle = textwrap.fill(subtitle, 200)
+        header = 0.62 + subtitle.count("\n") * 0.14 + 0.2
+        panel_heights = [count * bar_height + 0.1 for count in tallest]
+        height = header + sum(h + 0.42 + 0.62 for h in panel_heights)
+        figure = plt.figure(figsize=(width, height))
+        figure.patch.set_facecolor("white")
+        figure.text(margin / width, 1 - 0.12 / height, "Time to target: each library's fastest method (lower is better)",
+                    fontsize=12.5, fontweight="bold", va="top")
+        figure.text(margin / width, 1 - 0.40 / height, subtitle, fontsize=7.8, color="#555555", va="top",
+                    linespacing=1.3)
+        y = height - header
+        for panel_row, panel_height_ in zip(rows_of_panels, panel_heights):
+            y -= 0.42 + panel_height_
+            for column, scenario in enumerate(panel_row):
+                left = margin + column * column_width + label_width
+                axis = figure.add_axes((left / width, y / height, (column_width - label_width - 0.25) / width,
+                                        panel_height_ / height))
+                group = sorted((row for key, row in best.items() if key[0] == scenario), key=lambda row: row["ert_time"])
+                positions = list(range(len(group)))[::-1]
+                values = [row["ert_time"] for row in group]
+                axis.barh(positions, values, height=0.72, color=[colors[row["library"]] for row in group], linewidth=0)
+                axis.set_xscale("log")
+                axis.set_xlim(min(values) / 2.5, max(values) * 40)
+                axis.set_ylim(-0.6, len(group) - 0.4)
+                for position, row in zip(positions, group):
+                    axis.text(row["ert_time"] * 1.12, position, format_seconds(row["ert_time"]), va="center",
+                              fontsize=6.3, color="#222222")
+                axis.set_yticks(positions, [label(row["library"], row["solver"]) for row in group], fontsize=6.6)
+                for tick_label, row in zip(axis.get_yticklabels(), group):
+                    if row["library"] in GENOXIDE_COLORS:
+                        tick_label.set_fontweight("bold")
+                axis.xaxis.set_major_locator(LogLocator(base=10, numticks=6))
+                axis.xaxis.set_major_formatter(time_ticks)
+                axis.tick_params(axis="y", length=0, pad=2)
+                axis.tick_params(axis="x", labelsize=6.3, length=2, pad=1.5)
+                axis.grid(axis="x", color="#e8e8e8", linewidth=0.5)
+                axis.grid(axis="y", visible=False)
+                axis.spines[["top", "right"]].set_visible(False)
+                axis.set_title(scenario_title(scenario), fontsize=8.2, loc="left", fontweight="bold", pad=4,
+                               x=-label_width / (column_width - label_width - 0.25))
+                ran = sorted({row["library"] for row in rows if row["scenario"] == scenario})
+                others = [LIBRARY_NAMES.get(name, name) for name in ran if (scenario, name) not in best]
+                if others:
+                    # under the panel's time axis
+                    figure.text((margin + column * column_width) / width, (y - 0.27) / height,
+                                textwrap.fill(f"Fewer than {ERT_REACHED} of {results['seeds']} runs reached the "
+                                              f"target: {', '.join(others)}", 80),
+                                fontsize=6.2, color="#666666", va="top", linespacing=1.25)
+            y -= 0.62
+        save(figure, "summary")
+
     # --- how close every run got: the distance to the optimum at the end (rule 8.1) -----------------
     # the runs the time cap stopped apart from the others
     gap_rows = summarize(runs, caps, split=True)
