@@ -84,7 +84,7 @@ N-Queens 64 (budget 1,000,000):
 **Keeping going:**
 - `ga`, `de`: no convergence criterion; the evaluation limits are lifted.
 - `cma_es`: an attempt ends when the covariance matrix degenerates and `checkEigenCorrectness` fails (it sets the evaluations to the maximum); the adapter restarts it from a new random point.
-- **Workaround of a crash (rule 8.4):** when the covariance matrix holds NaN, `CMAESUtils.tql2` throws `ArrayIndexOutOfBoundsException`. The adapter catches it and starts a new attempt. The tables show both: `cma_es` with the workaround, `cma_es (as-is)` (`JMETAL_CMAES_AS_IS=1`) ending at the first crash with the best so far. On Rastrigin 30 and Ackley 30 the time cap stops most runs before any crash.
+- **Workaround of a crash (rule 8.4):** when the covariance matrix holds NaN, `CMAESUtils.tql2` throws `ArrayIndexOutOfBoundsException`. The adapter catches it and starts a new attempt. The tables show both: `cma_es` with the workaround, `cma_es (as-is)` (`JMETAL_CMAES_AS_IS=1`) ending at the first crash with the best so far. In the separate tests, the time cap stopped most runs on Rastrigin 30 and Ackley 30 before any crash.
 
 **Left out:**
 - Standard PSO 2007 and 2011 (StandardPSO2007Runner.java, StandardPSO2011Runner.java): fourth in the docs' order.

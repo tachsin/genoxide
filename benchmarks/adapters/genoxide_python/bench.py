@@ -11,31 +11,28 @@ its solutions), see ../../README.md for the fields. The second reads one JSON so
 from stdin and prints its value (or its list of objectives), with the fitness functions below. The
 third compares the fitness functions with problems.py at random points.
 
-The methods are those the Python package's own docs (python/README.md, python/examples/ and the
-docstrings of python/genoxide/__init__.py) present for the problem type, chosen as rule 6.2 says;
-they're not the Rust adapter's, which follow the Rust docs. They run with their defaults, and a
-setting without a default takes a standard value from the literature (rule 6.6). Where each comes
-from, and the separate test runs: docs/benchmarks/libraries/genoxide_python.md. The fitness
-functions are written as those docs write them:
-- a function per genome for OneMax and N-Queens, as python/README.md's first example and
-  python/examples/onemax.py and n_queens.py;
+The methods are those python/README.md recommends for the problem type ("Choosing an
+algorithm"), chosen as rule 6.2 says: the same as the Rust adapter's, except the evolution strategy,
+which is only in Rust. They run with their defaults, and a setting without a default takes a
+standard value from the literature (rule 6.6). Where each comes from, and the separate test runs:
+docs/benchmarks/libraries/genoxide_python.md. The fitness functions are written as python/README.md
+writes them:
+- a function per genome for OneMax and N-Queens, as its first example;
 - `batch=True` with vectorized numpy functions, a generation per call, for the real-valued and
-  multi-objective problems, as python/examples/rastrigin.py and zdt1.py, and what python/README.md
-  presents for vectorized numpy ("one call per generation"). A batch is the same algorithm: the
-  package asks for the same genomes either way ("the same seed repeats a run exactly, with a
-  genome at a time, in batches or in parallel").
+  multi-objective problems, as its Rastrigin example ("one call per generation"). A batch is the
+  same algorithm: the package asks for the same genomes either way ("The same seed repeats a run
+  exactly: one genome at a time, in batches or in parallel").
 
 The rules (docs/benchmarks/rules.md), as this adapter follows them:
 - each fitness function counts the genomes it evaluates itself (rule 3), and records the first
   one that reaches the target ("first_hit"): that count is the reported "evaluations", and the
   package's own `result.evaluations` must be the same (a difference is printed to stderr);
 - a run ends at the target, the evaluation budget or the time cap only (rule 2.1). On convergence
-  a method starts again (rule 2.2): DE and CMA-ES (IPOP) with their own restarts; the GA has no
-  convergence criterion but the package's stall ("stalled": 10,000 generations without a genome to
-  evaluate), after which the adapter starts it again with the seed
-  `(seed + 1) * 1_000_000 + restart`, keeping the best and counting every evaluation. The stall
-  needs stop conditions that all need new evaluations, so the GA's time cap is its
-  `on_generation` callback, not `time`;
+  a method starts again (rule 2.2): DE and CMA-ES (IPOP) with their own restarts; the GA after
+  10 generations in a row without a genome to evaluate (a child identical to a parent isn't
+  evaluated), when its `on_generation` callback ends the attempt and the adapter starts it again
+  with the seed `(seed + 1) * 1_000_000 + restart`, keeping the best and counting every
+  evaluation. The same callback is the GA's time cap;
 - every evaluated solution stays inside the bounds, by genoxide's own bound handling, and the
   fitness functions count any outside them ("outside", rule 2.4);
 - the clock starts before the algorithm object is created, and stops when `run` returns, whose
@@ -111,7 +108,7 @@ def onemax(bits):
 
 
 def nqueens(order):
-    """The diagonal conflicts of one genome, as python/examples/n_queens.py: for each diagonal,
+    """The diagonal conflicts of one genome, as examples/n_queens/main.py: for each diagonal,
     its queens minus one, which is n minus the number of occupied diagonals, in both directions."""
     global EVALUATIONS
     EVALUATIONS += 1
@@ -261,10 +258,10 @@ def onemax_solvers(size, mode):
             scheme=gx.Generational(elitism=0),
             seed=seed,
         ), onemax, False)]
-    # idiomatic: the GA, the method of both OneMax examples (python/README.md's first example and
-    # python/examples/onemax.py), with its defaults (crossover rate 0.9, mutation rate 1,
-    # generational with an elitism of 1), UniformCrossover, the first crossover the README lists,
-    # and the literature's population 100, binary tournament and bit-flip at 1 / n
+    # idiomatic: the GA, the one method python/README.md recommends for binary genomes ("Choosing
+    # an algorithm"), with its defaults (crossover rate 0.9, mutation rate 1, generational with an
+    # elitism of 1), UniformCrossover, the first crossover it names, and the literature's
+    # population 100, binary tournament and bit-flip at 1 / n
     return [("ga", lambda seed: gx.Ga(
         gx.Binary(size),
         population_size=GA_POPULATION,
@@ -276,12 +273,18 @@ def onemax_solvers(size, mode):
 
 
 def nqueens_solvers(size):
-    # the package's example for N-Queens, python/examples/n_queens.py, is tabu search, whose tenure
-    # has no default and no standard value: left out. The methods python/README.md lists first
-    # for any genome, Ga and LocalSearch, with their defaults; the GA with OrderCrossover, the
-    # first permutation crossover the README lists, a swap mutation, and the literature's
-    # population 100 and binary tournament; local search with swap neighbors
+    # python/README.md ("Choosing an algorithm"): LocalSearch, which "often beats a GA on
+    # permutations", then the GA. Local search with its defaults (1 neighbor per step, NotWorse
+    # acceptance) and swap neighbors; the GA with its defaults, OrderCrossover, the first
+    # permutation crossover it names, a swap mutation, and the literature's population 100 and
+    # binary tournament
     return [
+        ("local_search", lambda seed: gx.LocalSearch(
+            gx.Permutation(size),
+            neighbor=gx.SwapMutation(),
+            objective="minimize",
+            seed=seed,
+        ), nqueens, False),
         ("ga", lambda seed: gx.Ga(
             gx.Permutation(size),
             population_size=GA_POPULATION,
@@ -291,46 +294,34 @@ def nqueens_solvers(size):
             objective="minimize",
             seed=seed,
         ), nqueens, False),
-        ("local_search", lambda seed: gx.LocalSearch(
-            gx.Permutation(size),
-            neighbor=gx.SwapMutation(),
-            objective="minimize",
-            seed=seed,
-        ), nqueens, False),
     ]
 
 
 def real_solvers(problem, size):
     function, low, high = REAL_PROBLEMS[problem]
     genome = gx.Real((low, high), length=size)
-    mutation = gx.PolynomialMutation(ETA, rate=1.0 / size)
-    de = ("de", lambda seed: gx.De(genome, objective="minimize", seed=seed), function, True)
-    if problem == "rosenbrock":
-        # the Python docs have no example for a unimodal function and state no preference for
-        # one, so the first methods python/README.md lists for real genomes (rule 6.2): Ga,
-        # LocalSearch and De, with their defaults. The GA with the literature's population 100,
-        # binary tournament, SBX with eta 20 and polynomial mutation with eta 20 at 1 / n; local
-        # search with that polynomial mutation as its neighbor; DE with SHADE's published settings
-        # and genoxide's restarts
-        ga = ("ga", lambda seed: gx.Ga(
-            genome,
-            population_size=GA_POPULATION,
-            select=gx.Tournament(TOURNAMENT),
-            crossover=gx.SimulatedBinaryCrossover(ETA),
-            mutation=mutation,
-            objective="minimize",
-            seed=seed,
-        ), function, True)
-        local_search = ("local_search", lambda seed: gx.LocalSearch(
-            genome, neighbor=mutation, objective="minimize", seed=seed), function, True)
-        return [ga, local_search, de]
-    # multimodal: the package's example for Rastrigin, python/examples/rastrigin.py, runs CMA-ES
-    # and DE. CMA-ES with its defaults and IPOP restarts, which the example, python/README.md's
-    # first example and the Cmaes docstring ("for multimodal functions") give it; DE with its
-    # defaults (the example's L-SHADE is a setting of De, `l_shade`)
+    # python/README.md ("Choosing an algorithm") for real genomes: CMA-ES, "the strongest general
+    # choice", with its defaults and IPOP restarts, which it gives for multimodal functions (and
+    # rule 2.2 gives a converged CMA-ES on Rosenbrock); DE, which "often needs far fewer
+    # evaluations than a GA", with its defaults: SHADE's published settings and genoxide's restarts
     cmaes = ("cma_es", lambda seed: gx.Cmaes(genome, restarts="ipop", objective="minimize", seed=seed),
              function, True)
-    return [cmaes, de]
+    de = ("de", lambda seed: gx.De(genome, objective="minimize", seed=seed), function, True)
+    if problem == "rosenbrock":
+        # the third the README names for smooth problems, the evolution strategy, is only in Rust
+        return [cmaes, de]
+    # multimodal: the GA third, with its defaults and the literature's population 100, binary
+    # tournament, SBX with eta 20 and polynomial mutation with eta 20 at 1 / n
+    ga = ("ga", lambda seed: gx.Ga(
+        genome,
+        population_size=GA_POPULATION,
+        select=gx.Tournament(TOURNAMENT),
+        crossover=gx.SimulatedBinaryCrossover(ETA),
+        mutation=gx.PolynomialMutation(ETA, rate=1.0 / size),
+        objective="minimize",
+        seed=seed,
+    ), function, True)
+    return [cmaes, de, ga]
 
 
 def front_solvers(problem, size):
@@ -388,6 +379,10 @@ def attempt_seed(seed, restart):
     return seed if restart == 0 else (seed + 1) * 1_000_000 + restart
 
 
+# an attempt whose generations evaluate nothing for this many in a row has converged (rule 2.2)
+STALL_GENERATIONS = 10
+
+
 def solve(common, solver, seed, make, function, batch, target, max_evaluations, max_seconds):
     """Runs one solver, with restarts after a stall (rule 2.2), and prints the run."""
     global EVALUATIONS, OUTSIDE, BATCH
@@ -395,17 +390,20 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
     maximize = common["problem"] == "onemax"
     # the GA is the one solver here that can stall (every child a copy of a parent): the others
     # evaluate new genomes every generation (local search redraws a neighbor that didn't change).
-    # Its time cap is this callback, so that a stall can end the run and the GA can start again
+    # Its callback ends an attempt after STALL_GENERATIONS generations without an evaluation, and
+    # at the time cap
     can_stall = solver == "ga"
     # the last generation's evaluations, for the budget check (rule 2.3): the GA's callback, called
-    # after every generation (each attempt's initial population included), records the count and
-    # the generation's size; see the end of the run for the other solvers
-    generation = {"end": 0, "last": 0}
+    # after every generation (each attempt's initial population included), records the count, the
+    # generation's size and the generations in a row without an evaluation; see the end of the run
+    # for the other solvers
+    generation = {"end": 0, "last": 0, "idle": 0}
 
     def in_time(progress):
         generation["last"] = EVALUATIONS - generation["end"]
         generation["end"] = EVALUATIONS
-        return time.perf_counter() - start < max_seconds
+        generation["idle"] = 0 if generation["last"] else generation["idle"] + 1
+        return generation["idle"] < STALL_GENERATIONS and time.perf_counter() - start < max_seconds
 
     best = solution = None
     generations = reported = restart = 0
@@ -414,6 +412,7 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
     start = HIT["start"] = time.perf_counter()
     while True:
         budget = max_evaluations - EVALUATIONS
+        generation["idle"] = 0
         if can_stall:
             limits = {"on_generation": in_time}
         else:
@@ -425,7 +424,7 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
         score = result.best_fitness
         if score is not None and (best is None or (score > best if maximize else score < best)):
             best, solution = score, result.best_genome
-        if (result.stop_reason != "stalled" or EVALUATIONS >= max_evaluations
+        if (generation["idle"] < STALL_GENERATIONS or EVALUATIONS >= max_evaluations
                 or time.perf_counter() - start >= max_seconds):
             break
         restart += 1
@@ -452,6 +451,48 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
     }), flush=True)
 
 
+def solve_front(common, solver, seed, make, function, max_evaluations, max_seconds):
+    """Runs one multi-objective solver and prints the non-dominated individuals of its final
+    population (rule 7.2) and their solutions. A run has a budget and no target. None of these
+    algorithms has a convergence criterion (rule 2.2); an attempt that evaluates nothing for
+    STALL_GENERATIONS generations in a row (a child identical to a parent isn't evaluated) ends by
+    its on_generation callback and starts again with the next seed of attempt_seed, and the front
+    is the last attempt's."""
+    global EVALUATIONS, OUTSIDE, BATCH
+    EVALUATIONS = OUTSIDE = BATCH = 0
+    generation = {"end": 0, "idle": 0}
+
+    def active(progress):
+        generation["idle"] = generation["idle"] + 1 if EVALUATIONS == generation["end"] else 0
+        generation["end"] = EVALUATIONS
+        return generation["idle"] < STALL_GENERATIONS
+
+    generations = reported = restart = 0
+    start = time.perf_counter()
+    while True:
+        generation["idle"] = 0
+        result = make(attempt_seed(seed, restart)).run(
+            function, batch=True, evaluations=max_evaluations - EVALUATIONS,
+            time=max(max_seconds - (time.perf_counter() - start), 0.0), on_generation=active)
+        generations += result.generations
+        reported += result.evaluations
+        if (generation["idle"] < STALL_GENERATIONS or EVALUATIONS >= max_evaluations
+                or time.perf_counter() - start >= max_seconds):
+            break
+        restart += 1
+    elapsed = time.perf_counter() - start
+    compare(common, solver, seed, EVALUATIONS, reported)
+    extra = {"restarts": restart} if restart else {}
+    print(json.dumps({
+        **common, "solver": solver, "seed": seed, "time_s": round(elapsed, 6),
+        "generations": generations, "evaluations": EVALUATIONS,
+        # a batch is a generation (rule 2.3)
+        "last_generation": BATCH, **extra, "outside": OUTSIDE,
+        "front": result.front_objectives.tolist(),
+        "solutions": result.front_genomes.tolist(),
+    }), flush=True)
+
+
 def main():
     global EVALUATIONS, OUTSIDE, BATCH
     if sys.argv[1:] == ["--self-check"]:
@@ -470,25 +511,9 @@ def main():
 
     for seed in range(seed_from, seed_to + 1):
         if problem in FRONT_PROBLEMS:
-            # multi-objective runs have a budget and no target: they print the non-dominated
-            # individuals of the final population (rule 7.2) and their solutions. None of these
-            # algorithms has a convergence criterion (rule 2.2), and with a time limit the package
-            # doesn't stall: every run ends at its budget or the time cap
             function, solvers = front_solvers(problem, size)
             for solver, make in solvers:
-                EVALUATIONS = OUTSIDE = BATCH = 0
-                start = time.perf_counter()
-                result = make(seed).run(function, batch=True, evaluations=max_evaluations, time=max_seconds)
-                elapsed = time.perf_counter() - start
-                compare(common, solver, seed, EVALUATIONS, result.evaluations)
-                print(json.dumps({
-                    **common, "solver": solver, "seed": seed, "time_s": round(elapsed, 6),
-                    "generations": result.generations, "evaluations": EVALUATIONS,
-                    # a batch is a generation (rule 2.3)
-                    "last_generation": BATCH, "outside": OUTSIDE,
-                    "front": result.front_objectives.tolist(),
-                    "solutions": result.front_genomes.tolist(),
-                }), flush=True)
+                solve_front(common, solver, seed, make, function, max_evaluations, max_seconds)
             continue
 
         if problem == "onemax":

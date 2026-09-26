@@ -15,7 +15,7 @@
 | [pymoo](../docs/benchmarks/libraries/pymoo.md) | Python | 0.6.2 | GA, BRKGA, CMA-ES (IPOP), DE, ES, Nelder-Mead; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
 | [PyGAD](../docs/benchmarks/libraries/pygad.md) | Python | 3.7.0 | GA; NSGA-II/III |
 | [pycma](../docs/benchmarks/libraries/pycma.md) | Python | 4.5.0 | IPOP-CMA-ES, BIPOP-CMA-ES, lq-CMA-ES |
-| [Nevergrad](../docs/benchmarks/libraries/nevergrad.md) | Python | 1.0.12 | NgIohTuned, DiscreteOnePlusOne, PortfolioDiscreteOnePlusOne, RotatedTwoPointsDE, GeneticDE, ScrHammersleySearchPlusMiddlePoint, OnePlusOne, CMA |
+| [Nevergrad](../docs/benchmarks/libraries/nevergrad.md) | Python | 1.0.12 | NgIohTuned, DiscreteOnePlusOne, PortfolioDiscreteOnePlusOne, RotatedTwoPointsDE, GeneticDE, OnePlusOne, CMA |
 | [SciPy](../docs/benchmarks/libraries/scipy.md) | Python | 1.18.1 | `differential_evolution`, `dual_annealing`, `direct`, `minimize` (L-BFGS-B, Nelder-Mead) |
 | [Jenetics](../docs/benchmarks/libraries/jenetics.md) | Java | 9.1.0 | GA |
 | [jMetal](../docs/benchmarks/libraries/jmetal.md) | Java | 7.5 | GA, ES, DE, CMA-ES; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |

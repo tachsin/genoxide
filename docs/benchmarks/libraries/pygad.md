@@ -7,23 +7,23 @@ Know a better way to solve one of these problems with PyGAD? [Open a benchmark i
 
 ## How the adapter runs PyGAD
 
-- **Fitness functions:** numpy functions of a batch, one solution per row ([bench.py, lines 115-231](../../../benchmarks/adapters/pygad/bench.py#L115-L231)), through `fitness_batch_size` ([Batch Fitness Calculation](https://pygad.readthedocs.io/en/latest/fitness_calculation.html#batch-fitness-calculation), rule 3.4). PyGAD picks the solutions to evaluate as without it (`cal_pop_fitness`, `utils/engine.py`); runs with and without it give the same evaluations and best values. PyGAD maximizes, so a minimized problem is negated.
-- **Evaluations:** each row counts ([`Budget.count`, lines 66-71](../../../benchmarks/adapters/pygad/bench.py#L66-L71)), with the first hit ([`Budget.keep`, lines 73-86](../../../benchmarks/adapters/pygad/bench.py#L73-L86)). PyGAD doesn't evaluate a solution identical to a previous elite or kept parent, so generations differ in size; runs print `last_generation`.
+- **Fitness functions:** numpy functions of a batch, one solution per row ([bench.py, lines 117-233](../../../benchmarks/adapters/pygad/bench.py#L117-L233)), through `fitness_batch_size` ([Batch Fitness Calculation](https://pygad.readthedocs.io/en/latest/fitness_calculation.html#batch-fitness-calculation), rule 3.4). PyGAD picks the solutions to evaluate as without it (`cal_pop_fitness`, `utils/engine.py`); runs with and without it give the same evaluations and best values. PyGAD maximizes, so a minimized problem is negated.
+- **Evaluations:** each row counts ([`Budget.count`, lines 68-73](../../../benchmarks/adapters/pygad/bench.py#L68-L73)), with the first hit ([`Budget.keep`, lines 75-88](../../../benchmarks/adapters/pygad/bench.py#L75-L88)). PyGAD doesn't evaluate a solution identical to a previous elite or kept parent, so generations differ in size; runs print `last_generation`.
 - **Stop:** `on_generation` returns `"stop"` at the target, the budget or the time cap; `num_generations` is 10⁷.
-- **Keeping going (rule 2.2):** the examples' `num_generations` is lifted. PyGAD's `stop_criteria="saturate_N"` is off by default and no example sets it.
+- **Keeping going (rule 2.2):** the examples' `num_generations` is lifted. PyGAD's `stop_criteria="saturate_N"` is off by default and no example sets it. After 10 generations in a row without an evaluation, `on_generation` ends the attempt, and a new `pygad.GA` starts from a new random population with the next restart seed ([`run_single`, lines 296-353](../../../benchmarks/adapters/pygad/bench.py#L296-L353)); the run prints `restarts`.
 - **Bounds (rule 2.4):** per section.
-- **Time:** from before the `pygad.GA` constructor, which creates the initial population; the front is extracted after the clock ([line 504](../../../benchmarks/adapters/pygad/bench.py#L504)).
+- **Time:** from before the `pygad.GA` constructor, which creates the initial population; the front is extracted after the clock ([line 547](../../../benchmarks/adapters/pygad/bench.py#L547)).
 - **One thread:** numpy's BLAS set to one thread before import ([lines 18-20](../../../benchmarks/adapters/pygad/bench.py#L18-L20)); `parallel_processing=None`.
 - **Seeds:** `random_seed=seed` (numpy's and Python's generators).
-- **Solutions:** the best evaluated; a multi-objective run prints the non-dominated part of its final survivors ([`front_of`, lines 425-436](../../../benchmarks/adapters/pygad/bench.py#L425-L436)).
-- **Rule 5.3:** [line 519](../../../benchmarks/adapters/pygad/bench.py#L519).
+- **Solutions:** the best evaluated; a multi-objective run prints the non-dominated part of its final survivors ([`front_of`, lines 466-477](../../../benchmarks/adapters/pygad/bench.py#L466-L477)).
+- **Rule 5.3:** in the scenarios with a target ([lines 562-563](../../../benchmarks/adapters/pygad/bench.py#L562-L563)).
 - **Separate tests:** 2026-09-25, PyGAD 3.7.0, numpy 2.5.3, Python 3.13.9, seeds 0 to 4, the scenario's budget, 60 s cap, with other processes on the machine. `outside` was 0 in every run.
 
 ## Binary: OneMax 100 and 1000
 
 **Methods:**
-- **Matched** ([lines 242-259](../../../benchmarks/adapters/pygad/bench.py#L242-L259)): 300 solutions, all parents (`num_parents_mating` 300), `parent_selection_type="tournament"` with `K_tournament` 3, `keep_elitism` 0 and `keep_parents` 0, `crossover_type="two_points"` with `crossover_probability` 0.5, `mutation_type="random"` with `mutation_probability` 0.2 / n. The genes are PyGAD's binary genes, `gene_space=[0, 1]`, `gene_type=int` ([Benchmark Problems](https://pygad.readthedocs.io/en/latest/benchmarks.html), "Knapsack"); a mutated gene takes the other value (`generate_gene_value_from_space`, `helper/misc.py`).
-- **Idiomatic (OneMax 100):** [example_knapsack.py](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/examples/benchmarks/example_knapsack.py), the binary example: `gene_space=[0, 1]`, `gene_type=int`, 30 solutions, 10 parents, and the defaults ([`pygad.GA`](https://pygad.readthedocs.io/en/latest/pygad.html)): steady-state selection (`"sss"`), single-point crossover, random mutation of 10% of the genes, `keep_elitism` 1 ([line 264](../../../benchmarks/adapters/pygad/bench.py#L264)).
+- **Matched** ([lines 244-261](../../../benchmarks/adapters/pygad/bench.py#L244-L261)): 300 solutions, all parents (`num_parents_mating` 300), `parent_selection_type="tournament"` with `K_tournament` 3, `keep_elitism` 0 and `keep_parents` 0, `crossover_type="two_points"` with `crossover_probability` 0.5, `mutation_type="random"` with `mutation_probability` 0.2 / n. The genes are PyGAD's binary genes, `gene_space=[0, 1]`, `gene_type=int` ([Benchmark Problems](https://pygad.readthedocs.io/en/latest/benchmarks.html), "Knapsack"); a mutated gene takes the other value (`generate_gene_value_from_space`, `helper/misc.py`).
+- **Idiomatic (OneMax 100):** [example_knapsack.py](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/examples/benchmarks/example_knapsack.py), the binary example: `gene_space=[0, 1]`, `gene_type=int`, 30 solutions, 10 parents, and the defaults ([`pygad.GA`](https://pygad.readthedocs.io/en/latest/pygad.html)): steady-state selection (`"sss"`), single-point crossover, random mutation of 10% of the genes, `keep_elitism` 1 ([line 266](../../../benchmarks/adapters/pygad/bench.py#L266)).
 
 **Matched differences:**
 - `two_points_crossover` always takes exactly n / 2 consecutive genes from the second parent (a bug, see [Bugs found](#bugs-found)).
@@ -60,9 +60,9 @@ The idiomatic GA flips 10 of the 100 bits of every child (the default 10%).
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods:** `ga`, [example_tsp.py](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/examples/benchmarks/example_tsp.py), the permutation example ([Benchmark Problems](https://pygad.readthedocs.io/en/latest/benchmarks.html): `gene_space=list(range(num_cities))`, `gene_type=int`, `allow_duplicate_genes=False` "keep the permutation constraint"): 30 solutions, 10 parents, the defaults otherwise ([lines 267-276](../../../benchmarks/adapters/pygad/bench.py#L267-L276)). As `pygad/benchmarks/tsp.py` does, a non-permutation scores worse than any permutation ([lines 297-315](../../../benchmarks/adapters/pygad/bench.py#L297-L315)).
+**Methods:** `ga`, [example_tsp.py](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/examples/benchmarks/example_tsp.py), the permutation example ([Benchmark Problems](https://pygad.readthedocs.io/en/latest/benchmarks.html): `gene_space=list(range(num_cities))`, `gene_type=int`, `allow_duplicate_genes=False` "keep the permutation constraint"): 30 solutions, 10 parents, the defaults otherwise ([lines 269-278](../../../benchmarks/adapters/pygad/bench.py#L269-L278)). As `pygad/benchmarks/tsp.py` does, a non-permutation scores worse than any permutation ([lines 314-332](../../../benchmarks/adapters/pygad/bench.py#L314-L332)).
 
-**Keeping going:** to the target, the budget or the time cap.
+**Keeping going:** to the target, the budget or the time cap; an attempt that stalls restarts.
 
 **Left out:**
 - The swap, inversion and scramble mutations: the example uses the default, random mutation.
@@ -82,11 +82,11 @@ N-Queens 64 (budget 1,000,000):
 |---|---|---|---|---|---|
 | ga | 3 | 0 | - | 18 (15, 18) | 3 |
 
-The random mutation can't change a permutation (see [Bugs found](#bugs-found)), so the population converges to one board, and the unevaluated copies leave about 200 evaluations in 60 s. With PyGAD's other mutation types (not benchmarked): `"swap"` reached N-Queens 32 in 5 of 5 runs (median 32,462 evaluations) and 64 in 5 of 5 (90,251); `"inversion"` 1 of 5 and 0 of 3; `"scramble"` 0 of 5 and 0 of 3.
+The random mutation can't change a permutation (see [Bugs found](#bugs-found)), so the population converges to one board and stops evaluating. These tests ran before the stall restart: about 200 evaluations in 60 s. With PyGAD's other mutation types (not benchmarked): `"swap"` reached N-Queens 32 in 5 of 5 runs (median 32,462 evaluations) and 64 in 5 of 5 (90,251); `"inversion"` 1 of 5 and 0 of 3; `"scramble"` 0 of 5 and 0 of 3.
 
 ## Continuous: Rastrigin 10 and 30, Ackley 30 (multimodal), Rosenbrock 10 (unimodal)
 
-**Methods:** `ga`, [example_classic_rastrigin.py](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/examples/benchmarks/example_classic_rastrigin.py) and [example_classic_ackley.py](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/examples/benchmarks/example_classic_ackley.py) (also the docs' "Example: SOO"): 40 solutions, 10 parents, `crossover_type="sbx"` with `sbx_crossover_eta` 20, `mutation_type="polynomial"` with `polynomial_mutation_eta` 20 (1 / n per gene, the default), `init_range_low` and `init_range_high` at the bounds, the defaults otherwise (steady-state selection, `keep_elitism` 1). [example_classic_rosenbrock.py](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/examples/benchmarks/example_classic_rosenbrock.py): `sbx_crossover_eta` 30 ([lines 278-291](../../../benchmarks/adapters/pygad/bench.py#L278-L291)).
+**Methods:** `ga`, [example_classic_rastrigin.py](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/examples/benchmarks/example_classic_rastrigin.py) and [example_classic_ackley.py](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/examples/benchmarks/example_classic_ackley.py) (also the docs' "Example: SOO"): 40 solutions, 10 parents, `crossover_type="sbx"` with `sbx_crossover_eta` 20, `mutation_type="polynomial"` with `polynomial_mutation_eta` 20 (1 / n per gene, the default), `init_range_low` and `init_range_high` at the bounds, the defaults otherwise (steady-state selection, `keep_elitism` 1). [example_classic_rosenbrock.py](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/examples/benchmarks/example_classic_rosenbrock.py): `sbx_crossover_eta` 30 ([lines 280-293](../../../benchmarks/adapters/pygad/bench.py#L280-L293)).
 
 **Bounds:** `sbx` and `polynomial` clip each gene to its initial range (`get_initial_population_range`), the box.
 
@@ -124,7 +124,7 @@ With a 900 s cap (seeds 0 to 2): Rastrigin 30 in 3 of 3 runs (median first hit 4
 
 ## Multi-objective (matched): ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1
 
-PyGAD's NSGA-II and NSGA-III are parent selections ([Multi-Objective Optimization](https://pygad.readthedocs.io/en/latest/multi_objective.html)). A generation selects parents, crosses and mutates them, and the next population is either the `keep_elitism` best of the current one by PyGAD's NSGA-II sort followed by the offspring, or, with `keep_parents=-1`, the parents followed by the offspring (`run`, `utils/engine.py`). Each algorithm's survival is built from these, with N = 100 (92 with 3 objectives) and a PyGAD population of 2N ([`run_front`, lines 387-422](../../../benchmarks/adapters/pygad/bench.py#L387-L422)).
+PyGAD's NSGA-II and NSGA-III are parent selections ([Multi-Objective Optimization](https://pygad.readthedocs.io/en/latest/multi_objective.html)). A generation selects parents, crosses and mutates them, and the next population is either the `keep_elitism` best of the current one by PyGAD's NSGA-II sort followed by the offspring, or, with `keep_parents=-1`, the parents followed by the offspring (`run`, `utils/engine.py`). Each algorithm's survival is built from these, with N = 100 (92 with 3 objectives) and a PyGAD population of 2N ([`run_front`, lines 415-462](../../../benchmarks/adapters/pygad/bench.py#L415-L462)).
 
 **Methods:**
 - **`nsga2`:** `keep_elitism` N and N offspring, so the elites are the best N of elites and offspring by the NSGA-II sort. Parents: PyGAD's crowded binary tournament (`"tournament_nsga2"`, `K_tournament` 2), drawn from all 2N, since PyGAD selects parents before elites.
@@ -138,11 +138,11 @@ PyGAD's NSGA-II and NSGA-III are parent selections ([Multi-Objective Optimizatio
 - The initial population is 2N, so the first generation costs N more evaluations.
 - The crowding distance normalizes by the whole population's range, not the front's.
 - A child identical to a previous elite or parent isn't evaluated.
-- The non-dominated sorting compares every pair in Python, two or three times per generation; the 60 s cap ends runs before the budget.
+- The non-dominated sorting compares every pair in Python, two or three times per generation. On DTLZ1, the 60 s cap ends the NSGA-II runs before the budget.
 
 **Bounds:** `sbx` and polynomial mutation clip to [0, 1].
 
-**Keeping going:** to the budget or the time cap.
+**Keeping going:** to the budget or the time cap. An attempt that stalls restarts, and the front is the last attempt's.
 
 **The front:** the non-dominated part of the final N survivors (the elites, or NSGA-III's parents).
 
@@ -197,5 +197,5 @@ SPEA2, SMS-EMOA and MOEA/D in the multi-objective scenarios: PyGAD doesn't have 
 |---|---|---|---|
 | `sbx` makes one child per pair, always `0.5 * ((y1 + y2) - beta_q * (y2 - y1))` with `beta_q > 0` ([utils/crossover.py, line 329](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/pygad/utils/crossover.py#L329)): the child below the parents' midpoint, which pulls every crossed gene towards the lower bound | the continuous runs above (Ackley 30 and Rosenbrock 10 don't reach the target) and the multi-objective runs: on ZDT the first variable is pulled too, so the fronts crowd towards f1 = 0; on DTLZ the distance variables stay away from their optimum, 0.5. With an unbiased SBX, the same NSGA-II reached 0.8676 on ZDT1 and 0.6874 on DTLZ2 (medians of 3, full budget) | no | [ahmedfgad/GeneticAlgorithmPython#369](https://github.com/ahmedfgad/GeneticAlgorithmPython/issues/369) |
 | `two_points_crossover` draws only the first point; the second is always the first plus n / 2 ([utils/crossover.py, lines 122-127](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/pygad/utils/crossover.py#L122-L127)), so a child always takes exactly n / 2 consecutive genes from its second parent. The docs say it "selects the 2 points randomly" ([utils.md](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/docs/source/utils.md)) | the matched OneMax runs above | no | not yet |
-| With `allow_duplicate_genes=False` and a gene space of n values for n genes, as in PyGAD's permutation example, the random mutation never changes a solution: it picks a value from the space that isn't already in the solution (`select_unique_value`, [helper/unique.py, lines 269-280](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/pygad/helper/unique.py#L269-L280)), and in a permutation there's none, so the gene keeps its value. In 1,000 mutations of random permutations of 8, none changed | the N-Queens runs above: the population converges to one board, and the runs reach the time cap after about 200 evaluations | no | not yet |
+| With `allow_duplicate_genes=False` and a gene space of n values for n genes, as in PyGAD's permutation example, the random mutation never changes a solution: it picks a value from the space that isn't already in the solution (`select_unique_value`, [helper/unique.py, lines 269-280](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/pygad/helper/unique.py#L269-L280)), and in a permutation there's none, so the gene keeps its value. In 1,000 mutations of random permutations of 8, none changed | the N-Queens runs above: the population converges to one board and stops evaluating, until the stall restart | no | not yet |
 | The docs describe `swap_mutation` as swapping "2 randomly selected genes" ([utils.md](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/docs/source/utils.md)), but it swaps a gene of the first half with the gene half the length after it ([utils/mutation.py, lines 363-387](https://github.com/ahmedfgad/GeneticAlgorithmPython/blob/3.7.0/pygad/utils/mutation.py#L363-L387)) | none here: the adapter doesn't use it | - | not yet |

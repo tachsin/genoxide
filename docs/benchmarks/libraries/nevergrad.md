@@ -7,10 +7,10 @@ Know a better way to solve one of these problems with Nevergrad? [Open a benchma
 
 ## How the adapter runs Nevergrad
 
-- **The loop** ([`run`](../../../benchmarks/adapters/nevergrad/bench.py#L219-L248)): the docs' [ask and tell loop](https://facebookresearch.github.io/nevergrad/optimization.html#ask-and-tell-interface), one worker, the optimizer given the scenario's budget ("the budget tells NgIohTuned which algorithm to choose"). Every optimizer runs with its defaults.
+- **The loop** ([`run`](../../../benchmarks/adapters/nevergrad/bench.py#L207-L236)): the docs' [ask and tell loop](https://facebookresearch.github.io/nevergrad/optimization.html#ask-and-tell-interface), one worker, the optimizer given the scenario's budget ("the budget tells NgIohTuned which algorithm to choose"). Every optimizer runs with its defaults.
 - **Stop:** right after the evaluation that reaches the target, or before one past the budget or the time cap.
 - **Keeping going (rule 2.2):** the optimizers have no stop criterion. The CMA-ES inside `CMA` and `NgIohTuned` restarts from the middle of the domain, with the same population size, when pycma's criteria end it (`optimizerlib.py`, `_CMA.es`).
-- **Imports (rule 4.2):** pycma with matplotlib, scikit-learn and SciPy's COBYLA, which Nevergrad imports during its first run (about 0.4 s), are imported before the clock ([the imports](../../../benchmarks/adapters/nevergrad/bench.py#L46-L53)).
+- **Imports (rule 4.2):** pycma with matplotlib, scikit-learn and SciPy's COBYLA, which Nevergrad imports during its first run (about 0.4 s), are imported before the clock ([the imports](../../../benchmarks/adapters/nevergrad/bench.py#L45-L52)).
 - **Seeds:** the docs' two ways ([Reproducibility](https://facebookresearch.github.io/nevergrad/optimization.html#reproducibility)): numpy's global random state and the parametrization's `random_state`.
 - **Rule 5.3:** applied in the adapter too.
 - **Choosing among the docs (rule 6.2):** [Choosing an optimizer](https://facebookresearch.github.io/nevergrad/optimization.html#choosing-an-optimizer) lists "rules of thumb", each for its case. The first is the default: "`NgIohTuned` is 'meta'-optimizer which adapts to the provided settings ... and should therefore be a good default". It runs on every problem; the other methods come from the list's cases or the docs' example for the problem type.
@@ -18,7 +18,7 @@ Know a better way to solve one of these problems with Nevergrad? [Open a benchma
 
 ## Binary: OneMax 100 (idiomatic)
 
-**Methods** ([`solvers`](../../../benchmarks/adapters/nevergrad/bench.py#L169-L216)), on the docs' OneMax parameter, `ng.p.TransitionChoice(range(2), repetitions=100)` ([Basic example](https://facebookresearch.github.io/nevergrad/optimization.html#basic-example)):
+**Methods** ([`solvers`](../../../benchmarks/adapters/nevergrad/bench.py#L168-L204)), on the docs' OneMax parameter, `ng.p.TransitionChoice(range(2), repetitions=100)` ([Basic example](https://facebookresearch.github.io/nevergrad/optimization.html#basic-example)):
 - **`ngiohtuned`:** the default; here it chooses `DoubleFastGADiscreteOnePlusOne`.
 - **`discrete_one_plus_one`:** `DiscreteOnePlusOne`, the docs' OneMax example.
 - **`portfolio_discrete_one_plus_one`:** "`PortfolioDiscreteOnePlusOne` is excellent in discrete settings of mixed settings when high precision on parameters is not relevant".
@@ -68,8 +68,7 @@ The parameter is a bounded `ng.p.Array(shape=(n,), lower=..., upper=...)`, the d
 
 **Methods:**
 - **`ngiohtuned`:** the default; here a metamodel over `VLPCMA`, which fits a quadratic model to the best points every few dozen evaluations (about 1 ms or more per evaluation).
-- **`scr_hammersley`:** "`ScrHammersleySearchPlusMiddlePoint` is excellent for super parallel cases ... or for very multimodal cases", the list's only case for multimodal functions.
-- **`one_plus_one`:** with one worker and a budget over 1000 times the dimension, two cases match: "`OnePlusOne` is a simple robust method for continuous parameters with `num_workers` < 8" and "`CMA` is excellent for control ... when the budget is large". The first listed runs (rule 6.2).
+- **`one_plus_one`, `cma_es`:** with one worker and a budget over 1000 times the dimension, two cases of [Choosing an optimizer](https://facebookresearch.github.io/nevergrad/optimization.html#choosing-an-optimizer) match (docs/optimization.rst, lines 99-100, at 1.0.12): "`OnePlusOne` is a simple robust method for continuous parameters with `num_workers` < 8" and "`CMA` is excellent for control ... when the budget is large". `CMA` with bounds is `CMAbounded` (an elitist, diagonal CMA-ES from `MetaCMA`).
 
 **Bounds (rule 2.4):** the `Array`'s default "bouncing" (`set_bounds`: "bounce on border (at most once). This is a variant of clipping"). `outside` was 0 in every run.
 
@@ -77,7 +76,7 @@ The parameter is a bounded `ng.p.Array(shape=(n,), lower=..., upper=...)`, the d
 
 **Left out:**
 - `NGOpt`: one wizard runs. On these budgets it chooses a portfolio of 24 to 33 metamodel CMA-ES (`NGOpt36`), at 75 to 120 evaluations per second.
-- `CMA`: see `one_plus_one`; it runs on Rosenbrock.
+- `ScrHammersleySearchPlusMiddlePoint`, the list's case "for very multimodal cases": a one-shot sampler (a scrambled Hammersley sequence and the middle of the box) that ignores the values, so it doesn't run in a scenario with a target ([rule 6.3](../rules.md#6-which-methods-run)).
 - `TwoPointsDE` ("excellent in many cases") and `PSO` ("excellent in terms of robustness"): the list gives them no case that singles out this one.
 - `CmaFmin2` (pycma's `fmin` with IPOP): not in the docs; pycma itself runs in this benchmark.
 - `TBPSA`: for noisy functions.
@@ -87,20 +86,17 @@ The parameter is a bounded `ng.p.Array(shape=(n,), lower=..., upper=...)`, the d
 | Scenario | Solver | Runs | Reached | First hit: median evaluations | Best value: median | best | worst | Capped |
 |---|---|---|---|---|---|---|---|---|
 | Rastrigin 10 (500k) | ngiohtuned | 3 | 0 | | 63.4 | 43.3 | 64.8 | 3 |
-| Rastrigin 10 (500k) | scr_hammersley | 3 | 0 | | 70.5 | 56.2 | 74.6 | 3 |
 | Rastrigin 10 (500k) | one_plus_one | 3 | 0 | | 89.5 | 59.7 | 105 | 3 |
 | Rastrigin 30 (2M) | ngiohtuned | 3 | 0 | | 257 | 236 | 278 | 3 |
-| Rastrigin 30 (2M) | scr_hammersley | 3 | 0 | | 392 | 382 | 408 | 3 |
 | Rastrigin 30 (2M) | one_plus_one | 3 | 0 | | 162 | 161 | 183 | 3 |
 | Ackley 30 (1M) | ngiohtuned | 3 | 0 | | 12.4 | 11.8 | 12.7 | 3 |
-| Ackley 30 (1M) | scr_hammersley | 3 | 0 | | 20.3 | 19.7 | 20.4 | 3 |
 | Ackley 30 (1M) | one_plus_one | 3 | 0 | | 19.0 | 18.6 | 19.0 | 3 |
 
-The runs reached the cap after 2,300 evaluations (`ngiohtuned`, Rastrigin 10) and 8,000 to 9,000 (in 30 dimensions), 17,000 to 21,000 (`scr_hammersley`) and 63,000 to 76,000 (`one_plus_one`).
+The runs reached the cap after 2,300 evaluations (`ngiohtuned`, Rastrigin 10) and 8,000 to 9,000 (in 30 dimensions), and 63,000 to 76,000 (`one_plus_one`). `cma_es` has had no separate test run on these problems.
 
 ## Continuous, unimodal: Rosenbrock 10
 
-**Methods:** `ngiohtuned`, `one_plus_one`, and `cma_es`: `CMA`, the list's other matching case, which with bounds is `CMAbounded` (an elitist, diagonal CMA-ES from `MetaCMA`).
+**Methods:** as on the multimodal functions: `ngiohtuned`, `one_plus_one` and `cma_es`.
 
 **Bounds** and **keeping going:** as above.
 
@@ -121,4 +117,4 @@ The runs reached the cap after about 2,200 evaluations (`ngiohtuned`), 75,000 (`
 
 ## Bugs found
 
-- **`NgIohTuned`'s metamodel crashes with NumPy 2.5.** It calls `float()` on a one-element array (`metamodel.py`, `loss_function_sm`), which NumPy 2.5 refuses (`TypeError`). Worked around: the adapter restores the old conversion in that module only ([the line](../../../benchmarks/adapters/nevergrad/bench.py#L58-L62)); the algorithm is unchanged. Both results: without it, every `ngiohtuned` run on Rastrigin, Rosenbrock and Ackley crashes at the metamodel's first fit (after 118 evaluations in 10 dimensions, 892 or 1,784 in 30), with no result; with it, the results above. Not reported upstream yet.
+- **`NgIohTuned`'s metamodel crashes with NumPy 2.5.** It calls `float()` on a one-element array (`metamodel.py`, `loss_function_sm`), which NumPy 2.5 refuses (`TypeError`). Worked around: the adapter restores the old conversion in that module only ([the line](../../../benchmarks/adapters/nevergrad/bench.py#L57-L61)); the algorithm is unchanged. Both results: without it, every `ngiohtuned` run on Rastrigin, Rosenbrock and Ackley crashes at the metamodel's first fit (after 118 evaluations in 10 dimensions, 892 or 1,784 in 30), with no result; with it, the results above. Not reported upstream yet.

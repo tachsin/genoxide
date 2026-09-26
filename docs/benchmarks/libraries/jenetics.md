@@ -7,14 +7,14 @@ Know a better way to solve one of these problems with Jenetics? [Open a benchmar
 
 ## How the adapter runs Jenetics
 
-- **Fitness functions:** in Java, as in the Jenetics examples, of a codec's decoded `double[]` or `int[]`, or of the `BitChromosome` ([Bench.java, lines 79-159](../../../benchmarks/adapters/jenetics/Bench.java#L79-L159); `values`, [lines 469-493](../../../benchmarks/adapters/jenetics/Bench.java#L469-L493)).
+- **Fitness functions:** in Java, as in the Jenetics examples, of a codec's decoded `double[]` or `int[]`, or of the `BitChromosome` ([Bench.java, lines 79-159](../../../benchmarks/adapters/jenetics/Bench.java#L79-L159); `values`, [lines 453-477](../../../benchmarks/adapters/jenetics/Bench.java#L453-L477)).
 - **Evaluations:** every call counts, with the first hit ([`Budget`, lines 165-247](../../../benchmarks/adapters/jenetics/Bench.java#L165-L247)). Survivors and untouched offspring keep their fitness. A crossover replaces both mates even when it changed one (`Recombinator`), and `Mutator` replaces an individual it picked even when no gene changed; those are evaluated again.
-- **Stop:** a stream never ends by itself ("If you don't limit the stream, the EvolutionStream will not terminate", README). The adapter limits it at the target, the budget or the time cap, after every generation ([`evolve`, lines 262-298](../../../benchmarks/adapters/jenetics/Bench.java#L262-L298)).
-- **Keeping going (rule 2.2):** an example's generation limit (`limit(100)`) is replaced by the budget. `Limits.bySteadyFitness(n)`, which the permutation and continuous examples set, ends an attempt, and the run starts again from a new random population with the seeds of rule 2.2 ([`evolve`, lines 267-298](../../../benchmarks/adapters/jenetics/Bench.java#L267-L298)). Jenetics has no restart mechanism: `CyclicEngine` (manual 3.1.6.2) continues from the previous population.
+- **Stop:** a stream never ends by itself ("If you don't limit the stream, the EvolutionStream will not terminate", README). The adapter limits it at the target, the budget or the time cap, after every generation ([`evolve`, lines 261-304](../../../benchmarks/adapters/jenetics/Bench.java#L261-L304)).
+- **Keeping going (rule 2.2):** an example's generation limit (`limit(100)`) is replaced by the budget. `Limits.bySteadyFitness(n)`, which the permutation and continuous examples set, ends an attempt, and the run starts again from a new random population with the seeds of rule 2.2 ([`evolve`, lines 270-304](../../../benchmarks/adapters/jenetics/Bench.java#L270-L304)). So does an attempt whose generations evaluate nothing for 10 in a row, and the run prints `restarts`. Jenetics has no restart mechanism: `CyclicEngine` (manual 3.1.6.2) continues from the previous population.
 - **Bounds (rule 2.4):** a `DoubleGene` stays in its range: `Mutator` draws in it, `MeanAlterer` averages two values in it.
 - **Seeds:** `RandomRegistry.random(...)` with the default `L64X256MixRandom` (manual 1.4.2 and 2.7), seeded per run ([lines 256-259](../../../benchmarks/adapters/jenetics/Bench.java#L256-L259)).
-- **Time:** from the run's `Budget`, before the initial population, to the end of the run ([`runSingle`, lines 423-450](../../../benchmarks/adapters/jenetics/Bench.java#L423-L450)).
-- **One thread and the JIT (rule 4.3):** `.executor(Runnable::run)` (manual 2.7) keeps everything on the calling thread (the default is the ForkJoin common pool). The JVM runs with `-XX:+UseSerialGC -Xbatch` ([run.sh](../../../benchmarks/adapters/jenetics/run.sh)): the serial collector, and the JIT compiling while the calling thread waits. Each solver first makes the warm-up run of rule 4.2 ([lines 523-542](../../../benchmarks/adapters/jenetics/Bench.java#L523-L542)).
+- **Time:** from the run's `Budget`, before the initial population, to the end of the run ([`runSingle`, lines 407-434](../../../benchmarks/adapters/jenetics/Bench.java#L407-L434)).
+- **One thread and the JIT (rule 4.3):** `.executor(Runnable::run)` (manual 2.7) keeps everything on the calling thread (the default is the ForkJoin common pool). The JVM runs with `-XX:+UseSerialGC -Xbatch` ([run.sh](../../../benchmarks/adapters/jenetics/run.sh)): the serial collector, and the JIT compiling while the calling thread waits. Each solver first makes the warm-up run of rule 4.2 ([lines 507-526](../../../benchmarks/adapters/jenetics/Bench.java#L507-L526)).
 - **Separate tests:** 2026-09-25, Jenetics 9.1.0, seeds 0 to 4, the scenario's budget, 60 s cap, on a shared machine. `outside` was 0 in every run.
 
 JVM flags on one invocation (Rastrigin 10, seeds 0 to 4, 500,000 evaluations, then ZDT1 with 25,000, after a 1,000-evaluation warm-up):
@@ -29,14 +29,11 @@ JVM flags on one invocation (Rastrigin 10, seeds 0 to 4, 500,000 evaluations, th
 
 Only C1-only and `-Xbatch` stay within 10%. C1-only makes the code 2 to 3 times slower throughout; `-Xbatch` keeps the same compiled code, and moves the compilations the warm-up didn't trigger into the first timed run.
 
-## Binary: OneMax 100 and 1000
+## Binary: OneMax 100 (idiomatic)
 
 **Methods:**
-- **Matched:** Jenetics' own components: population 300, `TournamentSelector(3)` for the parents (with replacement), no survivors (`offspringFraction(1.0)`), `MultiPointCrossover` with 2 points, `Mutator`, no maximal age ([lines 325-347](../../../benchmarks/adapters/jenetics/Bench.java#L325-L347)). Differences:
-  - the crossover picks each individual with probability p and mates it with a random other; p = 0.25 gives the matched N / 2 pairs at 0.5;
-  - there's no bit flip: `Mutator(p)` redraws a bit (flipping it half the time), picking the individual, chromosome and bit each with probability p^(1/3). p = 0.4 / n gives the matched mean of 0.2 flipped bits per child, in bursts: with n = 100, 2.5% of the children get about 16 bits redrawn and 8 flipped;
-  - picked or mated individuals are evaluated again even when unchanged.
-- **Idiomatic, `ga`:** the README's "Hello World (Ones counting)" and [OnesCounting.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/OnesCounting.java): a `BitChromosome` with random bits and the engine defaults ([lines 348-363](../../../benchmarks/adapters/jenetics/Bench.java#L348-L363); [Engine.Builder](https://jenetics.io/javadoc/jenetics/9.1/io.jenetics.base/io/jenetics/engine/Engine.Builder.html)): population 50, `TournamentSelector(3)`, `SinglePointCrossover(0.2)`, `Mutator(0.15)` (about 7.5% of the bits flipped), 60% offspring, maximal age 70. Of the three OneMax examples, with no stated preference, it's listed first, on [jenetics.io](https://jenetics.io/) and in the README.
+- **Matched:** not run (rule 6.1): Jenetics has no bit-flip mutation among its own components. `Mutator` redraws a bit, flipping it half the time ([lines 331-333](../../../benchmarks/adapters/jenetics/Bench.java#L331-L333)).
+- **Idiomatic, `ga`:** the README's "Hello World (Ones counting)" and [OnesCounting.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/OnesCounting.java): a `BitChromosome` with random bits and the engine defaults ([lines 334-346](../../../benchmarks/adapters/jenetics/Bench.java#L334-L346); [Engine.Builder](https://jenetics.io/javadoc/jenetics/9.1/io.jenetics.base/io/jenetics/engine/Engine.Builder.html)): population 50, `TournamentSelector(3)`, `SinglePointCrossover(0.2)`, `Mutator(0.15)` (about 7.5% of the bits flipped), 60% offspring, maximal age 70. Of the three OneMax examples, with no stated preference, it's listed first, on [jenetics.io](https://jenetics.io/) and in the README.
 
 **Keeping going:** the examples' `limit(100)` and `limit(10)` are replaced by the budget; no convergence criterion.
 
@@ -46,18 +43,6 @@ Only C1-only and `-Xbatch` stay within 10%. C1-only makes the code 2 to 3 times 
 
 **Separate tests:**
 
-OneMax 100, matched (budget 200,000):
-
-| Solver | Runs | Reached | Median first hit (evaluations) | Best value: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| ga | 5 | 4 | 87,834 | 100 | 100 | 99 | 0 |
-
-OneMax 1000, matched (budget 2,000,000):
-
-| Solver | Runs | Reached | Median first hit (evaluations) | Best value: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| ga | 5 | 0 | - | 775 | 781 | 757 | 5 |
-
 OneMax 100, idiomatic (budget 200,000):
 
 | Solver | Runs | Reached | Median first hit (evaluations) | Best value: median | best | worst | Capped |
@@ -66,7 +51,7 @@ OneMax 100, idiomatic (budget 200,000):
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods:** `ga`, the manual's "Traveling salesman" example (section 6.5): `Codecs.ofPermutation(n)`, population 500, maximal age 11, `SwapMutator(0.2)`, `PartiallyMatchedCrossover(0.35)`, the other engine defaults ([lines 364-388](../../../benchmarks/adapters/jenetics/Bench.java#L364-L388)). Of the two permutation examples, with no stated preference, the docs list only the manual's; the program [TravelingSalesman.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/TravelingSalesman.java) is only in the source tree. The engine's default crossover and `Mutator` break a permutation.
+**Methods:** `ga`, the manual's "Traveling salesman" example (section 6.5): `Codecs.ofPermutation(n)`, population 500, maximal age 11, `SwapMutator(0.2)`, `PartiallyMatchedCrossover(0.35)`, the other engine defaults ([lines 348-372](../../../benchmarks/adapters/jenetics/Bench.java#L348-L372)). Of the two permutation examples, with no stated preference, the docs list only the manual's; the program [TravelingSalesman.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/TravelingSalesman.java) is only in the source tree. The engine's default crossover and `Mutator` break a permutation.
 
 **Keeping going:** the example's `limit(250)` is lifted; `Limits.bySteadyFitness(25)` ends an attempt.
 
@@ -90,7 +75,7 @@ N-Queens 64 (budget 1,000,000):
 
 ## Continuous: Rastrigin 10 and 30, Ackley 30 (multimodal), Rosenbrock 10 (unimodal)
 
-**Methods:** `ga`, the manual's "Rastrigin function" example (section 6.3), with the engine of its "Real function" example (section 6.2, [RealFunction.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/RealFunction.java)): `Codecs.ofVector(new DoubleRange(lower, upper), n)`, population 500, `Mutator(0.03)`, `MeanAlterer(0.6)`, the other defaults ([lines 389-415](../../../benchmarks/adapters/jenetics/Bench.java#L389-L415)). Jenetics has no other recommendation for real functions, so Rosenbrock runs the same.
+**Methods:** `ga`, the manual's "Rastrigin function" example (section 6.3), with the engine of its "Real function" example (section 6.2, [RealFunction.java](https://github.com/jenetics/jenetics/blob/v9.1.0/jenetics.example/src/main/java/io/jenetics/example/RealFunction.java)): `Codecs.ofVector(new DoubleRange(lower, upper), n)`, population 500, `Mutator(0.03)`, `MeanAlterer(0.6)`, the other defaults ([lines 373-399](../../../benchmarks/adapters/jenetics/Bench.java#L373-L399)). Jenetics has no other recommendation for real functions, so Rosenbrock runs the same.
 
 **Keeping going:** both examples set `Limits.bySteadyFitness(7)`, which ends an attempt; `limit(100)` is lifted.
 
@@ -142,6 +127,7 @@ An NSGA-II can be built from the engine, `NSGA2Selector`, `UFTournamentSelector`
 
 ## Can't run
 
+- OneMax 100 and 1000, matched: no bit-flip mutation among Jenetics' own components.
 - The 5 multi-objective scenarios: no polynomial mutation, and no NSGA-III, SPEA2, MOEA/D or SMS-EMOA.
 
 ## Bugs found

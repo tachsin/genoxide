@@ -407,7 +407,7 @@ const WARM_UP_EVALUATIONS = 50_000
 const WARM_UP_SEED = 999_999
 
 # rule 5.3: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took CAPPED of
-# it) without reaching the target runs no more seeds
+# it) without reaching the target runs no more seeds; only in a scenario with a target
 const EARLY_SEEDS = 3
 const CAPPED = 0.98
 
@@ -474,14 +474,11 @@ function main(args)
             budget = Budget(WARM_UP_EVALUATIONS, max_seconds)
             run_restarting(s -> run(budget, s), budget, WARM_UP_SEED)
         end
-        capped = Dict(solver => 0 for (solver, _) in solvers)
+        # rule 5.3 applies only to scenarios with a target: every seed runs
         for seed in seed_from:seed_to, (solver, run) in solvers
-            index = seed - seed_from
-            index >= EARLY_SEEDS && capped[solver] == EARLY_SEEDS && continue
             budget = Budget(max_evaluations, max_seconds)  # the clock starts
             status, iterations, restarts = run_restarting(s -> run(budget, s), budget, seed)
             elapsed = seconds(budget)
-            capped[solver] += index < EARLY_SEEDS && elapsed >= CAPPED * max_seconds
             # the final population of the last attempt (rule 7.2): the objective values the library
             # evaluated
             points = [Metaheuristics.fval(s) for s in status.population]

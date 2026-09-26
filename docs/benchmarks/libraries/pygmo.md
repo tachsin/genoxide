@@ -97,7 +97,7 @@ Ackley 30 (1,000,000 evaluations):
 | cma_es | 5 | 5 | 3,909 | 0.0097 (0.0089, 0.0100) | 0 | 0 |
 | simulated_annealing | 3 | 0 | | 0.328 (0.312, 0.384) | 3 | 52 |
 
-Every CMA-ES run on Rastrigin 10 ended at 0.995, one variable a period away from the optimum. The capped runs stopped after about 1.6 million evaluations (CMA-ES, Rastrigin 30) and 700,000 to 800,000 (simulated annealing).
+In these tests, every CMA-ES run on Rastrigin 10 ended at 0.995, one variable a period away from the optimum. The capped runs stopped after about 1.6 million evaluations (CMA-ES, Rastrigin 30) and 700,000 to 800,000 (simulated annealing).
 
 ## Continuous, unimodal: Rosenbrock 10
 

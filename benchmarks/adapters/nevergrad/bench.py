@@ -13,8 +13,7 @@ docs/benchmarks/libraries/nevergrad.md:
   docs' discrete parameter, a TransitionChoice;
 - N-Queens: NgIohTuned, RotatedTwoPointsDE and GeneticDE on a real array whose argsort is the
   permutation, Nevergrad's documented way to optimize a permutation;
-- Rastrigin and Ackley: NgIohTuned, ScrHammersleySearchPlusMiddlePoint and OnePlusOne, and
-  Rosenbrock: NgIohTuned, OnePlusOne and CMA, on a bounded Array.
+- Rastrigin, Ackley and Rosenbrock: NgIohTuned, OnePlusOne and CMA, on a bounded Array.
 It prints nothing for the matched OneMax (Nevergrad has no GA with the matched operators) and for
 the multi-objective scenarios, which run only NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA
 (rule 6.1): Nevergrad has none of them.
@@ -194,25 +193,14 @@ def solvers(problem):
     # dimension: "OnePlusOne is a simple robust method for continuous parameters with
     # num_workers < 8", and "CMA is excellent for control (e.g. neurocontrol) when the environment
     # is not very noisy (num_workers ~50 ok) and when the budget is large (e.g. 1000 x the
-    # dimension)"
-    one_plus_one = ("one_plus_one", ng.optimizers.OnePlusOne)
-    if problem == "rosenbrock":
-        return [
-            ("ngiohtuned", ng.optimizers.NgIohTuned),
-            one_plus_one,
-            # with bounds it is CMAbounded (MetaCMA); it starts again from the middle of the box
-            # when pycma's own stop criteria end a run (optimizerlib.py, _CMA.es)
-            ("cma_es", ng.optimizers.CMA),
-        ]
+    # dimension)". ScrHammersleySearchPlusMiddlePoint, the list's case for "very multimodal cases",
+    # is a one-shot sampler that ignores the values, so it doesn't run in a scenario with a target
     return [
         ("ngiohtuned", ng.optimizers.NgIohTuned),
-        # "ScrHammersleySearchPlusMiddlePoint is excellent for super parallel cases (fully one-shot,
-        # i.e. num_workers = budget included) or for very multimodal cases": the only one the list
-        # gives for multimodal functions. A scrambled Hammersley sequence over the box, plus its
-        # middle point
-        ("scr_hammersley", ng.optimizers.ScrHammersleySearchPlusMiddlePoint),
-        # of the two that match, the first the list gives (rule 6.2)
-        one_plus_one,
+        ("one_plus_one", ng.optimizers.OnePlusOne),
+        # with bounds it is CMAbounded (MetaCMA); it starts again from the middle of the box
+        # when pycma's own stop criteria end a run (optimizerlib.py, _CMA.es)
+        ("cma_es", ng.optimizers.CMA),
     ]
 
 
