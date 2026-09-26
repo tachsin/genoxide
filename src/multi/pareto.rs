@@ -226,8 +226,12 @@ fn ens_ranks<const M: usize>(points: &[[f64; M]]) -> Vec<usize> {
 /// objective get an infinite distance. Larger distances mean less crowded regions, which
 /// NSGA-II prefers to keep a spread-out front.
 ///
-/// An objective whose range is 0 or not finite adds nothing, and a front of invalid solutions
-/// has distances 0.
+/// An objective whose range is 0 or not finite adds nothing. If any solution of the front is
+/// invalid, every distance is 0.
+///
+/// # Panics
+///
+/// If an index of `front` is out of range of `scores`.
 ///
 /// ```
 /// use genoxide::multi::{Scores, crowding_distance};

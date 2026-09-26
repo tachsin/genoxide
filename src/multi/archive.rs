@@ -13,7 +13,8 @@ use crate::{Error, Individual, Objective, Result};
 /// objective vector, the first one given. With a capacity, the most crowded member makes room
 /// for a new one: the smallest [crowding distance](crowding_distance), the earliest on ties. The
 /// extremes of each objective have an infinite distance, so they stay unless every member is an
-/// extreme.
+/// extreme. They aren't infinite for an objective whose range isn't finite, or when any member is
+/// invalid (every distance is then 0).
 ///
 /// Record a run with [`update`](ParetoArchive::update) in
 /// [`MultiEngine::on_generation`](super::MultiEngine::on_generation):
@@ -111,15 +112,20 @@ impl<G: Genome, const M: usize> ParetoArchive<G, M> {
             return false;
         };
         let objectives = &self.objectives;
+        // the members are evaluated
         let rejected = self.members.iter().any(|member| {
-            let other = member.fitness().expect("members are evaluated");
+            let Some(other) = member.fitness() else {
+                return false;
+            };
             other == scores || dominates(&other, &scores, objectives)
         });
         if rejected {
             return false;
         }
         self.members.retain(|member| {
-            let other = member.fitness().expect("members are evaluated");
+            let Some(other) = member.fitness() else {
+                return true;
+            };
             !dominates(&scores, &other, objectives)
         });
         self.members.push(individual.clone());

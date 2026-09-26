@@ -90,6 +90,10 @@ pub struct Penalty {
 
 impl Penalty {
     /// A penalty of `weight` (positive and finite) per unit of violation.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a weight that isn't positive and finite.
     pub fn new(weight: f64) -> Result<Self> {
         if weight > 0.0 && weight.is_finite() {
             Ok(Self { weight })

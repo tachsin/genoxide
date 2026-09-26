@@ -314,7 +314,8 @@ impl De {
         self.control
     }
 
-    /// The archive of replaced individuals, for [`Strategy::CurrentToPBest`].
+    /// The archive of replaced individuals, for [`Strategy::CurrentToPBest`] and
+    /// [`Strategy::CurrentToPBestRandomP`] (the default).
     pub fn archive(&self) -> &[Reals] {
         &self.archive
     }
@@ -947,9 +948,9 @@ impl DeBuilder {
     }
 
     /// Linear population size reduction (L-SHADE): after every generation, the population
-    /// shrinks to the size on the line from the initial size to `min_size` (at least 4) over
-    /// `max_evaluations` evaluations, dropping the worst individuals. Stop the run at
-    /// `max_evaluations` too. Off by default.
+    /// shrinks to the size on the line from the initial size to `min_size` (at least 4, at most
+    /// the population size) over `max_evaluations` evaluations (at least 1), dropping the worst
+    /// individuals. Stop the run at `max_evaluations` too. Off by default.
     pub fn linear_reduction(mut self, min_size: usize, max_evaluations: u64) -> Self {
         self.reduction = Some((min_size, max_evaluations));
         self

@@ -37,6 +37,10 @@ pub struct HallOfFame<G: Genome> {
 
 impl<G: Genome> HallOfFame<G> {
     /// An empty hall of fame for up to `capacity` individuals, at least 1.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a capacity of 0.
     pub fn new(capacity: usize) -> Result<Self> {
         if capacity == 0 {
             return Err(Error::InvalidSetting {

@@ -431,8 +431,8 @@ where
 /// A builder for [`SmsEmoa`], from [`SmsEmoa::builder`].
 ///
 /// The population size, the crossover and the mutation are required. Defaults: as many children
-/// as the population size, `crossover_rate` 0.9, `mutation_rate` 1.0, a random initial
-/// population and a random seed.
+/// as the population size, `crossover_rate` 0.9, `mutation_rate` 1.0, `eliminate_duplicates`
+/// true, a random initial population and a random seed.
 #[derive(Clone, Debug)]
 pub struct SmsEmoaBuilder<R: Representation, const M: usize, C = Unset, X = Unset> {
     representation: R,

@@ -42,6 +42,24 @@ pub const MAX_WORKERS: usize = 4096;
 ///
 /// With one worker, a seed gives the same run every time. With more, the order of the results
 /// depends on how long each evaluation takes, so runs differ.
+///
+/// ```
+/// use genoxide::prelude::*;
+///
+/// let ga = Ga::builder(Binary::new(32)?)
+///     .population_size(20)
+///     .select(Tournament::new(3)?)
+///     .crossover(UniformCrossover::new())
+///     .mutate(BitFlip::per_gene(1.0 / 32.0)?)
+///     .seed(1)
+///     .build_steady()?;
+/// let outcome = AsyncEngine::new(ga, |genome: &Bits| genome.count_ones() as f64)
+///     .workers(2)
+///     .stop_when(Stop::evaluations(1_000))
+///     .run()?;
+/// assert_eq!(outcome.evaluations(), 1_000);
+/// # Ok::<(), genoxide::Error>(())
+/// ```
 pub struct AsyncEngine<'o, A: Incremental, F> {
     algorithm: A,
     fitness: F,
@@ -149,6 +167,11 @@ where
     ///   genome.
     /// - The errors of the algorithm's [`receive`](Incremental::receive) and of the checkpoint
     ///   closure.
+    ///
+    /// # Panics
+    ///
+    /// A panic in the fitness function propagates to the caller, on the calling thread, once the
+    /// other evaluations in flight are done.
     ///
     /// The run stops at the first error, once the evaluations in flight are done. If the algorithm
     /// has run before and a stop condition is already met, or its limit of evaluations was

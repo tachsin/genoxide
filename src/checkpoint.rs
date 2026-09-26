@@ -1,6 +1,8 @@
 //! Checkpoints: an algorithm saved during a run, to resume the run later with exactly the results
 //! it would have had without the interruption.
 //!
+//! This module needs the `serde` feature.
+//!
 //! A checkpoint is a small header (the genoxide version and the algorithm's type), the algorithm's
 //! state in a compact binary format that stores every `f64` exactly (NaN and infinities too), and
 //! a checksum. It resumes with the same genoxide version that saved it, as the same type; a

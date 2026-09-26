@@ -1,7 +1,20 @@
 //! Genetic operators: selection, crossover and mutation.
 //!
 //! Crossover and mutation are parameterized by the [`Representation`], so an operator that
-//! doesn't fit a genome (e.g. point crossover on a permutation) doesn't compile.
+//! doesn't fit a genome (e.g. point crossover on a permutation) doesn't compile. Selection works
+//! with every representation: [`Tournament`], [`Rank`], [`Truncation`], [`Roulette`],
+//! [`StochasticUniversalSampling`] and [`RandomSelection`].
+//!
+//! | Representation | Crossover | Mutation |
+//! |---|---|---|
+//! | [`Binary`](crate::genome::Binary) | [`PointCrossover`], [`UniformCrossover`] | [`BitFlip`] (rate `1 / length`) |
+//! | [`Integer`](crate::genome::Integer) | [`PointCrossover`], [`UniformCrossover`] | [`UniformMutation`] (rate `1 / length`) |
+//! | [`Real`](crate::genome::Real) | [`SimulatedBinaryCrossover`] (η 15 to 20), [`BlendCrossover`] (α 0.5), [`ArithmeticCrossover`], [`PointCrossover`], [`UniformCrossover`] | [`PolynomialMutation`] (η 20, rate `1 / length`), [`GaussianMutation`] (σ 0.01 to 0.1), [`UniformMutation`] |
+//! | [`AdaptiveReal`](crate::genome::AdaptiveReal) | [`PointCrossover`], [`UniformCrossover`] | [`SelfAdaptiveMutation`] (τ `1 / √n`) |
+//! | [`Permutation`](crate::genome::Permutation) | [`OrderCrossover`], [`PartiallyMappedCrossover`], [`CycleCrossover`], [`EdgeRecombinationCrossover`] | [`SwapMutation`], [`InversionMutation`], [`InsertionMutation`], [`ScrambleMutation`] |
+//!
+//! [`NoCrossover`] fits every representation, for algorithms that only mutate. For another
+//! representation, or another operator, implement [`Crossover`] and [`Mutate`].
 
 pub mod crossover;
 pub mod mutate;
@@ -49,6 +62,34 @@ pub trait Select: Clone + Debug + Send + Sync {
 }
 
 /// Recombines two genomes into two children, in place.
+///
+/// Implement it for a crossover of your own:
+///
+/// ```
+/// use genoxide::StreamRng;
+/// use genoxide::genome::{Real, Reals};
+/// use genoxide::operator::Crossover;
+///
+/// // the children are the gene-wise minimum and maximum of their parents
+/// #[derive(Clone, Debug)]
+/// struct MinMax;
+///
+/// impl Crossover<Real> for MinMax {
+///     fn crossover(&self, _real: &Real, a: &mut Reals, b: &mut Reals, _rng: &mut StreamRng) {
+///         for gene in 0..a.len() {
+///             let (x, y) = (a[gene], b[gene]);
+///             (a[gene], b[gene]) = (x.min(y), x.max(y));
+///         }
+///     }
+/// }
+///
+/// let real = Real::uniform(2, 0.0..=1.0)?;
+/// let (mut a, mut b) = (Reals::from(vec![0.2, 0.9]), Reals::from(vec![0.5, 0.1]));
+/// MinMax.crossover(&real, &mut a, &mut b, &mut StreamRng::seed_from_u64(0));
+/// assert_eq!(&a[..], &[0.2, 0.1]);
+/// assert_eq!(&b[..], &[0.5, 0.9]);
+/// # Ok::<(), genoxide::Error>(())
+/// ```
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a crossover for `{R}`",
     label = "not a crossover for `{R}`",
@@ -56,6 +97,10 @@ pub trait Select: Clone + Debug + Send + Sync {
 )]
 pub trait Crossover<R: Representation>: Clone + Debug + Send + Sync {
     /// Recombines `a` and `b`, which become the two children.
+    ///
+    /// # Panics
+    ///
+    /// May panic if a genome doesn't fit the representation, e.g. has another length.
     fn crossover(
         &self,
         representation: &R,
@@ -74,6 +119,37 @@ pub trait Crossover<R: Representation>: Clone + Debug + Send + Sync {
 }
 
 /// Changes a genome randomly, in place.
+///
+/// Implement it for a mutation of your own:
+///
+/// ```
+/// use genoxide::StreamRng;
+/// use genoxide::genome::{Integer, Integers};
+/// use genoxide::operator::Mutate;
+/// use rand::RngExt;
+///
+/// // adds 1 to a random gene, back to its lower bound after its upper bound
+/// #[derive(Clone, Debug)]
+/// struct Increment;
+///
+/// impl Mutate<Integer> for Increment {
+///     fn mutate(&self, integer: &Integer, genome: &mut Integers, rng: &mut StreamRng) {
+///         let gene = rng.random_range(0..genome.len());
+///         let bounds = &integer.bounds()[gene];
+///         genome[gene] = if genome[gene] < *bounds.end() {
+///             genome[gene] + 1
+///         } else {
+///             *bounds.start()
+///         };
+///     }
+/// }
+///
+/// let integer = Integer::uniform(3, 0..=9)?;
+/// let mut genome = Integers::from(vec![0, 5, 9]);
+/// Increment.mutate(&integer, &mut genome, &mut StreamRng::seed_from_u64(0));
+/// assert_eq!(genome.iter().sum::<i64>() % 10, 5); // one gene changed by +1 or -9
+/// # Ok::<(), genoxide::Error>(())
+/// ```
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a mutation for `{R}`",
     label = "not a mutation for `{R}`",
@@ -82,6 +158,10 @@ pub trait Crossover<R: Representation>: Clone + Debug + Send + Sync {
 pub trait Mutate<R: Representation>: Clone + Debug + Send + Sync {
     /// Mutates `genome`. A mutation with a per-gene rate can leave it unchanged when it picks no
     /// gene; the other mutations always change it (unless its space has a single genome).
+    ///
+    /// # Panics
+    ///
+    /// May panic if the genome doesn't fit the representation, e.g. has another length.
     fn mutate(&self, representation: &R, genome: &mut R::Genome, rng: &mut StreamRng);
 }
 

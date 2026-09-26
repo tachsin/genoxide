@@ -120,6 +120,10 @@ pub struct AdaptiveReal {
 impl AdaptiveReal {
     /// Genomes of `real` with a step size, starting at `initial_step` (positive and finite, a
     /// fraction of each gene's range; e.g. 0.3 to start broad).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for an initial step size that isn't positive and finite.
     pub fn new(real: Real, initial_step: f64) -> Result<Self> {
         if !(initial_step > 0.0 && initial_step.is_finite()) {
             return Err(Error::InvalidSetting {

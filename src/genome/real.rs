@@ -116,7 +116,12 @@ pub struct Real {
 
 impl Real {
     /// Real-valued genomes with these bounds, one per gene. At least one gene, and every range
-    /// must be finite and contain a value.
+    /// must contain a value and have a finite width (`end - start`), so its ends are finite too.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for no bounds, an empty range (NaN bounds included), or a range
+    /// whose width isn't finite, e.g. `-f64::MAX..=f64::MAX`.
     pub fn new<I: IntoIterator<Item = RangeInclusive<f64>>>(bounds: I) -> Result<Self> {
         let bounds: Vec<_> = bounds.into_iter().collect();
         if bounds.is_empty() {
@@ -150,6 +155,10 @@ impl Real {
     }
 
     /// Real-valued genomes of `len` genes, all with the same bounds.
+    ///
+    /// # Errors
+    ///
+    /// As [`new`](Real::new): [`Error::InvalidSetting`] for a length of 0 or invalid bounds.
     pub fn uniform(len: usize, bounds: RangeInclusive<f64>) -> Result<Self> {
         Self::new(std::iter::repeat_n(bounds, len))
     }

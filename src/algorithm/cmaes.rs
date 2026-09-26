@@ -43,10 +43,11 @@ pub enum Criterion {
     /// the `1 + ⌈0.1 + λ / 4⌉`-th best: a plateau.
     EqualFunValues,
     /// The step size times every standard deviation and evolution path component is below 1e-12
-    /// times the initial step size.
+    /// times the step size the run started with: the initial step size, or the random one of a
+    /// small [BIPOP](Restarts::Bipop) run.
     TolX,
-    /// The step size times the largest standard deviation grew above 1000 times the initial step
-    /// size: the function is probably unbounded, or the step size diverged.
+    /// The step size times the largest standard deviation grew above 1000 times the step size the
+    /// run started with: the function is probably unbounded, or the step size diverged.
     TolUpX,
     /// Adding 0.1 standard deviations along a principal axis doesn't change the mean.
     NoEffectAxis,
@@ -67,9 +68,12 @@ pub enum Covariance {
     #[default]
     Full,
     /// A diagonal covariance matrix (sep-CMA-ES, Ros and Hansen, 2008): only the variance of
-    /// each gene is learned, (n + 2) / 3 times faster than with a full matrix, and each sample
-    /// costs O(n). For separable problems and for high dimensions, from hundreds to thousands of
-    /// genes; it can't learn correlations between genes.
+    /// each gene is learned, and each sample costs O(n). For separable problems and for high
+    /// dimensions, from hundreds to thousands of genes; it can't learn correlations between genes.
+    ///
+    /// It also changes the strategy parameters: the learning rates `c_1` and `c_μ` are (n + 2) / 3
+    /// times those of a full matrix (`c_1` at most 1, `c_μ` at most `1 − c_1`), and the standard
+    /// deviations are updated every generation instead of every few generations.
     Diagonal,
 }
 

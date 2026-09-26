@@ -452,8 +452,9 @@ where
 /// A builder for [`Moead`], from [`Moead::builder`].
 ///
 /// The crossover and the mutation are required. Defaults: 20 neighbors, parents from the
-/// neighborhood with probability 0.9, at most 2 replacements per child, Tchebycheff decomposition, `crossover_rate` and
-/// `mutation_rate` 1.0 (as in pymoo), a random initial population and a random seed.
+/// neighborhood with probability 0.9, at most 2 replacements per child, Tchebycheff
+/// decomposition, `crossover_rate` and `mutation_rate` 1.0 (as in pymoo), a random initial
+/// population and a random seed.
 #[derive(Clone, Debug)]
 pub struct MoeadBuilder<R: Representation, const M: usize, C = Unset, X = Unset> {
     representation: R,

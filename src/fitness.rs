@@ -101,7 +101,11 @@ impl Fitness {
         Self::try_new(score).unwrap_or(Self::invalid())
     }
 
-    /// A fitness with this score, or [`Error::NanFitness`] for NaN.
+    /// A fitness with this score.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NanFitness`] for NaN.
     pub fn try_new(score: f64) -> Result<Self> {
         if score.is_nan() {
             Err(Error::NanFitness)
@@ -136,8 +140,12 @@ impl Fitness {
         Self::try_constrained(score, violation).unwrap_or(Self::invalid())
     }
 
-    /// A fitness with this score and constraint violation, or [`Error::NanFitness`] for a NaN
-    /// score or violation, and [`Error::InvalidFitness`] for a negative violation.
+    /// A fitness with this score and constraint violation.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NanFitness`] for a NaN score or violation, and [`Error::InvalidFitness`] for a
+    /// negative violation.
     pub fn try_constrained(score: f64, violation: f64) -> Result<Self> {
         if violation.is_nan() {
             return Err(Error::NanFitness);

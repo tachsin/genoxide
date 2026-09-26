@@ -361,6 +361,10 @@ where
     /// - [`Error::FitnessCount`] if a [`Batch`] returns a different number of scores than genomes.
     /// - The errors of the algorithm's [`tell`](MultiObjectiveAlgorithm::tell) and of the
     ///   checkpoint closure.
+    ///
+    /// # Panics
+    ///
+    /// A panic in the fitness function propagates to the caller.
     pub fn run(&mut self) -> Result<MultiOutcome<A::Genome, M>> {
         if self.stop.is_none() && self.abort.is_none() {
             return Err(Error::MissingSetting {

@@ -39,8 +39,9 @@ pub trait TestProblem<const M: usize>: MultiFitnessFunction<Reals, M, Output = [
     /// The representation: the number of variables and their bounds.
     fn real(&self) -> Real;
 
-    /// At least `points` points of the optimal front (exactly `points` for 2 objectives), for
-    /// [`igd`](super::indicator::igd) and similar indicators.
+    /// At least `points` points of the optimal front, for [`igd`](super::indicator::igd) and
+    /// similar indicators. Exactly `points` for 2 objectives, except that DTLZ gives 2 points for
+    /// `points` 0 or 1.
     fn optimal_front(&self, points: usize) -> Vec<[f64; M]>;
 }
 
@@ -177,6 +178,11 @@ zdt!(
 impl MultiFitnessFunction<Reals, 2> for Zdt1 {
     type Output = [f64; 2];
 
+    /// The objective values of `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` is empty.
     fn evaluate(&self, x: &Reals) -> [f64; 2] {
         let g = 1.0 + 9.0 * tail_mean(x);
         [x[0], g * (1.0 - (x[0] / g).sqrt())]
@@ -200,6 +206,11 @@ impl TestProblem<2> for Zdt1 {
 impl MultiFitnessFunction<Reals, 2> for Zdt2 {
     type Output = [f64; 2];
 
+    /// The objective values of `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` is empty.
     fn evaluate(&self, x: &Reals) -> [f64; 2] {
         let g = 1.0 + 9.0 * tail_mean(x);
         [x[0], g * (1.0 - (x[0] / g) * (x[0] / g))]
@@ -232,6 +243,11 @@ const ZDT3_PIECES: [(f64, f64); 5] = [
 impl MultiFitnessFunction<Reals, 2> for Zdt3 {
     type Output = [f64; 2];
 
+    /// The objective values of `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` is empty.
     fn evaluate(&self, x: &Reals) -> [f64; 2] {
         let g = 1.0 + 9.0 * tail_mean(x);
         let ratio = x[0] / g;
@@ -279,6 +295,11 @@ impl TestProblem<2> for Zdt3 {
 impl MultiFitnessFunction<Reals, 2> for Zdt4 {
     type Output = [f64; 2];
 
+    /// The objective values of `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` is empty.
     fn evaluate(&self, x: &Reals) -> [f64; 2] {
         let g = 1.0
             + 10.0 * (x.len() - 1) as f64
@@ -311,6 +332,11 @@ const ZDT6_START: f64 = 0.280_775_319_1;
 impl MultiFitnessFunction<Reals, 2> for Zdt6 {
     type Output = [f64; 2];
 
+    /// The objective values of `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` is empty.
     fn evaluate(&self, x: &Reals) -> [f64; 2] {
         let f1 = 1.0 - (-4.0 * x[0]).exp() * (6.0 * PI * x[0]).sin().powi(6);
         let g = 1.0 + 9.0 * tail_mean(x).powf(0.25);
@@ -357,6 +383,10 @@ macro_rules! dtlz {
 
         impl<const M: usize> Default for $name<M> {
             #[doc = concat!("The standard problem, with `M + ", stringify!($k), " − 1` variables.")]
+            ///
+            /// # Panics
+            ///
+            /// With fewer than 2 objectives.
             fn default() -> Self {
                 Self::new(M + $k - 1)
             }
@@ -432,6 +462,11 @@ fn spherical_front<const M: usize>(points: usize) -> Vec<[f64; M]> {
 impl<const M: usize> MultiFitnessFunction<Reals, M> for Dtlz1<M> {
     type Output = [f64; M];
 
+    /// The objective values of `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than `M − 1` genes.
     fn evaluate(&self, x: &Reals) -> [f64; M] {
         let g = rastrigin_g(&x[M - 1..]);
         std::array::from_fn(|m| {
@@ -467,6 +502,11 @@ impl<const M: usize> TestProblem<M> for Dtlz1<M> {
 impl<const M: usize> MultiFitnessFunction<Reals, M> for Dtlz2<M> {
     type Output = [f64; M];
 
+    /// The objective values of `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than `M − 1` genes.
     fn evaluate(&self, x: &Reals) -> [f64; M] {
         spherical(x, 1.0 + sphere_g(&x[M - 1..]), 1.0)
     }
@@ -489,6 +529,11 @@ impl<const M: usize> TestProblem<M> for Dtlz2<M> {
 impl<const M: usize> MultiFitnessFunction<Reals, M> for Dtlz3<M> {
     type Output = [f64; M];
 
+    /// The objective values of `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than `M − 1` genes.
     fn evaluate(&self, x: &Reals) -> [f64; M] {
         spherical(x, 1.0 + rastrigin_g(&x[M - 1..]), 1.0)
     }
@@ -511,6 +556,11 @@ impl<const M: usize> TestProblem<M> for Dtlz3<M> {
 impl<const M: usize> MultiFitnessFunction<Reals, M> for Dtlz4<M> {
     type Output = [f64; M];
 
+    /// The objective values of `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than `M − 1` genes.
     fn evaluate(&self, x: &Reals) -> [f64; M] {
         spherical(x, 1.0 + sphere_g(&x[M - 1..]), 100.0)
     }

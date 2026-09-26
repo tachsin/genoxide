@@ -32,9 +32,28 @@ use std::cmp::Ordering;
 /// Constraints are handled by constrained dominance ([`dominates`](super::dominates)).
 ///
 /// Built with [`Nsga2::builder`], run with a [`MultiEngine`](super::MultiEngine). For real
-/// genomes, the usual operators are [`SimulatedBinaryCrossover`](crate::operator::SimulatedBinaryCrossover)
-/// (η 15 to 20, rate 0.9) and [`PolynomialMutation`](crate::operator::PolynomialMutation)
-/// (η 20, a rate of 1 / the number of genes).
+/// genomes, the usual operators are
+/// [`SimulatedBinaryCrossover`](crate::operator::SimulatedBinaryCrossover) (η 15 to 20, rate 0.9)
+/// and [`PolynomialMutation`](crate::operator::PolynomialMutation) (η 20, a rate of 1 / the
+/// number of genes).
+///
+/// ```
+/// use genoxide::Objective::Minimize;
+/// use genoxide::multi::Nsga2;
+/// use genoxide::multi::problems::{TestProblem, Zdt1};
+/// use genoxide::prelude::*;
+///
+/// let problem = Zdt1::new(30);
+/// let nsga2 = Nsga2::builder(problem.real(), [Minimize; 2])
+///     .population_size(100)
+///     .crossover(SimulatedBinaryCrossover::new(15.0)?)
+///     .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0)?)
+///     .seed(1)
+///     .build()?;
+/// let outcome = MultiEngine::new(nsga2, problem).stop_when(Stop::generations(150)).run()?;
+/// assert_eq!(outcome.front().len(), 100);
+/// # Ok::<(), genoxide::Error>(())
+/// ```
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
@@ -360,7 +379,8 @@ where
 /// A builder for [`Nsga2`], from [`Nsga2::builder`].
 ///
 /// The population size, the crossover and the mutation are required. Defaults: `crossover_rate`
-/// 0.9, `mutation_rate` 1.0, a random initial population and a random seed.
+/// 0.9, `mutation_rate` 1.0, `eliminate_duplicates` true, a random initial population and a
+/// random seed.
 #[derive(Clone, Debug)]
 pub struct Nsga2Builder<R: Representation, const M: usize, C = Unset, X = Unset> {
     representation: R,

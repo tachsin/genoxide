@@ -41,7 +41,11 @@ impl<const M: usize> Scores<M> {
         Self::try_new(values).unwrap_or(Self::invalid())
     }
 
-    /// Scores with these objective values, or [`Error::NanFitness`] if one is NaN.
+    /// Scores with these objective values.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NanFitness`] if a value is NaN.
     pub fn try_new(values: [f64; M]) -> Result<Self> {
         if values.iter().any(|value| value.is_nan()) {
             return Err(Error::NanFitness);
@@ -62,8 +66,12 @@ impl<const M: usize> Scores<M> {
         Self::try_constrained(values, violation).unwrap_or(Self::invalid())
     }
 
-    /// Scores with these objective values and constraint violation, or [`Error::NanFitness`] for
-    /// a NaN value or violation, and [`Error::InvalidFitness`] for a negative violation.
+    /// Scores with these objective values and constraint violation.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NanFitness`] for a NaN value or violation, and [`Error::InvalidFitness`] for a
+    /// negative violation.
     pub fn try_constrained(values: [f64; M], violation: f64) -> Result<Self> {
         if violation.is_nan() {
             return Err(Error::NanFitness);
@@ -81,6 +89,8 @@ impl<const M: usize> Scores<M> {
     }
 
     /// The scores of a solution that can't be scored.
+    ///
+    /// With no objectives (`M` = 0), there is no value to mark invalid: these scores are valid.
     pub fn invalid() -> Self {
         Self {
             values: [f64::NAN; M],

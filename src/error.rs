@@ -6,7 +6,7 @@ use std::fmt;
 ///
 /// Invalid settings and values are reported as an `Error`, before a run starts where possible,
 /// not as panics. The few functions that panic say so under `# Panics`: an index out of bounds
-/// (as with slices), and the constructors of the test problems in
+/// (as with slices), a genome that doesn't fit its representation, and the test problems in
 /// [`multi::problems`](crate::multi::problems).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
