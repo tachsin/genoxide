@@ -14,6 +14,12 @@ pub trait Genes: Genome {
 
     /// Appends the genes to `genes`.
     fn push_genes(&self, genes: &mut Vec<Self::Element>);
+
+    /// The genome as real numbers, if it is: what the test problems of `genoxide::problems`
+    /// evaluate.
+    fn reals(&self) -> Option<&Reals> {
+        None
+    }
 }
 
 impl Genes for Bits {
@@ -29,6 +35,10 @@ impl Genes for Reals {
 
     fn push_genes(&self, genes: &mut Vec<f64>) {
         genes.extend_from_slice(self);
+    }
+
+    fn reals(&self) -> Option<&Reals> {
+        Some(self)
     }
 }
 

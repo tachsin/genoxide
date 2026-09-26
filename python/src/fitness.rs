@@ -1,5 +1,6 @@
 //! Python fitness functions: called with a genome as a numpy array, or with a generation as a
-//! 2-D array (a batch). And the progress callback, called after every generation.
+//! 2-D array (a batch); and the test problems of `genoxide::problems`, evaluated in Rust. And the
+//! progress callback, called after every generation.
 //!
 //! An exception in the fitness function or the progress callback, or Ctrl+C, stops the run: the
 //! first exception is kept, the abort flag is set, and the genomes left get an invalid fitness
@@ -9,6 +10,7 @@ use crate::genes::{self, Genes};
 use genoxide::Fitness;
 use genoxide::engine::{FitnessFunction, IntoFitness, Progress};
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
+use genoxide::problems::DynProblem;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -145,6 +147,8 @@ pub enum Value {
     Score(f64),
     Constrained(f64, f64),
     Invalid,
+    /// The fitness of a test problem evaluated in Rust.
+    Native(Fitness),
 }
 
 impl IntoFitness for Value {
@@ -153,6 +157,7 @@ impl IntoFitness for Value {
             Self::Score(score) => score.into_fitness(),
             Self::Constrained(score, violation) => (score, violation).into_fitness(),
             Self::Invalid => Ok(Fitness::invalid()),
+            Self::Native(fitness) => Ok(fitness),
         }
     }
 }
@@ -197,16 +202,26 @@ fn values(result: &Bound<'_, PyAny>, genomes: usize) -> PyResult<Vec<Value>> {
     }
 }
 
-/// A single-objective fitness function.
-pub struct Single<'a>(pub &'a Shared);
+/// A single-objective fitness function: the Python function of `Shared`, or a test problem of
+/// `genoxide::problems`, evaluated in Rust without Python.
+pub struct Single<'a> {
+    pub shared: &'a Shared,
+    pub problem: Option<&'a dyn DynProblem>,
+}
 
 impl<G: Genes> FitnessFunction<G> for Single<'_> {
     type Output = Value;
 
     fn evaluate(&self, genome: &G) -> Value {
-        let shared = self.0;
+        let shared = self.shared;
         if shared.aborted() {
             return Value::Invalid;
+        }
+        if let Some(problem) = self.problem {
+            // the run checks that the genome is real
+            return genome.reals().map_or(Value::Invalid, |genome| {
+                Value::Native(problem.evaluate(genome))
+            });
         }
         Python::attach(|py| {
             let argument = Ok(genes::array(py, genome).into_any());
@@ -215,12 +230,12 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
     }
 
     fn is_batch(&self) -> bool {
-        self.0.batch
+        self.shared.batch && self.problem.is_none()
     }
 
     fn evaluate_batch(&self, genomes: &[&G]) -> Vec<Value> {
-        let shared = self.0;
-        if !shared.batch {
+        let shared = self.shared;
+        if !FitnessFunction::<G>::is_batch(self) {
             return genomes
                 .iter()
                 .map(|genome| FitnessFunction::<G>::evaluate(self, genome))
