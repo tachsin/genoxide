@@ -1,7 +1,7 @@
 //! OneMax: find the bit string with the most ones.
 //!
 //! The "hello world" of genetic algorithms: a binary genome, tournament selection, uniform
-//! crossover and bit-flip mutation, with statistics per generation.
+//! crossover and bit-flip mutation, with the best count printed every 50 generations.
 //!
 //! ```text
 //! cargo run --release --example one_max
@@ -20,28 +20,23 @@ fn main() -> Result<()> {
         .seed(42)
         .build()?;
 
-    let mut statistics = Statistics::new();
+    println!("generation  best");
     let outcome = Engine::new(ga, |genome: &Bits| genome.count_ones() as f64)
         .stop_when(Stop::target(LEN as f64).or(Stop::generations(10_000)))
-        .observe(&mut statistics)
+        .on_generation(|snapshot| {
+            let progress = snapshot.progress();
+            if progress.generation() % 50 == 0 {
+                let best = progress.best().unwrap_or(Fitness::invalid());
+                println!("{:>10}  {best:>4}", progress.generation());
+            }
+        })
         .run()?;
 
-    println!("generation  best  mean");
-    for record in statistics.records().iter().step_by(25) {
-        println!(
-            "{:>10}  {:>4}  {:>6.1}",
-            record.generation,
-            record.best.and_then(Fitness::score).unwrap_or(f64::NAN),
-            record.mean.unwrap_or(f64::NAN),
-        );
-    }
     println!(
-        "\n{:?} after {} generations and {} evaluations ({:?}): {}",
-        outcome.stop_reason(),
-        outcome.generations(),
-        outcome.evaluations(),
-        outcome.elapsed(),
+        "\n{} ones after {} generations and {} evaluations (the optimum: {LEN})",
         outcome.best_fitness(),
+        outcome.generations(),
+        outcome.evaluations()
     );
     Ok(())
 }

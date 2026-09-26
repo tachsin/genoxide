@@ -1,14 +1,15 @@
 name: Docs site
 
 # The site at https://tachsin.github.io/genoxide/: pages built with Material for MkDocs from
-# docs/site/ (the examples included from examples/ and python/examples/), and the API reference of
-# the Python package, built with pdoc from its docstrings (NumPy style) into api/python/. Pull
-# requests that touch them build the site without deploying.
+# docs/site/, the example pages generated from the folders in examples/ by docs/hooks/examples.py,
+# and the API reference of the Python package, built with pdoc from its docstrings (NumPy style)
+# into api/python/. Pull requests that touch them build the site without deploying.
 on:
   push:
     branches: [main]
     paths:
       - "docs/site/**"
+      - "docs/hooks/**"
       - "mkdocs.yml"
       - "examples/**"
       - "python/**"
@@ -16,6 +17,7 @@ on:
   pull_request:
     paths:
       - "docs/site/**"
+      - "docs/hooks/**"
       - "mkdocs.yml"
       - "examples/**"
       - "python/**"

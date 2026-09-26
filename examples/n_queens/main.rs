@@ -41,18 +41,11 @@ fn main() -> Result<()> {
         .run()?;
 
     println!(
-        "{:?} after {} generations: {} conflicts",
-        outcome.stop_reason(),
+        "{} conflicts after {} generations and {} evaluations",
+        outcome.best_fitness(),
         outcome.generations(),
-        outcome.best_fitness()
+        outcome.evaluations()
     );
-    if N <= 16 {
-        for &column in outcome.best_genome().iter() {
-            let row: String = (0..N)
-                .map(|c| if c == column { 'Q' } else { '.' })
-                .collect();
-            println!("{row}");
-        }
-    }
+    println!("columns {:?}", &outcome.best_genome()[..]);
     Ok(())
 }

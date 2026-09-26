@@ -2,8 +2,7 @@
 //!
 //! Shows a constraint with Deb's feasibility rules: the fitness function returns the value and how
 //! far the weight exceeds the capacity, so overweight selections still guide the search towards
-//! the feasible ones. Also a hall of fame. The result is checked against the optimum found by
-//! brute force.
+//! the feasible ones. The result is checked against the optimum found by dynamic programming.
 //!
 //! ```text
 //! cargo run --release --example knapsack
@@ -36,8 +35,8 @@ const ITEMS: [(u32, u32); 20] = [
 ];
 const CAPACITY: u32 = 400;
 
-// the total value, and how much the weight exceeds the capacity (0 if the items fit)
-fn value(selection: &Bits) -> (f64, f64) {
+// the total weight and value of the selected items
+fn totals(selection: &Bits) -> (u32, u32) {
     let (mut weight, mut value) = (0, 0);
     for (item, selected) in selection.iter().enumerate() {
         if selected {
@@ -45,18 +44,27 @@ fn value(selection: &Bits) -> (f64, f64) {
             value += ITEMS[item].1;
         }
     }
+    (weight, value)
+}
+
+// the total value, and how much the weight exceeds the capacity (0 if the items fit)
+fn value(selection: &Bits) -> (f64, f64) {
+    let (weight, value) = totals(selection);
     (
         f64::from(value),
         constraint::at_most(f64::from(weight), f64::from(CAPACITY)),
     )
 }
 
-// the best value of the selections that fit, over all 2^20 selections
-fn optimum() -> f64 {
-    (0u32..1 << ITEMS.len())
-        .map(|mask| value(&(0..ITEMS.len()).map(|item| mask >> item & 1 == 1).collect()))
-        .filter(|&(_, violation)| violation == 0.0)
-        .fold(0.0, |best, (value, _)| f64::max(best, value))
+// the best value that fits, by dynamic programming over the capacities
+fn optimum() -> u32 {
+    let mut best = [0; CAPACITY as usize + 1];
+    for (weight, value) in ITEMS {
+        for capacity in (weight as usize..=CAPACITY as usize).rev() {
+            best[capacity] = best[capacity].max(best[capacity - weight as usize] + value);
+        }
+    }
+    best[CAPACITY as usize]
 }
 
 fn main() -> Result<()> {
@@ -68,22 +76,21 @@ fn main() -> Result<()> {
         .seed(7)
         .build()?;
 
-    let mut hall_of_fame = HallOfFame::new(3)?;
     let outcome = Engine::new(ga, value)
         .stop_when(Stop::stagnation(200).or(Stop::generations(2_000)))
-        .observe(&mut hall_of_fame)
         .run()?;
 
-    println!("best selections:");
-    for individual in hall_of_fame.individuals() {
-        let value = individual.fitness().unwrap_or(Fitness::invalid());
-        println!("  {} value {value}", individual.genome());
-    }
-    let optimum = optimum();
+    let best = outcome.best_genome();
+    let items: Vec<usize> = (0..ITEMS.len())
+        .filter(|&item| best.get(item) == Some(true))
+        .collect();
+    let (weight, value) = totals(best);
+    println!("items {items:?}");
+    println!("value {value}, weight {weight} of {CAPACITY}");
     println!(
-        "\nfound {} after {} evaluations, the optimum is {optimum}",
-        outcome.best_fitness(),
-        outcome.evaluations()
+        "after {} evaluations; the optimum is {}",
+        outcome.evaluations(),
+        optimum()
     );
     Ok(())
 }

@@ -33,12 +33,13 @@ result = cmaes.run(rastrigin, batch=True, target=1e-8, evaluations=500_000)
 print(result.best_genome, result.best_fitness)
 ```
 
-More in [examples/](examples/):
-- OneMax
-- a knapsack with a constraint
-- N-Queens with tabu search
-- Rastrigin with CMA-ES and L-SHADE
-- ZDT1 with NSGA-II
+More in [examples/](https://github.com/tachsin/genoxide/tree/main/examples), each the same program in Python and Rust
+(`python examples/<name>/main.py` in the repository), and on the [docs site](https://tachsin.github.io/genoxide/examples/):
+- OneMax, a knapsack with a constraint, and N-Queens
+- the travelling salesman (TSPLIB berlin52) and job shop scheduling (ft06)
+- Rastrigin with CMA-ES and L-SHADE, and the pressure vessel design with constraints
+- ZDT1 with NSGA-II, and DTLZ2 with NSGA-III
+- XOR neuroevolution with CMA-ES
 
 ## Install
 
