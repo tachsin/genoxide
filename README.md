@@ -1,6 +1,7 @@
 # genoxide
 
 [![Crates.io](https://img.shields.io/crates/v/genoxide.svg)](https://crates.io/crates/genoxide)
+[![PyPI](https://img.shields.io/pypi/v/genoxide.svg)](https://pypi.org/project/genoxide/)
 [![Docs.rs](https://img.shields.io/docsrs/genoxide)](https://docs.rs/genoxide)
 [![CI](https://github.com/tachsin/genoxide/actions/workflows/ci.yml/badge.svg)](https://github.com/tachsin/genoxide/actions/workflows/ci.yml)
 [![License](https://img.shields.io/crates/l/genoxide.svg)](#license)
