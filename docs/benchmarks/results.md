@@ -29,6 +29,8 @@ Invalid runs, left out of every table and chart: 3
 
 The check was too strict for these three: each ends within its last generation, which a later fix of the check allows (#172).
 
+This run used the rules and adapters at 8dd8436. The changes merged since, in #172 to #174, apply from the next run: a 600 s cap for multi-objective scenarios, restarts of stalled attempts, CMA in place of Nevergrad's Hammersley search, and the methods of genoxide (Python) aligned with the Rust ones.
+
 ## Charts
 
 ![Time to target: each library's fastest method](summary.svg)

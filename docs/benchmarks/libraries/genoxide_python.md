@@ -1,4 +1,4 @@
-# genoxide for Python (Rust via Python, 0.6.0)
+# genoxide for Python (Rust via Python, 0.7.0)
 
 genoxide's Python package, from this repository's [python/](../../../python/) folder: genoxide's algorithms, in Rust, calling fitness functions in Python and numpy. Its docs are [python/README.md](../../../python/README.md) and the docstrings of [python/genoxide/\_\_init\_\_.py](../../../python/genoxide/__init__.py).
 
