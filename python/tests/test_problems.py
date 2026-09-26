@@ -29,10 +29,41 @@ PROBLEMS = [
 ]
 
 
+MULTI_PROBLEMS = [
+    gx.problems.Zdt1,
+    gx.problems.Zdt2,
+    gx.problems.Zdt3,
+    gx.problems.Zdt4,
+    gx.problems.Zdt6,
+    gx.problems.Schaffer1,
+    gx.problems.Schaffer2,
+    gx.problems.FonsecaFleming,
+    gx.problems.Kursawe,
+    gx.problems.Poloni,
+    gx.problems.Viennet1,
+    gx.problems.Viennet2,
+    gx.problems.Viennet3,
+    gx.problems.Bnh,
+    gx.problems.Srn,
+    gx.problems.Tnk,
+    gx.problems.Osy,
+    gx.problems.Constr,
+    gx.problems.Dtlz1,
+    gx.problems.Dtlz2,
+    gx.problems.Dtlz3,
+    gx.problems.Dtlz4,
+]
+
+
 def test_the_classes_are_the_rust_registry():
     assert [cls().name for cls in PROBLEMS] == gx._genoxide.problem_names()
-    assert sorted(cls.__name__ for cls in PROBLEMS) == sorted(
-        name for name in gx.problems.__all__ if name not in ("Problem", "Optimum")
+    two = [cls().name for cls in MULTI_PROBLEMS if len(cls().objectives) == 2]
+    three = [cls().name for cls in MULTI_PROBLEMS if len(cls().objectives) == 3]
+    # the DTLZ problems have 3 objectives by default
+    assert two == gx._genoxide.multi_problem_names(2)[:-4]
+    assert three == gx._genoxide.multi_problem_names(3)
+    assert sorted(cls.__name__ for cls in PROBLEMS + MULTI_PROBLEMS) == sorted(
+        name for name in gx.problems.__all__ if name not in ("Problem", "MultiProblem", "Optimum")
     )
 
 
@@ -177,6 +208,174 @@ def test_a_native_run_calls_on_generation():
     result = pso.run(problem, generations=100, on_generation=stop_at_three)
     assert result.stop_reason == "aborted"
     assert seen == [0, 1, 2, 3]
+
+
+# ---- multi-objective problems ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("cls", MULTI_PROBLEMS)
+def test_every_multi_objective_problem_describes_itself(cls):
+    problem = cls()
+    assert isinstance(problem, gx.problems.MultiProblem)
+    assert not isinstance(problem, gx.problems.Problem)
+    assert set(problem.objectives) == {"minimize"}
+    assert problem.reference
+    assert problem.reference_url is None or problem.reference_url.startswith("https://")
+    assert cls.__doc__
+    bounds = np.array(problem.genome._describe()["bounds"])
+    assert bounds.shape == (problem.dimensions, 2)
+    genome = bounds.mean(axis=1)
+    assert problem.constraints(genome).shape == (problem.constraint_count,)
+    front = problem.optimal_front(20)
+    if front is None:
+        assert problem.ideal_point is None and problem.nadir_point is None
+    else:
+        count = len(problem.objectives)
+        assert front.shape[1] == count and len(front) >= 20
+        assert np.all(problem.ideal_point <= front.min(axis=0) + 1e-9)
+        assert np.all(front.max(axis=0) <= problem.nadir_point + 1e-9)
+
+
+@pytest.mark.parametrize("cls", MULTI_PROBLEMS)
+def test_multi_objective_calls_and_batches_agree(cls):
+    problem = cls()
+    bounds = np.array(problem.genome._describe()["bounds"])
+    genomes = np.random.default_rng(1).uniform(bounds[:, 0], bounds[:, 1], size=(20, len(bounds)))
+    values = problem.evaluate(genomes)
+    if problem.constraint_count:
+        values, violations = values
+        assert violations.shape == (20,) and np.all(violations >= 0)
+        calls = [problem(genome) for genome in genomes]
+        assert [violation for _, violation in calls] == list(violations)
+        assert np.array_equal(np.array([objectives for objectives, _ in calls]), values)
+    else:
+        assert np.array_equal(np.array([problem(genome) for genome in genomes]), values)
+    assert values.shape == (20, len(problem.objectives))
+
+
+def test_multi_objective_values_at_chosen_points():
+    # ZDT1 at (0.25, 1/9, …): g = 2, f₂ = 2 (1 − √0.125)
+    x = np.full(30, 1 / 9)
+    x[0] = 0.25
+    assert gx.problems.Zdt1()(x) == pytest.approx([0.25, 2 - math.sqrt(2) / 2])
+    # BNH at (0, 3): outside the first constraint's circle by 25 + 9 − 25
+    objectives, violation = gx.problems.Bnh()([0.0, 3.0])
+    assert list(objectives) == [36.0, 29.0] and violation == 9.0
+    assert list(gx.problems.Bnh().constraints([0.0, 0.0])) == pytest.approx([0.0, -65.3])
+    # SRN at (−2.5, 2.5), on the second constraint's boundary
+    objectives, violation = gx.problems.Srn()([-2.5, 2.5])
+    assert list(objectives) == pytest.approx([24.5, -24.75]) and violation == 0.0
+    # VNT1 at the origin
+    assert list(gx.problems.Viennet1()([0.0, 0.0])) == [1.0, 2.0, 3.0]
+    # DTLZ2 on its front: the squared objectives sum to 1
+    front = gx.problems.Dtlz2(objectives=4).optimal_front(35)
+    assert front.shape == (35, 4)
+    assert np.allclose((front**2).sum(axis=1), 1)
+    assert gx.problems.Kursawe().optimal_front(10) is None
+    assert gx.problems.Constr().ideal_point == pytest.approx([7 / 18, 1])
+
+
+def test_multi_objective_sizes():
+    assert gx.problems.Zdt1().dimensions == 30
+    assert gx.problems.Zdt4().dimensions == 10
+    assert gx.problems.Zdt4().genome == gx.Real([(0.0, 1.0)] + [(-5.0, 5.0)] * 9)
+    assert gx.problems.Dtlz1().dimensions == 7
+    assert gx.problems.Dtlz2(objectives=4).dimensions == 13
+    assert gx.problems.Dtlz2(objectives=4).objectives == ["minimize"] * 4
+    assert gx.problems.Dtlz2(objectives=2, variables=5).dimensions == 5
+    assert gx.problems.Dtlz2(3) == gx.problems.Dtlz2(objectives=3)
+    assert gx.problems.Kursawe(5).dimensions == 5
+    assert gx.problems.Bnh().genome == gx.Real((-15.0, 30.0), length=2)
+    assert gx.problems.Osy().constraint_count == 6
+
+
+@pytest.mark.parametrize(
+    "problem, message",
+    [
+        (gx.problems.Zdt1(1), "Zdt1.variables is at least 2, not 1"),
+        (gx.problems.Kursawe(1), "Kursawe.variables is at least 2, not 1"),
+        (gx.problems.FonsecaFleming(0), "FonsecaFleming.variables is at least 1, not 0"),
+        (gx.problems.Dtlz2(objectives=7), "Dtlz2.objectives is at most 6, not 7"),
+        (gx.problems.Dtlz2(objectives=1), "Dtlz2.objectives is at least 2, not 1"),
+        (gx.problems.Dtlz1(objectives=4, variables=3), "Dtlz1.variables is at least 4, not 3"),
+    ],
+)
+def test_wrong_multi_objective_sizes_are_errors(problem, message):
+    with pytest.raises(ValueError, match=message):
+        problem.genome
+
+
+def nsga2(genome, objectives, **settings):
+    return gx.Nsga2(
+        genome,
+        objectives=objectives,
+        population_size=40,
+        crossover=gx.SimulatedBinaryCrossover(20),
+        mutation=gx.PolynomialMutation(20, rate=0.5),
+        seed=2,
+        **settings,
+    )
+
+
+@pytest.mark.parametrize("cls", [gx.problems.Bnh, gx.problems.Zdt1, gx.problems.Viennet1])
+@pytest.mark.parametrize("parallel", [False, True])
+def test_a_native_multi_objective_run_equals_a_run_with_python_calls(cls, parallel):
+    problem = cls()
+    algorithm = nsga2(problem.genome, problem.objectives)
+    native = algorithm.run(problem, generations=30, parallel=parallel)
+    python = algorithm.run(lambda x: problem(x), generations=30)
+    batch = algorithm.run(problem.evaluate, generations=30, batch=True)
+    for other in (python, batch):
+        assert np.array_equal(other.front_objectives, native.front_objectives)
+        assert np.array_equal(other.front_violations, native.front_violations)
+        assert np.array_equal(other.front_genomes, native.front_genomes)
+        assert other.evaluations == native.evaluations
+
+
+def test_a_native_multi_objective_run_reaches_the_front():
+    problem = gx.problems.Bnh()
+    result = nsga2(problem.genome, problem.objectives).run(problem, generations=200)
+    assert np.all(result.front_violations == 0)
+    distance = gx.indicators.igd_plus(result.front_objectives, problem.optimal_front(200))
+    assert distance < 1.0
+    for algorithm in (
+        gx.Spea2(
+            problem.genome,
+            objectives=problem.objectives,
+            population_size=40,
+            crossover=gx.SimulatedBinaryCrossover(20),
+            mutation=gx.PolynomialMutation(20, rate=0.5),
+            seed=1,
+        ),
+        gx.Moead(
+            problem.genome,
+            objectives=problem.objectives,
+            weights=gx.das_dennis(2, 39),
+            crossover=gx.SimulatedBinaryCrossover(20),
+            mutation=gx.PolynomialMutation(20, rate=0.5),
+            seed=1,
+        ),
+    ):
+        result = algorithm.run(problem, generations=100)
+        assert len(result.front_objectives) > 5
+
+
+def test_a_native_multi_objective_run_needs_matching_settings():
+    problem = gx.problems.Bnh()
+    with pytest.raises(ValueError, match="Bnh has 2 objectives: use a multi-objective algorithm"):
+        gx.Cmaes(problem.genome, seed=1).run(problem, generations=1)
+    with pytest.raises(ValueError, match="BNH has 2 objectives, but the algorithm has 3"):
+        nsga2(problem.genome, ["minimize"] * 3).run(problem, generations=1)
+    with pytest.raises(ValueError, match="BNH minimizes its objectives"):
+        nsga2(problem.genome, ["minimize", "maximize"]).run(problem, generations=1)
+    with pytest.raises(ValueError, match="BNH has 2 dimensions, but the genome has 3 genes"):
+        nsga2(gx.Real((0, 1), length=3), problem.objectives).run(problem, generations=1)
+    with pytest.raises(ValueError, match="BNH takes genomes of 2 genes, not 3"):
+        problem([1.0, 2.0, 3.0])
+    with pytest.raises(ValueError, match="BNH takes genomes of 2 genes, not 1"):
+        problem.constraints([1.0])
+    with pytest.raises(ValueError, match="points is at least 0"):
+        problem.optimal_front(-1)
 
 
 # ---- indicators ------------------------------------------------------------------------------

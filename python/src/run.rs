@@ -14,7 +14,6 @@ use genoxide::genome::Representation;
 use genoxide::multi::{self, Decomposition, MultiObjectiveAlgorithm, SmsEmoa};
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
-use genoxide::problems::DynProblem;
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -26,8 +25,9 @@ type Result<T> = std::result::Result<T, String>;
 
 /// Runs the optimization that `config` (JSON, from the Python package) describes, with
 /// `fitness`, called with a genome or, with `batch`, a generation of genomes; with `parallel`,
-/// from several threads at once. With `problem`, a test problem of `genoxide::problems` (JSON),
-/// the problem is evaluated in Rust instead, and `fitness` and `batch` aren't used.
+/// from several threads at once. With `problem`, a test problem of `genoxide::problems` or
+/// `genoxide::multi::problems` (JSON), the problem is evaluated in Rust instead, and `fitness` and
+/// `batch` aren't used.
 /// `on_generation` is called after every generation with the generation, the evaluations, the
 /// seconds and the best fitness (or the size of the front), and returns False to stop the run.
 /// Returns the result as a dict.
@@ -50,7 +50,7 @@ pub fn run<'py>(
     })?;
     let problem = problem.map(problems::parse).transpose()?;
     if let Some(problem) = &problem {
-        check_problem(problem.as_ref(), &run).map_err(PyValueError::new_err)?;
+        check_problem(problem, &run).map_err(PyValueError::new_err)?;
     }
     let context = Context {
         shared: Shared::new(fitness, batch, on_generation),
@@ -129,23 +129,45 @@ impl From<PyErr> for Failure {
 
 type Returns<'py> = std::result::Result<Bound<'py, PyDict>, Failure>;
 
-// a test problem runs with one objective and a real genome of its dimensions
-fn check_problem(problem: &dyn DynProblem, run: &config::Run) -> Result<()> {
-    if run.objectives.len() != 1 {
-        return Err(format!(
-            "{} has one objective: use a single-objective algorithm",
-            problem.name()
-        ));
+// a test problem runs with its objectives, minimized, and a real genome of its dimensions
+fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
+    let (name, objectives, dimensions) = match problem {
+        problems::Problem::Single(problem) => (problem.name(), 1, problem.real().genome_len()),
+        problems::Problem::Multi(config) => {
+            let (name, dimensions) = problems::name_and_dimensions(*config);
+            (name, config.objectives(), dimensions)
+        }
+    };
+    match (objectives, run.objectives.len()) {
+        (1, 1) => {}
+        (1, _) => {
+            return Err(format!(
+                "{name} has one objective: use a single-objective algorithm"
+            ));
+        }
+        (_, 1) => {
+            return Err(format!(
+                "{name} has {objectives} objectives: use a multi-objective algorithm"
+            ));
+        }
+        (objectives, count) if objectives != count => {
+            return Err(format!(
+                "{name} has {objectives} objectives, but the algorithm has {count}"
+            ));
+        }
+        _ => {
+            if run.objectives.contains(&config::Objective::Maximize) {
+                return Err(format!("{name} minimizes its objectives"));
+            }
+        }
     }
-    let dimensions = problem.real().genome_len();
     match &run.genome {
         config::Genome::Real { bounds } if bounds.len() == dimensions => Ok(()),
         config::Genome::Real { bounds } => Err(format!(
-            "{} has {dimensions} dimensions, but the genome has {} genes",
-            problem.name(),
+            "{name} has {dimensions} dimensions, but the genome has {} genes",
             bounds.len()
         )),
-        _ => Err(format!("{} needs a Real genome", problem.name())),
+        _ => Err(format!("{name} needs a Real genome")),
     }
 }
 
@@ -156,7 +178,7 @@ struct Context {
     stop: config::Stop,
     parallel: bool,
     // a test problem, evaluated in Rust instead of the Python function
-    problem: Option<Box<dyn DynProblem>>,
+    problem: Option<problems::Problem>,
 }
 
 impl Context {
@@ -636,10 +658,11 @@ where
     let stop = context.stop(true)?;
     let shared = &context.shared;
     let parallel = context.parallel;
-    let fitness = Single {
-        shared,
-        problem: context.problem.as_deref(),
+    let problem = match &context.problem {
+        Some(problems::Problem::Single(problem)) => Some(problem.as_ref()),
+        _ => None,
     };
+    let fitness = Single { shared, problem };
     let outcome = py.detach(|| {
         Engine::new(algorithm, fitness)
             .stop_when(stop)
@@ -682,8 +705,16 @@ where
     let stop = context.stop(false)?;
     let shared = &context.shared;
     let parallel = context.parallel;
+    let problem = match &context.problem {
+        Some(problems::Problem::Multi(config)) => Some(config.build::<N>()),
+        _ => None,
+    };
+    let fitness = Multi {
+        shared,
+        problem: problem.as_deref(),
+    };
     let outcome = py.detach(|| {
-        MultiEngine::new(algorithm, Multi(shared))
+        MultiEngine::new(algorithm, fitness)
             .stop_when(stop)
             .abort_flag(shared.abort_flag())
             .parallel(parallel)

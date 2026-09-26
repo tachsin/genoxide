@@ -26,19 +26,24 @@ use rand::Rng;
 ///    otherwise).
 ///
 /// Only feasible solutions take part in the niching; infeasible ones fill the rest of the
-/// population by constraint violation. The normalization follows pymoo's, and keeps the ideal
-/// point, the worst point and the extreme points over the whole run.
+/// population by constraint violation. The normalization is Deb and Jain's, and keeps the ideal
+/// point, the worst point and the extreme points over the whole run: the nadir point is where the
+/// hyperplane through the extreme points meets the axes, no further than the worst point, with
+/// the fallbacks of Blank, Deb and Roy (2019, Investigating the normalization procedure of
+/// NSGA-III, EMO 2019, LNCS 11411: 229-240, doi:10.1007/978-3-030-12598-1_19) to the worst point
+/// of the first front, when the hyperplane can't be used, and of the population, for an objective
+/// whose range would be too small.
 ///
 /// The population size is the number of reference directions by default.
 ///
 /// ```
 /// use genoxide::Objective::Minimize;
-/// use genoxide::multi::problems::{Dtlz2, TestProblem};
+/// use genoxide::multi::problems::{Dtlz2, MultiProblem};
 /// use genoxide::multi::{Nsga3, das_dennis};
 /// use genoxide::prelude::*;
 ///
 /// let problem = Dtlz2::<3>::default();
-/// let nsga3 = Nsga3::builder(problem.real(), [Minimize; 3], das_dennis::<3>(12))
+/// let nsga3 = Nsga3::builder(problem.representation(), [Minimize; 3], das_dennis::<3>(12))
 ///     .crossover(SimulatedBinaryCrossover::new(30.0)?)
 ///     .mutate(PolynomialMutation::per_gene(1.0 / 12.0, 20.0)?)
 ///     .seed(1)
@@ -362,8 +367,8 @@ where
         }));
     }
 
-    // the nadir point: the intercepts of the hyperplane through the extreme points, with pymoo's
-    // fallbacks to the worst point of the first front and of the population
+    // the nadir point: the intercepts of the hyperplane through the extreme points, with Blank,
+    // Deb and Roy's fallbacks to the worst point of the first front and of the population
     fn nadir(&self, points: &[[f64; M]], first_front: &[usize]) -> [f64; M] {
         let ideal = self.ideal;
         let worst_of = |positions: &mut dyn Iterator<Item = usize>| {
@@ -639,7 +644,7 @@ where
 ///
 /// The crossover and the mutation are required. Defaults: a population size equal to the number
 /// of reference directions, `crossover_rate` 1.0 and `mutation_rate` 1.0 (as in Deb and Jain,
-/// and pymoo), `eliminate_duplicates` true, a random initial population and a random seed.
+/// 2014), `eliminate_duplicates` true, a random initial population and a random seed.
 #[derive(Clone, Debug)]
 pub struct Nsga3Builder<R: Representation, const M: usize, C = Unset, X = Unset> {
     representation: R,
@@ -719,7 +724,7 @@ impl<R: Representation, const M: usize, C, X> Nsga3Builder<R, M, C, X> {
 
     /// Whether a child that equals a member of the population, or an earlier child of the same
     /// generation, is dropped and another bred instead, which keeps the population and its front
-    /// free of copies. On by default, as in pymoo. When copies are all a population can breed,
+    /// free of copies. On by default. When copies are all a population can breed,
     /// after 100 dropped children per child needed, copies are accepted.
     pub fn eliminate_duplicates(mut self, eliminate: bool) -> Self {
         self.eliminate_duplicates = eliminate;

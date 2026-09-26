@@ -325,8 +325,9 @@ impl Mutate<Real> for GaussianMutation {
     }
 }
 
-/// Polynomial mutation for [`Real`] genomes: Deb's bounded polynomial mutation, as in NSGA-II and
-/// pymoo, each gene with a probability or `n` genes.
+/// Polynomial mutation for [`Real`] genomes: Deb's bounded polynomial mutation, as in NSGA-II (Deb,
+/// Pratap, Agarwal and Meyarivan, 2002, IEEE Transactions on Evolutionary Computation 6(2):
+/// 182-197, doi:10.1109/4235.996017), each gene with a probability or `n` genes.
 ///
 /// The distribution index `eta` sets the step size: the larger, the closer the new value to the
 /// old one. Common values are 20 (the NSGA-II default) and 5 to 100. Steps shrink near the bounds,

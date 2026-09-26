@@ -561,7 +561,7 @@ fn main() -> genoxide::Result<()> {
 - Objective counts are typed: `[f64; 3]` for 2 objectives doesn't compile.
 - Constrained dominance: feasible first, then the smaller violation (`multi::dominates`). `Stop::stagnation` counts generations without a new non-dominated solution; `Stop::target` isn't available.
 - `multi::non_dominated_sort`, `multi::crowding_distance`; `multi::ParetoArchive::new(objectives)` with `.on_generation(|snapshot| archive.update(snapshot))` keeps every non-dominated solution.
-- Test problems: `multi::problems::{Zdt1, Zdt2, Zdt3, Zdt4, Zdt6, Dtlz1, Dtlz2, Dtlz3, Dtlz4}`, with `TestProblem::real()` and `optimal_front(points)`.
+- Test problems: `multi::problems::{Zdt1, Zdt2, Zdt3, Zdt4, Zdt6}::new(n)`, `{Dtlz1, Dtlz2, Dtlz3, Dtlz4}::<M>::new(n)`, `{FonsecaFleming, Kursawe}::new(n)`, `Schaffer1`, `Schaffer2`, `Poloni`, `Viennet1`/`2`/`3` (3 objectives), and the constrained `Bnh`, `Srn`, `Tnk`, `Osy`, `Constr` (fitness `([f64; 2], violation)`), all minimized, for `MultiEngine::new(algorithm, problem)`. The `multi::problems::MultiProblem<M>` trait gives `representation()`, `optimal_front(points)` (`Option`: `None` for KUR, POL, VNT2, VNT3), `ideal_point()`, `nadir_point()`, `constraints(&x)` (`g <= 0`), `reference()`; `multi::problems::all::<M>()` lists them as `Box<dyn DynMultiProblem<M>>`.
 - `multi::indicator`: `hypervolume(&front, &reference_point, &objectives)`, `hypervolume_contributions`; `igd_plus`, `igd`, `gd`, `spread` against a reference front.
 
 ### Local search: hill climbing and simulated annealing

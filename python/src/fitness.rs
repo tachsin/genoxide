@@ -1,6 +1,7 @@
 //! Python fitness functions: called with a genome as a numpy array, or with a generation as a
-//! 2-D array (a batch); and the test problems of `genoxide::problems`, evaluated in Rust. And the
-//! progress callback, called after every generation.
+//! 2-D array (a batch); and the test problems of `genoxide::problems` and
+//! `genoxide::multi::problems`, evaluated in Rust. And the progress callback, called after every
+//! generation.
 //!
 //! An exception in the fitness function or the progress callback, or Ctrl+C, stops the run: the
 //! first exception is kept, the abort flag is set, and the genomes left get an invalid fitness
@@ -9,6 +10,7 @@
 use crate::genes::{self, Genes};
 use genoxide::Fitness;
 use genoxide::engine::{FitnessFunction, IntoFitness, Progress};
+use genoxide::multi::problems::DynMultiProblem;
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
 use genoxide::problems::DynProblem;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
@@ -260,6 +262,8 @@ pub enum MultiValue<const M: usize> {
     Scores([f64; M]),
     Constrained([f64; M], f64),
     Invalid,
+    /// The scores of a test problem evaluated in Rust.
+    Native(Scores<M>),
 }
 
 impl<const M: usize> IntoScores<M> for MultiValue<M> {
@@ -268,6 +272,7 @@ impl<const M: usize> IntoScores<M> for MultiValue<M> {
             Self::Scores(scores) => scores.into_scores(),
             Self::Constrained(scores, violation) => (scores, violation).into_scores(),
             Self::Invalid => Ok(Scores::invalid()),
+            Self::Native(scores) => Ok(scores),
         }
     }
 }
@@ -347,16 +352,26 @@ fn multi_values<const M: usize>(
     }
 }
 
-/// A multi-objective fitness function.
-pub struct Multi<'a>(pub &'a Shared);
+/// A multi-objective fitness function: the Python function of `Shared`, or a test problem of
+/// `genoxide::multi::problems`, evaluated in Rust without Python.
+pub struct Multi<'a, const M: usize> {
+    pub shared: &'a Shared,
+    pub problem: Option<&'a dyn DynMultiProblem<M>>,
+}
 
-impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_> {
+impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
     type Output = MultiValue<M>;
 
     fn evaluate(&self, genome: &G) -> MultiValue<M> {
-        let shared = self.0;
+        let shared = self.shared;
         if shared.aborted() {
             return MultiValue::Invalid;
+        }
+        if let Some(problem) = self.problem {
+            // the run checks that the genome is real
+            return genome.reals().map_or(MultiValue::Invalid, |genome| {
+                MultiValue::Native(problem.evaluate(genome))
+            });
         }
         Python::attach(|py| {
             let argument = Ok(genes::array(py, genome).into_any());
@@ -367,12 +382,12 @@ impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_> {
     }
 
     fn is_batch(&self) -> bool {
-        self.0.batch
+        self.shared.batch && self.problem.is_none()
     }
 
     fn evaluate_batch(&self, genomes: &[&G]) -> Vec<MultiValue<M>> {
-        let shared = self.0;
-        if !shared.batch {
+        let shared = self.shared;
+        if !MultiFitnessFunction::<G, M>::is_batch(self) {
             return genomes
                 .iter()
                 .map(|genome| MultiFitnessFunction::<G, M>::evaluate(self, genome))

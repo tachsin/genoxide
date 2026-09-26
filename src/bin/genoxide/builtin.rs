@@ -1,6 +1,9 @@
 //! `genoxide fitness <name>`: test functions that speak the fitness protocol, to try a run file
 //! without writing a program, and as examples of the protocol.
 
+use genoxide::genome::Reals;
+use genoxide::multi::MultiFitnessFunction;
+use genoxide::multi::problems::{Schaffer1, Zdt1};
 use std::f64::consts::{E, TAU};
 use std::io::{BufRead, Write};
 
@@ -77,18 +80,20 @@ pub const FUNCTIONS: &[Function] = &[
         name: "zdt1",
         description: "real in [0, 1]: ZDT1's two objectives (minimize both)",
         score: |x| {
-            let g = if x.len() > 1 {
-                1.0 + 9.0 * x[1..].iter().sum::<f64>() / (x.len() - 1) as f64
+            if x.len() > 1 {
+                Zdt1::new(x.len())
+                    .evaluate(&Reals::from(x.to_vec()))
+                    .to_vec()
             } else {
-                1.0
-            };
-            vec![x[0], g * (1.0 - (x[0] / g).sqrt())]
+                // g = 1 without the other variables
+                vec![x[0], 1.0 - x[0].sqrt()]
+            }
         },
     },
     Function {
         name: "schaffer",
         description: "real: Schaffer's two objectives, x² and (x − 2)² of the first gene (minimize both)",
-        score: |x| vec![x[0] * x[0], (x[0] - 2.0) * (x[0] - 2.0)],
+        score: |x| Schaffer1.evaluate(&Reals::from(vec![x[0]])).to_vec(),
     },
 ];
 
