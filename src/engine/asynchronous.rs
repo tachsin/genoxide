@@ -168,15 +168,15 @@ where
     /// - The errors of the algorithm's [`receive`](Incremental::receive) and of the checkpoint
     ///   closure.
     ///
-    /// # Panics
-    ///
-    /// A panic in the fitness function propagates to the caller, on the calling thread, once the
-    /// other evaluations in flight are done.
-    ///
     /// The run stops at the first error, once the evaluations in flight are done. If the algorithm
     /// has run before and a stop condition is already met, or its limit of evaluations was
     /// reached before the initial population was complete, it returns that outcome at once,
     /// without notifying the observers or calling the checkpoint closure again.
+    ///
+    /// # Panics
+    ///
+    /// A panic in the fitness function propagates to the caller, on the calling thread, once the
+    /// other evaluations in flight are done.
     pub fn run(&mut self) -> Result<Outcome<A::Genome>>
     where
         F: Sync,

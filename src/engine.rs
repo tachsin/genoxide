@@ -564,15 +564,15 @@ where
     /// - [`Error::FitnessCount`] if a [`Batch`] returns a different number of scores than genomes.
     /// - The errors of the algorithm's [`tell`](Algorithm::tell) and of the checkpoint closure.
     ///
-    /// # Panics
-    ///
-    /// A panic in the fitness function propagates to the caller. It also panics if the algorithm
-    /// has no [`best`](Algorithm::best) individual after a [`tell`](Algorithm::tell).
-    ///
     /// If the algorithm has run before and a stop condition is already met, it returns that
     /// outcome without another generation. A run whose stop conditions need new evaluations stops
     /// with [`StopReason::Stalled`] after [`STALL_GENERATIONS`] generations in a row without a
     /// genome to evaluate.
+    ///
+    /// # Panics
+    ///
+    /// A panic in the fitness function propagates to the caller. It also panics if the algorithm
+    /// has no [`best`](Algorithm::best) individual after a [`tell`](Algorithm::tell).
     pub fn run(&mut self) -> Result<Outcome<A::Genome>> {
         if self.stop.is_none() && self.abort.is_none() {
             return Err(Error::MissingSetting {
