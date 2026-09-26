@@ -4,6 +4,7 @@
 #![forbid(unsafe_code)]
 
 mod config;
+mod errors;
 mod fitness;
 mod genes;
 mod operators;
