@@ -42,7 +42,7 @@ use std::cell::Cell;
 use std::f64::consts::{E, PI};
 use std::io::BufRead;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------------------------
@@ -71,21 +71,28 @@ fn nqueens(genome: &Order) -> f64 {
 
 // Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
 // towards 0: gene i is measured from s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1), where
-// `upper` is the box's upper bound, computed in this order (rule 1.4)
+// `upper` is the box's upper bound, computed in this order (rule 1.4). Computed once, before any
+// run, for up to MAX_GENES genes.
 fn shift(i: usize, upper: f64) -> f64 {
     0.8 * upper * (2.0 * ((37 * i + 11) % 101) as f64 / 101.0 - 1.0)
 }
 
 const RASTRIGIN_UPPER: f64 = 5.12;
 const ACKLEY_UPPER: f64 = 32.768;
+const MAX_GENES: usize = 1024;
+fn shifts(upper: f64) -> Vec<f64> {
+    (0..MAX_GENES).map(|i| shift(i, upper)).collect()
+}
+static RASTRIGIN_SHIFT: LazyLock<Vec<f64>> = LazyLock::new(|| shifts(RASTRIGIN_UPPER));
+static ACKLEY_SHIFT: LazyLock<Vec<f64>> = LazyLock::new(|| shifts(ACKLEY_UPPER));
 
 fn rastrigin(genome: &Reals) -> f64 {
     10.0 * genome.len() as f64
         + genome
             .iter()
-            .enumerate()
-            .map(|(i, x)| {
-                let x = x - shift(i, RASTRIGIN_UPPER);
+            .zip(RASTRIGIN_SHIFT.iter())
+            .map(|(x, s)| {
+                let x = x - s;
                 x * x - 10.0 * (2.0 * PI * x).cos()
             })
             .sum::<f64>()
@@ -100,12 +107,7 @@ fn rosenbrock(genome: &Reals) -> f64 {
 
 fn ackley(genome: &Reals) -> f64 {
     let n = genome.len() as f64;
-    let shifted = || {
-        genome
-            .iter()
-            .enumerate()
-            .map(|(i, x)| x - shift(i, ACKLEY_UPPER))
-    };
+    let shifted = || genome.iter().zip(ACKLEY_SHIFT.iter()).map(|(x, s)| x - s);
     let squares = shifted().map(|x| x * x).sum::<f64>() / n;
     let cosines = shifted().map(|x| (2.0 * PI * x).cos()).sum::<f64>() / n;
     -20.0 * (-0.2 * squares.sqrt()).exp() - cosines.exp() + 20.0 + E
@@ -792,9 +794,14 @@ fn values(problem: &str, size: usize) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    // the shifts are computed before any run
+    LazyLock::force(&RASTRIGIN_SHIFT);
+    LazyLock::force(&ACKLEY_SHIFT);
     let raw: Vec<String> = std::env::args().skip(1).collect();
     if raw.len() == 3 && raw[0] == "values" {
-        return values(&raw[1], raw[2].parse().expect("size"));
+        let size = raw[2].parse().expect("size");
+        assert!(size <= MAX_GENES, "at most {MAX_GENES} genes");
+        return values(&raw[1], size);
     }
     if raw.len() != 7 {
         eprintln!(
@@ -811,6 +818,7 @@ fn main() -> Result<()> {
         max_evaluations: raw[5].parse().expect("max_evaluations"),
         max_seconds: raw[6].parse().expect("max_seconds"),
     };
+    assert!(args.size <= MAX_GENES, "at most {MAX_GENES} genes");
     for seed in args.seed_from..=args.seed_to {
         match args.problem.as_str() {
             "onemax" => run_onemax(&args, seed)?,
@@ -839,6 +847,9 @@ mod tests {
         let x: Vec<f64> = (0..10).map(|i| 0.5 * (i % 7) as f64 - 1.5).collect();
         assert!(rastrigin(&at_shift(RASTRIGIN_UPPER)).abs() < 1e-12);
         assert!(ackley(&at_shift(ACKLEY_UPPER)).abs() < 1e-12);
+        // the precomputed shifts are the formula's values, bit for bit
+        assert_eq!(RASTRIGIN_SHIFT[0], -3.20380198019802);
+        assert_eq!(ACKLEY_SHIFT[4], 3.893227722772275);
         assert!((rastrigin(&Reals::from(x.clone())) - 145.90969988928046).abs() < 1e-9);
         assert!((ackley(&Reals::from(x.clone())) - 20.92235706225884).abs() < 1e-9);
     }

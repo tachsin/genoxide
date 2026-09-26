@@ -7,7 +7,7 @@ Know a better way to solve one of these problems with Nevergrad? [Open a benchma
 
 ## How the adapter runs Nevergrad
 
-- **The loop** ([`run`](../../../benchmarks/adapters/nevergrad/bench.py#L207-L236)): the docs' [ask and tell loop](https://facebookresearch.github.io/nevergrad/optimization.html#ask-and-tell-interface), one worker, the optimizer given the scenario's budget ("the budget tells NgIohTuned which algorithm to choose"). Every optimizer runs with its defaults.
+- **The loop** ([`run`](../../../benchmarks/adapters/nevergrad/bench.py#L215-L244)): the docs' [ask and tell loop](https://facebookresearch.github.io/nevergrad/optimization.html#ask-and-tell-interface), one worker, the optimizer given the scenario's budget ("the budget tells NgIohTuned which algorithm to choose"). Every optimizer runs with its defaults.
 - **Stop:** right after the evaluation that reaches the target, or before one past the budget or the time cap.
 - **Keeping going (rule 2.2):** the optimizers have no stop criterion. The CMA-ES inside `CMA` and `NgIohTuned` restarts from the middle of the domain, with the same population size, when pycma's criteria end it (`optimizerlib.py`, `_CMA.es`).
 - **Imports (rule 4.2):** pycma with matplotlib, scikit-learn and SciPy's COBYLA, which Nevergrad imports during its first run (about 0.4 s), are imported before the clock ([the imports](../../../benchmarks/adapters/nevergrad/bench.py#L45-L52)).
@@ -18,7 +18,7 @@ Know a better way to solve one of these problems with Nevergrad? [Open a benchma
 
 ## Binary: OneMax 100 (idiomatic)
 
-**Methods** ([`solvers`](../../../benchmarks/adapters/nevergrad/bench.py#L168-L204)), on the docs' OneMax parameter, `ng.p.TransitionChoice(range(2), repetitions=100)` ([Basic example](https://facebookresearch.github.io/nevergrad/optimization.html#basic-example)):
+**Methods** ([`solvers`](../../../benchmarks/adapters/nevergrad/bench.py#L176-L212)), on the docs' OneMax parameter, `ng.p.TransitionChoice(range(2), repetitions=100)` ([Basic example](https://facebookresearch.github.io/nevergrad/optimization.html#basic-example)):
 - **`ngiohtuned`:** the default; here it chooses `DoubleFastGADiscreteOnePlusOne`.
 - **`discrete_one_plus_one`:** `DiscreteOnePlusOne`, the docs' OneMax example.
 - **`portfolio_discrete_one_plus_one`:** "`PortfolioDiscreteOnePlusOne` is excellent in discrete settings of mixed settings when high precision on parameters is not relevant".

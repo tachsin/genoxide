@@ -68,13 +68,21 @@ metamodel.float = lambda value: builtins.float(np.asarray(value).item())
 
 
 def onemax(bits):
-    return int(np.sum(bits))
+    """The number of ones of a TransitionChoice's value, a tuple: summed as it is, without making
+    it a numpy array first."""
+    return sum(bits)
+
+
+@functools.cache
+def row_indices(n):
+    """0, ..., n - 1: computed once per size, not in every call."""
+    return np.arange(n)
 
 
 def nqueens(order):
     """Diagonal conflicts of queens at (i, order[i]): for each diagonal, its queens minus one."""
     n = len(order)
-    rows = np.arange(n)
+    rows = row_indices(n)
     left = np.bincount(rows + order, minlength=2 * n - 1)
     right = np.bincount(n - 1 - rows + order, minlength=2 * n - 1)
     return int(np.sum(np.maximum(left - 1, 0)) + np.sum(np.maximum(right - 1, 0)))
