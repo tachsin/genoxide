@@ -35,17 +35,21 @@ GENERATIONS = 10_000_000
 
 
 class Budget:
-    """Counts the fitness evaluations (rule 3) and keeps the best solution evaluated. A run stops at
-    the target, at max_evaluations or at max_seconds (rule 2.1)."""
+    """Counts the fitness evaluations (rule 3), one per row of a batch, and keeps the best solution
+    evaluated. A run stops at the target, at max_evaluations or at max_seconds (rule 2.1). `start`
+    is the run's clock."""
 
-    def __init__(self, problem, size, max_evaluations, max_seconds):
+    def __init__(self, problem, size, max_evaluations, max_seconds, start):
+        self.start = start
         self.evaluations = 0
         self.max_evaluations = max_evaluations
-        self.deadline = time.perf_counter() + max_seconds
+        self.deadline = start + max_seconds
         self.maximize = problem == "onemax"
         self.target = {"onemax": size, "nqueens": 0}.get(problem, REAL_TARGET)
         self.best = -math.inf if self.maximize else math.inf
         self.solution = None
+        # the first evaluation that reaches the target: (its number, seconds since the start)
+        self.first_hit = None
         # the evaluations when the last generation started: PyGAD calls on_fitness at the start of
         # every generation
         self.generation_start = 0
@@ -59,13 +63,27 @@ class Budget:
             self.bounds = None
         self.outside = 0
 
-    def count(self, solution):
-        """Counts one evaluation (rule 3), and whether the solution is outside the box (rule 2.4)."""
-        self.evaluations += 1
+    def count(self, X):
+        """Counts the evaluations of the rows of X (rule 3), and those outside the box (rule 2.4)."""
+        self.evaluations += len(X)
         if self.bounds is not None:
             low, high = self.bounds
-            if numpy.any(solution < low) or numpy.any(solution > high):
-                self.outside += 1
+            self.outside += int(numpy.count_nonzero(numpy.any((X < low) | (X > high), axis=1)))
+
+    def keep(self, X, values, valid):
+        """Keeps the best valid row of a batch just counted, and the first one that reaches the
+        target (its number counts the rows before it)."""
+        rows = numpy.flatnonzero(valid)
+        if rows.size == 0:
+            return
+        before = self.evaluations - len(X)
+        reached = values[rows] >= self.target if self.maximize else values[rows] <= self.target
+        if self.first_hit is None and reached.any():
+            self.first_hit = (before + int(rows[numpy.argmax(reached)]) + 1, time.perf_counter() - self.start)
+        best = rows[numpy.argmax(values[rows]) if self.maximize else numpy.argmin(values[rows])]
+        if values[best] > self.best if self.maximize else values[best] < self.best:
+            self.best = values[best].item()
+            self.solution = X[best].copy()
 
     def on_fitness(self, ga, fitness):
         self.generation_start = self.evaluations
@@ -75,11 +93,6 @@ class Budget:
         elite or a parent again, so generations differ in size, and the budget check (rule 2.3)
         allows the last one's."""
         return self.evaluations - self.generation_start
-
-    def keep(self, value, solution):
-        if value > self.best if self.maximize else value < self.best:
-            self.best = value
-            self.solution = solution.copy()
 
     def reached(self):
         return bool(self.best >= self.target if self.maximize else self.best <= self.target)
@@ -92,48 +105,63 @@ class Budget:
 
 
 # -------------------------------------------------------------------------------------------------
-# Fitness functions, identical to benchmarks/problems.py. PyGAD calls the fitness function with one
-# solution, a numpy array, at a time, and PyGAD's own benchmark problems (pygad/benchmarks) are
-# numpy functions of that array, as these are.
+# Fitness functions, identical to benchmarks/problems.py, vectorized with numpy over a batch of
+# solutions, one per row: PyGAD's batch fitness (fitness_batch_size, docs fitness_calculation.md,
+# "Batch Fitness Calculation") passes the solutions of a generation to one call, and changes
+# nothing else in the algorithm (utils/engine.py, cal_pop_fitness).
 # -------------------------------------------------------------------------------------------------
 
 
-def onemax(solution):
-    return int(numpy.sum(solution))
+def onemax(X):
+    return numpy.sum(X, axis=1)
 
 
-def nqueens(solution):
-    """Diagonal conflicts of the queens at (i, solution[i]): for each diagonal, its queens minus one."""
-    n = len(solution)
-    rows = numpy.arange(n)
-    columns = numpy.asarray(solution, dtype=int)
-    left = numpy.bincount(rows + columns, minlength=2 * n - 1)
-    right = numpy.bincount(n - 1 - rows + columns, minlength=2 * n - 1)
-    return int(numpy.maximum(left - 1, 0).sum() + numpy.maximum(right - 1, 0).sum())
+def nqueens(X):
+    """Diagonal conflicts of the queens at (i, X[i]): for each diagonal, its queens minus one. That's
+    n minus the number of occupied diagonals, in each direction."""
+    X = numpy.asarray(X, dtype=int)
+    n = X.shape[1]
+    column = numpy.arange(n)
+
+    def occupied(diagonals):
+        diagonals = numpy.sort(diagonals, axis=1)
+        return 1 + numpy.count_nonzero(numpy.diff(diagonals, axis=1), axis=1)
+
+    return 2 * n - occupied(X + column) - occupied(X + (n - 1 - column))
 
 
-# Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
-# towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
-SHIFT = numpy.array([2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(1000)])
+def distinct(X):
+    """The number of distinct values in each row."""
+    return 1 + numpy.count_nonzero(numpy.diff(numpy.sort(X, axis=1), axis=1), axis=1)
 
 
-def rastrigin(solution):
-    d = numpy.asarray(solution, dtype=float) - SHIFT[:len(solution)]
-    return float(10 * len(d) + numpy.sum(d ** 2 - 10 * numpy.cos(2 * numpy.pi * d)))
+def shift(upper):
+    """Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that
+    drift towards 0: gene i is measured from s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1),
+    within 80% of the box, computed in this order, as problems.py."""
+    return numpy.array([0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1) for i in range(1000)])
 
 
-def rosenbrock(solution):
-    x = numpy.asarray(solution, dtype=float)
-    a, b = x[:-1], x[1:]
-    return float(numpy.sum(100 * (b - a * a) ** 2 + (1 - a) ** 2))
+RASTRIGIN_SHIFT = shift(5.12)
+ACKLEY_SHIFT = shift(32.768)
 
 
-def ackley(solution):
-    n = len(solution)
-    d = numpy.asarray(solution, dtype=float) - SHIFT[:n]
-    squares = numpy.sum(d ** 2) / n
-    cosines = numpy.sum(numpy.cos(2 * numpy.pi * d)) / n
-    return float(-20 * math.exp(-0.2 * math.sqrt(squares)) - math.exp(cosines) + 20 + math.e)
+def rastrigin(X):
+    D = numpy.asarray(X, dtype=float) - RASTRIGIN_SHIFT[:X.shape[1]]
+    return 10 * X.shape[1] + numpy.sum(D * D - 10 * numpy.cos(2 * numpy.pi * D), axis=1)
+
+
+def rosenbrock(X):
+    X = numpy.asarray(X, dtype=float)
+    a, b = X[:, :-1], X[:, 1:]
+    return numpy.sum(100 * (b - a * a) ** 2 + (1 - a) ** 2, axis=1)
+
+
+def ackley(X):
+    n = X.shape[1]
+    D = numpy.asarray(X, dtype=float) - ACKLEY_SHIFT[:n]
+    return (-20 * numpy.exp(-0.2 * numpy.sqrt(numpy.sum(D * D, axis=1) / n))
+            - numpy.exp(numpy.sum(numpy.cos(2 * numpy.pi * D), axis=1) / n) + 20 + math.e)
 
 
 # the real-valued problems: fitness function and bounds
@@ -145,50 +173,51 @@ REAL_PROBLEMS = {
 
 
 # multi-objective problems, minimized, all variables in [0, 1]
-def zdt_g(x):
-    return 1 + 9 * numpy.sum(x[1:]) / (len(x) - 1)
+def zdt_g(X):
+    return 1 + 9 * numpy.sum(X[:, 1:], axis=1) / (X.shape[1] - 1)
 
 
-def zdt1(x):
-    g = zdt_g(x)
-    return [x[0], g * (1 - math.sqrt(x[0] / g))]
+def zdt1(X):
+    g = zdt_g(X)
+    return numpy.column_stack([X[:, 0], g * (1 - numpy.sqrt(X[:, 0] / g))])
 
 
-def zdt2(x):
-    g = zdt_g(x)
-    return [x[0], g * (1 - (x[0] / g) ** 2)]
+def zdt2(X):
+    g = zdt_g(X)
+    return numpy.column_stack([X[:, 0], g * (1 - (X[:, 0] / g) ** 2)])
 
 
-def zdt3(x):
-    g = zdt_g(x)
-    return [x[0], g * (1 - math.sqrt(x[0] / g) - x[0] / g * math.sin(10 * math.pi * x[0]))]
+def zdt3(X):
+    g = zdt_g(X)
+    h = 1 - numpy.sqrt(X[:, 0] / g) - X[:, 0] / g * numpy.sin(10 * numpy.pi * X[:, 0])
+    return numpy.column_stack([X[:, 0], g * h])
 
 
-def dtlz2(x, objectives):
-    g = numpy.sum((x[objectives - 1:] - 0.5) ** 2)
-    values = []
+def dtlz2(X, objectives):
+    g = numpy.sum((X[:, objectives - 1:] - 0.5) ** 2, axis=1)
+    columns = []
     for m in range(objectives):
         f = 1 + g
-        for v in x[:objectives - 1 - m]:
-            f *= math.cos(v * math.pi / 2)
+        for i in range(objectives - 1 - m):
+            f = f * numpy.cos(X[:, i] * numpy.pi / 2)
         if m > 0:
-            f *= math.sin(x[objectives - 1 - m] * math.pi / 2)
-        values.append(f)
-    return values
+            f = f * numpy.sin(X[:, objectives - 1 - m] * numpy.pi / 2)
+        columns.append(f)
+    return numpy.column_stack(columns)
 
 
-def dtlz1(x, objectives):
-    tail = x[objectives - 1:]
-    g = 100 * (len(tail) + numpy.sum((tail - 0.5) ** 2 - numpy.cos(20 * numpy.pi * (tail - 0.5))))
-    values = []
+def dtlz1(X, objectives):
+    tail = X[:, objectives - 1:]
+    g = 100 * (tail.shape[1] + numpy.sum((tail - 0.5) ** 2 - numpy.cos(20 * numpy.pi * (tail - 0.5)), axis=1))
+    columns = []
     for m in range(objectives):
         f = 0.5 * (1 + g)
-        for v in x[:objectives - 1 - m]:
-            f *= v
+        for i in range(objectives - 1 - m):
+            f = f * X[:, i]
         if m > 0:
-            f *= 1 - x[objectives - 1 - m]
-        values.append(f)
-    return values
+            f = f * (1 - X[:, objectives - 1 - m])
+        columns.append(f)
+    return numpy.column_stack(columns)
 
 
 # (fitness function of the size, number of variables, number of objectives); the size of DTLZ is
@@ -197,8 +226,8 @@ FRONT_PROBLEMS = {
     "zdt1": (lambda size: zdt1, lambda size: size, lambda size: 2),
     "zdt2": (lambda size: zdt2, lambda size: size, lambda size: 2),
     "zdt3": (lambda size: zdt3, lambda size: size, lambda size: 2),
-    "dtlz2": (lambda size: lambda x: dtlz2(x, size), lambda size: size + 9, lambda size: size),
-    "dtlz1": (lambda size: lambda x: dtlz1(x, size), lambda size: size + 4, lambda size: size),
+    "dtlz2": (lambda size: lambda X: dtlz2(X, size), lambda size: size + 9, lambda size: size),
+    "dtlz1": (lambda size: lambda X: dtlz1(X, size), lambda size: size + 4, lambda size: size),
 }
 
 
@@ -207,39 +236,25 @@ FRONT_PROBLEMS = {
 # -------------------------------------------------------------------------------------------------
 
 
-def two_points_at(probability):
-    """The matched crossover: PyGAD's own two_points crossover (utils/crossover.py), applied to a
-    pair with the matched probability 0.5, else the child is a copy of its first parent. PyGAD's
-    crossover_probability can't give this: it makes each parent eligible with that probability
-    and crosses two eligible parents, so with 300 parents nearly every child is crossed. With
-    crossover_probability unset, two_points_crossover makes child k from parents k and k + 1."""
-
-    def crossover(parents, offspring_size, ga):
-        offspring = ga.two_points_crossover(parents, offspring_size)
-        copies = numpy.random.random(offspring_size[0]) >= probability
-        for k in numpy.flatnonzero(copies):
-            offspring[k] = parents[k % parents.shape[0]]
-        return offspring
-
-    return crossover
-
-
 def single_objective(problem, size, mode):
-    """(PyGAD's keyword arguments, the problem's value of a solution, whether a solution is valid)."""
+    """(PyGAD's keyword arguments, the problem's values of a batch, whether a solution must be a
+    permutation)."""
     if problem == "onemax":
         # binary genes as PyGAD documents them (docs benchmarks.md, "Knapsack": gene_space [0, 1],
         # gene_type int); mutation by space then sets a gene to the other value of its space
         # (helper/misc.py, generate_gene_value_from_space), a bit flip
         common = dict(num_genes=size, gene_space=[0, 1], gene_type=int)
         if mode == "matched":
-            # the matched GA of examples/ga/onemax.py in DEAP: 300 individuals, generational
-            # without elitism, tournament of 3, two-point crossover at 0.5, about 0.2 bits flipped
-            # per offspring
+            # the matched GA of examples/ga/onemax.py in DEAP with PyGAD's own components:
+            # 300 individuals, generational without elitism (keep_elitism 0, keep_parents 0),
+            # tournament of 3, PyGAD's two_points crossover with its crossover_probability 0.5,
+            # random mutation of each gene with probability 0.2 / n (the matched mean of 0.2 bits
+            # per child). The differences are on the library's page.
             config = dict(
                 common, sol_per_pop=300, num_parents_mating=300,
                 parent_selection_type="tournament", K_tournament=3,
                 keep_parents=0, keep_elitism=0,
-                crossover_type=two_points_at(0.5),
+                crossover_type="two_points", crossover_probability=0.5,
                 mutation_type="random", mutation_probability=0.2 / size,
             )
         else:
@@ -247,7 +262,7 @@ def single_objective(problem, size, mode):
             # parents, and PyGAD's defaults: steady-state selection ("sss"), single_point crossover,
             # random mutation of 10% of the genes (mutation_percent_genes "default"), keep_elitism 1
             config = dict(common, sol_per_pop=30, num_parents_mating=10)
-        return config, onemax, None
+        return config, onemax, False
 
     if problem == "nqueens":
         # examples/benchmarks/example_tsp.py, PyGAD's permutation example (docs benchmarks.md,
@@ -258,11 +273,7 @@ def single_objective(problem, size, mode):
             num_genes=size, gene_space=list(range(size)), gene_type=int, allow_duplicate_genes=False,
             sol_per_pop=30, num_parents_mating=10,
         )
-
-        def valid(solution):
-            return numpy.unique(solution).shape[0] == size
-
-        return config, nqueens, valid
+        return config, nqueens, True
 
     # examples/benchmarks/example_classic_rastrigin.py, example_classic_ackley.py (and the docs'
     # benchmarks.md): 40 solutions, 10 parents, sbx crossover with eta 20, polynomial mutation with
@@ -277,31 +288,39 @@ def single_objective(problem, size, mode):
         crossover_type="sbx", sbx_crossover_eta=30 if problem == "rosenbrock" else 20,
         mutation_type="polynomial", polynomial_mutation_eta=20,
     )
-    return config, function, None
+    return config, function, False
 
 
 def run_single(problem, size, mode, seed, budget):
     """Runs PyGAD's GA; returns the number of generations."""
-    config, function, valid = single_objective(problem, size, mode)
+    config, function, permutation = single_objective(problem, size, mode)
     # an invalid permutation (PyGAD couldn't remove a duplicate gene) scores worse than any
     # permutation, scaled by its missing values, as pygad/benchmarks/tsp.py does for tours
     worst = 2 * size
 
-    def fitness_func(ga, solution, solution_idx):
-        budget.count(solution)
-        if valid is not None and not valid(solution):
-            return -float(worst * (1 + size - numpy.unique(solution).shape[0]))
-        value = function(solution)
-        budget.keep(value, solution)
+    def fitness_func(ga, solutions, indices):
+        X = numpy.asarray(solutions)
+        budget.count(X)
+        values = function(X)
+        if permutation:
+            counts = distinct(X)
+            valid = counts == size
+        else:
+            valid = numpy.ones(len(X), dtype=bool)
+        budget.keep(X, values, valid)
         # PyGAD maximizes
-        return value if budget.maximize else -value
+        fitness = values if budget.maximize else -values
+        if permutation:
+            fitness = numpy.where(valid, fitness, -worst * (1 + size - counts))
+        return fitness.astype(float)
 
     def on_generation(ga):
         if budget.done():
             return "stop"
 
     ga = pygad.GA(num_generations=GENERATIONS, fitness_func=fitness_func, on_generation=on_generation,
-                  on_fitness=budget.on_fitness, random_seed=seed, suppress_warnings=True, **config)
+                  on_fitness=budget.on_fitness, fitness_batch_size=config["sol_per_pop"],
+                  random_seed=seed, suppress_warnings=True, **config)
     ga.run()
     return ga.generations_completed
 
@@ -315,8 +334,8 @@ def run_single(problem, size, mode, seed, budget):
 # (utils/engine.py, run) selects the parents from the population, crosses and mutates them, and the
 # next population is either the keep_elitism best of the current one, by PyGAD's NSGA-II sort (front,
 # then crowding distance), followed by the offspring, or, with keep_parents -1, the parents followed
-# by the offspring. Each algorithm's survival is built from these, with N the matched population, 100
-# (92 with 3 objectives), and a PyGAD population of 2N:
+# by the offspring. Each algorithm's survival is built from these settings, with N the matched
+# population, 100 (92 with 3 objectives), and a PyGAD population of 2N:
 #
 # - NSGA-II: keep_elitism N, and N offspring. The N elites of each generation are the best N of the
 #   previous elites and their offspring by the NSGA-II sort, which is NSGA-II's survival. The parents
@@ -324,32 +343,29 @@ def run_single(problem, size, mode, seed, budget):
 #   wins, then the larger crowding distance, then a random one). Because PyGAD selects the parents
 #   before the elites, it draws them from all 2N, the N survivors and the N offspring that won't all
 #   survive, not from the N survivors only, and its two contestants are drawn with replacement.
-# - NSGA-III: parent_selection_type "nsga3" with Das-Dennis reference points of 12 divisions
-#   (nsga3_num_divisions), num_parents_mating N, keep_elitism 0 and keep_parents -1. The parents are
-#   the N survivors of the 2N by NSGA-III's niching, and the next population is those survivors and
-#   their N offspring: NSGA-III's survival. Its mating is random, as in NSGA-III: the crossover below
-#   pairs the survivors in a random order.
+# - NSGA-III: parent_selection_type "nsga3" with Das-Dennis reference points of 99 divisions with 2
+#   objectives, 12 with 3 (nsga3_num_divisions), num_parents_mating N, keep_elitism 0 and
+#   keep_parents -1. The parents are the N survivors of the 2N by NSGA-III's niching, and the next
+#   population is those survivors and their N offspring: NSGA-III's survival.
 #
-# Differences from the textbook algorithms and from the other libraries' runs:
+# The operators are PyGAD's own (rule 6.1 and the matched settings), bugs included:
+# - Crossover: "sbx" (utils/crossover.py, sbx_crossover) with sbx_crossover_eta 15 and
+#   crossover_probability 0.9 (NSGA-II), 30 and every child crossed (NSGA-III, crossover_probability
+#   unset). PyGAD's sbx makes one child per pair, always the one below the parents' midpoint
+#   (ahmedfgad/GeneticAlgorithmPython#369), crosses every gene, and its crossover_probability makes
+#   each parent eligible with that probability, and crosses two parents drawn from the eligible ones.
+# - Mutation: "polynomial" (utils/mutation.py, polynomial_mutation), Deb's bounded polynomial
+#   mutation: η 20, each gene with probability 1 / n (mutation_probability), within init_range_low
+#   and init_range_high.
+#
+# Other differences from the textbook algorithms and from the other libraries' runs:
 # - The initial population has 2N random individuals, so the first generation costs N more
 #   evaluations.
 # - PyGAD's crowding distance normalizes each objective by its range over the whole population, not
 #   over the front.
 # - An offspring identical to an elite or a parent of the previous generation takes its fitness
 #   without an evaluation (utils/engine.py, cal_pop_fitness). The evaluations printed are the true
-#   number of calls to the fitness function.
-# - Crossover: PyGAD's own "sbx" can't take the matched settings. It makes one child from two parents
-#   drawn at random among those that pass crossover_probability, so a pair isn't crossed with
-#   probability 0.9, and that child is always the one below the parents' midpoint
-#   (0.5 * ((y1 + y2) - beta_q * (y2 - y1)) with beta_q > 0, utils/crossover.py), which pulls every
-#   gene towards the lower bound, where ZDT's optimum is (ahmedfgad/GeneticAlgorithmPython#369). So
-#   the crossover is make_sbx below, given to PyGAD as a crossover function (docs
-#   user_defined_operators.md): bounded SBX as DEAP's cxSimulatedBinaryBounded, each variable with
-#   probability 0.5, η 15 with each pair crossed with probability 0.9 for NSGA-II, η 30 with every
-#   pair crossed for NSGA-III.
-# - Mutation: PyGAD's own "polynomial" (utils/mutation.py, polynomial_mutation), Deb's bounded
-#   polynomial mutation: η 20, each gene with probability 1 / n (mutation_probability), within
-#   init_range_low and init_range_high.
+#   number of rows evaluated.
 # - PyGAD maximizes, so the fitness function returns the negated objectives. The front is printed
 #   minimized.
 # - Its non-dominated sorting compares every pair of individuals in Python (utils/nsga.py), and it
@@ -358,50 +374,6 @@ def run_single(problem, size, mode, seed, budget):
 # The front printed is the non-dominated part of the final N survivors: the elites (NSGA-II) or the
 # parents (NSGA-III) that PyGAD selects from the last population after the last generation.
 # -------------------------------------------------------------------------------------------------
-
-
-def sbx_pair(a, b, eta, low=0.0, high=1.0):
-    """Bounded SBX of two parents, as DEAP's cxSimulatedBinaryBounded: each variable crosses with
-    probability 0.5, and the two children swap sides with probability 0.5."""
-    y1, y2 = numpy.minimum(a, b), numpy.maximum(a, b)
-    crossed = (numpy.random.random(a.size) <= 0.5) & (y2 - y1 > 1e-14)
-    rand = numpy.random.random(a.size)
-    # 1 where a variable doesn't cross, to avoid dividing by 0; those values are discarded
-    delta = numpy.where(crossed, y2 - y1, 1.0)
-    power = 1.0 / (eta + 1.0)
-
-    def child(beta, sign):
-        alpha = 2.0 - beta ** -(eta + 1.0)
-        beta_q = numpy.where(rand <= 1.0 / alpha, (rand * alpha) ** power, (1.0 / (2.0 - rand * alpha)) ** power)
-        return numpy.clip(0.5 * (y1 + y2 + sign * beta_q * delta), low, high)
-
-    lower_child = child(1.0 + 2.0 * (y1 - low) / delta, -1.0)
-    upper_child = child(1.0 + 2.0 * (high - y2) / delta, 1.0)
-    swap = numpy.random.random(a.size) <= 0.5
-    first = numpy.where(crossed, numpy.where(swap, upper_child, lower_child), a)
-    second = numpy.where(crossed, numpy.where(swap, lower_child, upper_child), b)
-    return first, second
-
-
-def make_sbx(eta, probability, random_pairs):
-    """PyGAD's crossover function: the parents in pairs, (0, 1), (2, 3), ... in their order or in a
-    random one, each pair crossed by SBX with the probability, else copied."""
-
-    def crossover(parents, offspring_size, ga):
-        count = offspring_size[0]
-        order = numpy.random.permutation(len(parents)) if random_pairs else numpy.arange(len(parents))
-        offspring = numpy.empty(offspring_size, dtype=float)
-        for k in range(0, count, 2):
-            a = numpy.array(parents[order[k % len(parents)]], dtype=float)
-            b = numpy.array(parents[order[(k + 1) % len(parents)]], dtype=float)
-            if numpy.random.random() <= probability:
-                a, b = sbx_pair(a, b, eta)
-            offspring[k] = a
-            if k + 1 < count:
-                offspring[k + 1] = b
-        return offspring
-
-    return crossover
 
 
 def non_dominated(points):
@@ -413,15 +385,16 @@ def non_dominated(points):
 
 
 def run_front(problem, size, solver, seed, budget):
-    """Runs NSGA-II or NSGA-III; returns (front, solutions, generations)."""
+    """Runs NSGA-II or NSGA-III; returns PyGAD's GA after the run."""
     function = FRONT_PROBLEMS[problem][0](size)
     n = FRONT_PROBLEMS[problem][1](size)
     objectives = FRONT_PROBLEMS[problem][2](size)
     population_size = 100 if objectives == 2 else 92
 
-    def fitness_func(ga, solution, solution_idx):
-        budget.count(solution)
-        return [-float(v) for v in function(solution)]
+    def fitness_func(ga, solutions, indices):
+        X = numpy.asarray(solutions, dtype=float)
+        budget.count(X)
+        return -function(X)
 
     def on_generation(ga):
         if budget.exhausted():
@@ -429,24 +402,29 @@ def run_front(problem, size, solver, seed, budget):
 
     common = dict(
         num_generations=GENERATIONS, fitness_func=fitness_func, on_generation=on_generation,
-        on_fitness=budget.on_fitness,
+        on_fitness=budget.on_fitness, fitness_batch_size=2 * population_size,
         num_genes=n, gene_type=float, init_range_low=0.0, init_range_high=1.0,
         # N survivors and N offspring per generation
         sol_per_pop=2 * population_size, num_parents_mating=population_size,
+        crossover_type="sbx",
         mutation_type="polynomial", polynomial_mutation_eta=20.0, mutation_probability=1.0 / n,
         random_seed=seed, suppress_warnings=True,
     )
     if solver == "nsga2":
         ga = pygad.GA(**common, keep_elitism=population_size,
                       parent_selection_type="tournament_nsga2", K_tournament=2,
-                      crossover_type=make_sbx(15.0, 0.9, random_pairs=False))
+                      sbx_crossover_eta=15.0, crossover_probability=0.9)
     else:
         ga = pygad.GA(**common, keep_elitism=0, keep_parents=-1,
-                      parent_selection_type="nsga3", nsga3_num_divisions=12,
-                      crossover_type=make_sbx(30.0, 1.0, random_pairs=True))
+                      parent_selection_type="nsga3", nsga3_num_divisions=99 if objectives == 2 else 12,
+                      sbx_crossover_eta=30.0)
     ga.run()
+    return ga
 
-    # the final survivors: the N elites, or the N parents, PyGAD selects from the last population
+
+def front_of(ga, solver):
+    """The non-dominated part of the final survivors: the N elites, or the N parents, PyGAD selects
+    from the last population (rule 7.2)."""
     if solver == "nsga2":
         survivors = numpy.asarray(ga.last_generation_elitism_indices, dtype=int)
     else:
@@ -455,7 +433,7 @@ def run_front(problem, size, solver, seed, budget):
     points = [[-float(v) for v in row] for row in fitness]
     solutions = [[float(v) for v in ga.population[i]] for i in survivors]
     front = non_dominated(points)
-    return [points[i] for i in front], [solutions[i] for i in front], ga.generations_completed
+    return [points[i] for i in front], [solutions[i] for i in front]
 
 
 # -------------------------------------------------------------------------------------------------
@@ -474,8 +452,11 @@ def values(problem, size):
         function = {"onemax": onemax, "nqueens": nqueens}.get(problem) or REAL_PROBLEMS[problem][0]
     for line in sys.stdin:
         if line.strip():
-            result = function(numpy.asarray(json.loads(line)))
-            print(json.dumps([float(v) for v in result] if problem in FRONT_PROBLEMS else result), flush=True)
+            result = function(numpy.asarray([json.loads(line)]))[0]
+            if problem in FRONT_PROBLEMS:
+                print(json.dumps([float(v) for v in result]), flush=True)
+            else:
+                print(json.dumps(result.item()), flush=True)
 
 
 def main():
@@ -489,7 +470,7 @@ def main():
     seed_from, seed_to = int(sys.argv[4]), int(sys.argv[5])
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
     if problem in FRONT_PROBLEMS:
-        solvers = ["nsga2"] + (["nsga3"] if FRONT_PROBLEMS[problem][2](size) > 2 else [])
+        solvers = ["nsga2", "nsga3"]
     elif problem in ("onemax", "nqueens") or problem in REAL_PROBLEMS:
         solvers = ["ga"]
     else:
@@ -503,21 +484,24 @@ def main():
                 continue
             random.seed(seed)
             numpy.random.seed(seed)
-            budget = Budget(problem, size, max_evaluations, max_seconds)
             # the clock starts before PyGAD's constructor, which creates the initial population
             start = time.perf_counter()
+            budget = Budget(problem, size, max_evaluations, max_seconds, start)
             if problem in FRONT_PROBLEMS:
-                front, solutions, generations = run_front(problem, size, solver, seed, budget)
+                ga = run_front(problem, size, solver, seed, budget)
             else:
                 generations = run_single(problem, size, mode, seed, budget)
             elapsed = time.perf_counter() - start
 
             result = {
                 "library": "pygad", "solver": solver, "problem": problem, "size": size, "mode": mode,
-                "seed": seed, "time_s": round(elapsed, 6), "generations": generations,
+                "seed": seed, "time_s": round(elapsed, 6),
+                "generations": ga.generations_completed if problem in FRONT_PROBLEMS else generations,
                 "evaluations": budget.evaluations, "last_generation": budget.last_generation(),
             }
             if problem in FRONT_PROBLEMS:
+                # after the clock (rule 4.1)
+                front, solutions = front_of(ga, solver)
                 result.update(outside=budget.outside, front=front, solutions=solutions)
                 success = False
             else:
@@ -529,6 +513,8 @@ def main():
                     best=float(budget.best) if real else int(budget.best), target=budget.target,
                     success=success,
                     solution=[float(v) if real else int(v) for v in budget.solution],
+                    first_hit=budget.first_hit and {"evaluations": budget.first_hit[0],
+                                                    "time_s": round(budget.first_hit[1], 6)},
                 )
             capped[solver] += index < EARLY_SEEDS and not success and elapsed >= CAPPED * max_seconds
             print(json.dumps(result), flush=True)
