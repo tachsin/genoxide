@@ -9,7 +9,7 @@ exclude = ["benchmarks", "examples/gpu"]
 
 [workspace.package]
 # genoxide's version, which the Python package has as well: release-plz bumps it here
-version = "0.6.0"
+version = "0.7.0"
 
 [package]
 name = "genoxide"
