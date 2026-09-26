@@ -97,8 +97,11 @@ python run.py check     # test the adapters against the rules (a timed run needs
 python run.py --quick    # small scenarios, 3 seeds
 python run.py            # all scenarios, 10 seeds
 python run.py --scenarios nqueens-64-idiomatic --seeds 20 --libraries genetic_algorithm deap
+python run.py instructions  # count the instructions per evaluation into the latest results
 python run.py chart      # redraw the charts of the latest results (--png also draws PNG previews)
 ```
+
+A benchmark takes two steps. The timed run measures times and evaluations on the pinned cores. `python run.py instructions` then counts the instructions per evaluation into its results file. The counts don't depend on the load, so unpin WSL first: it runs up to `--jobs` Callgrind processes at once (default: one per core). `--instructions` on a timed run counts them right after it, on the pinned cores.
 
 `--allow-unpinned` skips the pinning check, for runs whose times don't count.
 
@@ -112,14 +115,14 @@ python run.py --update results/<timestamp>.json --libraries genoxide genoxide_py
 
 - It can't be combined with `--scenarios` or `--quick`. To add a scenario, rerun every library.
 - It first reruns DEAP's GA in matched OneMax 100, seeds 0 to 2. It refuses to go on if the median time differs from the file's by more than 3%, or if the evaluations differ. `--allow-drift` reruns anyway.
-- Without Valgrind, or with `--no-instructions`, the previous instruction counts are kept.
+- It keeps the other libraries' instruction counts. Count the rerun ones with `python run.py instructions --libraries ...`.
 - If the platform differs from the file's, the new file records both.
 
 **The version measured.** `--version-label genoxide=0.7.0` records genoxide and its Python package as 0.7.0, still followed by the commit, for a release benchmarked before `Cargo.toml` is bumped. It works for any library of `--libraries`.
 
 ## Instructions per evaluation
 
-On Linux with [Valgrind](https://valgrind.org/), each run also counts CPU instructions with Callgrind; it can't run the Java and Julia runtimes. Each adapter runs matched OneMax 1000 with budgets of N = 3,000 and 2N evaluations. The difference, I(2N) − I(N), divided by the difference in evaluations, cancels startup and setup: what's left is the cost of one evaluation. A library that can't run matched OneMax has no count.
+`python run.py instructions` counts CPU instructions with Callgrind, on Linux with [Valgrind](https://valgrind.org/); it can't run the Java and Julia runtimes. It writes the counts into the latest results file (`--results` for another), for the file's libraries or those of `--libraries`, and redraws `results/latest.md` and the charts. Each adapter runs matched OneMax 1000 with budgets of N = 3,000 and 2N evaluations. The difference, I(2N) − I(N), divided by the difference in evaluations, cancels startup and setup: what's left is the cost of one evaluation. A library that can't run matched OneMax has no count.
 
 ## Adding a library
 

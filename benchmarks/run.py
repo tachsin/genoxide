@@ -8,6 +8,9 @@ Usage:
     python run.py --libraries deap genetic_algorithm
     python run.py check                      # test the adapters against the rules, before a run
     python run.py chart                      # redraw the charts of the latest results
+    python run.py instructions               # count the instructions per evaluation with Callgrind
+                                             # into the latest results (--results <file>), --jobs
+                                             # at a time; unpinned is fine
     python run.py --libraries genoxide --update results/<file>.json
                                              # rerun one library, keep the others' results, if a
                                              # reference run still takes the file's time
@@ -17,11 +20,12 @@ Usage:
                                              # PR bumps Cargo.toml
 
 Results are written to results/<timestamp>.json (all runs), results/latest.md (table) and
-results/charts/*.svg (charts). On Linux with Valgrind, a run also measures instructions per
-evaluation with Callgrind.
+results/charts/*.svg (charts). `python run.py instructions`, or `--instructions` on a run, counts
+the instructions per evaluation with Callgrind (Linux, Valgrind).
 """
 
 import argparse
+import concurrent.futures
 import datetime
 import json
 import os
@@ -32,6 +36,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 import venv
 from pathlib import Path
@@ -394,31 +399,50 @@ def count_instructions(adapter, evaluations):
     return int(match.group(1)), {run["solver"]: run["evaluations"] for run in runs}
 
 
-def measure_instructions(libraries):
-    """Instructions per evaluation of each library in the instructions scenario."""
+def measure_instructions(libraries, jobs=None):
+    """Instructions per evaluation of each library in the instructions scenario, in the order of
+    `libraries`. The Callgrind runs go in parallel, `jobs` at a time: their counts don't depend on
+    the load."""
+    names = [name for name in libraries if ADAPTERS[name].get("instructions", True)]
+    lock = threading.Lock()
+
+    def count(name, evaluations):
+        if evaluations == INSTRUCTIONS_EVALUATIONS:
+            with lock:
+                print(f"instructions: {name} (callgrind) ...", flush=True)
+        return count_instructions(ADAPTERS[name], evaluations)
+
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=jobs or os.cpu_count())
+    # each library's two runs, in the order of the libraries
+    futures = {name: [pool.submit(count, name, budget)
+                      for budget in (INSTRUCTIONS_EVALUATIONS, 2 * INSTRUCTIONS_EVALUATIONS)]
+               for name in names}
     rows = []
-    for name in libraries:
-        if not ADAPTERS[name].get("instructions", True):
-            continue
-        print(f"instructions: {name} (callgrind) ...", flush=True)
-        low, low_evaluations = count_instructions(ADAPTERS[name], INSTRUCTIONS_EVALUATIONS)
-        high, high_evaluations = count_instructions(ADAPTERS[name], 2 * INSTRUCTIONS_EVALUATIONS)
-        if not high_evaluations:
-            # the library can't run the scenario
-            continue
-        # the instructions are the whole process's: they're one solver's only if it runs alone
-        if len(high_evaluations) != 1 or set(low_evaluations) != set(high_evaluations):
-            raise SystemExit(
-                f"instructions: the {name} adapter runs {len(high_evaluations)} solvers in "
-                f"{scenario_name(*INSTRUCTIONS_SCENARIO)} ({', '.join(sorted(high_evaluations))}), and the "
-                "instructions of the process can't be divided between them. Run one solver there, or set "
-                "\"instructions\": False on the adapter.")
-        (solver, evaluations), = high_evaluations.items()
-        rows.append({
-            "library": name,
-            "solver": solver,
-            "instructions_per_evaluation": (high - low) / (evaluations - low_evaluations[solver]),
-        })
+    try:
+        for name in names:
+            (low, low_evaluations), (high, high_evaluations) = (future.result() for future in futures[name])
+            if not high_evaluations:
+                # the library can't run the scenario
+                continue
+            # the instructions are the whole process's: they're one solver's only if it runs alone
+            if len(high_evaluations) != 1 or set(low_evaluations) != set(high_evaluations):
+                raise SystemExit(
+                    f"instructions: the {name} adapter runs {len(high_evaluations)} solvers in "
+                    f"{scenario_name(*INSTRUCTIONS_SCENARIO)} ({', '.join(sorted(high_evaluations))}), and the "
+                    "instructions of the process can't be divided between them. Run one solver there, or set "
+                    "\"instructions\": False on the adapter.")
+            (solver, evaluations), = high_evaluations.items()
+            row = {
+                "library": name,
+                "solver": solver,
+                "instructions_per_evaluation": (high - low) / (evaluations - low_evaluations[solver]),
+            }
+            with lock:
+                print(f"instructions: {name} / {solver}: {format_count(row['instructions_per_evaluation'])} "
+                      "per evaluation", flush=True)
+            rows.append(row)
+    finally:
+        pool.shutdown(cancel_futures=True)
     return rows
 
 
@@ -1193,18 +1217,63 @@ def check_drift(previous, max_seconds, allow):
                "Check the load, the pinning and the versions of WSL and Python, or rerun every library")
 
 
+def build(libraries, labels):
+    """Builds the adapters of `libraries` and returns their versions."""
+    versions = {}
+    for name in libraries:
+        adapter = ADAPTERS[name]
+        if adapter.get("build"):
+            print(f"building {name} adapter ...", flush=True)
+            subprocess.run(adapter["build"], check=True)
+        versions[name] = library_version(*adapter["version"], label=labels.get(name))
+        print(f"{name} {versions[name]}", flush=True)
+    return versions
+
+
+def count_into(results_file, libraries, labels, jobs, charts):
+    """Counts the instructions of `libraries` into a results file, in place of their previous counts,
+    and redraws results/latest.md and the charts from it."""
+    report = json.loads(results_file.read_text(encoding="utf-8"))
+    versions = build(libraries, labels)
+    for name in libraries:
+        if versions[name] != report["versions"][name]:
+            print(f"warning: {name} is {versions[name]} now, {report['versions'][name]} in {results_file.name}",
+                  flush=True)
+    instructions = measure_instructions(libraries, jobs)
+    kept = [row for row in report.get("instructions") or [] if row["library"] not in libraries]
+    order = list(report["versions"])
+    report["instructions"] = sorted(kept + instructions, key=lambda row: order.index(row["library"]))
+    results_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    # the summaries from the runs, as for the charts: the file's may come from older code
+    max_seconds = report.get("max_seconds", 60.0)
+    markdown = markdown_report({"timestamp": results_file.stem, **report,
+                                "summary": summarize(report["runs"], max_seconds),
+                                "front_summary": summarize_fronts(report["runs"], max_seconds)})
+    (ROOT / "results" / "latest.md").write_text(markdown, encoding="utf-8")
+    print()
+    print(markdown)
+    draw_charts_of(results_file, charts)
+    print(f"instruction counts of {', '.join(libraries)} written to {results_file}", flush=True)
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", nargs="?", choices=["run", "setup", "check", "chart"], default="run")
+    parser.add_argument("command", nargs="?", choices=["run", "setup", "check", "chart", "instructions"],
+                        default="run")
     parser.add_argument("--seeds", type=int, default=10)
     parser.add_argument("--max-seconds", type=float, default=60.0, help="wall time cap per run")
     parser.add_argument("--quick", action="store_true", help="small scenarios, 3 seeds")
     parser.add_argument("--scenarios", nargs="*", help="scenario names, e.g. onemax-100-matched (default all)")
-    parser.add_argument("--libraries", nargs="*", default=list(ADAPTERS), choices=list(ADAPTERS))
-    parser.add_argument("--results", type=Path, help="results file to chart (default: the latest)")
+    parser.add_argument("--libraries", nargs="*", choices=list(ADAPTERS),
+                        help="default all; for instructions, the libraries of the results file")
+    parser.add_argument("--results", type=Path,
+                        help="results file to chart or to count the instructions into (default: the latest)")
     parser.add_argument("--charts", type=Path, default=ROOT / "results" / "charts", help="folder for the charts")
-    parser.add_argument("--no-instructions", action="store_true", help="skip the Callgrind measurement")
+    parser.add_argument("--instructions", action="store_true",
+                        help="count the instructions with Callgrind right after the timed runs")
+    parser.add_argument("--jobs", type=int, default=os.cpu_count(),
+                        help="Callgrind runs at a time (default: the number of cores)")
     parser.add_argument("--png", action="store_true", help="also draw the charts as PNG, e.g. to preview them")
     parser.add_argument("--update", type=Path,
                         help="rerun only --libraries, with the seeds and every scenario of this results file, "
@@ -1222,6 +1291,23 @@ def main():
     parser.add_argument("--allow-unpinned", action="store_true",
                         help="measure under WSL without checking the pinning, for runs whose times don't count")
     args = parser.parse_args()
+
+    counted = None
+    if args.command == "instructions":
+        # the results file to count the instructions into, and its libraries
+        counted = args.results or latest_results()
+        counted_versions = json.loads(counted.read_text(encoding="utf-8"))["versions"]
+        missing = [name for name in args.libraries or [] if name not in counted_versions]
+        if missing:
+            raise SystemExit(f"{', '.join(missing)}: not in {counted.name}")
+        if args.libraries is None:
+            args.libraries = [name for name in counted_versions if name in ADAPTERS]
+        # Callgrind can't run every runtime: those libraries have no count
+        args.libraries = [name for name in args.libraries if ADAPTERS[name].get("instructions", True)]
+        if not args.libraries:
+            raise SystemExit("no library to count the instructions of")
+    if args.libraries is None:
+        args.libraries = list(ADAPTERS)
 
     labels = {}
     for item in args.version_label:
@@ -1253,6 +1339,13 @@ def main():
     if unchecked:
         raise SystemExit(f"{', '.join(unchecked)}: the adapter hasn't passed `python run.py check` since it last "
                          "changed. Check it first (docs/benchmarks/rules.md).")
+    if args.instructions or counted:
+        if not shutil.which("valgrind"):
+            raise SystemExit("counting the instructions needs Valgrind")
+    if counted:
+        # counts don't depend on the cores: no pinning
+        count_into(counted, args.libraries, labels, args.jobs, args.charts)
+        return
     pinned = None
     if is_wsl() and not args.allow_unpinned:
         pinned = tuple(int(core) for core in args.cores.split(","))
@@ -1279,14 +1372,7 @@ def main():
         and (previous_scenarios is None or scenario_name(*scenario[:3]) in previous_scenarios)
     ]
 
-    versions = {}
-    for name in args.libraries:
-        adapter = ADAPTERS[name]
-        if adapter.get("build"):
-            print(f"building {name} adapter ...", flush=True)
-            subprocess.run(adapter["build"], check=True)
-        versions[name] = library_version(*adapter["version"], label=labels.get(name))
-        print(f"{name} {versions[name]}", flush=True)
+    versions = build(args.libraries, labels)
 
     if previous:
         check_drift(previous, max_seconds, args.allow_drift)
@@ -1298,9 +1384,7 @@ def main():
             print(f"{scenario_name(problem, size, mode)}: {name} ({seeds} seeds) ...", flush=True)
             runs += run_adapter(ADAPTERS[name], problem, size, mode, seeds, max_evaluations, max_seconds)
 
-    instructions = None
-    if shutil.which("valgrind") and not args.no_instructions:
-        instructions = measure_instructions(args.libraries)
+    instructions = measure_instructions(args.libraries, args.jobs) if args.instructions else None
 
     if previous:
         # the results of the other libraries and scenarios, as they were
@@ -1311,14 +1395,9 @@ def main():
             or scenario_name(run["problem"], run["size"], run["mode"]) not in rerun
         ] + runs
         versions = {**previous["versions"], **versions}
-        if instructions is None:
-            # not measured again (no Valgrind, or --no-instructions): keep the previous counts
-            instructions = previous.get("instructions")
-            if instructions:
-                print("instruction counts: kept from the previous results", flush=True)
-        else:
-            kept = [row for row in previous.get("instructions") or [] if row["library"] not in args.libraries]
-            instructions = kept + instructions
+        # the other libraries' counts; the rerun ones' are counted again, now or with `run.py instructions`
+        kept = [row for row in previous.get("instructions") or [] if row["library"] not in args.libraries]
+        instructions = kept + (instructions or [])
 
     rows = summarize(runs, max_seconds)
     front_rows = summarize_fronts(runs, max_seconds)
@@ -1339,6 +1418,10 @@ def main():
     print()
     print(markdown)
     draw_charts_of(results_file, args.charts)
+    if not args.instructions:
+        rerun = f" --libraries {' '.join(args.libraries)}" if previous else ""
+        print(f"next: count the instructions with `python run.py instructions{rerun}` (unpinned, to use every core)",
+              flush=True)
 
 
 if __name__ == "__main__":
