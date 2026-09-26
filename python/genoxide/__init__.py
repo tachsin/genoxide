@@ -205,7 +205,10 @@ def _rate_or_count(name: str, rate: float | None, count: int | None) -> dict[str
 
 @dataclass(frozen=True)
 class Binary:
-    """Bit strings of ``length`` bits: numpy ``bool`` arrays."""
+    """Bit strings of ``length`` bits: numpy ``bool`` arrays.
+
+    ``length`` is 1 to 2^24.
+    """
 
     length: int
 
@@ -218,6 +221,8 @@ class Integer:
     """Whole numbers between bounds, inclusive: numpy ``int64`` arrays.
 
     ``bounds`` is one pair ``(low, high)`` for every gene, with ``length``, or a pair per gene.
+    Bounds are whole numbers that fit in an ``int64``, with ``low <= high``; both are included.
+    There is at least 1 gene.
     """
 
     bounds: Bounds
@@ -235,6 +240,8 @@ class Real:
     """Real numbers between bounds: numpy ``float64`` arrays.
 
     ``bounds`` is one pair ``(low, high)`` for every gene, with ``length``, or a pair per gene.
+    Bounds are finite, with ``low <= high`` and a finite width ``high - low``. There is at least 1
+    gene.
     """
 
     bounds: Bounds
@@ -246,7 +253,10 @@ class Real:
 
 @dataclass(frozen=True)
 class Permutation:
-    """Orderings of ``0 .. length - 1``: numpy ``int64`` arrays."""
+    """Orderings of ``0 .. length - 1``: numpy ``int64`` arrays.
+
+    ``length`` is 1 to 2^24.
+    """
 
     length: int
 
@@ -261,7 +271,7 @@ Genome = Union[Binary, Integer, Real, Permutation]
 
 @dataclass(frozen=True)
 class Tournament:
-    """The best of ``size`` random individuals."""
+    """The best of ``size`` random individuals. ``size`` is 1 to 2^24."""
 
     size: int
 
@@ -271,7 +281,8 @@ class Tournament:
 
 @dataclass(frozen=True)
 class Rank:
-    """Linear ranking, with ``pressure`` between 1 and 2."""
+    """Linear ranking: the best individual is expected to be selected ``pressure`` times as often
+    as the average one. ``pressure`` is 1 (uniform) to 2; 1.5 by default."""
 
     pressure: float = 1.5
 
@@ -297,7 +308,8 @@ class StochasticUniversalSampling:
 
 @dataclass(frozen=True)
 class Truncation:
-    """Uniformly among the best ``fraction`` of the population."""
+    """Uniformly among the best ``fraction`` of the population. ``fraction`` is greater than 0
+    and at most 1."""
 
     fraction: float
 
@@ -329,7 +341,7 @@ class UniformCrossover:
 @dataclass(frozen=True)
 class PointCrossover:
     """Swaps the segments between ``points`` random cut points. Binary, integer and real
-    genomes."""
+    genomes. ``points`` is at least 1; 1 by default."""
 
     points: int = 1
 
@@ -348,7 +360,7 @@ class NoCrossover:
 @dataclass(frozen=True)
 class SimulatedBinaryCrossover:
     """SBX with distribution index ``eta``: higher keeps children closer to their parents. Real
-    genomes."""
+    genomes. ``eta`` is 0 or more; 15 by default."""
 
     eta: float = 15.0
 
@@ -360,7 +372,7 @@ class SimulatedBinaryCrossover:
 @dataclass(frozen=True)
 class BlendCrossover:
     """BLX-alpha: children uniformly in the parents' interval, widened by ``alpha`` on each side.
-    Real genomes."""
+    Real genomes. ``alpha`` is 0 or more; 0.5 by default."""
 
     alpha: float = 0.5
 
@@ -426,7 +438,10 @@ Crossover = Union[
 
 @dataclass(frozen=True)
 class BitFlip:
-    """Flips each bit with probability ``rate``, or exactly ``count`` bits. Binary genomes."""
+    """Flips each bit with probability ``rate``, or exactly ``count`` bits. Binary genomes.
+
+    Give either ``rate``, greater than 0 and at most 1, or ``count``, at least 1.
+    """
 
     rate: float | None = None
     count: int | None = None
@@ -438,7 +453,10 @@ class BitFlip:
 @dataclass(frozen=True)
 class UniformMutation:
     """Redraws each gene uniformly within its bounds with probability ``rate``, or exactly
-    ``count`` genes. Integer and real genomes."""
+    ``count`` genes. Integer and real genomes.
+
+    Give either ``rate``, greater than 0 and at most 1, or ``count``, at least 1.
+    """
 
     rate: float | None = None
     count: int | None = None
@@ -450,7 +468,11 @@ class UniformMutation:
 @dataclass(frozen=True)
 class GaussianMutation:
     """Adds normal noise with standard deviation ``sigma`` (a fraction of each gene's range) to
-    each gene with probability ``rate``, or to exactly ``count`` genes. Real genomes."""
+    each gene with probability ``rate``, or to exactly ``count`` genes. Real genomes.
+
+    ``sigma`` is greater than 0 and finite. Give either ``rate``, greater than 0 and at most 1, or
+    ``count``, at least 1.
+    """
 
     sigma: float
     rate: float | None = None
@@ -467,7 +489,11 @@ class GaussianMutation:
 @dataclass(frozen=True)
 class PolynomialMutation:
     """Deb's polynomial mutation with distribution index ``eta``, of each gene with probability
-    ``rate`` (usually 1 / length), or of exactly ``count`` genes. Real genomes."""
+    ``rate`` (usually 1 / length), or of exactly ``count`` genes. Real genomes.
+
+    ``eta`` is 0 or more; 20 by default. Give either ``rate``, greater than 0 and at most 1, or
+    ``count``, at least 1.
+    """
 
     eta: float = 20.0
     rate: float | None = None
@@ -483,7 +509,8 @@ class PolynomialMutation:
 
 @dataclass(frozen=True)
 class SwapMutation:
-    """Swaps ``count`` pairs of positions. Permutations."""
+    """Swaps ``count`` pairs of positions. Permutations. ``count`` is at least 1; 1 by
+    default."""
 
     count: int = 1
 
@@ -532,7 +559,7 @@ Mutation = Union[
 @dataclass(frozen=True)
 class Generational:
     """Children replace the population, except its ``elitism`` best individuals (the default,
-    with 1)."""
+    with 1). ``elitism`` is 0 or more and less than the population size."""
 
     elitism: int = 1
 
@@ -542,7 +569,8 @@ class Generational:
 
 @dataclass(frozen=True)
 class SteadyState:
-    """Each generation, ``replacements`` children replace the worst individuals."""
+    """Each generation, ``replacements`` children replace the worst individuals. ``replacements``
+    is 1 to the population size."""
 
     replacements: int
 
@@ -555,7 +583,8 @@ class SteadyState:
 
 @dataclass(frozen=True)
 class MuPlusLambda:
-    """(mu + lambda): ``offspring`` children, and the best of parents and children survive."""
+    """(mu + lambda): ``offspring`` children, and the best of parents and children survive.
+    ``offspring`` is 1 to 2^24."""
 
     offspring: int
 
@@ -566,7 +595,8 @@ class MuPlusLambda:
 
 @dataclass(frozen=True)
 class MuCommaLambda:
-    """(mu, lambda): ``offspring`` children, of which the best survive."""
+    """(mu, lambda): ``offspring`` children, of which the best survive. ``offspring`` is the
+    population size to 2^24."""
 
     offspring: int
 
@@ -602,7 +632,8 @@ class NotWorse:
 class Annealing:
     """Simulated annealing: also moves to a neighbor worse by d with probability exp(-d / T).
     The temperature T starts at ``initial_temperature`` and is multiplied by ``cooling`` (e.g.
-    0.999) after every step."""
+    0.999) after every step. ``initial_temperature`` is greater than 0 and finite; ``cooling`` is
+    greater than 0 and at most 1."""
 
     initial_temperature: float
     cooling: float
@@ -619,7 +650,7 @@ class Annealing:
 @dataclass(frozen=True)
 class Tabu:
     """Tabu search: moves to the best neighbor that isn't one of the last ``tenure`` solutions,
-    even if it's worse. Use it with several neighbors per step."""
+    even if it's worse. Use it with several neighbors per step. ``tenure`` is at least 1."""
 
     tenure: int
 
@@ -644,7 +675,8 @@ class Tchebycheff:
 @dataclass(frozen=True)
 class Pbi:
     """Penalty-based boundary intersection: the distance along the weight vector plus ``theta``
-    times the distance from it. Spreads fronts of 3 or more objectives evenly."""
+    times the distance from it. Spreads fronts of 3 or more objectives evenly. ``theta`` is 0 or
+    more; 5 by default."""
 
     theta: float = 5.0
 
@@ -669,12 +701,20 @@ class Result:
     """Its constraint violation: 0 for a feasible solution, and NaN if no valid solution was
     found."""
     generations: int
+    """The generations completed after the initial population."""
     evaluations: int
+    """The fitness evaluations. A child identical to a parent inherits its fitness without one."""
     seconds: float
+    """The duration of the run, in seconds."""
     stop_reason: str
-    """What stopped the run: "target", "generations", "evaluations", "time", "stagnation",
-    "aborted" (by ``on_generation``) or "stalled" (nothing new to evaluate for 10,000
-    generations in a row, e.g. every child was a copy, so no other condition could be met)."""
+    """What stopped the run:
+
+    - "target", "generations", "evaluations", "time" or "stagnation": that stop condition;
+    - "aborted": ``on_generation`` returned False;
+    - "stalled": nothing new to evaluate for 10,000 generations in a row (e.g. every child was a
+      copy of a parent), while only ``target`` or ``evaluations`` could stop the run;
+    - "other": a reason that the stop conditions of the package don't produce.
+    """
 
 
 @dataclass(frozen=True, eq=False)
@@ -688,12 +728,21 @@ class MultiResult:
     front_violations: np.ndarray
     """Their constraint violations: 0 for feasible solutions, and NaN for invalid ones."""
     generations: int
+    """The generations completed after the initial population."""
     evaluations: int
+    """The fitness evaluations. A child identical to a parent inherits its objective values
+    without one."""
     seconds: float
+    """The duration of the run, in seconds."""
     stop_reason: str
-    """What stopped the run: "generations", "evaluations", "time", "stagnation", "aborted" (by
-    ``on_generation``) or "stalled" (nothing new to evaluate for 10,000 generations in a row, e.g.
-    every child was a copy, so no other condition could be met)."""
+    """What stopped the run:
+
+    - "generations", "evaluations", "time" or "stagnation": that stop condition;
+    - "aborted": ``on_generation`` returned False;
+    - "stalled": nothing new to evaluate for 10,000 generations in a row (e.g. every child was a
+      copy of a parent), while only ``evaluations`` could stop the run;
+    - "other": a reason that the stop conditions of the package don't produce.
+    """
 
 
 @dataclass(frozen=True)
@@ -887,27 +936,68 @@ class _SingleObjective(_Algorithm):
         parallel: bool = False,
         on_generation: Callable[[Progress], bool | None] | None = None,
     ) -> Result:
-        """Runs until the first stop condition.
+        """Runs the algorithm until the first stop condition.
 
-        ``fitness`` takes a genome as a numpy array and returns a number, None (an invalid
-        solution) or ``(score, constraint_violation)``. With ``batch=True`` it takes a generation
-        as a 2-D array, a genome per row, and returns an array of scores (NaN for an invalid
-        solution), or a tuple of an array of scores and an array of constraint violations; a
-        column, of shape ``(n, 1)``, does for an array.
+        Each call starts a new run from the settings. The settings are checked here, not by the
+        constructor. With a ``seed``, the same call repeats the run exactly: one genome at a time,
+        in batches or in parallel.
 
-        ``parallel=True`` calls a (non-batch) fitness function from several threads at once: it
-        pays off when the function releases the GIL, e.g. in numpy or I/O, or on free-threaded
-        Python.
+        Parameters
+        ----------
+        fitness : callable
+            Takes a genome as a 1-D numpy array and returns a number, None or NaN (an invalid
+            solution), or a tuple ``(score, constraint_violation)``. The violation is 0 for a
+            feasible solution and positive for an infeasible one. With ``batch=True``, it takes a
+            generation as a 2-D array, a genome per row, and returns an array of scores (NaN for
+            an invalid solution), or a tuple of an array of scores and an array of constraint
+            violations; a column of shape ``(n, 1)`` does for an array. The function must be
+            deterministic.
+        generations : int, optional
+            Stops after this many generations, 0 or more. 0 evaluates only the initial
+            population.
+        evaluations : int, optional
+            Stops after the generation that reaches this many fitness evaluations, 0 or more.
+        target : float, optional
+            Stops when the best score is at least as good: at least ``target`` when maximizing,
+            at most when minimizing. A finite number.
+        time : float, optional
+            Stops when the run has taken this many seconds, 0 or more, checked after every
+            generation. ``math.inf`` is no limit.
+        stagnation : int, optional
+            Stops after this many generations without a better best score, at least 1.
+        batch : bool, default False
+            Calls ``fitness`` once per generation with a 2-D array, and not for a generation of
+            copies of their parents.
+        parallel : bool, default False
+            Calls a non-batch ``fitness`` from several threads at once. It pays off when the
+            function releases the GIL (numpy on large arrays, I/O), or on free-threaded Python.
+        on_generation : callable, optional
+            Called with a :class:`Progress` after every generation, the initial population
+            (generation 0) included, on the thread that called ``run``. If it returns False, the
+            run stops with the stop reason "aborted".
 
-        Stop conditions: ``generations``, ``evaluations``, ``target`` (a score at least as good),
-        ``time`` (seconds; ``math.inf`` for no limit) and ``stagnation`` (generations without
-        improvement).
+        At least one of ``generations``, ``evaluations``, ``target``, ``time`` and
+        ``stagnation`` is needed. None is no condition.
 
-        ``on_generation`` is called after every generation, the initial population's included,
-        with a :class:`Progress`, on the thread that called ``run``. If it returns False, the run
-        stops with the stop reason "aborted".
+        Returns
+        -------
+        Result
+            The best solution found, and what the run took.
 
-        An exception in ``fitness`` or ``on_generation``, or Ctrl+C, stops the run and is raised.
+        Raises
+        ------
+        ValueError
+            Without a stop condition; for a wrong setting of the run, the algorithm, its genome
+            or its operators, or an operator that doesn't fit the genome (the message names the
+            setting); and for a wrong fitness result: a negative constraint violation, or a
+            batch result with a length other than the number of genomes.
+        TypeError
+            If ``fitness`` or ``on_generation`` isn't callable, or ``fitness`` returns something
+            that isn't a number. Another error converting a result, e.g. an ``OverflowError`` for
+            an int too large for a float, is raised as it is.
+        Exception
+            An exception raised by ``fitness`` or ``on_generation`` stops the run, and ``run``
+            raises it. So does ``KeyboardInterrupt`` on Ctrl+C.
         """
         _check_callable(fitness)
         stop = _stop(generations, evaluations, target, time, stagnation)
@@ -917,12 +1007,37 @@ class _SingleObjective(_Algorithm):
 
 
 class Ga(_SingleObjective):
-    """A genetic algorithm.
+    """A genetic algorithm. Any genome.
 
     Each generation, ``select`` picks parents, ``crossover`` combines pairs of them with
-    probability ``crossover_rate`` (default 0.9) and ``mutation`` changes each child with
-    probability ``mutation_rate`` (default 1). The ``scheme`` decides who survives: by default
-    the children replace the population, except its best individual.
+    probability ``crossover_rate`` and ``mutation`` changes each child with probability
+    ``mutation_rate``. The ``scheme`` decides who survives: by default the children replace the
+    population, except its best individual.
+
+    Parameters
+    ----------
+    genome : Binary, Integer, Real or Permutation
+        The search space.
+    population_size : int
+        The number of individuals, 1 to 2^24.
+    select : Tournament, Rank, Roulette, StochasticUniversalSampling, Truncation or RandomSelection
+        How parents are picked.
+    crossover : a crossover
+        How pairs of parents are combined. It must fit the genome.
+    mutation : a mutation
+        How children are changed. It must fit the genome.
+    crossover_rate : float, default 0.9
+        The probability that a pair of parents is combined, 0 to 1.
+    mutation_rate : float, default 1
+        The probability that a child is mutated, 0 to 1. 0 needs a ``crossover_rate`` above 0
+        and a crossover other than :class:`NoCrossover`: otherwise every child is a copy.
+    scheme : Generational, SteadyState, MuPlusLambda or MuCommaLambda, default Generational(1)
+        Who survives each generation.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
     """
 
     def __init__(
@@ -971,11 +1086,29 @@ class De(_SingleObjective):
     Parameter Adaptation for Differential Evolution", IEEE CEC 2013): DE/current-to-pbest/1 with
     a random p per trial between 2 / population and 0.2 and an archive of the population's size,
     SHADE's adaptation of F and CR with a memory of 100, and a population of 100. genoxide adds
-    restarts when the population converges or stalls (its own choice, not part of SHADE).
+    restarts, which aren't part of SHADE: every individual but the best is replaced when the
+    scores converge (within 1e-8, relative to the best) or the best doesn't improve for 200
+    generations.
 
     With ``l_shade``, L-SHADE (Tanabe and Fukunaga, 2014) for a budget of that many evaluations:
-    current-to-pbest/1, F and CR adapted during the run, and a population that shrinks linearly
-    from 18 times the number of genes to 4. Stop the run at the same number of evaluations.
+    current-to-pbest/1 with p 0.11 and an archive of 2.6 times the population, SHADE's
+    adaptation with a memory of 6, no restarts, and a population that shrinks linearly from its
+    initial size to 4 over the budget. Stop the run at the same number of evaluations.
+
+    Parameters
+    ----------
+    genome : Real
+        The search space.
+    population_size : int, optional
+        The number of individuals, 4 to 2^24. 100 by default. With ``l_shade``, the initial size,
+        18 times the number of genes (at least 4) by default.
+    l_shade : int, optional
+        L-SHADE's budget of evaluations, at least 1. None is SHADE.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
     """
 
     def __init__(
@@ -1005,9 +1138,28 @@ class De(_SingleObjective):
 class Cmaes(_SingleObjective):
     """CMA-ES, the covariance matrix adaptation evolution strategy. Real genomes.
 
-    ``restarts``: "never", "ipop" (restarts with a doubled population) or "bipop" (alternating
-    large and small populations), for multimodal functions. ``initial_step``: the initial step
-    size, as a fraction of each gene's range.
+    It adapts a full covariance matrix, from a random initial mean. At least one gene needs
+    ``low < high``; genes with ``low == high`` are fixed.
+
+    Parameters
+    ----------
+    genome : Real
+        The search space.
+    population_size : int, optional
+        The samples per generation, 2 to 2^24. ``4 + floor(3 ln n)`` by default, for the ``n``
+        genes with ``low < high``: 10 for 10 genes. With restarts, the size of the first run.
+    restarts : {"never", "ipop", "bipop"}, default "never"
+        What happens when a run converges. "never" goes on sampling around the same point.
+        "ipop" restarts from a random point with a doubled population, up to 1024 times the
+        initial one. "bipop" alternates such large populations with small ones of random size
+        and step size. Restarts suit multimodal functions.
+    initial_step : float, default 0.3
+        The initial step size as a fraction of each gene's range, greater than 0 and at most 1.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
     """
 
     def __init__(
@@ -1040,17 +1192,33 @@ class Cmaes(_SingleObjective):
 
 
 class Pso(_SingleObjective):
-    """Particle swarm optimization. Real genomes. ``population_size`` is needed, e.g. 40.
+    """Particle swarm optimization. Real genomes.
 
-    ``ring``: each particle follows the best of its ``ring`` neighbors on each side, instead of
-    the whole swarm's best, for multimodal functions.
+    The velocities keep 0.7298 of themselves, are pulled toward the personal and the neighborhood
+    best with 1.49618 each, and are at most each gene's range.
+
+    Parameters
+    ----------
+    genome : Real
+        The search space.
+    population_size : int
+        The number of particles, 2 to 2^24. 20 to 50 is common.
+    ring : int, optional
+        Each particle follows the best of itself and its ``ring`` neighbors on each side of a
+        ring, at least 1, instead of the whole swarm's best. Good positions spread slowly, which
+        suits multimodal functions. None is the whole swarm.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
     """
 
     def __init__(
         self,
         genome: Real,
         *,
-        population_size: int | None = None,
+        population_size: int,
         ring: int | None = None,
         objective: ObjectiveName = "maximize",
         seed: int | None = None,
@@ -1064,19 +1232,38 @@ class Pso(_SingleObjective):
     def _describe(self) -> dict[str, Any]:
         return {
             "type": "pso",
-            "population_size": _optional_whole("population_size", self.population_size),
+            "population_size": _whole("population_size", self.population_size),
             "seed": _optional_whole("seed", self.seed),
             "ring": _optional_whole("ring", self.ring),
         }
 
 
 class LocalSearch(_SingleObjective):
-    """Local search from one solution: each step evaluates ``neighbors`` (default 1) neighbors
-    made by ``neighbor``, a mutation, and ``acceptance`` decides whether to move to the best of
-    them: hill climbing across plateaus by default, or simulated annealing or tabu search.
+    """Local search from one random solution. Any genome.
 
-    ``restart=(patience, kicks)``: iterated local search, which restarts from the best solution
-    changed by ``kicks`` neighbor moves after ``patience`` steps without a new best.
+    Each step evaluates ``neighbors`` neighbors made by ``neighbor``, and ``acceptance`` decides
+    whether to move to the best of them: hill climbing across plateaus by default, simulated
+    annealing or tabu search. With ``restart``, iterated local search.
+
+    Parameters
+    ----------
+    genome : Binary, Integer, Real or Permutation
+        The search space.
+    neighbor : a mutation
+        Makes a neighbor from the current solution. It must fit the genome.
+    neighbors : int, default 1
+        The neighbors evaluated per step, 1 to 2^24.
+    acceptance : Improving, NotWorse, Annealing or Tabu, default NotWorse()
+        When to move to the best neighbor.
+    restart : tuple of (int, int), optional
+        ``(patience, kicks)``: after ``patience`` steps (at least 1) without a new best
+        solution, the search restarts from the best solution changed by ``kicks`` neighbor
+        moves (1 to 2^24). None is no restarts.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
     """
 
     def __init__(
@@ -1177,9 +1364,68 @@ class _MultiObjective(_Algorithm):
         parallel: bool = False,
         on_generation: Callable[[MultiProgress], bool | None] | None = None,
     ) -> MultiResult:
-        """Runs until the first stop condition: ``generations``, ``evaluations``, ``time``
-        (seconds; ``math.inf`` for no limit) or ``stagnation``. See :meth:`Ga.run` for
-        ``batch``, ``parallel`` and ``on_generation``, which gets a :class:`MultiProgress`."""
+        """Runs the algorithm until the first stop condition.
+
+        Each call starts a new run from the settings. The settings are checked here, not by the
+        constructor. With a ``seed``, the same call repeats the run exactly: one genome at a time,
+        in batches or in parallel.
+
+        Parameters
+        ----------
+        fitness : callable
+            Takes a genome as a 1-D numpy array and returns a sequence of objective values, one
+            per objective, None or NaN values (an invalid solution), or a tuple
+            ``(objective_values, constraint_violation)``. The violation is 0 for a feasible
+            solution and positive for an infeasible one. With ``batch=True``, it takes a
+            generation as a 2-D array, a genome per row, and returns a 2-D array with a row of
+            objective values per genome, or a tuple of it and an array of constraint violations.
+            The function must be deterministic.
+        generations : int, optional
+            Stops after this many generations, 0 or more. 0 evaluates only the initial
+            population.
+        evaluations : int, optional
+            Stops after the generation that reaches this many fitness evaluations, 0 or more.
+        time : float, optional
+            Stops when the run has taken this many seconds, 0 or more, checked after every
+            generation. ``math.inf`` is no limit.
+        stagnation : int, optional
+            Stops after this many generations in which the front gained no solution that
+            no earlier front member dominated or equaled, at least 1.
+        batch : bool, default False
+            Calls ``fitness`` once per generation with a 2-D array, and not for a generation of
+            copies of their parents.
+        parallel : bool, default False
+            Calls a non-batch ``fitness`` from several threads at once. It pays off when the
+            function releases the GIL (numpy on large arrays, I/O), or on free-threaded Python.
+        on_generation : callable, optional
+            Called with a :class:`MultiProgress` after every generation, the initial population
+            (generation 0) included, on the thread that called ``run``. If it returns False, the
+            run stops with the stop reason "aborted".
+
+        At least one of ``generations``, ``evaluations``, ``time`` and ``stagnation`` is
+        needed. None is no condition.
+
+        Returns
+        -------
+        MultiResult
+            The final non-dominated front, and what the run took.
+
+        Raises
+        ------
+        ValueError
+            Without a stop condition; for a wrong setting of the run, the algorithm, its genome
+            or its operators, an operator that doesn't fit the genome, or other than 2 to 6
+            objectives (the message names the setting); and for a wrong fitness result: the
+            wrong number of objective values, a negative constraint violation, a batch result
+            that isn't a 2-D array, or one with a number of rows other than the number of genomes.
+        TypeError
+            If ``fitness`` or ``on_generation`` isn't callable, or ``fitness`` returns something
+            that isn't a sequence of numbers. Another error converting a result, e.g. an
+            ``OverflowError`` for an int too large for a float, is raised as it is.
+        Exception
+            An exception raised by ``fitness`` or ``on_generation`` stops the run, and ``run``
+            raises it. So does ``KeyboardInterrupt`` on Ctrl+C.
+        """
         _check_callable(fitness)
         stop = _stop(generations, evaluations, None, time, stagnation)
         function = _batch_objectives(fitness) if batch else fitness
@@ -1201,6 +1447,29 @@ class Nsga2(_MultiObjective):
     (the default, as in pymoo), a child that equals a member of the population or an earlier child
     is dropped and another bred instead, which keeps the population and its front free of copies;
     :class:`Nsga3`, :class:`Spea2` and :class:`SmsEmoa` have it too.
+
+    Parameters
+    ----------
+    genome : Binary, Integer, Real or Permutation
+        The search space.
+    objectives : sequence of {"maximize", "minimize"}
+        Whether to maximize or minimize each objective: 2 to 6 of them.
+    population_size : int
+        The number of individuals, 2 to 2^24.
+    crossover : a crossover
+        How pairs of parents are combined. It must fit the genome.
+    mutation : a mutation
+        How children are changed. It must fit the genome.
+    crossover_rate : float, default 0.9
+        The probability that a pair of parents is combined, 0 to 1.
+    mutation_rate : float, default 1
+        The probability that a child is mutated, 0 to 1. 0 needs a ``crossover_rate`` above 0
+        and a crossover other than :class:`NoCrossover`: otherwise every child is a copy.
+    eliminate_duplicates : bool, default True
+        Whether a child equal to a member of the population or an earlier child is bred again.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
     """
 
     def __init__(
@@ -1247,6 +1516,32 @@ class Nsga3(_MultiObjective):
     genomes, SBX with eta 30 is the usual crossover.
 
     The fitness function is as for :class:`Nsga2`.
+
+    Parameters
+    ----------
+    genome : Binary, Integer, Real or Permutation
+        The search space.
+    objectives : sequence of {"maximize", "minimize"}
+        Whether to maximize or minimize each objective: 2 to 6 of them.
+    reference_directions : 2-D array_like of float
+        At least 1 direction, a row each with a value per objective: finite, non-negative and
+        not all 0.
+    crossover : a crossover
+        How pairs of parents are combined. It must fit the genome.
+    mutation : a mutation
+        How children are changed. It must fit the genome.
+    population_size : int, optional
+        The number of individuals, 2 to 2^24. The number of reference directions by default.
+    crossover_rate : float, default 1
+        The probability that a pair of parents is combined, 0 to 1.
+    mutation_rate : float, default 1
+        The probability that a child is mutated, 0 to 1. 0 needs a ``crossover_rate`` above 0
+        and a crossover other than :class:`NoCrossover`: otherwise every child is a copy.
+    eliminate_duplicates : bool, default True
+        Whether a child equal to a member of the population or an earlier child is bred again.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
     """
 
     def __init__(
@@ -1293,6 +1588,29 @@ class Spea2(_MultiObjective):
     Pairs of parents are recombined with probability ``crossover_rate`` (default 0.9), and each
     child is mutated with probability ``mutation_rate`` (default 1). The fitness function is as
     for :class:`Nsga2`.
+
+    Parameters
+    ----------
+    genome : Binary, Integer, Real or Permutation
+        The search space.
+    objectives : sequence of {"maximize", "minimize"}
+        Whether to maximize or minimize each objective: 2 to 6 of them.
+    population_size : int
+        The size of the archive and the number of children per generation, 2 to 2^24.
+    crossover : a crossover
+        How pairs of parents are combined. It must fit the genome.
+    mutation : a mutation
+        How children are changed. It must fit the genome.
+    crossover_rate : float, default 0.9
+        The probability that a pair of parents is combined, 0 to 1.
+    mutation_rate : float, default 1
+        The probability that a child is mutated, 0 to 1. 0 needs a ``crossover_rate`` above 0
+        and a crossover other than :class:`NoCrossover`: otherwise every child is a copy.
+    eliminate_duplicates : bool, default True
+        Whether a child equal to a member of the population or an earlier child is bred again.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
     """
 
     def __init__(
@@ -1337,16 +1655,42 @@ class Moead(_MultiObjective):
     :class:`Tchebycheff` (the default) or :class:`Pbi`, which spreads fronts of 3 or more
     objectives well. Each generation, every subproblem gets a child, one of the crossover's two.
 
-    Settings, with their defaults:
-
-    - ``neighbors`` (20): the size of each neighborhood, itself included, at least 2;
-    - ``neighbor_mating`` (0.9): the probability that the parents come from the neighborhood
-      rather than the whole population;
-    - ``max_replacements`` (2): the most solutions a child replaces;
-    - ``crossover_rate`` and ``mutation_rate`` (1).
-
     For real genomes, SBX with eta 20 is the usual crossover. The fitness function is as for
-    :class:`Nsga2`.
+    :class:`Nsga2`. MOEA/D has no ``eliminate_duplicates``: it replaces its neighbors one child at
+    a time.
+
+    Parameters
+    ----------
+    genome : Binary, Integer, Real or Permutation
+        The search space.
+    objectives : sequence of {"maximize", "minimize"}
+        Whether to maximize or minimize each objective: 2 to 6 of them.
+    weights : 2-D array_like of float
+        At least 2 weight vectors, a row each with a value per objective: finite, non-negative
+        and not all 0. Their number is the population size.
+    crossover : a crossover
+        How pairs of parents are combined. It must fit the genome.
+    mutation : a mutation
+        How children are changed. It must fit the genome.
+    neighbors : int, default 20
+        The size of each neighborhood, itself included, at least 2. More than the number of
+        weight vectors is all of them.
+    neighbor_mating : float, default 0.9
+        The probability that the parents come from the neighborhood rather than the whole
+        population, 0 to 1.
+    max_replacements : int, default 2
+        The most solutions a child replaces, at least 1. The neighborhood size or more removes
+        the limit.
+    decomposition : Tchebycheff or Pbi, default Tchebycheff()
+        How the objectives become one value per subproblem.
+    crossover_rate : float, default 1
+        The probability that a pair of parents is combined, 0 to 1.
+    mutation_rate : float, default 1
+        The probability that a child is mutated, 0 to 1. 0 needs a ``crossover_rate`` above 0
+        and a crossover other than :class:`NoCrossover`: otherwise every child is a copy.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
     """
 
     def __init__(
@@ -1401,6 +1745,31 @@ class SmsEmoa(_MultiObjective):
     steady-state algorithm. Pairs of parents are recombined with probability ``crossover_rate``
     (default 0.9), and each child is mutated with probability ``mutation_rate`` (default 1). The
     fitness function is as for :class:`Nsga2`.
+
+    Parameters
+    ----------
+    genome : Binary, Integer, Real or Permutation
+        The search space.
+    objectives : sequence of {"maximize", "minimize"}
+        Whether to maximize or minimize each objective: 2 to 6 of them.
+    population_size : int
+        The number of individuals, 2 to 2^24.
+    crossover : a crossover
+        How pairs of parents are combined. It must fit the genome.
+    mutation : a mutation
+        How children are changed. It must fit the genome.
+    offspring : int, optional
+        The children per generation, 1 to 2^24. ``population_size`` by default.
+    crossover_rate : float, default 0.9
+        The probability that a pair of parents is combined, 0 to 1.
+    mutation_rate : float, default 1
+        The probability that a child is mutated, 0 to 1. 0 needs a ``crossover_rate`` above 0
+        and a crossover other than :class:`NoCrossover`: otherwise every child is a copy.
+    eliminate_duplicates : bool, default True
+        Whether a child equal to a member of the population or an earlier child is bred again.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
     """
 
     def __init__(

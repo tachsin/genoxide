@@ -159,3 +159,40 @@ def report(progress):
 
 result = ga.run(lambda bits: bits.sum(), generations=1_000, on_generation=report)
 ```
+
+## The Rust library
+
+The package covers a subset of the Rust library. These parts are only in Rust:
+- the evolution strategy `Es`, with self-adaptive mutation
+- the island model, `Islands`
+- `SteadyGa` and the asynchronous engine, for evaluations of varying duration
+- memetic search in `Ga`, and initial genomes for a population
+- operators of your own
+- checkpoints, to save and resume a run
+- observers: statistics, a hall of fame and reports
+- the multi-objective indicators (hypervolume, IGD and others) and test problems
+- stop conditions combined with `and`, and custom ones
+- penalty functions for constraints, and the NaN policy: in Python, NaN is always an invalid solution
+- advanced settings:
+  - CMA-ES: a diagonal covariance matrix (sep-CMA-ES) and the initial mean
+  - PSO: the inertia, the acceleration and the maximum velocity
+  - DE: the strategy, the control of F and CR, the restarts, and population size reduction other than L-SHADE's
+  - the rate of `UniformCrossover` and the weight of `ArithmeticCrossover`
+
+Some names differ:
+
+| Python | Rust |
+|---|---|
+| `mutation=` | `.mutate(...)` |
+| `objective="minimize"` | `.minimize()`, `Objective::Minimize` |
+| `Binary(length)`, `Permutation(length)` | `Binary::new(len)`, `Permutation::new(len)` |
+| `BitFlip(rate=...)`, `BitFlip(count=...)` | `BitFlip::per_gene(rate)`, `BitFlip::count(count)`, and so for the other mutations |
+| `PointCrossover(points)` | `PointCrossover::k_point(points)` |
+| `MuPlusLambda(offspring)`, `MuCommaLambda(offspring)` | `Scheme::MuPlusLambda { lambda }`, `Scheme::MuCommaLambda { lambda }` |
+| `Cmaes(restarts="ipop")` | `.restarts(cmaes::Restarts::Ipop)` |
+| `Pso(ring=k)` | `.topology(pso::Topology::Ring { neighbors: k })` |
+| `De(l_shade=n)` | `De::l_shade(real, n)` |
+| `Pbi(theta)` | `Decomposition::Pbi { theta }` |
+| `run(generations=..., time=..., ...)` | `Stop::generations(...).or(Stop::time(...))` |
+| `time` (seconds) | `Stop::time(Duration)` |
+| `result.seconds` | `Outcome::elapsed()` |

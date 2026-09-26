@@ -147,8 +147,12 @@ jobs:
           source .venv/bin/activate 2>/dev/null || source .venv/Scripts/activate
           pip install maturin==1.15.0 pytest
           maturin develop --release
+          # the tests run the README's code blocks and the module docstring's example too
           pytest -v
-          for example in examples/*.py; do python "$example"; done
+          for example in examples/*.py; do
+            echo "$example"
+            python "$example"
+          done
 
   msrv:
     name: MSRV (1.86)
