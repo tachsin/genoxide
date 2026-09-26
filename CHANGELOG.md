@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/tachsin/genoxide/compare/v0.6.0...v0.7.0) - 2026-09-26
+
+### <!-- 1 -->Fixed
+
+- [**breaking**] restart differential evolution at the next ask, and don't restart constrained populations too early ([#117](https://github.com/tachsin/genoxide/pull/117))
+- [**breaking**] confirm duplicate children by equality, portable on 32 and 64 bits ([#118](https://github.com/tachsin/genoxide/pull/118))
+- stop runs that can never end, bound huge sizes, and correct the docs ([#121](https://github.com/tachsin/genoxide/pull/121))
+- [**breaking**] don't propose steady-state twins, and limit the initial PSO velocities ([#122](https://github.com/tachsin/genoxide/pull/122))
+- clearer errors and stricter settings in the Python package ([#119](https://github.com/tachsin/genoxide/pull/119))
+- correct the benchmark harness and docs, and use numpy fitness in pymoo and PyGAD ([#123](https://github.com/tachsin/genoxide/pull/123))
+- report stalled runs in Python, and bound genome lengths and workers ([#126](https://github.com/tachsin/genoxide/pull/126))
+- [**breaking**] use SHADE's published defaults for differential evolution ([#137](https://github.com/tachsin/genoxide/pull/137))
+
+### <!-- 4 -->Documentation
+
+- document the Python API's parameters, ranges and errors ([#164](https://github.com/tachsin/genoxide/pull/164))
+- build the Python API reference with pdoc for GitHub Pages ([#162](https://github.com/tachsin/genoxide/pull/162))
+- make 0.7 the correctness release, and move GP and neuroevolution to 0.8 ([#127](https://github.com/tachsin/genoxide/pull/127))
+- keep the README to what helps choose a library ([#138](https://github.com/tachsin/genoxide/pull/138))
+- shorten the README and move the feature list to docs/features.md ([#156](https://github.com/tachsin/genoxide/pull/156))
+- tighten AGENTS.md and ROADMAP.md ([#157](https://github.com/tachsin/genoxide/pull/157))
+- add the PyPI badge ([#160](https://github.com/tachsin/genoxide/pull/160))
+- match docs/cli.md to the genoxide program ([#161](https://github.com/tachsin/genoxide/pull/161))
+- fix the api docs and add errors, panics and examples sections ([#163](https://github.com/tachsin/genoxide/pull/163))
+- add a docs site with the examples in Rust and Python tabs ([#165](https://github.com/tachsin/genoxide/pull/165))
+- examples in a folder each, in rust and python, with problems from the literature ([#166](https://github.com/tachsin/genoxide/pull/166))
+
 ## [0.6.0](https://github.com/tachsin/genoxide/compare/v0.5.2...v0.6.0) - 2026-09-25
 
 ### <!-- 0 -->Added
