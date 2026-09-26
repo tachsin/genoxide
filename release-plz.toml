@@ -9,6 +9,9 @@ git_release_enable = true
 pr_labels = ["release"]
 # only release when the release PR is merged
 release_always = false
+# release PRs of this maintenance branch have their own branch prefix, so the release-plz runs of
+# main (prefix release-plz-) don't take them over
+pr_branch_prefix = "release-0.7-"
 
 # genoxide and its Python package share the version ([workspace.package] in Cargo.toml) and every
 # release: a release of genoxide to crates.io publishes the Python package to PyPI
