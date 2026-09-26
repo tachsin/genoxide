@@ -16,9 +16,9 @@ Each library has its own page: its methods and where its docs recommend them, wh
 | Rust | Python | C++, Java, Julia |
 |---|---|---|
 | [genoxide](libraries/genoxide.md) 0.7.0 | [genoxide (Python)](libraries/genoxide_python.md) 0.7.0 | [openGA](libraries/openga.md) 1.0.5 |
-| [genetic_algorithm](libraries/genetic_algorithm.md) 0.27.3 | [DEAP](libraries/deap.md) 1.4.4 | [pygmo](libraries/pygmo.md) 2.19.8 (C++ via Python) |
+| [genetic_algorithm](libraries/genetic_algorithm.md) 0.27.4 | [DEAP](libraries/deap.md) 1.4.4 | [pygmo](libraries/pygmo.md) 2.19.8 (C++ via Python) |
 | [radiate](libraries/radiate.md) 1.3.1 | [pymoo](libraries/pymoo.md) 0.6.2 | [Jenetics](libraries/jenetics.md) 9.1.0 |
 | [moors](libraries/moors.md) 0.2.11 | [PyGAD](libraries/pygad.md) 3.7.0 | [jMetal](libraries/jmetal.md) 7.5 |
-| | [pycma](libraries/pycma.md) 4.5.0 | [Evolutionary.jl](libraries/evolutionary_jl.md) 0.12.0 |
+| | [pycma](libraries/pycma.md) 4.5.0 | [Evolutionary.jl](libraries/evolutionary_jl.md) 0.12.1 |
 | | [Nevergrad](libraries/nevergrad.md) 1.0.12 | [Metaheuristics.jl](libraries/metaheuristics_jl.md) 3.5.0 |
 | | [SciPy](libraries/scipy.md) 1.18.1 | |

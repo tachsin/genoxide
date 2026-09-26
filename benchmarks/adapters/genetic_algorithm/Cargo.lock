@@ -124,16 +124,15 @@ dependencies = [
 
 [[package]]
 name = "genetic_algorithm"
-version = "0.27.3"
+version = "0.27.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d3f727b1d46a5458bec104e94f87d6aaa3cf8f32f627ecb4eee4b9d0174106c"
+checksum = "5061c42f4c7d3955ba95dd4571d890e7ce0d6c004c0bc9728dd07d2448079326"
 dependencies = [
  "bytemuck",
  "cardinality-estimator",
  "factorial",
  "impl-trait-for-tuples",
  "itertools",
- "log",
  "lru",
  "nohash-hasher",
  "num",
@@ -197,12 +196,6 @@ name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
-
-[[package]]
-name = "log"
-version = "0.4.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "lru"
