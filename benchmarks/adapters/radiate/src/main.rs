@@ -44,6 +44,7 @@
 //! the best of the run), with its value recomputed in f64 after the clock.
 
 use radiate::prelude::*;
+use std::cell::RefCell;
 use std::f64::consts::{E, PI};
 use std::io::BufRead;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -196,6 +197,20 @@ fn real_problem(problem: &str) -> Option<(Function, std::ops::Range<f64>)> {
 
 fn alleles(genotype: &Genotype<FloatChromosome<f64>>) -> Vec<f64> {
     genotype[0].as_slice().iter().map(|gene| *gene.allele()).collect()
+}
+
+/// `f` of the alleles of a genotype, in the fitness functions: radiate's genes aren't a slice of
+/// f64, so the alleles are copied into a buffer that every evaluation reuses, not a new allocation
+/// per call
+fn with_alleles<R>(genotype: &Genotype<FloatChromosome<f64>>, f: impl FnOnce(&[f64]) -> R) -> R {
+    thread_local! {
+        static ALLELES: RefCell<Vec<f64>> = const { RefCell::new(Vec::new()) };
+    }
+    ALLELES.with_borrow_mut(|x| {
+        x.clear();
+        x.extend(genotype[0].as_slice().iter().map(|gene| *gene.allele()));
+        f(x)
+    })
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -659,9 +674,10 @@ fn run_real(args: &Args, seed: u64) {
             let builder = GeneticEngine::builder()
                 .codec(FloatCodec::vector(size, range.clone()))
                 .raw_fitness_fn(move |genotype: &Genotype<FloatChromosome<f64>>| {
-                    let x = alleles(genotype);
-                    budget.check_bounds(&x, lower, upper);
-                    budget.record(function(&x), || x)
+                    with_alleles(genotype, |x| {
+                        budget.check_bounds(x, lower, upper);
+                        budget.record(function(x), || x.to_vec())
+                    })
                 })
                 .minimizing();
             let builder = if unimodal {
@@ -805,12 +821,13 @@ fn run_front(args: &Args, seed: u64) {
                     .codec(FloatCodec::vector(variables, 0.0_f64..1.0))
                     .raw_fitness_fn(move |genotype: &Genotype<FloatChromosome<f64>>| {
                         fitness.count();
-                        let x = alleles(genotype);
-                        fitness.check_bounds(&x, 0.0, 1.0);
-                        function(&x, objectives)
-                            .into_iter()
-                            .map(|v| v as f32)
-                            .collect::<Vec<f32>>()
+                        with_alleles(genotype, |x| {
+                            fitness.check_bounds(x, 0.0, 1.0);
+                            function(x, objectives)
+                                .into_iter()
+                                .map(|v| v as f32)
+                                .collect::<Vec<f32>>()
+                        })
                     })
                     .multi_objective(vec![Optimize::Minimize; objectives])
                     .population_size(2 * mu)

@@ -51,13 +51,17 @@ end
 
 # The shift of Rastrigin and Ackley, so that the optimum isn't at the origin:
 # s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1) for the 0-based gene index i, with `upper`
-# the box's upper bound, computed in this order (problems.py)
+# the box's upper bound, computed in this order (problems.py). Computed once, before any run, for up
+# to MAX_GENES genes.
 shift(index::Integer, upper) = 0.8 * upper * (2 * ((37 * (index - 1) + 11) % 101) / 101 - 1)
+const MAX_GENES = 1024
+const RASTRIGIN_SHIFT = [shift(index, 5.12) for index in 1:MAX_GENES]
+const ACKLEY_SHIFT = [shift(index, 32.768) for index in 1:MAX_GENES]
 
 function rastrigin(x::AbstractVector{<:Real})
     s = 10.0 * length(x)
-    for (index, v) in enumerate(x)
-        y = v - shift(index, 5.12)
+    for (v, offset) in zip(x, RASTRIGIN_SHIFT)
+        y = v - offset
         s += y * y - 10.0 * cos(2π * y)
     end
     return s
@@ -75,8 +79,8 @@ function ackley(x::AbstractVector{<:Real})
     n = length(x)
     squares = 0.0
     cosines = 0.0
-    for (index, v) in enumerate(x)
-        y = v - shift(index, 32.768)
+    for (v, offset) in zip(x, ACKLEY_SHIFT)
+        y = v - offset
         squares += y * y
         cosines += cos(2π * y)
     end
@@ -484,7 +488,9 @@ function main(args)
         return
     end
     if length(args) == 3 && args[1] == "values"
-        print_values(args[2], parse(Int, args[3]))
+        size = parse(Int, args[3])
+        size <= MAX_GENES || error("at most $MAX_GENES genes")
+        print_values(args[2], size)
         return
     end
     if length(args) != 7
@@ -494,6 +500,7 @@ function main(args)
     problem, size, mode = args[1], parse(Int, args[2]), args[3]
     seed_from, seed_to = parse(Int, args[4]), parse(Int, args[5])
     max_evaluations, max_seconds = parse(Int, args[6]), parse(Float64, args[7])
+    size <= MAX_GENES || error("at most $MAX_GENES genes")
 
     if haskey(FRONT_PROBLEMS, problem)
         if get(ENV, "EVOLUTIONARY_JL_NSGA2", "1") == "0"

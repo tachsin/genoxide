@@ -210,12 +210,14 @@ fn onemax_value(bits: &[bool]) -> usize {
     bits.iter().filter(|&&bit| bit).count()
 }
 
-/// Diagonal conflicts of queens at (i, order[i]): for each diagonal, its queens minus one, O(n)
-fn nqueens_value(order: &[usize]) -> usize {
+/// Diagonal conflicts of queens at (i, order[i]): for each diagonal, its queens minus one, O(n).
+/// Of the genes as they are (u8 in the runs), without a copy.
+fn nqueens_value<T: Copy + Into<usize>>(order: &[T]) -> usize {
     let size = order.len();
     let mut left_diagonal = vec![0usize; 2 * size - 1];
     let mut right_diagonal = vec![0usize; 2 * size - 1];
     for (i, &column) in order.iter().enumerate() {
+        let column: usize = column.into();
         left_diagonal[i + column] += 1;
         right_diagonal[size - 1 - i + column] += 1;
     }
@@ -292,8 +294,7 @@ impl Fitness for NQueens {
         chromosome: &FitnessChromosome<Self>,
         _genotype: &FitnessGenotype<Self>,
     ) -> Option<FitnessValue> {
-        let order: Vec<usize> = chromosome.genes.iter().map(|&gene| gene as usize).collect();
-        let value = nqueens_value(&order);
+        let value = nqueens_value(&chromosome.genes);
         self.0.count(value == 0);
         Some(value as FitnessValue)
     }
@@ -834,8 +835,8 @@ mod tests {
         assert_eq!(RASTRIGIN_SHIFT[0], -3.20380198019802);
         assert_eq!(ACKLEY_SHIFT[4], 3.893227722772275);
         assert_eq!(rosenbrock_value(&[1.0; 10]), 0.0);
-        assert_eq!(nqueens_value(&[3, 1, 6, 2, 5, 7, 4, 0]), 0);
-        assert_eq!(nqueens_value(&[0, 1, 2, 3, 4, 5, 6, 7]), 7);
+        assert_eq!(nqueens_value(&[3usize, 1, 6, 2, 5, 7, 4, 0]), 0);
+        assert_eq!(nqueens_value(&[0u8, 1, 2, 3, 4, 5, 6, 7]), 7);
         assert_eq!(parse_solution("[1, 0.5, -2e-3]"), vec![1.0, 0.5, -0.002]);
     }
 

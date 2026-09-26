@@ -47,6 +47,7 @@ import os
 for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ[variable] = "1"
 
+import functools
 import json
 import math
 import sys
@@ -113,15 +114,22 @@ def nqueens(order):
     global EVALUATIONS
     EVALUATIONS += 1
     size = len(order)
-    rows = np.arange(size)
+    rows = row_indices(size)
     value = float(2 * size - len(np.unique(order + rows)) - len(np.unique(order - rows)))
     record(value)
     return value
 
 
+@functools.cache
+def row_indices(n):
+    """0, ..., n - 1: computed once per size, not in every call."""
+    return np.arange(n)
+
+
+@functools.cache
 def shift(upper, n):
     """The optimum of Rastrigin and Ackley (rule 1.4): s_i = 0.8 upper (2 ((37 i + 11) mod 101) /
-    101 - 1), with `upper` the box's upper bound, computed in this order."""
+    101 - 1), with `upper` the box's upper bound, computed in this order, once per size."""
     i = np.arange(n)
     return 0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1)
 
