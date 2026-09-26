@@ -1,6 +1,10 @@
 # genoxide for Python
 
-Evolutionary computation in Rust, for Python: genetic algorithms, local search, differential evolution, CMA-ES, particle swarm optimization, and NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives, from [genoxide](https://github.com/tachsin/genoxide), with fitness functions in Python and numpy.
+The algorithms of [genoxide](https://github.com/tachsin/genoxide), a Rust library, with fitness functions in Python and numpy:
+
+- genetic algorithms and local search
+- differential evolution, CMA-ES and particle swarm optimization
+- NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives
 
 ```python
 import numpy as np
@@ -27,7 +31,12 @@ result = cmaes.run(rastrigin, batch=True, target=1e-8, evaluations=500_000)
 print(result.best_genome, result.best_fitness)
 ```
 
-More in [examples/](examples/): OneMax, a knapsack with a constraint, N-Queens with tabu search, Rastrigin with CMA-ES and L-SHADE, and ZDT1 with NSGA-II.
+More in [examples/](examples/):
+- OneMax
+- a knapsack with a constraint
+- N-Queens with tabu search
+- Rastrigin with CMA-ES and L-SHADE
+- ZDT1 with NSGA-II
 
 ## Install
 
@@ -35,7 +44,12 @@ More in [examples/](examples/): OneMax, a knapsack with a constraint, N-Queens w
 pip install genoxide
 ```
 
-The wheels are for Linux (x86_64 and aarch64, glibc and musl), macOS (Apple silicon and Intel) and Windows (x64), and CPython 3.10 or later, with numpy. To build it from the repository instead, with Rust and [maturin](https://www.maturin.rs/):
+Wheels for CPython 3.10 or later, with numpy:
+- Linux: x86_64 and aarch64, glibc and musl
+- macOS: Apple silicon and Intel
+- Windows: x64
+
+To build from the repository, with Rust and [maturin](https://www.maturin.rs/):
 
 ```sh
 cd python
@@ -59,15 +73,19 @@ A fitness function takes a genome as a numpy array:
 It returns one of these:
 - a number
 - `None` or NaN, for a solution that can't be scored
-- `(score, constraint_violation)`: infeasible solutions, with a positive violation, rank below feasible ones, and among themselves by violation (Deb's rules)
+- `(score, constraint_violation)`: a positive violation marks an infeasible solution. Infeasible solutions rank below feasible ones, and among themselves by violation (Deb's rules).
 
-The fitness function must be deterministic: genoxide doesn't evaluate a child identical to one of its parents again.
+The fitness function must be deterministic: genoxide doesn't evaluate again a child identical to one of its parents.
 
-With `batch=True`, the function takes a whole generation as a 2-D array, a genome per row, and returns an array of scores, or a tuple of scores and constraint violations (arrays or `(n, 1)` columns); a multi-objective function returns a 2-D array, a row of objective values per genome. It's one call per generation (none for a generation whose children are all copies of their parents), so vectorized numpy, a GPU or a remote service pays its cost per call once per generation instead of once per genome.
+With `batch=True`, the function takes a whole generation as a 2-D array, a genome per row. It returns:
+- an array of scores, or a tuple of scores and constraint violations (arrays or `(n, 1)` columns)
+- for several objectives, a 2-D array: a row of objective values per genome
 
-With `parallel=True`, genoxide calls a function that isn't a batch function from several threads at once. It pays off when the function releases the GIL, e.g. in numpy on large arrays or waiting for I/O, or on free-threaded Python.
+It's one call per generation, and none for a generation whose children are all copies of their parents. Vectorized numpy, a GPU or a remote service pays its cost per call once per generation, not once per genome.
 
-An exception in the fitness function stops the run and is raised by `run`, and so is Ctrl+C.
+With `parallel=True`, genoxide calls a non-batch function from several threads at once. It pays off when the function releases the GIL (numpy on large arrays, waiting for I/O), or on free-threaded Python.
+
+An exception in the fitness function stops the run, and `run` raises it. So does Ctrl+C.
 
 ## Algorithms
 
@@ -84,15 +102,21 @@ An exception in the fitness function stops the run and is raised by `run`, and s
 | `Moead` | all | `objectives`, `weights` (a subproblem each), `crossover`, `mutation`, `decomposition` (`Tchebycheff()`), `neighbors` (20), `neighbor_mating` (0.9), `max_replacements` (2), `crossover_rate` (1), `mutation_rate` (1) |
 | `SmsEmoa` | all | `objectives`, `population_size`, `crossover`, `mutation`, `offspring` (`population_size`), `crossover_rate` (0.9), `mutation_rate` (1) |
 
-Single-objective algorithms maximize, or minimize with `objective="minimize"`. The multi-objective algorithms take `objectives=["minimize", "maximize", ...]`, 2 to 6 of them. Their fitness function returns a sequence of objective values, and their result is the final non-dominated front: `front_genomes`, `front_objectives` and `front_violations`. A solution that couldn't be scored has NaN objective values and a NaN violation, and so does the `violation` of a single-objective result without a valid solution.
+Single-objective algorithms maximize, or minimize with `objective="minimize"`.
+
+The multi-objective algorithms take `objectives=["minimize", "maximize", ...]`, 2 to 6 of them. Their fitness function returns a sequence of objective values. Their result is the final non-dominated front: `front_genomes`, `front_objectives` and `front_violations`.
+
+A solution that couldn't be scored has NaN objective values and a NaN violation. A single-objective result without a valid solution has a NaN `violation`.
 
 - `Nsga2` spreads the front by crowding distance, which works poorly beyond 2 or 3 objectives.
-- `Nsga3` spreads it along reference directions instead, and `Moead` solves a single-objective subproblem per weight vector. `das_dennis(objectives, divisions)` gives evenly spread directions or weights, a row each: 91 for 3 objectives and 12 divisions.
+- `Nsga3` spreads it along reference directions instead.
+- `Moead` solves a single-objective subproblem per weight vector.
+- `das_dennis(objectives, divisions)` gives evenly spread directions or weights for `Nsga3` and `Moead`, a row each: 91 for 3 objectives and 12 divisions.
 - `Spea2` keeps an archive of the best solutions, the non-dominated ones first, truncated by the distance to their nearest neighbors.
-- `Nsga2`, `Nsga3`, `Spea2` and `SmsEmoa` drop a child that equals a member of the population or an earlier child, and breed another, as pymoo does: `eliminate_duplicates=False` keeps copies.
-- `SmsEmoa` removes, from the last front that fits partly, the solutions that contribute the least hypervolume. It costs more per generation than `Nsga2`: O(N log N) per removal for 2 objectives, O(N²) for 3, O(N³) for 4 and O(N⁴) for 5, where `Nsga3` or `Moead` are better choices.
+- `Nsga2`, `Nsga3`, `Spea2` and `SmsEmoa` drop a child that equals a member of the population or an earlier child, and breed another, as pymoo does. `eliminate_duplicates=False` keeps copies.
+- `SmsEmoa` removes the solutions that contribute the least hypervolume, from the last front that fits partly. It costs more per generation than `Nsga2`: O(N log N) per removal for 2 objectives, O(N²) for 3, O(N³) for 4 and O(N⁴) for 5. For 4 or 5 objectives, `Nsga3` or `Moead` are better choices.
 
-Every algorithm takes a `seed`: the same seed repeats a run exactly, with a genome at a time, in batches or in parallel.
+Every algorithm takes a `seed`. The same seed repeats a run exactly: one genome at a time, in batches or in parallel.
 
 Operators:
 - **Selection:** `Tournament(size)`, `Rank(pressure)`, `Roulette()`, `StochasticUniversalSampling()`, `Truncation(fraction)`, `RandomSelection()`
@@ -107,7 +131,7 @@ Operators:
   - permutations: `SwapMutation(count)`, `InversionMutation()`, `InsertionMutation()`, `ScrambleMutation()`
 - **Genetic algorithm schemes:** `Generational(elitism)` (the default, with 1), `SteadyState(replacements)`, `MuPlusLambda(offspring)`, `MuCommaLambda(offspring)`
 - **Local search acceptance:** `NotWorse()` (the default), `Improving()`, `Annealing(initial_temperature, cooling)`, `Tabu(tenure)`
-- **MOEA/D decomposition:** `Tchebycheff()` (the default), `Pbi(theta)` (penalty-based boundary intersection, `theta` 5 by default), which spreads fronts of 3 or more objectives well
+- **MOEA/D decomposition:** `Tchebycheff()` (the default), `Pbi(theta)` (penalty-based boundary intersection, `theta` 5 by default). `Pbi` spreads fronts of 3 or more objectives well.
 
 ## Stopping
 
@@ -118,11 +142,13 @@ Operators:
 - `time`: seconds (`math.inf` for no limit)
 - `stagnation`: generations without improvement
 
-The result says which one stopped it, in `stop_reason`, with the numbers of `generations` and `evaluations` and the `seconds` it took.
+The result has the condition that stopped it, `stop_reason`, and the `generations`, `evaluations` and `seconds` it took.
 
 ## Progress
 
-`run(..., on_generation=callback)` calls `callback` after every generation, the initial population (generation 0) included, on the thread that called `run`. It gets a read-only `Progress` with the `generation`, the `evaluations` and the `seconds` so far, and the `best_fitness` so far (`None` before a valid solution); for a multi-objective algorithm, a `MultiProgress` with the `front_size` (the number of non-dominated individuals in the population) instead.
+`run(..., on_generation=callback)` calls `callback` after every generation, the initial population (generation 0) included. It runs on the thread that called `run`. It gets a read-only object:
+- `Progress`: the `generation`, `evaluations`, `seconds` and `best_fitness` so far (`None` before a valid solution)
+- `MultiProgress`, for a multi-objective algorithm: the same, with `front_size` (the number of non-dominated individuals in the population) instead of `best_fitness`
 
 If `callback` returns `False`, the run stops with the stop reason `"aborted"`. If it raises an exception, the run stops and `run` raises it.
 
