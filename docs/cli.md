@@ -128,7 +128,7 @@ Set exactly one of `command` and `builtin`.
 - `crossover_rate` and `mutation_rate`: 0 to 1, the probability for each pair of parents and each child. They can't both be 0. `mutation_rate` can't be 0 with the crossover `none`.
 - `nsga2`: 2 to 6 objectives. It has no `mutation_rate`: every child is mutated.
 - `l_shade = <evaluations>`: L-SHADE, for a run of that many evaluations, at least 1. The default population becomes max(18 × genes, 4), and shrinks linearly to 4 over the evaluations. `population_size` sets the initial size instead. The run doesn't stop at the budget by itself: set `stop.evaluations` to the same number.
-- `cmaes`: n is the number of genes whose bounds differ. `population_size` is at least 2. `restarts` is `"never"`, `"ipop"` or `"bipop"`. `initial_step` is the initial step size as a fraction of each gene's range, greater than 0 and at most 1.
+- `cmaes`: n is the number of genes whose bounds differ. `restarts` is `"never"`, `"ipop"` or `"bipop"`. `initial_step` is the initial step size as a fraction of each gene's range, greater than 0 and at most 1.
 - `ring = <neighbors>`: a ring topology, with that many neighbors on each side, at least 1.
 - `neighbors`: the neighbors evaluated per step, 1 to 2^24.
 - `restart = [patience, kicks]`: after `patience` steps without a new best (at least 1), restart from the best, changed by `kicks` random neighbor moves (1 to 2^24).
