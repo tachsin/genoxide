@@ -118,6 +118,8 @@ python run.py --update results/<timestamp>.json --libraries genoxide genoxide_py
 - It keeps the other libraries' instruction counts. Count the rerun ones with `python run.py instructions --libraries ...`.
 - If the platform differs from the file's, the new file records both.
 
+**New releases.** `python run.py outdated` lists each library's pinned version, the version in the published results and its latest release, and marks the newer ones. To benchmark a newer release, update the library's pin, run `python run.py check --libraries <name>`, then rerun it alone with `--update`. A weekly workflow keeps an issue, "New releases of benchmarked libraries", open while any library has a newer release.
+
 **The version measured.** `--version-label genoxide=0.7.0` records genoxide and its Python package as 0.7.0, still followed by the commit, for a release benchmarked before `Cargo.toml` is bumped. It works for any library of `--libraries`.
 
 ## Instructions per evaluation
@@ -153,4 +155,4 @@ The second reads one JSON solution per line and prints its value, or its list of
 <adapter> values <problem> <size>
 ```
 
-Register the adapter in `ADAPTERS` in `run.py`, with its language, write its page in [docs/benchmarks/libraries/](../docs/benchmarks/libraries/), and run `python run.py check --libraries <name>`. A timed run measures only adapters that passed the check as they are now. A change to the adapter, to `problems.py` or to `requirements.txt` (and, for genoxide, to its sources) needs a new check.
+Register the adapter in `ADAPTERS` in `run.py`, with its language and where its releases are published (`release`), write its page in [docs/benchmarks/libraries/](../docs/benchmarks/libraries/), and run `python run.py check --libraries <name>`. A timed run measures only adapters that passed the check as they are now. A change to the adapter, to `problems.py` or to `requirements.txt` (and, for genoxide, to its sources) needs a new check.

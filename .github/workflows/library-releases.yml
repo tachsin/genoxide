@@ -1,0 +1,38 @@
+name: Library releases
+
+# Checks weekly for a release of a benchmarked library newer than the version the benchmarks pin
+# (`run.py outdated` in benchmarks/), and keeps one open issue listing them: created when one is
+# newer, updated when the list changes, closed when none is. It leaves the issue as it is when a
+# registry can't be reached. Pull requests that touch the check run it without changing the issue.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  pull_request:
+    paths:
+      - "benchmarks/outdated.py"
+      - "benchmarks/run.py"
+      - ".github/workflows/library-releases.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: library-releases-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - working-directory: benchmarks
+        run: python run.py outdated --issue ${{ github.event_name == 'pull_request' && '--dry-run' || '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

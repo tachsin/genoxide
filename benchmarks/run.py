@@ -20,6 +20,9 @@ Usage:
     python run.py --version-label genoxide=0.7.0
                                              # record genoxide as 0.7.0, e.g. before the release
                                              # PR bumps Cargo.toml
+    python run.py outdated                   # the pinned, published and latest versions of each
+                                             # library (--issue: keep a GitHub issue of the newer
+                                             # ones with gh, --dry-run: print what it would do)
 
 Results are written to results/<timestamp>.json (all runs), results/latest.md (table) and
 results/charts/*.svg (charts). `python run.py instructions`, or `--instructions` on a run, counts
@@ -65,6 +68,8 @@ BUILDS = Path(os.environ.get("BENCH_BUILDS", Path.home() / "bench-targets"))
 
 # Each adapter prints one JSON line per solver per seed, with the same command line:
 #   <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
+# "release" is the registry where `run.py outdated` looks for the library's latest release
+# (outdated.py).
 ADAPTERS = {
     "genoxide": {
         "build": ["cargo", "build", "--release", "--quiet", "--manifest-path", str(GENOXIDE_ADAPTER / "Cargo.toml")],
@@ -86,21 +91,25 @@ ADAPTERS = {
         "command": [str(RUST_ADAPTER / "target" / "release" / "ga_bench_genetic_algorithm")],
         "version": ("cargo", "genetic_algorithm", RUST_ADAPTER),
         "language": "Rust",
+        "release": ("crates", "genetic_algorithm"),
     },
     "deap": {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "deap" / "bench.py")],
         "version": ("python", "deap"),
         "language": "Python",
+        "release": ("pypi", "deap"),
     },
     "pygad": {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "pygad" / "bench.py")],
         "version": ("python", "pygad"),
         "language": "Python",
+        "release": ("pypi", "pygad"),
     },
     "pymoo": {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "pymoo" / "bench.py")],
         "version": ("python", "pymoo"),
         "language": "Python",
+        "release": ("pypi", "pymoo"),
     },
     "radiate": {
         "build": ["cargo", "build", "--release", "--quiet", "--manifest-path",
@@ -108,6 +117,7 @@ ADAPTERS = {
         "command": [str(ROOT / "adapters" / "radiate" / "target" / "release" / "ga_bench_radiate")],
         "version": ("cargo", "radiate", ROOT / "adapters" / "radiate"),
         "language": "Rust",
+        "release": ("crates", "radiate"),
     },
     "moors": {
         "build": ["cargo", "build", "--release", "--quiet", "--manifest-path",
@@ -115,27 +125,32 @@ ADAPTERS = {
         "command": [str(ROOT / "adapters" / "moors" / "target" / "release" / "ga_bench_moors")],
         "version": ("cargo", "moors", ROOT / "adapters" / "moors"),
         "language": "Rust",
+        "release": ("crates", "moors"),
     },
     "pycma": {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "pycma" / "bench.py")],
         "version": ("python", "cma"),
         "language": "Python",
+        "release": ("pypi", "cma"),
     },
     "nevergrad": {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "nevergrad" / "bench.py")],
         "version": ("python", "nevergrad"),
         "language": "Python",
+        "release": ("pypi", "nevergrad"),
     },
     "scipy": {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "scipy" / "bench.py")],
         "version": ("python", "scipy"),
         "language": "Python",
+        "release": ("pypi", "scipy"),
     },
     "pygmo": {
         # pagmo's C++ algorithms, calling the Python fitness function
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "pygmo" / "bench.py")],
         "version": ("python", "pygmo"),
         "language": "C++ via Python",
+        "release": ("pypi", "pygmo"),
     },
     "jenetics": {
         # the JDK and the pinned jars are downloaded into ~/opt, and compiled into ~/bench-targets
@@ -143,6 +158,7 @@ ADAPTERS = {
         "command": ["bash", str(ROOT / "adapters" / "jenetics" / "run.sh")],
         "version": ("command", ["bash", str(ROOT / "adapters" / "jenetics" / "run.sh"), "--version"]),
         "language": "Java",
+        "release": ("maven", "io.jenetics", "jenetics"),
         # Callgrind can't follow a JIT-compiled runtime in reasonable time
         "instructions": False,
     },
@@ -152,6 +168,7 @@ ADAPTERS = {
         "command": ["bash", str(ROOT / "adapters" / "jmetal" / "run.sh")],
         "version": ("command", ["bash", str(ROOT / "adapters" / "jmetal" / "run.sh"), "--version"]),
         "language": "Java",
+        "release": ("maven", "org.uma.jmetal", "jmetal-core"),
         # Callgrind can't follow a JIT-compiled runtime in reasonable time
         "instructions": False,
     },
@@ -161,6 +178,7 @@ ADAPTERS = {
         "command": ["bash", str(ROOT / "adapters" / "evolutionary_jl" / "run.sh")],
         "version": ("command", ["bash", str(ROOT / "adapters" / "evolutionary_jl" / "run.sh"), "--version"]),
         "language": "Julia",
+        "release": ("julia", "Evolutionary"),
         # Callgrind can't follow a JIT-compiled runtime in reasonable time
         "instructions": False,
     },
@@ -169,6 +187,7 @@ ADAPTERS = {
         "command": ["bash", str(ROOT / "adapters" / "metaheuristics_jl" / "run.sh")],
         "version": ("command", ["bash", str(ROOT / "adapters" / "metaheuristics_jl" / "run.sh"), "--version"]),
         "language": "Julia",
+        "release": ("julia", "Metaheuristics"),
         "instructions": False,
     },
     "openga": {
@@ -177,6 +196,7 @@ ADAPTERS = {
         "command": [str(BUILDS / "openga" / "ga_bench_openga")],
         "version": ("command", [str(BUILDS / "openga" / "ga_bench_openga"), "--version"]),
         "language": "C++",
+        "release": ("github", "Arash-codedev/openGA", "src/openGA.hpp"),
     },
 }
 
@@ -1454,7 +1474,7 @@ def count_into(results_file, libraries, labels, jobs, charts):
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", nargs="?", choices=["run", "setup", "check", "chart", "instructions"],
+    parser.add_argument("command", nargs="?", choices=["run", "setup", "check", "chart", "instructions", "outdated"],
                         default="run")
     parser.add_argument("--seeds", type=int, default=10)
     parser.add_argument("--max-seconds", type=float,
@@ -1486,6 +1506,10 @@ def main():
                              f"before times are measured; default {','.join(map(str, PINNED_CORES))}")
     parser.add_argument("--allow-unpinned", action="store_true",
                         help="measure under WSL without checking the pinning, for runs whose times don't count")
+    parser.add_argument("--issue", action="store_true",
+                        help="with outdated, keep one open GitHub issue listing the newer releases (gh)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="with outdated --issue, print what it would do to the issue instead")
     args = parser.parse_args()
 
     counted = None
@@ -1518,6 +1542,10 @@ def main():
 
     if args.command == "setup":
         setup()
+        return
+    if args.command == "outdated":
+        import outdated
+        outdated.outdated(args.libraries, args.issue, args.dry_run)
         return
     if args.command == "chart":
         results_file = args.results or latest_results()

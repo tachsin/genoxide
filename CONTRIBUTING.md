@@ -51,6 +51,6 @@ After a release to crates.io, the release workflow builds the wheels for Linux, 
 
 Every minor release (0.6.0, 0.7.0, …) is benchmarked before it's released, and [docs/benchmarks/](docs/benchmarks/) is updated from it. Patch releases aren't benchmarked again.
 
-- **Partial rerun:** genoxide and its Python package are always rerun. Another library is rerun only when its pinned version changes. `python run.py --update <the last results> --libraries <the changed ones>` keeps the other libraries' results.
+- **Partial rerun:** genoxide and its Python package are always rerun. Another library is rerun only when its pinned version changes. `python run.py outdated` and the "New releases of benchmarked libraries" issue list the libraries with a newer release. `python run.py --update <the last results> --libraries <the changed ones>` keeps the other libraries' results.
 - **Full rerun** (about 6 hours): when the scenarios, the fitness functions, the budgets, the machine, its operating system or a toolchain (Rust, Python, Java, Julia) change.
 - Nothing else may run on the machine during a timed run.
