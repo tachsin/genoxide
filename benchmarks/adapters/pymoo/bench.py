@@ -23,11 +23,13 @@ How a run follows the rules (docs/benchmarks/rules.md):
   argument, ("n_evals", N) for instance (docs/source/interface/termination.md); it replaces pymoo's
   default termination (xtol, ftol over 30 generations) entirely. So only the convergence criteria
   that belong to a method's own settings end an attempt: those a docs example sets explicitly (the
-  flowshop example's DefaultSingleObjectiveTermination(period=50)), Nelder-Mead's own
-  NelderAndMeadTermination, and CMA-ES's own stops, after its IPOP restarts; so does a GA whose
-  mating finds no new child. Their budget limits (n_max_gen, n_max_evals, n_max_iter) are lifted.
-  The method then starts again from a new random start, seed * 1000 + restart, keeping the best and
-  counting every evaluation.
+  flowshop example's DefaultSingleObjectiveTermination(period=50)), and CMA-ES's own stops, after its IPOP restarts; so does a GA whose mating finds no new child.
+  Their budget limits (n_max_gen, n_max_evals, n_max_iter) are lifted. The method then starts again
+  from a new random start, seeded (seed + 1) * 1_000_000 + restart, keeping the best and counting
+  every evaluation. Nelder-Mead's NelderAndMeadTermination is its default termination, which
+  minimize's termination replaces, as it replaces DE's: Nelder-Mead runs to the budget.
+- Every single-objective run prints first_hit, the evaluations and the time of the first evaluation
+  that reaches the target, recorded by `Counter` per row.
 - Rule 2.4: every evaluated solution is inside the bounds through pymoo's own bound handling;
   `outside` counts those that aren't, as pymoo proposed them.
 - A multi-objective run stops after the generation that reaches its budget, and its front is the
@@ -50,13 +52,13 @@ from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.algorithms.moo.sms import SMSEMOA
-from pymoo.algorithms.moo.spea2 import SPEA2
+from pymoo.algorithms.moo.spea2 import SPEA2, SPEA2Survival
 from pymoo.algorithms.soo.nonconvex.brkga import BRKGA
 from pymoo.algorithms.soo.nonconvex.cmaes import CMAES
 from pymoo.algorithms.soo.nonconvex.de import DE
 from pymoo.algorithms.soo.nonconvex.es import ES
-from pymoo.algorithms.soo.nonconvex.ga import GA, comp_by_cv_and_fitness
-from pymoo.algorithms.soo.nonconvex.nelder import NelderAndMeadTermination, NelderMead
+from pymoo.algorithms.soo.nonconvex.ga import GA
+from pymoo.algorithms.soo.nonconvex.nelder import NelderMead
 from pymoo.core.duplicate import ElementwiseDuplicateElimination
 from pymoo.core.problem import Problem
 from pymoo.core.termination import TerminateIfAny, Termination
@@ -70,7 +72,6 @@ from pymoo.operators.mutation.inversion import InversionMutation
 from pymoo.operators.mutation.pm import PM
 from pymoo.operators.sampling.lhs import LHS
 from pymoo.operators.sampling.rnd import BinaryRandomSampling, PermutationRandomSampling
-from pymoo.operators.selection.tournament import TournamentSelection
 from pymoo.optimize import minimize
 from pymoo.termination.default import DefaultSingleObjectiveTermination
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
@@ -82,8 +83,15 @@ from pymoo.util.ref_dirs import get_reference_directions
 
 TARGET = 0.01
 
-# the optimum of Rastrigin and Ackley: s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
-SHIFT = np.array([2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(1000)])
+
+def shift(upper):
+    """The optimum of Rastrigin and Ackley, within 80% of the box:
+    s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1), computed in this order, as problems.py."""
+    return np.array([0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1) for i in range(1000)])
+
+
+RASTRIGIN_SHIFT = shift(5.12)
+ACKLEY_SHIFT = shift(32.768)
 
 
 def onemax(X):
@@ -106,7 +114,7 @@ def nqueens(X):
 
 
 def rastrigin(X):
-    D = X - SHIFT[:X.shape[1]]
+    D = X - RASTRIGIN_SHIFT[:X.shape[1]]
     return 10 * X.shape[1] + np.sum(D * D - 10 * np.cos(2 * np.pi * D), axis=1)
 
 
@@ -117,7 +125,7 @@ def rosenbrock(X):
 
 def ackley(X):
     n = X.shape[1]
-    D = X - SHIFT[:n]
+    D = X - ACKLEY_SHIFT[:n]
     return (-20 * np.exp(-0.2 * np.sqrt(np.sum(D * D, axis=1) / n))
             - np.exp(np.sum(np.cos(2 * np.pi * D), axis=1) / n) + 20 + math.e)
 
@@ -228,13 +236,16 @@ class Stop(Exception):
 class Counter:
     """Counts the evaluations of a run, across its restarts, and keeps its best solution."""
 
-    def __init__(self, max_evaluations, deadline, target):
+    def __init__(self, start, max_evaluations, max_seconds, target):
+        self.start = start
         self.evaluations = 0
         self.max_evaluations = max_evaluations
-        self.deadline = deadline
+        self.deadline = start + max_seconds
         self.target = target
         self.best = math.inf
         self.solution = None
+        # the first evaluation that reaches the target: (its number, seconds since the start)
+        self.first_hit = None
         # evaluated solutions outside the bounds, as pymoo proposed them (rule 2.4)
         self.outside = 0
 
@@ -265,6 +276,11 @@ class SingleProblem(Problem):
             X = X[:counter.max_evaluations - counter.evaluations]
         solutions = self.decode(X) if self.decode else X
         F = self.function(solutions)
+        if counter.first_hit is None:
+            hits = np.flatnonzero(F <= counter.target)
+            if hits.size:
+                counter.first_hit = (counter.evaluations + int(hits[0]) + 1,
+                                     time.perf_counter() - counter.start)
         counter.evaluations += len(X)
         counter.outside += count_outside(X, self.xl, self.xu)
         best = int(np.argmin(F))
@@ -292,12 +308,12 @@ class BudgetTermination(Termination):
 
 
 # -------------------------------------------------------------------------------------------------
-# Single-objective solvers: (name, problem factory of a counter, algorithm factory, seed offset,
-# convergence factory). The convergence criteria end an attempt (rule 2.2); they're those a docs
-# example sets explicitly, or those of the method itself (Nelder-Mead), without their budget limits
-# (n_max_gen, n_max_evals, n_max_iter). A method whose example passes no termination, or only a
-# budget such as ("n_gen", 100), has none: the benchmark's budget replaces pymoo's default
-# termination, as ("n_evals", N) does for a pymoo user.
+# Single-objective solvers: (name, problem factory of a counter, algorithm factory, seeds of the
+# attempts, convergence factory). The convergence criteria end an attempt (rule 2.2); they're those
+# a docs example sets explicitly, without their budget limits (n_max_gen, n_max_evals). A method
+# whose example passes no termination, or only a budget such as ("n_gen", 100), has none: the
+# benchmark's budget replaces pymoo's default termination, and an algorithm's own default
+# termination (Nelder-Mead's NelderAndMeadTermination), as ("n_evals", N) does for a pymoo user.
 # -------------------------------------------------------------------------------------------------
 
 
@@ -310,6 +326,19 @@ def flowshop_convergence():
 
 def no_convergence():
     return None
+
+
+def restart_seed(seed, restart):
+    """Rule 2.2: attempt 0 runs with the seed, restart r with (seed + 1) * 1_000_000 + r."""
+    return seed if restart == 0 else (seed + 1) * 1_000_000 + restart
+
+
+def cma_es_seed(seed, restart):
+    """CMA-ES: pymoo passes its seed on to pycma, which reads 0 as a seed from the clock, and
+    pymoo's vendored fmin adds 1 to it at each IPOP restart (pymoo/vendor/vendor_cmaes.py). So
+    attempt r gets (seed + 1) * 1_000_000 + 1000 r, and its 10 restarts the next 10 seeds: no two
+    runs of any seed share one."""
+    return (seed + 1) * 1_000_000 + 1000 * restart
 
 
 class PermutationDuplicateElimination(ElementwiseDuplicateElimination):
@@ -330,21 +359,9 @@ def onemax_solvers(size, mode):
         return SingleProblem(counter, onemax, size, 0, 1, vtype=bool)
 
     if mode == "matched":
-        # the matched settings: population 300, tournament of 3, two-point crossover at 0.5,
-        # mutation at 0.2 of 1 / n per bit, every child evaluated. Difference: pymoo's GA survival
-        # keeps the best of parents and children (FitnessSurvival), and can't be generational.
-        def algorithm():
-            return GA(
-                pop_size=300,
-                sampling=BinaryRandomSampling(),
-                selection=TournamentSelection(func_comp=comp_by_cv_and_fitness, pressure=3),
-                crossover=TwoPointCrossover(prob=0.5),
-                mutation=BitflipMutation(prob=0.2, prob_var=1.0 / size),
-                eliminate_duplicates=False,
-            )
-        # the termination of the docs' binary GA (customization/binary.md), ("n_gen", 100), is only
-        # a budget: the GA runs to the budget
-        return [("ga", problem, algorithm, 0, no_convergence)]
+        # not run: the matched GA is generational without elitism, and pymoo's GA always keeps the
+        # best of its parents and children (FitnessSurvival); pymoo has no generational survival
+        return []
 
     # docs/source/customization/binary.md: GA for binary variables (the knapsack example). Its
     # termination, ("n_gen", 100), is only a budget: the GA runs to the budget
@@ -356,7 +373,7 @@ def onemax_solvers(size, mode):
             mutation=BitflipMutation(),
             eliminate_duplicates=True,
         )
-    return [("ga", problem, algorithm, 0, no_convergence)]
+    return [("ga", problem, algorithm, restart_seed, no_convergence)]
 
 
 def nqueens_solvers(size):
@@ -392,8 +409,8 @@ def nqueens_solvers(size):
             eliminate_duplicates=PermutationDuplicateElimination(),
         )
 
-    return [("ga", ga_problem, ga, 0, flowshop_convergence),
-            ("brkga", brkga_problem, brkga, 0, no_convergence)]
+    return [("ga", ga_problem, ga, restart_seed, flowshop_convergence),
+            ("brkga", brkga_problem, brkga, restart_seed, no_convergence)]
 
 
 def real_solvers(problem_name, size):
@@ -408,9 +425,8 @@ def real_solvers(problem_name, size):
     # of 20 Latin hypercube samples, sigma 0.1 of the normalized bounds. The restarts are IPOP-CMA-ES
     # (the CMAES docstring): each doubles the population. pycma's own criteria (tolfun, tolx and
     # others) end each of its runs; after the 10th restart, the adapter starts it again. The
-    # example's ("n_evals", 2500) is only a budget; CMAES has no pymoo-level criterion.
-    # The seed mapping: the library seed is seed + 1, because pymoo passes its seed to pycma, where
-    # 0 means a seed from the clock (not repeatable); every seed gets the next one, the same way.
+    # example's ("n_evals", 2500) is only a budget; CMAES has no pymoo-level criterion. Its seeds:
+    # cma_es_seed.
     def cma_es():
         return CMAES(restarts=10, restart_from_best=True)
 
@@ -421,13 +437,12 @@ def real_solvers(problem_name, size):
         # page, and Nelder-Mead with its defaults, as on docs/source/algorithms/soo/nelder.md.
         # Hooke and Jeeves pattern search (docs/source/algorithms/soo/pattern.md) is left out:
         # pymoo 0.6.2 draws its coordinate order from an unseeded generator (rule 5.2).
-        # Nelder-Mead's own termination, NelderAndMeadTermination, part of the method (NelderMead
-        # sets it itself): x_tol and f_tol of 1e-6 and a degenerate simplex end an attempt; its
-        # budget limits (n_max_iter, n_max_evals) are lifted.
+        # NelderMead sets NelderAndMeadTermination as its default termination, "if nothing else
+        # provided" (nelder.py); minimize's termination replaces it, as it replaces DE's default,
+        # and the nelder.md example passes none: Nelder-Mead runs to the budget.
         return [
-            ("cma_es", problem, cma_es, 1, no_convergence),
-            ("nelder_mead", problem, lambda: NelderMead(), 0,
-             lambda: NelderAndMeadTermination(n_max_iter=math.inf, n_max_evals=math.inf)),
+            ("cma_es", problem, cma_es, cma_es_seed, no_convergence),
+            ("nelder_mead", problem, lambda: NelderMead(), restart_seed, no_convergence),
         ]
 
     # Continuous, multimodal: the pages whose algorithm pymoo labels for multi-modal optimization.
@@ -444,8 +459,9 @@ def real_solvers(problem_name, size):
     def es():
         return ES(n_offsprings=200, rule=1.0 / 7.0)
 
-    return [("cma_es", problem, cma_es, 1, no_convergence), ("de", problem, de, 0, no_convergence),
-            ("es", problem, es, 0, no_convergence)]
+    return [("cma_es", problem, cma_es, cma_es_seed, no_convergence),
+            ("de", problem, de, restart_seed, no_convergence),
+            ("es", problem, es, restart_seed, no_convergence)]
 
 
 def single_solvers(problem_name, size, mode):
@@ -456,14 +472,15 @@ def single_solvers(problem_name, size, mode):
     return real_solvers(problem_name, size)
 
 
-def solve(make_problem, make_algorithm, make_convergence, seed, counter):
+def solve(make_problem, make_algorithm, make_convergence, seeds, seed, counter):
     """Runs the solver until the target, the budget or the time cap. An attempt that ends by
     itself (a convergence criterion, CMA-ES after its restarts, a GA whose mating finds no new
-    child) starts again from a new random start (rule 2.2). Returns the generations of all attempts."""
+    child) starts again from a new random start (rule 2.2), with the seed seeds(seed, restart).
+    Returns the generations of all attempts."""
     generations = 0
     restart = 0
     while True:
-        run_seed = seed if restart == 0 else seed * 1000 + restart
+        run_seed = seeds(seed, restart)
         np.random.seed(run_seed)
         algorithm = make_algorithm()
         convergence = make_convergence()
@@ -485,11 +502,11 @@ def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
     maximize = problem_name == "onemax"
     target = -size if maximize else (0 if problem_name == "nqueens" else TARGET)
     for seed in range(seed_from, seed_to + 1):
-        for solver, make_problem, make_algorithm, seed_offset, make_convergence in single_solvers(
+        for solver, make_problem, make_algorithm, seeds, make_convergence in single_solvers(
                 problem_name, size, mode):
             start = time.perf_counter()
-            counter = Counter(max_evaluations, start + max_seconds, target)
-            generations = solve(make_problem, make_algorithm, make_convergence, seed + seed_offset, counter)
+            counter = Counter(start, max_evaluations, max_seconds, target)
+            generations = solve(make_problem, make_algorithm, make_convergence, seeds, seed, counter)
             elapsed = time.perf_counter() - start
             if problem_name in REAL_PROBLEMS:
                 best, solution = counter.best, [float(v) for v in counter.solution]
@@ -511,6 +528,8 @@ def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
                 "target": -target if maximize else target,
                 "success": counter.reached(),
                 "solution": solution,
+                "first_hit": counter.first_hit and {"evaluations": counter.first_hit[0],
+                                                    "time_s": round(counter.first_hit[1], 6)},
                 **({"outside": counter.outside} if problem_name in REAL_PROBLEMS else {}),
             }), flush=True)
 
@@ -554,10 +573,11 @@ class FrontTermination(Termination):
 
 def front_solvers(problem_name, size):
     """NSGA-II, SPEA2 and SMS-EMOA: SBX with eta 15 at 0.9, polynomial mutation with eta 20 at
-    1 / n. NSGA-III (3 objectives): Das-Dennis directions, SBX with eta 30 at 1. MOEA/D: 20
-    neighbors, mating in the neighborhood at 0.9, Tchebycheff (PBI with theta 5 for DTLZ), SBX with
-    eta 20 at 1. pymoo's defaults for the rest: its NSGA-II, NSGA-III, SPEA2 and SMS-EMOA eliminate
-    duplicate children, and its SMS-EMOA makes a population of children per generation."""
+    1 / n. NSGA-III: Das-Dennis directions (99 divisions with 2 objectives, 12 with 3), SBX with
+    eta 30 at 1. MOEA/D: 20 neighbors, mating in the neighborhood at 0.9, Tchebycheff (PBI with
+    theta 5 for DTLZ), SBX with eta 20 at 1. No duplicate elimination (MOEA/D has none), and
+    SMS-EMOA makes one child per step (n_offsprings=1), as in the matched settings. pymoo's defaults
+    for the rest."""
     _, variables, population, divisions = FRONT_PROBLEMS[problem_name]
     n = variables(size)
     objectives = front_objectives(problem_name, size)
@@ -566,20 +586,25 @@ def front_solvers(problem_name, size):
     def mutation():
         return PM(eta=20, prob_var=1.0 / n)
 
-    solvers = [
-        ("nsga2", lambda: NSGA2(pop_size=population, crossover=SBX(prob=0.9, eta=15), mutation=mutation())),
-        ("spea2", lambda: SPEA2(pop_size=population, crossover=SBX(prob=0.9, eta=15), mutation=mutation())),
-        ("sms_emoa", lambda: SMSEMOA(pop_size=population, crossover=SBX(prob=0.9, eta=15), mutation=mutation())),
+    def sbx():
+        return SBX(prob=0.9, eta=15)
+
+    return [
+        ("nsga2", lambda: NSGA2(pop_size=population, crossover=sbx(), mutation=mutation(),
+                                eliminate_duplicates=False)),
+        ("nsga3", lambda: NSGA3(ref_dirs, pop_size=population, crossover=SBX(prob=1.0, eta=30),
+                                mutation=mutation(), eliminate_duplicates=False)),
+        # SPEA2's default survival, SPEA2Survival(normalize=True), is one object shared by every
+        # SPEA2 of the process, and it keeps its normalization points from run to run: a new one
+        # per run, with the same setting, makes each run as when it's alone (see the library's page)
+        ("spea2", lambda: SPEA2(pop_size=population, crossover=sbx(), mutation=mutation(),
+                                survival=SPEA2Survival(normalize=True), eliminate_duplicates=False)),
+        ("sms_emoa", lambda: SMSEMOA(pop_size=population, n_offsprings=1, crossover=sbx(),
+                                     mutation=mutation(), eliminate_duplicates=False)),
         ("moead", lambda: MOEAD(ref_dirs, n_neighbors=20, prob_neighbor_mating=0.9,
                                 decomposition=Tchebicheff() if objectives == 2 else PBI(theta=5),
                                 crossover=SBX(prob=1.0, eta=20), mutation=mutation())),
     ]
-    if objectives > 2:
-        # NSGA-III is pymoo's many-objective NSGA; U-NSGA-III is its version for 1 and 2 objectives
-        # (docs/source/algorithms/list.md), so NSGA-III runs the 3-objective problems
-        solvers.insert(1, ("nsga3", lambda: NSGA3(ref_dirs, pop_size=population,
-                                                  crossover=SBX(prob=1.0, eta=30), mutation=mutation())))
-    return solvers
 
 
 def run_fronts(problem_name, size, mode, seed_from, seed_to, max_evaluations, max_seconds):

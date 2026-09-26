@@ -43,16 +43,19 @@ REAL_TARGET = 0.01
 
 class Budget:
     """Counts the fitness evaluations (rule 3) and keeps the best solution evaluated. A run stops at
-    the target, at max_evaluations or at max_seconds (rule 2.1)."""
+    the target, at max_evaluations or at max_seconds (rule 2.1). `start` is the run's clock."""
 
-    def __init__(self, problem, size, max_evaluations, max_seconds):
+    def __init__(self, problem, size, max_evaluations, max_seconds, start):
+        self.start = start
         self.evaluations = 0
         self.max_evaluations = max_evaluations
-        self.deadline = time.perf_counter() + max_seconds
+        self.deadline = start + max_seconds
         self.maximize = problem == "onemax"
         self.target = {"onemax": size, "nqueens": 0}.get(problem, REAL_TARGET)
         self.best = -math.inf if self.maximize else math.inf
         self.solution = None
+        # the first evaluation that reaches the target: (its number, seconds since the start)
+        self.first_hit = None
         # the box of a continuous or multi-objective problem, and the evaluated solutions outside it
         # (rule 2.4)
         if problem in REAL_PROBLEMS:
@@ -81,6 +84,8 @@ class Budget:
             if value > self.best if self.maximize else value < self.best:
                 self.best = value
                 self.solution = list(individual)
+                if self.first_hit is None and self.reached():
+                    self.first_hit = (self.evaluations, time.perf_counter() - self.start)
             return values
 
         return counted
@@ -129,15 +134,22 @@ def nqueens(individual):
     return (conflicts,)
 
 
-# Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift
-# towards 0: gene i is measured from s_i = 2 ((37 i + 11) mod 101) / 101 - 1, in [-1, 1]
-SHIFT = [2 * ((37 * i + 11) % 101) / 101 - 1 for i in range(1000)]
+def shift(upper):
+    """Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that
+    drift towards 0: gene i is measured from s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1),
+    within 80% of the box, computed in this order, as problems.py."""
+    return [0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1) for i in range(1000)]
+
+
+RASTRIGIN_SHIFT = shift(5.12)
+ACKLEY_SHIFT = shift(32.768)
 
 
 def rastrigin(individual):
     return (
         10 * len(individual)
-        + sum((x - s) ** 2 - 10 * math.cos(2 * math.pi * (x - s)) for x, s in zip(individual, SHIFT)),
+        + sum((x - s) ** 2 - 10 * math.cos(2 * math.pi * (x - s))
+              for x, s in zip(individual, RASTRIGIN_SHIFT)),
     )
 
 
@@ -149,8 +161,8 @@ def rosenbrock(individual):
 
 def ackley(individual):
     n = len(individual)
-    squares = sum((x - s) ** 2 for x, s in zip(individual, SHIFT)) / n
-    cosines = sum(math.cos(2 * math.pi * (x - s)) for x, s in zip(individual, SHIFT)) / n
+    squares = sum((x - s) ** 2 for x, s in zip(individual, ACKLEY_SHIFT)) / n
+    cosines = sum(math.cos(2 * math.pi * (x - s)) for x, s in zip(individual, ACKLEY_SHIFT)) / n
     return (-20 * math.exp(-0.2 * math.sqrt(squares)) - math.exp(cosines) + 20 + math.e,)
 
 
@@ -288,7 +300,8 @@ def bounded_evaluate(budget, function, low, high, size):
     (its CMA-ES and DE are unbounded): tools.ClosestValidPenalty evaluates the closest point
     within the bounds and adds 1e6 times the squared distance to it. So every solution the fitness
     function evaluates is within the bounds (rule 2.4): a sample outside them is repaired by
-    clipping, and keeps the penalized value. The counter is around the fitness function itself."""
+    clipping, and keeps the penalized value. The counter is around the fitness function itself,
+    inside DEAP's repair: it sees the repaired point, so `outside` is 0 by construction."""
     lower, upper = numpy.full(size, low), numpy.full(size, high)
 
     def valid(individual):
@@ -472,7 +485,9 @@ def mut_de(y, a, b, c, f):
 
 
 def cx_exponential(x, y, cr):
-    """examples/de/sphere.py, cxExponential"""
+    """examples/de/sphere.py, cxExponential, as the example has it: it stops copying from the
+    mutant with probability cr after each gene, where exponential crossover continues with that
+    probability (see the library's page)"""
     size = len(x)
     index = random.randrange(size)
     # Loop on the indices index -> end, then on 0 -> index
@@ -554,9 +569,9 @@ def solve_de(problem, size, budget):
 def solve_front(problem, size, solver, budget):
     """NSGA-II as examples/ga/nsga2.py, NSGA-III as examples/ga/nsga3.py, with the matched settings
     of every library: 100 individuals (92 with 3 objectives), SBX with eta 15 at 0.9 and polynomial
-    mutation with eta 20 at 1 / n for NSGA-II; Das-Dennis reference points with 12 divisions and
-    92 individuals, SBX with eta 30 at 1 and the same mutation for NSGA-III. Returns the objectives
-    and the solutions of the non-dominated individuals of the final population."""
+    mutation with eta 20 at 1 / n for NSGA-II; Das-Dennis reference points with 99 divisions (12
+    with 3 objectives), SBX with eta 30 at 1 and the same mutation for NSGA-III. Returns the final
+    population and the generations."""
     function, variables, objectives = (f(size) for f in FRONT_PROBLEMS[problem])
     n = variables
     population_size = 100 if objectives == 2 else 92
@@ -572,14 +587,16 @@ def solve_front(problem, size, solver, budget):
     if solver == "nsga2":
         toolbox.register("select", tools.selNSGA2)
     else:
-        reference = tools.uniform_reference_points(objectives, 12)
+        reference = tools.uniform_reference_points(objectives, 99 if objectives == 2 else 12)
         toolbox.register("select", tools.selNSGA3, ref_points=reference)
 
     population = toolbox.population(n=population_size)
     for member in population:
         member.fitness.values = toolbox.evaluate(member)
-    # nsga2.py: "This is just to assign the crowding distance to the individuals"
-    population = toolbox.select(population, len(population))
+    if solver == "nsga2":
+        # nsga2.py: "This is just to assign the crowding distance to the individuals" (nsga3.py
+        # has no such step)
+        population = toolbox.select(population, len(population))
     generations = 0
     while not budget.exhausted():
         generations += 1
@@ -600,8 +617,7 @@ def solve_front(problem, size, solver, budget):
             if not member.fitness.valid:
                 member.fitness.values = toolbox.evaluate(member)
         population = toolbox.select(population + offspring, population_size)
-    front = tools.sortNondominated(population, len(population), first_front_only=True)[0]
-    return [list(member.fitness.values) for member in front], [list(member) for member in front], generations
+    return population, generations
 
 
 def counted_front(budget, function):
@@ -652,19 +668,21 @@ def main():
 
     for seed in range(seed_from, seed_to + 1):
         if problem in FRONT_PROBLEMS:
-            solvers = ["nsga2"] + (["nsga3"] if FRONT_PROBLEMS[problem][2](size) > 2 else [])
-            for solver in solvers:
+            for solver in ("nsga2", "nsga3"):
                 random.seed(seed)
                 numpy.random.seed(seed)
-                budget = Budget(problem, size, max_evaluations, max_seconds)
                 start = time.perf_counter()
-                front, solutions, generations = solve_front(problem, size, solver, budget)
+                budget = Budget(problem, size, max_evaluations, max_seconds, start)
+                population, generations = solve_front(problem, size, solver, budget)
                 elapsed = time.perf_counter() - start
+                # rule 7.2, after the clock: the first non-dominated front of the final population
+                front = tools.sortNondominated(population, len(population), first_front_only=True)[0]
                 print(json.dumps({
                     "library": "deap", "solver": solver, "problem": problem, "size": size, "mode": mode,
                     "seed": seed, "time_s": round(elapsed, 6), "generations": generations,
                     "evaluations": budget.evaluations, "outside": budget.outside,
-                    "front": front, "solutions": solutions,
+                    "front": [list(member.fitness.values) for member in front],
+                    "solutions": [list(member) for member in front],
                 }), flush=True)
             continue
 
@@ -676,8 +694,8 @@ def main():
             # DEAP draws from Python's random; its CMA-ES from numpy's
             random.seed(seed)
             numpy.random.seed(seed)
-            budget = Budget(problem, size, max_evaluations, max_seconds)
             start = time.perf_counter()
+            budget = Budget(problem, size, max_evaluations, max_seconds, start)
             generations = solve(budget)
             elapsed = time.perf_counter() - start
             result = {
@@ -690,7 +708,9 @@ def main():
                               solution=[float(v) for v in budget.solution])
             else:
                 result.update(best=int(budget.best), solution=[int(v) for v in budget.solution])
-            result.update(target=budget.target, success=bool(budget.reached()))
+            result.update(target=budget.target, success=bool(budget.reached()),
+                          first_hit=budget.first_hit and {"evaluations": budget.first_hit[0],
+                                                          "time_s": round(budget.first_hit[1], 6)})
             print(json.dumps(result), flush=True)
 
 
