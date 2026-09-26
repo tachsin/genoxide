@@ -2,12 +2,14 @@
 
 16 evolutionary computation libraries in 5 languages, genoxide included, and genoxide's Python package, on the same problems: OneMax, N-Queens, Rastrigin, Rosenbrock, Ackley, ZDT1 to 3, DTLZ1 and 2. Every library gets the same fitness functions, evaluation budgets and time caps. Matched scenarios run the same algorithm in every library; idiomatic scenarios run what each library's own docs recommend. Every setting and every bug found is documented per library, and a better way to run one is [welcome](rules.md#9-open-documentation).
 
+![Time to target: each library's fastest method](summary.svg)
+
 | Page | What it has |
 |---|---|
 | [Methodology](../../benchmarks/README.md) | the libraries and solvers, the protocol, the scenarios, the matched settings, how to run it |
 | [Rules](rules.md) | the rules every adapter follows, and which `run.py check` tests |
 | [Notes](notes.md) | what each library can't run, the bugs found, and the rule-level choices |
-| [Results](results.md) | the full numbers of the latest run |
+| [Results](results.md) | the charts and full numbers of the latest run |
 
 Each library has its own page: its methods and where its docs recommend them, what it leaves out, its separate test runs and its bugs.
 

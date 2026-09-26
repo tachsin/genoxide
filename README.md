@@ -67,6 +67,10 @@ See [python/README.md](python/README.md) for the algorithms, operators and numpy
 
 genoxide and its Python package are benchmarked with 15 other libraries in Rust, C++, Python, Java and Julia. Every library runs the same problems under the same public [rules](docs/benchmarks/rules.md). The [methodology](benchmarks/README.md) and the [page for each library](docs/benchmarks/libraries/) give the methods and settings.
 
+[![Time to target: each library's fastest method](docs/benchmarks/summary.svg)](docs/benchmarks/results.md)
+
+Each bar is a library's fastest method on that problem, single-threaded on the same machine, 10 seeds. Every method, the multi-objective fronts and the full tables: [results](docs/benchmarks/results.md).
+
 ## Links
 
 - Docs and examples: https://tachsin.github.io/genoxide/
