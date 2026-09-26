@@ -1,0 +1,69 @@
+name: Python docs
+
+# The API reference of the Python package, built with pdoc from its docstrings (NumPy style) and
+# deployed to GitHub Pages: https://tachsin.github.io/genoxide/. Pull requests that touch the
+# package build it without deploying.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "python/**"
+      - ".github/workflows/python-docs.yml"
+  pull_request:
+    paths:
+      - "python/**"
+      - ".github/workflows/python-docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# one deployment at a time, and a running one finishes
+concurrency:
+  group: python-docs-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      # the Python package is a member of the workspace: its target directory is the root's
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      # pdoc imports the package, so the extension module is built first
+      - run: python -m venv .venv
+      - run: |
+          source .venv/bin/activate
+          pip install maturin==1.15.0 pdoc==16.0.0
+          maturin develop --release
+          pdoc -d numpy -o site genoxide
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: python/site
+
+  deploy:
+    name: Deploy
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v6.0.0
+      - id: deployment
+        uses: actions/deploy-pages@v5.0.1
