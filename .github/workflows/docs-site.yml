@@ -1,18 +1,25 @@
-name: Python docs
+name: Docs site
 
-# The API reference of the Python package, built with pdoc from its docstrings (NumPy style) and
-# deployed to GitHub Pages: https://tachsin.github.io/genoxide/. Pull requests that touch the
-# package build it without deploying.
+# The site at https://tachsin.github.io/genoxide/: pages built with Material for MkDocs from
+# docs/site/ (the examples included from examples/ and python/examples/), and the API reference of
+# the Python package, built with pdoc from its docstrings (NumPy style) into api/python/. Pull
+# requests that touch them build the site without deploying.
 on:
   push:
     branches: [main]
     paths:
+      - "docs/site/**"
+      - "mkdocs.yml"
+      - "examples/**"
       - "python/**"
-      - ".github/workflows/python-docs.yml"
+      - ".github/workflows/docs-site.yml"
   pull_request:
     paths:
+      - "docs/site/**"
+      - "mkdocs.yml"
+      - "examples/**"
       - "python/**"
-      - ".github/workflows/python-docs.yml"
+      - ".github/workflows/docs-site.yml"
   workflow_dispatch:
 
 permissions:
@@ -20,7 +27,7 @@ permissions:
 
 # one deployment at a time, and a running one finishes
 concurrency:
-  group: python-docs-${{ github.ref }}
+  group: docs-site-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -30,9 +37,6 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: python
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -41,16 +45,19 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      # pdoc imports the package, so the extension module is built first
       - run: python -m venv .venv
       - run: |
           source .venv/bin/activate
-          pip install maturin==1.15.0 pdoc==16.0.0
-          maturin develop --release
-          pdoc -d numpy -o site genoxide
+          pip install -r docs/site/requirements.txt maturin==1.15.0 pdoc==16.0.0
+          # pdoc imports the package, so the extension module is built first
+          (cd python && maturin develop --release)
+          # from the root, which the snippets of the examples are relative to; mkdocs empties
+          # site/ first, so the API reference goes in after
+          mkdocs build --strict
+          pdoc -d numpy -o site/api/python genoxide
       - uses: actions/upload-pages-artifact@v5.0.0
         with:
-          path: python/site
+          path: site
 
   deploy:
     name: Deploy

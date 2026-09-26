@@ -74,6 +74,7 @@ cargo run --release --example one_max     # binary, statistics
 cargo run --release --example knapsack    # a constraint with Deb's feasibility rules, hall of fame
 cargo run --release --example n_queens    # permutation, (μ+λ)
 cargo run --release --example rastrigin   # real-valued, parallel evaluation
+cargo run --release --example zdt1        # two objectives, NSGA-II, hypervolume
 cargo run --release --example asynchronous # a slow fitness function, asynchronous evaluation
 cargo run --release --manifest-path examples/gpu/Cargo.toml  # neuroevolution on the GPU, with wgpu
 ```
