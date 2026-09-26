@@ -1,5 +1,5 @@
-# Benchmark adapter for Evolutionary.jl (https://github.com/wildart/Evolutionary.jl, docs:
-# https://wildart.github.io/Evolutionary.jl/stable/).
+# Benchmark adapter for Evolutionary.jl (https://github.com/SciML/Evolutionary.jl, docs:
+# https://docs.sciml.ai/Evolutionary/stable/).
 #
 # Usage: julia --project=<this folder> --threads=1 bench.jl <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
 #        julia --project=<this folder> bench.jl values <problem> <size>   # one JSON solution per line on stdin
@@ -9,8 +9,9 @@
 # The methods, their settings and where Evolutionary.jl recommends them are explained in
 # docs/benchmarks/libraries/evolutionary_jl.md; each one is cited next to its code below.
 #
-# Every solver is warmed up (compiled) with an untimed run of the same problem, 1,000 evaluations
-# and seed 1000, before the timed runs (rule 4.2), so time_s holds the optimization only.
+# Every solver is warmed up (compiled) with an untimed, unprinted run of the same problem, with
+# the seed 999,999, 50,000 evaluations and the scenario's time cap, before the timed runs (rule
+# 4.2), so time_s holds the optimization only.
 
 using Evolutionary
 using LinearAlgebra
@@ -49,13 +50,14 @@ function nqueens(p::AbstractVector{<:Integer})
 end
 
 # The shift of Rastrigin and Ackley, so that the optimum isn't at the origin:
-# s_i = 2 ((37 i + 11) mod 101) / 101 - 1 for the 0-based gene index i
-shift(index::Integer) = 2 * ((37 * (index - 1) + 11) % 101) / 101 - 1
+# s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1) for the 0-based gene index i, with `upper`
+# the box's upper bound, computed in this order (problems.py)
+shift(index::Integer, upper) = 0.8 * upper * (2 * ((37 * (index - 1) + 11) % 101) / 101 - 1)
 
 function rastrigin(x::AbstractVector{<:Real})
     s = 10.0 * length(x)
     for (index, v) in enumerate(x)
-        y = v - shift(index)
+        y = v - shift(index, 5.12)
         s += y * y - 10.0 * cos(2π * y)
     end
     return s
@@ -74,7 +76,7 @@ function ackley(x::AbstractVector{<:Real})
     squares = 0.0
     cosines = 0.0
     for (index, v) in enumerate(x)
-        y = v - shift(index)
+        y = v - shift(index, 32.768)
         squares += y * y
         cosines += cos(2π * y)
     end
@@ -165,6 +167,7 @@ const FRONT_PROBLEMS = Dict(
 # -------------------------------------------------------------------------------------------------
 # The budget: counts every evaluation (rule 3) and keeps the best value and solution; stops at the
 # target, at max_evaluations or at max_seconds (checked by the callback after every generation).
+# The clock starts when the budget is created, just before the run (rule 4.1).
 # -------------------------------------------------------------------------------------------------
 
 mutable struct Budget
@@ -173,17 +176,19 @@ mutable struct Budget
     solution::Any
     # evaluated solutions outside the bounds (rule 2.4), as the library proposed them
     outside::Int
+    # the first evaluation whose value reaches the target, and the clock then (-1: not yet)
+    first_hit_evaluations::Int
+    first_hit_seconds::Float64
     const max_evaluations::Int
     const max_seconds::Float64
     const target::Float64
-    start::Float64
-    # multi-objective: the objective values of every solution evaluated, to report the final
-    # population's without evaluating it again
-    const values::Dict{Vector{Float64}, Vector{Float64}}
+    const start::UInt64
 end
 
 Budget(max_evaluations, max_seconds, target = -Inf) =
-    Budget(0, Inf, nothing, 0, max_evaluations, max_seconds, target, time(), Dict{Vector{Float64}, Vector{Float64}}())
+    Budget(0, Inf, nothing, 0, -1, 0.0, max_evaluations, max_seconds, target, time_ns())
+
+seconds(budget::Budget) = (time_ns() - budget.start) / 1.0e9
 
 outside(x, bounds) = bounds !== nothing && any(v -> v < bounds[1] || v > bounds[2], x)
 
@@ -196,6 +201,10 @@ function counted(f, budget::Budget; bounds = nothing)
         if value < budget.best
             budget.best = value
             budget.solution = copy(x)
+            if budget.first_hit_evaluations < 0 && value <= budget.target
+                budget.first_hit_evaluations = budget.evaluations
+                budget.first_hit_seconds = seconds(budget)
+            end
         end
         return value
     end
@@ -205,16 +214,18 @@ function counted!(f!, budget::Budget)
     return function (F, x)
         budget.evaluations += 1
         outside(x, (0.0, 1.0)) && (budget.outside += 1)
-        f!(F, x)
-        budget.values[copy(x)] = copy(F)
-        return F
+        return f!(F, x)
     end
 end
 
 exhausted(budget::Budget) =
     budget.best <= budget.target ||
     budget.evaluations >= budget.max_evaluations ||
-    time() - budget.start >= budget.max_seconds
+    seconds(budget) >= budget.max_seconds
+
+# the "first_hit" field of a single-objective run
+first_hit(budget::Budget) = budget.first_hit_evaluations < 0 ? nothing :
+    (evaluations = budget.first_hit_evaluations, time_s = round(budget.first_hit_seconds, digits = 6))
 
 # Rule 2.2. The iteration limit, only a budget, is lifted (typemax(Int); the library's default is
 # 1,000, 1,500 for CMAES). The convergence test is the library's: each method's default metric
@@ -233,43 +244,17 @@ options(budget::Budget, rng; successive_f_tol = 10) = Evolutionary.Options(
 # An attempt that ends before the target, the budget or the cap has converged (the convergence
 # test above), or, for CMAES, its covariance matrix broke down (update_state! returns true when the
 # eigendecomposition fails, src/cmaes.jl). Evolutionary.jl has no restart mechanism, so the method
-# starts again from a new random start with the seed seed * 1000 + restart (rule 2.2). The best
-# solution and every evaluation are kept in `budget`. Returns (generations, restarts).
+# starts again from a new random start with the seed (seed + 1) * 1,000,000 + restart (rule 2.2).
+# The best solution and every evaluation are kept in `budget`. Returns (generations, restarts).
 function run_restarting(start, budget::Budget, seed)
     generations = 0
     restart = 0
     while true
-        rng = Xoshiro(restart == 0 ? seed : seed * 1000 + restart)
+        rng = Xoshiro(restart == 0 ? seed : (seed + 1) * 1_000_000 + restart)
         result = start(rng)
         generations += Evolutionary.iterations(result)
         exhausted(budget) && return generations, restart
         restart += 1
-    end
-end
-
-# -------------------------------------------------------------------------------------------------
-# Operators for the matched configuration
-# -------------------------------------------------------------------------------------------------
-
-# Bit-flip of every gene with probability p (DEAP's mutFlipBit). Evolutionary's `flip` flips exactly
-# one random bit.
-function bitflip_per_gene(p::Float64)
-    return function (x::AbstractVector{Bool}; rng::AbstractRNG = Random.default_rng())
-        @inbounds for i in eachindex(x)
-            rand(rng) < p && (x[i] = !x[i])
-        end
-        return x
-    end
-end
-
-# Crossover with probability p, else copies of the parents (as DEAP's varAnd, which clones). The
-# matched runs use crossoverRate = 1 and this operator: with crossoverRate < 1, Evolutionary passes
-# the parents themselves (not copies) to the offspring, and the in-place mutation then also changes
-# every other offspring that references the same parent, and the elites (see the library's page,
-# "Bugs found"). The idiomatic runs use the library's own crossoverRate, as its users get it.
-function crossover_with_probability(crossover, p::Float64)
-    return function (a, b; rng::AbstractRNG = Random.default_rng())
-        return rand(rng) < p ? crossover(a, b; rng = rng) : (copy(a), copy(b))
     end
 end
 
@@ -279,32 +264,31 @@ end
 
 function onemax_solvers(size, mode)
     if mode == "matched"
-        # as DEAP eaSimple: population 300, tournament 3, two-point crossover with probability 0.5,
-        # bit-flip with probability 1 / size on 20% of the children, no elitism (ɛ = 0).
-        # Differences: Evolutionary's tournament draws its contestants without replacement from a
-        # shuffled population (DEAP: with replacement); the crossover and bit-flip are the wrappers
-        # above (the library's own `flip` flips exactly one bit). The matched configuration has no
-        # convergence criterion: successive_f_tol = typemax(Int) lifts the GA's.
+        # as DEAP eaSimple, with the library's own GA and operators: population 300, tournament(3),
+        # two-point crossover (TPX) with crossoverRate 0.5, generational without elitism (ɛ = 0),
+        # `flip` with mutationRate 0.2. Differences: `flip` flips exactly one random bit of a
+        # mutated child (DEAP: each bit with probability 1 / size, the same mean); Evolutionary's
+        # tournament draws its contestants without replacement from a shuffled population (DEAP:
+        # with replacement); every child is evaluated, changed or not. A pair that isn't crossed
+        # passes the parents themselves to the offspring, not copies (the library's bug, see the
+        # page), as users get it. The matched configuration has no convergence criterion:
+        # successive_f_tol = typemax(Int) lifts the GA's.
         method = () -> GA(
             populationSize = 300,
             selection = tournament(3),
-            crossover = crossover_with_probability(TPX, 0.5),
-            crossoverRate = 1.0,
-            mutation = bitflip_per_gene(1.0 / size),
+            crossover = TPX,
+            crossoverRate = 0.5,
+            mutation = flip,
             mutationRate = 0.2,
             ɛ = 0,
         )
     else
-        # test/onemax.jl of Evolutionary.jl, its only binary example: GA with tournament(3), flip,
-        # TPX, mutationRate 0.05, crossoverRate 0.85, population = the genome size (100)
-        method = () -> GA(
-            populationSize = size,
-            selection = tournament(3),
-            crossover = TPX,
-            crossoverRate = 0.85,
-            mutation = flip,
-            mutationRate = 0.05,
-        )
+        # the tutorial's GA (docs/src/tutorial.md, "General options", on -sum(x) of a
+        # BitVector): GA(selection = uniformranking(5), mutation = flip, crossover = SPX) with the
+        # defaults (population 50, crossoverRate 0.8, mutationRate 0.1, ɛ 0); its
+        # Options(iterations = 10) is a budget, lifted. The bits start random, as in every library
+        # (the tutorial starts its 30 bits from zeros).
+        method = () -> GA(selection = uniformranking(5), mutation = flip, crossover = SPX)
     end
     # the matched configuration has no convergence criterion: it runs to the target or the budget
     tolerance = mode == "matched" ? typemax(Int) : 10
@@ -396,21 +380,24 @@ end
 # objective values in `state.fitpop[:, 1:N]`, nor their ranks and crowding distances, so from the
 # second generation on it sorts and selects on the values of other individuals. The multi-objective
 # scenarios run it anyway, as the library's users get it (rule 8.4), and their results show the
-# bug. The front printed holds the true objective values of the final population, recorded when
-# they were evaluated. EVOLUTIONARY_JL_NSGA2=0 skips them (prints nothing).
+# bug. The front printed holds the true objective values of the final population, computed after
+# the clock stops, not counted. EVOLUTIONARY_JL_NSGA2=0 skips them (prints nothing).
 # -------------------------------------------------------------------------------------------------
 
-# the untimed warm-up run of every solver before the timed ones (rule 4.2)
-const WARM_UP_EVALUATIONS = 1000
-const WARM_UP_SEED = 1000
+# the untimed warm-up run of every solver before the timed ones (rule 4.2), with the scenario's
+# time cap
+const WARM_UP_EVALUATIONS = 50_000
+const WARM_UP_SEED = 999_999
 
 non_dominated(points) = [i for (i, p) in enumerate(points) if !any(q -> all(q .<= p) && any(q .< p), points)]
 
 # NSGA-II with the matched settings of every library: population 100 (92 for DTLZ), SBX with η 15
-# at 0.9, polynomial mutation with η 20 at 1 / n; binary tournament on rank and crowding distance
-# (the library's default). Differences: Evolutionary's SBX and PLM are the unbounded variants
-# (the offspring are clipped to [0, 1] by the box constraints), its SBX crosses each variable
-# with probability 0.5 (as pymoo's default).
+# at 0.9 (crossoverRate), polynomial mutation with η 20 at 1 / n; binary tournament on rank and
+# crowding distance (the library's default). Differences: Evolutionary's SBX and PLM are the
+# unbounded variants (the offspring are clipped to [0, 1] by the box constraints), its SBX crosses
+# each variable with probability 0.5 (as pymoo's default). A pair that isn't crossed passes the
+# parents themselves to the offspring, which PLM then mutates in place (the library's bug, see the
+# page), as users get it.
 function run_front(problem, size, budget, seed)
     f!, variables, objectives, population_size = FRONT_PROBLEMS[problem]
     n = variables(size)
@@ -419,8 +406,8 @@ function run_front(problem, size, budget, seed)
     generations, restarts = run_restarting(budget, seed) do rng
         method = NSGA2(
             populationSize = population_size,
-            crossover = crossover_with_probability(SBX(0.5, 15), 0.9),
-            crossoverRate = 1.0,
+            crossover = SBX(0.5, 15),
+            crossoverRate = 0.9,
             mutation = PLM(1.0; η = 20, pm = 1.0 / n),
             mutationRate = 1.0,
         )
@@ -440,6 +427,8 @@ end
 # Output
 # -------------------------------------------------------------------------------------------------
 
+json_value(::Nothing) = "null"
+json_value(x::NamedTuple) = "{" * join(("\"$key\":" * json_value(value) for (key, value) in pairs(x)), ",") * "}"
 json_value(x::Bool) = string(x)
 json_value(x::Integer) = string(x)
 json_value(x::Real) = isfinite(x) ? repr(Float64(x)) : (isnan(x) ? "NaN" : (x > 0 ? "Infinity" : "-Infinity"))
@@ -494,14 +483,15 @@ function main(args)
             println(stderr, "evolutionary_jl: $problem skipped (EVOLUTIONARY_JL_NSGA2=0)")
             return
         end
-        run_front(problem, size, Budget(WARM_UP_EVALUATIONS, 10.0), WARM_UP_SEED)
+        f!, _, objectives, _ = FRONT_PROBLEMS[problem]
+        run_front(problem, size, Budget(WARM_UP_EVALUATIONS, max_seconds), WARM_UP_SEED)
         for seed in seed_from:seed_to
             Random.seed!(seed)
-            budget = Budget(max_evaluations, max_seconds)
-            start = time_ns()
+            budget = Budget(max_evaluations, max_seconds)  # the clock starts
             generations, restarts, population = run_front(problem, size, budget, seed)
-            elapsed = (time_ns() - start) / 1.0e9
-            points = [budget.values[x] for x in population]
+            elapsed = seconds(budget)
+            # the objectives of the final population, after the clock and not counted
+            points = [f!(zeros(objectives(size)), x) for x in population]
             front = non_dominated(points)
             print_line([
                 "library" => "evolutionary_jl", "solver" => "nsga2", "problem" => problem, "size" => size,
@@ -529,15 +519,14 @@ function main(args)
     end
 
     for (_, run) in solvers
-        run(Budget(WARM_UP_EVALUATIONS, 10.0, target), WARM_UP_SEED)
+        run(Budget(WARM_UP_EVALUATIONS, max_seconds, target), WARM_UP_SEED)
     end
 
     for seed in seed_from:seed_to, (solver, run) in solvers
         Random.seed!(seed)
-        budget = Budget(max_evaluations, max_seconds, target)
-        start = time_ns()
+        budget = Budget(max_evaluations, max_seconds, target)  # the clock starts
         generations, restarts = run(budget, seed)
-        elapsed = (time_ns() - start) / 1.0e9
+        elapsed = seconds(budget)
         if problem == "onemax"
             best, solution = -Int(budget.best), Int.(budget.solution)
         elseif problem == "nqueens"
@@ -552,7 +541,7 @@ function main(args)
             "generations" => generations, "evaluations" => budget.evaluations, "restarts" => restarts,
             (haskey(REAL_PROBLEMS, problem) ? ["outside" => budget.outside] : [])...,
             "best" => best, "target" => problem == "onemax" ? size : target, "success" => success,
-            "solution" => solution,
+            "first_hit" => first_hit(budget), "solution" => solution,
         ])
     end
     return

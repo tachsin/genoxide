@@ -21,8 +21,12 @@
  *   which it doesn't let a user set (the adapter replaces it by a seeded one, see cmaes() below),
  *   and its initial permutations are shuffled by Collections.shuffle's own generator (the adapter
  *   shuffles them with JMetalRandom, see NQueensProblem.createSolution()).
- * - Time (rule 4.2): before the timed runs, every solver runs once untimed, with 1,000 evaluations
- *   and the seed 1,000,003, so the JIT has compiled the fitness function and the algorithm.
+ * - Time (rules 4.1 and 4.2): the clock starts before the algorithm creates its initial population
+ *   and stops when the run ends. Before the timed runs, every solver runs once untimed and
+ *   unprinted, with the seed 999,999, 50,000 evaluations and the scenario's time cap, so the JIT has
+ *   compiled the fitness function and the algorithm.
+ * - First hit: a single-objective run records the evaluation (and the time) at which the best value
+ *   first reaches the target, in evaluate(), and prints it as "first_hit".
  */
 
 import org.uma.jmetal.algorithm.multiobjective.spea2.SPEA2;
@@ -36,7 +40,6 @@ import org.uma.jmetal.component.algorithm.multiobjective.NSGAIIIBuilder;
 import org.uma.jmetal.component.algorithm.multiobjective.SMSEMOABuilder;
 import org.uma.jmetal.component.algorithm.singleobjective.GeneticAlgorithmBuilder;
 import org.uma.jmetal.component.catalogue.common.termination.Termination;
-import org.uma.jmetal.component.catalogue.ea.selection.impl.NaryTournamentSelection;
 import org.uma.jmetal.operator.crossover.impl.DifferentialEvolutionCrossover;
 import org.uma.jmetal.operator.crossover.impl.PMXCrossover;
 import org.uma.jmetal.operator.crossover.impl.SBXCrossover;
@@ -56,7 +59,6 @@ import org.uma.jmetal.solution.permutationsolution.PermutationSolution;
 import org.uma.jmetal.solution.permutationsolution.impl.IntegerPermutationSolution;
 import org.uma.jmetal.util.aggregationfunction.impl.PenaltyBoundaryIntersection;
 import org.uma.jmetal.util.aggregationfunction.impl.Tschebyscheff;
-import org.uma.jmetal.util.comparator.ObjectiveComparator;
 import org.uma.jmetal.util.evaluator.impl.SequentialSolutionListEvaluator;
 import org.uma.jmetal.util.pseudorandom.JMetalRandom;
 import org.uma.jmetal.util.referencepoint.ReferencePointGenerator;
@@ -85,8 +87,10 @@ public final class Bench {
 
     static final String LIBRARY = "jmetal";
     // the untimed JIT warm-up run of every solver (rule 4.2)
-    static final long WARM_UP_SEED = 1_000_003L;
-    static final long WARM_UP_EVALUATIONS = 1_000L;
+    static final long WARM_UP_SEED = 999_999L;
+    static final long WARM_UP_EVALUATIONS = 50_000L;
+    // JMETAL_CMAES_AS_IS=1: CMA-ES without the workaround of its crash (see cmaes()), for the page
+    static final boolean CMAES_AS_IS = "1".equals(System.getenv("JMETAL_CMAES_AS_IS"));
 
     // ---------------------------------------------------------------------------------------------
     // Fitness functions, identical to problems.py
@@ -113,11 +117,14 @@ public final class Bench {
         return conflicts;
     }
 
-    /** The shift of Rastrigin and Ackley: s_i = 2 ((37 i + 11) mod 101) / 101 - 1. */
-    static double[] shift(int n) {
+    /**
+     * The shift of Rastrigin and Ackley: s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1), with
+     * `upper` the box's upper bound, computed in this order (problems.py).
+     */
+    static double[] shift(int n, double upper) {
         double[] s = new double[n];
         for (int i = 0; i < n; i++) {
-            s[i] = (2 * ((37 * i + 11) % 101)) / 101.0 - 1.0;
+            s[i] = 0.8 * upper * ((2 * ((37 * i + 11) % 101)) / 101.0 - 1.0);
         }
         return s;
     }
@@ -211,11 +218,16 @@ public final class Bench {
     record RealFunction(ToDoubleFunction<double[]> function, double lower, double upper) {}
 
     static RealFunction realFunction(String name, int size) {
-        double[] s = shift(size);
         return switch (name) {
-            case "rastrigin" -> new RealFunction(x -> rastrigin(x, s), -5.12, 5.12);
+            case "rastrigin" -> {
+                double[] s = shift(size, 5.12);
+                yield new RealFunction(x -> rastrigin(x, s), -5.12, 5.12);
+            }
             case "rosenbrock" -> new RealFunction(Bench::rosenbrock, -5.0, 10.0);
-            case "ackley" -> new RealFunction(x -> ackley(x, s), -32.768, 32.768);
+            case "ackley" -> {
+                double[] s = shift(size, 32.768);
+                yield new RealFunction(x -> ackley(x, s), -32.768, 32.768);
+            }
             default -> null;
         };
     }
@@ -251,6 +263,8 @@ public final class Bench {
 
     static final class Budget {
         final long maxEvaluations;
+        // the clock: started when the budget is created, just before the run
+        final long start;
         final long deadline;
         final boolean minimize;
         final double target;
@@ -261,10 +275,14 @@ public final class Bench {
         Object solution;
         // evaluated solutions outside the problem's bounds (rule 2.4)
         long outside;
+        // the first evaluation whose value reaches the target, and the clock then (-1: not yet)
+        long firstHitEvaluations = -1;
+        double firstHitSeconds;
 
         Budget(long maxEvaluations, double maxSeconds, boolean minimize, double target) {
             this.maxEvaluations = maxEvaluations;
-            this.deadline = System.nanoTime() + (long) (maxSeconds * 1e9);
+            this.start = System.nanoTime();
+            this.deadline = start + (long) (maxSeconds * 1e9);
             this.minimize = minimize;
             this.target = target;
             this.best = minimize ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
@@ -288,7 +306,20 @@ public final class Bench {
         void record(double value) {
             evaluations++;
             if (better(value)) best = value;
-            if (reached()) throw STOP;
+            if (reached()) {
+                if (firstHitEvaluations < 0) {
+                    firstHitEvaluations = evaluations;
+                    firstHitSeconds = (System.nanoTime() - start) / 1e9;
+                }
+                throw STOP;
+            }
+        }
+
+        /** The "first_hit" field of a single-objective run. */
+        String firstHit() {
+            if (firstHitEvaluations < 0) return "null";
+            return "{\"evaluations\":" + firstHitEvaluations + ",\"time_s\":"
+                + String.format(Locale.ROOT, "%.6f", firstHitSeconds) + "}";
         }
 
         boolean reached() {
@@ -508,12 +539,16 @@ public final class Bench {
 
     /**
      * jMetal's CMA-ES with its defaults (λ 10, σ 0.3). Its maximum of evaluations, a budget, is
-     * lifted (rule 2.2). It also ends an attempt when its covariance matrix degenerates: when the
-     * eigendecomposition fails its check (checkEigenCorrectness sets the evaluations to the
-     * maximum), or when CMAESUtils.tql2 throws ArrayIndexOutOfBoundsException (NaN in the matrix).
-     * jMetal has no restart mechanism, so the adapter then starts it again from a new random point,
-     * with JMetalRandom seeded with seed * 1000 + restart (rule 2.2); the budget keeps the best and
-     * counts every evaluation. Bounds (rule 2.4): jMetal clips every sample to the bounds
+     * lifted (rule 2.2). It ends an attempt by itself when its covariance matrix degenerates and
+     * the eigendecomposition fails its check (checkEigenCorrectness sets the evaluations to the
+     * maximum): a convergence criterion, so the run starts again (rule 2.2).
+     * Workaround of a crash (rule 8.4; the page shows both results): when NaN reaches the
+     * covariance matrix, CMAESUtils.tql2 throws ArrayIndexOutOfBoundsException and the run
+     * aborts. The adapter catches it and starts again, as after a convergence. Without the
+     * workaround (JMETAL_CMAES_AS_IS=1), the run ends at the crash with the best value found.
+     * jMetal has no restart mechanism, so the adapter starts it again from a new random point, with
+     * JMetalRandom seeded with (seed + 1) * 1,000,000 + restart (rule 2.2); the budget keeps the
+     * best and counts every evaluation. Bounds (rule 2.4): jMetal clips every sample to the bounds
      * (Bounds.restrict in sampleSolution).
      * jMetal's CMA-ES has a bug: once it has converged, its σ grows without bound, every sample
      * lands on the bounds and the run stalls without ending, often for 200,000 evaluations before
@@ -522,7 +557,7 @@ public final class Bench {
     static long cmaes(Budget budget, long seed, RealProblem problem, int size, double lower, double upper) {
         long generations = 0;
         for (int restart = 0; ; restart++) {
-            if (restart > 0) JMetalRandom.getInstance().setSeed(seed * 1000 + restart);
+            if (restart > 0) JMetalRandom.getInstance().setSeed((seed + 1) * 1_000_000 + restart);
             // jMetal starts the mean at a random point in [0, 1)^n whatever the bounds, which is next
             // to the shifted optimum of these problems (the shift lies in [-1, 1]); the start here is
             // a random point within the bounds, like the other libraries' CMA-ES
@@ -541,7 +576,9 @@ public final class Bench {
             } catch (Stop stop) {
                 return generations + (budget.evaluations - before) / algorithm.getLambda();
             } catch (ArrayIndexOutOfBoundsException error) {
-                // NaN in the covariance matrix: the attempt ends, as when it ends by itself
+                // the crash of tql2 on NaN in the covariance matrix: the workaround goes on with a
+                // new attempt (see above); as is, the run ends here
+                if (CMAES_AS_IS) return generations + (budget.evaluations - before) / algorithm.getLambda();
             }
             generations += (budget.evaluations - before) / algorithm.getLambda();
             if (budget.done()) return generations;
@@ -566,21 +603,11 @@ public final class Bench {
                 minimize[0] = false;
                 target[0] = size;
                 if (args.mode().equals("matched")) {
-                    // as close to DEAP's eaSimple as jMetal allows: population 300, tournament of
-                    // 3, crossover with probability 0.5, generational replacement without elitism
-                    // (a Replacement lambda: the children replace the parents).
-                    // Differences: jMetal's binary crossovers are single-point, HUX and uniform
-                    // (its TwoPointCrossover is for numbers), so single-point; its variation mutates
-                    // every child, so bit-flip with 0.2 / size per bit (DEAP: 1 / size on 20% of
-                    // the children, the same expected number of flips); every child is evaluated,
-                    // changed or not.
-                    solvers.add(new Solver("ga", (budget, seed) -> runComponent(termination ->
-                        new GeneticAlgorithmBuilder<>("GGA", new OneMaxProblem(size, budget), 300, 300,
-                                new SinglePointCrossover<>(0.5), new BitFlipMutation<>(0.2 / size))
-                            .setSelection(new NaryTournamentSelection<>(3, 300, new ObjectiveComparator<>(0)))
-                            .setReplacement((population, offspring) -> offspring)
-                            .setTermination(termination)
-                            .build())));
+                    // Not run (rule 6.1): jMetal has no generational replacement without elitism
+                    // (its replacements are (μ + λ), (μ, λ) with μ < λ, pairwise, random and the
+                    // multi-objective ones; the classic GenerationalGeneticAlgorithm keeps 2
+                    // elites) and no two-point crossover for bits (TwoPointCrossover is for numbers)
+                    return null;
                 } else {
                     // jmetal-component examples/singleobjective/geneticalgorithm/
                     // GenerationalGeneticAlgorithmBinaryExample.java (on OneMax): population 100,
@@ -664,10 +691,10 @@ public final class Bench {
         for (long seed = args.seedFrom(); seed <= args.seedTo(); seed++) {
             for (Solver solver : solvers) {
                 JMetalRandom.getInstance().setSeed(seed);
+                // the clock starts here (Budget.start), before the algorithm creates its population
                 Budget budget = new Budget(args.maxEvaluations(), args.maxSeconds(), minimize[0], target[0]);
-                long start = System.nanoTime();
                 long generations = solver.solver().run(budget, seed);
-                double time = (System.nanoTime() - start) / 1e9;
+                double time = (System.nanoTime() - budget.start) / 1e9;
                 if (!print) continue;
                 // the continuous problems report the solutions evaluated outside the bounds
                 String outside = realFunction(args.problem(), args.size()) != null
@@ -678,7 +705,7 @@ public final class Bench {
                     + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
                     + ",\"generations\":" + generations + ",\"evaluations\":" + budget.evaluations
                     + ",\"best\":" + number(budget.best) + ",\"target\":" + number(target[0])
-                    + ",\"success\":" + budget.reached() + outside
+                    + ",\"success\":" + budget.reached() + ",\"first_hit\":" + budget.firstHit() + outside
                     + ",\"solution\":" + json(budget.solution) + "}");
             }
         }
@@ -776,7 +803,8 @@ public final class Bench {
                     return false;
                 };
                 PolynomialMutation mutation = new PolynomialMutation(1.0 / n, 20.0);
-                long start = System.nanoTime();
+                // the clock started with the budget, above, and stops when the algorithm ends
+                long end;
                 List<DoubleSolution> result;
                 switch (solver) {
                     case "nsga2" -> {
@@ -786,6 +814,7 @@ public final class Bench {
                             .setTermination(termination)
                             .build();
                         algorithm.run();
+                        end = System.nanoTime();
                         result = algorithm.result();
                     }
                     case "nsga3" -> {
@@ -797,6 +826,7 @@ public final class Bench {
                             .setTermination(termination)
                             .build();
                         algorithm.run();
+                        end = System.nanoTime();
                         result = algorithm.result();
                     }
                     case "spea2" -> {
@@ -806,6 +836,7 @@ public final class Bench {
                         var algorithm = new BudgetSPEA2(problem, population, new SBXCrossover(0.9, 15.0), mutation,
                             budget);
                         algorithm.run();
+                        end = System.nanoTime();
                         generations[0] = algorithm.generations();
                         result = algorithm.result();
                     }
@@ -822,6 +853,7 @@ public final class Bench {
                             .setTermination(termination)
                             .build();
                         algorithm.run();
+                        end = System.nanoTime();
                         result = algorithm.result();
                     }
                     default -> {
@@ -830,13 +862,14 @@ public final class Bench {
                             .setTermination(termination)
                             .build();
                         algorithm.run();
+                        end = System.nanoTime();
                         result = algorithm.result();
                     }
                 }
                 List<double[]> points = new ArrayList<>();
                 for (DoubleSolution solution : result) points.add(solution.objectives().clone());
                 List<Integer> set = nonDominated(points);
-                double time = (System.nanoTime() - start) / 1e9;
+                double time = (end - budget.start) / 1e9;
                 if (!print) continue;
                 StringBuilder frontJson = new StringBuilder("[");
                 StringBuilder solutionsJson = new StringBuilder("[");
