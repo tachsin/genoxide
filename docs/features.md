@@ -69,14 +69,20 @@ What genoxide has, as of 0.6. The [API documentation](https://docs.rs/genoxide) 
 
 ## Examples
 
-```text
-cargo run --release --example one_max     # binary, statistics
-cargo run --release --example knapsack    # a constraint with Deb's feasibility rules, hall of fame
-cargo run --release --example n_queens    # permutation, (μ+λ)
-cargo run --release --example rastrigin   # real-valued, parallel evaluation
-cargo run --release --example zdt1        # two objectives, NSGA-II, hypervolume
-cargo run --release --example asynchronous # a slow fitness function, asynchronous evaluation
-cargo run --release --manifest-path examples/gpu/Cargo.toml  # neuroevolution on the GPU, with wgpu
-```
+Each example in [examples/](../examples/) is a folder with the same program in Rust and Python, and a README that cites the problem's source and its known optimum.
 
-The sources are in [examples/](../examples/).
+```text
+cargo run --release --example one_max             # binary genome, GA
+cargo run --release --example knapsack            # a constraint with Deb's feasibility rules
+cargo run --release --example n_queens            # permutation, (μ+λ)
+cargo run --release --example tsp_berlin52        # TSPLIB berlin52, simulated annealing with 2-opt moves
+cargo run --release --example jobshop_ft06        # job shop ft06, permutation with repetition
+cargo run --release --example rastrigin           # real-valued, CMA-ES with IPOP restarts and L-SHADE
+cargo run --release --example pressure_vessel     # constrained mixed discrete-continuous design, SHADE
+cargo run --release --example zdt1                # two objectives, NSGA-II, hypervolume
+cargo run --release --example dtlz2_3obj          # three objectives, NSGA-III, hypervolume
+cargo run --release --example xor_neuroevolution  # a 2-2-1 neural network's weights, CMA-ES
+cargo run --release --example asynchronous        # a slow fitness function, asynchronous evaluation
+cargo run --release --manifest-path examples/gpu/Cargo.toml  # neuroevolution on the GPU, with wgpu
+python examples/tsp_berlin52/main.py              # the same in Python, for all but the last two
+```

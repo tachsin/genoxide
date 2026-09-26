@@ -70,6 +70,7 @@ genoxide and its Python package are benchmarked with 15 other libraries in Rust,
 ## Links
 
 - Docs and examples: https://tachsin.github.io/genoxide/
+- [examples/](examples/): the same programs in Rust and Python, from OneMax to TSPLIB, job shop scheduling and NSGA-III
 - [API documentation](https://docs.rs/genoxide) on docs.rs
 - [docs/features.md](docs/features.md): the full feature list and the examples
 - [AGENTS.md](AGENTS.md): a guide for AI coding assistants

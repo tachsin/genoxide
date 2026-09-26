@@ -57,9 +57,13 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # every examples/<name>/main.rs, which Cargo finds as the example <name>
       - run: |
-          for example in one_max knapsack n_queens rastrigin zdt1 asynchronous; do
+          for main in examples/*/main.rs; do
+            example=$(basename "$(dirname "$main")")
+            echo "::group::$example"
             cargo run --release --example "$example"
+            echo "::endgroup::"
           done
       # the GPU example needs a GPU to run: it's only compiled
       - run: cargo check --manifest-path examples/gpu/Cargo.toml
@@ -149,9 +153,11 @@ jobs:
           maturin develop --release
           # the tests run the README's code blocks and the module docstring's example too
           pytest -v
-          for example in examples/*.py; do
-            echo "$example"
+          # every example in Python: examples/<name>/main.py
+          for example in ../examples/*/main.py; do
+            echo "::group::$example"
             python "$example"
+            echo "::endgroup::"
           done
 
   msrv:

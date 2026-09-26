@@ -55,12 +55,10 @@ gungraun = "0.19.4"
 proptest = "1"
 serde_json = { version = "1", features = ["float_roundtrip"] }
 
-[[example]]
-name = "rastrigin"
-required-features = ["parallel"]
-
+# the examples are examples/<name>/main.rs, which Cargo finds; this one needs rayon
 [[example]]
 name = "asynchronous"
+path = "examples/asynchronous/main.rs"
 required-features = ["parallel"]
 
 [[bin]]
