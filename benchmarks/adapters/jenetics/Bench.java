@@ -26,13 +26,15 @@
  * - Keeping going (rule 2.2): an evolution stream has no end of its own; the examples end it with a
  *   generation limit (a budget, replaced by the scenario's) or with Limits.bySteadyFitness (a
  *   convergence criterion: the attempt ends and the run restarts from a new random population, see
- *   evolve()). Every run ends at the target, the budget or the time cap, checked after each
- *   generation.
+ *   evolve()). An attempt whose generations evaluate nothing for 10 in a row has converged too, and
+ *   restarts the same way (rule 2.2). Every run ends at the target, the budget or the time cap,
+ *   checked after each generation.
  * - Bounds (rule 2.4): the continuous runs count the evaluated solutions outside the problem's
  *   bounds, in the fitness function, and print them as "outside".
- * - The multi-objective scenarios aren't run (rule 6.1): they use the library's own SBX and
- *   polynomial mutation, and Jenetics has no polynomial mutation (nor NSGA-III, SPEA2, MOEA/D or
- *   SMS-EMOA). The adapter prints nothing for them.
+ * - The matched OneMax scenarios aren't run (rule 6.1): Jenetics has no bit-flip mutation among its
+ *   own components. The multi-objective scenarios aren't run either: they use the library's own SBX
+ *   and polynomial mutation, and Jenetics has no polynomial mutation (nor NSGA-III, SPEA2, MOEA/D
+ *   or SMS-EMOA). The adapter prints nothing for them.
  */
 
 import io.jenetics.BitChromosome;
@@ -41,13 +43,11 @@ import io.jenetics.DoubleGene;
 import io.jenetics.Gene;
 import io.jenetics.Genotype;
 import io.jenetics.MeanAlterer;
-import io.jenetics.MultiPointCrossover;
 import io.jenetics.Mutator;
 import io.jenetics.Optimize;
 import io.jenetics.PartiallyMatchedCrossover;
 import io.jenetics.Phenotype;
 import io.jenetics.SwapMutator;
-import io.jenetics.TournamentSelector;
 import io.jenetics.engine.Codecs;
 import io.jenetics.engine.Engine;
 import io.jenetics.engine.Limits;
@@ -258,19 +258,23 @@ public final class Bench {
         RandomRegistry.random(RandomGeneratorFactory.of("L64X256MixRandom").create(seed));
     }
 
-    /** Runs an evolution stream until the budget ends the run; returns the generations. */
+    // an attempt whose generations evaluate nothing for this many in a row has converged (rule 2.2)
+    static final int STALL_GENERATIONS = 10;
+
+    /** Runs evolution streams until the budget ends the run; returns the generations. */
     static <G extends Gene<?, G>, C extends Comparable<? super C>> long evolve(
-            Engine<G, C> engine, Budget budget) {
-        return evolve(engine, budget, 0, -1);
+            Engine<G, C> engine, Budget budget, long seed) {
+        return evolve(engine, budget, 0, seed);
     }
 
     /**
-     * Runs evolution streams until the budget ends the run; returns the generations. With
-     * `steadyGenerations` > 0, an attempt also ends after that many generations without a better
-     * best fitness (Limits.bySteadyFitness, the convergence criterion of the documented example),
-     * and the run starts again from a new random population, the generator seeded with
-     * (seed + 1) * 1,000,000 + restart (rule 2.2); the budget keeps the best and counts every
-     * evaluation.
+     * Runs evolution streams until the budget ends the run; returns the generations. An attempt
+     * ends after STALL_GENERATIONS generations in a row without an evaluation (Jenetics evaluates
+     * only altered individuals) and, with `steadyGenerations` > 0, after that many generations
+     * without a better best fitness (Limits.bySteadyFitness, the convergence criterion of the
+     * documented example). The run then starts again from a new random population, the generator
+     * seeded with (seed + 1) * 1,000,000 + restart (rule 2.2); the budget keeps the best and
+     * counts every evaluation.
      */
     static <G extends Gene<?, G>, C extends Comparable<? super C>> long evolve(
             Engine<G, C> engine, Budget budget, int steadyGenerations, long seed) {
@@ -278,10 +282,12 @@ public final class Bench {
         for (int restart = 0; ; restart++) {
             if (restart > 0) seed((seed + 1) * 1_000_000 + restart);
             long[] attempt = {0};
+            int[] idle = {0};
             // every generation's end, the first of each attempt (its initial population and its
             // first offspring) included: this limit comes first, so it sees every result, also
             // the one that the steady-fitness limit ends the attempt at
             var stream = engine.stream().limit(result -> {
+                idle[0] = budget.evaluations == budget.generationEnd ? idle[0] + 1 : 0;
                 budget.endGeneration();
                 return true;
             });
@@ -289,11 +295,11 @@ public final class Bench {
             stream
                 .limit(result -> {
                     attempt[0] = result.generation();
-                    return !budget.done();
+                    return !budget.done() && idle[0] < STALL_GENERATIONS;
                 })
                 .forEach(result -> {});
             generations += attempt[0];
-            if (steadyGenerations <= 0 || budget.done()) return generations;
+            if (budget.done()) return generations;
         }
     }
 
@@ -322,44 +328,22 @@ public final class Bench {
             case "onemax" -> {
                 minimize[0] = false;
                 target[0] = size;
-                if (args.mode().equals("matched")) {
-                    // as DEAP's eaSimple, with Jenetics' own components: population 300, every
-                    // individual an offspring (no survivors, so generational without elitism),
-                    // TournamentSelector(3) (with replacement), two-point crossover
-                    // (MultiPointCrossover with 2 points), Mutator, no maximal age.
-                    // Differences: Jenetics' crossover picks each individual with probability p
-                    // and mates it with a random other one (DEAP: consecutive pairs with
-                    // probability 0.5); p = 0.25 gives DEAP's expected number of crossovers
-                    // (N / 2 pairs * 0.5). Jenetics has no bit-flip mutation: its Mutator(p)
-                    // gives a bit a new random value (a flip half the time), picking the
-                    // individual, the chromosome and the bit each with p^(1/3); p = 0.4 / size
-                    // gives DEAP's expected number of flipped bits per child (0.2 * size * 1 / size).
-                    solvers.add(new Solver("ga", (budget, seed) -> evolve(
-                        Engine.builder((Genotype<BitGene> gt) -> countOnes(gt, budget),
-                                Genotype.of(BitChromosome.of(size, 0.5)))
-                            .populationSize(300)
-                            .offspringFraction(1.0)
-                            .offspringSelector(new TournamentSelector<>(3))
-                            .alterers(new MultiPointCrossover<>(0.25, 2), new Mutator<>(0.4 / size))
-                            .maximalPhenotypeAge(Long.MAX_VALUE / 2)
-                            .executor(Runnable::run)
-                            .build(),
-                        budget)));
-                } else {
-                    // "Hello World (Ones counting)", the first example of jenetics.io and of the
-                    // README (BitChromosome.of(n, 0.5)), also the delivered program
-                    // jenetics.example/OnesCounting.java: the engine defaults, population 50,
-                    // TournamentSelector(3) for offspring and survivors, SinglePointCrossover(0.2),
-                    // Mutator(0.15), 60% offspring, maximal age 70. Both end the stream with a
-                    // generation limit only (limit(100), limit(10)), which the budget replaces.
-                    // (The manual's listing, section 6.1, sets other values; see the page.)
-                    solvers.add(new Solver("ga", (budget, seed) -> evolve(
-                        Engine.builder((Genotype<BitGene> gt) -> countOnes(gt, budget),
-                                Genotype.of(BitChromosome.of(size, 0.5)))
-                            .executor(Runnable::run)
-                            .build(),
-                        budget)));
-                }
+                // matched: Jenetics has no bit-flip mutation among its own components (its
+                // Mutator gives a bit a new random value), so it doesn't run (rule 6.1)
+                if (args.mode().equals("matched")) return null;
+                // "Hello World (Ones counting)", the first example of jenetics.io and of the
+                // README (BitChromosome.of(n, 0.5)), also the delivered program
+                // jenetics.example/OnesCounting.java: the engine defaults, population 50,
+                // TournamentSelector(3) for offspring and survivors, SinglePointCrossover(0.2),
+                // Mutator(0.15), 60% offspring, maximal age 70. Both end the stream with a
+                // generation limit only (limit(100), limit(10)), which the budget replaces.
+                // (The manual's listing, section 6.1, sets other values; see the page.)
+                solvers.add(new Solver("ga", (budget, seed) -> evolve(
+                    Engine.builder((Genotype<BitGene> gt) -> countOnes(gt, budget),
+                            Genotype.of(BitChromosome.of(size, 0.5)))
+                        .executor(Runnable::run)
+                        .build(),
+                    budget, seed)));
             }
             case "nqueens" -> {
                 minimize[0] = true;

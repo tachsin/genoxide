@@ -67,6 +67,8 @@ class Budget:
         else:
             self.bounds = None
         self.outside = 0
+        # the attempts after the first, of a GA that stalled (rule 2.2)
+        self.restarts = 0
 
     def count(self, solution):
         """Counts one evaluation (rule 3), and whether the solution is outside the box (rule 2.4)."""
@@ -248,17 +250,37 @@ FRONT_PROBLEMS = {
 # -------------------------------------------------------------------------------------------------
 
 
-def ea_simple(toolbox, population_size, cxpb, mutpb, budget):
+# an attempt whose generations evaluate nothing for this many in a row has converged (rule 2.2)
+STALL_GENERATIONS = 10
+
+
+def ea_simple(toolbox, population_size, cxpb, mutpb, budget, seed):
     """algorithms.eaSimple (deap/algorithms.py), with a stop at the target and at the time cap
     between generations, and at the budget: select, varAnd, evaluate the individuals whose fitness
     is invalid (varAnd keeps the fitness of an individual it neither crossed nor mutated), replace
-    the population."""
+    the population.
+
+    Rule 2.2: after STALL_GENERATIONS generations in a row without an evaluation (no offspring
+    crossed or mutated), the attempt has converged, and the GA starts again from a new random
+    population, with Python's random seeded (seed + 1) * 1_000_000 + restart. The budget keeps the
+    best and counts every evaluation."""
     population = toolbox.population(n=population_size)
     budget.new_generation()
     for individual in population:
         individual.fitness.values = toolbox.evaluate(individual)
-    generations = 0
+    generations = idle = 0
     while not budget.done():
+        if idle >= STALL_GENERATIONS:
+            budget.restarts += 1
+            random.seed((seed + 1) * 1_000_000 + budget.restarts)
+            population = toolbox.population(n=population_size)
+            budget.new_generation()
+            for individual in population:
+                if budget.full():
+                    break
+                individual.fitness.values = toolbox.evaluate(individual)
+            idle = 0
+            continue
         generations += 1
         budget.new_generation()
         offspring = toolbox.select(population, len(population))
@@ -268,11 +290,12 @@ def ea_simple(toolbox, population_size, cxpb, mutpb, budget):
                 if budget.full():
                     break
                 individual.fitness.values = toolbox.evaluate(individual)
+        idle = idle + 1 if budget.last_generation() == 0 else 0
         population[:] = offspring
     return generations
 
 
-def solve_onemax(size, mode, budget):
+def solve_onemax(size, mode, budget, seed):
     # examples/ga/onemax.py (docs: "One Max Problem"): 300 individuals, two-point crossover,
     # tournament of 3, eaSimple with cxpb 0.5 and mutpb 0.2. The matched scenarios are defined from
     # it: the only difference is the bit-flip probability 1 / n, about 0.2 bits per offspring.
@@ -285,10 +308,10 @@ def solve_onemax(size, mode, budget):
     indpb = 1.0 / size if mode == "matched" else 0.05
     toolbox.register("mutate", tools.mutFlipBit, indpb=indpb)
     toolbox.register("select", tools.selTournament, tournsize=3)
-    return ea_simple(toolbox, 300, 0.5, 0.2, budget)
+    return ea_simple(toolbox, 300, 0.5, 0.2, budget, seed)
 
 
-def solve_nqueens(size, budget):
+def solve_nqueens(size, budget, seed):
     # examples/ga/nqueens.py: permutations, partially matched crossover, shuffle-indexes mutation
     # with indpb 2 / n, tournament of 3, 300 individuals, eaSimple with cxpb 0.5 and mutpb 0.2
     toolbox = base.Toolbox()
@@ -299,7 +322,7 @@ def solve_nqueens(size, budget):
     toolbox.register("mate", tools.cxPartialyMatched)
     toolbox.register("mutate", tools.mutShuffleIndexes, indpb=2.0 / size)
     toolbox.register("select", tools.selTournament, tournsize=3)
-    return ea_simple(toolbox, 300, 0.5, 0.2, budget)
+    return ea_simple(toolbox, 300, 0.5, 0.2, budget, seed)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -649,14 +672,15 @@ def counted_front(budget, function):
 
 
 def solvers_of(problem, size, mode):
-    """(solver name, function of the budget returning the generations) of a problem."""
+    """(solver name, function of the budget and the seed returning the generations) of a
+    problem."""
     if problem == "onemax":
-        return [("ga", lambda budget: solve_onemax(size, mode, budget))]
+        return [("ga", lambda budget, seed: solve_onemax(size, mode, budget, seed))]
     if problem == "nqueens":
-        return [("ga", lambda budget: solve_nqueens(size, budget))]
+        return [("ga", lambda budget, seed: solve_nqueens(size, budget, seed))]
     if problem in REAL_PROBLEMS:
-        return [("cma_es", lambda budget: solve_bipop_cmaes(problem, size, budget)),
-                ("de", lambda budget: solve_de(problem, size, budget))]
+        return [("cma_es", lambda budget, seed: solve_bipop_cmaes(problem, size, budget)),
+                ("de", lambda budget, seed: solve_de(problem, size, budget))]
     return None
 
 
@@ -714,13 +738,15 @@ def main():
             numpy.random.seed(seed)
             start = time.perf_counter()
             budget = Budget(problem, size, max_evaluations, max_seconds, start)
-            generations = solve(budget)
+            generations = solve(budget, seed)
             elapsed = time.perf_counter() - start
             result = {
                 "library": "deap", "solver": solver, "problem": problem, "size": size, "mode": mode,
                 "seed": seed, "time_s": round(elapsed, 6), "generations": generations,
                 "evaluations": budget.evaluations, "last_generation": budget.last_generation(),
             }
+            if budget.restarts:
+                result.update(restarts=budget.restarts)
             if problem in REAL_PROBLEMS:
                 result.update(outside=budget.outside, best=float(budget.best),
                               solution=[float(v) for v in budget.solution])

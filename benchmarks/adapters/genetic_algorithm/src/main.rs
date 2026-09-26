@@ -22,7 +22,10 @@
 //!   below does what `call_repeatedly` does, one run after the other until a run is conclusive
 //!   (target or abort), keeping the best by the library's fitness score, from a new random start:
 //!   attempt 0 with `seed`, restart r with `(seed + 1) * 1_000_000 + r`. No run uses a limit
-//!   that's only a budget (`with_max_generations`).
+//!   that's only a budget (`with_max_generations`). The strategies evaluate only the chromosomes
+//!   that crossover or mutation changed, so an attempt can go on without evaluating anything:
+//!   after 10 generations in a row without an evaluation, the reporter sets the abort flag, and
+//!   the attempt restarts the same way (`Budget::resume_after_stall`).
 //! - Rule 2.4: the RangeGenotype keeps every gene inside its allele range itself (random values
 //!   drawn from the range, mutations clamped to it: genotype/range.rs). The fitness counts the
 //!   evaluated solutions outside the bounds, as the library proposed them, and each continuous
@@ -55,28 +58,71 @@ struct Budget {
     abort_flag: Arc<AtomicBool>,
     // the start of the clock
     start: Instant,
+    // the end of the time cap: start + max_seconds
+    deadline: Instant,
     // the evaluations at the end of the last generation, and that generation's (rule 2.3)
     generation_end: Arc<AtomicUsize>,
     last_generation: Arc<AtomicUsize>,
+    // the generations in a row without an evaluation, and whether they stopped the attempt
+    // (rule 2.2)
+    idle: Arc<AtomicUsize>,
+    stalled: Arc<AtomicBool>,
 }
 impl Budget {
-    fn new(max_evaluations: usize, abort_flag: Arc<AtomicBool>) -> Self {
+    fn new(max_evaluations: usize, max_seconds: f64, abort_flag: Arc<AtomicBool>) -> Self {
+        let start = Instant::now();
         Self {
             evaluations: Arc::new(AtomicUsize::new(0)),
             outside: Arc::new(AtomicUsize::new(0)),
             first_hit: Arc::new(OnceLock::new()),
             max_evaluations,
             abort_flag,
-            start: Instant::now(),
+            start,
+            deadline: start + Duration::from_secs_f64(max_seconds),
             generation_end: Arc::new(AtomicUsize::new(0)),
             last_generation: Arc::new(AtomicUsize::new(0)),
+            idle: Arc::new(AtomicUsize::new(0)),
+            stalled: Arc::new(AtomicBool::new(false)),
         }
     }
-    /// Marks the end of a generation, from the reporter
+    /// Marks the end of a generation, from the reporter; after `STALL_GENERATIONS` generations in
+    /// a row without an evaluation, sets the abort flag, which ends the attempt
     fn end_generation(&self) {
         let evaluations = self.evaluations();
         let end = self.generation_end.swap(evaluations, Ordering::Relaxed);
         self.last_generation.store(evaluations - end, Ordering::Relaxed);
+        let idle = if evaluations == end {
+            self.idle.fetch_add(1, Ordering::Relaxed) + 1
+        } else {
+            self.idle.store(0, Ordering::Relaxed);
+            0
+        };
+        if idle >= STALL_GENERATIONS {
+            self.stalled.store(true, Ordering::Relaxed);
+            self.abort_flag.store(true, Ordering::Relaxed);
+        }
+    }
+    /// Marks the initial population of an attempt, from the reporter
+    fn start_attempt(&self) {
+        self.idle.store(0, Ordering::Relaxed);
+        self.end_generation();
+    }
+    /// After an attempt the abort flag ended: whether a stall ended it, with evaluations and time
+    /// left, so the next attempt starts; then the abort flag is cleared. The timer sets the flag
+    /// at the deadline or later, so a flag it set is kept.
+    fn resume_after_stall(&self) -> bool {
+        if !self.stalled.swap(false, Ordering::Relaxed)
+            || self.evaluations() >= self.max_evaluations
+            || Instant::now() >= self.deadline
+        {
+            return false;
+        }
+        self.abort_flag.store(false, Ordering::Relaxed);
+        if Instant::now() >= self.deadline {
+            self.abort_flag.store(true, Ordering::Relaxed);
+            return false;
+        }
+        true
     }
     /// The evaluations since the start of the last generation (rule 2.3): of a generation cut
     /// short, or of the last one that ended
@@ -106,15 +152,18 @@ impl Budget {
     }
 }
 
-/// Sets the abort flag after max_seconds, stopped by dropping the returned sender
+/// The generations in a row without an evaluation after which an attempt has converged (rule 2.2)
+const STALL_GENERATIONS: usize = 10;
+
+/// Sets the abort flag at the deadline or later, stopped by dropping the returned sender
 fn start_timer(
     abort_flag: Arc<AtomicBool>,
-    max_seconds: f64,
+    deadline: Instant,
 ) -> (mpsc::Sender<()>, std::thread::JoinHandle<()>) {
     let (sender, receiver) = mpsc::channel::<()>();
     let handle = std::thread::spawn(move || {
         if let Err(mpsc::RecvTimeoutError::Timeout) =
-            receiver.recv_timeout(Duration::from_secs_f64(max_seconds))
+            receiver.recv_timeout(deadline.saturating_duration_since(Instant::now()))
         {
             abort_flag.store(true, Ordering::Relaxed);
         }
@@ -141,7 +190,7 @@ impl<G: Genotype> Generations<G> {
 impl<G: Genotype> StrategyReporter for Generations<G> {
     type Genotype = G;
     fn on_start<S: StrategyState<G>, C: StrategyConfig>(&mut self, _: &G, _: &S, _: &C) {
-        self.budget.end_generation();
+        self.budget.start_attempt();
     }
     fn on_generation_complete<S: StrategyState<G>, C: StrategyConfig>(
         &mut self,
@@ -352,9 +401,9 @@ fn run<R>(
     outcome: impl FnOnce(R) -> Outcome,
 ) {
     let abort_flag = Arc::new(AtomicBool::new(false));
-    let (timer, timer_handle) = start_timer(abort_flag.clone(), args.max_seconds);
     // the clock starts here (Budget::new)
-    let budget = Budget::new(args.max_evaluations, abort_flag);
+    let budget = Budget::new(args.max_evaluations, args.max_seconds, abort_flag.clone());
+    let (timer, timer_handle) = start_timer(abort_flag, budget.deadline);
     let result = solve(&budget);
     let time_s = budget.start.elapsed().as_secs_f64();
     drop(timer);
@@ -374,8 +423,9 @@ fn attempt_seed(seed: u64, restart: u64) -> u64 {
 
 /// `call_repeatedly` with a seed per run (see the top of the file): `once(seed)` runs the
 /// strategy and returns (its best genes, their fitness score, whether it is conclusive, its
-/// generations). Runs until one is conclusive (the target reached or the run aborted), and
-/// returns the best genes by the library's (minimized) score and the generations of all runs.
+/// generations). Runs until one is conclusive (the target reached or the run aborted by the
+/// budget or the time cap), and returns the best genes by the library's score (minimized; a
+/// maximized problem negates it) and the generations of all runs.
 fn restarts<T>(
     seed: u64,
     mut once: impl FnMut(u64) -> (Option<Vec<T>>, Option<FitnessValue>, bool, usize),
@@ -425,24 +475,34 @@ fn onemax(args: &Args, seed: u64) {
             // population 100 as in README.md "Quick Usage", which is this problem (100 genes,
             // count the true values, target 100). The only ending condition is the target
             // (with_max_stale_generations isn't set), so a run ends at the target or through the
-            // abort flag.
-            let evolve = Evolve::builder()
-                .with_genotype(genotype)
-                .with_fitness(OneMax(budget.clone()))
-                .with_target_fitness_score(target as FitnessValue)
-                .with_abort_flag(budget.abort_flag.clone())
-                .with_rng_seed_from_u64(seed)
-                .with_target_population_size(100)
-                .with_select(SelectTournament::new(0.5, 0.02, 4))
-                .with_crossover(CrossoverUniform::new(0.7, 0.8))
-                .with_mutate(MutateSingleGene::new(0.2))
-                .with_reporter(Generations::new(budget))
-                .call()
-                .unwrap();
-            (evolve.best_genes(), evolve.state.current_generation)
+            // abort flag, which a stall also sets (then the attempt restarts).
+            restarts(seed, |run_seed| {
+                let evolve = Evolve::builder()
+                    .with_genotype(genotype.clone())
+                    .with_fitness(OneMax(budget.clone()))
+                    .with_target_fitness_score(target as FitnessValue)
+                    .with_abort_flag(budget.abort_flag.clone())
+                    .with_rng_seed_from_u64(run_seed)
+                    .with_target_population_size(100)
+                    .with_select(SelectTournament::new(0.5, 0.02, 4))
+                    .with_crossover(CrossoverUniform::new(0.7, 0.8))
+                    .with_mutate(MutateSingleGene::new(0.2))
+                    .with_reporter(Generations::new(budget))
+                    .call()
+                    .unwrap();
+                let score = evolve.best_fitness_score();
+                let conclusive = score == Some(target as FitnessValue)
+                    || (budget.aborted() && !budget.resume_after_stall());
+                // maximized: restarts keeps the smallest
+                (
+                    evolve.best_genes(),
+                    score.map(|score| -score),
+                    conclusive,
+                    evolve.state.current_generation,
+                )
+            })
         },
         |(genes, generations)| {
-            let genes = genes.expect("the initial population is evaluated");
             let best = onemax_value(&genes);
             Outcome {
                 solver: "evolve",
@@ -491,7 +551,8 @@ fn nqueens(args: &Args, seed: u64) {
                     .call()
                     .unwrap();
                 let score = hill_climb.best_fitness_score();
-                let conclusive = score == Some(0) || budget.aborted();
+                let conclusive =
+                    score == Some(0) || (budget.aborted() && !budget.resume_after_stall());
                 (
                     hill_climb.best_genes(),
                     score,
@@ -600,7 +661,8 @@ fn real_evolve(args: &Args, seed: u64) {
                 .unwrap();
             let score = evolve.best_fitness_score();
             let conclusive =
-                score.is_some_and(|score| score <= scaled(REAL_TARGET)) || budget.aborted();
+                score.is_some_and(|score| score <= scaled(REAL_TARGET))
+                    || (budget.aborted() && !budget.resume_after_stall());
             (
                 evolve.best_genes(),
                 score,
@@ -655,7 +717,8 @@ fn real_hill_climb(args: &Args, seed: u64) {
                 .unwrap();
             let score = hill_climb.best_fitness_score();
             let conclusive =
-                score.is_some_and(|score| score <= scaled(REAL_TARGET)) || budget.aborted();
+                score.is_some_and(|score| score <= scaled(REAL_TARGET))
+                    || (budget.aborted() && !budget.resume_after_stall());
             (
                 hill_climb.best_genes(),
                 score,

@@ -15,7 +15,7 @@ Know a better way to solve one of these problems with Metaheuristics.jl? [Open a
   - a converged attempt restarts from a new random start with the seeds of rule 2.2; runs print `restarts`. The library's [`Restart`](https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/singleobjective/#Restart) replaces the population every 100 iterations whatever happens and keeps the base method's stops, so it isn't used;
   - the matched (multi-objective) scenarios have no convergence criterion: `BudgetTermination` only, and `f_tol = -1`.
 - **Bounds (rule 2.4):** `boxconstraints` for the continuous problems and BRKGA's random keys; the initial population within the bounds; repairs by `evo_boundary_repairer!` (ECA, DE: `DE.jl` line 205) and `reset_to_violated_bounds!` (PSO; the multi-objective algorithms through `GA_reproduction` in `NSGA2.jl`, and `SMS_EMOA.jl`).
-- **Rule 5.3:** `EARLY_SEEDS` ([line 411](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L411)) and `main`.
+- **Rule 5.3:** `EARLY_SEEDS` ([line 411](../../../benchmarks/adapters/metaheuristics_jl/bench.jl#L411)) and `main`, in the scenarios with a target.
 - **Time:** from the run's `Budget`, before `optimize` creates the initial population. Warm-up as rule 4.2.
 - **One thread:** [run.sh](../../../benchmarks/adapters/metaheuristics_jl/run.sh) runs Julia 1.13 with `--threads=1 --gcthreads=1,0` and BLAS with one thread.
 - **Seeds:** `Options(seed = seed)`, which seeds Julia's global generator, the library's own (`default_rng_mh`).

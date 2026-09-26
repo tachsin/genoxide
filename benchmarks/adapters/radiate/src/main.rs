@@ -19,8 +19,12 @@
 //! Every run ends only at the target, the budget or the time cap (rule 2.1): the adapter's
 //! `until` limit is the engine's only stop criterion, checked after every generation, and radiate
 //! has no stop criterion of its own (an engine without a limit runs forever,
-//! docs/source/engine/index.md, "Common Pitfalls"), neither a budget nor a convergence test, so
-//! no run needs a restart (rule 2.2).
+//! docs/source/engine/index.md, "Common Pitfalls"), neither a budget nor a convergence test.
+//! Rule 2.2: radiate evaluates only the individuals an alterer changed, so an attempt can go on
+//! without evaluating anything; after 10 generations in a row without an evaluation, the `until`
+//! limit ends the attempt, and the engine starts again from a new random population, seeded
+//! `(seed + 1) * 1_000_000 + restart`, keeping the budget and the best (a multi-objective run
+//! reports the last attempt's front).
 //! Bounds (rule 2.4): `FloatCodec::vector` draws the genes in the problem's range and sets it as
 //! their bounds, and radiate's float alterers write through `FloatGene::set_allele` or
 //! `safe_clamp`, which clamp to them. The fitness wrapper counts, without clipping, every
@@ -220,6 +224,8 @@ struct Budget {
     // the evaluations at the end of the last generation, and that generation's (rule 2.3)
     generation_end: AtomicUsize,
     last_generation: AtomicUsize,
+    // the generations in a row without an evaluation (rule 2.2)
+    idle: AtomicUsize,
 }
 
 impl Budget {
@@ -235,6 +241,7 @@ impl Budget {
             deadline: start + Duration::from_secs_f64(args.max_seconds),
             generation_end: AtomicUsize::new(0),
             last_generation: AtomicUsize::new(0),
+            idle: AtomicUsize::new(0),
         })
     }
 
@@ -289,6 +296,16 @@ impl Budget {
         let evaluations = self.evaluations();
         let end = self.generation_end.swap(evaluations, Ordering::Relaxed);
         self.last_generation.store(evaluations - end, Ordering::Relaxed);
+        if evaluations == end {
+            self.idle.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.idle.store(0, Ordering::Relaxed);
+        }
+    }
+
+    /// Whether the attempt has run `STALL_GENERATIONS` generations in a row without an evaluation
+    fn stalled(&self) -> bool {
+        self.idle.load(Ordering::Relaxed) >= STALL_GENERATIONS
     }
 
     /// The evaluations since the start of the last generation (rule 2.3): of a generation cut
@@ -323,32 +340,51 @@ struct Args {
     max_seconds: f64,
 }
 
-/// Builds the engine (the random initial population) and runs it until the budget is done,
-/// checked after every generation, where the generation's end is marked too. Returns the last
-/// generation.
-fn run_engine<C, T>(budget: &Arc<Budget>, engine: GeneticEngine<C, T>) -> Generation<C, T>
+/// The generations in a row without an evaluation after which an attempt has converged (rule 2.2)
+const STALL_GENERATIONS: usize = 10;
+
+/// The seed of an attempt (rule 2.2): the run's seed first, then (seed + 1) * 1_000_000 + restart
+fn attempt_seed(seed: u64, restart: u64) -> u64 {
+    if restart == 0 {
+        seed
+    } else {
+        (seed + 1) * 1_000_000 + restart
+    }
+}
+
+/// Builds the engine (the random initial population) and runs it until the budget is done or,
+/// with `stall`, the attempt has stalled, checked after every generation, where the generation's
+/// end is marked too. Returns the last generation.
+fn run_engine<C, T>(
+    budget: &Arc<Budget>,
+    engine: GeneticEngine<C, T>,
+    stall: bool,
+) -> Generation<C, T>
 where
     C: Chromosome + Clone + PartialEq + 'static,
     T: Clone + Send + Sync + 'static,
 {
     let stop = Arc::clone(budget);
+    stop.idle.store(0, Ordering::Relaxed);
     engine
         .iter()
         .until(move |_: GenerationView<C, T>| {
             stop.end_generation();
-            stop.done()
+            stop.done() || (stall && stop.stalled())
         })
         .last()
         .expect("radiate engine failed")
 }
 
 /// Prints a single-objective run: `best` is the value of `solution` (a JSON array)
+#[allow(clippy::too_many_arguments)]
 fn print_single(
     args: &Args,
     seed: u64,
     solver: &str,
     budget: &Budget,
     generations: usize,
+    restarts: u64,
     time_s: f64,
     best: f64,
     solution: String,
@@ -365,8 +401,13 @@ fn print_single(
         ),
         None => "null".to_string(),
     };
+    let restarts = if restarts > 0 {
+        format!(",\"restarts\":{restarts}")
+    } else {
+        String::new()
+    };
     println!(
-        "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"last_generation\":{},\"best\":{best:?},\"target\":{:?},\"success\":{},\"first_hit\":{first_hit},\"solution\":{solution}{outside}}}",
+        "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"last_generation\":{}{restarts},\"best\":{best:?},\"target\":{:?},\"success\":{},\"first_hit\":{first_hit},\"solution\":{solution}{outside}}}",
         args.problem,
         args.size,
         args.mode,
@@ -378,29 +419,43 @@ fn print_single(
 }
 
 /// Runs `build` (which gets the budget for its fitness function) with the seed, and prints the
-/// run. `report` gives the value and the JSON solution of radiate's best (`Generation::value`),
-/// after the clock.
+/// run. An attempt that stalls starts again with the next seed of `attempt_seed` (rule 2.2).
+/// `report` gives the value and the JSON solution of radiate's best of each attempt
+/// (`Generation::value`), after the clock; the run's best is the best of them.
 fn run_single<C, T>(
     args: &Args,
     seed: u64,
     solver: &str,
     minimize: bool,
     target: f64,
-    build: impl FnOnce(Arc<Budget>) -> GeneticEngine<C, T>,
-    report: impl FnOnce(&T) -> (f64, String),
+    build: impl Fn(Arc<Budget>) -> GeneticEngine<C, T>,
+    report: impl Fn(&T) -> (f64, String),
 ) where
     C: Chromosome + Clone + PartialEq + 'static,
     T: Clone + Send + Sync + 'static,
 {
-    let (budget, generation, time_s) = random_provider::scoped_seed(seed, || {
-        // the clock starts before the engine creates the initial population
-        let start = Instant::now();
-        let budget = Budget::new(args, start, minimize, target);
-        let generation = run_engine(&budget, build(Arc::clone(&budget)));
-        let time_s = start.elapsed().as_secs_f64();
-        (budget, generation, time_s)
-    });
-    let (mut best, mut solution) = report(generation.value());
+    // the clock starts before the engine creates the initial population
+    let start = Instant::now();
+    let budget = Budget::new(args, start, minimize, target);
+    let (mut bests, mut generations, mut restart) = (Vec::new(), 0, 0);
+    loop {
+        let generation = random_provider::scoped_seed(attempt_seed(seed, restart), || {
+            run_engine(&budget, build(Arc::clone(&budget)), true)
+        });
+        generations += generation.index();
+        bests.push(generation.value().clone());
+        if budget.done() {
+            break;
+        }
+        restart += 1;
+    }
+    let time_s = start.elapsed().as_secs_f64();
+    let better = |a: f64, b: f64| if minimize { a < b } else { a > b };
+    let (mut best, mut solution) = bests
+        .iter()
+        .map(report)
+        .reduce(|a, b| if better(b.0, a.0) { b } else { a })
+        .expect("an attempt");
     // radiate's best is chosen by its f32 score; if it doesn't reach the target in f64 while an
     // evaluated solution did, that solution is the run's best
     if let Some(hit) = budget.first_hit.get() {
@@ -413,7 +468,7 @@ fn run_single<C, T>(
             };
         }
     }
-    print_single(args, seed, solver, &budget, generation.index(), time_s, best, solution);
+    print_single(args, seed, solver, &budget, generations, restart, time_s, best, solution);
 }
 
 /// A JSON array of integers
@@ -602,7 +657,7 @@ fn run_real(args: &Args, seed: u64) {
             // bounds; every alterer writes through FloatGene::set_allele, which clamps to them
             // (radiate-core-1.3.1/src/genome/chromosomes/float.rs, lines 82-85)
             let builder = GeneticEngine::builder()
-                .codec(FloatCodec::vector(size, range))
+                .codec(FloatCodec::vector(size, range.clone()))
                 .raw_fitness_fn(move |genotype: &Genotype<FloatChromosome<f64>>| {
                     let x = alleles(genotype);
                     budget.check_bounds(&x, lower, upper);
@@ -738,10 +793,13 @@ fn run_front(args: &Args, seed: u64) {
     let rate = 1.0 / variables as f32;
 
     for solver in ["nsga2", "nsga3"] {
-        let (counter, generations, time_s, points, solutions) =
-            random_provider::scoped_seed(seed, || {
-                let start = Instant::now();
-                let counter: Arc<Budget> = Budget::new(args, start, true, f64::NEG_INFINITY);
+        // rule 2.2: an attempt that evaluates nothing for STALL_GENERATIONS generations starts
+        // again with the next seed of `attempt_seed`; the front is the last attempt's (rule 7.2)
+        let start = Instant::now();
+        let counter: Arc<Budget> = Budget::new(args, start, true, f64::NEG_INFINITY);
+        let (mut generations, mut restart) = (0, 0);
+        let (time_s, points, solutions) = loop {
+            let attempt = random_provider::scoped_seed(attempt_seed(seed, restart), || {
                 let fitness = Arc::clone(&counter);
                 let builder = GeneticEngine::builder()
                     .codec(FloatCodec::vector(variables, 0.0_f64..1.0))
@@ -779,7 +837,11 @@ fn run_front(args: &Args, seed: u64) {
                         ))
                         .build(),
                 };
-                let generation = run_engine(&counter, engine);
+                let generation = run_engine(&counter, engine, true);
+                generations += generation.index();
+                if !counter.done() {
+                    return None;
+                }
                 // the survivors of the last generation, as NSGA-II (NSGA-III) selects them
                 let population: &[Phenotype<FloatChromosome<f64>>] =
                     generation.population().as_ref();
@@ -796,13 +858,23 @@ fn run_front(args: &Args, seed: u64) {
                     .collect();
                 let points: Vec<Vec<f64>> =
                     solutions.iter().map(|x| function(x, objectives)).collect();
-                (counter, generation.index(), time_s, points, solutions)
+                Some((time_s, points, solutions))
             });
+            if let Some(attempt) = attempt {
+                break attempt;
+            }
+            restart += 1;
+        };
+        let restarts = if restart > 0 {
+            format!(",\"restarts\":{restart}")
+        } else {
+            String::new()
+        };
         let front = non_dominated(&points);
         let front_points: Vec<Vec<f64>> = front.iter().map(|&i| points[i].clone()).collect();
         let front_solutions: Vec<Vec<f64>> = front.iter().map(|&i| solutions[i].clone()).collect();
         println!(
-            "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"last_generation\":{},\"outside\":{},\"front\":{},\"solutions\":{}}}",
+            "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"last_generation\":{}{restarts},\"outside\":{},\"front\":{},\"solutions\":{}}}",
             args.problem,
             args.size,
             args.mode,

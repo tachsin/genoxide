@@ -25,9 +25,8 @@
 //!   reaches the target ("first_hit");
 //! - a run ends at the target, the evaluation budget or the time cap only (rule 2.1). On
 //!   convergence a method starts again (rule 2.2): DE and CMA-ES (IPOP) with their own restarts;
-//!   the others have no convergence criterion but genoxide's stall (10,000 generations without a
-//!   genome to evaluate), after which `solve` starts them again with the seed
-//!   `(seed + 1) * 1_000_000 + restart`;
+//!   every method after 10 generations in a row without a genome to evaluate, when `solve` starts
+//!   it again with the seed `(seed + 1) * 1_000_000 + restart`;
 //! - every evaluated solution stays inside the bounds, by genoxide's own bound handling, and the
 //!   adapter counts any outside them ("outside", rule 2.4);
 //! - the clock starts before the algorithm is built, which creates the random initial population,
@@ -43,7 +42,7 @@ use std::cell::Cell;
 use std::f64::consts::{E, PI};
 use std::io::BufRead;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------------------------
@@ -263,19 +262,38 @@ fn attempt_seed(seed: u64, restart: u64) -> u64 {
     }
 }
 
+/// The generations in a row without a genome to evaluate after which an attempt has converged
+/// (rule 2.2)
+const STALL_GENERATIONS: u64 = 10;
+
+/// A stop condition met after `STALL_GENERATIONS` generations in a row without an evaluation
+fn stalled() -> Stop {
+    // the evaluations after the last generation, and the generations in a row without a new one
+    let state = Mutex::new((0u64, 0u64));
+    Stop::custom(move |progress| {
+        let mut state = state.lock().expect("the stall state");
+        let idle = if progress.evaluations() == state.0 {
+            state.1 + 1
+        } else {
+            0
+        };
+        *state = (progress.evaluations(), idle);
+        idle >= STALL_GENERATIONS
+    })
+}
+
 /// Builds an algorithm with `build(seed)` and runs it with `fitness`, counting every call, every
 /// evaluated genome outside the bounds (`inside`) and the first evaluation that reaches the
 /// target, and prints the run. The clock starts before the algorithm is built (its random initial
 /// population) and stops when the run ends.
 ///
-/// Rule 2.2: genoxide's engine ends a run by itself only with `StopReason::Stalled`, when for
-/// 10,000 generations in a row every child was a copy of a parent, so nothing new was evaluated
-/// (AGENTS.md, Troubleshooting): a convergence criterion. The method then starts again from a new
-/// random start with the seed `(seed + 1) * 1_000_000 + restart`, keeping the best solution and
-/// counting every evaluation, until the target, the budget or the time cap. The engine stalls
-/// only when its stop conditions all need new evaluations (a target or an evaluation limit), so
-/// the time cap is an abort flag, set after the generation that reaches it, not `Stop::time`.
-/// CMA-ES (IPOP) and DE restart by themselves on their own convergence criteria, inside one run.
+/// Rule 2.2: a child identical to a parent inherits its fitness (AGENTS.md, Fitness functions), so
+/// a converged GA can run generations without a genome to evaluate. After `STALL_GENERATIONS` of
+/// them in a row, a `Stop::custom` condition ends the attempt (`StopReason::Custom`), and the
+/// method starts again from a new random start with the seed `(seed + 1) * 1_000_000 + restart`,
+/// keeping the best solution and counting every evaluation, until the target, the budget or the
+/// time cap. The time cap is an abort flag, set after the generation that reaches it. CMA-ES
+/// (IPOP) and DE restart by themselves on their own convergence criteria, inside one run.
 fn solve<A, G>(
     args: &Args,
     seed: u64,
@@ -324,7 +342,11 @@ where
     loop {
         let used = calls.load(Ordering::Relaxed);
         let outcome = Engine::new(build(attempt_seed(seed, restart))?, &counted)
-            .stop_when(Stop::target(target).or(Stop::evaluations(args.max_evaluations - used)))
+            .stop_when(
+                Stop::target(target)
+                    .or(Stop::evaluations(args.max_evaluations - used))
+                    .or(stalled()),
+            )
             .abort_flag(Arc::clone(&abort))
             .on_generation(|_| {
                 let evaluations = calls.load(Ordering::Relaxed);
@@ -336,7 +358,7 @@ where
             .run()?;
         generations += outcome.generations();
         reported += outcome.evaluations();
-        let stalled = outcome.stop_reason() == StopReason::Stalled;
+        let stalled = outcome.stop_reason() == StopReason::Custom;
         let score = |outcome: &Outcome<G>| outcome.best_fitness().score().unwrap_or(f64::NAN);
         if best
             .as_ref()
@@ -544,14 +566,17 @@ fn run_real(args: &Args, seed: u64) -> Result<()> {
 // Multi-objective runs
 // ---------------------------------------------------------------------------------------------
 
-// Builds and runs one multi-objective algorithm with `fitness`, counting every call, and prints
-// the non-dominated individuals of its final population (rule 7.2) and their solutions. A run
-// has a budget and no target; run.py computes the hypervolume the same way for every library.
+// Builds one multi-objective algorithm with `build(seed)` and runs it with `fitness`, counting
+// every call, and prints the non-dominated individuals of its final population (rule 7.2) and
+// their solutions. A run has a budget and no target; run.py computes the hypervolume the same way
+// for every library. None of these algorithms has a convergence criterion (rule 2.2); an attempt
+// that evaluates nothing for `STALL_GENERATIONS` generations in a row starts again with the seed
+// `(seed + 1) * 1_000_000 + restart`, and the front is the last attempt's.
 fn solve_front<A, const M: usize>(
     args: &Args,
     seed: u64,
     solver: &str,
-    build: impl FnOnce() -> Result<A>,
+    build: impl Fn(u64) -> Result<A>,
     fitness: fn(&Reals) -> [f64; M],
 ) -> Result<()>
 where
@@ -570,22 +595,35 @@ where
     // the last generation's evaluations (rule 2.3): the count after each generation, and the
     // generation's size
     let (evaluated, last_generation) = (Cell::new(0u64), Cell::new(0u64));
+    let cap = Duration::from_secs_f64(args.max_seconds);
+    let (mut generations, mut reported, mut restart) = (0, 0, 0);
     let start = Instant::now();
-    let outcome = MultiEngine::new(build()?, counted)
-        .stop_when(
-            Stop::evaluations(args.max_evaluations)
-                .or(Stop::time(Duration::from_secs_f64(args.max_seconds))),
-        )
-        .on_generation(|_| {
-            let evaluations = calls.load(Ordering::Relaxed);
-            last_generation.set(evaluations - evaluated.replace(evaluations));
-        })
-        .run()?;
+    let outcome = loop {
+        let used = calls.load(Ordering::Relaxed);
+        let outcome = MultiEngine::new(build(attempt_seed(seed, restart))?, &counted)
+            .stop_when(
+                Stop::evaluations(args.max_evaluations - used)
+                    .or(Stop::time(cap.saturating_sub(start.elapsed())))
+                    .or(stalled()),
+            )
+            .on_generation(|_| {
+                let evaluations = calls.load(Ordering::Relaxed);
+                last_generation.set(evaluations - evaluated.replace(evaluations));
+            })
+            .run()?;
+        generations += outcome.generations();
+        reported += outcome.evaluations();
+        if outcome.stop_reason() != StopReason::Custom
+            || calls.load(Ordering::Relaxed) >= args.max_evaluations
+            || start.elapsed() >= cap
+        {
+            break outcome;
+        }
+        restart += 1;
+    };
     let time_s = start.elapsed().as_secs_f64();
     let evaluations = calls.load(Ordering::Relaxed);
-    compare_counts(args, solver, seed, evaluations, outcome.evaluations());
-    // none of these algorithms has a convergence criterion (rule 2.2), and with a time limit the
-    // engine doesn't stall: every run ends at its budget or the time cap
+    compare_counts(args, solver, seed, evaluations, reported);
     // the non-dominated individuals of the final population, each with its solution
     let (front, solutions): (Vec<String>, Vec<String>) = outcome
         .front()
@@ -595,9 +633,14 @@ where
             Some((numbers(&values), individual.genome().json()))
         })
         .unzip();
+    let restarts = if restart > 0 {
+        format!(",\"restarts\":{restart}")
+    } else {
+        String::new()
+    };
     println!(
-        "{{{},\"last_generation\":{},\"outside\":{},\"front\":[{}],\"solutions\":[{}]}}",
-        args.header(solver, seed, time_s, outcome.generations(), evaluations),
+        "{{{},\"last_generation\":{}{restarts},\"outside\":{},\"front\":[{}],\"solutions\":[{}]}}",
+        args.header(solver, seed, time_s, generations, evaluations),
         last_generation.get(),
         outside.load(Ordering::Relaxed),
         front.join(","),
@@ -625,7 +668,7 @@ fn run_front_problem<const M: usize>(
     let mutation = || PolynomialMutation::per_gene(1.0 / variables as f64, 20.0);
     let objectives = [Minimize; M];
 
-    let nsga2 = || {
+    let nsga2 = |seed| {
         Nsga2::builder(real()?, objectives)
             .population_size(population)
             .crossover(SimulatedBinaryCrossover::new(15.0)?)
@@ -635,7 +678,7 @@ fn run_front_problem<const M: usize>(
             .build()
     };
     solve_front(args, seed, "nsga2", nsga2, fitness)?;
-    let nsga3 = || {
+    let nsga3 = |seed| {
         Nsga3::builder(real()?, objectives, das_dennis::<M>(divisions))
             .population_size(population)
             .crossover(SimulatedBinaryCrossover::new(30.0)?)
@@ -645,7 +688,7 @@ fn run_front_problem<const M: usize>(
             .build()
     };
     solve_front(args, seed, "nsga3", nsga3, fitness)?;
-    let spea2 = || {
+    let spea2 = |seed| {
         Spea2::builder(real()?, objectives)
             .population_size(population)
             .crossover(SimulatedBinaryCrossover::new(15.0)?)
@@ -655,7 +698,7 @@ fn run_front_problem<const M: usize>(
             .build()
     };
     solve_front(args, seed, "spea2", spea2, fitness)?;
-    let sms_emoa = || {
+    let sms_emoa = |seed| {
         SmsEmoa::builder(real()?, objectives)
             .population_size(population)
             .offspring(1)
@@ -666,7 +709,7 @@ fn run_front_problem<const M: usize>(
             .build()
     };
     solve_front(args, seed, "sms_emoa", sms_emoa, fitness)?;
-    let moead = || {
+    let moead = |seed| {
         let decomposition = if M == 2 {
             Decomposition::Tchebycheff
         } else {

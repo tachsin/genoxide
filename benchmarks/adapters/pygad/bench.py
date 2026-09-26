@@ -62,6 +62,8 @@ class Budget:
         else:
             self.bounds = None
         self.outside = 0
+        # the attempts after the first (rule 2.2)
+        self.restarts = 0
 
     def count(self, X):
         """Counts the evaluations of the rows of X (rule 3), and those outside the box (rule 2.4)."""
@@ -291,8 +293,23 @@ def single_objective(problem, size, mode):
     return config, function, False
 
 
+def attempt_seed(seed, restart):
+    """Rule 2.2: attempt 0 runs with the seed, restart r with (seed + 1) * 1_000_000 + r."""
+    return seed if restart == 0 else (seed + 1) * 1_000_000 + restart
+
+
+# an attempt whose generations evaluate nothing for this many in a row has converged (rule 2.2)
+STALL_GENERATIONS = 10
+
+
 def run_single(problem, size, mode, seed, budget):
-    """Runs PyGAD's GA; returns the number of generations."""
+    """Runs PyGAD's GA; returns the number of generations, over all attempts.
+
+    PyGAD doesn't evaluate a child identical to an elite or a parent (utils/engine.py,
+    cal_pop_fitness), so a converged population can go on without evaluating anything. After
+    STALL_GENERATIONS such generations in a row, on_generation ends the attempt ("stop"), and the
+    GA starts again from a new random population, seeded by attempt_seed (rule 2.2); the budget
+    keeps the best and counts every evaluation."""
     config, function, permutation = single_objective(problem, size, mode)
     # an invalid permutation (PyGAD couldn't remove a duplicate gene) scores worse than any
     # permutation, scaled by its missing values, as pygad/benchmarks/tsp.py does for tours
@@ -314,15 +331,26 @@ def run_single(problem, size, mode, seed, budget):
             fitness = numpy.where(valid, fitness, -worst * (1 + size - counts))
         return fitness.astype(float)
 
+    # the evaluations at the end of the last generation, and the generations in a row without one
+    stall = {"end": 0, "idle": 0}
+
     def on_generation(ga):
-        if budget.done():
+        stall["idle"] = stall["idle"] + 1 if budget.evaluations == stall["end"] else 0
+        stall["end"] = budget.evaluations
+        if budget.done() or stall["idle"] >= STALL_GENERATIONS:
             return "stop"
 
-    ga = pygad.GA(num_generations=GENERATIONS, fitness_func=fitness_func, on_generation=on_generation,
-                  on_fitness=budget.on_fitness, fitness_batch_size=config["sol_per_pop"],
-                  random_seed=seed, suppress_warnings=True, **config)
-    ga.run()
-    return ga.generations_completed
+    generations = 0
+    for restart in range(sys.maxsize):
+        stall.update(end=budget.evaluations, idle=0)
+        ga = pygad.GA(num_generations=GENERATIONS, fitness_func=fitness_func, on_generation=on_generation,
+                      on_fitness=budget.on_fitness, fitness_batch_size=config["sol_per_pop"],
+                      random_seed=attempt_seed(seed, restart), suppress_warnings=True, **config)
+        ga.run()
+        generations += ga.generations_completed
+        if budget.done():
+            return generations
+        budget.restarts += 1
 
 
 # -------------------------------------------------------------------------------------------------
@@ -385,7 +413,9 @@ def non_dominated(points):
 
 
 def run_front(problem, size, solver, seed, budget):
-    """Runs NSGA-II or NSGA-III; returns PyGAD's GA after the run."""
+    """Runs NSGA-II or NSGA-III; returns PyGAD's GA of the last attempt and the generations of
+    all attempts. An attempt that evaluates nothing for STALL_GENERATIONS generations in a row
+    starts again, as in run_single (rule 2.2); the front is the last attempt's."""
     function = FRONT_PROBLEMS[problem][0](size)
     n = FRONT_PROBLEMS[problem][1](size)
     objectives = FRONT_PROBLEMS[problem][2](size)
@@ -396,8 +426,13 @@ def run_front(problem, size, solver, seed, budget):
         budget.count(X)
         return -function(X)
 
+    # the evaluations at the end of the last generation, and the generations in a row without one
+    stall = {"end": 0, "idle": 0}
+
     def on_generation(ga):
-        if budget.exhausted():
+        stall["idle"] = stall["idle"] + 1 if budget.evaluations == stall["end"] else 0
+        stall["end"] = budget.evaluations
+        if budget.exhausted() or stall["idle"] >= STALL_GENERATIONS:
             return "stop"
 
     common = dict(
@@ -408,18 +443,24 @@ def run_front(problem, size, solver, seed, budget):
         sol_per_pop=2 * population_size, num_parents_mating=population_size,
         crossover_type="sbx",
         mutation_type="polynomial", polynomial_mutation_eta=20.0, mutation_probability=1.0 / n,
-        random_seed=seed, suppress_warnings=True,
+        suppress_warnings=True,
     )
-    if solver == "nsga2":
-        ga = pygad.GA(**common, keep_elitism=population_size,
-                      parent_selection_type="tournament_nsga2", K_tournament=2,
-                      sbx_crossover_eta=15.0, crossover_probability=0.9)
-    else:
-        ga = pygad.GA(**common, keep_elitism=0, keep_parents=-1,
-                      parent_selection_type="nsga3", nsga3_num_divisions=99 if objectives == 2 else 12,
-                      sbx_crossover_eta=30.0)
-    ga.run()
-    return ga
+    generations = 0
+    for restart in range(sys.maxsize):
+        stall.update(end=budget.evaluations, idle=0)
+        if solver == "nsga2":
+            ga = pygad.GA(**common, random_seed=attempt_seed(seed, restart), keep_elitism=population_size,
+                          parent_selection_type="tournament_nsga2", K_tournament=2,
+                          sbx_crossover_eta=15.0, crossover_probability=0.9)
+        else:
+            ga = pygad.GA(**common, random_seed=attempt_seed(seed, restart), keep_elitism=0, keep_parents=-1,
+                          parent_selection_type="nsga3", nsga3_num_divisions=99 if objectives == 2 else 12,
+                          sbx_crossover_eta=30.0)
+        ga.run()
+        generations += ga.generations_completed
+        if budget.exhausted():
+            return ga, generations
+        budget.restarts += 1
 
 
 def front_of(ga, solver):
@@ -439,7 +480,7 @@ def front_of(ga, solver):
 # -------------------------------------------------------------------------------------------------
 
 # rule 5.3: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took CAPPED of
-# it) without reaching the target runs no more seeds
+# it) without reaching the target runs no more seeds; only in a scenario with a target
 EARLY_SEEDS = 3
 CAPPED = 0.98
 
@@ -488,7 +529,7 @@ def main():
             start = time.perf_counter()
             budget = Budget(problem, size, max_evaluations, max_seconds, start)
             if problem in FRONT_PROBLEMS:
-                ga = run_front(problem, size, solver, seed, budget)
+                ga, generations = run_front(problem, size, solver, seed, budget)
             else:
                 generations = run_single(problem, size, mode, seed, budget)
             elapsed = time.perf_counter() - start
@@ -496,9 +537,11 @@ def main():
             result = {
                 "library": "pygad", "solver": solver, "problem": problem, "size": size, "mode": mode,
                 "seed": seed, "time_s": round(elapsed, 6),
-                "generations": ga.generations_completed if problem in FRONT_PROBLEMS else generations,
+                "generations": generations,
                 "evaluations": budget.evaluations, "last_generation": budget.last_generation(),
             }
+            if budget.restarts:
+                result.update(restarts=budget.restarts)
             if problem in FRONT_PROBLEMS:
                 # after the clock (rule 4.1)
                 front, solutions = front_of(ga, solver)
@@ -516,7 +559,8 @@ def main():
                     first_hit=budget.first_hit and {"evaluations": budget.first_hit[0],
                                                     "time_s": round(budget.first_hit[1], 6)},
                 )
-            capped[solver] += index < EARLY_SEEDS and not success and elapsed >= CAPPED * max_seconds
+            capped[solver] += (problem not in FRONT_PROBLEMS and index < EARLY_SEEDS and not success
+                               and elapsed >= CAPPED * max_seconds)
             print(json.dumps(result), flush=True)
 
 

@@ -90,6 +90,20 @@ With `parallel=True`, genoxide calls a non-batch function from several threads a
 
 An exception in the fitness function stops the run, and `run` raises it. So does Ctrl+C.
 
+## Choosing an algorithm
+
+| Problem | Genome | Algorithms, the first preferred |
+|---|---|---|
+| Yes / no choices (subsets) | `Binary` | `Ga` with `UniformCrossover()` or `PointCrossover(points)`, and `BitFlip` |
+| An order (tours, sequencing) | `Permutation` | `LocalSearch`, which often beats a GA on permutations; `Ga` with `OrderCrossover()` (sequences) or `EdgeRecombinationCrossover()` (tours) |
+| Reals in ranges | `Real` | `Cmaes`; `De`; `Ga` with `SimulatedBinaryCrossover(eta)` and `PolynomialMutation(eta)` |
+| Several objectives | any | `Nsga2` for 2 or 3 objectives; `Nsga3` or `Moead` for more |
+
+- `Cmaes` is the strongest general choice for continuous problems with up to a few hundred genes, especially when the genes interact. Its defaults need no tuning. For multimodal functions, add `restarts="ipop"` or `"bipop"`.
+- `De` often needs far fewer evaluations than a GA on continuous problems.
+- `Pso` with `ring=1` explores longer than the default global topology, for multimodal functions.
+- For smooth problems that need precise answers, the Rust library also has an evolution strategy, `Es`.
+
 ## Algorithms
 
 | Algorithm | Genomes | Settings |
