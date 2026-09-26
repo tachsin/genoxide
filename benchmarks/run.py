@@ -1081,7 +1081,13 @@ def draw_charts(results, out_dir, formats=("svg",)):
                     f"it · matched: the same algorithm in every library; idiomatic: each library's recommended "
                     f"methods · every method, the budgets and the rules: docs/benchmarks")
         subtitle = textwrap.fill(subtitle, 200)
-        header = 0.62 + subtitle.count("\n") * 0.14 + 0.2
+        # every library in the chart, with its version and language, as in the other charts
+        names = list(dict.fromkeys(name for name in list(ADAPTERS) + sorted(versions)
+                                   if any(key[1] == name for key in best)))
+        legend_columns = 5
+        legend_rows = (len(names) + legend_columns - 1) // legend_columns
+        legend_top = 0.62 + subtitle.count("\n") * 0.14
+        header = legend_top + legend_rows * 0.19 + 0.3
         panel_heights = [count * bar_height + 0.1 for count in tallest]
         height = header + sum(h + 0.42 + 0.62 for h in panel_heights)
         figure = plt.figure(figsize=(width, height))
@@ -1090,6 +1096,13 @@ def draw_charts(results, out_dir, formats=("svg",)):
                     fontsize=12.5, fontweight="bold", va="top")
         figure.text(margin / width, 1 - 0.40 / height, subtitle, fontsize=7.8, color="#555555", va="top",
                     linespacing=1.3)
+        figure.legend(handles=[Patch(color=colors[name], label=f"{LIBRARY_NAMES.get(name, name)} "
+                                                               f"{versions.get(name, '').split('+')[0]} "
+                                                               f"({languages.get(name, '')})")
+                               for name in names],
+                      loc="upper left", bbox_to_anchor=(margin / width, 1 - legend_top / height),
+                      ncol=legend_columns, frameon=False, fontsize=7.5, handlelength=0.9, handleheight=0.9,
+                      columnspacing=1.6, borderaxespad=0.0, labelspacing=0.35)
         y = height - header
         for panel_row, panel_height_ in zip(rows_of_panels, panel_heights):
             y -= 0.42 + panel_height_
