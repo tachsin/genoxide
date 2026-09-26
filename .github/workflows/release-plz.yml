@@ -2,7 +2,8 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    # main, and maintenance branches (release/0.7, ...) for patch releases of an older minor version
+    branches: [main, 'release/**']
 
 jobs:
   # after a release PR is merged: tag the version and create the GitHub release
