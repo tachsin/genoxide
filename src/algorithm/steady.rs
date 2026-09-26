@@ -52,17 +52,19 @@ pub trait Incremental {
 }
 
 /// A steady-state genetic algorithm for asynchronous evaluation, from
-/// [`GaBuilder::build_steady`](super::GaBuilder::build_steady): the same settings as a [`Ga`](super::Ga), but
-/// it proposes one child at a time and every result takes the place of the worst individual when
-/// it's not worse.
+/// [`GaBuilder::build_steady`](super::GaBuilder::build_steady): the same settings as a
+/// [`Ga`](super::Ga), but it proposes one child at a time and every result takes the place of the
+/// worst individual when it's not worse.
 ///
-/// - It first proposes the initial population: the initial genomes, then random ones. Once some of
-///   them are evaluated, every proposal is a child of two parents chosen by the selection operator
-///   from the individuals evaluated so far, recombined and mutated at the usual rates. A crossover
+/// - It first proposes the initial population: the initial genomes, then random ones. After that,
+///   until a result arrives, it proposes random genomes (with more workers than the population
+///   size). Then every proposal is a child of two parents chosen by the selection operator from
+///   the individuals evaluated so far, recombined and mutated at the usual rates. A crossover
 ///   gives two children: the first is proposed, and the second next, unless it's identical to the
 ///   first, or in the population by then. When both children are already in the population (e.g.
-///   copies of their parents), the parents are chosen and bred again, up to 100 times: such a
-///   child would add nothing. After that, a child in the population is proposed anyway.
+///   copies of their parents), the parents are chosen and bred again, up to 99 times (100
+///   breedings in all): such a child would add nothing. After that, a child in the population is
+///   proposed anyway.
 /// - A result joins the population until it holds `population_size` individuals. After that it
 ///   replaces the worst individual (the earliest on ties) if it's at least as good. A genome
 ///   already in the population is not added twice.

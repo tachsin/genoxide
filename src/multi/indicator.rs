@@ -407,7 +407,7 @@ fn mean_nearest<const M: usize>(
 /// `Δ = (Σₘ d(eₘ, front) + Σ |d(x) − d̄|) / (Σₘ d(eₘ, front) + N d̄)`, where `eₘ` is the point of
 /// the reference front that is worst in objective `m`, `d(x)` the distance of a point of `front`
 /// to its nearest neighbor in `front`, and `d̄` their mean. 1 for fronts of fewer than 2 points,
-/// or when every distance is 0, and NaN with infinite values.
+/// an empty reference front, or when every distance is 0, and NaN with infinite values.
 ///
 /// ```
 /// use genoxide::Objective::Minimize;

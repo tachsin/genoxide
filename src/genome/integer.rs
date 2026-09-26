@@ -95,6 +95,10 @@ pub struct Integer {
 impl Integer {
     /// Integer genomes with these bounds, one per gene. At least one gene, and every range must
     /// contain a value.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for no bounds or an empty range.
     pub fn new<I: IntoIterator<Item = RangeInclusive<i64>>>(bounds: I) -> Result<Self> {
         let bounds: Vec<_> = bounds.into_iter().collect();
         if bounds.is_empty() {
@@ -123,6 +127,10 @@ impl Integer {
     }
 
     /// Integer genomes of `len` genes, all with the same bounds.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a length of 0 or an empty range.
     pub fn uniform(len: usize, bounds: RangeInclusive<i64>) -> Result<Self> {
         Self::new(std::iter::repeat_n(bounds, len))
     }

@@ -1,4 +1,7 @@
 //! Observers: statistics, hall of fame and custom callbacks, notified after every generation.
+//!
+//! For a callback, pass a closure to [`Engine::on_generation`](crate::Engine::on_generation).
+//! For an observer that keeps state and can be reused, implement [`Observer`].
 
 pub mod hall_of_fame;
 pub mod report;
@@ -16,6 +19,38 @@ use crate::{Individual, Population};
 /// population.
 ///
 /// `&mut O` is an observer too, so an observer can be lent to an engine and read after the run.
+///
+/// ```
+/// use genoxide::observer::{Observer, Snapshot};
+/// use genoxide::prelude::*;
+///
+/// // the best score after every generation
+/// #[derive(Default)]
+/// struct BestScores(Vec<f64>);
+///
+/// impl Observer<Bits> for BestScores {
+///     fn observe(&mut self, snapshot: &Snapshot<'_, Bits>) {
+///         if let Some(score) = snapshot.best().fitness().and_then(|fitness| fitness.score()) {
+///             self.0.push(score);
+///         }
+///     }
+/// }
+///
+/// let ga = Ga::builder(Binary::new(16)?)
+///     .population_size(10)
+///     .select(Tournament::new(2)?)
+///     .crossover(UniformCrossover::new())
+///     .mutate(BitFlip::count(1)?)
+///     .seed(1)
+///     .build()?;
+/// let mut best = BestScores::default();
+/// let outcome = Engine::new(ga, |genome: &Bits| genome.count_ones() as f64)
+///     .stop_when(Stop::generations(10))
+///     .observe(&mut best)
+///     .run()?;
+/// assert_eq!(best.0.len() as u64, outcome.generations() + 1);
+/// # Ok::<(), genoxide::Error>(())
+/// ```
 pub trait Observer<G: Genome> {
     /// Called after a generation.
     fn observe(&mut self, snapshot: &Snapshot<'_, G>);

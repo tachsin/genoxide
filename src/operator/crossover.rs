@@ -30,6 +30,10 @@ impl PointCrossover {
     }
 
     /// k-point crossover, `points` at least 1.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for 0 points.
     pub fn k_point(points: usize) -> Result<Self> {
         if points == 0 {
             return Err(Error::InvalidSetting {
@@ -90,6 +94,10 @@ impl UniformCrossover {
 
     /// Uniform crossover exchanging each gene with probability `rate`, greater than 0 and less
     /// than 1.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a rate outside (0, 1).
     pub fn with_rate(rate: f64) -> Result<Self> {
         if rate < 1.0 {
             Ok(Self {
@@ -169,6 +177,10 @@ pub struct SimulatedBinaryCrossover {
 
 impl SimulatedBinaryCrossover {
     /// SBX with distribution index `eta`, 0 or more and finite.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a negative or non-finite `eta`.
     pub fn new(eta: f64) -> Result<Self> {
         if eta >= 0.0 && eta.is_finite() {
             Ok(Self { eta })
@@ -253,6 +265,10 @@ pub struct BlendCrossover {
 
 impl BlendCrossover {
     /// BLX-α with `alpha`, 0 or more and finite.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a negative or non-finite `alpha`.
     pub fn new(alpha: f64) -> Result<Self> {
         if alpha >= 0.0 && alpha.is_finite() {
             Ok(Self { alpha })
@@ -303,6 +319,10 @@ impl ArithmeticCrossover {
 
     /// Arithmetic crossover with a fixed `weight`, greater than 0 and less than 1, but not 0.5,
     /// which would give two identical children.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a weight outside (0, 1), or 0.5.
     pub fn with_weight(weight: f64) -> Result<Self> {
         if weight > 0.0 && weight < 1.0 && weight != 0.5 {
             Ok(Self {

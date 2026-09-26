@@ -54,10 +54,17 @@
 //! - `serde`: `Serialize` and `Deserialize` for algorithms and their parts, and `checkpoint`, to
 //!   save a run and resume it exactly
 //! - `cli`: the `genoxide` program, which runs an optimization described in a TOML or JSON file
-//!   with any program as the fitness function
+//!   with any program as the fitness function, see
+//!   [docs/cli.md](https://github.com/tachsin/genoxide/blob/main/docs/cli.md)
+//!
+//! For Python, the [`genoxide` package on PyPI](https://pypi.org/project/genoxide/) runs the
+//! algorithms with fitness functions in Python and numpy. Its source is in
+//! [python/](https://github.com/tachsin/genoxide/tree/main/python).
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+#![warn(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod algorithm;
 #[cfg(feature = "serde")]

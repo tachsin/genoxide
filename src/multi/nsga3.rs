@@ -639,7 +639,7 @@ where
 ///
 /// The crossover and the mutation are required. Defaults: a population size equal to the number
 /// of reference directions, `crossover_rate` 1.0 and `mutation_rate` 1.0 (as in Deb and Jain,
-/// and pymoo), a random initial population and a random seed.
+/// and pymoo), `eliminate_duplicates` true, a random initial population and a random seed.
 #[derive(Clone, Debug)]
 pub struct Nsga3Builder<R: Representation, const M: usize, C = Unset, X = Unset> {
     representation: R,

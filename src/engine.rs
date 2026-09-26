@@ -1,4 +1,16 @@
 //! Running an algorithm: fitness evaluation, stop conditions, observers and cancellation.
+//!
+//! - [`Engine`] runs a single-objective [`Algorithm`] one generation at a time.
+//! - [`AsyncEngine`] runs an [`Incremental`](crate::algorithm::Incremental) algorithm such as a
+//!   [`SteadyGa`](crate::algorithm::SteadyGa) on worker threads, each starting a new evaluation as
+//!   soon as it's done: for expensive fitness functions whose time varies.
+//! - [`MultiEngine`](crate::multi::MultiEngine) runs a
+//!   [`MultiObjectiveAlgorithm`](crate::multi::MultiObjectiveAlgorithm).
+//!
+//! `Engine` and `MultiEngine` evaluate the genomes of a generation one after the other by
+//! default. `parallel(true)` (the `parallel` feature) evaluates them on rayon's threads, with the
+//! same results: it pays off when the fitness function is expensive. A [`Batch`] fitness function
+//! gets the whole generation in one call, e.g. for a GPU or a remote service.
 
 pub mod asynchronous;
 pub mod stop;
@@ -22,6 +34,38 @@ use std::time::{Duration, Instant};
 /// `Option<f64>` (`None` for an invalid solution) or `(f64, f64)` (a score and a constraint
 /// violation, see [`Fitness::constrained`]), see [`IntoFitness`]. Fitness functions must be
 /// deterministic: the same genome always gets the same fitness.
+///
+/// Implement it for a fitness function with data of its own:
+///
+/// ```
+/// use genoxide::prelude::*;
+///
+/// // the squared distance to a point
+/// struct Distance {
+///     point: Vec<f64>,
+/// }
+///
+/// impl FitnessFunction<Reals> for Distance {
+///     type Output = f64;
+///
+///     fn evaluate(&self, genome: &Reals) -> f64 {
+///         genome.iter().zip(&self.point).map(|(x, p)| (x - p) * (x - p)).sum()
+///     }
+/// }
+///
+/// let ga = Ga::builder(Real::uniform(2, -5.0..=5.0)?)
+///     .population_size(50)
+///     .select(Tournament::new(3)?)
+///     .crossover(SimulatedBinaryCrossover::new(15.0)?)
+///     .mutate(PolynomialMutation::per_gene(0.5, 20.0)?)
+///     .minimize()
+///     .seed(1)
+///     .build()?;
+/// let distance = Distance { point: vec![1.0, -2.0] };
+/// let outcome = Engine::new(ga, distance).stop_when(Stop::generations(100)).run()?;
+/// assert!(outcome.best_fitness().score().unwrap() < 0.1);
+/// # Ok::<(), genoxide::Error>(())
+/// ```
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a fitness function for `{G}`",
     label = "not a fitness function for `{G}`",
@@ -133,7 +177,12 @@ where
     note = "convert other numbers with `as f64`"
 )]
 pub trait IntoFitness {
-    /// The fitness, or [`Error::NanFitness`] for NaN.
+    /// The fitness.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NanFitness`] for NaN, and [`Error::InvalidFitness`] for a negative constraint
+    /// violation.
     fn into_fitness(self) -> Result<Fitness>;
 }
 
@@ -519,6 +568,11 @@ where
     /// outcome without another generation. A run whose stop conditions need new evaluations stops
     /// with [`StopReason::Stalled`] after [`STALL_GENERATIONS`] generations in a row without a
     /// genome to evaluate.
+    ///
+    /// # Panics
+    ///
+    /// A panic in the fitness function propagates to the caller. It also panics if the algorithm
+    /// has no [`best`](Algorithm::best) individual after a [`tell`](Algorithm::tell).
     pub fn run(&mut self) -> Result<Outcome<A::Genome>> {
         if self.stop.is_none() && self.abort.is_none() {
             return Err(Error::MissingSetting {

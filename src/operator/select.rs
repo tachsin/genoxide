@@ -21,6 +21,10 @@ pub struct Tournament {
 impl Tournament {
     /// Tournaments of `size` individuals, at least 1 and at most 2^24, the largest population
     /// size.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a size of 0 or above 2^24.
     pub fn new(size: usize) -> Result<Self> {
         if size == 0 || size > MAX_SIZE {
             return Err(Error::InvalidSetting {
@@ -253,6 +257,10 @@ pub struct Rank {
 
 impl Rank {
     /// Linear ranking with selection `pressure` from 1 (uniform) to 2.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a pressure outside [1, 2].
     pub fn new(pressure: f64) -> Result<Self> {
         if (1.0..=2.0).contains(&pressure) {
             Ok(Self { pressure })
@@ -330,6 +338,10 @@ pub struct Truncation {
 
 impl Truncation {
     /// Selects from the best `fraction` of the population, greater than 0 and at most 1.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a fraction outside (0, 1].
     pub fn new(fraction: f64) -> Result<Self> {
         Ok(Self {
             fraction: check_rate("truncation_fraction", fraction)?,

@@ -87,20 +87,20 @@ impl<G: Genome> Population<G> {
     /// The position of the best evaluated individual (the first one on ties), or `None` if no
     /// individual is evaluated.
     pub fn best_index(&self, objective: Objective) -> Option<usize> {
-        let mut best: Option<usize> = None;
+        let mut best: Option<(usize, Fitness)> = None;
         for (index, individual) in self.individuals.iter().enumerate() {
             let Some(fitness) = individual.fitness() else {
                 continue;
             };
-            let is_better = best.is_none_or(|best| {
-                let best_fitness = self.individuals[best].fitness().expect("evaluated");
-                objective.is_better(fitness, best_fitness)
-            });
+            let is_better = match best {
+                Some((_, best_fitness)) => objective.is_better(fitness, best_fitness),
+                None => true,
+            };
             if is_better {
-                best = Some(index);
+                best = Some((index, fitness));
             }
         }
-        best
+        best.map(|(index, _)| index)
     }
 
     /// The best evaluated individual (the first one on ties), or `None` if no individual is

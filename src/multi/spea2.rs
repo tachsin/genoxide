@@ -444,7 +444,8 @@ where
 /// A builder for [`Spea2`], from [`Spea2::builder`].
 ///
 /// The population (archive) size, the crossover and the mutation are required. Defaults:
-/// `crossover_rate` 0.9, `mutation_rate` 1.0, a random initial population and a random seed.
+/// `crossover_rate` 0.9, `mutation_rate` 1.0, `eliminate_duplicates` true, a random initial
+/// population and a random seed.
 #[derive(Clone, Debug)]
 pub struct Spea2Builder<R: Representation, const M: usize, C = Unset, X = Unset> {
     representation: R,

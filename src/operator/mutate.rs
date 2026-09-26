@@ -72,6 +72,10 @@ pub struct BitFlip {
 impl BitFlip {
     /// Flips each bit independently with probability `rate` (greater than 0 and at most 1). A
     /// common choice is `1 / length`: one bit on average.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a rate outside (0, 1].
     pub fn per_gene(rate: f64) -> Result<Self> {
         Ok(Self {
             mode: Mode::per_gene("bit_flip_rate", rate)?,
@@ -80,6 +84,10 @@ impl BitFlip {
 
     /// Flips `count` distinct random bits, `count` at least 1. A genome with fewer bits has all of
     /// them flipped: the operator doesn't know the genome length when it's created.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a count of 0.
     pub fn count(count: usize) -> Result<Self> {
         Ok(Self {
             mode: Mode::count("bit_flip_count", count)?,
@@ -98,8 +106,8 @@ impl Mutate<Binary> for BitFlip {
 /// their bounds, different from the current one. Each gene with a probability, or `n` genes.
 ///
 /// A per-gene mutation changes no gene with probability `(1 − rate)^n`; in a genetic
-/// algorithm, such a child is a copy that inherits its parent's fitness without an evaluation. Genes whose bounds allow a single value are never
-/// changed.
+/// algorithm, such a child is a copy that inherits its parent's fitness without an evaluation.
+/// Genes whose bounds allow a single value are never changed.
 ///
 /// ```
 /// use genoxide::genome::{Integer, Integers, Representation};
@@ -121,6 +129,10 @@ pub struct UniformMutation {
 impl UniformMutation {
     /// Changes each gene independently with probability `rate` (greater than 0 and at most 1). A
     /// common choice is `1 / length`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a rate outside (0, 1].
     pub fn per_gene(rate: f64) -> Result<Self> {
         Ok(Self {
             mode: Mode::per_gene("uniform_mutation_rate", rate)?,
@@ -129,6 +141,10 @@ impl UniformMutation {
 
     /// Changes `count` distinct random genes, `count` at least 1. If fewer genes can change, all
     /// of them are changed: the operator doesn't know the representation when it's created.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a count of 0.
     pub fn count(count: usize) -> Result<Self> {
         Ok(Self {
             mode: Mode::count("uniform_mutation_count", count)?,
@@ -231,9 +247,9 @@ fn changed_gene(
 /// the bounds reachable without piling values up on them. Small steps make it the operator for
 /// fine-tuning, e.g. `sigma` 0.01 to 0.1.
 ///
-/// A picked gene always changes. A per-gene mutation changes no gene with probability `(1 − rate)^n`; in a genetic
-/// algorithm, such a child is a copy that inherits its parent's fitness without an evaluation. Genes whose bounds allow a
-/// single value are never changed.
+/// A picked gene always changes. A per-gene mutation changes no gene with probability
+/// `(1 − rate)^n`; in a genetic algorithm, such a child is a copy that inherits its parent's
+/// fitness without an evaluation. Genes whose bounds allow a single value are never changed.
 ///
 /// ```
 /// use genoxide::genome::{Real, Reals, Representation};
@@ -257,7 +273,12 @@ pub struct GaussianMutation {
 
 impl GaussianMutation {
     /// Mutates each gene with probability `rate` (greater than 0 and at most 1), with a standard
-    /// deviation of `sigma` (positive) times the gene's range, each gene independently.
+    /// deviation of `sigma` (positive and finite) times the gene's range, each gene independently.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a rate outside (0, 1], or a `sigma` that isn't positive and
+    /// finite.
     pub fn per_gene(rate: f64, sigma: f64) -> Result<Self> {
         Ok(Self {
             mode: Mode::per_gene("gaussian_mutation_rate", rate)?,
@@ -266,7 +287,11 @@ impl GaussianMutation {
     }
 
     /// Mutates `count` distinct random genes (at least 1; all genes that can change if there are
-    /// fewer), with a standard deviation of `sigma` (positive) times the gene's range.
+    /// fewer), with a standard deviation of `sigma` (positive and finite) times the gene's range.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a count of 0, or a `sigma` that isn't positive and finite.
     pub fn count(count: usize, sigma: f64) -> Result<Self> {
         Ok(Self {
             mode: Mode::count("gaussian_mutation_count", count)?,
@@ -307,9 +332,9 @@ impl Mutate<Real> for GaussianMutation {
 /// old one. Common values are 20 (the NSGA-II default) and 5 to 100. Steps shrink near the bounds,
 /// so the new value is always within them.
 ///
-/// A picked gene always changes. A per-gene mutation changes no gene with probability `(1 − rate)^n`; in a genetic
-/// algorithm, such a child is a copy that inherits its parent's fitness without an evaluation. Genes whose bounds allow a
-/// single value are never changed.
+/// A picked gene always changes. A per-gene mutation changes no gene with probability
+/// `(1 − rate)^n`; in a genetic algorithm, such a child is a copy that inherits its parent's
+/// fitness without an evaluation. Genes whose bounds allow a single value are never changed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PolynomialMutation {
@@ -319,8 +344,12 @@ pub struct PolynomialMutation {
 
 impl PolynomialMutation {
     /// Mutates each gene with probability `rate` (greater than 0 and at most 1), with
-    /// distribution index `eta` (0 or more), each gene independently. A common choice is `rate`
-    /// `1 / length`, `eta` 20, as in NSGA-II.
+    /// distribution index `eta` (0 or more and finite), each gene independently. A common choice
+    /// is `rate` `1 / length`, `eta` 20, as in NSGA-II.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a rate outside (0, 1], or a negative or non-finite `eta`.
     pub fn per_gene(rate: f64, eta: f64) -> Result<Self> {
         Ok(Self {
             mode: Mode::per_gene("polynomial_mutation_rate", rate)?,
@@ -329,7 +358,11 @@ impl PolynomialMutation {
     }
 
     /// Mutates `count` distinct random genes (at least 1; all genes that can change if there are
-    /// fewer), with distribution index `eta` (0 or more).
+    /// fewer), with distribution index `eta` (0 or more and finite).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a count of 0, or a negative or non-finite `eta`.
     pub fn count(count: usize, eta: f64) -> Result<Self> {
         Ok(Self {
             mode: Mode::count("polynomial_mutation_count", count)?,
@@ -429,6 +462,10 @@ impl SelfAdaptiveMutation {
 
     /// Self-adaptive mutation with the learning rate `tau` (positive and finite): how fast the
     /// step size changes.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a `tau` that isn't positive and finite.
     pub fn with_learning_rate(tau: f64) -> Result<Self> {
         Ok(Self {
             learning_rate: Some(check_positive("learning_rate", tau)?),
@@ -438,6 +475,10 @@ impl SelfAdaptiveMutation {
 
     /// The smallest step size (positive and finite; 1e-12 by default), below which the step
     /// size doesn't shrink. A minimum above 10, the largest step size, is 10.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a minimum that isn't positive and finite.
     pub fn with_min_step(self, min_step: f64) -> Result<Self> {
         Ok(Self {
             min_step: check_positive("min_step", min_step)?.min(MAX_STEP),
@@ -522,6 +563,10 @@ impl SwapMutation {
     }
 
     /// Swaps `count` disjoint pairs of positions, at least 1.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a count of 0.
     pub fn count(count: usize) -> Result<Self> {
         if count == 0 {
             return Err(Error::InvalidSetting {

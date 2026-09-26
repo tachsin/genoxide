@@ -8,7 +8,7 @@
 //! |---|---|---|
 //! | [`Binary`] | [`Bits`] | bits, packed 64 per word |
 //! | [`Integer`] | [`Integers`] | `i64`, inclusive bounds per gene |
-//! | [`Real`] | [`Reals`] | `f64`, inclusive finite bounds per gene |
+//! | [`Real`] | [`Reals`] | `f64`, inclusive bounds per gene, of finite width |
 //! | [`Permutation`] | [`Order`] | an ordering of `0..n` |
 //! | [`AdaptiveReal`] | [`AdaptiveReals`] | `f64` like [`Real`], plus a mutation step size |
 
@@ -44,6 +44,57 @@ pub trait Genome: Clone + Debug + PartialEq + Eq + Hash + Send + Sync {
 }
 
 /// The space of genomes of a problem, e.g. [`Binary`] genomes of a given length.
+///
+/// Implement it, with a [`Genome`], for a space of your own; then implement
+/// [`Crossover`](crate::operator::Crossover) and [`Mutate`](crate::operator::Mutate) for it.
+///
+/// ```
+/// use genoxide::genome::{Genome, Representation};
+/// use genoxide::{Error, Result, StreamRng};
+/// use rand::RngExt;
+///
+/// // a word of lowercase letters
+/// #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// struct Word(Vec<u8>);
+///
+/// impl Genome for Word {
+///     fn len(&self) -> usize {
+///         self.0.len()
+///     }
+/// }
+///
+/// // the words of `len` letters
+/// #[derive(Clone, Debug)]
+/// struct Words {
+///     len: usize,
+/// }
+///
+/// impl Representation for Words {
+///     type Genome = Word;
+///
+///     fn genome_len(&self) -> usize {
+///         self.len
+///     }
+///
+///     fn random_genome(&self, rng: &mut StreamRng) -> Word {
+///         Word((0..self.len).map(|_| rng.random_range(b'a'..=b'z')).collect())
+///     }
+///
+///     fn validate(&self, word: &Word) -> Result<()> {
+///         if word.0.len() == self.len && word.0.iter().all(u8::is_ascii_lowercase) {
+///             Ok(())
+///         } else {
+///             let reason = format!("not a word of {} lowercase letters", self.len);
+///             Err(Error::InvalidGenome { reason })
+///         }
+///     }
+/// }
+///
+/// let words = Words { len: 5 };
+/// let word = words.random_genome(&mut StreamRng::seed_from_u64(0));
+/// assert!(words.validate(&word).is_ok());
+/// assert!(words.validate(&Word(b"Hello".to_vec())).is_err());
+/// ```
 pub trait Representation: Clone + Debug + Send + Sync {
     /// The genome type of this representation.
     type Genome: Genome;
@@ -55,6 +106,10 @@ pub trait Representation: Clone + Debug + Send + Sync {
     fn random_genome(&self, rng: &mut StreamRng) -> Self::Genome;
 
     /// Checks that a genome belongs to this space, e.g. a genome provided as a seed.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidGenome`](crate::Error::InvalidGenome) for a genome outside the space.
     fn validate(&self, genome: &Self::Genome) -> Result<()>;
 }
 
@@ -86,6 +141,11 @@ pub trait SwapGenes: Genome {
 
     /// Exchanges each gene with `other` with probability `rate` (uniform crossover). `rate` is in
     /// `[0, 1]`.
+    ///
+    /// # Panics
+    ///
+    /// If the genomes have different lengths and a gene is exchanged ([`Bits`] checks the lengths
+    /// first).
     fn swap_uniform(&mut self, other: &mut Self, rate: f64, rng: &mut StreamRng) {
         let chance = crate::rng::Chance::new(rate);
         rng.chosen(chance, self.len(), |_, index| self.swap_gene(other, index));

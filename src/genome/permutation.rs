@@ -26,6 +26,10 @@ pub struct Order {
 
 impl Order {
     /// The ordering `genes`, which must contain every number of `0..genes.len()` once.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidGenome`] for a gene out of range or repeated.
     pub fn new(genes: Vec<usize>) -> Result<Self> {
         let mut seen = vec![false; genes.len()];
         for &gene in &genes {
