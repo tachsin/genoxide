@@ -13,12 +13,25 @@ import { BLOB_BASE, getRepoFile, getRepoFiles } from "./github";
  */
 export const BENCHMARK_CHARTS_FILE = "docs/benchmarks/charts.json";
 
+/** What the overall score is, under its title: rule 8.5 of docs/benchmarks/rules.md, in short. */
+const OVERALL_CAPTION =
+  "How fast each library solves the 14 scenarios, in one number. In each scenario it runs, a library gets the fastest library's time divided by its own: 1 for the fastest. " +
+  "Its time is its fastest method's expected time to the target or, with several objectives, its fastest method's time for the budget among those within 1% of the best hypervolume; " +
+  "a scenario it doesn't solve counts twice the time cap. The score is 100 times the geometric mean of these ratios. Hover a bar for its ratio in each scenario.";
+
 /**
  * The interactive charts, in order: each a `kind` of component
  * (components/projects/genoxide/benchmarks/charts.jsx) and its `views`, the
  * charts of charts.json it can switch between, each with its SVG `file`.
  */
 export const BENCHMARK_CHARTS = [
+  {
+    id: "overall",
+    kind: "overall",
+    title: "Overall score",
+    caption: OVERALL_CAPTION,
+    views: [{ data: "overall", label: "Score", file: "docs/benchmarks/overall.svg" }],
+  },
   {
     id: "summary",
     kind: "summary",
@@ -59,6 +72,13 @@ export const BENCHMARK_CHARTS = [
 /** Without charts.json (a pin from before it): the harness's SVG charts, as images. */
 export const BENCHMARK_IMAGES = [
   {
+    id: "overall",
+    title: "Overall score",
+    caption: OVERALL_CAPTION.replace(" Hover a bar for its ratio in each scenario.", ""),
+    file: "docs/benchmarks/overall.svg",
+    wide: true,
+  },
+  {
     id: "summary",
     title: "Time to target: each library's fastest method",
     caption: "Each bar is a library's fastest method on that problem, single-threaded on the same machine, 10 seeds.",
@@ -90,6 +110,15 @@ export const BENCHMARK_IMAGES = [
     file: "docs/benchmarks/hypervolume.svg",
   },
 ];
+
+/**
+ * The SVG charts of BENCHMARK_IMAGES that the pinned commit has (all of them
+ * when GitHub can't be reached): overall.svg is newer than the others.
+ */
+export async function getBenchmarkImages() {
+  const files = await getRepoFiles();
+  return files ? BENCHMARK_IMAGES.filter((image) => files.has(image.file)) : BENCHMARK_IMAGES;
+}
 
 /** The problems, as in benchmarks/README.md. */
 export const BENCHMARK_PROBLEMS = {

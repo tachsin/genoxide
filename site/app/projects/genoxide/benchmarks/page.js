@@ -4,9 +4,9 @@ import Breadcrumbs from "@/components/projects/Breadcrumbs";
 import JsonLd from "@/components/projects/JsonLd";
 import {
   BENCHMARK_CHARTS,
-  BENCHMARK_IMAGES,
   BENCHMARK_PROBLEMS,
   getBenchmarkChartData,
+  getBenchmarkImages,
   getBenchmarkLibraryPages,
 } from "@/lib/projects/genoxide/benchmarks";
 import { GENOXIDE_LINKS, GENOXIDE_OG_IMAGE, GENOXIDE_PATH } from "@/lib/projects/genoxide/meta";
@@ -60,7 +60,11 @@ const DOCS = [
 ];
 
 export default async function BenchmarksPage() {
-  const [libraries, data] = await Promise.all([getBenchmarkLibraryPages(), getBenchmarkChartData()]);
+  const [libraries, data, images] = await Promise.all([
+    getBenchmarkLibraryPages(),
+    getBenchmarkChartData(),
+    getBenchmarkImages(),
+  ]);
 
   return (
     <main className="proj-container pt-10 pb-8 sm:pt-14">
@@ -121,8 +125,8 @@ export default async function BenchmarksPage() {
         {data ? (
           <p className="proj-lead mt-2 mb-5 text-sm">
             The published run of {data.run.date}: {data.run.platform}, single-threaded, {data.run.seeds} seeds per
-            scenario. Hover a bar, or focus a chart and use the arrow keys, for its numbers; select a library to
-            highlight it in every chart.
+            scenario. The overall score comes first, then each measure per scenario. Hover a bar, or focus a chart and
+            use the arrow keys, for its numbers; select a library to highlight it in every chart.
           </p>
         ) : (
           <p className="proj-lead mt-2 mb-5 text-sm">
@@ -140,7 +144,7 @@ export default async function BenchmarksPage() {
         )}
         <BenchmarkCharts
           charts={BENCHMARK_CHARTS}
-          images={BENCHMARK_IMAGES}
+          images={images}
           data={data}
           resultsUrl={GENOXIDE_LINKS.benchmarkResults}
         />

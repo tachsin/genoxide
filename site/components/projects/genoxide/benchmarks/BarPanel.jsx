@@ -3,7 +3,7 @@
 import { useId, useMemo, useState } from "react";
 import { linear, logarithmic, logTicks, ticks } from "../player/chart-kit";
 import { Axes, PlotBox, TipRows, Tooltip } from "../player/chart-parts";
-import { barNotes, exactValue, QUANTITY_NAMES, tickFormat } from "./format";
+import { barNotes, exactValue, QUANTITY_NAMES, ratioText, tickFormat } from "./format";
 import { useHighlight } from "./Highlight";
 
 /**
@@ -13,8 +13,10 @@ import { useHighlight } from "./Highlight";
  * zoomed where the harness zoomed it (`axis_from`). Every number comes from
  * charts.json: a bar's label is its `text`, as in the SVG chart.
  *
- * Hover a bar, or focus the panel and use the arrow keys, for its numbers.
- * The highlighted library (the legend's) dims the others.
+ * Hover a bar, or focus the panel and use the arrow keys, for its numbers:
+ * for an overall score, its speed ratio in each scenario too (`ratios`, the
+ * scenarios' titles from the panel's `scenarios`). The highlighted library
+ * (the legend's) dims the others.
  */
 
 const ROW = 18;
@@ -23,13 +25,14 @@ const TOP = 4;
 const BOTTOM = 24;
 const CHAR = 5.9; // average width of a character of the 11px labels
 const GENOXIDE = new Set(["genoxide", "genoxide_python"]);
+const seconds = tickFormat("seconds");
 
 function fit(text, room) {
   const chars = Math.max(3, Math.floor(room / CHAR));
   return text.length <= chars ? text : `${text.slice(0, chars - 1)}…`;
 }
 
-export default function BarPanel({ panel, quantity, libraries, limit = Infinity, label }) {
+export default function BarPanel({ panel, quantity, libraries, limit = Infinity, label, room }) {
   const { focus } = useHighlight();
   const [expanded, setExpanded] = useState(false);
   const [active, setActive] = useState(null);
@@ -55,10 +58,16 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
       const lo = 10 ** Math.floor(Math.log10(Math.min(...positive) / 2));
       return [lo, Math.max(...positive) * 1.05];
     }
-    const hi = values.length ? Math.max(...values) : 1;
     const lo = zoomed ? panel.axis_from : 0;
+    // a fixed end, e.g. 100 for a score
+    if (typeof panel.axis_to === "number") return [lo, panel.axis_to];
+    const hi = values.length ? Math.max(...values) : 1;
     return [lo, hi + (hi - lo) * 0.06 || 1];
-  }, [all, panel.log, panel.axis_from]);
+  }, [all, panel.log, panel.axis_from, panel.axis_to]);
+  const titles = useMemo(
+    () => Object.fromEntries((panel.scenarios ?? []).map((scenario) => [scenario.key, scenario.title])),
+    [panel.scenarios],
+  );
 
   const format = tickFormat(quantity);
   const height = TOP + bars.length * ROW + BOTTOM;
@@ -102,11 +111,15 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
           label={summary}
           overlay={({ width, height: box }) => {
             if (!activeBar) return null;
-            const geometry = layout(width, box, domain, panel.log);
+            const geometry = layout(width, box, domain, panel.log, room);
             const row = bars.indexOf(activeBar);
             const end = activeBar.value === null ? geometry.area.left : geometry.x(Math.max(activeBar.value, domain[0]));
+            const ratios = Array.isArray(activeBar.ratios) ? activeBar.ratios : null;
+            // a tooltip with a row per scenario starts higher, to stay beside the panel
+            const y = TOP + row * ROW + ROW / 2;
+            const top = ratios ? Math.max(12, Math.min(y, box - (ratios.length + 6) * 15)) : y;
             return (
-              <Tooltip x={Math.min(end, width - 40)} y={TOP + row * ROW + ROW / 2} width={width}>
+              <Tooltip x={Math.min(end, width - 40)} y={top} width={width} wide={Boolean(ratios)}>
                 <p className="mb-1 font-semibold">{activeBar.label}</p>
                 <TipRows
                   rows={[
@@ -122,12 +135,30 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
                     {note}
                   </p>
                 ))}
+                {ratios ? (
+                  <>
+                    <p className="mt-1.5 mb-0.5 text-base-content/60">Speed ratio per scenario (1: the fastest)</p>
+                    <dl className="grid grid-cols-[auto_auto_auto] gap-x-2.5 gap-y-px text-[11px]">
+                      {ratios.map((ratio) => (
+                        <div key={ratio.scenario} className="contents">
+                          <dt className="text-base-content/65">{titles[ratio.scenario] ?? ratio.scenario}</dt>
+                          <dd className={`text-right font-medium tabular-nums ${ratio.penalized ? "text-base-content/50" : ""}`}>
+                            {ratioText(ratio.ratio)}
+                          </dd>
+                          <dd className="text-base-content/55">
+                            {ratio.penalized ? "unsolved" : `${ratio.method ?? ratio.solver}, ${seconds(ratio.time)}`}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </>
+                ) : null}
               </Tooltip>
             );
           }}
         >
           {({ width, height: box }) => {
-            const { area, x } = layout(width, box, domain, panel.log);
+            const { area, x } = layout(width, box, domain, panel.log, room);
             const xTicks = panel.log
               ? thin(logTicks(domain[0], domain[1]), area)
               : ticks(domain[0], domain[1], Math.max(2, Math.floor((area.right - area.left) / 70)));
@@ -242,10 +273,13 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
   );
 }
 
-/** The plot area and value scale of a panel: labels on the left, room for the values on the right. */
-function layout(width, height, domain, log) {
+/**
+ * The plot area and value scale of a panel: labels on the left, room for the
+ * values on the right (`room` px at most, for longer ones, up to 30% of the width).
+ */
+function layout(width, height, domain, log, room) {
   const left = Math.round(Math.min(180, Math.max(96, width * 0.4)));
-  const right = width - Math.min(64, Math.max(52, width * 0.12));
+  const right = width - (room ? Math.min(room, width * 0.3) : Math.min(64, Math.max(52, width * 0.12)));
   const area = { left, right: Math.max(left + 20, right), top: TOP, bottom: height - BOTTOM };
   return { area, x: (log ? logarithmic : linear)(domain, [area.left, area.right]) };
 }

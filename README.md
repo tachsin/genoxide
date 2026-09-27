@@ -7,6 +7,7 @@
 [![Docs.rs](https://img.shields.io/docsrs/genoxide)](https://docs.rs/genoxide)
 [![CI](https://github.com/tachsin/genoxide/actions/workflows/ci.yml/badge.svg)](https://github.com/tachsin/genoxide/actions/workflows/ci.yml)
 [![License](https://img.shields.io/crates/l/genoxide.svg)](#license)
+[![Benchmarks](https://img.shields.io/badge/benchmarks-16_libraries-ce422b)](https://tachsin.gr/projects/genoxide/benchmarks)
 
 **Evolutionary computation for Rust: genetic algorithms, evolution strategies, differential evolution, particle swarms, local search and multi-objective optimization in one library.**
 
@@ -68,11 +69,13 @@ See [python/README.md](python/README.md) for the algorithms, operators and numpy
 
 ## Benchmarks
 
-genoxide and its Python package are benchmarked with 15 other libraries in Rust, C++, Python, Java and Julia. Every library runs the same problems under the same public [rules](docs/benchmarks/rules.md). The [methodology](benchmarks/README.md) and the [page for each library](docs/benchmarks/libraries/) give the methods and settings.
+genoxide and its Python package are benchmarked with 15 other libraries in Rust, C++, Python, Java and Julia, on 14 scenarios under the same public [rules](docs/benchmarks/rules.md): single-threaded on the same machine, 10 seeds each.
 
-[![Time to target: each library's fastest method](docs/benchmarks/summary.svg)](docs/benchmarks/results.md)
+[![Overall score: each library's speed to a solution over the 14 scenarios](docs/benchmarks/overall.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
 
-Each bar is a library's fastest method on that problem, single-threaded on the same machine, 10 seeds. Every method, the multi-objective fronts and the full tables: [results](docs/benchmarks/results.md).
+The overall score is 100 times the geometric mean, over the scenarios a library runs, of the fastest library's time divided by its own ([rule 8.5](docs/benchmarks/rules.md#8-reporting)). The time is its fastest method's expected time to the target, or, with several objectives, its fastest method's time for the budget among those within 1% of the best hypervolume; a scenario it doesn't solve counts twice the time cap.
+
+**Interactive results, every chart and table: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).** The [methodology](benchmarks/README.md) and the [page for each library](docs/benchmarks/libraries/) give the methods and settings, and [results.md](docs/benchmarks/results.md) has the full tables.
 
 ## Links
 
@@ -84,6 +87,7 @@ Each bar is a library's fastest method on that problem, single-threaded on the s
 - [AGENTS.md](AGENTS.md): a guide for AI coding assistants
 - [ROADMAP.md](ROADMAP.md): what's planned
 - [docs/cli.md](docs/cli.md): the `genoxide` program
+- [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks): the benchmark results, interactive
 - [Benchmarks](docs/benchmarks/): rules, methodology and results
 - [CONTRIBUTING.md](CONTRIBUTING.md): pull requests and releases
 

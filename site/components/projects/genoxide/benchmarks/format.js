@@ -3,7 +3,7 @@ import { formatTick, formatValue } from "../player/chart-kit";
 /**
  * Number formats of the benchmark charts, by the quantity charts.json gives
  * each chart ("seconds", "evaluations", "instructions", "hypervolume",
- * "distance"). The bars' own labels are the harness's (`text`), so they read
+ * "distance", "score"). The bars' own labels are the harness's (`text`), so they read
  * as in its SVG charts; these are for axes and tooltips.
  */
 
@@ -17,6 +17,7 @@ export const QUANTITY_NAMES = {
   instructions: "Instructions per evaluation",
   hypervolume: "Hypervolume",
   distance: "Distance to the optimum",
+  score: "Score",
 };
 
 /** A value in full (6 significant digits, as stored), with its unit. */
@@ -33,7 +34,11 @@ export function exactValue(value, quantity) {
 /** A tick of a chart's value axis. */
 export function tickFormat(quantity) {
   if (quantity === "seconds") {
-    return (v) => (v < 1e-3 ? `${short.format(v * 1e6)} µs` : v < 1 ? `${short.format(v * 1e3)} ms` : `${short.format(v)} s`);
+    return (value) => {
+      // rounded first, so that 999.7 µs reads 1 ms, not 1,000 µs
+      const v = Number(value.toPrecision(3));
+      return v < 1e-3 ? `${short.format(v * 1e6)} µs` : v < 1 ? `${short.format(v * 1e3)} ms` : `${short.format(v)} s`;
+    };
   }
   if (quantity === "evaluations" || quantity === "instructions") {
     return (v) => {
@@ -48,6 +53,14 @@ export function tickFormat(quantity) {
     };
   }
   return formatTick;
+}
+
+/** A speed ratio of the overall score, in (0, 1]: 2 significant digits, e.g. 0.68, 0.00012 or 5.5e-6. */
+export function ratioText(ratio) {
+  if (ratio >= 1) return "1";
+  // 3 digits just below 1, so that only the fastest reads 1
+  if (ratio >= 1e-4) return ratio.toPrecision(ratio >= 0.995 ? 3 : 2).replace(/0+$/, "").replace(/\.$/, "");
+  return ratio.toExponential(1);
 }
 
 /** A share of the budget, e.g. 0.07 as "7%". */
@@ -71,6 +84,12 @@ export function barNotes(bar) {
     );
   }
   if (bar.ended_on_cap) notes.push("these are the runs the time cap stopped");
+  // an overall score: how many scenarios the library runs and solves
+  if (typeof bar.of === "number" && typeof bar.scenarios === "number") {
+    notes.push(
+      `runs ${bar.scenarios} of the ${bar.of} scenarios` + (typeof bar.solved === "number" ? `, solves ${bar.solved}` : ""),
+    );
+  }
   if (bar.below_axis) notes.push("below the axis's start");
   return notes;
 }

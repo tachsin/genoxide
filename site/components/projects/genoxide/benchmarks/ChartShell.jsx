@@ -3,7 +3,7 @@
 import { ExternalLink, X } from "lucide-react";
 import { useState } from "react";
 import BarPanel from "./BarPanel";
-import { barNotes, QUANTITY_NAMES } from "./format";
+import { barNotes, QUANTITY_NAMES, ratioText, tickFormat } from "./format";
 import { useHighlight } from "./Highlight";
 
 /**
@@ -17,9 +17,10 @@ import { useHighlight } from "./Highlight";
  * @param {Record<string, { name: string, version: string, language: string, color: string }>} props.libraries
  * @param {number} [props.limit]  bars per panel before "show all"
  * @param {string} [props.grid]  the panels' grid classes, by the chart's container width
+ * @param {number} [props.room]  px beside the bars for their labels, when they're long
  * @param {string} props.name  the chart's name, for its controls' labels
  */
-export default function ChartShell({ views, libraries, limit, grid = "", name }) {
+export default function ChartShell({ views, libraries, limit, grid = "", name, room }) {
   const [current, setCurrent] = useState(0);
   const view = views[current] ?? views[0];
   const { chart } = view;
@@ -58,7 +59,7 @@ export default function ChartShell({ views, libraries, limit, grid = "", name })
                   {panel.detail ? <span className="block text-base-content/55 text-xs">{panel.detail}</span> : null}
                 </figcaption>
               ) : null}
-              <BarPanel panel={panel} quantity={quantity} libraries={libraries} limit={limit} label={chart.title} />
+              <BarPanel panel={panel} quantity={quantity} libraries={libraries} limit={limit} label={chart.title} room={room} />
               {panel.note ? <p className="mt-1 text-base-content/60 text-xs">{panel.note}</p> : null}
             </figure>
           ))}
@@ -71,7 +72,10 @@ export default function ChartShell({ views, libraries, limit, grid = "", name })
         <summary className="cursor-pointer text-base-content/70 hover:text-primary">The numbers as tables</summary>
         <div className="mt-3 space-y-5">
           {chart.panels.map((panel) => (
-            <NumbersTable key={`${view.key}/${panel.key}`} panel={panel} quantity={quantity} fallbackTitle={chart.title} />
+            <div key={`${view.key}/${panel.key}`} className="space-y-5">
+              <NumbersTable panel={panel} quantity={quantity} fallbackTitle={chart.title} />
+              <RatiosTable panel={panel} />
+            </div>
           ))}
         </div>
       </details>
@@ -157,6 +161,66 @@ function KeyNote({ panels }) {
   );
 }
 
+const seconds = tickFormat("seconds");
+
+/**
+ * The speed ratios behind an overall score (bars with `ratios`): a row per
+ * library, a column per scenario of the panel's `scenarios`; nothing for
+ * other panels.
+ */
+function RatiosTable({ panel }) {
+  const scenarios = panel.scenarios ?? [];
+  const bars = panel.bars.filter((bar) => Array.isArray(bar.ratios));
+  if (!scenarios.length || !bars.length) return null;
+  return (
+    <div className="max-w-full overflow-x-auto">
+      <table className="w-full text-left text-xs">
+        <caption className="mb-1 text-left font-medium text-base-content/80">
+          Speed ratio per scenario: the fastest library's time divided by the library's
+          <span className="font-normal text-base-content/55"> · 1: the fastest · –: can't run it · unsolved: twice the time cap</span>
+        </caption>
+        <thead className="text-base-content/55">
+          <tr>
+            <th scope="col" className="py-1 pr-3 font-normal">
+              Library
+            </th>
+            {scenarios.map((scenario) => (
+              <th key={scenario.key} scope="col" className="min-w-[4.5rem] py-1 pr-3 text-right align-bottom font-normal">
+                {scenario.title}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {bars.map((bar, k) => {
+            const ratios = Object.fromEntries(bar.ratios.map((ratio) => [ratio.scenario, ratio]));
+            return (
+              <tr key={`${bar.library}/${k}`} className="border-base-content/10 border-t">
+                <th scope="row" className="whitespace-nowrap py-1 pr-3 font-normal">
+                  {bar.label}
+                </th>
+                {scenarios.map((scenario) => {
+                  const ratio = ratios[scenario.key];
+                  return (
+                    <td
+                      key={scenario.key}
+                      title={ratio && !ratio.penalized ? `${ratio.method ?? ratio.solver}, ${seconds(ratio.time)}` : undefined}
+                      className={`whitespace-nowrap py-1 pr-3 text-right tabular-nums ${ratio?.penalized ? "text-base-content/50" : ""}`}
+                    >
+                      {ratio ? ratioText(ratio.ratio) : "–"}
+                      {ratio?.penalized ? <span className="block text-[10px]">unsolved</span> : null}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /** A panel's bars as a table, for screen readers and anyone who wants the list. */
 function NumbersTable({ panel, quantity, fallbackTitle }) {
   return (
@@ -169,7 +233,7 @@ function NumbersTable({ panel, quantity, fallbackTitle }) {
         <thead className="text-base-content/55">
           <tr>
             <th scope="col" className="py-1 pr-3 font-normal">
-              Library and method
+              {panel.bars.some((bar) => bar.solver) ? "Library and method" : "Library"}
             </th>
             <th scope="col" className="py-1 pr-3 text-right font-normal">
               {QUANTITY_NAMES[quantity] ?? quantity}

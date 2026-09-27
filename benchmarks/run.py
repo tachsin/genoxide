@@ -34,6 +34,7 @@ import argparse
 import concurrent.futures
 import datetime
 import json
+import math
 import os
 import re
 import shutil
@@ -655,6 +656,62 @@ def summarize_fronts(runs, caps, split=False):
     return rows
 
 
+# The overall score (rule 8.5). A library that runs a scenario without solving it counts
+# PENALTY times the scenario's time cap: PAR-2, the penalized average runtime of the SAT
+# competitions. A multi-objective method solves a scenario when its median hypervolume is within
+# HYPERVOLUME_TOLERANCE (relative) of the best median hypervolume of any library there.
+PENALTY = 2
+HYPERVOLUME_TOLERANCE = 0.01
+
+
+def overall_scores(rows, front_rows, caps):
+    """Each library's overall score, from the single-objective summaries (`summarize`) and the
+    multi-objective ones (`summarize_fronts`, the runs the time cap stopped a row of their own, as
+    in the front_time chart). Per scenario, a library's time is its fastest method's expected time
+    to target, or its fastest method's median time for the budget among those whose median
+    hypervolume is within HYPERVOLUME_TOLERANCE of the best; without one, PENALTY times the time
+    cap. Its ratio is the fastest library's time divided by its own, and its score 100 times the
+    geometric mean of its ratios, over the scenarios it runs. Best first; ties in ADAPTERS order."""
+    fastest = {}  # (scenario, library): (seconds, solver), solver None when penalized
+
+    def consider(scenario, library, solver, seconds):
+        current = fastest.get((scenario, library))
+        if seconds is None:
+            if current is None:
+                fastest[(scenario, library)] = (PENALTY * caps[scenario], None)
+        elif current is None or current[1] is None or seconds < current[0]:
+            fastest[(scenario, library)] = (seconds, solver)
+
+    for row in rows:
+        consider(row["scenario"], row["library"], row["solver"], row["ert_time"])
+    best_volume = {}
+    for row in front_rows:
+        best_volume[row["scenario"]] = max(best_volume.get(row["scenario"], row["median_hypervolume"]),
+                                           row["median_hypervolume"])
+    for row in front_rows:
+        close = row["median_hypervolume"] >= best_volume[row["scenario"]] * (1 - HYPERVOLUME_TOLERANCE)
+        consider(row["scenario"], row["library"], row["solver"], row["median_time"] if close else None)
+
+    order = {scenario_name(*scenario[:3]): index for index, scenario in enumerate(SCENARIOS)}
+    scenarios = sorted({scenario for scenario, _ in fastest}, key=lambda s: (order.get(s, len(order)), s))
+    quickest = {scenario: min(seconds for (s, _), (seconds, _) in fastest.items() if s == scenario)
+                for scenario in scenarios}
+    libraries = list(ADAPTERS) + sorted({library for _, library in fastest} - set(ADAPTERS))
+    scores = []
+    for library in libraries:
+        ratios = [{"scenario": scenario, "ratio": quickest[scenario] / fastest[(scenario, library)][0],
+                   "time": fastest[(scenario, library)][0], "solver": fastest[(scenario, library)][1]}
+                  for scenario in scenarios if (scenario, library) in fastest]
+        if not ratios:
+            continue
+        score = 100 * math.exp(sum(math.log(ratio["ratio"]) for ratio in ratios) / len(ratios))
+        scores.append({"library": library, "score": score, "scenarios": len(ratios),
+                       "solved": sum(1 for ratio in ratios if ratio["solver"] is not None), "of": len(scenarios),
+                       "ratios": ratios})
+    scores.sort(key=lambda entry: -entry["score"])
+    return scenarios, scores
+
+
 def front_table(rows):
     lines = [
         "| Scenario | Library / solver | Runs | Stopped by the time cap | Median hypervolume | Range | Median time "
@@ -844,10 +901,11 @@ def significant(value, digits=6):
 
 
 def draw_charts(results, out_dir, formats=("svg",)):
-    """Vertical bar charts of a results file: time and evaluations to target, the distance to the
-    optimum, cost per evaluation, and the hypervolume and time of the multi-objective fronts. Their
-    numbers go to charts.json beside them, for the interactive charts of the project site: recorded
-    as each chart draws them, so the file and the charts can't disagree."""
+    """Bar charts of a results file: time and evaluations to target, the distance to the optimum,
+    cost per evaluation, the hypervolume and time of the multi-objective fronts, and each library's
+    overall score (overall_scores). Their numbers go to charts.json beside them, for the
+    interactive charts of the project site: recorded as each chart draws them, so the file and the
+    charts can't disagree."""
     import matplotlib
     matplotlib.use("agg")
     import matplotlib.pyplot as plt
@@ -1315,6 +1373,87 @@ def draw_charts(results, out_dir, formats=("svg",)):
             else:
                 axis.yaxis.set_major_locator(MaxNLocator(4))
         save(figure, name)
+
+    # --- the overall score: a bar per library (rule 8.5) ------------------------------------------------
+    score_scenarios, scores = overall_scores(rows, front_rows, caps)
+    if scores:
+        count = len(score_scenarios)
+        singles = sum(1 for scenario in score_scenarios if not is_front(scenario.split("-")[0]))
+
+        def score_text(score):
+            return f"{score:.1f}" if score >= 1 else f"{score:.2g}"
+
+        def coverage(entry):
+            return f"{entry['scenarios']}/{entry['of']} scenarios" + (
+                f", {entry['solved']} solved" if entry["solved"] < entry["scenarios"] else "")
+
+        overall_title = f"Overall score over {count} scenarios (higher is better)"
+        how = [
+            "100 × the geometric mean, over the scenarios a library runs, of the fastest library's time divided by "
+            "its own: 100 is the fastest in each of them",
+            f"Time: its fastest method's expected time to target ({singles} single-objective scenarios), or its "
+            f"fastest method's median time for the budget among those within {HYPERVOLUME_TOLERANCE:.0%} of the best "
+            f"median hypervolume ({count - singles} multi-objective); if none, {PENALTY} × the time cap (unsolved)",
+        ]
+        names = [name for name in dict.fromkeys(list(ADAPTERS) + sorted(versions))
+                 if any(entry["library"] == name for entry in scores)]
+        data["charts"]["overall"] = {
+            "file": "overall.svg", "title": overall_title, "subtitle": " · ".join(how + [context]),
+            "quantity": "score", "libraries": names,
+            "panels": [{
+                "key": "overall", "title": None, "detail": None, "log": False, "better": "higher", "axis_to": 100,
+                "scenarios": [{"key": scenario, "title": scenario_title(scenario),
+                               "objectives": "multi" if is_front(scenario.split("-")[0]) else "single",
+                               "cap": caps.get(scenario)} for scenario in score_scenarios],
+                "bars": [{
+                    "library": entry["library"], "label": LIBRARY_NAMES.get(entry["library"], entry["library"]),
+                    "value": significant(entry["score"]), "text": score_text(entry["score"]), "note": coverage(entry),
+                    "scenarios": entry["scenarios"], "solved": entry["solved"], "of": entry["of"],
+                    "ratios": [{"scenario": ratio["scenario"], "ratio": significant(ratio["ratio"]),
+                                "time": significant(ratio["time"]),
+                                **({"solver": ratio["solver"], "method": SOLVER_NAMES.get(ratio["solver"], ratio["solver"])}
+                                   if ratio["solver"] is not None else {"penalized": True})}
+                               for ratio in entry["ratios"]],
+                } for entry in scores],
+            }],
+        }
+        overall_width, label_width, value_room, bar_height = 8.6, 2.45, 1.75, 0.2
+        subtitle = "\n".join(textwrap.fill(line, 158) for line in how + [context])
+        header = 0.5 + (subtitle.count("\n") + 1) * 0.135 + 0.2
+        plot_height = len(scores) * bar_height + 0.1
+        height = header + plot_height + 0.35
+        figure = plt.figure(figsize=(overall_width, height))
+        figure.patch.set_facecolor("white")
+        figure.text(margin / overall_width, 1 - 0.12 / height, overall_title, fontsize=12.5, fontweight="bold",
+                    va="top")
+        figure.text(margin / overall_width, 1 - 0.40 / height, subtitle, fontsize=7.4, color="#555555", va="top",
+                    linespacing=1.3)
+        left = margin + label_width
+        axis = figure.add_axes((left / overall_width, 0.35 / height,
+                                (overall_width - left - value_room) / overall_width, plot_height / height))
+        positions = list(range(len(scores)))[::-1]
+        axis.barh(positions, [entry["score"] for entry in scores], height=0.72,
+                  color=[colors[entry["library"]] for entry in scores], linewidth=0)
+        axis.set_xlim(0, 100)
+        axis.set_ylim(-0.6, len(scores) - 0.4)
+        for position, entry in zip(positions, scores):
+            axis.text(entry["score"] + 1.2, position, f"{score_text(entry['score'])}   {coverage(entry)}",
+                      va="center", fontsize=6.8, color="#222222", clip_on=False)
+        axis.set_yticks(positions, [f"{LIBRARY_NAMES.get(entry['library'], entry['library'])} "
+                                    f"{versions.get(entry['library'], '').split('+')[0]} "
+                                    f"({languages.get(entry['library'], '')})" for entry in scores], fontsize=7.2)
+        for tick_label, entry in zip(axis.get_yticklabels(), scores):
+            if entry["library"] in GENOXIDE_COLORS:
+                tick_label.set_fontweight("bold")
+        axis.set_xticks(range(0, 101, 20))
+        axis.tick_params(axis="y", length=0, pad=3)
+        axis.tick_params(axis="x", labelsize=6.5, length=2, pad=1.5, color="#9a9a9a")
+        axis.grid(axis="x", color="#e8e8e8", linewidth=0.5)
+        axis.grid(axis="y", visible=False)
+        axis.spines[["top", "right"]].set_visible(False)
+        save(figure, "overall")
+        # first in charts.json, as on the site
+        data["charts"] = {"overall": data["charts"].pop("overall"), **data["charts"]}
 
     # the numbers of every chart drawn, compact, one chart per line
     lines = [f"{json.dumps(name)}:{json.dumps(record, ensure_ascii=False, separators=(',', ':'))}"
