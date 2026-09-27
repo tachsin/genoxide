@@ -25,26 +25,26 @@ and a Python one after `pip install genoxide`:
 python examples/tsp_berlin52/main.py
 ```
 
-| Example | Category | Languages |
-|---|---|---|
-| [OneMax](one_max/) | binary | Rust, Python |
-| [0/1 knapsack](knapsack/) | constrained | Rust, Python |
-| [N-Queens](n_queens/) | permutation | Rust, Python |
-| [Travelling salesman (berlin52)](tsp_berlin52/) | permutation | Rust, Python |
-| [Job shop scheduling (ft06)](jobshop_ft06/) | permutation | Rust, Python |
-| [Rastrigin function](rastrigin/) | continuous | Rust, Python |
-| [Function suite](function_suite/) | continuous | Rust, Python |
-| [Himmelblau's function](himmelblau/) | continuous | Rust, Python |
-| [Pressure vessel design](pressure_vessel/) | constrained | Rust, Python |
-| [Welded beam design](welded_beam/) | constrained | Rust, Python |
-| [Gear train design](gear_train/) | integer | Rust, Python |
-| [ZDT1](zdt1/) | multi-objective | Rust, Python |
-| [BNH, a constrained two-objective problem](bnh/) | multi-objective | Rust, Python |
-| [Kursawe's disconnected front](kursawe/) | multi-objective | Rust, Python |
-| [DTLZ2 with 3 objectives](dtlz2_3obj/) | multi-objective | Rust, Python |
-| [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python |
-| [Asynchronous evaluation](asynchronous/) | engine | Rust |
-| [Neuroevolution on the GPU](gpu/) | engine | Rust |
+| Example | Category | Languages | Interactive run |
+|---|---|---|---|
+| [OneMax](one_max/) | binary | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/one-max) |
+| [0/1 knapsack](knapsack/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/knapsack) |
+| [N-Queens](n_queens/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/n-queens) |
+| [Travelling salesman (berlin52)](tsp_berlin52/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/tsp-berlin52) |
+| [Job shop scheduling (ft06)](jobshop_ft06/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/jobshop-ft06) |
+| [Rastrigin function](rastrigin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rastrigin) |
+| [Function suite](function_suite/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/function-suite) |
+| [Himmelblau's function](himmelblau/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/himmelblau) |
+| [Pressure vessel design](pressure_vessel/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/pressure-vessel) |
+| [Welded beam design](welded_beam/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/welded-beam) |
+| [Gear train design](gear_train/) | integer | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gear-train) |
+| [ZDT1](zdt1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zdt1) |
+| [BNH, a constrained two-objective problem](bnh/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bnh) |
+| [Kursawe's disconnected front](kursawe/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/kursawe) |
+| [DTLZ2 with 3 objectives](dtlz2_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dtlz2-3obj) |
+| [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neuroevolution) |
+| [Asynchronous evaluation](asynchronous/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/asynchronous) |
+| [Neuroevolution on the GPU](gpu/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gpu) |
 
 The GPU example is a crate of its own, with wgpu as a dependency:
 `cargo run --release --manifest-path examples/gpu/Cargo.toml`.

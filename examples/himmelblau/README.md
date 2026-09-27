@@ -59,7 +59,7 @@ table.
 The values are small but not 0. The step size is fixed, so near a minimum few neighbors are better
 than the current point, and progress slows down to a stop.
 
-The project page plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/himmelblau) plays this run back.
 
 ## Good results
 

@@ -62,7 +62,7 @@ One line: how many solutions are on the final front, and its hypervolume. The hy
 volume that the front dominates, up to the reference point (1.1, 1.1, 1.1). Larger is better. For
 the whole front it is 1.1³ − π/6 = 0.8074: the cube minus the eighth of the unit ball.
 
-The project page plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/dtlz2-3obj) plays this run back.
 
 ## Good results
 

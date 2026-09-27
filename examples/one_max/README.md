@@ -59,7 +59,7 @@ as the last zeros get rare.
 The last line gives the final count, the generations and the evaluations. The evaluations are fewer
 than 100 per generation: a child equal to its parent inherits its fitness and isn't evaluated again.
 
-The project page plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/one-max) plays this run back.
 
 ## Good results
 

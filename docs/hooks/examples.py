@@ -44,6 +44,15 @@ FIELDS = {
 # optional: trace_note, what the project page's player plays when it isn't the run of the code
 # (the docs site has no player)
 OPTIONAL_FIELDS = {"trace_note"}
+# the project page of each example with a recorded run, which plays it back
+SITE = "https://tachsin.gr/projects/genoxide/examples"
+
+
+def slug(name: str) -> str:
+    """The example's URL segment on tachsin.gr, as site/lib/projects/genoxide/examples.js makes it."""
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
 FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.DOTALL)
 
 
@@ -115,6 +124,9 @@ def page(example: Example) -> str:
     if meta["optimum"]:
         lines += [f"**Known optimum:** {meta['optimum']}", ""]
     lines += [f"**Source:** [examples/{example.name}]({GITHUB}/{example.name})", ""]
+    if (EXAMPLES / example.name / "trace.json").exists():
+        url = f"{SITE}/{slug(example.name)}"
+        lines += [f"**Interactive run:** [{url.removeprefix('https://')}]({url})", ""]
     for language in meta["languages"]:
         label, fence = {"rust": ("Rust", "rust"), "python": ("Python", "python")}[language]
         lines += [

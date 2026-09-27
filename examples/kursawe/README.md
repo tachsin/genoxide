@@ -68,7 +68,7 @@ wide. The hypervolume is the area that the front dominates, up to the
 reference point (−14, 1). Larger is better. In Python, `run` evaluates the problem in Rust, so both
 versions print the same.
 
-The project page plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/kursawe) plays this run back.
 
 ## Good results
 

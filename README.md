@@ -76,6 +76,7 @@ Each bar is a library's fastest method on that problem, single-threaded on the s
 
 - Docs and examples: https://tachsin.github.io/genoxide/
 - [examples/](examples/): the same programs in Rust and Python, from OneMax to TSPLIB, job shop scheduling and NSGA-III
+- [tachsin.gr/projects/genoxide/examples](https://tachsin.gr/projects/genoxide/examples): each example's run played back, with charts made for its problem
 - [API documentation](https://docs.rs/genoxide) on docs.rs
 - [docs/features.md](docs/features.md): the full feature list and the examples
 - [AGENTS.md](AGENTS.md): a guide for AI coding assistants

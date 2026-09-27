@@ -72,7 +72,7 @@ The third gives the front's hypervolume: the area it dominates, up to the refere
 Larger is better. For the whole optimal front, it is 210 × 55 − 5000/3 = 9883.33. In Python, `run`
 evaluates the problem in Rust, so both versions print the same.
 
-The project page plays this run back. Its `trace.json` has one field more than a front's trace:
+[The project page](https://tachsin.gr/projects/genoxide/examples/bnh) plays this run back. Its `trace.json` has one field more than a front's trace:
 `feasible`, the share of the population that is feasible in each recorded generation.
 
 ## Good results

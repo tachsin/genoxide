@@ -62,7 +62,7 @@ The run stops when the error is below 0.01, or after 20,000 evaluations.
 The first line gives the squared error of the best network and the evaluations it took. The next
 four lines give, for each input pair, the expected output and the network's output, to 3 decimals.
 
-The project page plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/xor-neuroevolution) plays this run back.
 
 ## Good results
 

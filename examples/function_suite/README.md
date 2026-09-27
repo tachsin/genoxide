@@ -80,7 +80,7 @@ platform. The functions call the platform's `sin`, `cos` and `exp`, whose last b
 operating systems, and runs this long amplify it: on Windows or macOS a few cells differ from the
 table in `output.txt`, which is the Linux output.
 
-The project page plays these runs back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/function-suite) plays these runs back.
 
 ## Good results
 

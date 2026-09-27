@@ -69,7 +69,7 @@ gives the design's constraint violation; 0 means it's feasible. The third gives 
 shell and head thicknesses, rounded to whole plates, the radius and the length. In Python, `run`
 evaluates the problem in Rust, so both versions print the same.
 
-The project page plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/pressure-vessel) plays this run back.
 
 ## Good results
 
