@@ -39,6 +39,7 @@ python examples/tsp_berlin52/main.py
 | [Pressure vessel design](pressure_vessel/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/pressure-vessel) |
 | [Welded beam design](welded_beam/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/welded-beam) |
 | [Gear train design](gear_train/) | integer | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gear-train) |
+| [Engineering designs and CEC 2006](engineering_suite/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/engineering-suite) |
 | [ZDT1](zdt1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zdt1) |
 | [Classic two-objective fronts](classic_fronts/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/classic-fronts) |
 | [BNH, a constrained two-objective problem](bnh/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bnh) |

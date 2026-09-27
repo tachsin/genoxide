@@ -1,0 +1,13 @@
+SHADE with Deb's feasibility rules, one run per problem, seed 1
+problem                    budget  best found          f*       f* is       gap  feasible
+TensionCompressionSpring    50000   0.0126652   0.0126650  best known    1.8e-5       yes
+SpeedReducer                50000     2996.35     2996.35  best known    < 1e-8       yes
+ThreeBarTruss               50000     263.896     263.896     optimum    < 1e-8       yes
+CantileverBeam              50000     1.33996     1.33996     optimum    < 1e-8       yes
+CarSideImpact               50000     23.5857     23.5857  best known    < 1e-8       yes
+G01                        500000    -15.0000    -15.0000     optimum    < 1e-8       yes
+G02                        500000   -0.803538   -0.803619  best known    1.0e-4       yes
+G03                        500000   -0.791072    -1.00050     optimum    2.1e-1       yes
+G04                        500000    -30665.5    -30665.5     optimum    < 1e-8       yes
+G05                        500000     5126.50     5126.50  best known    < 1e-8       yes
+G06                        500000    -6961.81    -6961.81     optimum    < 1e-8       yes
