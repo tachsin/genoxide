@@ -27,9 +27,11 @@ use rand::Rng;
 ///    [hypervolume contribution](super::indicator::hypervolume_contributions) is removed, one at
 ///    a time, until the rest fits. The contributions are computed with the objectives normalized
 ///    by the best and worst feasible values of parents and children, and the reference point at
-///    11 in each normalized objective, so every point is inside it and the extremes of the front
-///    are kept. Normalizing by the parents only could put a far child beyond the reference point
-///    and drop it first, even when it's the best in another objective.
+///    11 in each normalized objective, so every point is inside it. An extreme of the front gets
+///    a large contribution, about 10 times its gap to its neighbor, and is usually kept; one
+///    very close to its neighbor can still have the smallest and be removed. Normalizing by the
+///    parents only could put a far child beyond the reference point and drop it first, even when
+///    it's the best in another objective.
 ///
 /// Maximizing the hypervolume gives fronts that are well spread and converged, at a higher cost
 /// per generation than NSGA-II: O(N log N) per removal for 2 objectives, O(N²) for 3, O(N³) for

@@ -780,6 +780,12 @@ pub fn optimal_front<'py>(
     problem: &str,
     points: usize,
 ) -> PyResult<Bound<'py, PyAny>> {
+    // checked before allocating: a failed allocation would abort the interpreter
+    if points as u128 > crate::run::MAX_POINTS {
+        return Err(PyValueError::new_err(format!(
+            "optimal_front takes at most 2^24 points, not {points}"
+        )));
+    }
     match parse(problem)? {
         Problem::Single(problem) => Err(PyValueError::new_err(format!(
             "{} has one objective, and an optimum instead of a front",

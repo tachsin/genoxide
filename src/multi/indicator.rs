@@ -38,7 +38,8 @@ fn distance(a: &[f64], b: &[f64]) -> f64 {
 /// The hypervolume of a front: the volume of the region that its points dominate, bounded by
 /// the `reference` point, which every point of interest should dominate (e.g. a little worse
 /// than the worst value of each objective). Points that don't dominate the reference point add
-/// nothing. Larger is better, and a front that dominates another has a larger hypervolume
+/// nothing, and neither do points with a NaN value. Larger is better, and a front that dominates
+/// another has a larger hypervolume
 /// (Pareto compliance), which makes it the most widely used indicator.
 ///
 /// The computation is exact. It takes O(N log N) time for up to 2 objectives, and slices the
@@ -323,8 +324,9 @@ fn exclusive_strips(points: &[[f64; 2]], right: f64, above: f64) -> f64 {
 /// the reference front. It measures both convergence and spread, but isn't Pareto compliant: a
 /// better front can have a larger IGD, see [`igd_plus`].
 ///
-/// Infinite for an empty front, and NaN for an empty reference front. The directions don't
-/// matter for distances, so IGD takes none.
+/// Infinite for an empty front, and NaN for an empty reference front. A point of `front` with a
+/// NaN value, an invalid solution, is skipped: a front of only such points scores infinity. The
+/// directions don't matter for distances, so IGD takes none.
 ///
 /// ```
 /// use genoxide::multi::indicator::igd;
@@ -341,7 +343,8 @@ pub fn igd<const M: usize>(front: &[[f64; M]], reference_front: &[[f64; M]]) -> 
 /// of the reference front. Smaller is better; it measures convergence only, so a single point on
 /// the true front scores a perfect 0.
 ///
-/// Infinite for an empty reference front, and NaN for an empty front.
+/// Infinite for an empty reference front, and NaN for an empty front. A point of `front` with a
+/// NaN value, an invalid solution, is infinitely far: the result is infinite.
 pub fn gd<const M: usize>(front: &[[f64; M]], reference_front: &[[f64; M]]) -> f64 {
     mean_nearest(front, reference_front, |a, b| distance(a, b))
 }
@@ -351,7 +354,9 @@ pub fn gd<const M: usize>(front: &[[f64; M]], reference_front: &[[f64; M]]) -> f
 /// minimizing. A front that dominates or equals every reference point scores 0, and a front that
 /// dominates another never scores worse (weak Pareto compliance). Smaller is better.
 ///
-/// Infinite for an empty front, and NaN for an empty reference front.
+/// Infinite for an empty front, and NaN for an empty reference front. A point of `front` with a
+/// NaN value, an invalid solution, is skipped, as in [`igd`]: a front of only such points scores
+/// infinity.
 ///
 /// ```
 /// use genoxide::Objective::Minimize;
@@ -376,7 +381,16 @@ pub fn igd_plus<const M: usize>(
     mean_nearest(&reference, &front, |z, a| {
         a.iter()
             .zip(z)
-            .map(|(a, z)| (a - z).max(0.0) * (a - z).max(0.0))
+            .map(|(a, z)| {
+                // NaN stays NaN, so that a point with a NaN value is skipped, as in `igd`:
+                // `f64::max` would turn it into 0, the best distance
+                let worse = a - z;
+                if worse > 0.0 || worse.is_nan() {
+                    worse * worse
+                } else {
+                    0.0
+                }
+            })
             .sum::<f64>()
             .sqrt()
     })
@@ -559,6 +573,37 @@ mod tests {
         let cubes = [[0.0, 1.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 0.0]];
         let contributions = hypervolume_contributions(&cubes, &[2.0; 3], &[Minimize; 3]);
         assert_eq!(contributions, [1.0; 3]);
+    }
+
+    #[test]
+    fn points_with_nan_values() {
+        let reference = [[0.0, 1.0], [1.0, 0.0]];
+        let minimize = [Minimize, Minimize];
+        let good = [[1.0, 2.0]];
+        let with_nan = [[f64::NAN, f64::NAN], [1.0, 2.0]];
+        let only_nan = [[f64::NAN, f64::NAN]];
+        // skipped by IGD and IGD+: a NaN point isn't a perfect one
+        assert_eq!(igd(&with_nan, &reference), igd(&good, &reference));
+        assert_eq!(
+            igd_plus(&with_nan, &reference, &minimize),
+            igd_plus(&good, &reference, &minimize)
+        );
+        assert!(igd_plus(&good, &reference, &minimize) > 0.0);
+        assert_eq!(igd(&only_nan, &reference), f64::INFINITY);
+        assert_eq!(igd_plus(&only_nan, &reference, &minimize), f64::INFINITY);
+        // one NaN value is enough, in either direction
+        let half_nan = [[0.0, f64::NAN]];
+        assert_eq!(igd_plus(&half_nan, &reference, &minimize), f64::INFINITY);
+        assert_eq!(
+            igd_plus(&half_nan, &reference, &[Maximize, Maximize]),
+            f64::INFINITY
+        );
+        // infinitely far for GD, and nothing for the hypervolume
+        assert_eq!(gd(&with_nan, &reference), f64::INFINITY);
+        assert_eq!(
+            hypervolume(&with_nan, &[4.0, 4.0], &minimize),
+            hypervolume(&good, &[4.0, 4.0], &minimize)
+        );
     }
 
     #[test]

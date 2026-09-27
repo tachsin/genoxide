@@ -266,9 +266,9 @@ where
     (K == M).then(|| Box::new(Boxed::<P, K>(problem)) as Box<dyn DynMultiProblem<M>>)
 }
 
-/// Every problem of this module with `M` objectives, at its default size, in the order of the
-/// table above: the two-objective problems for `M = 2`, the Viennet problems for `M = 3`, and
-/// DTLZ for any `M` from 2 on.
+/// Every problem of this module with `M` objectives, at its default size: the two-objective
+/// problems for `M = 2` and the Viennet problems for `M = 3`, in the order of the table above,
+/// then DTLZ1-4 for any `M` from 2 on.
 pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
     let fixed = [
         try_boxed::<_, 2, M>(Zdt1::default()),
@@ -455,6 +455,25 @@ mod tests {
     use crate::StreamRng;
     use crate::multi::non_dominated_sort;
     use std::collections::HashSet;
+
+    #[test]
+    fn optimal_fronts_have_the_promised_number_of_points() {
+        // exactly `points` with 2 objectives, and at least `points` with more
+        for problem in all::<2>() {
+            for points in 0..6 {
+                if let Some(front) = problem.optimal_front(points) {
+                    assert_eq!(front.len(), points, "{} with {points}", problem.name());
+                }
+            }
+        }
+        for problem in all::<3>() {
+            for points in 0..6 {
+                if let Some(front) = problem.optimal_front(points) {
+                    assert!(front.len() >= points, "{} with {points}", problem.name());
+                }
+            }
+        }
+    }
 
     #[test]
     fn das_dennis_points() {

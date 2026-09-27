@@ -490,10 +490,39 @@ pub fn das_dennis(
     objectives: usize,
     divisions: usize,
 ) -> PyResult<Bound<'_, PyArray2<f64>>> {
+    if !(2..=6).contains(&objectives) {
+        return Err(PyValueError::new_err(format!(
+            "das_dennis takes 2 to 6 objectives, not {objectives}"
+        )));
+    }
+    // checked before allocating: a failed allocation would abort the interpreter
+    let count = das_dennis_count(objectives, divisions);
+    if count > MAX_POINTS {
+        return Err(PyValueError::new_err(format!(
+            "das_dennis({objectives}, {divisions}) would have {count} points, more than 2^24"
+        )));
+    }
     let points = with_objectives(objectives, DasDennis(divisions)).map_err(|count| {
         PyValueError::new_err(format!("das_dennis takes 2 to 6 objectives, not {count}"))
     })?;
     Ok(points.into_pyarray(py))
+}
+
+/// The most points that `das_dennis` and `optimal_front` return, as genoxide's sizes.
+pub const MAX_POINTS: u128 = 1 << 24;
+
+// the number of Das-Dennis points, C(divisions + objectives − 1, objectives − 1); 0 for 0
+// divisions, as `das_dennis` returns none
+fn das_dennis_count(objectives: usize, divisions: usize) -> u128 {
+    if divisions == 0 {
+        return 0;
+    }
+    let (n, k) = (
+        (divisions + objectives - 1) as u128,
+        (objectives - 1) as u128,
+    );
+    // exact at each step: C(n, i + 1) = C(n, i) (n − i) / (i + 1); saturates far above the limit
+    (0..k).fold(1u128, |count, i| count.saturating_mul(n - i) / (i + 1))
 }
 
 // Das-Dennis points with this many divisions
