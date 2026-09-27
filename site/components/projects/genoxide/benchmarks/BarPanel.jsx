@@ -3,7 +3,7 @@
 import { useId, useMemo, useState } from "react";
 import { linear, logarithmic, logTicks, ticks } from "../player/chart-kit";
 import { Axes, PlotBox, TipRows, Tooltip } from "../player/chart-parts";
-import { barNotes, exactValue, QUANTITY_NAMES, ratioText, tickFormat } from "./format";
+import { barNotes, exactValue, pointsText, QUANTITY_NAMES, tickFormat } from "./format";
 import { useHighlight } from "./Highlight";
 
 /**
@@ -14,7 +14,7 @@ import { useHighlight } from "./Highlight";
  * charts.json: a bar's label is its `text`, as in the SVG chart.
  *
  * Hover a bar, or focus the panel and use the arrow keys, for its numbers:
- * for an overall score, its speed ratio in each scenario too (`ratios`, the
+ * for an overall score, its points in each scenario too (`ratios`, the
  * scenarios' titles from the panel's `scenarios`). The highlighted library
  * (the legend's) dims the others.
  */
@@ -137,13 +137,13 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
                 ))}
                 {ratios ? (
                   <>
-                    <p className="mt-1.5 mb-0.5 text-base-content/60">Speed ratio per scenario (1: the fastest)</p>
+                    <p className="mt-1.5 mb-0.5 text-base-content/60">Points per scenario (100: the fastest, 0: unsolved)</p>
                     <dl className="grid grid-cols-[auto_auto_auto] gap-x-2.5 gap-y-px text-[11px]">
                       {ratios.map((ratio) => (
                         <div key={ratio.scenario} className="contents">
                           <dt className="text-base-content/65">{titles[ratio.scenario] ?? ratio.scenario}</dt>
                           <dd className={`text-right font-medium tabular-nums ${ratio.penalized ? "text-base-content/50" : ""}`}>
-                            {ratioText(ratio.ratio)}
+                            {pointsText(ratio.points)}
                           </dd>
                           <dd className="text-base-content/55">
                             {ratio.penalized ? "unsolved" : `${ratio.method ?? ratio.solver}, ${seconds(ratio.time)}`}

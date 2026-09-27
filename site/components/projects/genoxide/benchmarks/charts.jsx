@@ -17,7 +17,7 @@ const LONG_PANELS = "@2xl:grid-cols-2";
 /**
  * Each library's overall score (rule 8.5): one panel, a bar per library,
  * with room for its coverage beside it; a bar's tooltip and the tables have
- * its speed ratio in each scenario.
+ * its points, time and method in each scenario.
  */
 export function OverallChart({ views, libraries }) {
   return <ChartShell views={views} libraries={libraries} grid="max-w-3xl" room={150} name="Overall score" />;

@@ -4,7 +4,7 @@
 
 [![Overall score: each library's speed to a solution over the 14 scenarios](overall.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
 
-The overall score is 100 times the geometric mean, over the scenarios a library runs, of the fastest library's time divided by its own; a scenario it doesn't solve counts twice the time cap ([rule 8.5](rules.md#8-reporting)).
+Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, evenly per order of magnitude of time in between; the overall score is the mean over the scenarios a library runs ([rule 8.5](rules.md#8-reporting)).
 
 **Interactive results, every chart and table: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).**
 

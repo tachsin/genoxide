@@ -23,6 +23,8 @@ export const QUANTITY_NAMES = {
 /** A value in full (6 significant digits, as stored), with its unit. */
 export function exactValue(value, quantity) {
   if (value === null || value === undefined) return "–";
+  // an overall score is given to one decimal (rule 8.5)
+  if (quantity === "score") return value.toFixed(1);
   if (quantity === "seconds") {
     if (value < 1e-3) return `${exact.format(value * 1e6)} µs`;
     if (value < 1) return `${exact.format(value * 1e3)} ms`;
@@ -55,12 +57,10 @@ export function tickFormat(quantity) {
   return formatTick;
 }
 
-/** A speed ratio of the overall score, in (0, 1]: 2 significant digits, e.g. 0.68, 0.00012 or 5.5e-6. */
-export function ratioText(ratio) {
-  if (ratio >= 1) return "1";
-  // 3 digits just below 1, so that only the fastest reads 1
-  if (ratio >= 1e-4) return ratio.toPrecision(ratio >= 0.995 ? 3 : 2).replace(/0+$/, "").replace(/\.$/, "");
-  return ratio.toExponential(1);
+/** A library's points in a scenario of the overall score, 0 to 100: one decimal, e.g. 96.8, 100 or 0. */
+export function pointsText(points) {
+  if (typeof points !== "number") return "–";
+  return points >= 100 ? "100" : points <= 0 ? "0" : points.toFixed(1);
 }
 
 /** A share of the budget, e.g. 0.07 as "7%". */

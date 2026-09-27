@@ -15,9 +15,10 @@ export const BENCHMARK_CHARTS_FILE = "docs/benchmarks/charts.json";
 
 /** What the overall score is, under its title: rule 8.5 of docs/benchmarks/rules.md, in short. */
 const OVERALL_CAPTION =
-  "How fast each library solves the 14 scenarios, in one number. In each scenario it runs, a library gets the fastest library's time divided by its own: 1 for the fastest. " +
-  "Its time is its fastest method's expected time to the target or, with several objectives, its fastest method's time for the budget among those within 1% of the best hypervolume; " +
-  "a scenario it doesn't solve counts twice the time cap. The score is 100 times the geometric mean of these ratios. Hover a bar for its ratio in each scenario.";
+  "How fast each library solves the 14 scenarios, in one number. Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, " +
+  "evenly per order of magnitude of time in between; the score is the mean over the scenarios a library runs. " +
+  "Its time is its fastest method's expected time to the target or, with several objectives, its fastest method's time for the budget among those within 1% of the best hypervolume. " +
+  "Hover a bar for its points in each scenario.";
 
 /**
  * The interactive charts, in order: each a `kind` of component
@@ -74,7 +75,7 @@ export const BENCHMARK_IMAGES = [
   {
     id: "overall",
     title: "Overall score",
-    caption: OVERALL_CAPTION.replace(" Hover a bar for its ratio in each scenario.", ""),
+    caption: OVERALL_CAPTION.replace(" Hover a bar for its points in each scenario.", ""),
     file: "docs/benchmarks/overall.svg",
     wide: true,
   },

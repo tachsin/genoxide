@@ -3,7 +3,7 @@
 import { ExternalLink, X } from "lucide-react";
 import { useState } from "react";
 import BarPanel from "./BarPanel";
-import { barNotes, QUANTITY_NAMES, ratioText, tickFormat } from "./format";
+import { barNotes, pointsText, QUANTITY_NAMES, tickFormat } from "./format";
 import { useHighlight } from "./Highlight";
 
 /**
@@ -164,7 +164,7 @@ function KeyNote({ panels }) {
 const seconds = tickFormat("seconds");
 
 /**
- * The speed ratios behind an overall score (bars with `ratios`): a row per
+ * The points behind an overall score (bars with `ratios`): a row per
  * library, a column per scenario of the panel's `scenarios`; nothing for
  * other panels.
  */
@@ -176,8 +176,8 @@ function RatiosTable({ panel }) {
     <div className="max-w-full overflow-x-auto">
       <table className="w-full text-left text-xs">
         <caption className="mb-1 text-left font-medium text-base-content/80">
-          Speed ratio per scenario: the fastest library's time divided by the library's
-          <span className="font-normal text-base-content/55"> · 1: the fastest · –: can't run it · unsolved: twice the time cap</span>
+          Points per scenario
+          <span className="font-normal text-base-content/55"> · 100: the fastest · 0: unsolved within the time cap · –: can't run it</span>
         </caption>
         <thead className="text-base-content/55">
           <tr>
@@ -207,7 +207,7 @@ function RatiosTable({ panel }) {
                       title={ratio && !ratio.penalized ? `${ratio.method ?? ratio.solver}, ${seconds(ratio.time)}` : undefined}
                       className={`whitespace-nowrap py-1 pr-3 text-right tabular-nums ${ratio?.penalized ? "text-base-content/50" : ""}`}
                     >
-                      {ratio ? ratioText(ratio.ratio) : "–"}
+                      {ratio ? pointsText(ratio.points) : "–"}
                       {ratio?.penalized ? <span className="block text-[10px]">unsolved</span> : null}
                     </td>
                   );

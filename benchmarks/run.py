@@ -664,14 +664,25 @@ PENALTY = 2
 HYPERVOLUME_TOLERANCE = 0.01
 
 
+def scenario_points(seconds, fastest, penalty):
+    """A library's points in a scenario (rule 8.5): 100 at the fastest library's time, 0 at the
+    penalty, linear in the logarithm of the time in between, clamped to [0, 100]. When no library
+    solved the scenario, the fastest time is the penalty, and every library gets 0."""
+    if seconds >= penalty or fastest >= penalty:
+        return 0.0
+    return min(100.0, max(0.0, 100 * (1 - math.log(seconds / fastest) / math.log(penalty / fastest))))
+
+
 def overall_scores(rows, front_rows, caps):
     """Each library's overall score, from the single-objective summaries (`summarize`) and the
     multi-objective ones (`summarize_fronts`, the runs the time cap stopped a row of their own, as
     in the front_time chart). Per scenario, a library's time is its fastest method's expected time
     to target, or its fastest method's median time for the budget among those whose median
     hypervolume is within HYPERVOLUME_TOLERANCE of the best; without one, PENALTY times the time
-    cap. Its ratio is the fastest library's time divided by its own, and its score 100 times the
-    geometric mean of its ratios, over the scenarios it runs. Best first; ties in ADAPTERS order."""
+    cap. Its ratio is the fastest library's time divided by its own. Its points are 100 for the
+    fastest time and 0 for PENALTY times the cap, linear in the logarithm of the time in between:
+    the same points per order of magnitude, on each scenario's own scale (scenario_points). Its
+    score is the mean of its points over the scenarios it runs. Best first; ties in ADAPTERS order."""
     fastest = {}  # (scenario, library): (seconds, solver), solver None when penalized
 
     def consider(scenario, library, solver, seconds):
@@ -700,11 +711,13 @@ def overall_scores(rows, front_rows, caps):
     scores = []
     for library in libraries:
         ratios = [{"scenario": scenario, "ratio": quickest[scenario] / fastest[(scenario, library)][0],
+                   "points": scenario_points(fastest[(scenario, library)][0], quickest[scenario],
+                                             PENALTY * caps[scenario]),
                    "time": fastest[(scenario, library)][0], "solver": fastest[(scenario, library)][1]}
                   for scenario in scenarios if (scenario, library) in fastest]
         if not ratios:
             continue
-        score = 100 * math.exp(sum(math.log(ratio["ratio"]) for ratio in ratios) / len(ratios))
+        score = sum(ratio["points"] for ratio in ratios) / len(ratios)
         scores.append({"library": library, "score": score, "scenarios": len(ratios),
                        "solved": sum(1 for ratio in ratios if ratio["solver"] is not None), "of": len(scenarios),
                        "ratios": ratios})
@@ -1381,7 +1394,7 @@ def draw_charts(results, out_dir, formats=("svg",)):
         singles = sum(1 for scenario in score_scenarios if not is_front(scenario.split("-")[0]))
 
         def score_text(score):
-            return f"{score:.1f}" if score >= 1 else f"{score:.2g}"
+            return f"{score:.1f}"
 
         def coverage(entry):
             return f"{entry['scenarios']}/{entry['of']} scenarios" + (
@@ -1389,8 +1402,8 @@ def draw_charts(results, out_dir, formats=("svg",)):
 
         overall_title = f"Overall score over {count} scenarios (higher is better)"
         how = [
-            "100 × the geometric mean, over the scenarios a library runs, of the fastest library's time divided by "
-            "its own: 100 is the fastest in each of them",
+            "Per scenario, 100 points for the fastest library and 0 for not solving it within the time cap, evenly per "
+            "order of magnitude of time in between; the score is the mean over the scenarios a library runs",
             f"Time: its fastest method's expected time to target ({singles} single-objective scenarios), or its "
             f"fastest method's median time for the budget among those within {HYPERVOLUME_TOLERANCE:.0%} of the best "
             f"median hypervolume ({count - singles} multi-objective); if none, {PENALTY} × the time cap (unsolved)",
@@ -1410,7 +1423,7 @@ def draw_charts(results, out_dir, formats=("svg",)):
                     "value": significant(entry["score"]), "text": score_text(entry["score"]), "note": coverage(entry),
                     "scenarios": entry["scenarios"], "solved": entry["solved"], "of": entry["of"],
                     "ratios": [{"scenario": ratio["scenario"], "ratio": significant(ratio["ratio"]),
-                                "time": significant(ratio["time"]),
+                                "points": round(ratio["points"], 1), "time": significant(ratio["time"]),
                                 **({"solver": ratio["solver"], "method": SOLVER_NAMES.get(ratio["solver"], ratio["solver"])}
                                    if ratio["solver"] is not None else {"penalized": True})}
                                for ratio in entry["ratios"]],

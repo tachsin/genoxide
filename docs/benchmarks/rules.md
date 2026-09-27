@@ -143,11 +143,11 @@ The charts show the capped runs apart from the runs that ended at the target or 
 8.5. **The overall score** sums up the 14 scenarios, 9 single-objective and 5 multi-objective, in one number per library. `run.py` computes it from the same summaries as the other charts:
 - **A library's time in a scenario.** With a target: its fastest method's expected running time to the target (rule 8.1), as in the summary chart. Multi-objective: its fastest method's median time for the evaluation budget, among its methods whose median hypervolume is within 1% (relative) of the best median hypervolume of any library in the scenario. As in the chart of the multi-objective times, the runs the time cap stopped are summarized apart from the others, with the time they took: about the cap.
 - **Unsolved.** A library that runs the scenario but has no such time (no method with an expected running time, or none within 1% of the best hypervolume) gets twice the scenario's time cap. This is PAR-2, the penalized average runtime of the SAT competitions.
-- **Speed ratio.** The fastest library's time in the scenario, penalties included, divided by the library's own: 1 for the fastest, between 0 and 1 for the others.
-- **Score.** 100 times the geometric mean of the library's ratios, over the scenarios it runs. A scenario it can't run (rule 8.2) is left out, not counted as 0. A score of 100 means the fastest library in every scenario it runs.
+- **Points.** With t the library's time, t₁ the fastest library's time (penalties included) and P twice the time cap, the library gets 100 × (1 − ln(t / t₁) / ln(P / t₁)) points, clamped to [0, 100]. The fastest library gets 100, an unsolved scenario 0, and in between every order of magnitude of time costs the same points. Each scenario has its own scale, from its fastest time to its penalty. If no library solves a scenario, all get 0 there.
+- **Score.** The mean of the library's points over the scenarios it runs, to one decimal. A scenario it can't run (rule 8.2) is left out, not counted as 0. A score of 100 means the fastest library in every scenario it runs.
 - **Coverage.** Beside the score, the scenarios the library runs, of 14, and those it solved.
 
-genoxide and its Python package are two libraries here, as in the other charts. The score measures speed to a solution on these scenarios and nothing else. The chart is `overall.svg`, and `charts.json` has each library's ratio in each scenario.
+genoxide and its Python package are two libraries here, as in the other charts. The score measures speed to a solution on these scenarios and nothing else. The chart is `overall.svg`, and `charts.json` has each library's points, time and speed ratio (the fastest time divided by its own) in each scenario.
 
 ## 9. Open documentation
 
