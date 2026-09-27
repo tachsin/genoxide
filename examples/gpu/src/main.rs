@@ -4,15 +4,14 @@
 //! network evaluations per generation. A generation goes to the GPU at once, through `Batch`: one
 //! upload of the weights, one dispatch with a workgroup per genome, one download of the errors.
 //!
-//! With `GENOXIDE_TRACE=<file>`, it also writes the GPU run's trace for the plot on the example's
-//! page: when each batch was evaluated, in at most 64 generations.
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
 //!
 //! cargo run --release --manifest-path examples/gpu/Cargo.toml
 
-use genoxide::genome::Genome;
-use genoxide::observer::Snapshot;
+mod trace;
+
 use genoxide::prelude::*;
-use serde_json::{Value, json};
 use std::sync::Mutex;
 use std::time::Instant;
 use wgpu::util::DeviceExt;
@@ -257,167 +256,20 @@ fn main() -> genoxide::Result<()> {
         outcome.best_fitness()
     );
 
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let start = Instant::now();
-    let mut trace = std::env::var("GENOXIDE_TRACE")
-        .ok()
-        .map(|path| (path, Trace::new(64)));
-    // the batches so far, for the trace: [worker, start, end], in seconds since the run started;
-    // the GPU is worker 0
-    let batches = Mutex::new(Vec::new());
-    let outcome = Engine::new(
-        ga()?,
-        Batch(|genomes: &[&Reals]| {
-            let begin = start.elapsed().as_secs_f64();
-            let errors = gpu.evaluate(genomes);
-            batches
-                .lock()
-                .unwrap()
-                .push((0, begin, start.elapsed().as_secs_f64()));
-            errors
-        }),
-    )
-    .stop_when(Stop::generations(GENERATIONS))
-    .on_generation(|snapshot| {
-        if let Some((_, trace)) = &mut trace {
-            let batches = batches.lock().unwrap();
-            let events = &batches[batches.len().saturating_sub(200)..];
-            let seconds = start.elapsed().as_secs_f64();
-            trace.record(snapshot, seconds, json!({ "events": events }));
-        }
-    })
-    .run()?;
+    let evaluate = trace.timed(|genomes: &[&Reals]| gpu.evaluate(genomes));
+    let outcome = Engine::new(ga()?, Batch(evaluate))
+        .stop_when(Stop::generations(GENERATIONS))
+        .on_generation(|snapshot| trace.record(snapshot))
+        .run()?;
     println!(
         "GPU, batches:    {:>6.2} s, error {:.4} ({:.4} on the CPU in double precision)",
         start.elapsed().as_secs_f64(),
         outcome.best_fitness(),
         error(outcome.best_genome(), &samples)
     );
-    if let Some((path, trace)) = trace {
-        trace.write(
-            &path,
-            json!({
-                "format": 1,
-                "example": "gpu",
-                "objective": "minimize",
-                "x_label": "evaluations",
-                "y_label": "mean squared error",
-                "log_y": false,
-                "optimum": null,
-                "plot": "timeline",
-                "problem": { "workers": 1 },
-            }),
-        );
-    }
+    trace.write();
     Ok(())
-}
-
-// ---- the trace of the GPU run, for the plot on the example's page ------------------------------
-
-// a frame per recorded generation, at most `most`: every `every`-th generation, with `every`
-// doubling whenever there are `most`, and the last generation
-struct Trace {
-    most: usize,
-    every: u64,
-    frames: Vec<(u64, Value)>,
-    last: Option<(u64, Value)>,
-}
-
-impl Trace {
-    fn new(most: usize) -> Self {
-        let (every, frames, last) = (1, Vec::new(), None);
-        Self {
-            most,
-            every,
-            frames,
-            last,
-        }
-    }
-
-    // the generation's progress, the seconds since the start, the median score of its population
-    // and the plot's `state`
-    fn record<G: Genome>(&mut self, snapshot: &Snapshot<'_, G>, seconds: f64, state: Value) {
-        let progress = snapshot.progress();
-        let population = snapshot.population().iter();
-        let scores = population.filter_map(|individual| individual.fitness()?.score());
-        let frame = json!({
-            "generation": progress.generation(),
-            "evaluations": progress.evaluations(),
-            "seconds": seconds,
-            "best": progress.best().and_then(Fitness::score),
-            "median": median(scores.collect()),
-            "state": state,
-        });
-        self.push(progress.generation(), frame);
-    }
-
-    // keeps `frame` if it's of the `every`-th generation, or as the last one
-    fn push(&mut self, generation: u64, frame: Value) {
-        if !generation.is_multiple_of(self.every) {
-            self.last = Some((generation, frame));
-            return;
-        }
-        self.frames.push((generation, frame));
-        self.last = None;
-        if self.frames.len() == self.most {
-            self.every *= 2;
-            let every = self.every;
-            self.frames
-                .retain(|(generation, _)| generation % every == 0);
-        }
-    }
-
-    // writes the settings and the frames to `path`, a frame per line
-    fn write(self, path: &str, settings: Value) {
-        let frames = self.frames.iter().chain(&self.last);
-        let frames: Vec<String> = frames.map(|(_, frame)| to_json(frame)).collect();
-        let settings = to_json(&settings);
-        let head = &settings[..settings.len() - 1];
-        let text = format!("{head},\"frames\":[\n{}\n]}}\n", frames.join(",\n"));
-        std::fs::write(path, text).expect("the trace is written");
-    }
-}
-
-// the median of the scores, None without any
-fn median(mut scores: Vec<f64>) -> Option<f64> {
-    scores.sort_by(f64::total_cmp);
-    let middle = scores.len() / 2;
-    match scores.len() {
-        0 => None,
-        n if n % 2 == 1 => Some(scores[middle]),
-        _ => Some((scores[middle - 1] + scores[middle]) / 2.0),
-    }
-}
-
-// compact JSON with sorted keys, and numbers rounded to 6 significant digits and written as
-// Python writes them (7542.0, 1e-08): the Python example writes the same file
-fn to_json(value: &Value) -> String {
-    let join = |items: Vec<String>| items.join(",");
-    match value {
-        Value::Number(number) if number.is_f64() => python_float(number.as_f64().expect("f64")),
-        Value::Array(items) => format!("[{}]", join(items.iter().map(to_json).collect())),
-        Value::Object(map) => {
-            let entry =
-                |(key, item): (&String, &Value)| format!("{}:{}", json!(key), to_json(item));
-            format!("{{{}}}", join(map.iter().map(entry).collect()))
-        }
-        other => other.to_string(),
-    }
-}
-
-fn python_float(value: f64) -> String {
-    let rounded: f64 = format!("{value:.5e}").parse().expect("a number");
-    let shortest = format!("{rounded:e}");
-    let (mantissa, exponent) = shortest.split_once('e').expect("an exponent");
-    let exponent: i32 = exponent.parse().expect("an exponent");
-    if (-4..16).contains(&exponent) {
-        let text = rounded.to_string();
-        if text.contains('.') {
-            text
-        } else {
-            text + ".0"
-        }
-    } else {
-        let sign = if exponent < 0 { '-' } else { '+' };
-        format!("{mantissa}e{sign}{:02}", exponent.abs())
-    }
 }
