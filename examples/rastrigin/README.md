@@ -62,7 +62,8 @@ One line per algorithm: the best value it found, to 6 decimals, and the evaluati
 stops as soon as it is within 1e-8 of the minimum, so a value of 0.000000 means that it met the
 target. In Python, `run` evaluates the function in Rust, so both versions print the same.
 
-The project page plays this run back.
+The project page plays back another run: L-SHADE on Rastrigin in 2 dimensions, so that the
+population can be drawn on the function's contour.
 
 ## Good results
 

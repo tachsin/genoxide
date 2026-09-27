@@ -1,9 +1,12 @@
 # Plan: the test problem library
 
-A working plan, removed when the work is done. genoxide has ZDT1-4, ZDT6 and DTLZ1-4 in
-`multi::problems`, and no single-objective, constrained or engineering problems; none are in the
-Python package. This plan catalogs the problems to add, designs their API in Rust and Python,
-sets how they're tested, and orders the work in batches.
+A working plan, removed when the work is done. Batches 1 to 3 are done
+([#170](https://github.com/tachsin/genoxide/pull/170), [#177](https://github.com/tachsin/genoxide/pull/177),
+[#191](https://github.com/tachsin/genoxide/pull/191)): `problems` has 16 classic functions, CEC 2006's
+g01-g06 and 8 engineering design problems, and `multi::problems` has 13 classic problems besides
+ZDT1-4, ZDT6 and DTLZ1-4, all of them in the Python package too. This plan catalogs the problems,
+designs their API in Rust and Python, sets how they're tested, and orders the work in batches;
+section 4 says which are done.
 
 **Rules.**
 
@@ -170,7 +173,7 @@ McGraw-Hill): g04, g14-g20; Hock and Schittkowski (1981, LNEMS 187, doi:10.1007/
 g05, g07, g09, g10, g13; Koziel and Michalewicz (1999, Evolutionary Computation 7(1): 19-44,
 doi:10.1162/evco.1999.7.1.19): g02, g08, g11, g12; Michalewicz, Nazhiyath and Michalewicz (1996,
 Proc. 5th Conf. on Evolutionary Programming, pp. 305-312): g03; Epperly (test problems with
-solutions): g21, g22; Xia (<http://www.mat.univie.ac.at/~neum/glopt/xia.txt>): g23; Floudas et
+solutions): g21, g22; Xia (<https://arnold-neumaier.at/glopt/xia.txt>): g23; Floudas et
 al. (1999, *Handbook of Test Problems in Local and Global Optimization*, Kluwer,
 doi:10.1007/978-1-4757-3040-1): g24. The docs cite the report and, per problem, its source.
 
@@ -935,22 +938,22 @@ entries, the docs (the module docs list every problem with its citation), and it
 (`title`, `category`, `summary`, `reference`, `reference_url`, `optimum`, `languages`, `order`),
 plus a row in `examples/README.md`.
 
-| Batch | Contents | Problems | Examples (`examples/<name>/`) |
-|---|---|---|---|
-| 1 | The `problems` module (trait, `Optimum`, `Constraints`, registry), `gx.problems` with native evaluation, `gx.indicators`; the classic continuous functions | Sphere, Axis-parallel ellipsoid, Schwefel 1.2, Rastrigin, Rosenbrock, Ackley, Griewank, Schwefel (2.26), Levy, Zakharov, Styblinski-Tang, Himmelblau, Michalewicz, Branin, Goldstein-Price, Six-hump camel (16) | `rastrigin` (switch to `problems::Rastrigin`); new `function_suite`: CMA-ES, SHADE and PSO on the batch's scalable functions in 10-D, printing the error to the optimum; new `himmelblau`: the four minima found by restarts of a local search (continuous) |
-| 2 | `MultiProblem` (the breaking change), constraints in multi-objective problems, the pymoo test values replaced (section 5); the classic two- and three-objective problems | Schaffer 1, Schaffer 2, Fonseca-Fleming, Kursawe, Poloni, Viennet 1-3, BNH, SRN, TNK, OSY, CONSTR (13; WATER is batch 9's water resource planning) | `bnh` (NSGA-II on a constrained problem, IGD+ to the analytic front; multi-objective); `kursawe` (disconnected front, SPEA2 vs NSGA-II) |
-| 3 | Engineering design, single objective, and the mixed-variable convention (`design()`) | Welded beam, Pressure vessel, Tension/compression spring, Speed reducer, Gear train (integer), Three-bar truss, Cantilever beam, Car side impact (single objective) (8), and CEC 2006 g01-g06 (6) | `pressure_vessel` (switch to `engineering::PressureVessel`); new `welded_beam` (constrained); new `gear_train` (integer genome; category integer) |
-| 4 | Scalable many-objective problems | DTLZ5, DTLZ6, DTLZ7, ZDT5 (binary), WFG1-WFG9 (13) | `wfg_many_objective`: NSGA-III and MOEA/D on WFG4 and WFG9 with 5 objectives, IGD to the sampled front; `zdt5` (binary genome, multi-objective) |
-| 5 | CEC 2006, part 2 | g07-g18 (12) | `cec2006`: SHADE with Deb's rules on all of the problems so far, printing f − f* and feasibility, as in the report's evaluation criteria |
-| 6 | CEC 2006, part 3, and the low-dimensional classics with tables | g19-g24 (6), Hartmann 3-D, Hartmann 6-D, Shekel 5/7/10, Easom, Eggholder, Schaffer F6 (8) | `cec2006` covers all 24 |
-| 7 | Constrained test problems with tunable difficulty (CTP needs its paper first: every CTP detail is unverified) | CTP1-CTP8 (8), C1-DTLZ1, C1-DTLZ3, C2-DTLZ2, C2-convex-DTLZ2, C3-DTLZ1, C3-DTLZ4 (6) | `ctp` (NSGA-II on CTP2/CTP7's disconnected feasible fronts); `c2_dtlz2` (NSGA-III with constraints, 3 objectives) |
-| 8 | Scaled and inverted DTLZ, and MW | Convex DTLZ2, scaled DTLZ1, scaled DTLZ2, inverted DTLZ1 (4), MW1-MW14 (14) | `mw` (constrained multi-objective, several fronts) |
-| 9 | Engineering design, several objectives | Two-bar truss, welded beam (2 objectives), disc brake, car side impact (3 objectives), speed reducer (2 objectives), four-bar truss, water resource planning, rocket injector, vehicle crashworthiness, conceptual marine design (10) | `two_bar_truss`; `car_side_impact` |
-| 10a | Remaining low-dimensional and classic scalable functions | Beale, Booth, Matyas, Bohachevsky 1-3, Three-hump camel, Dixon-Price, Trid, Powell, Langermann, Shekel's foxholes, Kowalik, Schwefel 2.21, Schwefel 2.22 (15) | none (covered by `function_suite`) |
-| 10b | CEC and BBOB-style functions, and the shift / rotation wrappers | `Shifted<P>`, `Rotated<P>`; Sum of different powers, Step, Quartic (deterministic: without noise, or with noise seeded from the genome, since fitness functions must be deterministic), Penalized 1 and 2, High-conditioned elliptic, Bent cigar, Discus, Büche-Rastrigin, Non-continuous Rastrigin, Weierstrass, Katsuura, HappyCat, HGBat, Schaffer F7, Rotated hyper-ellipsoid, BBOB different powers (17; the shifted and rotated Rastrigin of CEC 2005 and BBOB are the wrappers around `Rastrigin`) | `rotated_functions`: CMA-ES full vs diagonal on rotated vs axis-parallel ellipsoids |
-| 11 | Advanced constrained multi-objective suites | DAS-CMOP1-9 (with the 16 difficulty triplets as a parameter), DC-DTLZ (DC1-DC3 on DTLZ1/DTLZ3), DTLZ8, DTLZ9 (≈15) | `das_cmop` (difficulty triplets) |
-| 12 | Binary and combinatorial problems | OneMax, LeadingOnes, deceptive trap, royal road, NK landscapes (seeded), 0/1 knapsack (generated instance classes) (6) | `one_max` and `knapsack` switch to the problems; new `nk_landscape` (binary) |
-| 13 (optional) | Competition suites whose definitions are long | LIR-CMOP1-14, CEC 2009 UF1-UF10 and CF1-CF10, MaF1-MaF15, Deb's 1999 two-objective problems, Van Veldhuizen's constrained problems; the deferred engineering problems (section 1.5) once their originals are read | none; used by the benchmark suite |
+| Batch | Status | Contents | Problems | Examples (`examples/<name>/`) |
+|---|---|---|---|---|
+| 1 | done ([#170](https://github.com/tachsin/genoxide/pull/170)) | The `problems` module (trait, `Optimum`, `Constraints`, registry), `gx.problems` with native evaluation, `gx.indicators`; the classic continuous functions | Sphere, Axis-parallel ellipsoid, Schwefel 1.2, Rastrigin, Rosenbrock, Ackley, Griewank, Schwefel (2.26), Levy, Zakharov, Styblinski-Tang, Himmelblau, Michalewicz, Branin, Goldstein-Price, Six-hump camel (16) | `rastrigin` (switch to `problems::Rastrigin`); new `function_suite`: CMA-ES, SHADE and PSO on the batch's scalable functions in 10-D, printing the error to the optimum; new `himmelblau`: the four minima found by restarts of a local search (continuous) |
+| 2 | done ([#177](https://github.com/tachsin/genoxide/pull/177)) | `MultiProblem` (the breaking change), constraints in multi-objective problems, the pymoo test values replaced (section 5); the classic two- and three-objective problems | Schaffer 1, Schaffer 2, Fonseca-Fleming, Kursawe, Poloni, Viennet 1-3, BNH, SRN, TNK, OSY, CONSTR (13; WATER is batch 9's water resource planning) | `bnh` (NSGA-II on a constrained problem, IGD+ to the analytic front; multi-objective); `kursawe` (disconnected front, SPEA2 vs NSGA-II) |
+| 3 | done ([#191](https://github.com/tachsin/genoxide/pull/191)) | Engineering design, single objective, and the mixed-variable convention (`design()`) | Welded beam, Pressure vessel, Tension/compression spring, Speed reducer, Gear train (integer), Three-bar truss, Cantilever beam, Car side impact (single objective) (8), and CEC 2006 g01-g06 (6) | `pressure_vessel` (switch to `engineering::PressureVessel`); new `welded_beam` (constrained); new `gear_train` (integer genome; category integer) |
+| 4 |  | Scalable many-objective problems | DTLZ5, DTLZ6, DTLZ7, ZDT5 (binary), WFG1-WFG9 (13) | `wfg_many_objective`: NSGA-III and MOEA/D on WFG4 and WFG9 with 5 objectives, IGD to the sampled front; `zdt5` (binary genome, multi-objective) |
+| 5 |  | CEC 2006, part 2 | g07-g18 (12) | `cec2006`: SHADE with Deb's rules on all of the problems so far, printing f − f* and feasibility, as in the report's evaluation criteria |
+| 6 |  | CEC 2006, part 3, and the low-dimensional classics with tables | g19-g24 (6), Hartmann 3-D, Hartmann 6-D, Shekel 5/7/10, Easom, Eggholder, Schaffer F6 (8) | `cec2006` covers all 24 |
+| 7 |  | Constrained test problems with tunable difficulty (CTP needs its paper first: every CTP detail is unverified) | CTP1-CTP8 (8), C1-DTLZ1, C1-DTLZ3, C2-DTLZ2, C2-convex-DTLZ2, C3-DTLZ1, C3-DTLZ4 (6) | `ctp` (NSGA-II on CTP2/CTP7's disconnected feasible fronts); `c2_dtlz2` (NSGA-III with constraints, 3 objectives) |
+| 8 |  | Scaled and inverted DTLZ, and MW | Convex DTLZ2, scaled DTLZ1, scaled DTLZ2, inverted DTLZ1 (4), MW1-MW14 (14) | `mw` (constrained multi-objective, several fronts) |
+| 9 |  | Engineering design, several objectives | Two-bar truss, welded beam (2 objectives), disc brake, car side impact (3 objectives), speed reducer (2 objectives), four-bar truss, water resource planning, rocket injector, vehicle crashworthiness, conceptual marine design (10) | `two_bar_truss`; `car_side_impact` |
+| 10a |  | Remaining low-dimensional and classic scalable functions | Beale, Booth, Matyas, Bohachevsky 1-3, Three-hump camel, Dixon-Price, Trid, Powell, Langermann, Shekel's foxholes, Kowalik, Schwefel 2.21, Schwefel 2.22 (15) | none (covered by `function_suite`) |
+| 10b |  | CEC and BBOB-style functions, and the shift / rotation wrappers | `Shifted<P>`, `Rotated<P>`; Sum of different powers, Step, Quartic (deterministic: without noise, or with noise seeded from the genome, since fitness functions must be deterministic), Penalized 1 and 2, High-conditioned elliptic, Bent cigar, Discus, Büche-Rastrigin, Non-continuous Rastrigin, Weierstrass, Katsuura, HappyCat, HGBat, Schaffer F7, Rotated hyper-ellipsoid, BBOB different powers (17; the shifted and rotated Rastrigin of CEC 2005 and BBOB are the wrappers around `Rastrigin`) | `rotated_functions`: CMA-ES full vs diagonal on rotated vs axis-parallel ellipsoids |
+| 11 |  | Advanced constrained multi-objective suites | DAS-CMOP1-9 (with the 16 difficulty triplets as a parameter), DC-DTLZ (DC1-DC3 on DTLZ1/DTLZ3), DTLZ8, DTLZ9 (≈15) | `das_cmop` (difficulty triplets) |
+| 12 |  | Binary and combinatorial problems | OneMax, LeadingOnes, deceptive trap, royal road, NK landscapes (seeded), 0/1 knapsack (generated instance classes) (6) | `one_max` and `knapsack` switch to the problems; new `nk_landscape` (binary) |
+| 13 (optional) |  | Competition suites whose definitions are long | LIR-CMOP1-14, CEC 2009 UF1-UF10 and CF1-CF10, MaF1-MaF15, Deb's 1999 two-objective problems, Van Veldhuizen's constrained problems; the deferred engineering problems (section 1.5) once their originals are read | none; used by the benchmark suite |
 
 Order rationale: batch 1 builds the machinery with the functions everyone starts with; batch 2
 makes the multi-objective side consistent (and removes the pymoo test values) while the problems
@@ -960,62 +963,8 @@ literature. Each batch updates AGENTS.md's list of test problems and `docs/featu
 
 ## 5. Mentions of pymoo in the code, tests and docs
 
-The library's docs should state behavior and cite the papers, not describe genoxide by another
-library. Each mention below has a proposed rewording. The benchmark suite (`benchmarks/`,
-`docs/benchmarks/`) compares libraries by name on purpose and stays as it is; so do the
-CHANGELOG (history) and the ROADMAP's goals and benchmark lists (`ROADMAP.md:9`, `:164`, `:175`,
-`:217`), which the owner may reword separately.
-
-| Place | What it says | Proposed rewording |
-|---|---|---|
-| `src/multi/problems.rs:593-595` | `// values computed by pymoo 0.6.2 at random points`, test `values_match_pymoo` with 20 vectors of expected values | Replace the test (see below): `values_match_the_papers`, with expected values derived by hand from the papers' formulas at chosen points, and the Pareto-set checks that exist already |
-| `src/multi/moead.rs:70-71` | children evaluated together "(like pymoo's `ParallelMOEAD`)" | "The children are evaluated together, so a generation can be evaluated in parallel." (drop the comparison) |
-| `src/multi/moead.rs:72-76` | "…which matters more when a generation's children are applied together; pymoo's MOEA/D has no limit." | End at "…applied together." The limit is cited already (Li and Zhang, 2009, IEEE TEVC 13(2): 284-302, doi:10.1109/TEVC.2008.925798) |
-| `src/multi/moead.rs:78-79` | "constraints are handled too (unlike pymoo's MOEA/D)" | "…so constraints are handled too." (drop the parenthesis) |
-| `src/multi/moead.rs:456` | "`crossover_rate` and `mutation_rate` 1.0 (as in pymoo)" | "`crossover_rate` and `mutation_rate` 1.0 (every child is recombined and mutated, as in Zhang and Li's MOEA/D, 2007, IEEE TEVC 11(6): 712-731, doi:10.1109/TEVC.2007.892759)". Check the paper first; if it doesn't say, just "1.0" |
-| `src/multi/moead.rs:529-530` | "the neighborhood size (or more) removes the limit, as in pymoo" | "the neighborhood size (or more) removes the limit, as in the original MOEA/D (Zhang and Li, 2007)" |
-| `src/multi/nsga2.rs:459`, `src/multi/nsga3.rs:722`, `src/multi/sms_emoa.rs:520`, `src/multi/spea2.rs:523` | `eliminate_duplicates`: "On by default, as in pymoo." | "On by default." (a genoxide choice, explained by the sentence before it) |
-| `python/genoxide/__init__.py:1447` | "With `eliminate_duplicates` (the default, as in pymoo)" | "With `eliminate_duplicates` (the default)" |
-| `src/multi/nsga3.rs:29-30` | "The normalization follows pymoo's, and keeps the ideal point, the worst point and the extreme points over the whole run." | "The normalization is Deb and Jain's (2014, IEEE TEVC 18(4): 577-601, doi:10.1109/TEVC.2013.2281535), with the fallbacks of Blank, Deb and Roy (2019, 'Investigating the normalization procedure of NSGA-III', EMO 2019, LNCS 11411: 229-240, doi:10.1007/978-3-030-12598-1_19): it keeps the ideal point, the worst point and the extreme points over the whole run." Verify that the fallbacks match that paper before citing it; otherwise describe them without a citation |
-| `src/multi/nsga3.rs:365-366` | "with pymoo's fallbacks to the worst point of the first front and of the population" | "with the fallbacks (Blank, Deb and Roy, 2019) to the worst point of the first front and of the population" (same check) |
-| `src/multi/nsga3.rs:641-642` | "(as in Deb and Jain, and pymoo)" | "(as in Deb and Jain, 2014)" |
-| `src/multi/sms_emoa.rs:21-22` | "`offspring` children (the population size by default, as in pymoo; 1 for the original steady-state algorithm)" | "`offspring` children (the population size by default, a generational variant; 1 for the original steady-state algorithm of Beume, Naujoks and Emmerich, 2007, EJOR 181(3): 1653-1669, doi:10.1016/j.ejor.2006.08.008)" |
-| `src/multi/sms_emoa.rs:27-30` | reference point "at 11 in each normalized objective (pymoo's)…" and "(pymoo normalizes by the parents only, which can put a far child beyond the reference point…)" | "…and the reference point at 11 in each normalized objective, so every point is inside it and the extremes of the front are kept. Normalizing by the parents only could put a far child beyond the reference point and drop it first, even when it's the best in another objective." |
-| `src/operator/crossover.rs:163-164` | "Deb and Agrawal's bounded version, as in NSGA-II and pymoo." | "Deb and Agrawal's (1995, Complex Systems 9(2): 115-148) bounded version, as in Deb et al.'s NSGA-II (2002, IEEE TEVC 6(2): 182-197, doi:10.1109/4235.996017)." |
-| `src/operator/mutate.rs:328-329` | "Deb's bounded polynomial mutation, as in NSGA-II and pymoo" | "Deb's bounded polynomial mutation (Deb and Goyal, 1996, Computer Science and Informatics 26(4): 30-45; Deb, 2001, Multi-Objective Optimization Using Evolutionary Algorithms, Wiley), as in NSGA-II" |
-| `tests/multi.rs:39-40` | "pymoo's NSGA-II reaches 0.8696 to 0.8699 with these settings, genoxide 0.8689 to 0.8700 (5 seeds)" | "genoxide reaches 0.8689 to 0.8700 with these settings (5 seeds)" |
-| `tests/multi.rs:267-268` | "an IGD … of 0.0009 to 0.0015 for pymoo, 0.0012 to 0.0016 for genoxide" | "an IGD to the 91 optimal points of 0.0012 to 0.0016 (5 seeds)" |
-| `tests/multi.rs:289` | "pymoo's SPEA2 reaches 0.8703 to 0.8706" | drop the second half |
-| `tests/multi.rs:311-312` | "(pymoo's sequential MOEA/D 0.8693 to 0.8705, its ParallelMOEAD 0.78 to 0.83)" | drop the parenthesis |
-| `tests/multi.rs:326` | "(pymoo 0.0005 to 0.0006)" | drop the parenthesis |
-| `tests/multi.rs:347-348` | "like pymoo's SMS-EMOA (0.8715 to 0.8718)" | "0.8713 to 0.8716 over 5 seeds" |
-
-The citations in the rewordings are from the literature as commonly cited: check each DOI and page range when applying them. How genoxide compares with other libraries belongs in the benchmark results, which name them on
+Done in batch 2 ([#177](https://github.com/tachsin/genoxide/pull/177)): the code, tests and docs
+state behavior and cite the papers, not another library, and `values_match_pymoo` became tests
+whose expected values are derived from the papers' formulas. The benchmark suite (`benchmarks/`,
+`docs/benchmarks/`), the CHANGELOG and the ROADMAP's benchmark lists name other libraries on
 purpose.
-
-### Replacing `values_match_pymoo`
-
-The ZDT and DTLZ values are easy to check by hand at chosen points, from the formulas in Zitzler,
-Deb and Thiele (2000) and Deb, Thiele, Laumanns and Zitzler (2002/2005):
-
-- ZDT1-3 (n = 30) at `x = (a, b, …, b)`: g = 1 + 9b, and `f₂ = g (1 − √(a/g))` (ZDT1),
-  `g (1 − (a/g)²)` (ZDT2), `g (1 − √(a/g) − (a/g) sin(10πa))` (ZDT3). With a = 0.25 and b = 1/9
-  (g = 2, a/g = 0.125): ZDT1 f₂ = 2 (1 − √0.125) = 2 − √2/2 = 1.292893218813452; ZDT2
-  f₂ = 2 (1 − 1/64) = 1.96875; ZDT3 f₂ = 2 (1 − √0.125 − 0.125 sin(2.5π)) = 2 − √2/2 − 0.25 =
-  1.042893218813452.
-- ZDT4 (n = 10) at `x = (0.25, 1, 0, …, 0)`: g = 1 + 10 × 9 + (1 − 10 cos 4π) + 8 × (0 − 10 cos 0)
-  = 1 + 90 − 9 − 80 = 2, so f₂ = 2 − √2/2 as for ZDT1.
-- ZDT6 (n = 10) at `x₁ = 0` (f₁ = 1 − e⁰ sin⁶ 0 = 1) and `x₂ = … = x₁₀ = 1/81`: the tail mean is
-  1/81, g = 1 + 9 (1/81)^0.25 = 1 + 9/3 = 4, and f₂ = 4 (1 − (1/4)²) = 3.75.
-- DTLZ1 (M = 3, k = 5) at `x = (0.5, 0.5, 0.5, …)`: g = 0, f = (0.125, 0.125, 0.25); at
-  `x_M = … = 1`: each term is 0.25 − cos(10π) = −0.75, g = 100 (5 − 3.75) = 125, f scaled by 126.
-- DTLZ2-4 (M = 3) at the distance variables 0.5 and `x₁ = x₂ = 0` or `1`: the corners (1, 0, 0),
-  (0, 0, 1) and so on; at distance variables 1 (k = 10): DTLZ2 g = 10 × 0.25 = 2.5, radius 3.5;
-  DTLZ3 g = 100 (10 + 10 × (0.25 − cos 10π)) = 100 × 2.5 = 250, radius 251.
-- DTLZ4 (M = 3) at `x₁ = x₂ = 0.5` and the distance variables at 0.5: g = 0, both angles are
-  0.5¹⁰⁰ × π/2 ≈ 1.2391e-30, so f = (cos θ cos θ, cos θ sin θ, sin θ) = (1, 1.2391e-30, 1.2391e-30)
-  to double precision: the bias towards f₁ that the paper describes.
-
-Every expected value above is derived in a comment in the test. The test keeps the existing
-Pareto-set checks (`zdt_optimal_solutions_lie_on_the_front`,
-`dtlz_optimal_solutions_lie_on_the_front`).

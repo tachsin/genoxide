@@ -64,4 +64,4 @@ The project page plays this run back.
 ## Good results
 
 Each minimum is worth 0. A good result finds all four, each with a value close to 0. The run finds
-all four, with 3 to 6 searches each, and values between about 1e-9 and 1e-6.
+all four, with 3 to 6 searches each, and values between about 6e-9 and 2e-6.

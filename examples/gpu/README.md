@@ -24,6 +24,9 @@ output = c + Σ vⱼ tanh(aⱼ x + bⱼ y + dⱼ)    over the 16 hidden units j
 The fitness is the mean squared error between the network's output and the function, over the 4,096
 samples.
 
+There's no Python version: the example is a Rust crate of its own, with wgpu. In Python,
+`batch=True` hands a whole generation to the fitness function, which can pass it to any GPU library.
+
 ## What makes it hard
 
 The cost of the fitness. One evaluation runs the network on 4,096 samples. A generation of 512
@@ -64,7 +67,8 @@ precision changed it.
 
 The times depend on the machine: each run prints other numbers.
 
-The project page plays this run back.
+The project page plays back another run, recorded the same way: its times and values differ from
+the ones above.
 
 ## Good results
 

@@ -1,7 +1,7 @@
 ---
 title: Kursawe's disconnected front
 category: multi-objective
-summary: Minimize two objectives whose Pareto front is in three separate pieces, with SPEA2 and NSGA-II.
+summary: Minimize two objectives whose Pareto front is in four separate pieces, a point and three curves, with SPEA2 and NSGA-II.
 reference: "Kursawe, F. (1991). A variant of evolution strategies for vector optimization. Parallel Problem Solving from Nature, LNCS 496: 193-197."
 reference_url: https://doi.org/10.1007/BFb0029752
 optimum: "not known in closed form"
