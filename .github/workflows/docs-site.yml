@@ -54,12 +54,12 @@ jobs:
           # pdoc imports the package, so the extension module is built first
           (cd python && maturin develop --release)
           # from the root, which the snippets of the examples are relative to; mkdocs empties
-          # site/ first, so the API reference goes in after
+          # _site/ first, so the API reference goes in after
           mkdocs build --strict
-          pdoc -d numpy -o site/api/python genoxide
+          pdoc -d numpy -o _site/api/python genoxide
       - uses: actions/upload-pages-artifact@v5.0.0
         with:
-          path: site
+          path: _site
 
   deploy:
     name: Deploy
