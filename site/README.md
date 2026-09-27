@@ -15,7 +15,7 @@ app pins a commit that has it (`pnpm sync:genoxide --update` pins main's latest)
 | --- | --- |
 | `app/projects/genoxide/` | the routes: overview, `/examples`, `/examples/[slug]`, `/benchmarks`, the sub-navigation layout and the Open Graph image |
 | `lib/projects/genoxide/` | the data: static facts (`meta.js`), and the examples, benchmarks and versions read from GitHub, crates.io and PyPI |
-| `components/projects/genoxide/` | the components only these pages use |
+| `components/projects/genoxide/` | the components only these pages use; `player/` plays an example's recorded run (its `trace.json`) |
 
 Nothing else in `site/` is copied. Imports use the app's `@/` alias, which is the app's root.
 
@@ -45,7 +45,8 @@ The contract between the two repositories: these have to exist in the app, with 
 Also from the app: the `/projects` layout around these pages, the `proj-*` classes of
 `app/projects/projects.css`, Tailwind and daisyUI utilities (the app's `app/globals.css` lists the
 three folders with `@source`), and the npm packages `next`, `react`, `lucide-react`, `react-icons`
-and `yaml`.
+and `yaml`. The player fetches `trace.json` in the browser from raw.githubusercontent.com, so the
+app's Content-Security-Policy has to allow it in `connect-src`.
 
 The other way, the app uses `genoxideExamplePaths` from `lib/projects/genoxide/examples.js` for its
 sitemap, and links to `/projects/genoxide/examples` from its `/projects` 404 page.

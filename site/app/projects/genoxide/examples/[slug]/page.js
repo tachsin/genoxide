@@ -6,6 +6,8 @@ import Breadcrumbs from "@/components/projects/Breadcrumbs";
 import JsonLd from "@/components/projects/JsonLd";
 import LangCodeGroup from "@/components/projects/LangCodeGroup";
 import SourceUnavailable from "@/components/projects/SourceUnavailable";
+import ExampleOutput from "@/components/projects/genoxide/ExampleOutput";
+import ExamplePlayer from "@/components/projects/genoxide/player/ExamplePlayer";
 import { EXAMPLES_PATH, blobUrl, getExample, getExamples, runCommand } from "@/lib/projects/genoxide/examples";
 import { GENOXIDE_LINKS, GENOXIDE_OG_IMAGE, GENOXIDE_PATH } from "@/lib/projects/genoxide/meta";
 import { renderMarkdown } from "@/lib/projects/highlight";
@@ -166,6 +168,20 @@ export default async function ExamplePage({ params }) {
         ) : null}
       </header>
 
+      {example.traceUrl ? (
+        <section aria-labelledby="example-run-heading" className="proj-rise-1 mt-12">
+          <div className="mb-4 max-w-3xl">
+            <h2 id="example-run-heading" className="font-semibold text-2xl tracking-tight">
+              The run
+            </h2>
+            <p className="proj-lead mt-1 text-sm">
+              Recorded from the seeded run below: play it, pause it, or scrub through the generations.
+            </p>
+          </div>
+          <ExamplePlayer traceUrl={example.traceUrl} sourceUrl={blobUrl(example.files.trace)} />
+        </section>
+      ) : null}
+
       {bodyHtml ? (
         <article className="proj-prose proj-rise-1 mt-10 max-w-3xl" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
       ) : null}
@@ -213,6 +229,13 @@ export default async function ExamplePage({ params }) {
                 code: runCommand(example, lang),
               }))}
             />
+          </>
+        ) : null}
+
+        {example.output && example.languages.length ? (
+          <>
+            <h3 className="mt-10 mb-3 font-semibold text-lg tracking-tight">Output</h3>
+            <ExampleOutput example={example} note={note} />
           </>
         ) : null}
       </section>

@@ -12,6 +12,8 @@ import { GENOXIDE_PATH } from "./meta";
  *   examples/<name>/README.md   YAML front matter + the example's text
  *   examples/<name>/main.rs     the Rust example (cargo run --example <name>)
  *   examples/<name>/main.py     the Python example, when there is one
+ *   examples/<name>/output.txt  what the example prints (a seeded run), optional
+ *   examples/<name>/trace.json  its run recorded for the page's player, optional
  *
  * A folder with its own Cargo.toml is a crate of its own (examples/gpu):
  * its Rust code is src/main.rs and it runs with --manifest-path.
@@ -42,7 +44,8 @@ export const EXAMPLES_PATH = `${GENOXIDE_PATH}/examples`;
  * @property {CodeLanguage[]} languages  those with a file in the folder, Rust first
  * @property {number} order
  * @property {boolean} isCrate      has its own Cargo.toml
- * @property {{ rust: string | null, python: string | null }} files  repository paths
+ * @property {{ rust: string | null, python: string | null, output: string | null, trace: string | null }} files
+ *   repository paths; `output` is output.txt, `trace` is trace.json
  */
 
 /**
@@ -98,6 +101,8 @@ function toSummary(dir, data, files) {
   const isCrate = files.has(`${base}/Cargo.toml`);
   const rust = [`${base}/main.rs`, `${base}/src/main.rs`].find((p) => files.has(p)) ?? null;
   const python = files.has(`${base}/main.py`) ? `${base}/main.py` : null;
+  const output = files.has(`${base}/output.txt`) ? `${base}/output.txt` : null;
+  const trace = files.has(`${base}/trace.json`) ? `${base}/trace.json` : null;
 
   // A language shows only when its file exists; the front matter can narrow
   // the list, never add a language without code.
@@ -120,7 +125,7 @@ function toSummary(dir, data, files) {
     languages: languages.length ? languages : available,
     order: Number.isFinite(order) ? order : DEFAULT_ORDER,
     isCrate,
-    files: { rust, python },
+    files: { rust, python, output, trace },
   };
 }
 
@@ -206,10 +211,11 @@ export const getExample = cache(async (slug) => {
   if (index === -1) return null;
   const example = examples[index];
 
-  const [readme, rust, python] = await Promise.all([
+  const [readme, rust, python, output] = await Promise.all([
     getRepoFile(`${EXAMPLES_DIR}/${example.dir}/README.md`),
     example.files.rust && example.languages.includes("rust") ? getRepoFile(example.files.rust) : null,
     example.files.python && example.languages.includes("python") ? getRepoFile(example.files.python) : null,
+    example.files.output ? getRepoFile(example.files.output) : null,
   ]);
 
   const slugByDir = new Map(examples.map((e) => [e.dir, e.slug]));
@@ -218,6 +224,10 @@ export const getExample = cache(async (slug) => {
     body: stripLeadingTitle(parseFrontMatter(readme ?? "").body),
     resolveUrl: makeUrlResolver(example.dir, slugByDir),
     code: { rust, python },
+    output: output?.trim() ? output.replace(/\s+$/, "") : null,
+    // The browser fetches the trace itself, when the player scrolls into
+    // view (raw.githubusercontent.com allows it: Access-Control-Allow-Origin *).
+    traceUrl: example.files.trace ? rawUrl(example.files.trace) : null,
     folderUrl: `${TREE_BASE}${EXAMPLES_DIR}/${example.dir}`,
     previous: examples[index - 1] ?? null,
     next: examples[index + 1] ?? null,
@@ -227,6 +237,11 @@ export const getExample = cache(async (slug) => {
 /** Repository URL of a file, for "view on GitHub" links. */
 export function blobUrl(path) {
   return `${BLOB_BASE}${path}`;
+}
+
+/** Raw URL of a file of the branch the examples are read from, for the browser to fetch. */
+export function rawUrl(path) {
+  return `${RAW_BASE}${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 /**
@@ -240,6 +255,16 @@ export function runCommand(example, language) {
     return `cargo run --release --manifest-path ${EXAMPLES_DIR}/${example.dir}/Cargo.toml`;
   }
   return `cargo run --release --example ${example.dir}`;
+}
+
+/**
+ * The command whose output is the example's output.txt: the run command
+ * without the install step.
+ * @param {ExampleSummary} example
+ * @param {CodeLanguage} language
+ */
+export function outputCommand(example, language) {
+  return runCommand(example, language).split(/\n/).at(-1);
 }
 
 /** Paths of every example page, for the sitemap. Empty when GitHub is unreachable. */
