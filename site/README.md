@@ -15,6 +15,11 @@ app pins a commit that has it (`pnpm sync:genoxide --update` pins main's latest)
 | --- | --- |
 | `app/projects/genoxide/` | the routes: overview, `/examples`, `/examples/[slug]`, `/benchmarks`, the sub-navigation layout and the Open Graph image |
 | `lib/projects/genoxide/` | the data: static facts (`meta.js`), and the examples, benchmarks and versions read from GitHub, crates.io and PyPI |
+
+The examples (and the benchmark pages' file list) are read from GitHub at the pinned commit, not
+at `main`: the pages always get the files they were written for, and pinning a new commit is new
+URLs, so nothing the app cached from an older commit is served for it. An example added to `main`
+shows once the app pins a commit that has it. Links for readers ("view on GitHub") go to `main`.
 | `components/projects/genoxide/` | the components only these pages use; `player/` plays an example's recorded run (its `trace.json`) |
 
 Nothing else in `site/` is copied. Imports use the app's `@/` alias, which is the app's root.
@@ -28,6 +33,7 @@ The contract between the two repositories: these have to exist in the app, with 
 
 | Module | Exports |
 | --- | --- |
+| `@/genoxide-site.json` | `commit`: the pinned commit, the one these pages were synced from |
 | `@/components/projects/Breadcrumbs` | default |
 | `@/components/projects/JsonLd` | default |
 | `@/components/projects/LangCodeGroup` | default (the Rust/Python code tabs) |

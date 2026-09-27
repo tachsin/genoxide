@@ -1,23 +1,28 @@
 import { cache } from "react";
 import { fetchCached } from "@/lib/projects/fetch-cached";
-import { GENOXIDE_BRANCH, GENOXIDE_REPO } from "./meta";
+import { GENOXIDE_BRANCH, GENOXIDE_COMMIT, GENOXIDE_REPO } from "./meta";
 
 /**
- * Reads the public genoxide repository on GitHub, server-side.
+ * Reads the public genoxide repository on GitHub, server-side, at the
+ * commit the pages were synced from (GENOXIDE_COMMIT).
  *
- * One GitHub API call lists every file (the git tree of the branch); the
+ * One GitHub API call lists every file (the git tree of the commit); the
  * files themselves come from raw.githubusercontent.com, which has no API
  * rate limit. Both go through Next's data cache (daily), so GitHub's 60
- * unauthenticated API calls an hour are never close to being used.
+ * unauthenticated API calls an hour are never close to being used. The
+ * URLs name the commit, so the cache can't go stale: pinning a new commit
+ * fetches new URLs.
+ *
+ * Links for people ("view on GitHub") go to the branch instead.
  */
 
-const TREE_URL = `https://api.github.com/repos/${GENOXIDE_REPO}/git/trees/${GENOXIDE_BRANCH}?recursive=1`;
-export const RAW_BASE = `https://raw.githubusercontent.com/${GENOXIDE_REPO}/${GENOXIDE_BRANCH}/`;
+const TREE_URL = `https://api.github.com/repos/${GENOXIDE_REPO}/git/trees/${GENOXIDE_COMMIT}?recursive=1`;
+export const RAW_BASE = `https://raw.githubusercontent.com/${GENOXIDE_REPO}/${GENOXIDE_COMMIT}/`;
 export const BLOB_BASE = `https://github.com/${GENOXIDE_REPO}/blob/${GENOXIDE_BRANCH}/`;
 export const TREE_BASE = `https://github.com/${GENOXIDE_REPO}/tree/${GENOXIDE_BRANCH}/`;
 
 /**
- * Every file path of the branch, or null when GitHub can't be reached.
+ * Every file path of the commit, or null when GitHub can't be reached.
  * Deduplicated per request with React's cache().
  * @returns {Promise<Set<string> | null>}
  */
@@ -32,7 +37,7 @@ export const getRepoFiles = cache(async () => {
 });
 
 /**
- * A file of the branch as text, or null.
+ * A file of the commit as text, or null.
  * @param {string} path  repository-relative, e.g. "examples/knapsack/README.md"
  */
 export const getRepoFile = cache(async (path) =>
