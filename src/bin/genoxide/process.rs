@@ -110,6 +110,19 @@ impl Pool {
         abort: Arc<AtomicBool>,
     ) -> Result<Self, String> {
         let (program, arguments) = command.split_first().ok_or("`fitness.command` is empty")?;
+        // absolute: a relative program path joined to a relative directory would be resolved
+        // from inside that directory again on Unix, after `current_dir`
+        let directory = if directory.as_os_str().is_empty() {
+            directory.to_path_buf()
+        } else {
+            std::path::absolute(directory).map_err(|error| {
+                format!(
+                    "can't find the run file's directory {}: {error}",
+                    directory.display()
+                )
+            })?
+        };
+        let directory = directory.as_path();
         let mut processes = Vec::with_capacity(workers);
         for _ in 0..workers {
             // on Windows, a program path is looked up before changing directory

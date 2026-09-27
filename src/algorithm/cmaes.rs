@@ -24,9 +24,10 @@ pub enum Restarts {
     Ipop,
     /// BIPOP-CMA-ES (Hansen, 2009): restarts alternate between a large population regime, which
     /// doubles the population like IPOP (up to 1024 times the initial one), and a small one with
-    /// a random smaller population and a random step size down to 1/100 of the initial one. The
-    /// regime that has used fewer evaluations goes next; the first run counts as a large one. Good
-    /// on a wider range of multimodal functions than IPOP.
+    /// a random population between the initial size and half the last large one, and a random
+    /// step size down to 1/100 of the initial one. The regime that has used fewer evaluations
+    /// goes next; the first run counts as a small one, as in Hansen's reference code, so the first
+    /// restart is a large one. Good on a wider range of multimodal functions than IPOP.
     Bipop,
 }
 
@@ -373,7 +374,8 @@ impl Cmaes {
         self.restart_count += 1;
         let (lambda, sigma, small) = match self.restarts {
             Restarts::Bipop if self.small_evaluations < self.large_evaluations => {
-                // λ = ⌊λ₀ (λ_large / (2 λ₀))^(U²)⌋ and σ = σ₀ · 10^(−2 U), U uniform in 0..1
+                // λ = ⌊λ₀ (λ_large / (2 λ₀))^(U²)⌋ and σ = σ₀ · 10^(−2 U), U uniform in 0..1: λ
+                // from λ₀ to λ_large / 2, as a large run always comes first
                 let u = self.rng.unit_f64();
                 let ratio = 0.5 * self.large_lambda as f64 / self.initial_lambda as f64;
                 let lambda = (self.initial_lambda as f64 * exp(u * u * log(ratio))) as usize;
@@ -1092,7 +1094,9 @@ impl CmaesBuilder {
             large_lambda: lambda,
             large_evaluations: 0,
             small_evaluations: 0,
-            small_run: false,
+            // the first run, at the default size, counts as a small one (Hansen's reference
+            // code), so that the first restart is a large one
+            small_run: true,
             run_evaluations: 0,
             population: Population::new(Vec::new()),
             started: false,
@@ -1403,7 +1407,9 @@ mod tests {
         for _ in 0..200 {
             let size = cmaes.ask().len();
             if cmaes.small_run {
-                assert!(size >= 2 && size <= cmaes.large_lambda / 2 + 2, "{size}");
+                // from the default size (the first run's) to half the last large one
+                let largest = (cmaes.large_lambda / 2).max(cmaes.initial_lambda);
+                assert!(size >= cmaes.initial_lambda && size <= largest, "{size}");
                 assert!(cmaes.run_sigma <= 0.3 && cmaes.run_sigma >= 0.003);
             } else {
                 assert_eq!(size, cmaes.large_lambda);

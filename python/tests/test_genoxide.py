@@ -766,6 +766,66 @@ def test_no_crossover_needs_a_mutation_rate_above_zero():
     assert result.generations == 5
 
 
+def test_common_setting_mistakes_name_the_setting():
+    zero = lambda x: 0.0
+    # an operator, genome, scheme or acceptance class without ()
+    with pytest.raises(ValueError, match=r"crossover is a crossover .*: pass UniformCrossover\(\.\.\.\)"):
+        onemax_ga(crossover=gx.UniformCrossover).run(zero, generations=1)
+    with pytest.raises(ValueError, match=r"scheme is a scheme .*: pass Generational\(\.\.\.\)"):
+        onemax_ga(scheme=gx.Generational).run(zero, generations=1)
+    with pytest.raises(ValueError, match=r"genome is a genome .*: pass Binary\(\.\.\.\)"):
+        gx.Ga(
+            gx.Binary,
+            population_size=10,
+            select=gx.Tournament(2),
+            crossover=gx.UniformCrossover(),
+            mutation=gx.BitFlip(count=1),
+        ).run(zero, generations=1)
+    with pytest.raises(ValueError, match=r"acceptance is an acceptance .*: pass NotWorse\(\.\.\.\)"):
+        gx.LocalSearch(gx.Binary(8), neighbor=gx.BitFlip(count=1), acceptance=gx.NotWorse).run(
+            zero, generations=1
+        )
+    # a string or a number instead of an object
+    with pytest.raises(ValueError, match=r"select is a selection such as gx.Tournament\(3\), not 'tournament'"):
+        onemax_ga(select="tournament").run(zero, generations=1)
+    with pytest.raises(ValueError, match="genome is a genome such as .*, not 5"):
+        gx.Ga(
+            5,
+            population_size=10,
+            select=gx.Tournament(2),
+            crossover=gx.UniformCrossover(),
+            mutation=gx.BitFlip(count=1),
+        ).run(zero, generations=1)
+    # a string instead of a list of objectives
+    nsga2 = gx.Nsga2(
+        gx.Binary(5),
+        objectives="minimize",
+        population_size=10,
+        crossover=gx.UniformCrossover(),
+        mutation=gx.BitFlip(count=1),
+    )
+    with pytest.raises(ValueError, match="objectives is a list, one"):
+        nsga2.run(lambda x: [0.0, 0.0], generations=1)
+    # whole numbers beyond what Rust reads
+    with pytest.raises(ValueError, match="seed is at most 18446744073709551615, not"):
+        onemax_ga(seed=2**64).run(zero, generations=1)
+    with pytest.raises(ValueError, match="population_size is at most"):
+        onemax_ga(population_size=2**64).run(zero, generations=1)
+    with pytest.raises(ValueError, match="at most"):
+        onemax_ga(select=gx.Tournament(2**70)).run(zero, generations=1)
+    with pytest.raises(ValueError, match="Integer.bounds are at most 9223372036854775807"):
+        gx.Ga(
+            gx.Integer((0, 2**63), length=2),
+            population_size=10,
+            select=gx.Tournament(2),
+            crossover=gx.UniformCrossover(),
+            mutation=gx.UniformMutation(count=1),
+        ).run(zero, generations=1)
+    # a tuple that isn't (score, violation)
+    with pytest.raises(TypeError, match=r"tuple is \(score, constraint violation\), two numbers, not \(float, NoneType\)"):
+        onemax_ga().run(lambda x: (1.0, None), generations=1)
+
+
 def test_an_infinite_time_limit_is_no_limit():
     result = onemax_ga().run(lambda bits: 0.0, generations=3, time=math.inf)
     assert result.stop_reason == "generations"

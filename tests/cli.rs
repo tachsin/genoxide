@@ -280,6 +280,17 @@ fn run_files_are_checked() {
         &CMAES.replace("builtin = \"sphere\"", "builtin = \"nope\""),
         "no built-in fitness `nope`",
     );
+    // bounds of the wrong kind say what bounds are
+    expect(
+        &CMAES.replace("bounds = [-5.0, 5.0]", "bounds = [\"a\", 5.0]"),
+        "`bounds` is [low, high] for every gene, or a list of [low, high], one per gene, of numbers",
+    );
+    expect(
+        &CMAES
+            .replace("type = \"real\"", "type = \"integer\"")
+            .replace("type = \"cmaes\"", "type = \"de\""),
+        "of whole numbers",
+    );
     expect(
         &CMAES.replace(
             "builtin = \"sphere\"",
@@ -424,6 +435,22 @@ fn review_fixes() {
     );
     let result = run(&directory, "relative.toml", &text, &[]).unwrap();
     assert_eq!(result["stop_reason"], "target");
+    // also with the run file given by a relative path, from another directory
+    let output = Command::new(GENOXIDE)
+        .current_dir(directory.parent().unwrap())
+        .args([
+            "run",
+            &Path::new(directory.file_name().unwrap())
+                .join("relative.toml")
+                .to_string_lossy(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     // infinite values are text in the result; null is only for an invalid fitness
     let infinite = CMAES

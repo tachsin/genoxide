@@ -124,9 +124,17 @@ ObjectiveName = Literal["maximize", "minimize"]
 Bounds = Union[tuple[float, float], Sequence[tuple[float, float]]]
 
 
-def _whole(name: str, value: Any, *, minimum: int | None = 0, plural: bool = False) -> int:
+def _whole(
+    name: str,
+    value: Any,
+    *,
+    minimum: int | None = 0,
+    maximum: int = 2**64 - 1,
+    plural: bool = False,
+) -> int:
     """The setting ``name`` as an ``int``: an ``int`` or a numpy integer, not a ``bool`` (an
-    ``int`` to Python) nor a ``float``, even a whole one; at least ``minimum`` unless it's None."""
+    ``int`` to Python) nor a ``float``, even a whole one; at least ``minimum`` unless it's None,
+    and at most ``maximum``, the largest the Rust side can read."""
     wrong = f"{name} {'are whole numbers' if plural else 'is a whole number'}, not {value!r}"
     if isinstance(value, (bool, np.bool_)):
         raise ValueError(wrong)
@@ -136,7 +144,33 @@ def _whole(name: str, value: Any, *, minimum: int | None = 0, plural: bool = Fal
         raise ValueError(wrong) from None
     if minimum is not None and number < minimum:
         raise ValueError(f"{name} {'are' if plural else 'is'} at least {minimum}, not {number}")
+    if number > maximum:
+        raise ValueError(f"{name} {'are' if plural else 'is'} at most {maximum}, not {number}")
     return number
+
+
+# what each setting object is, for the error when it's something else
+_GENOME = "a genome such as gx.Binary(8) or gx.Real((0, 1), length=5)"
+_SELECT = "a selection such as gx.Tournament(3)"
+_CROSSOVER = "a crossover such as gx.UniformCrossover()"
+_MUTATION = "a mutation such as gx.BitFlip(rate=0.01)"
+_SCHEME = "a scheme such as gx.Generational(elitism=1)"
+_NEIGHBOR = "a mutation such as gx.SwapMutation()"
+_ACCEPTANCE = "an acceptance such as gx.NotWorse()"
+_DECOMPOSITION = "gx.Tchebycheff() or gx.Pbi(theta)"
+
+
+def _describe_setting(name: str, value: Any, what: str) -> dict[str, Any]:
+    """The description of an operator, genome or other setting object, or a ValueError that names
+    the setting: for a class passed without calling it, and for anything else, such as a string."""
+    if isinstance(value, type) and hasattr(value, "_describe"):
+        raise ValueError(
+            f"{name} is {what}: pass {value.__name__}(...), an instance, not the class "
+            f"{value.__name__}"
+        )
+    if isinstance(value, type) or not callable(getattr(value, "_describe", None)):
+        raise ValueError(f"{name} is {what}, not {value!r}")
+    return value._describe()
 
 
 def _number(name: str, value: Any, *, plural: bool = False) -> float:
@@ -191,7 +225,8 @@ def _bounds(
 
 
 def _integer_bound(name: str, value: Any) -> int:
-    return _whole(name, value, minimum=None, plural=True)
+    # the genes are int64
+    return _whole(name, value, minimum=-(2**63), maximum=2**63 - 1, plural=True)
 
 
 def _real_bound(name: str, value: Any) -> float:
@@ -948,7 +983,7 @@ class _Algorithm:
         problem: str | None = None,
     ) -> dict[str, Any]:
         run = {
-            "genome": self._genome._describe(),
+            "genome": _describe_setting("genome", self._genome, _GENOME),
             "algorithm": self._describe(),
             "objectives": self._objectives(),
             "stop": stop,
@@ -1129,12 +1164,14 @@ class Ga(_SingleObjective):
             "type": "ga",
             "population_size": _whole("population_size", self.population_size),
             "seed": _optional_whole("seed", self.seed),
-            "select": self.select._describe(),
-            "crossover": self.crossover._describe(),
-            "mutate": self.mutation._describe(),
+            "select": _describe_setting("select", self.select, _SELECT),
+            "crossover": _describe_setting("crossover", self.crossover, _CROSSOVER),
+            "mutate": _describe_setting("mutation", self.mutation, _MUTATION),
             "crossover_rate": _optional_number("crossover_rate", self.crossover_rate),
             "mutation_rate": _optional_number("mutation_rate", self.mutation_rate),
-            "scheme": None if self.scheme is None else self.scheme._describe(),
+            "scheme": (
+                None if self.scheme is None else _describe_setting("scheme", self.scheme, _SCHEME)
+            ),
         }
 
 
@@ -1357,9 +1394,13 @@ class LocalSearch(_SingleObjective):
         return {
             "type": "local_search",
             "seed": _optional_whole("seed", self.seed),
-            "neighbor": self.neighbor._describe(),
+            "neighbor": _describe_setting("neighbor", self.neighbor, _NEIGHBOR),
             "neighbors": _optional_whole("neighbors", self.neighbors),
-            "acceptance": None if self.acceptance is None else self.acceptance._describe(),
+            "acceptance": (
+                None
+                if self.acceptance is None
+                else _describe_setting("acceptance", self.acceptance, _ACCEPTANCE)
+            ),
             "restart": restart,
         }
 
@@ -1395,6 +1436,11 @@ class _MultiObjective(_Algorithm):
     seed: int | None
 
     def _objectives(self) -> list[str]:
+        if isinstance(self.objectives, str):
+            raise ValueError(
+                'objectives is a list, one "maximize" or "minimize" per objective, e.g. '
+                f'["minimize", "minimize"], not the string {self.objectives!r}'
+            )
         for objective in self.objectives:
             if objective not in ("maximize", "minimize"):
                 raise ValueError(f'an objective is "maximize" or "minimize", not {objective!r}')
@@ -1402,8 +1448,8 @@ class _MultiObjective(_Algorithm):
 
     def _variation(self) -> dict[str, Any]:
         return {
-            "crossover": self.crossover._describe(),
-            "mutate": self.mutation._describe(),
+            "crossover": _describe_setting("crossover", self.crossover, _CROSSOVER),
+            "mutate": _describe_setting("mutation", self.mutation, _MUTATION),
             "crossover_rate": _optional_number("crossover_rate", self.crossover_rate),
             "mutation_rate": _optional_number("mutation_rate", self.mutation_rate),
             "eliminate_duplicates": _flag(
@@ -1562,7 +1608,7 @@ class Nsga2(_MultiObjective):
         seed: int | None = None,
     ) -> None:
         self._genome = genome
-        self.objectives = list(objectives)
+        self.objectives = objectives if isinstance(objectives, str) else list(objectives)
         self.population_size = population_size
         self.crossover = crossover
         self.mutation = mutation
@@ -1635,7 +1681,7 @@ class Nsga3(_MultiObjective):
         seed: int | None = None,
     ) -> None:
         self._genome = genome
-        self.objectives = list(objectives)
+        self.objectives = objectives if isinstance(objectives, str) else list(objectives)
         self.reference_directions = reference_directions
         self.population_size = population_size
         self.crossover = crossover
@@ -1703,7 +1749,7 @@ class Spea2(_MultiObjective):
         seed: int | None = None,
     ) -> None:
         self._genome = genome
-        self.objectives = list(objectives)
+        self.objectives = objectives if isinstance(objectives, str) else list(objectives)
         self.population_size = population_size
         self.crossover = crossover
         self.mutation = mutation
@@ -1786,7 +1832,7 @@ class Moead(_MultiObjective):
         seed: int | None = None,
     ) -> None:
         self._genome = genome
-        self.objectives = list(objectives)
+        self.objectives = objectives if isinstance(objectives, str) else list(objectives)
         self.weights = weights
         self.crossover = crossover
         self.mutation = mutation
@@ -1805,7 +1851,11 @@ class Moead(_MultiObjective):
             "neighbors": _optional_whole("neighbors", self.neighbors),
             "neighbor_mating": _optional_number("neighbor_mating", self.neighbor_mating),
             "max_replacements": _optional_whole("max_replacements", self.max_replacements),
-            "decomposition": None if self.decomposition is None else self.decomposition._describe(),
+            "decomposition": (
+                None
+                if self.decomposition is None
+                else _describe_setting("decomposition", self.decomposition, _DECOMPOSITION)
+            ),
             "seed": _optional_whole("seed", self.seed),
             "variation": self._variation(),
         }
@@ -1863,7 +1913,7 @@ class SmsEmoa(_MultiObjective):
         seed: int | None = None,
     ) -> None:
         self._genome = genome
-        self.objectives = list(objectives)
+        self.objectives = objectives if isinstance(objectives, str) else list(objectives)
         self.population_size = population_size
         self.crossover = crossover
         self.mutation = mutation
