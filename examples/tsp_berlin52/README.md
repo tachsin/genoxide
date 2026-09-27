@@ -59,7 +59,9 @@ The first line gives the length of the best tour found and the evaluations it to
 that tour, from location 1, with the locations numbered from 1 as in TSPLIB. The tour returns from
 the last location to location 1.
 
-The project page plays this run back.
+The project page plays this run back, on a map of Berlin's districts. TSPLIB gives the locations
+no names and no real positions ("52 locations in Berlin (Groetschel)"), so their placement on the
+map is for orientation: every location inside Berlin, the dense cluster in the centre.
 
 ## Good results
 
