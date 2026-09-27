@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react";
 import { categorical, extent, formatValue } from "../chart-kit";
 import { Legend, PlotBox, TipRows, Tooltip, nearest, pointerIn } from "../chart-parts";
+import { BERLIN_DISTRICTS } from "./berlin";
+
+// maps drawn under a tour, by example: TSPLIB gives berlin52 no real positions, so its placement
+// on Berlin is for orientation (see berlin.js)
+const MAPS = { tsp_berlin52: BERLIN_DISTRICTS };
 
 function tourPath(order, at) {
   if (!order?.length) return "";
@@ -14,18 +19,24 @@ function tourPath(order, at) {
   return `${d}Z`;
 }
 
-/** `tour`: the best tour through the points, the previous frame's tour faint behind it. */
+/**
+ * `tour`: the best tour through the points, the previous frame's tour faint behind it, and for
+ * berlin52 Berlin's districts underneath.
+ */
 export default function TourPlot({ trace, frame, index, dark }) {
   const [hover, setHover] = useState(null);
   const points = trace.problem?.points ?? [];
   const order = frame.state?.best ?? [];
   const previous = index > 0 ? trace.frames[index - 1]?.state?.best : null;
   const color = categorical(dark)[0];
+  const map = MAPS[trace.example] ?? null;
   const bounds = useMemo(() => {
-    const xs = extent(points.map((p) => p[0])) ?? [0, 1];
-    const ys = extent(points.map((p) => p[1])) ?? [0, 1];
+    // the map's extent too, so that the whole city shows
+    const all = map ? [...points, ...map.flatMap((d) => d.rings.flat())] : points;
+    const xs = extent(all.map((p) => p[0])) ?? [0, 1];
+    const ys = extent(all.map((p) => p[1])) ?? [0, 1];
     return { xs, ys, ratio: (ys[1] - ys[0] || 1) / (xs[1] - xs[0] || 1) };
-  }, [points]);
+  }, [points, map]);
   const position = useMemo(() => {
     const m = new Map();
     order.forEach((city, i) => m.set(city, i));
@@ -40,12 +51,13 @@ export default function TourPlot({ trace, frame, index, dark }) {
           { label: "best tour", color, shape: "line" },
           ...(previous ? [{ label: "previous frame", shape: "line", className: "text-base-content/25" }] : []),
           { label: "location", shape: "dot", className: "text-base-content/70" },
+          ...(map ? [{ label: "Berlin's districts", shape: "square", className: "text-base-content/15" }] : []),
         ]}
       />
       <PlotBox
         aspect={Math.min(1.1, Math.max(0.5, bounds.ratio))}
         minHeight={260}
-        label={`A tour through ${points.length} locations`}
+        label={`A tour through ${points.length} locations${map ? ", drawn on a map of Berlin's districts" : ""}`}
         overlay={({ width }) =>
           hover ? (
             <Tooltip x={hover.px} y={hover.py} width={width}>
@@ -73,8 +85,25 @@ export default function TourPlot({ trace, frame, index, dark }) {
             return p ? { x: ox + (p[0] - bounds.xs[0]) * scale, y: oy + (bounds.ys[1] - p[1]) * scale } : null;
           };
           const located = points.map((_, city) => ({ city, px: at(city).x, py: at(city).y }));
+          const mapPath = (ring) =>
+            `${ring
+              .map(([x, y], i) => `${i ? "L" : "M"}${(ox + (x - bounds.xs[0]) * scale).toFixed(1)} ${(oy + (bounds.ys[1] - y) * scale).toFixed(1)}`)
+              .join("")}Z`;
           return (
             <>
+              {map ? (
+                <g aria-hidden>
+                  {map.map((district) => (
+                    <path
+                      key={district.name}
+                      d={district.rings.map(mapPath).join("")}
+                      className="fill-base-content/[0.06] stroke-base-content/25"
+                      strokeWidth={1}
+                      strokeLinejoin="round"
+                    />
+                  ))}
+                </g>
+              ) : null}
               {previous ? (
                 <path d={tourPath(previous, at)} fill="none" className="stroke-base-content/15" strokeWidth={3} strokeLinejoin="round" />
               ) : null}
@@ -99,6 +128,12 @@ export default function TourPlot({ trace, frame, index, dark }) {
           );
         }}
       </PlotBox>
+      {map ? (
+        <p className="mt-1 text-base-content/55 text-xs">
+          TSPLIB gives the locations no real positions: they're placed on Berlin for orientation. District
+          boundaries: Geoportal Berlin (dl-de/zero-2.0).
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -22,7 +22,7 @@ URLs, so nothing the app cached from an older commit is served for it. An exampl
 shows once the app pins a commit that has it. Links for readers ("view on GitHub") go to `main`.
 | `components/projects/genoxide/` | the components only these pages use; `player/` plays an example's recorded run (its `trace.json`) |
 
-Nothing else in `site/` is copied. Imports use the app's `@/` alias, which is the app's root.
+Nothing else in `site/` is copied: `scripts/berlin_districts.py` regenerates the Berlin map of the berlin52 example's tour plot (`player/plots/berlin.js`). Imports use the app's `@/` alias, which is the app's root.
 
 To see edits on the app's dev server: `pnpm dev` there, then
 `pnpm sync:genoxide --from <this folder> --watch`.
