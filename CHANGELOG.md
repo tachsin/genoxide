@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.1](https://github.com/tachsin/genoxide/compare/v0.7.0...v0.7.1) - 2026-09-26
+
+### <!-- 2 -->Performance
+
+- cut the per-trial overhead of differential evolution (0.7.1) ([#182](https://github.com/tachsin/genoxide/pull/182))
+
 ## [0.7.0](https://github.com/tachsin/genoxide/compare/v0.6.0...v0.7.0) - 2026-09-26
 
 ### <!-- 1 -->Fixed
