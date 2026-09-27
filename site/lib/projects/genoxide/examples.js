@@ -4,8 +4,8 @@ import { BLOB_BASE, RAW_BASE, TREE_BASE, getRepoFile, getRepoFiles } from "./git
 import { GENOXIDE_PATH } from "./meta";
 
 /**
- * genoxide's examples, read from the repository at request time (cached
- * daily, see lib/projects/fetch-cached.js).
+ * genoxide's examples, read from the repository at request time, at the
+ * commit the pages were synced from (cached daily, see github.js).
  *
  * Layout in the repository, one folder per example:
  *
@@ -239,7 +239,7 @@ export function blobUrl(path) {
   return `${BLOB_BASE}${path}`;
 }
 
-/** Raw URL of a file of the branch the examples are read from, for the browser to fetch. */
+/** Raw URL of a file of the commit the examples are read from, for the browser to fetch. */
 export function rawUrl(path) {
   return `${RAW_BASE}${path.split("/").map(encodeURIComponent).join("/")}`;
 }

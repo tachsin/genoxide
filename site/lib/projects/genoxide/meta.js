@@ -1,3 +1,5 @@
+import site from "@/genoxide-site.json";
+
 /**
  * genoxide's static facts: names, links and the landing page's copy.
  * Everything that changes with the repository (examples, versions) is
@@ -6,6 +8,14 @@
 
 export const GENOXIDE_REPO = "tachsin/genoxide";
 export const GENOXIDE_BRANCH = "main";
+
+/**
+ * The commit these pages were synced from (the app's genoxide-site.json).
+ * The examples are read at it too, so the pages and the files they expect
+ * always come from the same commit, and a new pin is new URLs: nothing
+ * cached from an older commit is ever served for it.
+ */
+export const GENOXIDE_COMMIT = site.commit;
 
 export const GENOXIDE_PATH = "/projects/genoxide";
 export const GENOXIDE_OG_IMAGE = "/projects/genoxide/opengraph-image";
