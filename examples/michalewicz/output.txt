@@ -1,0 +1,3 @@
+Michalewicz in 10 dimensions: minimum -9.6602, 100000 evaluations at most
+CMA-ES with IPOP: error 0.2532 with the budget spent, 2 of 10 genes off by more than 0.01
+L-SHADE: error 0.0000 at the target, 0 of 10 genes off by more than 0.01
