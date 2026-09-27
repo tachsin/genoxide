@@ -637,6 +637,8 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+When the fitness function changes during a run (adaptive penalty weights, a retrained surrogate), call `ga.reevaluate()?` between a tell and the next ask: the next ask gives the whole population, its tell scores it again without breeding, and `best()` is then the best by the new function.
+
 ### Without Rust: the `genoxide` program
 
 `cargo install genoxide --features cli`; `genoxide run run.toml` (or JSON). Each worker runs `fitness.command`: a genome per stdin line in, objective values (then an optional violation) per stdout line out. The result is JSON on stdout. Settings: [docs/cli.md](docs/cli.md).
