@@ -16,7 +16,8 @@ import genoxide as gx
 
 from trace import Trace
 
-# (weight, value)
+# (weight, value): the first ten are the test data of Martello and Toth's Algorithm 632 (ACM TOMS
+# 11(2), 1985), the other ten this example's own
 ITEMS = [
     (23, 92),
     (31, 57),

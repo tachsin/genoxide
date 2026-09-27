@@ -30,8 +30,10 @@ end of the Pareto front.
 
 ## What makes it hard
 
-The Pareto front is disconnected: for 3 variables it's in three separate pieces, and it isn't known
-in closed form. Between the pieces, no solution is optimal. An algorithm has to keep separate groups
+The Pareto front is disconnected: for 3 variables it's the point (−20, 0) and three separate
+curves, four pieces in all, and it isn't known in closed form. Deb, Pratap, Agarwal and Meyarivan
+(2002) and Van Veldhuizen (1999, PhD thesis) describe three regions, and plot the point apart from
+them. Between the pieces, no solution is optimal. An algorithm has to keep separate groups
 of solutions on each piece, or it loses a piece.
 
 f₂ is multimodal. The sine of xᵢ³ oscillates faster as |xᵢ| grows: near |xᵢ| = 5 it goes through a
@@ -59,8 +61,9 @@ Both spread the front, in different ways, which matters on a front in pieces.
 ## Output
 
 One line per algorithm: how many solutions are on its final front, how many pieces they cover, and
-the front's hypervolume. The example sorts the front by f₁, and starts a new piece wherever two
-neighbors are more than 0.5 apart. The hypervolume is the area that the front dominates, up to the
+the front's hypervolume. The example sorts the front by f₁, and starts a new piece wherever f₁
+grows by more than 0.2 from one solution to the next: along a piece it grows by at most about 0.13,
+and across the gaps between pieces by 0.25 to 0.92. The hypervolume is the area that the front dominates, up to the
 reference point (−14, 1). Larger is better. In Python, `run` evaluates the problem in Rust, so both
 versions print the same.
 
@@ -69,5 +72,6 @@ The project page plays this run back.
 ## Good results
 
 The front's exact hypervolume isn't known, so there is no target value. A good front covers all
-three pieces, with many solutions on each. Both algorithms find the three pieces with 100 solutions.
+four pieces: the point (−20, 0), and the three curves with many solutions on each. Both algorithms
+find the four pieces with 100 solutions.
 SPEA2's hypervolume, about 37.10, is a little larger than NSGA-II's, about 37.02, on this seed.

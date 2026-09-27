@@ -2,7 +2,7 @@
 title: N-Queens
 category: permutation
 summary: Place 64 queens on a 64×64 chessboard so that no two attack each other.
-reference: "Bezzel, M. (1848). Schachfreund. Berliner Schachzeitung 3, p. 363."
+reference: "Bezzel, M. (1848). Zwei Schachfragen. Schachzeitung der Berliner Schachgesellschaft 3: 363 (signed 'Schachfreund')."
 reference_url: null
 optimum: "0 (conflicts)"
 languages: [rust, python]

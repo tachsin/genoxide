@@ -37,13 +37,15 @@ source.
 
 ## What makes it hard
 
-The functions test different things. Yao, Liu and Lin divide theirs into unimodal functions and
-multimodal functions with many local minima, whose number grows exponentially with the dimension.
+The functions test different things. Yao, Liu and Lin divide theirs into unimodal functions,
+multimodal functions with many local minima, whose number grows exponentially with the dimension,
+and low-dimensional functions with only a few local minima.
 The first five here test how fast an algorithm converges, and whether it copes with genes of
 different scales (the ellipsoid), genes that interact (Schwefel 1.2, Zakharov) and a valley that
 bends (Rosenbrock). The first four have a single minimum. Rosenbrock's function, which Yao, Liu and
-Lin count as unimodal, also has a local minimum near x₁ = −1 for n from 4 to 30 (Shang and Qiu,
-2006, Evolutionary Computation 14(1): 119-126). The other seven are multimodal, and test whether an
+Lin count as unimodal, also has a second, local minimum for n from 4 to 30 (Shang and Qiu, 2006,
+Evolutionary Computation 14(1): 119-126). It has x₁ ≈ −0.78 for n = 4, and x₁ near −1 from n = 6
+on, as in the 10 dimensions here. The other seven are multimodal, and test whether an
 algorithm escapes local minima.
 
 ## Representation

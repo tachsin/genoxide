@@ -26,7 +26,7 @@ flips, so there are no local optima. What the problem measures is how fast an al
 The slow part is the end. At a flip rate of 1/500 per bit, a mutation flips a given zero with
 probability 0.2%, and it can flip a one at the same time. For the (1+1) evolutionary algorithm,
 which keeps one string and flips each bit with probability 1/n, the expected number of evaluations
-is of the order of n log n (Droste, Jansen and Wegener, 2002, Theoretical Computer Science 276:
+is of the order of n log n (Droste, Jansen and Wegener, 2002, Theoretical Computer Science 276(1-2):
 51-81).
 
 ## Representation
