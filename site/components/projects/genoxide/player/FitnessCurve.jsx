@@ -14,9 +14,14 @@ import { categorical, extent, formatValue, linear, logTickFormat, logTicks, loga
 /** The curve's series from a trace: what's plotted, and its labels. */
 export function curveOf(trace) {
   const frames = trace.frames;
-  const xKey = trace.x_label === "evaluations" ? "evaluations" : "generation";
+  // A timeline (asynchronous or GPU evaluation) is about time, so its curve runs over the
+  // recorded seconds; the others over their trace's x_label.
+  const overTime = trace.plot === "timeline" && frames.every((f) => typeof f.seconds === "number");
+  const xKey = overTime ? "seconds" : trace.x_label === "evaluations" ? "evaluations" : "generation";
   const xs = frames.map((f) => f[xKey] ?? f.generation);
-  const xLabel = xKey === "evaluations" ? "evaluations" : "generation";
+  const xLabel = xKey;
+  // for the curve's accessible name: "best value over time"
+  const over = { generation: "generations", evaluations: "evaluations", seconds: "time" }[xKey];
 
   if (frames.some((f) => typeof f.best === "number")) {
     const series = [{ key: "best", label: "best", values: frames.map((f) => f.best), slot: 0 }];
@@ -26,6 +31,7 @@ export function curveOf(trace) {
     return {
       xs,
       xLabel,
+      over,
       yLabel: trace.y_label ?? "best",
       logY: !!trace.log_y,
       optimum: numberOrNull(trace.optimum),
@@ -39,6 +45,7 @@ export function curveOf(trace) {
     return {
       xs,
       xLabel,
+      over,
       yLabel: "hypervolume",
       logY: !!trace.log_y,
       optimum: numberOrNull(trace.optimum),
@@ -51,6 +58,7 @@ export function curveOf(trace) {
     return {
       xs,
       xLabel,
+      over,
       yLabel: "hypervolume",
       logY: !!trace.log_y,
       optimum: numberOrNull(trace.optimum),
@@ -129,7 +137,7 @@ export default function FitnessCurve({ curve, index, onSeek, dark }) {
       <PlotBox
         fill
         minHeight={220}
-        label={`${curve.yLabel} over ${curve.xLabel}s`}
+        label={`${curve.yLabel} over ${curve.over}`}
         className="flex-1"
         overlay={({ width }) =>
           hover ? (
