@@ -87,6 +87,11 @@ impl<G: Genome, F> Individual<G, F> {
         self.fitness = Some(fitness);
     }
 
+    // forgets the fitness, e.g. when the fitness function changed; the age stays
+    pub(crate) fn clear_fitness(&mut self) {
+        self.fitness = None;
+    }
+
     /// The number of generations this individual has survived.
     pub fn age(&self) -> u32 {
         self.age

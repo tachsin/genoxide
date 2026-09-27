@@ -260,6 +260,65 @@ impl<R: Representation, S, C, M> Ga<R, S, C, M> {
         self.memetic
     }
 
+    /// Marks the population as not evaluated, for a fitness function that changed during the
+    /// run: adaptive penalty weights, a retrained surrogate model, a moving optimum. The next
+    /// [`ask`](Algorithm::ask) gives the whole population instead of offspring, and its
+    /// [`tell`](Algorithm::tell) sets their fitness without breeding.
+    ///
+    /// - It isn't a generation: [`generation`](Algorithm::generation) doesn't change. The
+    ///   evaluations are counted.
+    /// - Old and new fitness values measure different things, so after that tell,
+    ///   [`best`](Algorithm::best) is the best of the re-evaluated population, found in the
+    ///   current generation.
+    /// - It draws no random numbers: a seeded run that re-evaluates at the same points gives the
+    ///   same results.
+    /// - Before the first tell nothing is evaluated yet, and it changes nothing.
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let mut ga = Ga::builder(Binary::new(16)?)
+    ///     .population_size(20)
+    ///     .select(Tournament::new(2)?)
+    ///     .crossover(UniformCrossover::new())
+    ///     .mutate(BitFlip::count(1)?)
+    ///     .seed(3)
+    ///     .build()?;
+    /// // the ones, then the zeros
+    /// let score = |bits: &Bits, ones: bool| {
+    ///     let count = bits.count_ones() as f64;
+    ///     Fitness::new(if ones { count } else { 16.0 - count })
+    /// };
+    /// for generation in 0..60 {
+    ///     let ones = generation < 30;
+    ///     if generation == 30 {
+    ///         ga.reevaluate()?;
+    ///         assert_eq!(ga.ask().len(), 20);
+    ///     }
+    ///     let fitness: Vec<Fitness> = ga.ask().iter().map(|bits| score(bits, ones)).collect();
+    ///     ga.tell(&fitness)?;
+    /// }
+    /// // the best under the new measure
+    /// assert!(ga.best().unwrap().genome().count_ones() < 8);
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ReevaluationOutOfTurn`] between an ask and its tell. Nothing changes on errors.
+    pub fn reevaluate(&mut self) -> Result<()> {
+        if self.asked {
+            return Err(Error::ReevaluationOutOfTurn);
+        }
+        self.population
+            .iter_mut()
+            .for_each(Individual::clear_fitness);
+        // they were discarded by the last generation, which observers have seen
+        self.discarded.clear();
+        self.phase = Phase::Initial;
+        Ok(())
+    }
+
     /// Mutable access to the selection operator, to change it during a run (parameter control).
     /// A change applies from the next generation's breeding, the next
     /// [`ask`](Algorithm::ask) after a [`tell`](Algorithm::tell).
@@ -643,7 +702,11 @@ where
         self.asked = false;
         match self.phase {
             Phase::Initial => {
+                // the first evaluation, or a re-evaluation, after which the old best is measured
+                // by another function: the population is the best found so far
+                self.best = None;
                 update_best(&mut self.best, self.population.as_slice(), self.objective);
+                self.best_generation = self.generation;
                 self.phase = Phase::Offspring;
             }
             Phase::Offspring => {
@@ -1179,6 +1242,76 @@ mod tests {
         assert_eq!(run(builder(32).build().unwrap(), changed), expected);
         // and they do change the run
         assert_ne!(run(builder(32).build().unwrap(), |_| {}), expected);
+    }
+
+    #[test]
+    fn a_reevaluation_scores_the_population_again_without_breeding() {
+        let mut ga = builder(16).build().unwrap();
+        for _ in 0..5 {
+            step(&mut ga);
+        }
+        let genomes: Vec<Bits> = ga.population().iter().map(|i| i.genome().clone()).collect();
+        let (generation, evaluations) = (ga.generation(), ga.evaluations());
+
+        ga.reevaluate().unwrap();
+        let asked: Vec<Bits> = ga.ask().iter().cloned().collect();
+        assert_eq!(asked, genomes);
+        // the zeros now
+        let fitness: Vec<Fitness> = asked
+            .iter()
+            .map(|genome| Fitness::new(genome.count_zeros() as f64))
+            .collect();
+        ga.tell(&fitness).unwrap();
+
+        assert_eq!(ga.generation(), generation);
+        assert_eq!(ga.evaluations(), evaluations + 10);
+        let population: Vec<Bits> = ga.population().iter().map(|i| i.genome().clone()).collect();
+        assert_eq!(population, genomes);
+        let most_zeros = genomes.iter().map(Bits::count_zeros).max().unwrap();
+        assert_eq!(
+            ga.best().unwrap().fitness(),
+            Some(Fitness::new(most_zeros as f64))
+        );
+        assert_eq!(ga.best_generation(), generation);
+        assert!(ga.discarded().is_empty());
+    }
+
+    #[test]
+    fn a_reevaluation_with_the_same_function_changes_only_the_count() {
+        let run = |reevaluate: bool| {
+            let mut ga = builder(16).build().unwrap();
+            for generation in 0..20 {
+                if reevaluate && generation == 10 {
+                    ga.reevaluate().unwrap();
+                    step(&mut ga);
+                }
+                step(&mut ga);
+            }
+            (
+                ga.population().clone(),
+                ga.best().cloned(),
+                ga.evaluations(),
+            )
+        };
+        let (population, best, evaluations) = run(false);
+        assert_eq!(run(true), (population, best, evaluations + 10));
+    }
+
+    #[test]
+    fn a_reevaluation_waits_for_the_tell() {
+        let mut ga = builder(8).build().unwrap();
+        // before anything is evaluated, it changes nothing
+        ga.reevaluate().unwrap();
+        step(&mut ga);
+        let mut other = builder(8).build().unwrap();
+        step(&mut other);
+        assert_eq!(ga.population(), other.population());
+
+        let asked = ga.ask().len();
+        assert_eq!(ga.reevaluate(), Err(Error::ReevaluationOutOfTurn));
+        // still the offspring
+        assert_eq!(ga.ask().len(), asked);
+        step(&mut ga);
     }
 
     #[test]

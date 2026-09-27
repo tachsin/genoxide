@@ -51,6 +51,10 @@ pub enum Error {
     /// between an [`ask`](crate::algorithm::Algorithm::ask) and its tell, see
     /// [`Migrate`](crate::algorithm::Migrate).
     MigrationOutOfTurn,
+    /// A re-evaluation was asked for between an [`ask`](crate::algorithm::Algorithm::ask) and its
+    /// [`tell`](crate::algorithm::Algorithm::tell), see
+    /// [`Ga::reevaluate`](crate::algorithm::Ga::reevaluate).
+    ReevaluationOutOfTurn,
     /// A checkpoint can't be saved or loaded, see `genoxide::checkpoint` (the `serde` feature).
     Checkpoint {
         /// Why, e.g. that the file is corrupted.
@@ -75,6 +79,10 @@ impl fmt::Display for Error {
             Error::MigrationOutOfTurn => write!(
                 f,
                 "migrants can only arrive after a `tell` and before the next `ask`"
+            ),
+            Error::ReevaluationOutOfTurn => write!(
+                f,
+                "a re-evaluation can only start after a `tell` and before the next `ask`"
             ),
             Error::Checkpoint { reason } => write!(f, "checkpoint: {reason}"),
         }
@@ -122,6 +130,10 @@ mod tests {
             }
             .to_string(),
             "expected 3 fitness values, got 2"
+        );
+        assert_eq!(
+            Error::ReevaluationOutOfTurn.to_string(),
+            "a re-evaluation can only start after a `tell` and before the next `ask`"
         );
     }
 
