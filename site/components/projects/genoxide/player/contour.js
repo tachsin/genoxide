@@ -7,7 +7,28 @@
 export const FUNCTIONS = {
   rastrigin: (x, y) => 20 + x * x - 10 * Math.cos(2 * Math.PI * x) + y * y - 10 * Math.cos(2 * Math.PI * y),
   himmelblau: (x, y) => (x * x + y - 11) ** 2 + (x + y * y - 7) ** 2,
+  // Branin's RCOS, with the usual constants
+  branin: (x, y) => {
+    const b = 5.1 / (4 * Math.PI * Math.PI);
+    const c = 5 / Math.PI;
+    const t = 1 / (8 * Math.PI);
+    return (y - b * x * x + c * x - 6) ** 2 + 10 * (1 - t) * Math.cos(x) + 10;
+  },
+  goldstein_price: (x, y) =>
+    (1 + (x + y + 1) ** 2 * (19 - 14 * x + 3 * x * x - 14 * y + 6 * x * y + 3 * y * y)) *
+    (30 + (2 * x - 3 * y) ** 2 * (18 - 32 * x + 12 * x * x + 48 * y - 36 * x * y + 27 * y * y)),
+  six_hump_camel: (x, y) => (4 - 2.1 * x * x + (x * x * x * x) / 3) * x * x + x * y + (-4 + 4 * y * y) * y * y,
 };
+
+/** The contour plot's legend items; a grid of contours shows them once, for all its panels. */
+export function contourLegend({ best, minima, palette }) {
+  return [
+    { label: "population", color: palette[1], shape: "dot" },
+    ...(best ? [{ label: "best", color: palette[0], shape: "diamond" }] : []),
+    ...(minima ? [{ label: minima > 1 ? "global minima" : "global minimum", shape: "ring", className: "text-base-content" }] : []),
+    { label: "shading: higher f (log)", shape: "square", className: "text-base-content/30" },
+  ];
+}
 
 /**
  * Samples f on an n × n grid over bounds; `values[i][j]` is at

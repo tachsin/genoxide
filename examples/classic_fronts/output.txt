@@ -1,0 +1,5 @@
+problem          front  hypervolume     IGD+
+Schaffer 1         100       1.0392   0.0082
+Schaffer 2         100       0.8114   0.0087
+Fonseca-Fleming    100       0.5195   0.0038
+Poloni             100       1.1228        -

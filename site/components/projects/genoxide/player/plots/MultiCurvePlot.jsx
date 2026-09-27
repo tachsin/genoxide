@@ -27,7 +27,14 @@ function Panel({ title, lines, xs, index, logY, colors, xLabel }) {
     const e = extent(all) ?? [0, 1];
     return nice(e[0], e[1], 4);
   }, [lines, logY]);
-  const xDomain = extent(xs) ?? [0, 1];
+  // up to the panel's last value: a run that ended early (a smaller budget) fills its own panel
+  const end = useMemo(() => {
+    let last = 0;
+    for (let i = 0; i < xs.length; i++) if (lines.some((l) => typeof l.values[i] === "number")) last = i;
+    return last || xs.length - 1;
+  }, [lines, xs]);
+  const xDomain = extent(xs.slice(0, end + 1)) ?? [0, 1];
+  const ended = index > end;
 
   return (
     <figure className="min-w-0">
@@ -74,7 +81,7 @@ function Panel({ title, lines, xs, index, logY, colors, xLabel }) {
                   <path d={path(l.values, index)} fill="none" stroke={colors[l.slot]} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
                 </g>
               ))}
-              <line x1={cx} x2={cx} y1={area.top} y2={area.bottom} className="stroke-base-content/30" strokeWidth={1} />
+              {ended ? null : <line x1={cx} x2={cx} y1={area.top} y2={area.bottom} className="stroke-base-content/30" strokeWidth={1} />}
               {lines.map((l) => {
                 const v = l.values[index];
                 if (typeof v !== "number") return null;
@@ -91,7 +98,7 @@ function Panel({ title, lines, xs, index, logY, colors, xLabel }) {
                   const p = pointerIn(event);
                   const v = x.invert(p.x);
                   let i = 0;
-                  for (let k = 1; k < xs.length; k++) if (Math.abs(xs[k] - v) < Math.abs(xs[i] - v)) i = k;
+                  for (let k = 1; k <= end; k++) if (Math.abs(xs[k] - v) < Math.abs(xs[i] - v)) i = k;
                   setHover({ i, px: x(xs[i]), py: p.y });
                 }}
                 onPointerLeave={() => setHover(null)}

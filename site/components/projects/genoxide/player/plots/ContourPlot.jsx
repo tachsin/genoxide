@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { categorical, formatValue, linear, resolveColor, ticks } from "../chart-kit";
 import { Axes, Legend, Marker, PlotBox, TipRows, Tooltip, nearest, pointerIn } from "../chart-parts";
-import { FUNCTIONS, gridImage, isoline, sample } from "../contour";
+import { FUNCTIONS, contourLegend, gridImage, isoline, sample } from "../contour";
 
 const GRID = 140;
 const LEVELS = [0.12, 0.24, 0.36, 0.48, 0.6, 0.72, 0.84];
@@ -11,8 +11,9 @@ const LEVELS = [0.12, 0.24, 0.36, 0.48, 0.6, 0.72, 0.84];
 /**
  * `contour`: the population over the function's landscape (computed here),
  * darker where the function is higher, with iso-lines and the known minima.
+ * `compact` (a panel of a grid) leaves the legend to the grid.
  */
-export default function ContourPlot({ trace, frame, dark }) {
+export default function ContourPlot({ trace, frame, dark, compact = false }) {
   const [hover, setHover] = useState(null);
   const [image, setImage] = useState(null);
   const clip = `clip${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -58,18 +59,10 @@ export default function ContourPlot({ trace, frame, dark }) {
 
   return (
     <div>
-      <Legend
-        className="mb-2"
-        items={[
-          { label: "population", color: palette[1], shape: "dot" },
-          ...(best ? [{ label: "best", color: palette[0], shape: "diamond" }] : []),
-          ...(minima.length ? [{ label: minima.length > 1 ? "global minima" : "global minimum", shape: "ring", className: "text-base-content" }] : []),
-          { label: "shading: higher f (log)", shape: "square", className: "text-base-content/30" },
-        ]}
-      />
+      {compact ? null : <Legend className="mb-2" items={contourLegend({ best, minima: minima.length, palette })} />}
       <PlotBox
         aspect={1}
-        minHeight={280}
+        minHeight={compact ? 220 : 280}
         maxHeight={540}
         label={`The population of ${population.length} on ${problem.function ?? "the function"}`}
         overlay={({ width }) =>

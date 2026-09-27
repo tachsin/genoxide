@@ -19,6 +19,7 @@ const PLOTS = {
   "front-3d": lazy(() => import("./plots/Front3dPlot")),
   surface: lazy(() => import("./plots/SurfacePlot")),
   timeline: lazy(() => import("./plots/TimelinePlot")),
+  grid: lazy(() => import("./plots/GridPlot")),
 };
 
 const TITLES = {
@@ -28,12 +29,19 @@ const TITLES = {
   tour: "The best tour",
   gantt: "The best schedule",
   contour: "The population on the function",
-  "multi-curve": "Error per function",
+  "multi-curve": "Error per problem",
   design: "The best design",
   "front-2d": "The front",
   "front-3d": "The front",
   surface: "The network's output",
   timeline: "Evaluations over time",
+};
+
+// the titles of a grid, by the kind of its panels
+const GRID_TITLES = {
+  contour: "The population on each function",
+  "front-2d": "The front of each problem",
+  "front-3d": "The front of each problem",
 };
 
 const SPEEDS = [0.5, 1, 2, 4];
@@ -54,6 +62,7 @@ export default function PlayerView({ trace }) {
   const dark = useDarkScheme();
   const curve = useMemo(() => curveOf(trace), [trace]);
   const Plot = PLOTS[trace.plot] ?? null;
+  const title = trace.plot === "grid" ? (GRID_TITLES[trace.problem?.panel_plot] ?? "Each problem") : TITLES[trace.plot];
 
   // Reduced motion: no autoplay, the last frame (the result) shows.
   const [index, setIndex] = useState(() =>
@@ -181,8 +190,8 @@ export default function PlayerView({ trace }) {
   ].filter(Boolean);
 
   const plotPanel = Plot ? (
-    <section aria-label={TITLES[trace.plot]} className="min-w-0">
-      <h3 className="mb-2 font-medium text-base-content/80 text-sm">{TITLES[trace.plot]}</h3>
+    <section aria-label={title} className="min-w-0">
+      <h3 className="mb-2 font-medium text-base-content/80 text-sm">{title}</h3>
       <Suspense fallback={<PlotFallback />}>
         <Plot trace={trace} frame={frame} index={index} dark={dark} reduced={reduced} />
       </Suspense>
@@ -208,7 +217,8 @@ export default function PlayerView({ trace }) {
 
   return (
     <div ref={rootRef} onKeyDown={onKeyDown}>
-      <div className={plotPanel && curvePanel ? "grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : "grid"}>
+      {/* a grid of panels takes the full width, with the curve under it */}
+      <div className={plotPanel && curvePanel && trace.plot !== "grid" ? "grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : "grid gap-6"}>
         {plotPanel}
         {curvePanel}
       </div>
