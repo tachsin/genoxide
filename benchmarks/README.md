@@ -105,7 +105,7 @@ A benchmark takes two steps. The timed run measures times and evaluations on the
 
 `--allow-unpinned` skips the pinning check, for runs whose times don't count.
 
-Each run writes the raw runs to `results/<timestamp>.json`, tables to `results/latest.md` (published as [docs/benchmarks/results.md](../docs/benchmarks/results.md)), and charts to `results/charts/`.
+Each run writes the raw runs to `results/<timestamp>.json`, tables to `results/latest.md` (published as [docs/benchmarks/results.md](../docs/benchmarks/results.md)), and charts to `results/charts/`: an SVG per chart, and `charts.json`, the numbers, labels and notes of every chart with the run's date, machine and versions, written from the same summaries as the SVGs. Published, the SVGs and `charts.json` go to [docs/benchmarks/](../docs/benchmarks/); the project site's [benchmarks page](https://tachsin.gr/projects/genoxide/benchmarks) draws its interactive charts from `charts.json`. `python run.py chart --results <file> --charts <folder>` redraws both from a results file.
 
 **Rerunning some libraries.** `--update` reruns only the libraries of `--libraries`, on every scenario of the file with its seeds and time caps, and keeps the others' results:
 

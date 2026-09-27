@@ -25,8 +25,9 @@ Usage:
                                              # ones with gh, --dry-run: print what it would do)
 
 Results are written to results/<timestamp>.json (all runs), results/latest.md (table) and
-results/charts/*.svg (charts). `python run.py instructions`, or `--instructions` on a run, counts
-the instructions per evaluation with Callgrind (Linux, Valgrind).
+results/charts/ (charts: *.svg, and charts.json, their numbers for the project site's interactive
+charts). `python run.py instructions`, or `--instructions` on a run, counts the instructions per
+evaluation with Callgrind (Linux, Valgrind).
 """
 
 import argparse
@@ -837,9 +838,16 @@ def results_date(results):
     return f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}" if len(stamp) >= 8 else ""
 
 
+def significant(value, digits=6):
+    """A number for charts.json: 6 significant digits, more than any chart shows."""
+    return None if value is None else float(f"{value:.{digits}g}")
+
+
 def draw_charts(results, out_dir, formats=("svg",)):
     """Vertical bar charts of a results file: time and evaluations to target, the distance to the
-    optimum, cost per evaluation, and the hypervolume and time of the multi-objective fronts."""
+    optimum, cost per evaluation, and the hypervolume and time of the multi-objective fronts. Their
+    numbers go to charts.json beside them, for the interactive charts of the project site: recorded
+    as each chart draws them, so the file and the charts can't disagree."""
     import matplotlib
     matplotlib.use("agg")
     import matplotlib.pyplot as plt
@@ -888,6 +896,27 @@ def draw_charts(results, out_dir, formats=("svg",)):
     runs = results["runs"]
     caps = scenario_caps(results.get("max_seconds", 60.0), runs)
 
+    # charts.json: the run, every library as the legends show it, and each chart's panels and bars
+    data = {
+        "format": 1,
+        "run": {
+            "timestamp": results.get("timestamp", ""),
+            "date": results_date(results),
+            "platform": results.get("platform", ""),
+            "threads": "single-threaded",
+            "seeds": results["seeds"],
+            "context": context,
+        },
+        "libraries": [
+            {"id": name, "name": LIBRARY_NAMES.get(name, name), "version": versions[name].split("+")[0],
+             "language": languages.get(name, ""), "color": colors[name]}
+            for name in dict.fromkeys(name for name in list(ADAPTERS) + sorted(versions) if name in versions)
+        ],
+        "charts": {},
+    }
+    # each panel's record, by its axes
+    records = {}
+
     # sizes in inches
     width, margin, gap = 12.0, 0.1, 0.5
     panel_height, labels_height, title_height = 1.75, 1.05, 0.42
@@ -899,9 +928,10 @@ def draw_charts(results, out_dir, formats=("svg",)):
                            dpi=200)
         plt.close(figure)
 
-    def chart(title, subtitle, panels, libraries):
+    def chart(name, title, subtitle, panels, libraries, quantity):
         """A figure with a header, a legend of every library (version and language), and axes for
-        the panels, `[(key, bars)]`, packed into rows with the same width for every bar."""
+        the panels, `[(key, bars)]`, packed into rows with the same width for every bar. Its record
+        in charts.json is `name`'s, its values `quantity`."""
         rows, row = [], []
         for key, count in panels:
             if row and sum(c + 1.5 for _, c in row) + count + 1.5 > bar_capacity:
@@ -910,7 +940,9 @@ def draw_charts(results, out_dir, formats=("svg",)):
             row.append((key, count))
         if row:
             rows.append(row)
-        names = list(dict.fromkeys(name for name in list(ADAPTERS) + sorted(versions) if name in libraries))
+        names = list(dict.fromkeys(library for library in list(ADAPTERS) + sorted(versions) if library in libraries))
+        record = data["charts"][name] = {"file": f"{name}.svg", "title": title, "subtitle": subtitle,
+                                         "quantity": quantity, "libraries": names, "panels": []}
         columns = 5
         legend_rows = (len(names) + columns - 1) // columns
         # a long subtitle on several lines, the legend below it
@@ -945,6 +977,8 @@ def draw_charts(results, out_dir, formats=("svg",)):
             for key, count in row:
                 panel_width = (count + 1.5) * unit
                 axes[key] = figure.add_axes((x / width, y / height, panel_width / width, panel_height / height))
+                records[axes[key]] = {"key": key, "title": None, "detail": None}
+                record["panels"].append(records[axes[key]])
                 x += panel_width + gap
             y -= labels_height
         return figure, axes
@@ -1013,6 +1047,31 @@ def draw_charts(results, out_dir, formats=("svg",)):
         if apart and len(apart) < len(group):
             axis.axvline(len(group) - len(apart) - 0.5, color="#9a9a9a", linewidth=0.7, linestyle=(0, (1, 2)),
                          zorder=0)
+        # the panel in charts.json: its bars in this order, each with its value and labels as drawn
+        record = records[axis]
+        record.update({"log": log, "better": better})
+        if zoom and values:
+            record["axis_from"] = significant(base)
+        record["bars"] = []
+        for row in group:
+            v = value(row)
+            bar = {"library": row["library"], "solver": row["solver"], "label": label(row["library"], row["solver"]),
+                   "value": significant(v)}
+            if v is None:
+                bar["missing"] = missing_text(row) if missing_text else ""
+            else:
+                bar["text"] = text(v)
+                if note and note(row).strip():
+                    bar["note"] = note(row).strip()
+                if zoom and v < base:
+                    bar["below_axis"] = True
+            bar.update({key: row[key] for key in ("runs", "reached") if key in row})
+            bar.update({key: row[key] for key in ("capped", "errors") if row.get(key)})
+            if row.get("capped_share") is not None:
+                bar["capped_share"] = significant(row["capped_share"])
+            if row.get("ended_on_cap"):
+                bar["ended_on_cap"] = True
+            record["bars"].append(bar)
         axis.set_xticks(positions, [label(row["library"], row["solver"]) for row in group], rotation=60,
                         ha="right", rotation_mode="anchor", fontsize=6.5)
         for tick_label, row in zip(axis.get_xticklabels(), group):
@@ -1026,6 +1085,8 @@ def draw_charts(results, out_dir, formats=("svg",)):
         # the detail (e.g. the budget) on a second, lighter line, so narrow panels' titles fit
         axis.set_title(scenario_title(scenario), fontsize=8.2, loc="left", fontweight="bold", pad=11)
         axis.text(0, 1.015, detail, transform=axis.transAxes, fontsize=6.6, color="#666666", va="bottom")
+        records[axis].update({"title": scenario_title(scenario), "detail": detail, "budget": budgets.get(scenario),
+                              "cap": caps.get(scenario)})
 
     def limits(scenario, budget_word="budget "):
         """A panel's budget and time cap."""
@@ -1061,21 +1122,21 @@ def draw_charts(results, out_dir, formats=("svg",)):
 
     ert = ("expected running time (ERT): what all runs spent, up to the first hit in those that reached the target, "
            f"divided by the runs that reached it; at least {ERT_REACHED} must have")
-    for name, title, value, text, ticks in (
+    for name, title, value, text, ticks, quantity in (
         ("time_to_target", "Expected time to target (lower is better)",
-         lambda row: row["ert_time"], format_seconds, time_ticks),
+         lambda row: row["ert_time"], format_seconds, time_ticks, "seconds"),
         ("evaluations_to_target",
          "Expected fitness evaluations to target (lower is better): search efficiency, whatever the language",
-         lambda row: row["ert_evaluations"], short_number, count_ticks),
+         lambda row: row["ert_evaluations"], short_number, count_ticks, "evaluations"),
     ):
         if not scenarios:
             break
         figure, axes = chart(
-            title, context + f" · {ert} · k of n: reached in k of n runs · {capped_legend} · ×: fewer than "
+            name, title, context + f" · {ert} · k of n: reached in k of n runs · {capped_legend} · ×: fewer than "
             f"{ERT_REACHED} runs reached the target, k/n: how many did · a missing library can't run the scenario: "
             "see notes.md",
             [(scenario, len([row for row in rows if row["scenario"] == scenario])) for scenario in scenarios],
-            {row["library"] for row in rows})
+            {row["library"] for row in rows}, quantity)
         for scenario in scenarios:
             axis = axes[scenario]
             bars(axis, [row for row in rows if row["scenario"] == scenario], value, text, note=reached,
@@ -1100,10 +1161,13 @@ def draw_charts(results, out_dir, formats=("svg",)):
                     f"spent, up to the first hit in those that reached the target, divided by the runs that reached "
                     f"it · matched: the same algorithm in every library; idiomatic: each library's recommended "
                     f"methods · every method, the budgets and the rules: docs/benchmarks")
-        subtitle = textwrap.fill(subtitle, 200)
+        summary_title = "Time to target: each library's fastest method (lower is better)"
         # every library in the chart, with its version and language, as in the other charts
         names = list(dict.fromkeys(name for name in list(ADAPTERS) + sorted(versions)
                                    if any(key[1] == name for key in best)))
+        record = data["charts"]["summary"] = {"file": "summary.svg", "title": summary_title, "subtitle": subtitle,
+                                              "quantity": "seconds", "libraries": names, "panels": []}
+        subtitle = textwrap.fill(subtitle, 200)
         legend_columns = 5
         legend_rows = (len(names) + legend_columns - 1) // legend_columns
         legend_top = 0.62 + subtitle.count("\n") * 0.14
@@ -1112,8 +1176,7 @@ def draw_charts(results, out_dir, formats=("svg",)):
         height = header + sum(h + 0.42 + 0.62 for h in panel_heights)
         figure = plt.figure(figsize=(width, height))
         figure.patch.set_facecolor("white")
-        figure.text(margin / width, 1 - 0.12 / height, "Time to target: each library's fastest method (lower is better)",
-                    fontsize=12.5, fontweight="bold", va="top")
+        figure.text(margin / width, 1 - 0.12 / height, summary_title, fontsize=12.5, fontweight="bold", va="top")
         figure.text(margin / width, 1 - 0.40 / height, subtitle, fontsize=7.8, color="#555555", va="top",
                     linespacing=1.3)
         figure.legend(handles=[Patch(color=colors[name], label=f"{LIBRARY_NAMES.get(name, name)} "
@@ -1155,6 +1218,15 @@ def draw_charts(results, out_dir, formats=("svg",)):
                                x=-label_width / (column_width - label_width - 0.25))
                 ran = sorted({row["library"] for row in rows if row["scenario"] == scenario})
                 others = [LIBRARY_NAMES.get(name, name) for name in ran if (scenario, name) not in best]
+                record["panels"].append({
+                    "key": scenario, "title": scenario_title(scenario), "log": True, "better": "lower",
+                    "bars": [{"library": row["library"], "solver": row["solver"],
+                              "label": label(row["library"], row["solver"]), "value": significant(row["ert_time"]),
+                              "text": format_seconds(row["ert_time"]), "runs": row["runs"], "reached": row["reached"]}
+                             for row in group],
+                    **({"note": f"Fewer than {ERT_REACHED} of {results['seeds']} runs reached the target: "
+                                f"{', '.join(others)}"} if others else {}),
+                })
                 if others:
                     # under the panel's time axis
                     figure.text((margin + column * column_width) / width, (y - 0.27) / height,
@@ -1169,11 +1241,12 @@ def draw_charts(results, out_dir, formats=("svg",)):
     gap_rows = summarize(runs, caps, split=True)
     if gap_rows:
         figure, axes = chart(
+            "distance_to_optimum",
             "Distance to the optimum at the end of the run, median of the runs (lower is better)",
             context + " · a run ends at the target, its budget or its time cap · dashed: the target, 0.01 · "
             f"cross-hatched, past the dotted line: the runs stopped by the time cap · {capped_legend}",
             [(scenario, len([row for row in gap_rows if row["scenario"] == scenario])) for scenario in scenarios],
-            {row["library"] for row in gap_rows})
+            {row["library"] for row in gap_rows}, "distance")
         for scenario in scenarios:
             axis = axes[scenario]
             # a log axis can't show 0: a distance of 0 is drawn at a tenth of the smallest other one
@@ -1186,6 +1259,7 @@ def draw_charts(results, out_dir, formats=("svg",)):
             panel_title(axis, scenario, limits(scenario))
             if scenario.split("-")[0] in ("rastrigin", "rosenbrock", "ackley"):
                 axis.axhline(0.01, color="#444444", linewidth=0.7, linestyle=(0, (4, 3)), zorder=0)
+                records[axis]["target"] = 0.01
             if axis.get_yscale() == "log":
                 axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
         save(figure, "distance_to_optimum")
@@ -1195,10 +1269,11 @@ def draw_charts(results, out_dir, formats=("svg",)):
     if instructions:
         problem, size, mode = INSTRUCTIONS_SCENARIO
         figure, axes = chart(
+            "instructions",
             "CPU instructions per evaluation, framework and fitness function together (lower is better)",
             f"{PROBLEM_NAMES[problem]} {size} ({mode}), counted by Callgrind: exact, whatever the machine's load; "
             "startup and imports excluded · " + context,
-            [("instructions", len(instructions))], {row["library"] for row in instructions})
+            [("instructions", len(instructions))], {row["library"] for row in instructions}, "instructions")
         axis = axes["instructions"]
         bars(axis, instructions, lambda row: row["instructions_per_evaluation"], short_number)
         axis.yaxis.set_major_locator(LogLocator(base=10, numticks=6))
@@ -1215,20 +1290,20 @@ def draw_charts(results, out_dir, formats=("svg",)):
         parts += capped_note(row)
         return "  " + ", ".join(parts) if parts else ""
 
-    for name, title, value, text, log, better in (
+    for name, title, value, text, log, better, quantity in (
         ("hypervolume", "Hypervolume of the final front (higher is better; the axes don't start at 0)",
-         lambda row: row["median_hypervolume"], lambda v: f"{v:.4f}", False, "higher"),
+         lambda row: row["median_hypervolume"], lambda v: f"{v:.4f}", False, "higher", "hypervolume"),
         ("front_time", "Time for the evaluation budget of a multi-objective run (lower is better)",
-         lambda row: row["median_time"], format_seconds, True, "lower"),
+         lambda row: row["median_time"], format_seconds, True, "lower", "seconds"),
     ):
         if not front_rows:
             break
         figure, axes = chart(
-            title, context + " · median of the runs · the same settings in every library where it has them · "
+            name, title, context + " · median of the runs · the same settings in every library where it has them · "
             f"cross-hatched, past the dotted line: the runs stopped by the time cap · {capped_legend} · a missing "
             "library can't run the scenario: see notes.md",
             [(scenario, len([row for row in front_rows if row["scenario"] == scenario])) for scenario in front_scenarios],
-            {row["library"] for row in front_rows})
+            {row["library"] for row in front_rows}, quantity)
         for scenario in front_scenarios:
             axis = axes[scenario]
             bars(axis, [row for row in front_rows if row["scenario"] == scenario], value, text,
@@ -1240,6 +1315,13 @@ def draw_charts(results, out_dir, formats=("svg",)):
             else:
                 axis.yaxis.set_major_locator(MaxNLocator(4))
         save(figure, name)
+
+    # the numbers of every chart drawn, compact, one chart per line
+    lines = [f"{json.dumps(name)}:{json.dumps(record, ensure_ascii=False, separators=(',', ':'))}"
+             for name, record in data.pop("charts").items()]
+    head = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    (out_dir / "charts.json").write_text(f'{head[:-1]},"charts":{{\n' + ",\n".join(lines) + "\n}}\n",
+                                         encoding="utf-8", newline="\n")
 
 
 # The cores that times are measured on, under WSL: the two favoured P-cores (the highest turbo

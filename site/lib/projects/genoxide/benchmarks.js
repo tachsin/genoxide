@@ -1,19 +1,63 @@
-import { fetchCached } from "@/lib/projects/fetch-cached";
-import { BLOB_BASE, getRepoFiles } from "./github";
+import { BLOB_BASE, getRepoFile, getRepoFiles } from "./github";
 
 /**
  * The benchmark page's data.
  *
- * RESULTS: interactive charts will read a results JSON published by the
- * benchmark harness. Until that file exists, BENCHMARK_RESULTS_URL stays
- * null and the page shows the charts the harness drew for the published run
- * (docs/benchmarks/*.svg, at the pinned commit), each with its `file`: no
- * number here is ever made up.
+ * The charts are drawn from docs/benchmarks/charts.json, which the benchmark
+ * harness (benchmarks/run.py) writes beside its SVG charts of the published
+ * run, from the same summaries: every number, label and note the SVGs show,
+ * and the run's date, machine and versions. It's read at the pinned commit,
+ * like everything else here, so the page shows that commit's run. A pin from
+ * before the file existed gets the SVG charts as images instead
+ * (BENCHMARK_IMAGES). No number here is ever made up.
  */
-export const BENCHMARK_RESULTS_URL = null;
+export const BENCHMARK_CHARTS_FILE = "docs/benchmarks/charts.json";
 
-/** The charts the page will have, in order. */
+/**
+ * The interactive charts, in order: each a `kind` of component
+ * (components/projects/genoxide/benchmarks/charts.jsx) and its `views`, the
+ * charts of charts.json it can switch between, each with its SVG `file`.
+ */
 export const BENCHMARK_CHARTS = [
+  {
+    id: "summary",
+    kind: "summary",
+    title: "Time to target: each library's fastest method",
+    caption: "Each bar is a library's fastest method on that problem, single-threaded on the same machine, 10 seeds.",
+    views: [{ data: "summary", label: "Time", file: "docs/benchmarks/summary.svg" }],
+  },
+  {
+    id: "to-target",
+    kind: "to-target",
+    title: "Time and evaluations to target",
+    caption:
+      "Every method's expected running time to each single-objective target, per scenario, or the fitness evaluations it took: what counts when the fitness function is expensive.",
+    views: [
+      { data: "time_to_target", label: "Time", file: "docs/benchmarks/time_to_target.svg" },
+      { data: "evaluations_to_target", label: "Evaluations", file: "docs/benchmarks/evaluations_to_target.svg" },
+    ],
+  },
+  {
+    id: "instructions",
+    kind: "instructions",
+    title: "Instructions per evaluation",
+    caption: "The framework's own cost around one evaluation.",
+    views: [{ data: "instructions", label: "Instructions", file: "docs/benchmarks/instructions.svg" }],
+  },
+  {
+    id: "hypervolume",
+    kind: "front",
+    title: "Multi-objective fronts",
+    caption: "Median hypervolume of the final front on ZDT and DTLZ problems, or the time its evaluation budget took.",
+    views: [
+      { data: "hypervolume", label: "Hypervolume", file: "docs/benchmarks/hypervolume.svg" },
+      { data: "front_time", label: "Time", file: "docs/benchmarks/front_time.svg" },
+    ],
+  },
+];
+
+/** Without charts.json (a pin from before it): the harness's SVG charts, as images. */
+export const BENCHMARK_IMAGES = [
   {
     id: "summary",
     title: "Time to target: each library's fastest method",
@@ -103,10 +147,20 @@ export async function getBenchmarkLibraryPages() {
 }
 
 /**
- * The published results, or null until BENCHMARK_RESULTS_URL is set (or when
- * it can't be fetched). The shape is the harness's to define.
+ * The published run's charts.json at the pinned commit, parsed, or null when
+ * the commit has none (or it can't be read, or it isn't a format this page
+ * knows): the page then shows the SVG charts.
+ * @returns {Promise<{ format: 1, run: object, libraries: object[], charts: Record<string, object> } | null>}
  */
-export async function getBenchmarkResults() {
-  if (!BENCHMARK_RESULTS_URL) return null;
-  return fetchCached(BENCHMARK_RESULTS_URL, { as: "json", tags: ["genoxide"] });
+export async function getBenchmarkChartData() {
+  const files = await getRepoFiles();
+  if (files && !files.has(BENCHMARK_CHARTS_FILE)) return null;
+  const text = await getRepoFile(BENCHMARK_CHARTS_FILE);
+  if (typeof text !== "string") return null;
+  try {
+    const data = JSON.parse(text);
+    return data?.format === 1 && data.charts && Array.isArray(data.libraries) ? data : null;
+  } catch {
+    return null;
+  }
 }
