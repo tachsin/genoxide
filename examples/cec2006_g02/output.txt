@@ -1,0 +1,6 @@
+CEC 2006 g02 with SHADE (population 300), seed 1: 500000 evaluations
+f -0.803619, feasible (the best known: -0.803619, not proven)
+relative gap to the best known: below 1e-8
+x1-x10  3.162 3.128 3.095 3.061 3.028 2.994 2.959 2.922 0.495 0.488
+x11-x20 0.482 0.477 0.471 0.466 0.461 0.457 0.452 0.448 0.444 0.440
+active constraints (|g| <= 1e-6): g1
