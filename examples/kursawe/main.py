@@ -3,8 +3,8 @@ NSGA-II.
 
 Kursawe's problem in 3 variables, from genoxide's problems.Kursawe; run evaluates it in Rust. Its
 front isn't known in closed form, so the example compares the two algorithms' fronts by their
-hypervolume, and counts the pieces each finds: a new piece starts where two neighbors on the
-front are more than 0.5 apart.
+hypervolume, and counts the pieces each finds: a new piece starts where f₁ grows by more than
+0.2 between two neighbors on the front.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
 page, with trace.py.
@@ -24,8 +24,9 @@ REFERENCE = [-14.0, 1.0]
 def report(name, front):
     """Prints the size of the front, its pieces and its hypervolume."""
     ordered = front[np.argsort(front[:, 0], kind="stable")]
-    gaps = np.linalg.norm(np.diff(ordered, axis=0), axis=1)
-    pieces = 1 + int((gaps > 0.5).sum())
+    # along a piece, f₁ grows by at most about 0.13 between neighbors, and f₂ falls; the gaps
+    # between the pieces of the true front are 0.25 to 0.92 wide in f₁, with f₂ nearly unchanged
+    pieces = 1 + int((np.diff(ordered[:, 0]) > 0.2).sum())
     volume = gx.indicators.hypervolume(front, REFERENCE)
     print(f"{name:<8} {len(front)} solutions in {pieces} pieces, hypervolume {volume:.4f}")
 

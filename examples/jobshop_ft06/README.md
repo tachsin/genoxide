@@ -52,8 +52,9 @@ A genetic algorithm with the operators that genoxide's guide lists for sequences
 
 - a population of 100;
 - tournament selection of size 3;
-- order crossover (Davis, 1985, Proceedings of IJCAI-85: 162-164): the child keeps a segment of one
-  parent, and takes the other entries in the order they have in the other parent;
+- order crossover: the child keeps a segment of one parent, and takes the other entries in the
+  order they have in the other parent. It goes back to the modified crossover of Davis (1985,
+  Proceedings of IJCAI-85: 162-164), which keeps the first part of a parent instead of a segment;
 - swap mutation, which exchanges two entries;
 - the default generational scheme, which keeps the best individual.
 

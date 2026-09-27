@@ -3,8 +3,8 @@
 //!
 //! Kursawe's problem in 3 variables, from genoxide's `multi::problems::Kursawe`. Its front isn't
 //! known in closed form, so the example compares the two algorithms' fronts by their hypervolume,
-//! and counts the pieces each finds: a new piece starts where two neighbors on the front are
-//! more than 0.5 apart.
+//! and counts the pieces each finds: a new piece starts where f₁ grows by more than 0.2 between
+//! two neighbors on the front.
 //!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
 //! page, with `trace.rs`.
@@ -57,12 +57,11 @@ fn main() -> Result<()> {
 fn report(name: &str, front: &[[f64; 2]]) {
     let mut sorted = front.to_vec();
     sorted.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    // along a piece, f₁ grows by at most about 0.13 between neighbors, and f₂ falls; the gaps
+    // between the pieces of the true front are 0.25 to 0.92 wide in f₁, with f₂ nearly unchanged
     let pieces = 1 + sorted
         .windows(2)
-        .filter(|pair| {
-            let (d1, d2) = (pair[1][0] - pair[0][0], pair[1][1] - pair[0][1]);
-            (d1 * d1 + d2 * d2).sqrt() > 0.5
-        })
+        .filter(|pair| pair[1][0] - pair[0][0] > 0.2)
         .count();
     let volume = hypervolume(front, &REFERENCE, &[Minimize; 2]);
     println!(

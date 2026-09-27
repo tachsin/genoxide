@@ -15,7 +15,8 @@ mod trace;
 
 use genoxide::prelude::*;
 
-// (weight, value)
+// (weight, value): the first ten are the test data of Martello and Toth's Algorithm 632 (ACM TOMS
+// 11(2), 1985), the other ten this example's own
 const ITEMS: [(u32, u32); 20] = [
     (23, 92),
     (31, 57),

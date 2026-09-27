@@ -126,6 +126,15 @@ def page(example: Example) -> str:
             "    ```",
             "",
         ]
+    if (EXAMPLES / example.name / "output.txt").exists():
+        lines += [
+            "**What it prints**, from a seeded run:",
+            "",
+            "```text",
+            f'--8<-- "examples/{example.name}/output.txt"',
+            "```",
+            "",
+        ]
     return "\n".join(lines)
 
 

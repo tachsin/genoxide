@@ -3,7 +3,7 @@ title: 0/1 knapsack
 category: constrained
 summary: Choose the items with the highest total value whose total weight fits a capacity.
 reference: "Martello, S. and Toth, P. (1990). Knapsack Problems: Algorithms and Computer Implementations. Wiley."
-reference_url: null
+reference_url: "https://silvano333.github.io/kp.html"
 optimum: "625 (total value)"
 languages: [rust, python]
 order: 20
@@ -17,8 +17,12 @@ The 0/1 knapsack problem has items, each with a weight and a value, and a knapsa
 It chooses the items with the highest total value whose total weight is at most the capacity. Each
 item is taken whole or not at all. Martello and Toth (1990) treat it and its variants in a book.
 
-The example has 20 items and a capacity of 400. The first item weighs 23 and is worth 92; the eighth
-weighs 85 and is worth 84. All 20 together weigh 896, more than twice the capacity.
+The example has 20 items and a capacity of 400. The first ten are the test data of Martello and
+Toth's program for the multiple knapsack problem (Algorithm 632, 1985, ACM Transactions on
+Mathematical Software 11(2): 135-140), where one knapsack of capacity 165 holds a value of at most
+309. The other ten items and the capacity are this example's own. The first item weighs 23 and is
+worth 92; the eighth weighs 85 and is worth 84. All 20 together weigh 896, more than twice the
+capacity.
 
 ## What makes it hard
 

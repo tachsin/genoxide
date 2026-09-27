@@ -323,9 +323,10 @@ impl MultiProblem<2> for FonsecaFleming {
 /// Kursawe's problem (KUR): `f₁ = Σᵢ₌₁ⁿ⁻¹ −10 exp(−0.2 √(xᵢ² + xᵢ₊₁²))`,
 /// `f₂ = Σᵢ₌₁ⁿ (|xᵢ|^0.8 + 5 sin(xᵢ³))`, in n variables.
 ///
-/// Bounds [−5, 5]ⁿ; 3 variables by default. The front is disconnected, in three pieces for 3
-/// variables, and not known in closed form: [`optimal_front`](MultiProblem::optimal_front) is
-/// `None`.
+/// Bounds [−5, 5]ⁿ; 3 variables by default. The front is disconnected: for 3 variables, the point
+/// (−20, 0) at x = 0 and three curves. It isn't known in closed form:
+/// [`optimal_front`](MultiProblem::optimal_front) is `None`. Deb et al. (2002) and Van Veldhuizen
+/// (1999) describe three regions, and plot the point apart from them.
 ///
 /// Kursawe, F. (1991). A variant of evolution strategies for vector optimization. *Parallel
 /// Problem Solving from Nature*, LNCS 496: 193-197. Definition and bounds as restated in Deb,

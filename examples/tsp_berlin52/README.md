@@ -38,12 +38,13 @@ tour's length, to minimize.
 
 A local search that keeps one tour and tries one neighbor per step.
 
-The neighbor is an inversion: a random segment of the tour is reversed. This is the 2-opt move of
-Croes (1958, Operations Research 6(6): 791-812): it removes two edges and reconnects the tour the
-other way. With symmetric distances, only those two edges change length. genoxide's guide recommends
-inversion for tours.
+The neighbor is an inversion: a random segment of the tour is reversed. This is the 2-opt move: it
+removes two edges and reconnects the tour the other way. Flood (1956, Operations Research 4(1):
+61-75) suggested the move, and Croes (1958, Operations Research 6(6): 791-812) made it a method.
+With symmetric distances, only those two edges change length. genoxide's guide recommends inversion
+for tours.
 
-The acceptance is simulated annealing (Kirkpatrick, Gelatt and Vecchi, 1983, Science 220: 671-680).
+The acceptance is simulated annealing (Kirkpatrick, Gelatt and Vecchi, 1983, Science 220(4598): 671-680).
 A shorter or equal tour is always accepted. A tour longer by Δ is accepted with probability exp(−Δ /
 T), for a temperature T. T starts at 100 and is multiplied by 0.99996 after every step. At first, a
 tour 100 longer is accepted with probability 37%; the optimal tour's edges are 145 long on average.
