@@ -4,12 +4,17 @@ A permutation genome puts one queen in each row and each column (queen ``row`` i
 ``order[row]``), so only the diagonals can conflict. Permutations have no position-wise crossover,
 so this uses (μ+λ) with swap mutation only. The fitness function takes a generation at a time.
 
+With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
+page, with trace.py.
+
     python examples/n_queens/main.py
 """
 
 import numpy as np
 
 import genoxide as gx
+
+from trace import Trace
 
 N = 64
 ROWS = np.arange(N)
@@ -36,10 +41,15 @@ ga = gx.Ga(
     objective="minimize",
     seed=1,
 )
-result = ga.run(conflicts, batch=True, target=0, generations=50_000)
+# with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+trace = Trace(N)
+result = ga.run(
+    conflicts, batch=True, target=0, generations=50_000, on_generation=trace.on_generation
+)
 
 print(
     f"{result.best_fitness:.0f} conflicts after {result.generations} generations and "
     f"{result.evaluations} evaluations"
 )
 print(f"columns {result.best_genome.tolist()}")
+trace.write()

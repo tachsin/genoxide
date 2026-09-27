@@ -1,0 +1,6 @@
+20 local searches from random points in [-5, 5] x [-5, 5]
+minimum                  searches  values reached
+( 3.000000,  2.000000)         3  5.4e-7 to 1.7e-6
+(-2.805118,  3.131313)         6  6.2e-9 to 2.2e-6
+(-3.779310, -3.283186)         6  3.6e-7 to 1.7e-6
+( 3.584428, -1.848127)         5  2.6e-7 to 2.2e-6

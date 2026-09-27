@@ -1,0 +1,2 @@
+SPEA2    100 solutions in 3 pieces, hypervolume 37.1035
+NSGA-II  100 solutions in 3 pieces, hypervolume 37.0213

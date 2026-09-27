@@ -4,12 +4,17 @@ Shows a constraint with Deb's feasibility rules: the fitness function returns th
 far the weight exceeds the capacity, so overweight selections still guide the search towards the
 feasible ones. The result is checked against the optimum found by dynamic programming.
 
+With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
+page, with trace.py.
+
     python examples/knapsack/main.py
 """
 
 import numpy as np
 
 import genoxide as gx
+
+from trace import Trace
 
 # (weight, value)
 ITEMS = [
@@ -62,9 +67,12 @@ ga = gx.Ga(
     mutation=gx.BitFlip(rate=1 / len(ITEMS)),
     seed=7,
 )
-result = ga.run(value, stagnation=200, generations=2_000)
+# with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+trace = Trace(ITEMS, CAPACITY, optimum())
+result = ga.run(value, stagnation=200, generations=2_000, on_generation=trace.on_generation)
 
 best = result.best_genome
 print(f"items {np.flatnonzero(best).tolist()}")
 print(f"value {VALUES[best].sum()}, weight {WEIGHTS[best].sum()} of {CAPACITY}")
 print(f"after {result.evaluations} evaluations; the optimum is {optimum()}")
+trace.write()

@@ -69,11 +69,12 @@ impl Shared {
 
     /// After a generation, on the thread that runs the engine, the one that called `run`: stops
     /// the run on Ctrl+C, which Python handles there, and calls the progress callback with the
-    /// generation, the evaluations, the seconds and `value` (the best fitness, or the size of
-    /// the front). The callback returns False to stop the run.
-    pub fn after_generation<V>(&self, progress: &Progress, value: V)
+    /// generation, the evaluations, the seconds and the values `state` makes (the best fitness
+    /// or the size of the front, then the population as arrays), only made for a callback. The
+    /// callback returns False to stop the run.
+    pub fn after_generation<S>(&self, progress: &Progress, state: S)
     where
-        V: for<'py> IntoPyObject<'py>,
+        S: for<'py> FnOnce(Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>>,
     {
         Python::attach(|py| {
             if let Err(error) = py.check_signals() {
@@ -85,13 +86,19 @@ impl Shared {
             if self.aborted() {
                 return;
             }
-            let arguments = (
-                progress.generation(),
-                progress.evaluations(),
-                progress.elapsed().as_secs_f64(),
-                value,
-            );
-            let go_on = callback.bind(py).call1(arguments);
+            let go_on = state(py).and_then(|state| {
+                let mut arguments = vec![
+                    progress.generation().into_pyobject(py)?.into_any(),
+                    progress.evaluations().into_pyobject(py)?.into_any(),
+                    progress
+                        .elapsed()
+                        .as_secs_f64()
+                        .into_pyobject(py)?
+                        .into_any(),
+                ];
+                arguments.extend(state);
+                callback.bind(py).call1(PyTuple::new(py, arguments)?)
+            });
             match go_on.and_then(|go_on| go_on.extract::<bool>()) {
                 Ok(true) => {}
                 Ok(false) => self.abort.store(true, Ordering::Relaxed),

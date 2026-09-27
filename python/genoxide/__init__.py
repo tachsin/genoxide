@@ -44,7 +44,7 @@ import math
 import numbers
 import operator
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, Union
 
 import numpy as np
@@ -752,7 +752,7 @@ class MultiResult:
     """
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Progress:
     """A single-objective run after a generation, for ``on_generation``."""
 
@@ -764,9 +764,18 @@ class Progress:
     """The time since the run started."""
     best_fitness: float | None
     """The best score so far, or None if no valid solution was found yet."""
+    best_genome: np.ndarray = field(repr=False)
+    """The best genome so far."""
+    population: np.ndarray = field(repr=False)
+    """The population after the generation, a genome per row."""
+    scores: np.ndarray = field(repr=False)
+    """The population's scores: NaN for an invalid solution."""
+    violations: np.ndarray = field(repr=False)
+    """The population's constraint violations: 0 for a feasible solution, NaN for an invalid
+    one."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class MultiProgress:
     """A multi-objective run after a generation, for ``on_generation``."""
 
@@ -778,6 +787,18 @@ class MultiProgress:
     """The time since the run started."""
     front_size: int
     """The number of non-dominated individuals in the population, copies included."""
+    population: np.ndarray = field(repr=False)
+    """The population after the generation, a genome per row."""
+    objectives: np.ndarray = field(repr=False)
+    """The population's objective values, a row each: NaN for an invalid solution."""
+    violations: np.ndarray = field(repr=False)
+    """The population's constraint violations: 0 for a feasible solution, NaN for an invalid
+    one."""
+    front_objectives: np.ndarray = field(repr=False)
+    """The objective values of the population's non-dominated individuals, copies included, a
+    row each."""
+    front_violations: np.ndarray = field(repr=False)
+    """Their constraint violations."""
 
 
 # --- running -------------------------------------------------------------------------------------
@@ -825,15 +846,16 @@ def _check_callable(function: Any, name: str = "the fitness function") -> None:
 
 def _on_generation(
     callback: Callable[[Any], Any] | None, progress: type[Progress] | type[MultiProgress]
-) -> Callable[[int, int, float, Any], bool] | None:
-    """The callback, called with the generation, the evaluations, the seconds and the best
-    fitness or the size of the front, as a ``progress``; False from it stops the run."""
+) -> Callable[..., bool] | None:
+    """The callback, called with the generation, the evaluations, the seconds, the best fitness
+    or the size of the front and the population's arrays, as a ``progress``; False from it stops
+    the run."""
     if callback is None:
         return None
     _check_callable(callback, "on_generation")
 
-    def call(generation: int, evaluations: int, seconds: float, value: Any) -> bool:
-        go_on = callback(progress(generation, evaluations, seconds, value))
+    def call(*state: Any) -> bool:
+        go_on = callback(progress(*state))
         return go_on is not False and go_on is not np.False_
 
     return call
@@ -909,7 +931,7 @@ class _Algorithm:
         stop: dict[str, Any],
         batch: bool,
         parallel: bool,
-        on_generation: Callable[[int, int, float, Any], bool] | None,
+        on_generation: Callable[..., bool] | None,
         problem: str | None = None,
     ) -> dict[str, Any]:
         run = {

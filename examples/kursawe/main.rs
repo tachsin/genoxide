@@ -6,9 +6,14 @@
 //! and counts the pieces each finds: a new piece starts where two neighbors on the front are
 //! more than 0.5 apart.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example kursawe
 //! ```
+
+mod trace;
 
 use genoxide::Objective::Minimize;
 use genoxide::multi::indicator::hypervolume;
@@ -25,8 +30,11 @@ fn main() -> Result<()> {
         .mutate(PolynomialMutation::per_gene(1.0 / 3.0, 20.0)?)
         .seed(1)
         .build()?;
+    // with GENOXIDE_TRACE=<file>, a trace of the runs for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let spea2 = MultiEngine::new(spea2, problem)
         .stop_when(Stop::generations(250))
+        .on_generation(trace.fronts("SPEA2"))
         .run()?;
     report("SPEA2", &spea2.front_values());
 
@@ -38,8 +46,10 @@ fn main() -> Result<()> {
         .build()?;
     let nsga2 = MultiEngine::new(nsga2, problem)
         .stop_when(Stop::generations(250))
+        .on_generation(trace.fronts("NSGA-II"))
         .run()?;
     report("NSGA-II", &nsga2.front_values());
+    trace.write();
     Ok(())
 }
 

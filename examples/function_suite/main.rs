@@ -4,9 +4,14 @@
 //! of the known minimum. The table gives the error to the minimum: the best value found minus
 //! the minimum. The functions, their bounds and their minima come from genoxide's `problems`.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example function_suite
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 use genoxide::problems::{self, DynProblem};
@@ -35,6 +40,8 @@ fn main() -> Result<()> {
         "{:<22}{:>10}{:>10}{:>10}",
         "function", "CMA-ES", "SHADE", "PSO"
     );
+    // with GENOXIDE_TRACE=<file>, a trace of the runs for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     for problem in &functions {
         let minimum = problem.optimum().expect("known").value();
         let stop = || Stop::target(minimum + 1e-8).or(Stop::evaluations(BUDGET));
@@ -45,17 +52,26 @@ fn main() -> Result<()> {
             .minimize()
             .seed(1)
             .build()?;
-        let cmaes = Engine::new(cmaes, fitness).stop_when(stop()).run()?;
+        let cmaes = Engine::new(cmaes, fitness)
+            .stop_when(stop())
+            .on_generation(trace.errors(format!("{}/CMA-ES", problem.name()), minimum))
+            .run()?;
 
         let shade = De::builder(problem.real()).minimize().seed(1).build()?;
-        let shade = Engine::new(shade, fitness).stop_when(stop()).run()?;
+        let shade = Engine::new(shade, fitness)
+            .stop_when(stop())
+            .on_generation(trace.errors(format!("{}/SHADE", problem.name()), minimum))
+            .run()?;
 
         let pso = Pso::builder(problem.real())
             .population_size(40)
             .minimize()
             .seed(1)
             .build()?;
-        let pso = Engine::new(pso, fitness).stop_when(stop()).run()?;
+        let pso = Engine::new(pso, fitness)
+            .stop_when(stop())
+            .on_generation(trace.errors(format!("{}/PSO", problem.name()), minimum))
+            .run()?;
 
         let error = |outcome: &Outcome<Reals>| {
             let best = outcome.best_fitness().score().expect("valid");
@@ -70,6 +86,7 @@ fn main() -> Result<()> {
             error(&pso)
         );
     }
+    trace.write();
     Ok(())
 }
 

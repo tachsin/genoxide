@@ -6,9 +6,14 @@
 //! n-th operation starts as early as its job and its machine allow (a semi-active schedule). A
 //! genetic algorithm with order crossover and swap mutation searches the sequences.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example jobshop_ft06
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 
@@ -61,8 +66,11 @@ fn main() -> Result<()> {
         .seed(1)
         .build()?;
 
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(ga, makespan)
         .stop_when(Stop::target(OPTIMUM).or(Stop::generations(1_000)))
+        .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
     println!(
@@ -85,5 +93,6 @@ fn main() -> Result<()> {
         let jobs: Vec<usize> = jobs.into_iter().map(|(_, job)| job).collect();
         println!("machine {machine}: jobs {jobs:?}");
     }
+    trace.write();
     Ok(())
 }

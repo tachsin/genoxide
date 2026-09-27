@@ -1,0 +1,1 @@
+100 solutions on the front, hypervolume 0.8698 (the whole front: 0.8767)

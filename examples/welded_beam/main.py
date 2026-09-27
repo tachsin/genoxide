@@ -8,19 +8,27 @@ Their fitness is the cost and the constraint violation, which Deb's feasibility 
 SHADE, a differential evolution, solves each with the same budget, and the example prints the best
 design next to the best known cost.
 
+With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
+page, with trace.py.
+
     python examples/welded_beam/main.py
 """
 
 import genoxide as gx
 
+from trace import Trace
+
 forms = [gx.problems.engineering.WeldedBeam(), gx.problems.engineering.WeldedBeamRagsdell()]
+# with GENOXIDE_TRACE=<file>, a trace of the first form's run for the plot on the example's page
+trace = Trace(forms[0])
 for problem in forms:
     best_known = problem.optimum.value
     de = gx.De(problem.genome, objective=problem.objective, seed=1)
-    result = de.run(problem, evaluations=40_000)
+    result = de.run(problem, evaluations=40_000, on_generation=trace.on_generation)
     h, l, t, b = result.best_genome.tolist()
     print(
         f"{problem.name}: cost {result.best_fitness:.6f}, violation {result.violation:.6f} "
         f"(the best known: {best_known})"
     )
     print(f"  h {h:.6f}, l {l:.6f}, t {t:.6f}, b {b:.6f}")
+trace.write()

@@ -221,8 +221,8 @@ The result has the condition that stopped it, `stop_reason`, and the `generation
 ## Progress
 
 `run(..., on_generation=callback)` calls `callback` after every generation, the initial population (generation 0) included. It runs on the thread that called `run`. It gets a read-only object:
-- `Progress`: the `generation`, `evaluations`, `seconds` and `best_fitness` so far (`None` before a valid solution)
-- `MultiProgress`, for a multi-objective algorithm: the same, with `front_size` (the number of non-dominated individuals in the population) instead of `best_fitness`
+- `Progress`: the `generation`, `evaluations`, `seconds` and `best_fitness` so far (`None` before a valid solution), the `best_genome` so far, and the `population` (a genome per row) with its `scores` and `violations`
+- `MultiProgress`, for a multi-objective algorithm: the same, with `front_size` (the number of non-dominated individuals in the population) instead of `best_fitness` and the best genome, the population's `objectives` (a row per genome) instead of its scores, and the `front_objectives` and `front_violations` of its non-dominated individuals
 
 If `callback` returns `False`, the run stops with the stop reason `"aborted"`. If it raises an exception, the run stops and `run` raises it.
 

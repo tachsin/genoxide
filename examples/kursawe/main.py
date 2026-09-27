@@ -6,12 +6,17 @@ front isn't known in closed form, so the example compares the two algorithms' fr
 hypervolume, and counts the pieces each finds: a new piece starts where two neighbors on the
 front are more than 0.5 apart.
 
+With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
+page, with trace.py.
+
     python examples/kursawe/main.py
 """
 
 import numpy as np
 
 import genoxide as gx
+
+from trace import Trace
 
 REFERENCE = [-14.0, 1.0]
 
@@ -33,7 +38,12 @@ settings = dict(
     mutation=gx.PolynomialMutation(20, rate=1 / 3),
     seed=1,
 )
+# with GENOXIDE_TRACE=<file>, a trace of the runs for the plot on the example's page
+trace = Trace(REFERENCE)
 spea2 = gx.Spea2(problem.genome, **settings)
-report("SPEA2", spea2.run(problem, generations=250).front_objectives)
+result = spea2.run(problem, generations=250, on_generation=trace.fronts("SPEA2"))
+report("SPEA2", result.front_objectives)
 nsga2 = gx.Nsga2(problem.genome, **settings)
-report("NSGA-II", nsga2.run(problem, generations=250).front_objectives)
+result = nsga2.run(problem, generations=250, on_generation=trace.fronts("NSGA-II"))
+report("NSGA-II", result.front_objectives)
+trace.write()

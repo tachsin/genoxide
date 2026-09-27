@@ -11,7 +11,8 @@ use crate::operators::{
 use crate::problems;
 use genoxide::algorithm::{GaBuilder, cmaes, pso};
 use genoxide::genome::Representation;
-use genoxide::multi::{self, Decomposition, MultiObjectiveAlgorithm, SmsEmoa};
+use genoxide::multi::{self, Decomposition, MultiObjectiveAlgorithm, MultiSnapshot, SmsEmoa};
+use genoxide::observer::Snapshot;
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
 use numpy::ndarray::Array2;
@@ -689,8 +690,7 @@ where
             .abort_flag(shared.abort_flag())
             .parallel(parallel)
             .on_generation(|snapshot| {
-                let progress = snapshot.progress();
-                shared.after_generation(progress, progress.best().and_then(Fitness::score));
+                shared.after_generation(snapshot.progress(), |py| single_state(py, snapshot));
             })
             .run()
     });
@@ -739,7 +739,7 @@ where
             .abort_flag(shared.abort_flag())
             .parallel(parallel)
             .on_generation(|snapshot| {
-                shared.after_generation(snapshot.progress(), snapshot.front().len());
+                shared.after_generation(snapshot.progress(), |py| multi_state(py, snapshot));
             })
             .run()
     });
@@ -758,10 +758,81 @@ where
         }
     }
     let genomes: Vec<&A::Genome> = members.iter().map(|member| member.genome()).collect();
-    let mut objectives = Vec::with_capacity(members.len() * N);
-    let mut violations = Vec::with_capacity(members.len());
-    for member in &members {
-        let scores = member.fitness();
+    let (objectives, violations) = objective_rows(py, members)?;
+    let result = PyDict::new(py);
+    result.set_item("front_genomes", genes::matrix(py, &genomes)?)?;
+    result.set_item("front_objectives", objectives)?;
+    result.set_item("front_violations", violations)?;
+    result.set_item("generations", outcome.generations())?;
+    result.set_item("evaluations", outcome.evaluations())?;
+    result.set_item("seconds", outcome.elapsed().as_secs_f64())?;
+    result.set_item("stop_reason", stop_reason(outcome.stop_reason()))?;
+    Ok(result)
+}
+
+// the arguments of the progress callback after a single-objective generation: the best score
+// and genome so far, and the population's genomes, scores and violations (NaN for an invalid
+// solution)
+fn single_state<'py, G: Genes>(
+    py: Python<'py>,
+    snapshot: &Snapshot<'_, G>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let population = snapshot.population();
+    let genomes: Vec<&G> = population.iter().map(Individual::genome).collect();
+    let (scores, violations): (Vec<f64>, Vec<f64>) = population
+        .iter()
+        .map(|individual| {
+            let fitness = individual.fitness().unwrap_or(Fitness::invalid());
+            let score = fitness.score();
+            (
+                score.unwrap_or(f64::NAN),
+                score.map_or(f64::NAN, |_| fitness.violation()),
+            )
+        })
+        .unzip();
+    let best = snapshot.progress().best().and_then(Fitness::score);
+    Ok(vec![
+        best.into_pyobject(py)?.into_any(),
+        genes::array(py, snapshot.best().genome()).into_any(),
+        genes::matrix(py, &genomes)?.into_any(),
+        PyArray1::from_vec(py, scores).into_any(),
+        PyArray1::from_vec(py, violations).into_any(),
+    ])
+}
+
+// the arguments of the progress callback after a multi-objective generation: the size of the
+// front, the population's genomes, objective values and violations, and the front's
+fn multi_state<'py, G: Genes, const N: usize>(
+    py: Python<'py>,
+    snapshot: &MultiSnapshot<'_, G, N>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let population = snapshot.population();
+    let genomes: Vec<&G> = population.iter().map(Individual::genome).collect();
+    let (objectives, violations) = objective_rows(py, population.iter())?;
+    let (front_objectives, front_violations) = objective_rows(py, snapshot.front())?;
+    Ok(vec![
+        snapshot.front().len().into_pyobject(py)?.into_any(),
+        genes::matrix(py, &genomes)?.into_any(),
+        objectives.into_any(),
+        violations.into_any(),
+        front_objectives.into_any(),
+        front_violations.into_any(),
+    ])
+}
+
+// objective values, a row per individual, and constraint violations
+type ObjectiveRows<'py> = (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray1<f64>>);
+
+// the objective values of individuals, a row each, and their constraint violations; NaN for an
+// invalid solution
+fn objective_rows<'a, 'py, G: Genes + 'a, const N: usize>(
+    py: Python<'py>,
+    individuals: impl IntoIterator<Item = &'a Individual<G, Scores<N>>>,
+) -> PyResult<ObjectiveRows<'py>> {
+    let mut objectives = Vec::new();
+    let mut violations = Vec::new();
+    for individual in individuals {
+        let scores = individual.fitness();
         objectives.extend(
             scores
                 .and_then(|scores| scores.values())
@@ -771,18 +842,10 @@ where
         let valid = scores.filter(|scores| scores.is_valid());
         violations.push(valid.map_or(f64::NAN, |scores| scores.violation()));
     }
-    let objectives = Array2::from_shape_vec((members.len(), N), objectives)
+    let objectives = Array2::from_shape_vec((violations.len(), N), objectives)
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))?
         .into_pyarray(py);
-    let result = PyDict::new(py);
-    result.set_item("front_genomes", genes::matrix(py, &genomes)?)?;
-    result.set_item("front_objectives", objectives)?;
-    result.set_item("front_violations", PyArray1::from_vec(py, violations))?;
-    result.set_item("generations", outcome.generations())?;
-    result.set_item("evaluations", outcome.evaluations())?;
-    result.set_item("seconds", outcome.elapsed().as_secs_f64())?;
-    result.set_item("stop_reason", stop_reason(outcome.stop_reason()))?;
-    Ok(result)
+    Ok((objectives, PyArray1::from_vec(py, violations)))
 }
 
 fn stop_reason(reason: StopReason) -> &'static str {

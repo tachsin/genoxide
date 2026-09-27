@@ -4,9 +4,14 @@
 //! `order[row]`), so only the diagonals can conflict. Permutations have no position-wise
 //! crossover, so this uses (μ+λ) with swap mutation only.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example n_queens
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 
@@ -36,8 +41,11 @@ fn main() -> Result<()> {
         .seed(1)
         .build()?;
 
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(ga, conflicts)
         .stop_when(Stop::target(0.0).or(Stop::generations(50_000)))
+        .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
     println!(
@@ -47,5 +55,6 @@ fn main() -> Result<()> {
         outcome.evaluations()
     );
     println!("columns {:?}", &outcome.best_genome()[..]);
+    trace.write();
     Ok(())
 }

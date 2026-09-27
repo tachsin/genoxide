@@ -4,9 +4,14 @@
 //! far the weight exceeds the capacity, so overweight selections still guide the search towards
 //! the feasible ones. The result is checked against the optimum found by dynamic programming.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example knapsack
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 
@@ -76,8 +81,11 @@ fn main() -> Result<()> {
         .seed(7)
         .build()?;
 
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(ga, value)
         .stop_when(Stop::stagnation(200).or(Stop::generations(2_000)))
+        .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
     let best = outcome.best_genome();
@@ -92,5 +100,6 @@ fn main() -> Result<()> {
         outcome.evaluations(),
         optimum()
     );
+    trace.write();
     Ok(())
 }

@@ -5,12 +5,17 @@ NSGA-III with the 91 reference directions of Das and Dennis's method with 12 div
 population of 92 and 250 generations, as in Deb and Jain (2014). Prints the size of the final
 front and its hypervolume. The fitness function takes a generation at a time.
 
+With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
+page, with trace.py.
+
     python examples/dtlz2_3obj/main.py
 """
 
 import numpy as np
 
 import genoxide as gx
+
+from trace import Trace
 
 VARIABLES = 12
 
@@ -56,10 +61,13 @@ nsga3 = gx.Nsga3(
     mutation=gx.PolynomialMutation(20, rate=1 / VARIABLES),
     seed=1,
 )
-result = nsga3.run(dtlz2, batch=True, generations=250)
+# with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+trace = Trace()
+result = nsga3.run(dtlz2, batch=True, generations=250, on_generation=trace.on_generation)
 
 # the hypervolume of the front, with the reference point (1.1, 1.1, 1.1); the whole front's is
 # 1.1³ minus the eighth of the unit ball, π/6
 front = result.front_objectives
 volume = hypervolume(front, np.array([1.1, 1.1, 1.1]))
 print(f"{len(front)} solutions on the front, hypervolume {volume:.4f} (the whole front: 0.8074)")
+trace.write()

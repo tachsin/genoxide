@@ -3,12 +3,17 @@
 Shows NSGA-II, a fitness function that takes a generation at a time, and the hypervolume of the
 final non-dominated front.
 
+With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
+page, with trace.py.
+
     python examples/zdt1/main.py
 """
 
 import numpy as np
 
 import genoxide as gx
+
+from trace import Trace
 
 
 def zdt1(x):
@@ -26,7 +31,9 @@ nsga2 = gx.Nsga2(
     mutation=gx.PolynomialMutation(20, rate=1 / 30),
     seed=1,
 )
-result = nsga2.run(zdt1, batch=True, evaluations=25_000)
+# with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+trace = Trace()
+result = nsga2.run(zdt1, batch=True, evaluations=25_000, on_generation=trace.on_generation)
 front = result.front_objectives[np.argsort(result.front_objectives[:, 0])]
 
 # the hypervolume of the front, with the reference point (1.1, 1.1): the front is sorted by f1, so
@@ -34,3 +41,4 @@ front = result.front_objectives[np.argsort(result.front_objectives[:, 0])]
 widths = np.diff(np.append(front[:, 0], 1.1))
 hypervolume = np.sum(widths * (1.1 - front[:, 1]))
 print(f"{len(front)} solutions on the front, hypervolume {hypervolume:.4f} (the whole front: 0.8767)")
+trace.write()

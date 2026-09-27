@@ -5,10 +5,15 @@ the known minimum. The table gives the error to the minimum: the best value foun
 minimum. The functions, their bounds and their minima come from genoxide's problems, which run
 evaluates in Rust.
 
+With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
+page, with trace.py.
+
     python examples/function_suite/main.py
 """
 
 import genoxide as gx
+
+from trace import Trace
 
 DIMENSIONS = 10
 BUDGET = 10_000 * DIMENSIONS
@@ -35,18 +40,24 @@ functions = [
     gx.problems.Michalewicz(DIMENSIONS),
 ]
 
+# with GENOXIDE_TRACE=<file>, a trace of the runs for the plot on the example's page
+trace = Trace(BUDGET)
 print(f"Error to the minimum in {DIMENSIONS} dimensions, {BUDGET} evaluations at most")
 print(f"{'function':<22}{'CMA-ES':>10}{'SHADE':>10}{'PSO':>10}")
 for problem in functions:
     minimum = problem.optimum.value
-    algorithms = [
-        gx.Cmaes(problem.genome, restarts="ipop", objective="minimize", seed=1),
-        gx.De(problem.genome, objective="minimize", seed=1),
-        gx.Pso(problem.genome, population_size=40, objective="minimize", seed=1),
-    ]
+    algorithms = {
+        "CMA-ES": gx.Cmaes(problem.genome, restarts="ipop", objective="minimize", seed=1),
+        "SHADE": gx.De(problem.genome, objective="minimize", seed=1),
+        "PSO": gx.Pso(problem.genome, population_size=40, objective="minimize", seed=1),
+    }
     errors = []
-    for algorithm in algorithms:
-        result = algorithm.run(problem, target=minimum + 1e-8, evaluations=BUDGET)
+    for name, algorithm in algorithms.items():
+        record = trace.errors(f"{problem.name}/{name}", minimum)
+        result = algorithm.run(
+            problem, target=minimum + 1e-8, evaluations=BUDGET, on_generation=record
+        )
         # rounding can put a solution a few ulps below the minimum
         errors.append(scientific(max(result.best_fitness - minimum, 0.0)))
     print(f"{problem.name:<22}" + "".join(f"{error:>10}" for error in errors))
+trace.write()

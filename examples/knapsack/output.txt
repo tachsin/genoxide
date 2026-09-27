@@ -1,0 +1,3 @@
+items [0, 1, 2, 3, 5, 10, 11, 12, 13, 14, 16, 17, 19]
+value 625, weight 395 of 400
+after 14952 evaluations; the optimum is 625

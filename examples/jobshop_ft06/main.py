@@ -6,10 +6,15 @@ read as a sequence of jobs (a permutation with repetition): the n-th time a job 
 operation starts as early as its job and its machine allow (a semi-active schedule). A genetic
 algorithm with order crossover and swap mutation searches the sequences.
 
+With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
+page, with trace.py.
+
     python examples/jobshop_ft06/main.py
 """
 
 import genoxide as gx
+
+from trace import Trace
 
 JOBS = 6
 MACHINES = 6
@@ -57,7 +62,9 @@ ga = gx.Ga(
     objective="minimize",
     seed=1,
 )
-result = ga.run(makespan, target=OPTIMUM, generations=1_000)
+# with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+trace = Trace(INSTANCE, MACHINES, OPTIMUM, schedule)
+result = ga.run(makespan, target=OPTIMUM, generations=1_000, on_generation=trace.on_generation)
 
 print(
     f"makespan {result.best_fitness:.0f} after {result.generations} generations "
@@ -73,3 +80,4 @@ for machine in range(MACHINES):
         if on == machine
     )
     print(f"machine {machine}: jobs {[job for _, job in jobs]}")
+trace.write()

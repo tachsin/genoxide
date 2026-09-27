@@ -10,7 +10,7 @@ def run(
     fitness: Callable[[Any], Any],
     batch: bool = False,
     parallel: bool = False,
-    on_generation: Callable[[int, int, float, Any], bool] | None = None,
+    on_generation: Callable[..., bool] | None = None,
     problem: str | None = None,
 ) -> dict[str, Any]: ...
 def das_dennis(objectives: int, divisions: int) -> np.ndarray: ...

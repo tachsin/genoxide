@@ -3,9 +3,14 @@
 //! Shows NSGA-II on genoxide's ZDT1 test problem, and the hypervolume of the final non-dominated
 //! front.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example zdt1
 //! ```
+
+mod trace;
 
 use genoxide::Objective::Minimize;
 use genoxide::multi::indicator::hypervolume;
@@ -21,8 +26,11 @@ fn main() -> Result<()> {
         .seed(1)
         .build()?;
 
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let outcome = MultiEngine::new(nsga2, problem)
         .stop_when(Stop::evaluations(25_000))
+        .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
     // the hypervolume of the front, with the reference point (1.1, 1.1)
@@ -32,5 +40,6 @@ fn main() -> Result<()> {
         "{} solutions on the front, hypervolume {volume:.4} (the whole front: 0.8767)",
         front.len()
     );
+    trace.write();
     Ok(())
 }

@@ -4,9 +4,14 @@
 //! Each search is a hill climber with Gaussian steps; it ends in the minimum whose basin it
 //! started in. The known minima come from genoxide's `problems::Himmelblau`.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example himmelblau
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 use genoxide::problems::{Himmelblau, Problem};
@@ -20,6 +25,8 @@ fn main() -> Result<()> {
     // per known minimum: the searches that ended nearest it, and the best and worst values they
     // reached
     let mut found = vec![(0, f64::INFINITY, 0.0f64); minima.len()];
+    // with GENOXIDE_TRACE=<file>, a trace of the searches for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     for seed in 1..=SEARCHES {
         let search = LocalSearch::builder(problem.representation())
             .neighbor(GaussianMutation::per_gene(1.0, 0.001)?)
@@ -30,6 +37,7 @@ fn main() -> Result<()> {
             .build()?;
         let outcome = Engine::new(search, problem)
             .stop_when(Stop::generations(1_000))
+            .on_generation(|snapshot| trace.record(snapshot))
             .run()?;
         let end = outcome.best_genome();
         let nearest = (0..minima.len())
@@ -53,6 +61,7 @@ fn main() -> Result<()> {
             scientific(worst)
         );
     }
+    trace.write();
     Ok(())
 }
 

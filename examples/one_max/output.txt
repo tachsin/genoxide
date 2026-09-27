@@ -1,0 +1,6 @@
+generation  best
+         0   274
+        50   476
+       100   498
+
+500 ones after 120 generations and 10380 evaluations (the optimum: 500)

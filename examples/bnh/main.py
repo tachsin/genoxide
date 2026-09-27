@@ -4,10 +4,15 @@ Binh and Korn's problem, from genoxide's problems.Bnh, whose fitness is the two 
 constraint violation; run evaluates it in Rust. Prints how many solutions of the final front are
 feasible, their IGD+ to 500 points of the optimal front, and the front's hypervolume.
 
+With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
+page, with trace.py.
+
     python examples/bnh/main.py
 """
 
 import genoxide as gx
+
+from trace import Trace
 
 problem = gx.problems.Bnh()
 nsga2 = gx.Nsga2(
@@ -18,7 +23,9 @@ nsga2 = gx.Nsga2(
     mutation=gx.PolynomialMutation(20, rate=0.5),
     seed=1,
 )
-result = nsga2.run(problem, generations=250)
+# with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+trace = Trace(problem)
+result = nsga2.run(problem, generations=250, on_generation=trace.on_generation)
 
 front = result.front_objectives
 feasible = int((result.front_violations == 0).sum())
@@ -33,3 +40,4 @@ print(f"IGD+ to the optimal front: {distance:.4f}")
 # area above f2 = 2 (√(f1/8) − 5)²
 volume = gx.indicators.hypervolume(front, [210.0, 55.0])
 print(f"hypervolume {volume:.2f} (the whole front: 9883.33)")
+trace.write()

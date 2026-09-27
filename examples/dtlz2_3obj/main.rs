@@ -5,9 +5,14 @@
 //! population of 92 and 250 generations, as in Deb and Jain (2014). Prints the size of the final
 //! front and its hypervolume.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example dtlz2_3obj
 //! ```
+
+mod trace;
 
 use genoxide::Objective::Minimize;
 use genoxide::multi::indicator::hypervolume;
@@ -26,8 +31,11 @@ fn main() -> Result<()> {
         .seed(1)
         .build()?;
 
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let outcome = MultiEngine::new(nsga3, problem)
         .stop_when(Stop::generations(250))
+        .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
     // the hypervolume of the front, with the reference point (1.1, 1.1, 1.1); the whole front's
@@ -38,5 +46,6 @@ fn main() -> Result<()> {
         "{} solutions on the front, hypervolume {volume:.4} (the whole front: 0.8074)",
         front.len()
     );
+    trace.write();
     Ok(())
 }

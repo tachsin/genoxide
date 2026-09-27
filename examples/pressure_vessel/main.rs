@@ -7,9 +7,14 @@
 //! genes to whole plates, and its fitness is the cost and the violation of the four constraints,
 //! which Deb's feasibility rules compare. SHADE, a differential evolution, searches the genes.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example pressure_vessel
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 use genoxide::problems::Problem;
@@ -22,8 +27,11 @@ fn main() -> Result<()> {
         .minimize()
         .seed(1)
         .build()?;
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(de, problem)
         .stop_when(Stop::evaluations(50_000))
+        .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
     let best = outcome.best_fitness();
@@ -35,5 +43,6 @@ fn main() -> Result<()> {
     );
     println!("violation {:.6}", best.violation());
     println!("shell {shell:.4}, heads {head:.4}, radius {radius:.6}, length {length:.6}");
+    trace.write();
     Ok(())
 }

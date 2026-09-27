@@ -3,12 +3,17 @@
 //! XOR isn't linearly separable, so the network needs its hidden layer: two sigmoid units, each
 //! with a weight per input and a bias, and a sigmoid output unit with a weight per hidden unit
 //! and a bias. The fitness is the sum of the squared errors over the four input pairs, minimized
-//! by CMA-ES with IPOP restarts, which escape the local minima where the network outputs 0.5 or
+//! by CMA-ES with IPOP restarts, which escape the flat regions where the network outputs 0.5 or
 //! solves three of the four cases.
+//!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
 //!
 //! ```text
 //! cargo run --release --example xor_neuroevolution
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 
@@ -47,8 +52,11 @@ fn main() -> Result<()> {
         .minimize()
         .seed(1)
         .build()?;
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(cmaes, squared_error)
         .stop_when(Stop::target(0.01).or(Stop::evaluations(20_000)))
+        .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
     println!(
@@ -60,5 +68,6 @@ fn main() -> Result<()> {
         let value = output(outcome.best_genome(), [a, b]);
         println!("{a:.0} xor {b:.0} = {expected:.0}: {value:.3}");
     }
+    trace.write();
     Ok(())
 }

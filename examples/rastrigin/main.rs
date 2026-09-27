@@ -4,9 +4,14 @@
 //! (differential evolution with a population that shrinks over the budget). The global minimum is
 //! 0, at the origin. The function is genoxide's `problems::Rastrigin`.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example rastrigin
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 use genoxide::problems::{Problem, Rastrigin};
@@ -33,6 +38,10 @@ fn main() -> Result<()> {
         .build()?;
     let outcome = Engine::new(l_shade, problem).stop_when(stop()).run()?;
     report("L-SHADE", &outcome);
+
+    // with GENOXIDE_TRACE=<file>, a trace for the plot on the example's page, of a separate
+    // run in 2 dimensions: the plot is the function's contour
+    trace::record_2d()?;
     Ok(())
 }
 

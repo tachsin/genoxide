@@ -1,0 +1,4 @@
+2000 evaluations of 1 to 8 ms, 20 at a time
+
+     generational, parallel: 0.70 s, 2877 evaluations/s, best 2.459
+ steady-state, asynchronous: 0.50 s, 3963 evaluations/s, best 1.022

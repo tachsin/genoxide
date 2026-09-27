@@ -4,7 +4,12 @@
 //! network evaluations per generation. A generation goes to the GPU at once, through `Batch`: one
 //! upload of the weights, one dispatch with a workgroup per genome, one download of the errors.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! cargo run --release --manifest-path examples/gpu/Cargo.toml
+
+mod trace;
 
 use genoxide::prelude::*;
 use std::sync::Mutex;
@@ -251,9 +256,13 @@ fn main() -> genoxide::Result<()> {
         outcome.best_fitness()
     );
 
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let start = Instant::now();
-    let outcome = Engine::new(ga()?, Batch(|genomes: &[&Reals]| gpu.evaluate(genomes)))
+    let evaluate = trace.timed(|genomes: &[&Reals]| gpu.evaluate(genomes));
+    let outcome = Engine::new(ga()?, Batch(evaluate))
         .stop_when(Stop::generations(GENERATIONS))
+        .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
     println!(
         "GPU, batches:    {:>6.2} s, error {:.4} ({:.4} on the CPU in double precision)",
@@ -261,5 +270,6 @@ fn main() -> genoxide::Result<()> {
         outcome.best_fitness(),
         error(outcome.best_genome(), &samples)
     );
+    trace.write();
     Ok(())
 }

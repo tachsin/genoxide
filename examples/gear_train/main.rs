@@ -6,9 +6,14 @@
 //! with probability 0.25 searches the 49⁴ ≈ 5.8 million designs, until it reaches the minimum,
 //! 2.700857e-12, known by evaluating them all.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example gear_train
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 use genoxide::problems::Problem;
@@ -25,8 +30,11 @@ fn main() -> Result<()> {
         .minimize()
         .seed(1)
         .build()?;
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(ga, problem)
         .stop_when(Stop::target(minimum).or(Stop::generations(2_000)))
+        .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
     let teeth = outcome.best_genome();
@@ -44,5 +52,6 @@ fn main() -> Result<()> {
         teeth[3],
         1.0 / 6.931
     );
+    trace.write();
     Ok(())
 }

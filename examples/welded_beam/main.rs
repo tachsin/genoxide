@@ -8,9 +8,14 @@
 //! rules compare. SHADE, a differential evolution, solves each with the same budget, and the
 //! example prints the best design next to the best known cost.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example welded_beam
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 use genoxide::problems::engineering::{WeldedBeam, WeldedBeamRagsdell};
@@ -21,11 +26,15 @@ fn main() -> Result<()> {
         problems::boxed(WeldedBeam),
         problems::boxed(WeldedBeamRagsdell),
     ];
+    // with GENOXIDE_TRACE=<file>, a trace of the first form's run for the plot on the example's
+    // page
+    let mut trace = trace::Trace::from_env();
     for problem in &forms {
         let best_known = problem.optimum().expect("known").value();
         let de = De::builder(problem.real()).minimize().seed(1).build()?;
         let outcome = Engine::new(de, |x: &Reals| problem.evaluate(x))
             .stop_when(Stop::evaluations(40_000))
+            .on_generation(|snapshot| trace.record(snapshot))
             .run()?;
         let best = outcome.best_fitness();
         let x = outcome.best_genome();
@@ -40,5 +49,6 @@ fn main() -> Result<()> {
             x[0], x[1], x[2], x[3]
         );
     }
+    trace.write();
     Ok(())
 }

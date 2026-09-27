@@ -5,9 +5,14 @@
 //! random 2-opt move: a reversed segment of the tour) and simulated annealing, which also accepts
 //! worse tours, less and less often as the temperature cools.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! ```text
 //! cargo run --release --example tsp_berlin52
 //! ```
+
+mod trace;
 
 use genoxide::prelude::*;
 
@@ -94,8 +99,11 @@ fn main() -> Result<()> {
         .minimize()
         .seed(1)
         .build()?;
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(search, tour_length)
         .stop_when(Stop::target(OPTIMUM).or(Stop::evaluations(200_000)))
+        .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
     println!(
@@ -112,5 +120,6 @@ fn main() -> Result<()> {
         .map(|location| location + 1)
         .collect();
     println!("tour {tour:?}");
+    trace.write();
     Ok(())
 }

@@ -3,7 +3,12 @@
 //! while a steady-state GA with asynchronous evaluation gives every worker a new genome as soon as
 //! it's done.
 //!
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
+//! page, with `trace.rs`.
+//!
 //! cargo run --release --example asynchronous
+
+mod trace;
 
 use genoxide::prelude::*;
 use std::f64::consts::TAU;
@@ -51,12 +56,16 @@ fn main() -> genoxide::Result<()> {
         .minimize()
         .seed(1)
         .build_steady()?;
+    // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
+    let mut trace = trace::Trace::from_env(workers);
     let start = Instant::now();
-    let outcome = AsyncEngine::new(steady, simulation)
+    let outcome = AsyncEngine::new(steady, trace.timed(simulation))
         .workers(workers)
         .stop_when(Stop::evaluations(EVALUATIONS))
+        .observe(&mut trace)
         .run()?;
     report("steady-state, asynchronous", &outcome, start.elapsed());
+    trace.write();
     Ok(())
 }
 

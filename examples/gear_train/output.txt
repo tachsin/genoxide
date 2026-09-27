@@ -1,0 +1,2 @@
+error 2.700857e-12 after 183 generations (the minimum: 2.700857e-12)
+teeth (16, 19, 43, 49), ratio 0.14428097 (the target: 0.14427932)

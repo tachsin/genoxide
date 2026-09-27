@@ -57,15 +57,24 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # every examples/<name>/main.rs, which Cargo finds as the example <name>
+      # every examples/<name>/main.rs, which Cargo finds as the example <name>, printing what its
+      # output.txt has. The asynchronous example's numbers depend on the machine (its thread count
+      # and how long each evaluation takes): its output is compared with every number replaced by #.
       - run: |
+          numbers() { sed -E 's/[0-9]+(\.[0-9]+)?/#/g' "$@"; }
           for main in examples/*/main.rs; do
             example=$(basename "$(dirname "$main")")
             echo "::group::$example"
-            cargo run --release --example "$example"
+            cargo run --release --example "$example" | tee output.actual
             echo "::endgroup::"
+            if [ "$example" = asynchronous ]; then
+              diff <(numbers "examples/$example/output.txt") <(numbers output.actual)
+            else
+              diff "examples/$example/output.txt" output.actual
+            fi
           done
-      # the GPU example needs a GPU to run: it's only compiled
+      # the GPU example needs a GPU to run: it's only compiled, and its output.txt is from a run on
+      # a GPU
       - run: cargo check --manifest-path examples/gpu/Cargo.toml
 
   instructions:
@@ -153,11 +162,17 @@ jobs:
           maturin develop --release
           # the tests run the README's code blocks and the module docstring's example too
           pytest -v
-          # every example in Python: examples/<name>/main.py
+          # every example in Python, examples/<name>/main.py, printing what its output.txt has
+          # (Linux's output). Except function_suite on macOS and Windows: their math libraries
+          # round sin and cos differently in the last bit, and its long runs drift apart.
           for example in ../examples/*/main.py; do
+            folder=$(dirname "$example")
             echo "::group::$example"
-            python "$example"
+            python "$example" | tee output.actual
             echo "::endgroup::"
+            if [ "$(basename "$folder")" != function_suite ] || [ "$RUNNER_OS" = Linux ]; then
+              diff <(tr -d '\r' < "$folder/output.txt") <(tr -d '\r' < output.actual)
+            fi
           done
 
   msrv:
