@@ -22,6 +22,54 @@ function status(g, signed) {
   return { label: "satisfied", tone: "good" };
 }
 
+/** Design variables `offset` onward on their ranges: the best design's value, and the trail before it. */
+function Variables({ variables, offset, best, trail, color }) {
+  return (
+    <PlotBox
+      height={variables.length * ROW + 8}
+      label={`The best design: ${variables.map((v, i) => `${v.name} ${formatValue(best[offset + i])}${v.unit ? ` ${v.unit}` : ""}`).join(", ")}`}
+    >
+      {({ width }) => {
+        const left = Math.min(120, width * 0.3);
+        const right = width - 12;
+        return variables.map((v, i) => {
+          const [lo, hi] = v.bounds ?? [0, 1];
+          const x = linear([lo, hi], [left, right]);
+          const y = 8 + i * ROW + 16;
+          const clamp = (value) => x(Math.min(hi, Math.max(lo, value)));
+          const value = best[offset + i];
+          return (
+            <g key={v.name}>
+              <text x={0} y={y} dy="0.32em" className="fill-base-content text-[12px] font-medium">
+                {v.name}
+              </text>
+              <text x={0} y={y + 16} dy="0.32em" className="fill-base-content/70 text-[11px] tabular-nums">
+                {formatValue(value)}
+                {v.unit ? <tspan className="fill-base-content/55"> {v.unit}</tspan> : null}
+              </text>
+              <line x1={left} x2={right} y1={y} y2={y} className="stroke-base-content/20" strokeWidth={4} strokeLinecap="round" />
+              <text x={left} y={y + 16} dy="0.32em" className="fill-base-content/50 text-[10px] tabular-nums">
+                {formatTick(lo)}
+              </text>
+              <text x={right} y={y + 16} dy="0.32em" textAnchor="end" className="fill-base-content/50 text-[10px] tabular-nums">
+                {formatTick(hi)}
+              </text>
+              {trail.map((f, k) =>
+                typeof f.state?.best?.[offset + i] === "number" ? (
+                  <circle key={k} cx={clamp(f.state.best[offset + i])} cy={y} r={3} className="fill-base-content" opacity={0.06 + (0.2 * (k + 1)) / trail.length} />
+                ) : null,
+              )}
+              {typeof value === "number" ? (
+                <circle cx={clamp(value)} cy={y} r={6} fill={color} stroke="var(--color-base-100)" strokeWidth={2} />
+              ) : null}
+            </g>
+          );
+        });
+      }}
+    </PlotBox>
+  );
+}
+
 /**
  * `design`: each design variable on its range, the best design's value
  * marked (the last frames' values faint behind it), and every constraint's
@@ -34,7 +82,20 @@ export default function DesignPlot({ trace, frame, index, dark }) {
   const violations = frame.state?.violations ?? [];
   const color = categorical(dark)[0];
   const trail = trace.frames.slice(Math.max(0, index - TRAIL), index);
-  const signed = useMemo(() => trace.frames.some((f) => (f.state?.violations ?? []).some((g) => g < 0)), [trace]);
+  // `problem.signed` says so outright: a trace of equalities only, recorded as their excess over
+  // the tolerance, has no negative value to tell
+  const signed = useMemo(
+    () => trace.problem?.signed ?? trace.frames.some((f) => (f.state?.violations ?? []).some((g) => g < 0)),
+    [trace],
+  );
+  const half = Math.ceil(variables.length / 2);
+  const columns =
+    variables.length > 8
+      ? [
+          { variables: variables.slice(0, half), offset: 0 },
+          { variables: variables.slice(half), offset: half },
+        ]
+      : [{ variables, offset: 0 }];
 
   return (
     <div>
@@ -45,48 +106,12 @@ export default function DesignPlot({ trace, frame, index, dark }) {
           { label: `the ${TRAIL} frames before`, shape: "dot", className: "text-base-content/25" },
         ]}
       />
-      <PlotBox
-        height={variables.length * ROW + 8}
-        label={`The best design: ${variables.map((v, i) => `${v.name} ${formatValue(best[i])}${v.unit ? ` ${v.unit}` : ""}`).join(", ")}`}
-      >
-        {({ width }) => {
-          const left = Math.min(120, width * 0.3);
-          const right = width - 12;
-          return variables.map((v, i) => {
-            const [lo, hi] = v.bounds ?? [0, 1];
-            const x = linear([lo, hi], [left, right]);
-            const y = 8 + i * ROW + 16;
-            const clamp = (value) => x(Math.min(hi, Math.max(lo, value)));
-            const value = best[i];
-            return (
-              <g key={v.name}>
-                <text x={0} y={y} dy="0.32em" className="fill-base-content text-[12px] font-medium">
-                  {v.name}
-                </text>
-                <text x={0} y={y + 16} dy="0.32em" className="fill-base-content/70 text-[11px] tabular-nums">
-                  {formatValue(value)}
-                  {v.unit ? <tspan className="fill-base-content/55"> {v.unit}</tspan> : null}
-                </text>
-                <line x1={left} x2={right} y1={y} y2={y} className="stroke-base-content/20" strokeWidth={4} strokeLinecap="round" />
-                <text x={left} y={y + 16} dy="0.32em" className="fill-base-content/50 text-[10px] tabular-nums">
-                  {formatTick(lo)}
-                </text>
-                <text x={right} y={y + 16} dy="0.32em" textAnchor="end" className="fill-base-content/50 text-[10px] tabular-nums">
-                  {formatTick(hi)}
-                </text>
-                {trail.map((f, k) =>
-                  typeof f.state?.best?.[i] === "number" ? (
-                    <circle key={k} cx={clamp(f.state.best[i])} cy={y} r={3} className="fill-base-content" opacity={0.06 + (0.2 * (k + 1)) / trail.length} />
-                  ) : null,
-                )}
-                {typeof value === "number" ? (
-                  <circle cx={clamp(value)} cy={y} r={6} fill={color} stroke="var(--color-base-100)" strokeWidth={2} />
-                ) : null}
-              </g>
-            );
-          });
-        }}
-      </PlotBox>
+      {/* many variables: two columns of them on wider screens */}
+      <div className={columns.length > 1 ? "grid gap-x-6 sm:grid-cols-2" : ""}>
+        {columns.map((column) => (
+          <Variables key={column.offset} {...column} best={best} trail={trail} color={color} />
+        ))}
+      </div>
 
       {constraints.length ? (
         <div className="mt-4">

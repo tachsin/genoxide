@@ -73,7 +73,8 @@ impl Trace {
             "log_y": true,
             "optimum": 0.0,
             "plot": "design",
-            "problem": { "variables": variables, "constraints": ["h1"] },
+            // an equality only, recorded as its excess over the tolerance: 0 when met, which is active
+            "problem": { "variables": variables, "constraints": ["h1"], "signed": true },
         });
         write(&path, settings, self.frames.into_vec());
     }

@@ -64,6 +64,9 @@ class Trace:
                 "problem": {
                     "variables": [{"name": f"x{i}", "bounds": [0.0, 1.0]} for i in range(1, 11)],
                     "constraints": ["h1"],
+                    # an equality only, recorded as its excess over the tolerance: 0 when met, which
+                    # is active
+                    "signed": True,
                 },
             }
             write(self.path, settings, self.frames.to_list())
