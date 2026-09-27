@@ -1,6 +1,6 @@
 # Features
 
-What genoxide has, as of 0.6. The [API documentation](https://docs.rs/genoxide) has the details, and [AGENTS.md](../AGENTS.md) has decision tables and templates.
+What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the latest release. The [API documentation](https://docs.rs/genoxide) has the details, and [AGENTS.md](../AGENTS.md) has decision tables and templates.
 
 ## Properties
 
