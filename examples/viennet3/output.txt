@@ -1,0 +1,2 @@
+92 solutions on the front: 68 near the origin, 24 farther out
+hypervolume 5.2553 (the whole front: 5.3255)
