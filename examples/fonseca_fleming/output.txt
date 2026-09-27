@@ -1,0 +1,3 @@
+100 solutions on the front
+IGD+ to the optimal front: 0.0038
+hypervolume 0.5446 (the whole front: 0.5521)

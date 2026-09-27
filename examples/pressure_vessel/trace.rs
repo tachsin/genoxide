@@ -1,5 +1,5 @@
 //! The trace of the run for the plot on the example's page, written to the file that
-//! `GENOXIDE_TRACE` names: the best design so far and its constraint violations, in at most 200
+//! `GENOXIDE_TRACE` names: the best design so far and its constraints, in at most 200
 //! generations. The Python example writes the same file.
 
 use genoxide::observer::Snapshot;
@@ -21,18 +21,14 @@ impl Trace {
         Self { path, frames }
     }
 
-    // records a generation: the best design so far and its constraint violations
+    // records a generation: the best design so far and its constraints
     pub fn record(&mut self, snapshot: &Snapshot<'_, Reals>) {
         if self.path.is_none() {
             return;
         }
         let best = snapshot.best().genome();
         let constraints = PressureVessel.constraints(best);
-        let violations: Vec<f64> = constraints
-            .inequalities()
-            .iter()
-            .map(|&g| g.max(0.0))
-            .collect();
+        let violations: Vec<f64> = constraints.inequalities().to_vec();
         let state = json!({ "best": PressureVessel.design(best), "violations": violations });
         self.frames.push(frame(snapshot, state));
     }

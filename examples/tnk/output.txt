@@ -1,0 +1,4 @@
+100 solutions on the front, 100 feasible
+on the five pieces of the front, from f1 = 0.04 to 1.04: 18, 23, 19, 22, 18
+IGD+ to the optimal front: 0.002027
+hypervolume 0.6511 (the whole front: 0.6551)

@@ -1,5 +1,5 @@
 """The trace of the first form's run for the plot on the example's page, written to the file that
-``GENOXIDE_TRACE`` names: the best design so far and its constraint violations, in at most 200
+``GENOXIDE_TRACE`` names: the best design so far and its constraints, in at most 200
 generations. The Rust example writes the same file."""
 
 import json
@@ -24,12 +24,12 @@ class Trace:
 
     def record(self, progress):
         """Records a generation of the first run: the best design so far and its constraint
-        violations."""
+        constraints."""
         if progress.generation == 0:
             self.runs += 1
         if self.path and self.runs == 1:
             best = progress.best_genome
-            violations = [max(g, 0.0) for g in self.problem.constraints(best).tolist()]
+            violations = self.problem.constraints(best).tolist()
             self.frames.push(frame(progress, {"best": best.tolist(), "violations": violations}))
 
     def write(self):

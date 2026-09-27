@@ -1,0 +1,5 @@
+CMA-ES with Deb's feasibility rules on g05, seed 1
+stopped by the target: f(x) - f* < 1e-8, feasible
+f(x) 5126.50, f* 5126.50 (best known)
+x1 679.9, x2 1026, x3 0.1189, x4 -0.3962
+g1 -0.03489, g2 -1.065, h3 active, h4 active, h5 active

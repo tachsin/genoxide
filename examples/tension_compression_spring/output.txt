@@ -1,0 +1,4 @@
+weight 0.0126652 (the best known: 0.012665)
+violation 0.000000
+d 0.051689, D 0.356718, N 11.288925
+active constraints: g1, g2
