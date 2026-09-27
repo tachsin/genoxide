@@ -175,7 +175,8 @@ export default async function ExamplePage({ params }) {
               The run
             </h2>
             <p className="proj-lead mt-1 text-sm">
-              Recorded from the seeded run below: play it, pause it, or scrub through the generations.
+              {example.traceNote ?? "Recorded from the seeded run below."} Play it, pause it, or scrub through
+              the run.
             </p>
           </div>
           <ExamplePlayer traceUrl={example.traceUrl} sourceUrl={blobUrl(example.files.trace)} />

@@ -7,6 +7,7 @@ reference_url: "https://doi.org/10.1016/S0167-8191(05)80052-3"
 optimum: "0 (at the origin)"
 languages: [rust, python]
 order: 60
+trace_note: "Recorded from another run: L-SHADE in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 
 # Rastrigin function

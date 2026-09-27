@@ -7,6 +7,7 @@ reference_url: null
 optimum: null
 languages: [rust]
 order: 120
+trace_note: "Recorded from another run like the one below: its times and values differ."
 ---
 
 # Neuroevolution on the GPU

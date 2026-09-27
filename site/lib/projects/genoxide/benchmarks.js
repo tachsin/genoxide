@@ -4,36 +4,46 @@ import { BLOB_BASE, getRepoFiles } from "./github";
 /**
  * The benchmark page's data.
  *
- * RESULTS: the page's charts will read a results JSON published by the
+ * RESULTS: interactive charts will read a results JSON published by the
  * benchmark harness. Until that file exists, BENCHMARK_RESULTS_URL stays
- * null and the page shows the chart frames with a link to results.md: no
- * number here is ever made up. When the harness publishes one, set the URL
- * (e.g. a raw.githubusercontent.com path on main) and fill in
- * components/projects/genoxide/BenchmarkCharts.jsx.
+ * null and the page shows the charts the harness drew for the published run
+ * (docs/benchmarks/*.svg, at the pinned commit), each with its `file`: no
+ * number here is ever made up.
  */
 export const BENCHMARK_RESULTS_URL = null;
 
 /** The charts the page will have, in order. */
 export const BENCHMARK_CHARTS = [
   {
+    id: "summary",
+    title: "Time to target: each library's fastest method",
+    caption: "Each bar is a library's fastest method on that problem, single-threaded on the same machine, 10 seeds.",
+    file: "docs/benchmarks/summary.svg",
+    wide: true,
+  },
+  {
     id: "time-to-target",
     title: "Time to target",
     caption: "Expected running time to reach each single-objective target, per scenario.",
+    file: "docs/benchmarks/time_to_target.svg",
   },
   {
     id: "evaluations-to-target",
     title: "Evaluations to target",
     caption: "Fitness evaluations to reach the target: what counts when the fitness function is expensive.",
+    file: "docs/benchmarks/evaluations_to_target.svg",
   },
   {
     id: "instructions",
     title: "Instructions per evaluation",
     caption: "The framework's own cost around one evaluation.",
+    file: "docs/benchmarks/instructions.svg",
   },
   {
     id: "hypervolume",
     title: "Hypervolume",
     caption: "Median hypervolume of the final front on ZDT and DTLZ problems.",
+    file: "docs/benchmarks/hypervolume.svg",
   },
 ];
 

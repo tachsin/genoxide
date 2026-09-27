@@ -41,6 +41,9 @@ FIELDS = {
     "languages",
     "order",
 }
+# optional: trace_note, what the project page's player plays when it isn't the run of the code
+# (the docs site has no player)
+OPTIONAL_FIELDS = {"trace_note"}
 FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.DOTALL)
 
 
@@ -79,10 +82,10 @@ def examples() -> list[Example]:
         if not match:
             raise PluginError(f"examples/{folder.name}/README.md has no YAML front matter")
         meta = yaml.safe_load(match.group(1))
-        if not isinstance(meta, dict) or set(meta) != FIELDS:
+        if not isinstance(meta, dict) or not FIELDS <= set(meta) <= FIELDS | OPTIONAL_FIELDS:
             raise PluginError(
                 f"the front matter of examples/{folder.name}/README.md has the fields "
-                f"{sorted(FIELDS)}"
+                f"{sorted(FIELDS)}, and optionally {sorted(OPTIONAL_FIELDS)}"
             )
         if meta["category"] not in CATEGORIES:
             raise PluginError(

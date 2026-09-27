@@ -61,6 +61,8 @@ export default function PlayerView({ trace }) {
   );
   const [playing, setPlaying] = useState(() => last > 0 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [speed, setSpeed] = useState(1);
+  // the slider announces its own value: the readout stays quiet while it has focus
+  const [sliderFocused, setSliderFocused] = useState(false);
   const position = useRef(index);
   const rootRef = useRef(null);
   const autoPaused = useRef(false);
@@ -163,6 +165,7 @@ export default function PlayerView({ trace }) {
   // A frame is a generation, or (runs without one, e.g. several algorithms
   // side by side) just a recorded point of the run.
   const byGeneration = typeof frame.generation === "number" && typeof frames[last].generation === "number";
+  const unit = byGeneration ? "generation" : "frame";
   const where = byGeneration
     ? `Generation ${formatValue(frame.generation)} of ${formatValue(frames[last].generation)}`
     : `Frame ${index + 1} of ${frames.length}`;
@@ -224,26 +227,30 @@ export default function PlayerView({ trace }) {
           <button
             type="button"
             onClick={() => {
+              if (index === 0) return;
               setPlaying(false);
               seek(position.current - 1);
             }}
-            disabled={index === 0}
-            className="btn btn-ghost btn-sm btn-square"
-            aria-label="Previous generation"
-            title="Previous generation (←)"
+            // aria-disabled, not disabled: a focused button that disables itself would drop the
+            // focus to the page, and with it the player's keyboard shortcuts
+            aria-disabled={index === 0}
+            className={`btn btn-ghost btn-sm btn-square ${index === 0 ? "opacity-40" : ""}`}
+            aria-label={`Previous ${unit}`}
+            title={`Previous ${unit} (←)`}
           >
             <StepBack size={16} aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => {
+              if (atEnd) return;
               setPlaying(false);
               seek(position.current + 1);
             }}
-            disabled={atEnd}
-            className="btn btn-ghost btn-sm btn-square"
-            aria-label="Next generation"
-            title="Next generation (→)"
+            aria-disabled={atEnd}
+            className={`btn btn-ghost btn-sm btn-square ${atEnd ? "opacity-40" : ""}`}
+            aria-label={`Next ${unit}`}
+            title={`Next ${unit} (→)`}
           >
             <StepForward size={16} aria-hidden />
           </button>
@@ -259,6 +266,8 @@ export default function PlayerView({ trace }) {
             setPlaying(false);
             seek(Number(event.target.value));
           }}
+          onFocus={() => setSliderFocused(true)}
+          onBlur={() => setSliderFocused(false)}
           aria-label={byGeneration ? "Generation" : "Frame"}
           aria-valuetext={where}
           className="h-1.5 min-w-40 flex-1 cursor-pointer accent-primary"
@@ -279,7 +288,7 @@ export default function PlayerView({ trace }) {
         </div>
       </div>
 
-      <p className="mt-2 text-base-content/65 text-xs tabular-nums" aria-live={playing ? "off" : "polite"}>
+      <p className="mt-2 text-base-content/65 text-xs tabular-nums" aria-live={playing || sliderFocused ? "off" : "polite"}>
         {details.join(" · ")}
       </p>
     </div>
