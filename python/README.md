@@ -85,7 +85,7 @@ The fitness function must be deterministic: genoxide doesn't evaluate again a ch
 
 With `batch=True`, the function takes a whole generation as a 2-D array, a genome per row. It returns:
 - an array of scores, or a tuple of scores and constraint violations (arrays or `(n, 1)` columns)
-- for several objectives, a 2-D array: a row of objective values per genome
+- for several objectives, a 2-D array or a list with a row of objective values per genome, or a tuple of one array per objective (`return f1, f2`)
 
 It's one call per generation, and none for a generation whose children are all copies of their parents. Vectorized numpy, a GPU or a remote service pays its cost per call once per generation, not once per genome.
 
@@ -113,7 +113,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 |---|---|---|
 | `Ga` | all | `population_size`, `select`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1), `scheme` |
 | `LocalSearch` | all | `neighbor` (a mutation), `neighbors` (1), `acceptance`, `restart=(patience, kicks)` |
-| `De` | real | `population_size` (100), `l_shade` (a budget of evaluations, for L-SHADE) |
+| `De` | real | `population_size` (100; with `l_shade`, 18 × genes, at least 4), `l_shade` (a budget of evaluations, for L-SHADE) |
 | `Cmaes` | real | `population_size`, `restarts` (`"ipop"`, `"bipop"`), `initial_step` |
 | `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
 | `Nsga2` | all | `objectives`, `population_size`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1) |
@@ -204,8 +204,9 @@ print(gx.indicators.igd(result.front_objectives, problem.optimal_front(91)))
 ```
 
 `gx.indicators` measures multi-objective fronts, a point per row: `hypervolume(front,
-reference_point)`, `igd`, `igd_plus`, `gd` and `spread` against a reference front, each with
-`objectives` ("minimize" by default).
+reference_point)`, and `igd`, `igd_plus`, `gd` and `spread` against a reference front.
+`hypervolume`, `igd_plus` and `spread` take `objectives` ("minimize" by default); `igd` and `gd`
+measure distances, the same for either direction.
 
 ## Stopping
 
