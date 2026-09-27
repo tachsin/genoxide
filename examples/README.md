@@ -35,6 +35,7 @@ python examples/tsp_berlin52/main.py
 | [Rastrigin function](rastrigin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rastrigin) |
 | [Function suite](function_suite/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/function-suite) |
 | [Himmelblau's function](himmelblau/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/himmelblau) |
+| [Branin, Goldstein-Price and the six-hump camel](minima_2d/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/minima-2d) |
 | [Pressure vessel design](pressure_vessel/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/pressure-vessel) |
 | [Welded beam design](welded_beam/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/welded-beam) |
 | [Gear train design](gear_train/) | integer | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gear-train) |
