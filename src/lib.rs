@@ -67,6 +67,10 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/tachsin/genoxide/main/assets/brand/logo.svg",
+    html_favicon_url = "https://raw.githubusercontent.com/tachsin/genoxide/main/assets/brand/logo-32.png"
+)]
 
 pub mod algorithm;
 #[cfg(feature = "serde")]

@@ -1,4 +1,6 @@
-# genoxide
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tachsin/genoxide/main/assets/brand/banner.svg" alt="genoxide: evolutionary computation for Rust and Python" width="100%">
+</p>
 
 [![Crates.io](https://img.shields.io/crates/v/genoxide.svg)](https://crates.io/crates/genoxide)
 [![PyPI](https://img.shields.io/pypi/v/genoxide.svg)](https://pypi.org/project/genoxide/)

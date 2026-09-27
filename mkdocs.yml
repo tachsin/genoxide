@@ -16,6 +16,9 @@ exclude_docs: |
 
 theme:
   name: material
+  # copied from assets/brand/ by docs/hooks/examples.py
+  logo: assets/brand/logo.svg
+  favicon: assets/brand/logo-32.png
   features:
     - content.code.copy
     - content.tabs.link
@@ -26,17 +29,24 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
 
 plugins:
   - search
+
+extra_css:
+  - stylesheets/brand.css
 
 hooks:
   - docs/hooks/examples.py

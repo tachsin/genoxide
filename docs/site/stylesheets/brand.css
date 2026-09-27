@@ -1,0 +1,19 @@
+/* genoxide's colors (assets/brand/README.md): a deep oxide header, rust links and highlights */
+:root,
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #7a2410;
+  --md-primary-fg-color--light: #b7410e;
+  --md-primary-fg-color--dark: #561a0b;
+  --md-accent-fg-color: #b7410e;
+  --md-accent-fg-color--transparent: rgb(183 65 14 / 10%);
+  --md-typeset-a-color: #a43a0d;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #2b1d17;
+  --md-primary-fg-color--light: #3a2820;
+  --md-primary-fg-color--dark: #1c1411;
+  --md-accent-fg-color: #ee8a32;
+  --md-accent-fg-color--transparent: rgb(238 138 50 / 10%);
+  --md-typeset-a-color: #ee8a32;
+}

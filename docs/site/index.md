@@ -1,5 +1,7 @@
 # genoxide
 
+![genoxide: evolutionary computation for Rust and Python](assets/brand/banner.svg)
+
 genoxide is a library for evolutionary computation, written in Rust and available in Python.
 It has genetic algorithms, evolution strategies, CMA-ES, differential evolution, particle swarms,
 local search, and multi-objective algorithms such as NSGA-II. Runs evaluate in parallel, in
