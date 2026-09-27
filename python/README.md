@@ -37,7 +37,8 @@ More in [examples/](https://github.com/tachsin/genoxide/tree/main/examples), eac
 (`python examples/<name>/main.py` in the repository), and on the [docs site](https://tachsin.github.io/genoxide/examples/):
 - OneMax, a knapsack with a constraint, and N-Queens
 - the travelling salesman (TSPLIB berlin52) and job shop scheduling (ft06)
-- Rastrigin with CMA-ES and L-SHADE, and the pressure vessel design with constraints
+- Rastrigin with CMA-ES and L-SHADE, and the pressure vessel and welded beam designs with constraints
+- the gear train design, an integer problem
 - CMA-ES, SHADE and PSO on twelve test functions, and Himmelblau's four minima by restarts of a local search
 - ZDT1 with NSGA-II, and DTLZ2 with NSGA-III
 - the constrained BNH with NSGA-II, and Kursawe's disconnected front with SPEA2 and NSGA-II
@@ -173,6 +174,20 @@ constrained `Bnh`, `Srn`, `Tnk`, `Osy` and `Constr`, run with the multi-objectiv
 same way. Each gives its `objectives`, for the algorithm, and `optimal_front(points)`, None where
 the front isn't known; a constrained one returns `(objectives, violation)` and gives its
 `constraints(x)`.
+
+Two submodules have constrained single-objective problems, whose fitness is `(score,
+violation)`: `gx.problems.cec2006` has CEC 2006's `G01()` to `G06()`, and
+`gx.problems.engineering` has `WeldedBeam()`, `WeldedBeamRagsdell()`, `PressureVessel()`,
+`TensionCompressionSpring()`, `SpeedReducer()`, `GearTrain()` (an `Integer` genome),
+`ThreeBarTruss()`, `CantileverBeam()` and `CarSideImpact()`. `PressureVessel` and `SpeedReducer`
+round their discrete genes, and `design(x)` gives the rounded design.
+
+```python
+problem = gx.problems.engineering.WeldedBeam()
+de = gx.De(problem.genome, objective=problem.objective, seed=1)
+result = de.run(problem, evaluations=40_000)
+print(result.best_fitness, result.violation, problem.optimum.value)
+```
 
 ```python
 problem = gx.problems.Dtlz2(objectives=3)

@@ -8,6 +8,7 @@
 //! without a call. The run raises the exception when it returns.
 
 use crate::genes::{self, Genes};
+use crate::problems::IntegerProblem;
 use genoxide::Fitness;
 use genoxide::engine::{FitnessFunction, IntoFitness, Progress};
 use genoxide::multi::problems::DynMultiProblem;
@@ -208,7 +209,14 @@ fn values(result: &Bound<'_, PyAny>, genomes: usize) -> PyResult<Vec<Value>> {
 /// `genoxide::problems`, evaluated in Rust without Python.
 pub struct Single<'a> {
     pub shared: &'a Shared,
-    pub problem: Option<&'a dyn DynProblem>,
+    pub problem: Option<Native<'a>>,
+}
+
+/// A single-objective test problem evaluated in Rust: on real or on integer genomes.
+#[derive(Clone, Copy)]
+pub enum Native<'a> {
+    Real(&'a dyn DynProblem),
+    Integer(&'a dyn IntegerProblem),
 }
 
 impl<G: Genes> FitnessFunction<G> for Single<'_> {
@@ -219,11 +227,19 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
         if shared.aborted() {
             return Value::Invalid;
         }
-        if let Some(problem) = self.problem {
-            // the run checks that the genome is real
-            return genome.reals().map_or(Value::Invalid, |genome| {
-                Value::Native(problem.evaluate(genome))
-            });
+        match self.problem {
+            // the run checks that the genome is the problem's
+            Some(Native::Real(problem)) => {
+                return genome.reals().map_or(Value::Invalid, |genome| {
+                    Value::Native(problem.evaluate(genome))
+                });
+            }
+            Some(Native::Integer(problem)) => {
+                return genome.integers().map_or(Value::Invalid, |genome| {
+                    Value::Native(problem.evaluate(genome))
+                });
+            }
+            None => {}
         }
         Python::attach(|py| {
             let argument = Ok(genes::array(py, genome).into_any());

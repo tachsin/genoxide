@@ -20,6 +20,11 @@ pub trait Genes: Genome {
     fn reals(&self) -> Option<&Reals> {
         None
     }
+
+    /// The genome as whole numbers, if it is: what the integer test problems evaluate.
+    fn integers(&self) -> Option<&Integers> {
+        None
+    }
 }
 
 impl Genes for Bits {
@@ -47,6 +52,10 @@ impl Genes for Integers {
 
     fn push_genes(&self, genes: &mut Vec<i64>) {
         genes.extend_from_slice(self);
+    }
+
+    fn integers(&self) -> Option<&Integers> {
+        Some(self)
     }
 }
 

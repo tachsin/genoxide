@@ -38,6 +38,7 @@ What genoxide has, as of 0.6. The [API documentation](https://docs.rs/genoxide) 
 - **Particle swarm optimization:** global or ring topology, constriction coefficients, velocity limits.
 - **Local search:** hill climbing (first-improvement or best-of-k, with plateau moves), simulated annealing, tabu search, iterated local search. Any mutation serves as the neighborhood.
 - **Test problems** (`problems`): Sphere, the axis-parallel ellipsoid, Schwefel 1.2 and 2.26, Rastrigin, Rosenbrock, Ackley, Griewank, Levy, Zakharov, Styblinski-Tang, Michalewicz, Himmelblau, Branin, Goldstein-Price and the six-hump camel, each with its bounds, known optimum and reference, in Rust and Python.
+- **Constrained test problems:** CEC 2006's g01-g06 (`problems::cec2006`), and the engineering design problems (`problems::engineering`): the welded beam in two forms, the pressure vessel, the tension/compression spring, the speed reducer, the gear train (integer), the three-bar truss, the cantilever beam and the car side impact, each with its optimum or best known solution and references, in Rust and Python.
 
 ## Multi-objective
 
@@ -82,6 +83,8 @@ cargo run --release --example rastrigin           # real-valued, CMA-ES with IPO
 cargo run --release --example function_suite      # CMA-ES, SHADE and PSO on twelve test functions
 cargo run --release --example himmelblau          # four global minima, by restarts of a local search
 cargo run --release --example pressure_vessel     # constrained mixed discrete-continuous design, SHADE
+cargo run --release --example welded_beam         # constrained design in two forms, SHADE
+cargo run --release --example gear_train          # integer genome, genetic algorithm
 cargo run --release --example zdt1                # two objectives, NSGA-II, hypervolume
 cargo run --release --example bnh                 # two objectives and two constraints, NSGA-II, IGD+
 cargo run --release --example kursawe             # a disconnected front, SPEA2 and NSGA-II

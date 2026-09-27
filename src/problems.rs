@@ -17,11 +17,13 @@
 //! # Ok::<(), genoxide::Error>(())
 //! ```
 //!
-//! [`all`] lists every problem at its default size, behind the object-safe [`DynProblem`].
+//! [`all`] lists every problem on [`Real`] genomes at its default size, behind the object-safe
+//! [`DynProblem`].
 //!
 //! # The problems
 //!
-//! All are minimized, on [`Real`] genomes. `n` is the number of dimensions.
+//! All are minimized. The classic functions are unconstrained, on [`Real`] genomes. `n` is the
+//! number of dimensions.
 //!
 //! | Problem | n (default) | Bounds | Minimum |
 //! |---|---|---|---|
@@ -41,6 +43,19 @@
 //! | [`Branin`] | 2 | [−5, 10] × [0, 15] | 5/(4π) at three points |
 //! | [`GoldsteinPrice`] | 2 | [−2, 2] | 3 at (0, −1) |
 //! | [`SixHumpCamel`] | 2 | [−5, 5] | −1.03163 at two points |
+//!
+//! Two submodules hold constrained problems, whose fitness is `(score, violation)`:
+//!
+//! - [`cec2006`]: the CEC 2006 constrained problems g01 to g06
+//!   ([`G01`](cec2006::G01) … [`G06`](cec2006::G06)), with 2 to 20 dimensions, inequality and
+//!   equality constraints, and the optimum or best known solution of their report;
+//! - [`engineering`]: engineering design problems, the welded beam in two forms, the pressure
+//!   vessel, the tension/compression spring, the speed reducer, the gear train (on
+//!   [`Integer`](crate::genome::Integer) genomes), the three-bar truss, the cantilever beam and
+//!   the car side impact.
+//!
+//! [`Problem::constraints`] gives a constrained problem's constraint values, as `g(x) <= 0` and
+//! `h(x) = 0`.
 //!
 //! Each problem's docs cite its original authors, and say where its definition and bounds come
 //! from. Most originals are books or reports that aren't online, and some functions have no known
@@ -66,7 +81,9 @@
 //!
 //! [`Engine`]: crate::Engine
 
+pub mod cec2006;
 mod classic;
+pub mod engineering;
 
 pub use classic::{
     Ackley, AxisParallelEllipsoid, Branin, GoldsteinPrice, Griewank, Himmelblau, Levy, Michalewicz,
@@ -248,9 +265,10 @@ impl Constraints {
 /// use genoxide::problems;
 ///
 /// for problem in problems::all() {
-///     let optimum = problem.optimum().expect("known");
+///     let Some(optimum) = problem.optimum() else { continue };
 ///     let fitness = problem.evaluate(&optimum.solutions()[0]);
-///     assert!((fitness.score().unwrap() - optimum.value()).abs() < 1e-9, "{}", problem.name());
+///     let error = (fitness.score().unwrap() - optimum.value()).abs();
+///     assert!(error <= 1e-3 * optimum.value().abs().max(1.0), "{}", problem.name());
 /// }
 /// ```
 pub trait DynProblem: Send + Sync {
@@ -331,7 +349,9 @@ where
     Box::new(Boxed(problem))
 }
 
-/// Every problem of this module, at its default size, in the order of the table above.
+/// Every problem of this module and its submodules on [`Real`] genomes, at its default size: the
+/// classic functions in the order of the table above, then [`cec2006`]'s and [`engineering`]'s.
+/// The gear train, on integer genomes, isn't among them.
 pub fn all() -> Vec<Box<dyn DynProblem>> {
     vec![
         boxed(Sphere::default()),
@@ -350,6 +370,20 @@ pub fn all() -> Vec<Box<dyn DynProblem>> {
         boxed(Branin),
         boxed(GoldsteinPrice),
         boxed(SixHumpCamel),
+        boxed(cec2006::G01),
+        boxed(cec2006::G02),
+        boxed(cec2006::G03::default()),
+        boxed(cec2006::G04),
+        boxed(cec2006::G05::default()),
+        boxed(cec2006::G06),
+        boxed(engineering::WeldedBeam),
+        boxed(engineering::WeldedBeamRagsdell),
+        boxed(engineering::PressureVessel),
+        boxed(engineering::TensionCompressionSpring),
+        boxed(engineering::SpeedReducer),
+        boxed(engineering::ThreeBarTruss),
+        boxed(engineering::CantileverBeam),
+        boxed(engineering::CarSideImpact),
     ]
 }
 
@@ -362,47 +396,72 @@ mod tests {
     #[test]
     fn the_registry_describes_every_problem() {
         let problems = all();
-        assert_eq!(problems.len(), 16);
+        assert_eq!(problems.len(), 30);
         let names: HashSet<_> = problems.iter().map(|problem| problem.name()).collect();
         assert_eq!(names.len(), problems.len(), "names are unique");
+        let mut rng = StreamRng::seed_from_u64(0);
         for problem in &problems {
             assert!(!problem.reference().is_empty(), "{}", problem.name());
             if let Some(url) = problem.reference_url() {
                 assert!(url.starts_with("https://"), "{url}");
             }
             assert_eq!(problem.objective(), Objective::Minimize);
-            let optimum = problem.optimum().expect("every optimum is known");
-            assert!(optimum.is_proven(), "{}", problem.name());
-            assert!(!optimum.solutions().is_empty(), "{}", problem.name());
             let real = problem.real();
+            let constrained = !problem
+                .constraints(&real.random_genome(&mut rng))
+                .is_empty();
+            let Some(optimum) = problem.optimum() else {
+                assert_eq!(problem.name(), "CarSideImpact");
+                continue;
+            };
+            assert!(!optimum.solutions().is_empty(), "{}", problem.name());
+            // the unconstrained optima are all proven
+            assert!(constrained || optimum.is_proven(), "{}", problem.name());
             for solution in optimum.solutions() {
                 assert!(real.validate(solution).is_ok(), "{}", problem.name());
-                assert!(problem.constraints(solution).is_empty());
+                let fitness = problem.evaluate(solution);
+                let score = fitness.score().expect("valid");
+                // best known values and their solutions are printed to a few digits
+                let tolerance = if optimum.is_proven() { 1e-12 } else { 2e-4 };
+                let error = (score - optimum.value()).abs();
+                let scale = optimum.value().abs().max(1.0);
+                assert!(error <= tolerance * scale, "{}", problem.name());
             }
         }
     }
 
-    // the value is finite and deterministic everywhere in the bounds, and never below the optimum
+    // the value is finite and deterministic everywhere in the bounds, and no feasible solution is
+    // better than the optimum
     #[test]
     fn random_solutions_are_finite_and_no_better_than_the_optimum() {
         let mut rng = StreamRng::seed_from_u64(1);
         for problem in all() {
             let real = problem.real();
-            let optimum = problem.optimum().expect("known").value();
+            let optimum = problem.optimum().map(|optimum| optimum.value());
             for _ in 0..2_000 {
                 let genome = real.random_genome(&mut rng);
-                let score = problem.evaluate(&genome).score().expect("valid");
+                let fitness = problem.evaluate(&genome);
+                let score = fitness.score().expect("valid");
                 assert!(score.is_finite(), "{}: {genome:?}", problem.name());
-                assert_eq!(problem.evaluate(&genome).score(), Some(score));
-                let slack = 1e-9 * optimum.abs().max(1.0);
-                assert!(score >= optimum - slack, "{}: {genome:?}", problem.name());
+                assert_eq!(problem.evaluate(&genome), fitness);
+                if let Some(optimum) = optimum.filter(|_| fitness.is_feasible()) {
+                    let slack = 1e-9 * optimum.abs().max(1.0);
+                    assert!(score >= optimum - slack, "{}: {genome:?}", problem.name());
+                }
             }
-            // the corners of the box
+            // the corners of the box; the three-bar truss's stresses are undefined at x₁ = 0
             let low: Reals = real.bounds().iter().map(|range| *range.start()).collect();
             let high: Reals = real.bounds().iter().map(|range| *range.end()).collect();
             for corner in [low, high] {
-                let score = problem.evaluate(&corner).score().expect("valid");
-                assert!(score.is_finite() && score >= optimum, "{}", problem.name());
+                if problem.name() == "ThreeBarTruss" && corner[0] == 0.0 {
+                    continue;
+                }
+                let fitness = problem.evaluate(&corner);
+                let score = fitness.score().expect("valid");
+                assert!(score.is_finite(), "{}", problem.name());
+                if let Some(optimum) = optimum.filter(|_| fitness.is_feasible()) {
+                    assert!(score >= optimum, "{}", problem.name());
+                }
             }
         }
     }

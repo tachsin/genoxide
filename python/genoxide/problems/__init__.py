@@ -35,7 +35,18 @@ give their ``objectives`` and, where it's known, their ``optimal_front(points)``
 A constrained problem gives ``(objectives, violation)``, 0 when feasible, and its
 ``constraints(x)`` as ``g(x) <= 0``.
 
-All problems here are minimized, on :class:`genoxide.Real` genomes. Each class's docstring gives
+Two submodules hold constrained single-objective problems, whose fitness is ``(score,
+violation)``: :mod:`genoxide.problems.cec2006` (g01 to g06 of the CEC 2006 competition) and
+:mod:`genoxide.problems.engineering` (engineering design problems such as the welded beam and the
+pressure vessel)::
+
+    problem = gx.problems.engineering.PressureVessel()
+    de = gx.De(problem.genome, objective=problem.objective, seed=1)
+    result = de.run(problem, evaluations=20_000)
+    print(result.best_fitness, result.violation, problem.design(result.best_genome))
+
+All problems here are minimized, on :class:`genoxide.Real` genomes except the gear train's
+:class:`genoxide.Integer`. Each class's docstring gives
 the function, its bounds, its optimum or front and its source. Many originals are books, reports
 or proceedings that aren't online, and some functions have no known origin: their definitions
 are taken from later papers that restate them, named in the docstrings, and are still to be
@@ -67,7 +78,7 @@ from typing import Any, ClassVar
 
 import numpy as np
 
-from . import Real, _genoxide, _whole
+from .. import Integer, Real, _genoxide, _whole
 
 __all__ = [
     "Problem",
@@ -155,12 +166,14 @@ class _Described:
         return len(self._info["bounds"])
 
     @property
-    def genome(self) -> Real:
-        """The search space, e.g. ``Real((-5.12, 5.12), length=10)``."""
+    def genome(self) -> Real | Integer:
+        """The search space, e.g. ``Real((-5.12, 5.12), length=10)``; ``Integer`` bounds for a
+        problem of whole numbers, such as :class:`genoxide.problems.engineering.GearTrain`."""
+        kind = Integer if self._info["genome"] == "integer" else Real
         bounds = [tuple(pair) for pair in self._info["bounds"]]
         if all(pair == bounds[0] for pair in bounds):
-            return Real(bounds[0], length=len(bounds))
-        return Real(bounds)
+            return kind(bounds[0], length=len(bounds))
+        return kind(bounds)
 
     @property
     def constraint_count(self) -> int:
@@ -986,3 +999,6 @@ class Constr(MultiProblem):
     """
 
     _type: ClassVar[str] = "constr"
+
+
+from . import cec2006, engineering  # noqa: E402
