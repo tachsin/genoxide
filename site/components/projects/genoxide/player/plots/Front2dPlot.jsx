@@ -28,7 +28,7 @@ function frontPath(points, x, y) {
  * front; infeasible points hollow. The axes follow the points with a short
  * glide, so the front's approach reads at every scale.
  */
-export default function Front2dPlot({ trace, frame, dark, reduced }) {
+export default function Front2dPlot({ trace, frame, dark, reduced, compact = false }) {
   const [hover, setHover] = useState(null);
   const clip = `clip${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const problem = trace.problem ?? {};
@@ -57,8 +57,8 @@ export default function Front2dPlot({ trace, frame, dark, reduced }) {
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <Legend items={legend} />
+      <div className={`flex flex-wrap items-center justify-between gap-2 ${compact && !feasible ? "" : "mb-2"}`}>
+        <Legend items={compact ? [] : legend} />
         {feasible && typeof feasible === "object" ? (
           <span className="text-base-content/65 text-xs tabular-nums">
             feasible:{" "}
@@ -71,7 +71,7 @@ export default function Front2dPlot({ trace, frame, dark, reduced }) {
       </div>
       <PlotBox
         aspect={0.85}
-        minHeight={280}
+        minHeight={compact ? 220 : 280}
         label={`The front in ${objectives.join(" and ")}: ${names.map((n) => `${n} ${(fronts[n] ?? []).length} points`).join(", ")}`}
         overlay={({ width }) =>
           hover ? (

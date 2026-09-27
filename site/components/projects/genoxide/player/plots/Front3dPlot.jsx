@@ -49,8 +49,11 @@ function projector(yaw, pitch) {
 /**
  * `front-3d`: the three-objective front, rotatable (drag, or the arrow keys
  * when focused), over the true front's wireframe. Orthographic, drawn in SVG.
+ * Over a sphere, every axis runs from 0 to one maximum; otherwise each axis
+ * spans its own objective's values (they can be negative, and far apart in
+ * scale). `compact` (a panel of a grid) leaves the legend to the grid.
  */
-export default function Front3dPlot({ trace, frame, dark, reduced }) {
+export default function Front3dPlot({ trace, frame, dark, reduced, compact = false }) {
   const [view, setView] = useState(VIEW);
   const [hover, setHover] = useState(null);
   const drag = useRef(null);
@@ -59,12 +62,22 @@ export default function Front3dPlot({ trace, frame, dark, reduced }) {
   const sphere = trace.problem?.true_front === "sphere";
   const front = frame.state?.front ?? [];
 
+  // [lo1, lo2, lo3, hi1, hi2, hi3]
   const target = useMemo(() => {
-    let m = sphere ? 1 : 0;
-    for (const p of front) for (const c of p) if (c > m) m = c;
-    return [m * 1.05 || 1];
+    if (sphere) {
+      let m = 1;
+      for (const p of front) for (const c of p) if (c > m) m = c;
+      return [0, 0, 0, m * 1.05, m * 1.05, m * 1.05];
+    }
+    if (!front.length) return [0, 0, 0, 1, 1, 1];
+    const lo = [0, 1, 2].map((k) => Math.min(...front.map((p) => p[k])));
+    const hi = [0, 1, 2].map((k) => Math.max(...front.map((p) => p[k])));
+    const span = [0, 1, 2].map((k) => hi[k] - lo[k] || Math.abs(hi[k]) || 1);
+    return [...lo.map((v, k) => v - span[k] * 0.05), ...hi.map((v, k) => v + span[k] * 0.05)];
   }, [front, sphere]);
-  const [scale] = useEased(target, reduced);
+  const eased = useEased(target, reduced);
+  const lo = eased.slice(0, 3);
+  const hi = eased.slice(3);
 
   const rotate = (dYaw, dPitch) =>
     setView((v) => ({ yaw: (v.yaw + dYaw + 360) % 360, pitch: Math.max(-10, Math.min(89, v.pitch + dPitch)) }));
@@ -73,10 +86,14 @@ export default function Front3dPlot({ trace, frame, dark, reduced }) {
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <Legend
-          items={[
-            { label: "front", color, shape: "dot" },
-            ...(sphere ? [{ label: "true front (sphere)", shape: "line", className: "text-base-content/35" }] : []),
-          ]}
+          items={
+            compact
+              ? []
+              : [
+                  { label: "front", color, shape: "dot" },
+                  ...(sphere ? [{ label: "true front (sphere)", shape: "line", className: "text-base-content/35" }] : []),
+                ]
+          }
         />
         <button
           type="button"
@@ -91,7 +108,7 @@ export default function Front3dPlot({ trace, frame, dark, reduced }) {
       </div>
       <PlotBox
         aspect={0.9}
-        minHeight={280}
+        minHeight={compact ? 220 : 280}
         maxHeight={540}
         label={`The front of ${front.length} points in ${objectives.join(", ")}. Drag or use the arrow keys to rotate.`}
         svgProps={{
@@ -131,7 +148,7 @@ export default function Front3dPlot({ trace, frame, dark, reduced }) {
               <TipRows
                 rows={[
                   ...objectives.map((o, k) => [o, formatValue(hover.p[k])]),
-                  ["distance to origin", formatValue(Number(Math.hypot(...hover.p).toPrecision(4)))],
+                  ...(sphere ? [["distance to origin", formatValue(Number(Math.hypot(...hover.p).toPrecision(4)))]] : []),
                 ]}
               />
             </Tooltip>
@@ -143,17 +160,17 @@ export default function Front3dPlot({ trace, frame, dark, reduced }) {
           const unit = (Math.min(width, height) / 2) * 0.98;
           const cx = width / 2;
           const cy = height / 2 + unit * 0.05;
-          // Centre the cube [0, scale]^3 on the box.
+          // Centre the box of the ranges, scaled to a unit cube, on the plot.
           const at = (p) => {
-            const q = project([p[0] / scale - 0.5, p[1] / scale - 0.5, p[2] / scale - 0.5]);
+            const q = project([0, 1, 2].map((k) => (p[k] - lo[k]) / (hi[k] - lo[k] || 1) - 0.5));
             return { x: cx + q.x * unit, y: cy - q.y * unit, depth: q.depth };
           };
-          const origin = at([0, 0, 0]);
+          const origin = at(lo);
           const axes = [0, 1, 2].map((k) => {
-            const end = [0, 0, 0];
-            end[k] = scale;
-            const label = [0, 0, 0];
-            label[k] = scale * 1.12;
+            const end = [...lo];
+            end[k] = hi[k];
+            const label = [...lo];
+            label[k] = hi[k] + (hi[k] - lo[k]) * 0.12;
             return { k, end: at(end), label: at(label) };
           });
           const arcs = sphere
@@ -220,7 +237,10 @@ export default function Front3dPlot({ trace, frame, dark, reduced }) {
         }}
       </PlotBox>
       <p className="mt-1 text-base-content/50 text-xs">
-        Each axis runs from 0 to {formatTick(Number(scale.toPrecision(2)))}. Drag to rotate, or focus the plot and use the arrow keys.
+        {sphere
+          ? `Each axis runs from 0 to ${formatTick(Number(hi[0].toPrecision(2)))}.`
+          : `${objectives.map((o, k) => `${o} ${formatTick(Number(lo[k].toPrecision(2)))} to ${formatTick(Number(hi[k].toPrecision(2)))}`).join(", ")}.`}{" "}
+        {compact ? "Drag to rotate." : "Drag to rotate, or focus the plot and use the arrow keys."}
       </p>
     </div>
   );

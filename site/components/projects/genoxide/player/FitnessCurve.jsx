@@ -6,7 +6,8 @@ import { categorical, extent, formatValue, linear, logTickFormat, logTicks, loga
 
 /**
  * The curve beside every solution plot: `best` (and `median`) per recorded
- * frame, or the hypervolume of each series for multi-objective runs. The
+ * frame, the hypervolume of each series for multi-objective runs, or one
+ * line per problem (a frame's `series`, for a grid of problems). The
  * part already played is drawn in full, the rest faint, with a marker at the
  * current frame. Click or drag on it to seek.
  */
@@ -37,6 +38,21 @@ export function curveOf(trace) {
       optimum: numberOrNull(trace.optimum),
       minimize: trace.objective !== "maximize",
       series,
+    };
+  }
+
+  // a run of several problems: one value per problem each frame
+  if (frames.some((f) => f.series && typeof f.series === "object")) {
+    const names = trace.problem?.series ?? Object.keys(frames.find((f) => f.series && typeof f.series === "object").series);
+    return {
+      xs,
+      xLabel,
+      over,
+      yLabel: trace.y_label ?? "value",
+      logY: !!trace.log_y,
+      optimum: numberOrNull(trace.optimum),
+      minimize: trace.objective !== "maximize",
+      series: names.map((name, i) => ({ key: name, label: name, values: frames.map((f) => numberOrNull(f.series?.[name])), slot: i })),
     };
   }
 
