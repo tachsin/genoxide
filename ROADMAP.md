@@ -36,13 +36,13 @@ From a review of existing libraries (e.g. genetic_algorithm, [issues #11 to #78]
 | Integer overflow, float steps that don't advance | Checked or saturating arithmetic; guaranteed progress |
 | NaN fitness taken as a valid score | NaN is an error or `Invalid`, configurable |
 | Deadlocks with one rayon thread | No blocking waits on pool threads; tested in CI |
-| Docs drifting from the code | Every example is a doctest |
+| Docs drifting from the code | The docs' code blocks, README.md and AGENTS.md are doctests; CI runs `examples/` and compares their output |
 
 ## Architecture
 
 - **`Genome`:** the representation: bits (bit-packed), integers, bounded reals, permutations; planned: mixed (per-gene types), trees (GP), graphs (NEAT).
-- **`Fitness`:** totally ordered `f64`, single or multi-objective (`[f64; N]` / `Vec<f64>`), optional constraint violation; batch and async hooks.
-- **Operators:** `Select`, `Crossover`, `Mutate`, `Repair`, `Survive`, generic over the genome.
+- **`Fitness`:** totally ordered `f64`, single or multi-objective (`[f64; M]`, with the number of objectives fixed at compile time), optional constraint violation; batch and async evaluation.
+- **Operators:** `Select`, `Crossover`, `Mutate`, generic over the genome; survival is each algorithm's scheme.
 - **`Algorithm`:** ask / tell state machines (GA, ES, CMA-ES, DE, PSO, NSGA-II, …).
 - **`Engine`:** termination, parallel evaluation, observers, cancellation.
 - **`Observer`:** statistics, hall of fame, Pareto archive, logging, checkpoints.
@@ -162,7 +162,7 @@ Done means implemented, documented, tested (property tests for operators) and be
 - [x] Python fitness functions and vectorized numpy batch fitness
 - [x] Pythonic builders
 - [x] Examples matching the DEAP / pymoo tutorials
-- Zero-copy numpy genomes: moved to 0.8.
+- Zero-copy numpy genomes: moved to 0.9.
 
 ### 0.7: Correctness ✅
 Fixes from the review of 0.6.0 ([#116](https://github.com/tachsin/genoxide/issues/116)). Some change seeded results.
@@ -175,7 +175,16 @@ Fixes from the review of 0.6.0 ([#116](https://github.com/tachsin/genoxide/issue
 - [x] Benchmarks: numpy fitness in pymoo and PyGAD, timings on pinned P-cores
 - [x] DE defaults: SHADE's published settings, with its random `p` per trial
 
-### 0.8: Genetic programming and neuroevolution
+### 0.8: Test problems
+The test problem library of [docs/problems-plan.md](docs/problems-plan.md), batches 1 to 3, and the fixes from the review of 0.7 ([#201](https://github.com/tachsin/genoxide/issues/201) to [#229](https://github.com/tachsin/genoxide/issues/229)). `multi::problems::TestProblem` became `MultiProblem`: a breaking change.
+- [x] `problems`: 16 classic functions, CEC 2006's g01-g06 and 8 engineering design problems, each with its optimum and reference ([#170](https://github.com/tachsin/genoxide/pull/170), [#191](https://github.com/tachsin/genoxide/pull/191))
+- [x] `multi::problems`: `MultiProblem`, constraints, and 13 classic two- and three-objective problems ([#177](https://github.com/tachsin/genoxide/pull/177))
+- [x] The same problems in Python, evaluated in Rust, and `genoxide.indicators`
+- [x] Examples with their output checked in CI, a full explanation and a recorded run ([#193](https://github.com/tachsin/genoxide/pull/193), [#194](https://github.com/tachsin/genoxide/pull/194), [#198](https://github.com/tachsin/genoxide/pull/198))
+- [ ] The fixes from the review of 0.7
+- The later batches of the problem library follow in later releases.
+
+### 0.9: Genetic programming and neuroevolution
 - [ ] Zero-copy numpy genomes in the Python package
 - [ ] Tree GP, strongly typed
 - [ ] Subtree crossover; point, subtree and hoist mutation; bloat control
@@ -183,7 +192,7 @@ Fixes from the review of 0.6.0 ([#116](https://github.com/tachsin/genoxide/issue
 - [ ] NEAT (speciation, innovation numbers)
 - [ ] Neuroevolution with evolution strategies
 
-### 0.9: Frontier
+### 0.10: Frontier
 - [ ] Quality-diversity: MAP-Elites, CMA-ME, novelty search
 - [ ] LLM-guided evolution (async operators calling a language model)
 - [ ] Adaptive operator selection and automatic parameter tuning
@@ -200,7 +209,7 @@ Fixes from the review of 0.6.0 ([#116](https://github.com/tachsin/genoxide/issue
 - **Fuzzing** of builders and the configuration format: planned.
 - **Performance:** criterion (wall time) and gungraun (exact instruction counts; fail CI on regressions) for every hot path.
 - **Safety:** `#![forbid(unsafe_code)]`; any `unsafe` (SIMD, bit tricks) behind a feature, with `SAFETY` comments and Miri tests.
-- **Docs:** every example is a doctest.
+- **Docs:** every code block in the API docs, README.md and AGENTS.md is a doctest; CI runs `examples/` and compares each output with its `output.txt`.
 
 ## Benchmarks
 
