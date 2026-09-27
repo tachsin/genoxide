@@ -4,7 +4,7 @@ category: constrained
 summary: The cheapest welded beam under stress, buckling and deflection limits, in the two forms of the literature.
 reference: "Ragsdell, K. M. and Phillips, D. T. (1976). Optimal design of a class of welded structures using geometric programming. Journal of Engineering for Industry 98(3): 1021-1025."
 reference_url: https://doi.org/10.1115/1.3438995
-optimum: "1.724852 (seven constraints) and 2.38116 (five constraints), best known"
+optimum: "1.724852 (seven constraints) and 2.3811341 (five constraints), best known"
 languages: [rust, python]
 order: 72
 ---
@@ -35,8 +35,8 @@ Two forms of the problem circulate in the literature:
   1.724852 (Cagnina, Esquivel and Coello Coello, 2008, Informatica 32: 319-326).
 - `WeldedBeamRagsdell` has five, after Ragsdell and Phillips (1976) as restated by Deb (2000,
   Computer Methods in Applied Mechanics and Engineering 186: 311-338). Its best known cost is
-  2.38116 (Reklaitis, Ravindran and Ragsdell, 1983, Engineering Optimization: Methods and
-  Applications, Wiley).
+  2.3811341, a feasible design found with genoxide's SHADE. Reklaitis, Ravindran and Ragsdell
+  (1983, Engineering Optimization: Methods and Applications, Wiley) report 2.38116.
 
 The two forms also differ in the constants of their shear stress and buckling formulas, so the same
 beam has different stresses in each. Their best costs aren't comparable.
@@ -74,6 +74,6 @@ versions print the same.
 ## Good results
 
 On the seven-constraint form, the run reaches the best known cost, 1.724852, with no violation. On
-the five-constraint form, it finds 2.381134, below the best known 2.38116, also with no violation.
-The best known design is published to 4 digits, and evaluated as printed it costs 2.38151. The run's
-design costs less than both.
+the five-constraint form, it reaches the best known cost, 2.381134, also with no violation. That's
+below the 2.38116 that Reklaitis, Ravindran and Ragsdell report, whose design, published to 4
+digits, costs 2.38151 as printed.

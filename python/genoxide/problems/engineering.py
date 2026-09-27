@@ -70,7 +70,8 @@ class WeldedBeam(Problem):
 
     Bounds h, b in [0.1, 2], l, t in [0.1, 10]; best known 1.724852 at (0.205730, 3.470489,
     9.036624, 0.205729), from Cagnina, Esquivel and Coello Coello (2008, Informatica 32: 319-326),
-    whose printed solution exceeds the bending and buckling limits by 0.09 psi and 0.06 lb.
+    whose printed solution exceeds the bending and buckling limits by 0.09 psi and 0.06 lb, and
+    has h above b by 1e-6.
     :class:`WeldedBeamRagsdell` is the other form in the literature.
 
     Rao, S. S. (1996). Engineering Optimization. Wiley, third edition. Definition and bounds as
@@ -90,8 +91,9 @@ class WeldedBeamRagsdell(Problem):
     weld's shear stress, the bar's bending stress, h ≤ b, the buckling load
     ``64,746.022 (1 − 0.0282346 t) t b³ >= 6000`` and the deflection ``2.1952 / (t³ b) <= 0.25``.
 
-    Bounds h in [0.125, 10], l, t, b in [0.1, 10]; best known 2.38116 at (0.2444, 6.2187, 8.2915,
-    0.2444), as reported by Reklaitis, Ravindran and Ragsdell (1983); printed to 4 digits, that
+    Bounds h in [0.125, 10], l, t, b in [0.1, 10]; best known 2.3811341 at (0.24436895, 6.2186069,
+    8.2914718, 0.24436895), feasible, found with genoxide's SHADE. Reklaitis, Ravindran and
+    Ragsdell (1983) report 2.38116 at (0.2444, 6.2187, 8.2915, 0.2444); printed to 4 digits, that
     solution evaluates to 2.38151.
 
     Ragsdell, K. M. and Phillips, D. T. (1976). Optimal design of a class of welded structures
@@ -117,7 +119,9 @@ class PressureVessel(_Mixed):
 
     Bounds T_s, T_h in [0.0625, 6.1875], R, L in [10, 200]; minimum 6059.714335048436 at
     (0.8125, 0.4375, 42.0984455958549, 176.6365958424394), proven global by Yang, Huyck,
-    Karamanoglu and Khan (2013, International Journal of Bio-Inspired Computation 5(6): 329-335).
+    Karamanoglu and Khan (2013, International Journal of Bio-Inspired Computation 5(6): 329-335);
+    the solution's length is a few units in the last place longer than printed, to be feasible
+    despite rounding.
 
     Sandgren, E. (1990). Nonlinear integer and discrete programming in mechanical design
     optimization. Journal of Mechanical Design 112(2): 223-229. Definition as restated in Coello
@@ -160,7 +164,8 @@ class SpeedReducer(_Mixed):
     shafts between bearings and the diameters of the shafts.
 
     Bounds [2.6, 3.6], [0.7, 0.8], [17, 28], [7.3, 8.3], [7.8, 8.3], [2.9, 3.9], [5.0, 5.5]; best
-    known 2996.348165 at (3.5, 0.7, 17, 7.3, 7.8, 3.350214, 5.286683), from the restatement.
+    known 2996.348165 at (3.5, 0.7, 17, 7.3, 7.8, 3.350214, 5.286683), from the restatement, whose
+    printed solution exceeds g5 by 6.0e-7 and g6 by 1.3e-7.
 
     Golinski, J. (1973). An adaptive optimization system applied to machine synthesis. Mechanism
     and Machine Theory 8(4): 419-436. Definition, bounds and best known solution as restated in

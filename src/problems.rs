@@ -426,6 +426,11 @@ mod tests {
                 let error = (score - optimum.value()).abs();
                 let scale = optimum.value().abs().max(1.0);
                 assert!(error <= tolerance * scale, "{}", problem.name());
+                // a proven optimum is feasible: under Deb's rules, any feasible point beats an
+                // infeasible one, however far worse
+                if optimum.is_proven() {
+                    assert!(fitness.is_feasible(), "{}: {fitness:?}", problem.name());
+                }
             }
         }
     }
