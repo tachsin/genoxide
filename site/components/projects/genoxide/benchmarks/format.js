@@ -3,7 +3,7 @@ import { formatTick, formatValue } from "../player/chart-kit";
 /**
  * Number formats of the benchmark charts, by the quantity charts.json gives
  * each chart ("seconds", "evaluations", "instructions", "hypervolume",
- * "distance"). The bars' own labels are the harness's (`text`), so they read
+ * "distance", "score"). The bars' own labels are the harness's (`text`), so they read
  * as in its SVG charts; these are for axes and tooltips.
  */
 
@@ -17,11 +17,14 @@ export const QUANTITY_NAMES = {
   instructions: "Instructions per evaluation",
   hypervolume: "Hypervolume",
   distance: "Distance to the optimum",
+  score: "Score",
 };
 
 /** A value in full (6 significant digits, as stored), with its unit. */
 export function exactValue(value, quantity) {
   if (value === null || value === undefined) return "–";
+  // an overall score is given to one decimal (rule 8.5)
+  if (quantity === "score") return value.toFixed(1);
   if (quantity === "seconds") {
     if (value < 1e-3) return `${exact.format(value * 1e6)} µs`;
     if (value < 1) return `${exact.format(value * 1e3)} ms`;
@@ -33,7 +36,11 @@ export function exactValue(value, quantity) {
 /** A tick of a chart's value axis. */
 export function tickFormat(quantity) {
   if (quantity === "seconds") {
-    return (v) => (v < 1e-3 ? `${short.format(v * 1e6)} µs` : v < 1 ? `${short.format(v * 1e3)} ms` : `${short.format(v)} s`);
+    return (value) => {
+      // rounded first, so that 999.7 µs reads 1 ms, not 1,000 µs
+      const v = Number(value.toPrecision(3));
+      return v < 1e-3 ? `${short.format(v * 1e6)} µs` : v < 1 ? `${short.format(v * 1e3)} ms` : `${short.format(v)} s`;
+    };
   }
   if (quantity === "evaluations" || quantity === "instructions") {
     return (v) => {
@@ -48,6 +55,12 @@ export function tickFormat(quantity) {
     };
   }
   return formatTick;
+}
+
+/** A library's points in a scenario of the overall score, 0 to 100: one decimal, e.g. 96.8, 100 or 0. */
+export function pointsText(points) {
+  if (typeof points !== "number") return "–";
+  return points >= 100 ? "100" : points <= 0 ? "0" : points.toFixed(1);
 }
 
 /** A share of the budget, e.g. 0.07 as "7%". */
@@ -71,6 +84,12 @@ export function barNotes(bar) {
     );
   }
   if (bar.ended_on_cap) notes.push("these are the runs the time cap stopped");
+  // an overall score: how many scenarios the library runs and solves
+  if (typeof bar.of === "number" && typeof bar.scenarios === "number") {
+    notes.push(
+      `runs ${bar.scenarios} of the ${bar.of} scenarios` + (typeof bar.solved === "number" ? `, solves ${bar.solved}` : ""),
+    );
+  }
   if (bar.below_axis) notes.push("below the axis's start");
   return notes;
 }

@@ -33,8 +33,11 @@ This run used the rules and adapters at 8dd8436. The changes merged since, in #1
 
 ## Charts
 
-![Time to target: each library's fastest method](summary.svg)
+Interactive, with each bar's numbers: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).
 
+![Overall score: each library's speed to a solution over the 14 scenarios](overall.svg)
+
+- [Time to target: each library's fastest method](summary.svg)
 - [Expected time to target](time_to_target.svg), every method
 - [Expected evaluations to target](evaluations_to_target.svg), every method
 - [Distance to the optimum at the end](distance_to_optimum.svg)

@@ -152,19 +152,31 @@ export const SHAPES = ["dot", "square", "triangle", "diamond"];
 
 /**
  * A tooltip over a plot, placed beside (x, y) and kept inside the box.
- * @param {{ x: number, y: number, width: number, children: any }} props
+ * A `wide` one (with a table) takes the side with more room, up to 22rem,
+ * or the box's whole width when neither side has enough.
+ * @param {{ x: number, y: number, width: number, wide?: boolean, children: any }} props
  */
-export function Tooltip({ x, y, width, children }) {
-  const right = x > width * 0.6;
+export function Tooltip({ x, y, width, wide = false, children }) {
+  const top = Math.max(0, y - 12);
+  let style;
+  let size = "max-w-[16rem]";
+  if (wide) {
+    const room = Math.max(width - x, x) - 12;
+    const right = x > width - x;
+    size = room < 280 ? "" : "w-max";
+    style =
+      room < 280
+        ? { left: 0, right: 0, top }
+        : { left: right ? undefined : x + 12, right: right ? width - x + 12 : undefined, top, maxWidth: Math.min(352, room) };
+  } else {
+    const right = x > width * 0.6;
+    style = { left: right ? undefined : x + 12, right: right ? width - x + 12 : undefined, top };
+  }
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute z-10 max-w-[16rem] rounded-lg border border-base-content/10 bg-base-100/95 px-2.5 py-1.5 text-base-content text-xs shadow-lg backdrop-blur-sm"
-      style={{
-        left: right ? undefined : x + 12,
-        right: right ? width - x + 12 : undefined,
-        top: Math.max(0, y - 12),
-      }}
+      className={`pointer-events-none absolute z-10 ${size} rounded-lg border border-base-content/10 bg-base-100/95 px-2.5 py-1.5 text-base-content text-xs shadow-lg backdrop-blur-sm`}
+      style={style}
     >
       {children}
     </div>

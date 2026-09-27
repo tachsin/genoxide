@@ -240,6 +240,16 @@ def report(progress):
 result = ga.run(lambda bits: bits.sum(), generations=1_000, on_generation=report)
 ```
 
+## Benchmarks
+
+The package is benchmarked as a library of its own, genoxide (Python), beside the Rust library and 15 other libraries in Rust, C++, Python, Java and Julia, on 14 scenarios under the same public [rules](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md): single-threaded on the same machine, 10 seeds each.
+
+[![Overall score: each library's speed to a solution over the 14 scenarios](https://raw.githubusercontent.com/tachsin/genoxide/main/docs/benchmarks/overall.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
+
+Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, evenly per order of magnitude of time in between; the overall score is the mean over the scenarios a library runs ([rule 8.5](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md#8-reporting)). A library's time is its fastest method's expected time to the target, or, with several objectives, its fastest method's time for the budget among those within 1% of the best hypervolume.
+
+**Interactive results, every chart and table: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).** The methodology and a page per library are in [docs/benchmarks](https://github.com/tachsin/genoxide/tree/main/docs/benchmarks).
+
 ## The Rust library
 
 The package covers a subset of the Rust library. These parts are only in Rust:

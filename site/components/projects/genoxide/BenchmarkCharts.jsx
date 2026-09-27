@@ -3,12 +3,19 @@ import { HighlightProvider } from "@/components/projects/genoxide/benchmarks/Hig
 import {
   FrontChart,
   InstructionsChart,
+  OverallChart,
   SummaryChart,
   ToTargetChart,
 } from "@/components/projects/genoxide/benchmarks/charts";
 import { BLOB_BASE, RAW_BASE } from "@/lib/projects/genoxide/github";
 
-const KINDS = { summary: SummaryChart, "to-target": ToTargetChart, instructions: InstructionsChart, front: FrontChart };
+const KINDS = {
+  overall: OverallChart,
+  summary: SummaryChart,
+  "to-target": ToTargetChart,
+  instructions: InstructionsChart,
+  front: FrontChart,
+};
 
 const path = (file) => file.split("/").map(encodeURIComponent).join("/");
 

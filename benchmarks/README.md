@@ -2,6 +2,8 @@
 
 16 evolutionary computation libraries in 5 languages, and genoxide's Python package, on the same problems, with the same fitness functions and evaluation budgets.
 
+**Interactive results, every chart and table: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).** The full tables are in [results.md](../docs/benchmarks/results.md).
+
 | Library | Language | Version | Solvers (single-objective; multi-objective) |
 |---|---|---|---|
 | [genoxide](../docs/benchmarks/libraries/genoxide.md) | Rust | this repository | GA, local search, CMA-ES (IPOP), DE, ES; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
@@ -33,6 +35,7 @@ The full protocol is in [rules.md](../docs/benchmarks/rules.md). In short:
 - **Seeds:** 10 per scenario. In a scenario with a target, a solver whose first 3 seeds all reach the time cap without the target stops there; `run.py` applies this to every library.
 - **Time:** measured inside the adapter, around the optimization only. Every library runs single-threaded, one run at a time.
 - **Results:** time and evaluations to target are the expected running time (ERT, [rule 8.1](../docs/benchmarks/rules.md#8-reporting)), given when at least 3 runs reached the target. A first hit after the time cap counts as not reached. Runs stopped by the time cap before their budget are "capped", and the charts show them apart. The other results are medians.
+- **Overall score** ([rule 8.5](../docs/benchmarks/rules.md#8-reporting)): per scenario, 100 points for the fastest library and 0 for a library that doesn't solve it within the time cap (its time counts twice the cap, PAR-2), evenly per order of magnitude of time in between. A library's time is its fastest method's expected time to target, or, multi-objective, its fastest method's median time among those within 1% of the best hypervolume. The score is the mean of the points over the scenarios the library runs, shown with how many it runs and solves.
 - **Validation:** every timed run passes the checks of `run.py check`, or it's left out and listed.
 - **Matched:** configurations as equal as the libraries allow, with each library's own components. They measure framework cost and algorithm implementations.
 - **Idiomatic:** each library's recommended configuration, from its docs and examples, up to 3 solvers per problem type. They measure what its users get.
