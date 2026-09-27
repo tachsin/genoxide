@@ -89,11 +89,14 @@ constraint violation; 0 means it's feasible. The third gives the design: d, D an
 the constraints at their limit, within 1e-6 of 0. In Python, `run` evaluates the problem in Rust,
 so both versions print the same.
 
-The plot shows each variable on its range, and whether each constraint is satisfied or violated.
-The best design is feasible from the first generation on: the best of the 100 random designs of the
-first population is feasible. The weight falls to 0.0127 after about 9,000 evaluations and to
-0.012666 after about 17,000. After about 45,000 evaluations, the population has gathered at the
-minimum, and SHADE restarts it: the median weight jumps back up while the best design stays.
+The plot shows each variable on its range, and each constraint's value g: satisfied with its slack,
+active (within 1e-6 of its limit) or violated. The best design is feasible from the first generation
+on: the best of the 100 random designs of the first population is feasible. The weight falls to
+0.0127 after about 9,000 evaluations and to 0.012666 after about 17,000. From about 21,000
+evaluations, g1 and g2 come within 1e-6 of their limits, first in turn and from about 28,000 on
+together; g3 and g4 keep their slack throughout. After about 45,000 evaluations, the population has
+gathered at the minimum, and SHADE restarts it: the median weight jumps back up while the best
+design stays.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/tension-compression-spring) plays this run back.
 

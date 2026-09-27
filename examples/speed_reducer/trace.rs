@@ -1,6 +1,7 @@
 //! The trace of the run for the plot on the example's page, written to the file that
-//! `GENOXIDE_TRACE` names: the best design so far and its constraint violations, in at most 100
-//! generations. The Python example writes the same file.
+//! `GENOXIDE_TRACE` names: the best design so far and the value g of each of its constraints
+//! (satisfied at g ≤ 0, on its limit at 0), in at most 100 generations. The Python example
+//! writes the same file.
 
 use genoxide::observer::Snapshot;
 use genoxide::prelude::*;
@@ -22,19 +23,14 @@ impl Trace {
     }
 
     // records a generation: the best design so far, with its number of teeth rounded, and its
-    // constraint violations
+    // constraints' values
     pub fn record(&mut self, snapshot: &Snapshot<'_, Reals>) {
         if self.path.is_none() {
             return;
         }
         let best = snapshot.best().genome();
-        let constraints = SpeedReducer.constraints(best);
-        let violations: Vec<f64> = constraints
-            .inequalities()
-            .iter()
-            .map(|&g| g.max(0.0))
-            .collect();
-        let state = json!({ "best": SpeedReducer.design(best), "violations": violations });
+        let (design, values) = (SpeedReducer.design(best), SpeedReducer.constraints(best));
+        let state = json!({ "best": design, "violations": values.inequalities() });
         self.frames.push(frame(snapshot, state));
     }
 

@@ -112,12 +112,13 @@ module and the number of teeth, then each shaft's length and diameter. The last 
 constraints at their limit, within 1e-6 of 0. In Python, `run` evaluates the problem in Rust, so
 both versions print the same.
 
-The plot shows each variable on its range, and whether each constraint is satisfied or violated.
-The best of the first 100 random designs exceeds g5, the stress in shaft 1; within 400
-evaluations, the best design is feasible. After about 15,000 evaluations, it matches the best known
-design to the 6 digits that the plot shows. SHADE then restarts twice, after about 20,000 and
-38,500 evaluations (the median weight jumps back up), and each time the population comes back to
-the same design.
+The plot shows each variable on its range, and each constraint's value g: satisfied with its slack,
+active (within 1e-6 of its limit) or violated. The best of the first 100 random designs exceeds g5,
+the stress in shaft 1; within 400 evaluations, the best design is feasible. Between about 11,000 and
+13,000 evaluations, g6, g8 and then g5 reach their limits. After about 15,000 evaluations, the
+design matches the best known one to the 6 digits that the plot shows. SHADE then restarts twice,
+after about 20,000 and 38,500 evaluations (the median weight jumps back up), and each time the
+population comes back to the same design.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/speed-reducer) plays this run back.
 

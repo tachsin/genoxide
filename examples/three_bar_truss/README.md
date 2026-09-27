@@ -86,12 +86,13 @@ The second gives its constraint violation; 0 means it's feasible. The third give
 and A₂, in cm². The last names the constraints at their limit, within 1e-6 of 0. In Python, `run`
 evaluates the problem in Rust, so both versions print the same.
 
-The plot shows the two cross-sections on their ranges, and whether each constraint is satisfied or
-violated. The best of the first 100 random designs is feasible, at a volume of 274.1. The median
-volume of that population, 201.1, is below it: the smallest designs are infeasible, too thin for
-the load. The best volume is within 0.1 of the minimum after about 1,700 evaluations, and within
-0.01 after about 3,500; the rest of the run settles the last digits, while the design slides along
-the boundary of g1.
+The plot shows the two cross-sections on their ranges, and each constraint's value g: satisfied with
+its slack, active (within 1e-6 of its limit) or violated. The best of the first 100 random designs
+is feasible, at a volume of 274.1. The median volume of that population, 201.1, is below it: the
+smallest designs are infeasible, too thin for the load. The best volume is within 0.1 of the minimum
+after about 1,700 evaluations, and within 0.01 after about 3,500; the rest of the run settles the
+last digits, while the design slides along the boundary of g1. g1 is active from about 6,500
+evaluations on; g2 and g3 keep a slack of 1.46 and 0.54 kN/cm².
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/three-bar-truss) plays this run back.
 
