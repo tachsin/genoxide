@@ -73,7 +73,8 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
     const lo = [0, 1, 2].map((k) => Math.min(...front.map((p) => p[k])));
     const hi = [0, 1, 2].map((k) => Math.max(...front.map((p) => p[k])));
     const span = [0, 1, 2].map((k) => hi[k] - lo[k] || Math.abs(hi[k]) || 1);
-    return [...lo.map((v, k) => v - span[k] * 0.05), ...hi.map((v, k) => v + span[k] * 0.05)];
+    // from each objective's least value, as the sphere's cube starts at 0, with room above
+    return [...lo, ...hi.map((v, k) => v + span[k] * 0.05)];
   }, [front, sphere]);
   const eased = useEased(target, reduced);
   const lo = eased.slice(0, 3);
