@@ -4,9 +4,10 @@ import Breadcrumbs from "@/components/projects/Breadcrumbs";
 import JsonLd from "@/components/projects/JsonLd";
 import {
   BENCHMARK_CHARTS,
+  BENCHMARK_IMAGES,
   BENCHMARK_PROBLEMS,
+  getBenchmarkChartData,
   getBenchmarkLibraryPages,
-  getBenchmarkResults,
 } from "@/lib/projects/genoxide/benchmarks";
 import { GENOXIDE_LINKS, GENOXIDE_OG_IMAGE, GENOXIDE_PATH } from "@/lib/projects/genoxide/meta";
 import { breadcrumbList } from "@/lib/projects/json-ld";
@@ -59,7 +60,7 @@ const DOCS = [
 ];
 
 export default async function BenchmarksPage() {
-  const [libraries, results] = await Promise.all([getBenchmarkLibraryPages(), getBenchmarkResults()]);
+  const [libraries, data] = await Promise.all([getBenchmarkLibraryPages(), getBenchmarkChartData()]);
 
   return (
     <main className="proj-container pt-10 pb-8 sm:pt-14">
@@ -117,19 +118,32 @@ export default async function BenchmarksPage() {
         <h2 id="bench-charts" className="font-semibold text-xl tracking-tight">
           Results
         </h2>
-        <p className="proj-lead mt-2 mb-5 text-sm">
-          The charts will read the published results file. Until then, the numbers of the latest run are in{" "}
-          <a
-            href={GENOXIDE_LINKS.benchmarkResults}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-primary underline-offset-2 hover:underline"
-          >
-            results.md
-          </a>
-          .
-        </p>
-        <BenchmarkCharts charts={BENCHMARK_CHARTS} results={results} resultsUrl={GENOXIDE_LINKS.benchmarkResults} />
+        {data ? (
+          <p className="proj-lead mt-2 mb-5 text-sm">
+            The published run of {data.run.date}: {data.run.platform}, single-threaded, {data.run.seeds} seeds per
+            scenario. Hover a bar, or focus a chart and use the arrow keys, for its numbers; select a library to
+            highlight it in every chart.
+          </p>
+        ) : (
+          <p className="proj-lead mt-2 mb-5 text-sm">
+            The charts of the published run, as the benchmark harness drew them. Their numbers are in{" "}
+            <a
+              href={GENOXIDE_LINKS.benchmarkResults}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
+              results.md
+            </a>
+            .
+          </p>
+        )}
+        <BenchmarkCharts
+          charts={BENCHMARK_CHARTS}
+          images={BENCHMARK_IMAGES}
+          data={data}
+          resultsUrl={GENOXIDE_LINKS.benchmarkResults}
+        />
       </section>
 
       <section aria-labelledby="bench-docs" className="mt-12">
