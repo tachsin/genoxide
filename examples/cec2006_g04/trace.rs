@@ -1,6 +1,9 @@
 //! The trace of the run for the plot on the example's page, written to the file that
 //! `GENOXIDE_TRACE` names: the best solution so far and its constraints, in at most 100
 //! generations. The Python example writes the same file.
+//!
+//! The curve is the error f − f* of the best feasible solution and of the population's median,
+//! on a log scale: null while they're infeasible, whose values aren't comparable to f*.
 
 use genoxide::observer::Snapshot;
 use genoxide::prelude::*;
@@ -21,16 +24,33 @@ impl Trace {
         Self { path, frames }
     }
 
-    // records a generation: the best solution so far and its constraints g(x), which are
-    // satisfied at or below 0 and active at 0 (the page shows each one's state)
+    // records a generation: the errors of the best and the median, the best solution so far and
+    // its constraints g(x), which are satisfied at or below 0 and active at 0 (the page shows each
+    // one's state)
     pub fn record(&mut self, snapshot: &Snapshot<'_, Reals>) {
         if self.path.is_none() {
             return;
         }
         let best = snapshot.best().genome();
+        let fitness = snapshot.best().fitness().expect("evaluated");
+        let best_error = fitness.is_feasible().then(|| error(fitness));
+        // the population in the order of Deb's rules: the feasible solutions by value, then the
+        // infeasible ones
+        let population: Vec<Fitness> = snapshot
+            .population()
+            .iter()
+            .filter_map(|individual| individual.fitness())
+            .collect();
+        let mut feasible: Vec<f64> = population
+            .iter()
+            .filter(|fitness| fitness.is_feasible())
+            .map(|&fitness| error(fitness))
+            .collect();
+        feasible.sort_by(f64::total_cmp);
+        let median = median(&feasible, population.len());
         let constraints = G04.constraints(best);
         let state = json!({ "best": &best[..], "violations": constraints.inequalities() });
-        self.frames.push(frame(snapshot, state));
+        self.frames.push(frame(snapshot, best_error, median, state));
     }
 
     // writes the trace, if there's one
@@ -49,14 +69,50 @@ impl Trace {
             "example": "cec2006_g04",
             "objective": "minimize",
             "x_label": "evaluations",
-            "y_label": "f(x)",
-            "log_y": false,
-            "optimum": G04.optimum().expect("known").value(),
+            "y_label": "error f - f* of the best feasible solution",
+            "log_y": true,
+            "optimum": 0.0,
             "plot": "design",
             "problem": { "variables": variables, "constraints": constraints },
         });
         write(&path, settings, self.frames.into_vec());
     }
+}
+
+// the error f - f* of a feasible solution, 0 at or below f*
+fn error(fitness: Fitness) -> f64 {
+    let optimum = G04.optimum().expect("known").value();
+    (fitness.score().expect("valid") - optimum).max(0.0)
+}
+
+// the median error of a population of `size` in the order of Deb's rules, given the sorted
+// errors of its feasible solutions: None if the median is infeasible
+fn median(feasible: &[f64], size: usize) -> Option<f64> {
+    let middle = size / 2;
+    if size == 0 || middle >= feasible.len() {
+        None
+    } else if size % 2 == 1 {
+        Some(feasible[middle])
+    } else {
+        Some((feasible[middle - 1] + feasible[middle]) / 2.0)
+    }
+}
+
+// the frame of a generation: its progress, the errors of the best and the median, and `state`
+fn frame<G: Genome>(
+    snapshot: &Snapshot<'_, G>,
+    best: Option<f64>,
+    median: Option<f64>,
+    state: Value,
+) -> Value {
+    let progress = snapshot.progress();
+    json!({
+        "generation": progress.generation(),
+        "evaluations": progress.evaluations(),
+        "best": best,
+        "median": median,
+        "state": state,
+    })
 }
 
 // ---- the same in every example's trace ---------------------------------------------------------
@@ -99,31 +155,6 @@ impl Frames {
     fn into_vec(self) -> Vec<Value> {
         let frames = self.kept.into_iter().chain(self.last);
         frames.map(|(_, frame)| frame).collect()
-    }
-}
-
-// the frame of a generation: its progress, the median score of its population and `state`
-fn frame<G: Genome>(snapshot: &Snapshot<'_, G>, state: Value) -> Value {
-    let progress = snapshot.progress();
-    let population = snapshot.population().iter();
-    let scores = population.filter_map(|individual| individual.fitness()?.score());
-    json!({
-        "generation": progress.generation(),
-        "evaluations": progress.evaluations(),
-        "best": progress.best().and_then(Fitness::score),
-        "median": median(scores.collect()),
-        "state": state,
-    })
-}
-
-// the median of the scores, None without any
-fn median(mut scores: Vec<f64>) -> Option<f64> {
-    scores.sort_by(f64::total_cmp);
-    let middle = scores.len() / 2;
-    match scores.len() {
-        0 => None,
-        n if n % 2 == 1 => Some(scores[middle]),
-        _ => Some((scores[middle - 1] + scores[middle]) / 2.0),
     }
 }
 

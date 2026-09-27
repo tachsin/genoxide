@@ -1,6 +1,9 @@
 """The trace of the run for the plot on the example's page, written to the file that
 ``GENOXIDE_TRACE`` names: the best solution so far and its constraints, in at most 100
-generations. The Rust example writes the same file."""
+generations. The Rust example writes the same file.
+
+The curve is the error f − f* of the best feasible solution and of the population's median, on a
+log scale: null while they're infeasible, whose values aren't comparable to f*."""
 
 import json
 import math
@@ -23,14 +26,30 @@ class Trace:
         return self.record if self.path else None
 
     def record(self, progress):
-        """Records a generation: the best solution so far and its constraints, g(x) for the
-        inequalities, satisfied at or below 0 and active at 0, and for the equalities the excess
-        max(0, |h(x)| - 0.0001), 0 (active) when met (the page shows each one's state)."""
+        """Records a generation: the errors of the best and the median, the best solution so far and
+        its constraints, g(x) for the inequalities, satisfied at or below 0 and active at 0, and for
+        the equalities the excess max(0, |h(x)| - 0.0001), 0 (active) when met (the page shows each
+        one's state)."""
         if self.path:
             best = progress.best_genome
+            score, violation = self.problem(best)
+            best_error = self.error(score) if violation == 0 else None
+            # the population in the order of Deb's rules: the feasible solutions by value, then
+            # the infeasible ones
+            feasible = sorted(
+                self.error(float(score))
+                for score, violation in zip(progress.scores, progress.violations)
+                if violation == 0
+            )
+            middle = median(feasible, len(progress.scores))
             g1, g2, *h = self.problem.constraints(best).tolist()
             values = [g1, g2] + [max(abs(hj) - EQUALITY_TOLERANCE, 0.0) for hj in h]
-            self.frames.push(frame(progress, {"best": best.tolist(), "violations": values}))
+            state = {"best": best.tolist(), "violations": values}
+            self.frames.push(frame(progress, best_error, middle, state))
+
+    def error(self, score):
+        """The error f - f* of a feasible solution, 0 at or below f*."""
+        return max(score - self.problem.optimum.value, 0.0)
 
     def write(self):
         """Writes the trace, if there's one."""
@@ -40,9 +59,9 @@ class Trace:
                 "example": "cec2006_g05",
                 "objective": "minimize",
                 "x_label": "evaluations",
-                "y_label": "f(x)",
-                "log_y": False,
-                "optimum": self.problem.optimum.value,
+                "y_label": "error f - f* of the best feasible solution",
+                "log_y": True,
+                "optimum": 0.0,
                 "plot": "design",
                 "problem": {
                     "variables": [
@@ -53,6 +72,27 @@ class Trace:
                 },
             }
             write(self.path, settings, self.frames.to_list())
+
+
+def median(feasible, size):
+    """The median error of a population of ``size`` in the order of Deb's rules, given the sorted
+    errors of its feasible solutions: None if the median is infeasible."""
+    middle = size // 2
+    if size == 0 or middle >= len(feasible):
+        return None
+    return feasible[middle] if size % 2 else (feasible[middle - 1] + feasible[middle]) / 2
+
+
+def frame(progress, best, middle, state):
+    """The frame of a generation: its progress, the errors of the best and the median, and
+    ``state``."""
+    return {
+        "generation": progress.generation,
+        "evaluations": progress.evaluations,
+        "best": best,
+        "median": middle,
+        "state": state,
+    }
 
 
 # ---- the same in every example's trace ----------------------------------------------------------
@@ -77,27 +117,6 @@ class Frames:
 
     def to_list(self):
         return self.kept + ([self.last] if self.last else [])
-
-
-def frame(progress, state):
-    """The frame of a generation: its progress, the median score of its population and
-    ``state``."""
-    return {
-        "generation": progress.generation,
-        "evaluations": progress.evaluations,
-        "best": progress.best_fitness,
-        "median": median(progress.scores),
-        "state": state,
-    }
-
-
-def median(scores):
-    """The median of the valid scores, None without any."""
-    scores = sorted(float(score) for score in scores if not math.isnan(score))
-    middle = len(scores) // 2
-    if not scores:
-        return None
-    return scores[middle] if len(scores) % 2 else (scores[middle - 1] + scores[middle]) / 2
 
 
 def write(path, settings, frames):
