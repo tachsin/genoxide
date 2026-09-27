@@ -57,7 +57,8 @@ class Trace:
         frames = [
             {
                 "generation": runs[0][k]["generation"],
-                "evaluations": runs[0][k]["evaluations"],
+                # the four runs' together
+                "evaluations": sum(run[k]["evaluations"] for run in runs),
                 "series": {name: run[k]["hypervolume"] for name, run in zip(names, runs)},
                 "state": {"panels": [run[k]["state"] for run in runs]},
             }

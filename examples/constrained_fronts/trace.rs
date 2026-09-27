@@ -77,7 +77,8 @@ impl Trace {
             let panels: Vec<&Value> = runs.iter().map(|run| &run[k]["state"]).collect();
             json!({
                 "generation": runs[0][k]["generation"],
-                "evaluations": runs[0][k]["evaluations"],
+                // the four runs' together
+                "evaluations": runs.iter().map(|run| run[k]["evaluations"].as_u64().unwrap_or(0)).sum::<u64>(),
                 "series": series,
                 "state": { "panels": panels },
             })
