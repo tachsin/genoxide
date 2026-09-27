@@ -1,0 +1,2 @@
+100 solutions on the front: 22 on the first piece, 78 on the second
+hypervolume 444.12 (a fine grid: 444.57)
