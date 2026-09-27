@@ -1,0 +1,21 @@
+weight 23.585657981 after 20002 evaluations (the best known: 23.585657984)
+violation 0.000000, a relative gap of -1.4e-10
+thickness (mm)                    best  range
+B-pillar inner                0.500000  0.5 to 1.5
+B-pillar reinforcement        1.225732  0.45 to 1.35
+floor side inner              0.500000  0.5 to 1.5
+cross members                 1.207111  0.5 to 1.5
+door beam                     0.875000  0.875 to 2.625
+door beltline reinforcement   0.884189  0.4 to 1.2
+roof rail                     0.400000  0.4 to 1.2
+response                          best  limit
+abdomen load                    0.6054  1 kN
+upper chest velocity            0.2295  0.32 m/s
+middle chest velocity           0.2019  0.32 m/s
+lower chest velocity            0.3050  0.32 m/s
+upper rib deflection           28.3682  32 mm
+middle rib deflection          27.6641  32 mm
+lower rib deflection           32.0000  32 mm
+pubic force                     4.0000  4 kN
+B-pillar velocity               9.3423  9.9 mm/ms
+front door velocity            15.7000  15.7 mm/ms

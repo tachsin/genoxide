@@ -1,0 +1,143 @@
+---
+title: Car side impact
+category: constrained
+summary: The lightest car body whose side passes the European side-impact test, from seven panel thicknesses under ten limits on the crash dummy's injuries and the structure's velocities.
+reference: "Gu, L., Yang, R. J., Tho, C. H., Makowski, M., Faruque, O. and Li, Y. (2001). Optimisation and robustness for crashworthiness of side impact. International Journal of Vehicle Design 26(4): 348-360."
+reference_url: https://doi.org/10.1504/IJVD.2001.005210
+optimum: "23.585658 (weight), best known"
+languages: [rust, python]
+order: 76
+---
+
+# Car side impact
+
+## The problem
+
+In a side-impact test, a barrier hits the side of a car, and a crash-test dummy in the seat records
+the loads on its body. Gu, Yang, Tho, Makowski, Faruque and Li (2001) made a car body as light as
+possible while it still passes the European side-impact test. Crash simulations are slow, so they
+fitted a response surface, a low-degree polynomial of the thicknesses, to each response of a set of
+simulations. The optimization then works on the polynomials.
+
+The seven design variables are thicknesses, in millimetres, of parts of the body's side:
+
+| Gene | Part | Range |
+|---|---|---|
+| x₁ | B-pillar inner | 0.5 to 1.5 |
+| x₂ | B-pillar reinforcement | 0.45 to 1.35 |
+| x₃ | floor side inner | 0.5 to 1.5 |
+| x₄ | cross members | 0.5 to 1.5 |
+| x₅ | door beam | 0.875 to 2.625 |
+| x₆ | door beltline reinforcement | 0.4 to 1.2 |
+| x₇ | roof rail | 0.4 to 1.2 |
+
+The B-pillar is the post between the front and the rear door. The weight to minimize is linear in
+the thicknesses:
+
+```text
+1.98 + 4.9 x₁ + 6.67 x₂ + 6.98 x₃ + 4.01 x₄ + 1.78 x₅ + 0.00001 x₆ + 2.73 x₇
+```
+
+Ten constraints keep the dummy's injuries and the intrusion into the car within limits:
+
+| Constraint | Limit |
+|---|---|
+| the abdomen load | 1 kN |
+| the upper, middle and lower chest velocities | 0.32 m/s each |
+| the upper, middle and lower rib deflections | 32 mm each |
+| the pubic force | 4 kN |
+| the velocity of the B-pillar's middle point | 9.9 mm/ms |
+| the velocity of the front door | 15.7 mm/ms |
+
+Each response is a polynomial of degree 1 or 2 in the thicknesses; genoxide's docs of
+[`CarSideImpact`](https://docs.rs/genoxide/latest/genoxide/problems/engineering/struct.CarSideImpact.html)
+give them all. genoxide follows the restatement of Jain and Deb (2014, IEEE Transactions on
+Evolutionary Computation 18(4): 602-622, appendix of the authors' version), which hasn't yet been
+checked against the original. There the weight is the first of three objectives. The original has
+four more variables, two materials and the barrier's height and hitting position, which the
+surfaces fix. Two coefficients are as published in the restatement and the implementations that
+follow it, and differ from the eleven-variable restatements: the abdomen load's 0.0092928 x₃, and
+the lower chest's 0.031296 x₃. Neither constraint is active at the best designs, so neither changes
+them.
+
+The restatement gives no optimum. genoxide's best known weight, 23.585658, is from SLSQP started
+from 300 points and from genoxide's SHADE. It isn't proven optimal.
+
+## What makes it hard
+
+The constraints are nonlinear: they contain products of thicknesses and a square. Only 18 % of
+random designs meet all ten. The lower rib deflection rules out 62 % of them, the pubic force 60 %
+and the lower chest velocity 50 %. Most responses grow as the parts get thinner, so a lighter
+design comes closer to the limits: the search has to reach the boundary of the feasible region and
+stay on it.
+
+The lightest designs sit in a corner. Four thicknesses are at their lower bounds: the B-pillar
+inner, the floor side inner, the door beam and the roof rail. Three responses are at their limits:
+the lower rib deflection, the pubic force and the front door's velocity. That's seven active
+constraints for seven genes, which fix the design.
+
+One gene barely counts. The door beltline reinforcement x₆ adds 0.00001 to the weight per
+millimetre: taking it from its lowest feasible value, about 0.8842, to its upper bound, 1.2, adds
+only 3.2e-6. Of the ten limits, only the front door's velocity needs it larger. The weight hardly
+steers the search toward the best x₆, and a search that converges early leaves x₆ wherever it
+happens to be.
+
+## Representation
+
+A `Real` genome of 7 genes, the thicknesses, within their ranges. The fitness is the weight and the
+total constraint violation: the sum over the ten constraints of how far each response exceeds its
+limit, 0 for a feasible design. genoxide compares fitnesses with Deb's feasibility rules (Deb, 2000,
+Computer Methods in Applied Mechanics and Engineering 186: 311-338): a feasible design beats an
+infeasible one, two feasible ones compare by weight, and two infeasible ones by violation.
+
+## Algorithm
+
+L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665), a differential evolution that adapts
+its scale factor and crossover rate from successful trials. Its population starts at 18 times the
+number of genes, 126, and shrinks linearly to 4 over the budget of 20,000 evaluations. genoxide's
+`De::l_shade` takes L-SHADE's settings, so the example only gives it the budget.
+
+L-SHADE has no restarts, and that matters here. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013:
+71-78) with genoxide's defaults, as in the welded beam example, restarts every time its
+population's weights agree to about 1e-8, and throws away the converged population. With seeds 1 to
+8 and 30,000 evaluations, it ends 3e-10 to 3e-9 above the best known weight, relative to it.
+Without restarts (`de::Restarts::Never`, in Rust), with seeds 1 to 5, it comes within 1e-12 of the
+best known weight after 26,400 to 29,000 evaluations, and ends at the same weight as L-SHADE.
+L-SHADE gets within 1e-12 after 16,500 to 17,900 evaluations, with the same seeds.
+
+CMA-ES, which solves the cantilever beam example, puts the other six thicknesses on their bounds and
+limits, but leaves x₆ where it happens to be: between 0.89 and 1.10 with seeds 1 to 5. After 30,000
+evaluations, it's 3e-9 to 9e-8 above the best known weight.
+
+## Output
+
+The first line gives the weight of the best design, the evaluations, and the best known weight. The
+second gives the design's constraint violation, 0 when it's feasible, and the relative gap to the
+best known weight, (weight − best known) / best known; a negative gap is a lighter design. Then
+comes a row per part: its thickness in the best design and its range. The last rows give each
+response of the best design next to its limit. In Python, `run` evaluates the problem in Rust, so
+both versions print the same.
+
+[The project page](https://tachsin.gr/projects/genoxide/examples/car-side-impact) plays this run back.
+
+## Good results
+
+The best known weight is 23.585657984, at (0.5, 1.225732, 0.5, 1.207111, 0.875, 0.884329, 0.4).
+The run ends at 23.585657981, with no violation: 3.3e-9 lighter, a relative gap of −1.4e-10. Its
+design differs visibly from the best known one only in x₆, 0.884189 against 0.884329. At the best
+known design, the front door's velocity is 15.699897, 1.0e-4 below its limit, so x₆ could still go
+down.
+
+At the run's design, all seven constraints of the corner hold with equality. With x₁, x₃, x₅ and x₇
+on their lower bounds, the lower rib deflection gives x₂ = (46.36 − 4.4505 · 0.5 − 32) / 9.9 =
+1.225732, the pubic force gives x₄ = 1.207111, and the front door's velocity gives x₆ = 0.884189.
+The weight of that corner is 23.58565798078, and the run matches it to the printed digits. All five
+seeds end at the same weight.
+
+At the corner, the weight's gradient is a combination of the seven active constraints' gradients
+with positive coefficients, the Lagrange multipliers, so no feasible move nearby makes the design
+lighter: it's a local minimum. The constraints aren't convex, so that doesn't prove it's the global one.
+
+The gain is far below the accuracy of response surfaces fitted to crash simulations: in practice
+the two designs are the same car. The run finds the corner exactly, down to the gene that barely
+counts.
