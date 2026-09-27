@@ -72,6 +72,8 @@ Two lines per form. The first gives the form, the cost of the best design, its c
 equals b: the constraint h ≤ b binds. In Python, `run` evaluates the problems in Rust, so both
 versions print the same.
 
+[The project page](https://tachsin.gr/projects/genoxide/examples/welded-beam) plays back the first form's run.
+
 ## Good results
 
 On the seven-constraint form, the run reaches the best known cost, 1.724852, with no violation. On

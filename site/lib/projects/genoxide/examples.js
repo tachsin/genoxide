@@ -173,9 +173,18 @@ export function exampleCategories(examples) {
  * becomes that example's page here, other repository paths go to GitHub
  * (images to raw.githubusercontent.com so they load).
  */
+// The READMEs link to their own pages here ("[The project page](https://tachsin.gr/...)"), for
+// readers on GitHub: here, a link to this page goes to its player, and to another example's page
+// stays on the site.
+const SITE_EXAMPLES = `https://tachsin.gr${EXAMPLES_PATH}/`;
+
 function makeUrlResolver(dir, slugByDir) {
   const folder = `https://example.invalid/${EXAMPLES_DIR}/${dir}/`;
   return (href, kind) => {
+    if (kind === "link" && href?.startsWith(SITE_EXAMPLES)) {
+      const slug = href.slice(SITE_EXAMPLES.length).replace(/[/#?].*$/, "");
+      return slug === slugForDir(dir) ? "#example-run-heading" : `${EXAMPLES_PATH}/${slug}`;
+    }
     if (!href || href.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("//")) {
       return href;
     }

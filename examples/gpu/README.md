@@ -68,7 +68,7 @@ precision changed it.
 
 The times depend on the machine: each run prints other numbers.
 
-The project page plays back another run, recorded the same way: its times and values differ from
+[The project page](https://tachsin.gr/projects/genoxide/examples/gpu) plays back another run, recorded the same way: its times and values differ from
 the ones above.
 
 ## Good results

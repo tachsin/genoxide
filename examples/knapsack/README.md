@@ -68,7 +68,7 @@ finds for comparison.
 The run stops only after 200 generations without improvement, so its last 200 generations find
 nothing better, and their evaluations count too.
 
-The project page plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/knapsack) plays this run back.
 
 ## Good results
 

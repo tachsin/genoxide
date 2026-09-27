@@ -60,7 +60,7 @@ The first line gives the conflicts of the best placement, and the generations an
 took. The second gives the columns: for each row from the first, the column of its queen, with rows
 and columns numbered from 0. Every number from 0 to 63 appears once.
 
-The project page plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/n-queens) plays this run back.
 
 ## Good results
 

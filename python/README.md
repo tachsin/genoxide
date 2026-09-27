@@ -34,7 +34,8 @@ print(result.best_genome, result.best_fitness)
 ```
 
 More in [examples/](https://github.com/tachsin/genoxide/tree/main/examples), each the same program in Python and Rust
-(`python examples/<name>/main.py` in the repository), and on the [docs site](https://tachsin.github.io/genoxide/examples/):
+(`python examples/<name>/main.py` in the repository), on the [docs site](https://tachsin.github.io/genoxide/examples/), and
+played back with charts made for each problem on [tachsin.gr](https://tachsin.gr/projects/genoxide/examples):
 - OneMax, a knapsack with a constraint, and N-Queens
 - the travelling salesman (TSPLIB berlin52) and job shop scheduling (ft06)
 - Rastrigin with CMA-ES and L-SHADE, and the pressure vessel and welded beam designs with constraints

@@ -64,7 +64,7 @@ and the best value it found.
 The times depend on the machine. The asynchronous run's best value depends on the order of the
 results, so it changes from run to run too.
 
-The project page plays back another run, recorded the same way: its times and values differ from
+[The project page](https://tachsin.gr/projects/genoxide/examples/asynchronous) plays back another run, recorded the same way: its times and values differ from
 the ones above.
 
 ## Good results

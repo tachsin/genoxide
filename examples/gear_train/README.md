@@ -61,6 +61,8 @@ The first line gives the squared error of the best design, the generations it to
 minimum. The second gives its teeth, (T_d, T_b, T_a, T_f), its ratio and the target ratio. In
 Python, `run` evaluates the problem in Rust, so both versions print the same.
 
+[The project page](https://tachsin.gr/projects/genoxide/examples/gear-train) plays this run back.
+
 ## Good results
 
 The minimum is 2.700857e-12, at 16 · 19 / (43 · 49), and at the three designs that swap 16 with 19

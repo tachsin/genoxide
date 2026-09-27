@@ -63,7 +63,7 @@ is the area that the front dominates, up to a reference point, here (1.1, 1.1). 
 rewards both convergence and spread. For the whole Pareto front, it is 1.1 × 1.1 − 1/3 = 0.8767, the
 area of the box minus the area under the curve.
 
-The project page plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/zdt1) plays this run back.
 
 ## Good results
 

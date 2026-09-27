@@ -66,7 +66,7 @@ The first line gives the best makespan and the generations it took. The next six
 jobs in the order the machine does them, with the jobs and machines numbered from 0. Together, those
 orders define the schedule.
 
-The project page plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/jobshop-ft06) plays this run back.
 
 ## Good results
 
