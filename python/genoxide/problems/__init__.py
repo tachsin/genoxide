@@ -828,10 +828,12 @@ class Kursawe(_Sized):
     Van Veldhuizen (1999) describe three regions, and plot the point apart from them.
 
     Kursawe, F. (1991). A variant of evolution strategies for vector optimization. Parallel
-    Problem Solving from Nature, LNCS 496: 193-197. Definition and bounds as restated in Deb,
-    Pratap, Agarwal and Meyarivan (2002, NSGA-II, table I), with sin(xᵢ³); Van Veldhuizen (1999,
-    PhD thesis, table B.1) prints sin(xᵢ)³ and notes that the original is misprinted. Not yet
-    checked against the original (#168).
+    Problem Solving from Nature, LNCS 496: 193-197. The original (p. 196) prints f₁ summed to n
+    and f₂ = Σ (|xᵢ|^0.8 + 5 sin(xᵢ)³), with no bounds or number of variables; its figure 2 looks
+    like sin(xᵢ)³ with 2 variables. The definition here, with sin(xᵢ³), 3 variables and bounds
+    [−5, 5], is Deb, Pratap, Agarwal and Meyarivan's (2002, NSGA-II, table I), the form the
+    literature uses; Van Veldhuizen (1999, PhD thesis, table B.1) keeps sin(xᵢ)³ and sums f₁ to
+    n − 1.
     """
 
     variables: int = 3
@@ -851,8 +853,13 @@ class Poloni(MultiProblem):
     Poloni, C., Giurgevich, A., Onesti, L. and Pediroda, V. (2000). Hybridization of a
     multi-objective genetic algorithm, a neural network and a classical optimizer for a complex
     design problem in fluid dynamics. Computer Methods in Applied Mechanics and Engineering
-    186(2-4): 403-420. Definition and bounds as restated in Deb, Pratap, Agarwal and Meyarivan
-    (2002, NSGA-II, table I); not yet checked against the original (#168).
+    186(2-4): 403-420. It first appeared in Poloni et al. (1996, ECCOMAS '96, Wiley: 258-264) and
+    Poloni (1997, in Genetic Algorithms in Engineering and Computer Science, Wiley: 397-414),
+    which, as Van Veldhuizen (1999, PhD thesis, table B.1) notes, print it mistyped. Definition
+    and bounds as restated in Deb, Pratap, Agarwal and Meyarivan (2002, NSGA-II, table I),
+    minimized; Van Veldhuizen restates it as the maximization of the negated objectives, and
+    Rigoni and Poles (2005, Dagstuhl Seminar Proceedings 04461) minimize it with the same
+    constants. Not yet checked against the originals (#168).
     """
 
     _type: ClassVar[str] = "poloni"

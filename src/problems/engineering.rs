@@ -90,10 +90,16 @@ const SHEAR: f64 = 12e6;
 ///
 /// [`constraints`](Problem::constraints) gives g₁…g₇ in this order, as `g(x) ≤ 0`.
 ///
+/// This form isn't [`WeldedBeamRagsdell`]'s mechanics with other limits: its J, `2√2 h l (…)`,
+/// is twice the weld throat's, and its buckling load has E where Ragsdell and Phillips's has
+/// √(EG), 1.58 times larger. It's the benchmark as published, so it stays as it is.
+///
 /// Rao, S. S. (1996). *Engineering Optimization.* Wiley, third edition. Definition and bounds as
 /// restated in Coello Coello, C. A. (2000). Use of a self-adaptive penalty approach for
 /// engineering optimization problems. *Computers in Industry* 41(2): 113-127 (eqs. 22-37 and
-/// section 6.2); not yet checked against the original
+/// section 6.2), and the same in Coello Coello and Mezura-Montes (2002, *Advanced Engineering
+/// Informatics* 16: 193-203, eqs. 8-23), after Rao; Cagnina, Esquivel and Coello Coello (2008)
+/// attribute it to Ragsdell and Phillips. Not yet checked against the original
 /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct WeldedBeam;
@@ -171,6 +177,10 @@ impl Problem for WeldedBeam {
 /// which all end within 3e-9 of it. Not proven optimal. Reklaitis, Ravindran and Ragsdell (1983)
 /// report 2.38116 at (0.2444, 6.2187, 8.2915, 0.2444); printed to 4 digits, that solution
 /// evaluates to 2.38151. Deb (1991) reports 2.43 at (0.2489, 6.1730, 8.1789, 0.2533).
+/// Ragsdell and Phillips's own solution, (0.2455, 6.1960, 8.2730, 0.2455) at 2.3859 as tabulated
+/// by Coello Coello and Mezura-Montes (2002), exceeds the shear stress limit by 0.31 psi in this
+/// form. The constants follow from the mechanics: P = 6000 lb at L = 14 in, E = 30·10⁶ psi,
+/// G = 12·10⁶ psi.
 ///
 /// [`constraints`](Problem::constraints) gives the five constraints in this order, as `g(x) ≤ 0`.
 ///
@@ -279,8 +289,16 @@ const VOLUME: f64 = 1_296_000.0;
 /// Sandgren, E. (1990). Nonlinear integer and discrete programming in mechanical design
 /// optimization. *Journal of Mechanical Design* 112(2): 223-229; in the notation of Kannan, B. K.
 /// and Kramer, S. N. (1994). *Journal of Mechanical Design* 116(2): 405-411. Definition as
-/// restated in Coello Coello (2000, *Computers in Industry* 41(2): 113-127, eqs. 17-21); not yet
-/// checked against the originals ([#168](https://github.com/tachsin/genoxide/issues/168)).
+/// restated in Coello Coello (2000, *Computers in Industry* 41(2): 113-127, eqs. 17-21), and the
+/// same in Coello Coello and Mezura-Montes (2002) and Cagnina, Esquivel and Coello Coello (2008);
+/// not yet checked against the originals ([#168](https://github.com/tachsin/genoxide/issues/168)).
+/// The originals' own designs, as tabulated by Coello Coello and Mezura-Montes, suggest that the
+/// originals also had minimum thicknesses, T_s ≥ 1.1 and T_h ≥ 0.6: Sandgren's (1.125, 0.625,
+/// 47.70, 117.70), at 8129.10, has both walls thicker than g₁ and g₂ require, and Kannan and
+/// Kramer's (1.125, 0.625, 58.291, 43.690), at 7198.04, has a head of 0.625 where 0.5625 meets g₂
+/// and costs about 378 less. With those minimums the least cost is 7198.006, at (1.125, 0.625,
+/// 58.29015, 43.69268); the minimum of 6059.714 is of the form without them. Some restatements
+/// print 3.1611 for 3.1661, which gives 7197.729 there.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct PressureVessel;
 
@@ -448,12 +466,15 @@ impl Problem for TensionCompressionSpring {
 /// Bounds x₁ ∈ [2.6, 3.6], x₂ ∈ [0.7, 0.8], x₃ ∈ [17, 28], x₄ ∈ [7.3, 8.3], x₅ ∈ [7.8, 8.3],
 /// x₆ ∈ [2.9, 3.9], x₇ ∈ [5.0, 5.5]; best known 2996.348165 at (3.5, 0.7, 17, 7.3, 7.8, 3.350214,
 /// 5.286683), from the restatement, whose solution, printed to 6 digits, exceeds g₅ by 6.0e-7 and
-/// g₆ by 1.3e-7. Not proven optimal. The literature's formulations differ
-/// (Ray, 2003, AIAA Journal 41(3): 556-558): some print 7.477 for 7.4777, which doesn't give
-/// this value, and some let x₅ go down to 7.3.
+/// g₆ by 1.3e-7, and evaluates to 2996.347849. Not proven optimal. The literature's formulations
+/// differ (Ray, 2003, AIAA Journal 41(3): 556-558): some print 7.477 for 7.4777 and 1.5079 for
+/// 1.508, which don't give this value, and some let x₅ go down to 7.3, where the minimum is
+/// 2994.471 (Lin, Tsai, Hu and Chang, 2013, *Mathematical Problems in Engineering* 419043).
 ///
 /// [`constraints`](Problem::constraints) gives g₁…g₁₁ of the design in this order.
 ///
+/// Golinski, J. (1970). Optimal synthesis problems solved by means of nonlinear programming and
+/// random methods. *Journal of Mechanisms* 5(3): 287-309, where the problem is first posed; and
 /// Golinski, J. (1973). An adaptive optimization system applied to machine synthesis. *Mechanism
 /// and Machine Theory* 8(4): 419-436. Definition, bounds and best known solution as restated in
 /// Cagnina, L. C., Esquivel, S. C. and Coello Coello, C. A. (2008). Solving engineering
@@ -827,7 +848,10 @@ impl Problem for CantileverBeam {
 /// front door (≤ 15.7 mm/ms), each a response surface as printed in the restatement's appendix.
 ///
 /// Bounds x₁, x₃, x₄ ∈ [0.5, 1.5], x₂ ∈ [0.45, 1.35], x₅ ∈ [0.875, 2.625], x₆, x₇ ∈ [0.4, 1.2];
-/// no optimum is given in the restatement: [`optimum`](Problem::optimum) is `None`. The weight is
+/// the restatement gives no optimum. Best known 23.585658 at (0.5, 1.225732, 0.5, 1.207111,
+/// 0.875, 0.884329, 0.4), with the lower rib deflection, the pubic force and the front door's
+/// velocity at their limits, found by SLSQP from 300 starting points and by genoxide's SHADE,
+/// whose runs all end within 4e-9 of it. Not proven optimal. The weight is
 /// the first objective of the restatement's three-objective problem; the original has four more
 /// variables (two materials, the barrier's height and hitting position), fixed in these surfaces.
 ///
@@ -840,7 +864,12 @@ impl Problem for CantileverBeam {
 /// evolutionary many-objective optimization algorithm using reference-point based nondominated
 /// sorting approach, part II. *IEEE Transactions on Evolutionary Computation* 18(4): 602-622
 /// (appendix, in the authors' version); not yet checked against the original
-/// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+/// ([#168](https://github.com/tachsin/genoxide/issues/168)). The abdomen load's `0.0092928 x₃`
+/// is as published there and in the implementations that follow it; the eleven-variable form's
+/// `0.484 x₃ x₉`, with x₉ fixed at 0.192, would give 0.092928, ten times as much. Likewise the
+/// lower chest's `0.031296 x₃` is `0.163 x₃` times x₉'s 0.192, where the eleven-variable
+/// restatements have x₈'s 0.345. Neither constraint is active at the best known design, so
+/// neither changes it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct CarSideImpact;
 
@@ -907,7 +936,18 @@ impl Problem for CarSideImpact {
     }
 
     fn optimum(&self) -> Option<Optimum<Reals>> {
-        None
+        Some(Optimum::best_known(
+            23.585_657_984_054_272,
+            vec![reals(&[
+                0.500_000_000_431_087_8,
+                1.225_732_323_099_214,
+                0.500_000_000_001_969_3,
+                1.207_110_858_745_761_3,
+                0.875_000_000_000_002_2,
+                0.884_328_591_666_781_2,
+                0.400_000_000_000_005,
+            ])],
+        ))
     }
 
     fn reference(&self) -> &'static str {
@@ -1207,7 +1247,9 @@ mod tests {
 
     #[test]
     fn car_side_impact() {
-        assert!(CarSideImpact.optimum().is_none());
+        let optimum = CarSideImpact.optimum().expect("a best known design");
+        let best = CarSideImpact.evaluate(&optimum.solutions()[0]);
+        assert_eq!(best, (optimum.value(), 0.0));
         // at the lower bounds: the weight, and every response by hand
         let low = reals(&[0.5, 0.45, 0.5, 0.5, 0.875, 0.4, 0.4]);
         let weight = 1.98
