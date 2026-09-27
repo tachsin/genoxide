@@ -218,7 +218,9 @@ type Callback<'o, G, const M: usize> = Box<dyn FnMut(&MultiSnapshot<'_, G, M>) +
 /// results as sequential evaluation), abort flag and NaN policy.
 ///
 /// - [`Stop::stagnation`] counts the generations since the front last gained a solution that no
-///   earlier front member dominated or equaled.
+///   member of the previous generation's front dominated or equaled. A front with more
+///   trade-offs than the population holds keeps losing and regaining some, which counts as a
+///   gain: see [`Stop::stagnation`].
 /// - [`Stop::target`] needs a single objective: running with it is an error.
 /// - A run whose stop conditions can only be met with new evaluations ([`Stop::evaluations`])
 ///   stops with [`StopReason::Stalled`] once the algorithm has asked for no genome to evaluate in

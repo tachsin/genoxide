@@ -75,7 +75,10 @@ shows what each run found, not an average.
 The first line gives the dimension and the budget. Then a table has a row per function and a column
 per algorithm. Each cell is the error of that run: the best value it found minus the known minimum,
 to two significant digits. An error below 1e-8 means the run met the target and stopped early. In
-Python, `run` evaluates the functions in Rust, so both versions print the same table.
+Python, `run` evaluates the functions in Rust, so both versions print the same table on one
+platform. The functions call the platform's `sin`, `cos` and `exp`, whose last bit differs between
+operating systems, and runs this long amplify it: on Windows or macOS a few cells differ from the
+table in `output.txt`, which is the Linux output.
 
 The project page plays these runs back.
 

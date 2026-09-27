@@ -559,7 +559,7 @@ fn main() -> genoxide::Result<()> {
 | `Nsga3` | `Nsga3::builder(real, objectives, multi::das_dennis::<3>(12))` | 3+ objectives; population defaults to the number of directions (91); SBX η 30 |
 
 - Objective counts are typed: `[f64; 3]` for 2 objectives doesn't compile.
-- Constrained dominance: feasible first, then the smaller violation (`multi::dominates`). `Stop::stagnation` counts generations without a new non-dominated solution; `Stop::target` isn't available.
+- Constrained dominance: feasible first, then the smaller violation (`multi::dominates`). `Stop::stagnation` counts generations whose front has no solution that the previous front didn't dominate or equal: with a front larger than the population, it may never fire, so add `Stop::generations`; `Stop::target` isn't available.
 - `multi::non_dominated_sort`, `multi::crowding_distance`; `multi::ParetoArchive::new(objectives)` with `.on_generation(|snapshot| archive.update(snapshot))` keeps every non-dominated solution.
 - Test problems: `multi::problems::{Zdt1, Zdt2, Zdt3, Zdt4, Zdt6}::new(n)`, `{Dtlz1, Dtlz2, Dtlz3, Dtlz4}::<M>::new(n)`, `{FonsecaFleming, Kursawe}::new(n)`, `Schaffer1`, `Schaffer2`, `Poloni`, `Viennet1`/`2`/`3` (3 objectives), and the constrained `Bnh`, `Srn`, `Tnk`, `Osy`, `Constr` (fitness `([f64; 2], violation)`), all minimized, for `MultiEngine::new(algorithm, problem)`. The `multi::problems::MultiProblem<M>` trait gives `representation()`, `optimal_front(points)` (`Option`: `None` for KUR, POL, VNT2, VNT3), `ideal_point()`, `nadir_point()`, `constraints(&x)` (`g <= 0`), `reference()`; `multi::problems::all::<M>()` lists them as `Box<dyn DynMultiProblem<M>>`.
 - `multi::indicator`: `hypervolume(&front, &reference_point, &objectives)`, `hypervolume_contributions`; `igd_plus`, `igd`, `gd`, `spread` against a reference front.
@@ -694,7 +694,7 @@ every = 50
 
 ## Guarantees to rely on
 
-- **Reproducible:** a seed gives the same results on every platform and thread count, parallel or not.
+- **Reproducible:** a seed gives the same results on every platform and thread count, parallel or not. The exception is a fitness function that calls the platform's `sin`, `cos`, `exp` and the like, including `problems` and `multi::problems`: their last bit can differ between operating systems, and long runs drift apart.
 - **Ties:** the earlier individual wins.
 - **The best is kept:** `outcome.best()` is the best individual ever evaluated.
 - **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `problems` or `multi::problems` constructor with too few dimensions or variables, and a `Batch` returning no score for a single genome.

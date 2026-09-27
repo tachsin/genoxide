@@ -266,8 +266,8 @@ impl Progress {
     }
 
     /// The generation in which the best individual so far was found. In a multi-objective run,
-    /// the last generation in which the front gained a solution that no earlier front member
-    /// dominated or equaled.
+    /// the last generation in which the front gained a solution that no member of the previous
+    /// generation's front dominated or equaled.
     pub fn best_generation(&self) -> u64 {
         self.best_generation
     }

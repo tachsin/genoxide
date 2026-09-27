@@ -97,6 +97,12 @@ impl Stop {
     }
 
     /// Stops when the best fitness hasn't improved for `generations` generations, at least 1.
+    ///
+    /// In a multi-objective run, it counts the generations since the front gained a solution
+    /// that no member of the previous generation's front dominated or equaled. When the Pareto
+    /// front has more trade-offs than the population holds, survival drops some and brings them
+    /// back later, which counts as a gain, and the run may never stagnate: stop it by
+    /// [`generations`](Stop::generations) or [`evaluations`](Stop::evaluations).
     pub fn stagnation(generations: u64) -> Self {
         Self::new(Condition::Stagnation(generations))
     }

@@ -1453,7 +1453,10 @@ class _MultiObjective(_Algorithm):
             generation. ``math.inf`` is no limit.
         stagnation : int, optional
             Stops after this many generations in which the front gained no solution that
-            no earlier front member dominated or equaled, at least 1.
+            the previous generation's front didn't dominate or equal, at least 1. With a front
+            of more trade-offs than the population holds, survival drops some and brings them
+            back later, which counts as a gain, and the run may never stagnate: add
+            ``generations`` or ``evaluations``.
         batch : bool, default False
             Calls ``fitness`` once per generation with a 2-D array, and not for a generation of
             copies of their parents.

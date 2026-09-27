@@ -9,7 +9,9 @@ builds its example pages from. CI runs every example in both languages.
 Both versions use the same algorithm, settings and seed, and print the same output. The exception
 is a fitness function in numpy with functions such as cosine, whose last bit can differ from
 Rust's: the runs then drift apart. The test problems of `genoxide.problems` are evaluated in Rust
-in both languages, so their runs don't.
+in both languages, so on one platform their runs don't. They call the platform's `sin`, `cos` and
+`exp`, though, so between operating systems a long run can drift too: `output.txt` is the Linux
+output.
 
 Run a Rust example from the root of the repository:
 

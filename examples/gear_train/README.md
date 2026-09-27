@@ -33,8 +33,8 @@ Every variable is an integer, and there are no constraints besides the bounds. T
 
 The score depends only on the two products T_d T_b and T_a T_f. A change of one tooth changes a
 product by 1.7% (at 60 teeth) to 8% (at 12), so neighboring designs have very different scores. The
-best designs are scattered: the second best, with a squared error of 2.3e-11, is 13 and 20 over 34
-and 53, with no gear in common with the best one.
+best designs are scattered: three designs share the second best squared error, 2.3e-11, among them
+13 and 20 over 34 and 53, with no gear in common with the best one.
 
 ## Representation
 

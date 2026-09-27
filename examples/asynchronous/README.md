@@ -21,6 +21,8 @@ each get 2,000 evaluations, and the example measures how long they take.
 Rastrigin's function, 10n + Σ (xᵢ² − 10 cos 2πxᵢ) over [−5.12, 5.12]ⁿ, has its minimum, 0, at the
 origin; the Rastrigin example explains it.
 
+There's no Python version: the Python package has no asynchronous engine.
+
 ## What makes it hard
 
 The waiting. A generational algorithm breeds a whole generation, evaluates it in parallel, and waits
@@ -61,11 +63,13 @@ and the best value it found.
 The times depend on the machine. The asynchronous run's best value depends on the order of the
 results, so it changes from run to run too.
 
-The project page plays this run back.
+The project page plays back another run, recorded the same way: its times and values differ from
+the ones above.
 
 ## Good results
 
 What matters is the time. The asynchronous run finishes the same 2,000 evaluations sooner, since its
-workers never wait. In one run with 20 workers, it took 0.41 s against 0.68 s. Neither run gets near
+workers never wait: in the run of `output.txt`, 0.50 s against 0.70 s, with 20 workers. The times
+vary from run to run and machine to machine; the gap stays. Neither run gets near
 the minimum, 0, with 2,000 evaluations. Their best values come from different algorithms, so they
 don't rank the engines.
