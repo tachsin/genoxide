@@ -11,10 +11,55 @@ order: 40
 
 # Travelling salesman (berlin52)
 
-berlin52 is a TSPLIB instance of the travelling salesman problem: 52 locations in Berlin, with
-distances in TSPLIB's EUC_2D metric (the Euclidean distance rounded to the nearest integer), and
-an optimal tour of length 7542. A permutation genome is the order of the visits. The example runs
-local search with inversion neighbors, a random 2-opt move that reverses a segment of the tour,
-and simulated annealing from a temperature of 100 cooled by 0.99996 per step, until it finds the
-optimum or for at most 200,000 evaluations. It prints the length of the best tour and the tour
-from location 1.
+## The problem
+
+The travelling salesman problem asks for the shortest round trip that visits each of a set of
+locations once and returns to the start. TSPLIB (Reinelt, 1991) is a library of instances with known
+optimal tours. berlin52 is one of them: 52 locations in Berlin, given as points in the plane. Its
+optimal tour has length 7542.
+
+The distance between two locations is TSPLIB's EUC_2D: the Euclidean distance, rounded to the
+nearest integer. Locations 1 and 2, at (565, 575) and (25, 185), are 666 apart.
+
+## What makes it hard
+
+The problem is NP-hard (Garey and Johnson, 1979, Computers and Intractability). With symmetric
+distances, 52 locations give 51!/2 ≈ 7.8 × 10⁶⁵ different tours. A search that only accepts shorter
+tours stops at the first tour that no single move improves: a local optimum, not necessarily the
+optimal tour.
+
+## Representation
+
+A `Permutation` of the 52 locations is the order of the visits; the tour returns from the last one
+to the first. Every permutation is a valid tour, so no tour needs repairing. The fitness is the
+tour's length, to minimize.
+
+## Algorithm
+
+A local search that keeps one tour and tries one neighbor per step.
+
+The neighbor is an inversion: a random segment of the tour is reversed. This is the 2-opt move of
+Croes (1958, Operations Research 6(6): 791-812): it removes two edges and reconnects the tour the
+other way. With symmetric distances, only those two edges change length. genoxide's guide recommends
+inversion for tours.
+
+The acceptance is simulated annealing (Kirkpatrick, Gelatt and Vecchi, 1983, Science 220: 671-680).
+A shorter or equal tour is always accepted. A tour longer by Δ is accepted with probability exp(−Δ /
+T), for a temperature T. T starts at 100 and is multiplied by 0.99996 after every step. At first, a
+tour 100 longer is accepted with probability 37%; the optimal tour's edges are 145 long on average.
+After 50,000 steps T is about 13, and after 200,000 steps about 0.03, when the search only goes
+downhill. Accepting worse tours early lets it leave local optima.
+
+The run stops at the optimum, or after 200,000 evaluations.
+
+## Output
+
+The first line gives the length of the best tour found and the evaluations it took. The second gives
+that tour, from location 1, with the locations numbered from 1 as in TSPLIB. The tour returns from
+the last location to location 1.
+
+The project page plays this run back.
+
+## Good results
+
+The optimum is 7542. The run reaches it after about 51,000 evaluations, a quarter of its budget.
