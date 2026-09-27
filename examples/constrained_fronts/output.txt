@@ -1,0 +1,5 @@
+problem  front  feasible  hypervolume  (optimal)  IGD+
+SRN        100       100       0.7427     0.7496  0.0039
+TNK        100       100       0.5147     0.5184  0.0022
+OSY        100       100       0.9612     0.9680  0.0048
+CONSTR     100       100       0.9853     0.9907  0.0039

@@ -42,6 +42,7 @@ python examples/tsp_berlin52/main.py
 | [ZDT1](zdt1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zdt1) |
 | [Classic two-objective fronts](classic_fronts/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/classic-fronts) |
 | [BNH, a constrained two-objective problem](bnh/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bnh) |
+| [Constrained two-objective fronts](constrained_fronts/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/constrained-fronts) |
 | [Kursawe's disconnected front](kursawe/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/kursawe) |
 | [DTLZ2 with 3 objectives](dtlz2_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dtlz2-3obj) |
 | [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neuroevolution) |
