@@ -1,4 +1,0 @@
-problem  solutions  hypervolume  IGD+
-VNT1            92       1.0044  0.0694
-VNT2            92       1.2397       -
-VNT3            92       1.1417       -
