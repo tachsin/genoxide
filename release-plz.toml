@@ -45,6 +45,10 @@ commit_preprocessors = [
 ]
 # groups are sorted by name: the invisible <!-- n --> comments set their order
 commit_parsers = [
+  # already released from release/0.7: #181 is 0.7.1's #182; a commit that only adds a released
+  # version to CHANGELOG.md isn't a change of the next one
+  { message = '^perf: cut the per-trial overhead of differential evolution \(\[#181\]', skip = true },
+  { message = '^docs: add the [0-9.]+ release to the changelog', skip = true },
   { message = "^feat", group = "<!-- 0 -->Added" },
   { message = "^fix", group = "<!-- 1 -->Fixed" },
   { message = "^perf", group = "<!-- 2 -->Performance" },

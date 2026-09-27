@@ -40,6 +40,7 @@ Reproducibility is part of the API: a seeded run gives the same results in every
 1. **Release PR.** After every merge to `main`, release-plz opens or updates a release PR. It holds the next version and the new CHANGELOG.md section, generated from the PR titles.
 2. **Breaking-change check.** [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) compares the public API with the previous release. It catches a breaking change without a breaking version bump.
 3. **Release.** A maintainer merges the release PR. That tags the version, creates the GitHub release with the same notes, and publishes to crates.io.
+4. **A patch release of an older minor version** (0.7.1 while `main` is on its way to 0.8.0) is made from its branch, `release/0.7`, with its own release PR. Afterwards, `main` gets the patch's version in `Cargo.toml` and `Cargo.lock` and its CHANGELOG.md section, and `release-plz.toml` skips the commits of `main` that the patch already released: otherwise the next release's changelog compares with the older version and lists them again.
 
 ## The Python package
 
