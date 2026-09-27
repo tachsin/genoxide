@@ -161,8 +161,10 @@ pub enum Algorithm {
     },
     LocalSearch {
         seed: Option<u64>,
+        #[serde(deserialize_with = "neighbor")]
         neighbor: Mutate,
         neighbors: Option<usize>,
+        #[serde(default, deserialize_with = "acceptance")]
         acceptance: Option<Acceptance>,
         /// Iterated local search: `[patience, kicks]`.
         restart: Option<(u64, usize)>,
@@ -170,7 +172,9 @@ pub enum Algorithm {
     Nsga2 {
         population_size: usize,
         seed: Option<u64>,
+        #[serde(deserialize_with = "crossover")]
         crossover: Crossover,
+        #[serde(deserialize_with = "mutate")]
         mutate: Mutate,
         crossover_rate: Option<f64>,
     },
@@ -182,12 +186,38 @@ pub enum Algorithm {
 pub struct Ga {
     pub population_size: usize,
     pub seed: Option<u64>,
+    #[serde(deserialize_with = "select")]
     pub select: Select,
+    #[serde(deserialize_with = "crossover")]
     pub crossover: Crossover,
+    #[serde(deserialize_with = "mutate")]
     pub mutate: Mutate,
     pub crossover_rate: Option<f64>,
     pub mutation_rate: Option<f64>,
+    #[serde(default, deserialize_with = "scheme")]
     pub scheme: Option<Scheme>,
+}
+
+// The operators' fields, read with their name in the error. `[algorithm]` is an internally tagged
+// enum, which serde reads from a buffered copy of the table: an error in an operator's own table
+// (`select = { type = "tournament" }`, without its size) can only point at the `[algorithm]`
+// header, so the message says which operator it is.
+macro_rules! named {
+    ($($function:ident: $operator:ty = $field:literal;)*) => {$(
+        fn $function<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<$operator, D::Error> {
+            <$operator>::deserialize(deserializer)
+                .map_err(|error| serde::de::Error::custom(format!("`algorithm.{}`: {error}", $field)))
+        }
+    )*};
+}
+
+named! {
+    select: Select = "select";
+    crossover: Crossover = "crossover";
+    mutate: Mutate = "mutate";
+    neighbor: Mutate = "neighbor";
+    scheme: Option<Scheme> = "scheme";
+    acceptance: Option<Acceptance> = "acceptance";
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
