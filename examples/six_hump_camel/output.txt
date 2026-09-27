@@ -1,0 +1,8 @@
+30 local searches from random points in [-5, 5] x [-5, 5], 1000 steps each
+minimum reached   searches  best value
+(-0.090,  0.713)         2     -1.0316  global
+( 0.090, -0.713)         8     -1.0316  global
+(-1.704,  0.796)         6    -0.21546
+( 1.704, -0.796)         7    -0.21546
+(-1.607, -0.569)         3      2.1043
+( 1.607,  0.569)         4      2.1043
