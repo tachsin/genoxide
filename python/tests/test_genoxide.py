@@ -514,6 +514,13 @@ def test_on_generation_is_called_after_every_generation():
     assert seconds == sorted(seconds) and seconds[-1] <= result.seconds
     best = [state.best_fitness for state in progress]
     assert best == sorted(best) and best[-1] == result.best_fitness
+    # the population, its scores and the best genome so far
+    last = progress[-1]
+    assert last.population.dtype == bool and last.population.shape[0] == len(last.scores)
+    assert np.array_equal(last.scores, last.population.sum(axis=1))
+    assert np.all(last.violations == 0)
+    assert np.array_equal(last.best_genome, result.best_genome)
+    assert all(state.scores.max() <= state.best_fitness for state in progress)
     with pytest.raises(dataclasses.FrozenInstanceError):
         progress[0].generation = 3
 
@@ -527,6 +534,15 @@ def test_on_generation_is_called_after_every_generation():
     assert all(1 <= state.front_size <= 40 for state in progress)
     # the result's front is without copies
     assert progress[-1].front_size >= len(result.front_objectives)
+    for state in progress:
+        assert state.objectives.shape == (len(state.population), 2)
+        assert np.array_equal(state.objectives, zdt1(state.population))
+        assert state.front_objectives.shape == (state.front_size, 2)
+        assert len(state.violations) == len(state.population)
+        assert len(state.front_violations) == state.front_size
+    assert {tuple(row) for row in progress[-1].front_objectives} == {
+        tuple(row) for row in result.front_objectives
+    }
 
 
 def test_on_generation_returning_false_aborts():
