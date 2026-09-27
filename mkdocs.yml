@@ -1,5 +1,5 @@
 # The site at https://tachsin.github.io/genoxide/, built by .github/workflows/docs-site.yml. The
-# Python API reference is built by pdoc into site/api/python/ after this. Build from the root of the
+# Python API reference is built by pdoc into _site/api/python/ after this. Build from the root of the
 # repository, which snippets include the examples from: mkdocs build --strict. The example pages are
 # generated from the folders in examples/ by docs/hooks/examples.py.
 site_name: genoxide
@@ -10,7 +10,7 @@ repo_name: tachsin/genoxide
 edit_uri: ""
 
 docs_dir: docs/site
-site_dir: site
+site_dir: _site
 exclude_docs: |
   requirements.txt
 
