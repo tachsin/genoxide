@@ -130,6 +130,17 @@ impl From<PyErr> for Failure {
 
 type Returns<'py> = std::result::Result<Bound<'py, PyDict>, Failure>;
 
+// a single-objective test problem is minimized: maximizing it by mistake (the algorithms' default)
+// would optimize the wrong way without a warning
+fn minimized(name: &str, run: &config::Run) -> Result<()> {
+    if run.objectives.contains(&config::Objective::Maximize) {
+        return Err(format!(
+            "{name} minimizes its objective: pass objective=\"minimize\" (the problem's objective)"
+        ));
+    }
+    Ok(())
+}
+
 // a test problem runs with its objectives, minimized, and a genome of its type and dimensions
 fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
     if let problems::Problem::Integer(problem) = problem {
@@ -139,6 +150,7 @@ fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
                 "{name} has one objective: use a single-objective algorithm"
             ));
         }
+        minimized(name, run)?;
         let dimensions = problem.integer().genome_len();
         return match &run.genome {
             config::Genome::Integer { bounds } if bounds.len() == dimensions => Ok(()),
@@ -159,7 +171,7 @@ fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
         }
     };
     match (objectives, run.objectives.len()) {
-        (1, 1) => {}
+        (1, 1) => minimized(name, run)?,
         (1, _) => {
             return Err(format!(
                 "{name} has one objective: use a single-objective algorithm"

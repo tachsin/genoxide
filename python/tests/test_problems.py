@@ -196,10 +196,13 @@ def test_a_native_run_equals_a_run_with_python_calls(parallel):
 def test_a_native_run_needs_a_matching_genome_and_one_objective():
     problem = gx.problems.Sphere(3)
     with pytest.raises(ValueError, match="Sphere has 3 dimensions, but the genome has 2 genes"):
-        gx.Cmaes(gx.Real((0, 1), length=2), seed=1).run(problem, generations=1)
+        gx.Cmaes(gx.Real((0, 1), length=2), objective=problem.objective, seed=1).run(
+            problem, generations=1
+        )
     with pytest.raises(ValueError, match="Sphere needs a Real genome"):
         ga = gx.Ga(
             gx.Integer((0, 5), length=3),
+            objective=problem.objective,
             population_size=10,
             select=gx.Tournament(2),
             crossover=gx.UniformCrossover(),
@@ -499,6 +502,22 @@ def test_a_native_multi_objective_run_reaches_the_front():
     ):
         result = algorithm.run(problem, generations=100)
         assert len(result.front_objectives) > 5
+
+
+def test_a_single_objective_problem_is_minimized():
+    # the algorithms maximize by default: a test problem, minimized, rejects that
+    rastrigin = gx.problems.Rastrigin(5)
+    with pytest.raises(ValueError, match="Rastrigin minimizes its objective"):
+        gx.Cmaes(rastrigin.genome, seed=1).run(rastrigin, generations=1)
+    gear_train = gx.problems.engineering.GearTrain()
+    with pytest.raises(ValueError, match="minimizes its objective"):
+        gx.LocalSearch(gear_train.genome, neighbor=gx.UniformMutation(count=1), seed=1).run(
+            gear_train, generations=1
+        )
+    result = gx.Cmaes(rastrigin.genome, objective=rastrigin.objective, seed=1).run(
+        rastrigin, evaluations=2_000
+    )
+    assert result.best_fitness < 50
 
 
 def test_a_native_multi_objective_run_needs_matching_settings():

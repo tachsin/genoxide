@@ -977,6 +977,47 @@ def test_a_1d_multi_objective_batch_result_is_a_clear_error():
         nsga2.run(lambda bits: bits.sum(axis=1), generations=1, batch=True)
 
 
+def zdt1_columns(x):
+    g = 1 + 9 * x[:, 1:].sum(axis=1) / (x.shape[1] - 1)
+    return x[:, 0], g * (1 - np.sqrt(x[:, 0] / g))
+
+
+def test_a_multi_objective_batch_may_return_an_array_per_objective():
+    def run(fitness, population_size, offspring):
+        return gx.SmsEmoa(
+            gx.Real((0.0, 1.0), length=5),
+            objectives=["minimize", "minimize"],
+            population_size=population_size,
+            offspring=offspring,
+            crossover=gx.SimulatedBinaryCrossover(),
+            mutation=gx.PolynomialMutation(rate=0.2),
+            seed=1,
+        ).run(fitness, generations=20, batch=True)
+
+    # a tuple of columns is the same as the rows, also for batches of 2 genomes and 2 objectives
+    for population_size, offspring in [(2, 2), (20, 20)]:
+        columns = run(zdt1_columns, population_size, offspring)
+        rows = run(lambda x: np.column_stack(zdt1_columns(x)), population_size, offspring)
+        assert columns.front_objectives.tolist() == rows.front_objectives.tolist()
+        true_values = np.column_stack(zdt1_columns(columns.front_genomes))
+        assert np.allclose(columns.front_objectives, true_values)
+    # with constraint violations
+    result = run(lambda x: (zdt1_columns(x), np.zeros(len(x))), 20, 20)
+    assert np.allclose(result.front_objectives, np.column_stack(zdt1_columns(result.front_genomes)))
+
+
+def test_a_transposed_multi_objective_batch_result_is_a_clear_error():
+    nsga2 = gx.Nsga2(
+        gx.Real((0.0, 1.0), length=5),
+        objectives=["minimize", "minimize"],
+        population_size=20,
+        crossover=gx.SimulatedBinaryCrossover(),
+        mutation=gx.PolynomialMutation(rate=0.2),
+    )
+    with pytest.raises(ValueError, match=r"returned 2 rows of 20 values.*np.column_stack"):
+        nsga2.run(lambda x: np.array(zdt1_columns(x)), generations=1, batch=True)
+
+
 # --- invalid solutions --------------------------------------------------------------------------
 
 

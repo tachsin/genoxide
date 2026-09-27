@@ -885,31 +885,44 @@ def _batch_scores(function: Callable[[np.ndarray], Any]) -> Callable[[np.ndarray
     return evaluate
 
 
-def _batch_objectives(function: Callable[[np.ndarray], Any]) -> Callable[[np.ndarray], Any]:
+def _batch_objectives(
+    function: Callable[[np.ndarray], Any], objectives: int
+) -> Callable[[np.ndarray], Any]:
     """A batch function returning float64 arrays: a row of objective values per genome, and
     constraint violations or None."""
 
     def evaluate(genomes: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
         result = function(genomes)
-        # (objectives, violations): a matrix and an array
+        # (objectives, violations): the objective values, in rows or columns, and an array
         if isinstance(result, tuple) and len(result) == 2 and np.ndim(result[0]) == 2:
-            objectives, violations = result
+            values, violations = result
             return (
-                _objective_rows(objectives),
+                _objective_rows(values, len(genomes), objectives),
                 np.asarray(violations, dtype=np.float64).reshape(-1),
             )
-        return _objective_rows(result), None
+        return _objective_rows(result, len(genomes), objectives), None
 
     return evaluate
 
 
-def _objective_rows(objectives: Any) -> np.ndarray:
-    """The objective values of a batch, a row per genome."""
-    rows = np.asarray(objectives, dtype=np.float64)
+def _objective_rows(values: Any, genomes: int, objectives: int) -> np.ndarray:
+    """The objective values of a batch, a row per genome: from a 2-D array or a list of rows,
+    or from a tuple of one 1-D array per objective (``return f1, f2``), its columns."""
+    if isinstance(values, tuple) and len(values) == objectives and all(
+        np.ndim(column) == 1 for column in values
+    ):
+        return np.column_stack([np.asarray(column, dtype=np.float64) for column in values])
+    rows = np.asarray(values, dtype=np.float64)
     if rows.ndim != 2:
         raise ValueError(
             "a multi-objective batch fitness function returns a 2-D array, a row of objective "
             f"values per genome, not an array of shape {rows.shape}"
+        )
+    if rows.shape == (objectives, genomes) and genomes != objectives:
+        raise ValueError(
+            f"the batch fitness function returned {objectives} rows of {genomes} values: return a "
+            "row of objective values per genome, e.g. np.column_stack([f1, f2]), or a tuple of "
+            "one array per objective, (f1, f2)"
         )
     return rows
 
@@ -984,8 +997,9 @@ class _SingleObjective(_Algorithm):
             an invalid solution), or a tuple of an array of scores and an array of constraint
             violations; a column of shape ``(n, 1)`` does for an array. The function must be
             deterministic. A problem of :mod:`genoxide.problems` is evaluated in Rust, with no
-            Python call: ``batch`` doesn't apply, and the genome must be a :class:`Real` with a
-            gene per dimension of the problem.
+            Python call: ``batch`` doesn't apply, the genome must be the problem's
+            (``problem.genome``: a :class:`Real`, or an :class:`Integer` for
+            :class:`~genoxide.problems.engineering.GearTrain`), and the objective "minimize".
         generations : int, optional
             Stops after this many generations, 0 or more. 0 evaluates only the initial
             population.
@@ -1422,8 +1436,9 @@ class _MultiObjective(_Algorithm):
             per objective, None or NaN values (an invalid solution), or a tuple
             ``(objective_values, constraint_violation)``. The violation is 0 for a feasible
             solution and positive for an infeasible one. With ``batch=True``, it takes a
-            generation as a 2-D array, a genome per row, and returns a 2-D array with a row of
-            objective values per genome, or a tuple of it and an array of constraint violations.
+            generation as a 2-D array, a genome per row, and returns the objective values: a 2-D
+            array or a list with a row per genome, or a tuple of one 1-D array per objective
+            (``return f1, f2``); or a tuple of those and an array of constraint violations.
             The function must be deterministic. A multi-objective problem of
             :mod:`genoxide.problems` is evaluated in Rust, with no Python call: ``batch`` doesn't
             apply, and the genome must be a :class:`Real` with a gene per variable of the
@@ -1467,7 +1482,8 @@ class _MultiObjective(_Algorithm):
             :mod:`genoxide.problems`, or a multi-objective one whose objectives, number of genes
             or genome don't match the algorithm's; and for a wrong fitness result: the
             wrong number of objective values, a negative constraint violation, a batch result
-            that isn't a 2-D array, or one with a number of rows other than the number of genomes.
+            that isn't a 2-D array or a tuple of an array per objective, or one with a number of
+            rows other than the number of genomes.
         TypeError
             If ``fitness`` or ``on_generation`` isn't callable, or ``fitness`` returns something
             that isn't a sequence of numbers. Another error converting a result, e.g. an
@@ -1486,7 +1502,7 @@ class _MultiObjective(_Algorithm):
         if isinstance(fitness, problems.MultiProblem):
             description = fitness._json()
             return MultiResult(**self._run(fitness, stop, False, parallel, callback, description))
-        function = _batch_objectives(fitness) if batch else fitness
+        function = _batch_objectives(fitness, len(self._objectives())) if batch else fitness
         return MultiResult(**self._run(function, stop, batch, parallel, callback))
 
 
