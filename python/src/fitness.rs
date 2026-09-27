@@ -131,6 +131,12 @@ fn type_name(value: &Bound<'_, PyAny>) -> String {
 // the error of a result that doesn't convert to numbers: a TypeError with `message`, caused by the
 // conversion's TypeError. Any other error, e.g. an OverflowError for an int too large for a float
 // or an exception in `__float__`, is the result's own, and raised as it is.
+// the types of a tuple's items, e.g. "(float, NoneType)"
+fn item_types(tuple: &Bound<'_, PyTuple>) -> String {
+    let names: Vec<String> = tuple.iter().map(|item| type_name(&item)).collect();
+    format!("({})", names.join(", "))
+}
+
 fn not_numbers(py: Python<'_>, error: PyErr, message: impl FnOnce() -> String) -> PyErr {
     if !error.is_instance_of::<PyTypeError>(py) {
         return error;
@@ -178,7 +184,14 @@ fn value(result: &Bound<'_, PyAny>) -> PyResult<Value> {
         return Ok(Value::Invalid);
     }
     if let Ok(tuple) = result.cast::<PyTuple>() {
-        let (score, violation) = tuple.extract::<(f64, f64)>()?;
+        let (score, violation) = tuple.extract::<(f64, f64)>().map_err(|error| {
+            not_numbers(result.py(), error, || {
+                format!(
+                    "a fitness function's tuple is (score, constraint violation), two numbers, not {}",
+                    item_types(tuple)
+                )
+            })
+        })?;
         return Ok(Value::Constrained(score, violation));
     }
     result.extract::<f64>().map(Value::Score).map_err(|error| {
@@ -329,7 +342,14 @@ fn multi_value<const M: usize>(result: &Bound<'_, PyAny>) -> PyResult<MultiValue
             match first.extract::<f64>() {
                 Ok(_) => {}
                 Err(error) if error.is_instance_of::<PyTypeError>(result.py()) => {
-                    let violation = tuple.get_item(1)?.extract::<f64>()?;
+                    let violation = tuple.get_item(1)?.extract::<f64>().map_err(|error| {
+                        not_numbers(result.py(), error, || {
+                            format!(
+                                "a multi-objective fitness function's tuple is (scores, constraint violation), the violation a number, not {}",
+                                item_types(tuple)
+                            )
+                        })
+                    })?;
                     return Ok(MultiValue::Constrained(objectives(&first)?, violation));
                 }
                 Err(error) => return Err(error),

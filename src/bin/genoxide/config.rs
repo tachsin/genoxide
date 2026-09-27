@@ -38,11 +38,45 @@ pub enum Genome {
 }
 
 /// Bounds: one `[low, high]` for every gene (with a length), or one per gene.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum Bounds<T> {
     Same([T; 2]),
     PerGene(Vec<[T; 2]>),
+}
+
+/// What a bound is, for the error when one isn't.
+pub trait Bound {
+    const WHAT: &'static str;
+}
+
+impl Bound for i64 {
+    const WHAT: &'static str = "whole numbers";
+}
+
+impl Bound for f64 {
+    const WHAT: &'static str = "numbers";
+}
+
+// the two forms, and an error that says what they are: serde's own for an untagged enum is
+// "data did not match any variant"
+impl<'de, T: Deserialize<'de> + Bound> Deserialize<'de> for Bounds<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Form<T> {
+            Same([T; 2]),
+            PerGene(Vec<[T; 2]>),
+        }
+        match Form::deserialize(deserializer) {
+            Ok(Form::Same(bounds)) => Ok(Bounds::Same(bounds)),
+            Ok(Form::PerGene(bounds)) => Ok(Bounds::PerGene(bounds)),
+            Err(_) => Err(serde::de::Error::custom(format!(
+                "`bounds` is [low, high] for every gene, or a list of [low, high], one per gene, of {}",
+                T::WHAT
+            ))),
+        }
+    }
 }
 
 impl<T: Copy> Bounds<T> {
