@@ -1,0 +1,4 @@
+volume 263.895843 after 13300 evaluations (the minimum: 263.895843)
+violation 0.000000
+A1 0.788676, A2 0.408246
+active constraints: g1
