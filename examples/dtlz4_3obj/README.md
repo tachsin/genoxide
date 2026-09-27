@@ -6,7 +6,7 @@ reference: "Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2002). Scalable m
 reference_url: https://doi.org/10.1109/CEC.2002.1007032
 optimum: "the unit sphere's eighth with f ≥ 0; hypervolume 0.8074 (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 104
+order: 108
 ---
 
 # DTLZ4 with 3 objectives

@@ -6,7 +6,7 @@ reference: "Zitzler, E., Deb, K. and Thiele, L. (2000). Comparison of multiobjec
 reference_url: https://doi.org/10.1162/106365600568202
 optimum: "the front f₂ = 1 − f₁² for f₁ in [0, 1]; hypervolume 0.5433 (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 81
+order: 91
 ---
 
 # ZDT2

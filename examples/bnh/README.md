@@ -6,7 +6,7 @@ reference: "Binh, T. T. and Korn, U. (1997). MOBES: a multiobjective evolution s
 reference_url: ""
 optimum: "the front f = (8t², 2(t − 5)²) for t in [0, 5]; hypervolume 9883.33 (reference point (210, 55))"
 languages: [rust, python]
-order: 96
+order: 100
 ---
 
 # BNH, a constrained two-objective problem

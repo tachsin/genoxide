@@ -6,7 +6,7 @@ reference: "Poloni, C., Giurgevich, A., Onesti, L. and Pediroda, V. (2000). Hybr
 reference_url: https://doi.org/10.1016/S0045-7825(99)00394-1
 optimum: "not known in closed form; a fine grid gives hypervolume 444.57 (reference point (18.4, 27.5))"
 languages: [rust, python]
-order: 95
+order: 99
 ---
 
 # Poloni

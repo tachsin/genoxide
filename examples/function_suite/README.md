@@ -6,7 +6,7 @@ reference: "Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made f
 reference_url: "https://doi.org/10.1109/4235.771163"
 optimum: "an error of 0 on each function"
 languages: [rust, python]
-order: 62
+order: 63
 ---
 
 # Function suite

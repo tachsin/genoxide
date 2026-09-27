@@ -6,7 +6,7 @@ reference: "Kursawe, F. (1991). A variant of evolution strategies for vector opt
 reference_url: https://doi.org/10.1007/BFb0029752
 optimum: "not known in closed form"
 languages: [rust, python]
-order: 94
+order: 98
 ---
 
 # Kursawe's disconnected front
