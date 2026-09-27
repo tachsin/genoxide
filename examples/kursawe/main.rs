@@ -57,8 +57,8 @@ fn main() -> Result<()> {
 fn report(name: &str, front: &[[f64; 2]]) {
     let mut sorted = front.to_vec();
     sorted.sort_by(|a, b| a[0].total_cmp(&b[0]));
-    // along a piece, f₁ grows by at most about 0.13 between neighbors, and f₂ falls; across the
-    // gaps between pieces, f₁ grows by 0.25 to 0.92 and f₂ hardly changes
+    // along a piece, f₁ grows by at most about 0.13 between neighbors, and f₂ falls; the gaps
+    // between the pieces of the true front are 0.25 to 0.92 wide in f₁, with f₂ nearly unchanged
     let pieces = 1 + sorted
         .windows(2)
         .filter(|pair| pair[1][0] - pair[0][0] > 0.2)

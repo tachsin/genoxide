@@ -62,8 +62,9 @@ Both spread the front, in different ways, which matters on a front in pieces.
 
 One line per algorithm: how many solutions are on its final front, how many pieces they cover, and
 the front's hypervolume. The example sorts the front by f₁, and starts a new piece wherever f₁
-grows by more than 0.2 from one solution to the next: along a piece it grows by at most about 0.13,
-and across the gaps between pieces by 0.25 to 0.92. The hypervolume is the area that the front dominates, up to the
+grows by more than 0.2 from one solution to the next. Along a piece, it grows by at most about 0.13
+between neighbors on these fronts; the gaps between the pieces of the true front are 0.25 to 0.92
+wide. The hypervolume is the area that the front dominates, up to the
 reference point (−14, 1). Larger is better. In Python, `run` evaluates the problem in Rust, so both
 versions print the same.
 

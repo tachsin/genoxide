@@ -24,8 +24,8 @@ REFERENCE = [-14.0, 1.0]
 def report(name, front):
     """Prints the size of the front, its pieces and its hypervolume."""
     ordered = front[np.argsort(front[:, 0], kind="stable")]
-    # along a piece, f₁ grows by at most about 0.13 between neighbors, and f₂ falls; across the
-    # gaps between pieces, f₁ grows by 0.25 to 0.92 and f₂ hardly changes
+    # along a piece, f₁ grows by at most about 0.13 between neighbors, and f₂ falls; the gaps
+    # between the pieces of the true front are 0.25 to 0.92 wide in f₁, with f₂ nearly unchanged
     pieces = 1 + int((np.diff(ordered[:, 0]) > 0.2).sum())
     volume = gx.indicators.hypervolume(front, REFERENCE)
     print(f"{name:<8} {len(front)} solutions in {pieces} pieces, hypervolume {volume:.4f}")
