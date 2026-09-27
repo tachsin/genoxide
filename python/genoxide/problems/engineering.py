@@ -74,10 +74,16 @@ class WeldedBeam(Problem):
     has h above b by 1e-6.
     :class:`WeldedBeamRagsdell` is the other form in the literature.
 
+    This form isn't :class:`WeldedBeamRagsdell`'s mechanics with other limits: its J is twice the
+    weld throat's, and its buckling load has E where Ragsdell and Phillips's has √(EG), 1.58 times
+    larger. It's the benchmark as published, so it stays as it is.
+
     Rao, S. S. (1996). Engineering Optimization. Wiley, third edition. Definition and bounds as
     restated in Coello Coello, C. A. (2000). Use of a self-adaptive penalty approach for
-    engineering optimization problems. Computers in Industry 41(2): 113-127 (eqs. 22-37); not yet
-    checked against the original (#168).
+    engineering optimization problems. Computers in Industry 41(2): 113-127 (eqs. 22-37), and the
+    same in Coello Coello and Mezura-Montes (2002, Advanced Engineering Informatics 16: 193-203,
+    eqs. 8-23), after Rao; Cagnina, Esquivel and Coello Coello (2008) attribute it to Ragsdell and
+    Phillips. Not yet checked against the original (#168).
     """
 
     _type: ClassVar[str] = "welded_beam"
@@ -94,7 +100,9 @@ class WeldedBeamRagsdell(Problem):
     Bounds h in [0.125, 10], l, t, b in [0.1, 10]; best known 2.3811341 at (0.24436895, 6.2186069,
     8.2914718, 0.24436895), feasible, found with genoxide's SHADE. Reklaitis, Ravindran and
     Ragsdell (1983) report 2.38116 at (0.2444, 6.2187, 8.2915, 0.2444); printed to 4 digits, that
-    solution evaluates to 2.38151.
+    solution evaluates to 2.38151. Ragsdell and Phillips's own solution, (0.2455, 6.1960, 8.2730,
+    0.2455) at 2.3859 as tabulated by Coello Coello and Mezura-Montes (2002), exceeds the shear
+    stress limit by 0.31 psi in this form.
 
     Ragsdell, K. M. and Phillips, D. T. (1976). Optimal design of a class of welded structures
     using geometric programming. Journal of Engineering for Industry 98(3): 1021-1025. Definition,
@@ -125,8 +133,14 @@ class PressureVessel(_Mixed):
 
     Sandgren, E. (1990). Nonlinear integer and discrete programming in mechanical design
     optimization. Journal of Mechanical Design 112(2): 223-229. Definition as restated in Coello
-    Coello (2000, Computers in Industry 41(2): 113-127, eqs. 17-21); not yet checked against the
-    original (#168).
+    Coello (2000, Computers in Industry 41(2): 113-127, eqs. 17-21), and the same in Coello Coello
+    and Mezura-Montes (2002) and Cagnina et al. (2008); not yet checked against the original
+    (#168). The originals' own designs suggest that the originals also had minimum thicknesses,
+    T_s >= 1.1 and T_h >= 0.6: Sandgren's (1.125, 0.625, 47.70, 117.70), at 8129.10, has both
+    walls thicker than g1 and g2 require, and Kannan and Kramer's (1.125, 0.625, 58.291, 43.690),
+    at 7198.04, has a head of 0.625 where 0.5625 meets g2 and costs about 378 less. With those
+    minimums the least cost is 7198.006; the minimum of 6059.714 is of the form without them.
+    Some restatements print 3.1611 for 3.1661, which gives 7197.729 there.
     """
 
     _type: ClassVar[str] = "pressure_vessel"
@@ -165,8 +179,12 @@ class SpeedReducer(_Mixed):
 
     Bounds [2.6, 3.6], [0.7, 0.8], [17, 28], [7.3, 8.3], [7.8, 8.3], [2.9, 3.9], [5.0, 5.5]; best
     known 2996.348165 at (3.5, 0.7, 17, 7.3, 7.8, 3.350214, 5.286683), from the restatement, whose
-    printed solution exceeds g5 by 6.0e-7 and g6 by 1.3e-7.
+    printed solution exceeds g5 by 6.0e-7 and g6 by 1.3e-7, and evaluates to 2996.347849. Some
+    formulations print 7.477 for 7.4777 and 1.5079 for 1.508, and some let x5 go down to 7.3,
+    where the minimum is 2994.471 (Lin, Tsai, Hu and Chang, 2013).
 
+    Golinski, J. (1970). Optimal synthesis problems solved by means of nonlinear programming and
+    random methods. Journal of Mechanisms 5(3): 287-309, where the problem is first posed; and
     Golinski, J. (1973). An adaptive optimization system applied to machine synthesis. Mechanism
     and Machine Theory 8(4): 419-436. Definition, bounds and best known solution as restated in
     Cagnina, L. C., Esquivel, S. C. and Coello Coello, C. A. (2008). Solving engineering
@@ -246,14 +264,20 @@ class CarSideImpact(Problem):
     velocities and rib deflections and on the structure's velocities.
 
     Bounds x₁, x₃, x₄ in [0.5, 1.5], x₂ in [0.45, 1.35], x₅ in [0.875, 2.625], x₆, x₇ in
-    [0.4, 1.2]; ``optimum`` is None: the restatement gives none.
+    [0.4, 1.2]; the restatement gives no optimum. Best known 23.585658 at (0.5, 1.225732, 0.5,
+    1.207111, 0.875, 0.884329, 0.4), found by SLSQP from 300 starting points and by genoxide's
+    SHADE. Not proven optimal.
 
     Gu, L., Yang, R. J., Tho, C. H., Makowski, M., Faruque, O. and Li, Y. (2001). Optimisation and
     robustness for crashworthiness of side impact. International Journal of Vehicle Design 26(4):
     348-360. Definition and bounds as restated in Jain, H. and Deb, K. (2014). An evolutionary
     many-objective optimization algorithm using reference-point based nondominated sorting
     approach, part II. IEEE Transactions on Evolutionary Computation 18(4): 602-622 (appendix);
-    not yet checked against the original (#168).
+    not yet checked against the original (#168). The abdomen load's 0.0092928 x₃ is as published
+    there and in the implementations that follow it; the eleven-variable form's 0.484 x₃ x₉, with
+    x₉ fixed at 0.192, would give 0.092928, ten times as much. Likewise the lower chest's
+    0.031296 x₃ is 0.163 x₃ times x₉'s 0.192, where the eleven-variable restatements have x₈'s
+    0.345. Neither constraint is active at the best known design, so neither changes it.
     """
 
     _type: ClassVar[str] = "car_side_impact"

@@ -367,6 +367,26 @@ fn review_fixes() {
     );
     let error = check(&directory, &ga).unwrap_err();
     assert!(error.contains("unknown field `size`"), "{error}");
+    // and each operator's error says which operator it is
+    assert!(error.contains("`algorithm.select`"), "{error}");
+    let missing = ga.replace(
+        "select = { type = \"roulette\", size = 3 }",
+        "select = { type = \"tournament\" }",
+    );
+    let error = check(&directory, &missing).unwrap_err();
+    assert!(
+        error.contains("`algorithm.select`: missing field `size`"),
+        "{error}"
+    );
+    let error = check(
+        &directory,
+        &ga.replace(
+            "mutate = { type = \"polynomial\", rate = 0.1, eta = 20.0 }",
+            "mutate = { type = \"polynomial\", rate = 0.1 }",
+        ),
+    )
+    .unwrap_err();
+    assert!(error.contains("`algorithm.mutate`"), "{error}");
     let error = check(
         &directory,
         &ga.replace(

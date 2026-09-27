@@ -251,9 +251,7 @@ def test_every_constrained_problem_describes_itself(cls):
     assert problem.constraint_count > 0
     assert problem.constraints(bounds.mean(axis=1)).shape == (problem.constraint_count,)
     optimum = problem.optimum
-    if optimum is None:
-        assert cls is gx.problems.engineering.CarSideImpact
-        return
+    assert optimum is not None
     for solution in optimum.solutions:
         assert np.all(bounds[:, 0] <= solution) and np.all(solution <= bounds[:, 1])
         value, violation = problem(solution)

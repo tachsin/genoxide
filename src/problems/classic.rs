@@ -78,8 +78,10 @@ scalable!(
     ///
     /// De Jong, K. A. (1975). *An Analysis of the Behavior of a Class of Genetic Adaptive
     /// Systems.* PhD thesis, University of Michigan. Definition, bounds and dimensions as restated
-    /// in Yao, Liu and Lin (1999, f1); not yet checked against the original
-    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    /// in Yao, Liu and Lin (1999, f1); De Jong's F1 is the same function in 3 dimensions on
+    /// [−5.12, 5.12], as restated by Pohlheim (GEATbx) and Laguna and Martí (2005), and Schwefel
+    /// (1977, problem 1.1) states it in any dimension, unbounded. Not yet checked against De Jong's
+    /// thesis ([#168](https://github.com/tachsin/genoxide/issues/168)).
     Sphere,
     "Sphere",
     1,
@@ -93,9 +95,10 @@ scalable!(
     ///
     /// Bounds [−5.12, 5.12]ⁿ; minimum 0 at the origin; 30 dimensions by default.
     ///
-    /// Its origin is unknown: definition and bounds as restated in Molga and Smutnicki (2005,
-    /// section 2.2); not yet checked against an original
-    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    /// Its origin is unknown. The earliest source found is Pohlheim's GEATbx documentation (function
+    /// 1a, "the weighted sphere model"), which Molga and Smutnicki (2005, section 2.2) restate with
+    /// the same bounds; it isn't among Schwefel's (1977) problems. Not yet checked against an
+    /// original ([#168](https://github.com/tachsin/genoxide/issues/168)).
     AxisParallelEllipsoid,
     "AxisParallelEllipsoid",
     1,
@@ -107,9 +110,10 @@ scalable!(
     ///
     /// Bounds [−100, 100]ⁿ; minimum 0 at the origin; 30 dimensions by default.
     ///
-    /// Schwefel, H.-P. (1981). *Numerical Optimization of Computer Models.* Wiley, problem 1.2.
-    /// Definition and bounds as restated in Yao, Liu and Lin (1999, f3); not yet checked against
-    /// the original ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    /// Schwefel, H.-P. (1981). *Numerical Optimization of Computer Models.* Wiley, problem 1.2, the
+    /// translation of *Numerische Optimierung von Computer-Modellen* (1977, Birkhäuser, p. 319),
+    /// which states it in any dimension and unbounded, with its minimum 0 at the origin. The bounds
+    /// are Yao, Liu and Lin's (1999, f3).
     Schwefel1_2,
     "Schwefel1_2",
     1,
@@ -122,12 +126,14 @@ scalable!(
     ///
     /// Bounds [−5.12, 5.12]ⁿ; minimum 0 at the origin; 30 dimensions by default.
     ///
-    /// Rastrigin, L. A. (1974). *Systems of Extremal Control.* Nauka, Moscow (two dimensions);
-    /// generalized to n dimensions by Mühlenbein, H., Schomisch, M. and Born, J. (1991). The
-    /// parallel genetic algorithm as function optimizer. *Parallel Computing* 17(6-7): 619-632.
-    /// doi:10.1016/S0167-8191(05)80052-3. Definition and bounds as restated in Yao, Liu and Lin
-    /// (1999, f9); not yet checked against the original
-    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    /// Rastrigin, L. A. (1974). *Systems of Extremal Control.* Nauka, Moscow, whose function is a
+    /// related one in two dimensions with other constants, as Törn and Žilinskas (1989) restate
+    /// it. The n-dimensional form is credited to Rudolph (1990), and was spread by Hoffmeister and
+    /// Bäck (1991) and Mühlenbein, H., Schomisch, M. and Born, J. (1991). The parallel genetic
+    /// algorithm as function optimizer. *Parallel Computing* 17(6-7): 619-632.
+    /// doi:10.1016/S0167-8191(05)80052-3, whose F6 this is (as their 1993 paper restates it, with
+    /// A = 10). Definition and bounds as in Yao, Liu and Lin (1999, f9); not yet checked against
+    /// Rastrigin's book ([#168](https://github.com/tachsin/genoxide/issues/168)).
     Rastrigin,
     "Rastrigin",
     1,
@@ -174,9 +180,12 @@ scalable!(
     /// Bounds [−600, 600]ⁿ; minimum 0 at the origin; 30 dimensions by default.
     ///
     /// Griewank, A. O. (1981). Generalized descent for global optimization. *Journal of
-    /// Optimization Theory and Applications* 34(1): 11-39. The divisor 4000 and the bounds are as
-    /// restated in Yao, Liu and Lin (1999, f11); the original's divisor and domain are not yet
-    /// checked ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    /// Optimization Theory and Applications* 34(1): 11-39, whose function, as Bosse and Bücker
+    /// (2024) restate it, is two-dimensional with the divisor 200:
+    /// `1 + (x₁² + x₂²) / 200 − cos x₁ cos(x₂ / √2)`. The n-dimensional form with the divisor 4000
+    /// and the bounds are those of Mühlenbein, Schomisch and Born (1991, F8) and Yao, Liu and Lin
+    /// (1999, f11). Not yet checked against the original
+    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
     Griewank,
     "Griewank",
     1,
@@ -190,11 +199,13 @@ scalable!(
     /// Bounds [−500, 500]ⁿ; minimum −418.9828872724337 n at xᵢ = 420.96874635998205, both derived
     /// from the formula (each term is minimized alone); 30 dimensions by default.
     ///
-    /// Schwefel, H.-P. (1981). *Numerical Optimization of Computer Models.* Wiley, problem 2.26.
-    /// Definition and bounds as restated in Yao, Liu and Lin (1999, f8), whose minimum is −12569.5
-    /// for n = 30; not yet checked against the original
-    /// ([#168](https://github.com/tachsin/genoxide/issues/168)). This is the form without an
-    /// offset: variants add 418.9829 n (a minimum near 0) or divide by n.
+    /// Schwefel, H.-P. (1981). *Numerical Optimization of Computer Models.* Wiley, problem 2.26, the
+    /// translation of *Numerische Optimierung von Computer-Modellen* (1977, Birkhäuser, p. 335),
+    /// where it has one variable, `−x₁ sin √|x₁|`, no bounds and so no finite minimum (its problem
+    /// 2.44 bounds it to [−300, 300]). The sum over n variables on [−500, 500] is Mühlenbein,
+    /// Schomisch and Born's (1991, F7), restated in Yao, Liu and Lin (1999, f8), whose minimum is
+    /// −12569.5 for n = 30. This is the form without an offset: variants add 418.9829 n (a
+    /// minimum near 0) or divide by n.
     Schwefel2_26,
     "Schwefel2_26",
     1,
@@ -209,10 +220,13 @@ scalable!(
     ///
     /// Usually credited to Levy, A. V. and Montalvo, A. (1985). The tunneling algorithm for the
     /// global minimization of functions. *SIAM Journal on Scientific and Statistical Computing*
-    /// 6(1): 15-29, but several functions carry Levy's name. Definition and bounds as restated
-    /// in Laguna and Martí (2005, function 38), who print xₙ instead of wₙ in the last sine; this
-    /// uses wₙ, like the other terms. Not yet checked against the original
-    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    /// 6(1): 15-29, but several functions carry Levy's name. This is the form of Surjanovic and
+    /// Bingham's Virtual Library of Simulation Experiments, with `sin²(πwᵢ + 1)` and bounds
+    /// [−10, 10]; Laguna and Martí (2005, function 38) print xₙ instead of wₙ in the last sine
+    /// (this uses wₙ, like the other terms), and the Levy-Montalvo functions as restated in Yao,
+    /// Liu and Lin (1999, f12 and f13) have `sin²(πyᵢ₊₁)` instead, of which `πwᵢ + 1` may be a
+    /// misreading. The minimum is 0 at (1, …, 1) in every form. Not yet checked against the
+    /// original ([#168](https://github.com/tachsin/genoxide/issues/168)).
     Levy,
     "Levy",
     1,
@@ -928,7 +942,10 @@ impl Problem for Branin {
 /// [30 + (2x₁ − 3x₂)² (18 − 32x₁ + 12x₁² + 48x₂ − 36x₁x₂ + 27x₂²)]`.
 ///
 /// Bounds [−2, 2]²; minimum 3 at (0, −1). The paper also lists the local minima (1.2, 0.8) with
-/// 840, (1.8, 0.2) with 84 and (−0.6, −0.4) with 30.
+/// 840, (1.8, 0.2) with 84 and (−0.6, −0.4) with 30, and found (0, −1) numerically. It's the
+/// global minimum: with s = x₁ + x₂, the first factor is `1 + (s + 1)² (3s² − 14s + 19)` ≥ 1,
+/// and with t = 2x₁ − 3x₂, the second is `30 + t² (3t² − 16t + 18)` ≥ 3; both bounds are met only
+/// at s = −1 and t = 3, that is at (0, −1).
 ///
 /// Goldstein, A. A. and Price, J. F. (1971). On descent from local minima. *Mathematics of
 /// Computation* 25(115): 569-574. The paper gives no bounds: these are Dixon and Szegö's (1978),
@@ -985,8 +1002,11 @@ impl Problem for GoldsteinPrice {
 /// global minima among six.
 ///
 /// Bounds [−5, 5]²; minimum −1.0316284534898774 at ±(0.08984201310031806,
-/// −0.7126564030207396): stationary points computed to 40 digits by Newton's method and rounded,
-/// which agree with the 8 digits Yao, Liu and Lin give.
+/// −0.7126564030207396): stationary points computed to 40 digits by Newton's method and rounded.
+/// It's the global minimum: the function has 15 real stationary points (with x₁ = 8x₂ − 16x₂³,
+/// a polynomial of degree 15 in x₂), this pair the lowest, the next −0.2154638 at ±(1.70361,
+/// −0.79608), and it grows without bound. Yao, Liu and Lin's value agrees to 8 digits; their
+/// x₁, 0.08983, is 0.089842 to 5.
 ///
 /// Dixon, L. C. W. and Szegö, G. P. (eds.) (1978). *Towards Global Optimisation 2.*
 /// North-Holland. Definition and bounds as restated in Yao, Liu and Lin (1999, f16), whose
