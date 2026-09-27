@@ -82,7 +82,8 @@ export default function Front3dPlot({ trace, frame, dark, reduced }) {
           type="button"
           className="btn btn-ghost btn-xs gap-1 font-normal text-base-content/70"
           onClick={() => setView(VIEW)}
-          disabled={view.yaw === VIEW.yaw && view.pitch === VIEW.pitch}
+          // aria-disabled, not disabled: clicking it would otherwise drop the focus to the page
+          aria-disabled={view.yaw === VIEW.yaw && view.pitch === VIEW.pitch}
         >
           <RotateCcw size={12} aria-hidden />
           Reset view

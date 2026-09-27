@@ -72,7 +72,7 @@ export default async function BenchmarksPage() {
         <div className="proj-lead mt-5 space-y-3 text-lg">
           <p>
             genoxide and its Python package run the same problems as 15 other evolutionary computation libraries in
-            Rust, C++, Python, Java and Julia, with the same fitness functions, evaluation budgets and 60-second cap.
+            Rust, C++, Python, Java and Julia, with the same fitness functions, evaluation budgets and time caps (60 seconds to a target, 600 for a front).
           </p>
           <p>
             Matched scenarios run the same algorithm in every library to measure framework cost; idiomatic scenarios

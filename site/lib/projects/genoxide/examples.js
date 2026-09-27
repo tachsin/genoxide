@@ -142,23 +142,25 @@ function exampleDirs(files) {
  * Every example, sorted by `order` then title.
  * `ok` is false when GitHub couldn't be reached: pages then show a link to
  * the repository instead of the list.
- * @returns {Promise<{ ok: boolean, examples: ExampleSummary[] }>}
+ * A README that can't be fetched makes the whole list unavailable (`ok` false),
+ * as a failed file listing does: a page built without it would have a made-up
+ * title, category and order, and be indexed with them.
+ *
+ * @returns {Promise<{ ok: boolean, examples: ExampleSummary[], readmes: Map<string, string> }>}
  */
 export const getExamples = cache(async () => {
   const files = await getRepoFiles();
-  if (!files) return { ok: false, examples: [] };
+  if (!files) return { ok: false, examples: [], readmes: new Map() };
 
   const dirs = exampleDirs(files);
-  const examples = await Promise.all(
-    dirs.map(async (dir) => {
-      const readme = await getRepoFile(`${EXAMPLES_DIR}/${dir}/README.md`);
-      const { data } = parseFrontMatter(readme ?? "");
-      return toSummary(dir, data, files);
-    }),
-  );
+  const readmes = await Promise.all(dirs.map((dir) => getRepoFile(`${EXAMPLES_DIR}/${dir}/README.md`)));
+  if (readmes.some((readme) => readme === null || readme === undefined)) {
+    return { ok: false, examples: [], readmes: new Map() };
+  }
+  const examples = dirs.map((dir, i) => toSummary(dir, parseFrontMatter(readmes[i]).data, files));
 
   examples.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-  return { ok: true, examples };
+  return { ok: true, examples, readmes: new Map(dirs.map((dir, i) => [dir, readmes[i]])) };
 });
 
 /** Categories in first-appearance order (the examples are already sorted). */
@@ -205,23 +207,27 @@ function stripLeadingTitle(body) {
  * @param {string} slug
  */
 export const getExample = cache(async (slug) => {
-  const { ok, examples } = await getExamples();
+  const { ok, examples, readmes } = await getExamples();
   if (!ok) return null;
   const index = examples.findIndex((e) => e.slug === slug);
   if (index === -1) return null;
   const example = examples[index];
 
-  const [readme, rust, python, output] = await Promise.all([
-    getRepoFile(`${EXAMPLES_DIR}/${example.dir}/README.md`),
+  // the README as getExamples read it: fetched once, so it can't fail here after succeeding there
+  const readme = readmes.get(example.dir);
+  const [rust, python, output] = await Promise.all([
     example.files.rust && example.languages.includes("rust") ? getRepoFile(example.files.rust) : null,
     example.files.python && example.languages.includes("python") ? getRepoFile(example.files.python) : null,
     example.files.output ? getRepoFile(example.files.output) : null,
   ]);
 
   const slugByDir = new Map(examples.map((e) => [e.dir, e.slug]));
+  const front = parseFrontMatter(readme ?? "");
   return {
     ...example,
-    body: stripLeadingTitle(parseFrontMatter(readme ?? "").body),
+    body: stripLeadingTitle(front.body),
+    // what the player plays, when it isn't the run of the code below (front matter trace_note)
+    traceNote: typeof front.data.trace_note === "string" ? front.data.trace_note : null,
     resolveUrl: makeUrlResolver(example.dir, slugByDir),
     code: { rust, python },
     output: output?.trim() ? output.replace(/\s+$/, "") : null,
