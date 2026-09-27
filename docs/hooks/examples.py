@@ -190,8 +190,22 @@ def on_config(config):
     return config
 
 
+# the brand files the site uses, from assets/brand/ (the logo and favicon in mkdocs.yml, the banner
+# on the home page)
+BRAND = ["logo.svg", "logo-32.png", "banner.svg"]
+
+
 def on_files(files, config):
-    """The generated pages."""
+    """The generated pages, and the brand files."""
+    for name in BRAND:
+        files.append(
+            File(
+                f"assets/brand/{name}",
+                src_dir=str(ROOT),
+                dest_dir=config["site_dir"],
+                use_directory_urls=config["use_directory_urls"],
+            )
+        )
     found = examples()
     files.append(File.generated(config, "examples/index.md", content=index(found)))
     for example in found:
