@@ -29,6 +29,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
   - bit-flip, uniform, Gaussian, polynomial, self-adaptive Gaussian
   - permutations: swap, inversion (2-opt), insertion, scramble
 - **Schemes:** generational with elitism, steady-state, (μ+λ), (μ,λ), and memetic (Lamarckian local search on the best parents).
+- **Parameter control:** a GA's rates and operators can be changed between generations, e.g. to anneal the mutation step or raise it when the search stagnates.
 
 ## Other single-objective methods
 

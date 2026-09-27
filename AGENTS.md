@@ -65,6 +65,8 @@ Any selection fits any representation; usually `Tournament` of size 2 to 5.
 
 `.memetic`: each of the best `parents` takes the best of `neighbors` mutated neighbors if not worse (Lamarckian). `.build()?` returns `Error::MissingSetting` or `Error::InvalidSetting`, naming the setting.
 
+During a run (parameter control, e.g. an annealed mutation step): `ga.set_crossover_rate(p)?`, `ga.set_mutation_rate(p)?` (validated as in the builder), and `ga.select_mut()`, `ga.crossover_mut()`, `ga.mutate_mut()` to replace an operator, e.g. `*ga.mutate_mut() = GaussianMutation::per_gene(0.5, sigma)?`. A change applies from the next generation's breeding. The `Engine` has no hook for it yet: drive the run with ask / tell (below).
+
 ### Operators
 
 | Constructor | Valid |
