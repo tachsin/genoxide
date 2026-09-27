@@ -85,7 +85,7 @@ const SHEAR: f64 = 12e6;
 /// Bounds h, b ∈ [0.1, 2], l, t ∈ [0.1, 10]; best known 1.724852 at (0.205730, 3.470489,
 /// 9.036624, 0.205729), from Cagnina, Esquivel and Coello Coello (2008, *Informatica* 32:
 /// 319-326, appendix), whose solution, printed to 6 digits, exceeds the bending limit by 0.09 psi
-/// and the buckling limit by 0.06 lb. Not proven optimal. [`WeldedBeamRagsdell`] is the other
+/// and the buckling limit by 0.06 lb, and has h above b by 1e-6. Not proven optimal. [`WeldedBeamRagsdell`] is the other
 /// form in the literature.
 ///
 /// [`constraints`](Problem::constraints) gives g₁…g₇ in this order, as `g(x) ≤ 0`.
@@ -166,10 +166,11 @@ impl Problem for WeldedBeam {
 /// in, with `τ = √(τ'² + τ''² + l τ'τ'' / √(0.25 (l² + (h + t)²)))`, `τ' = 6000 / (√2 h l)` and
 /// `τ'' = 6000 (14 + 0.5 l) √(0.25 (l² + (h + t)²)) / (2 · 0.707 h l (l²/12 + 0.25 (h + t)²))`.
 ///
-/// Bounds h ∈ [0.125, 10], l, t, b ∈ [0.1, 10]; best known 2.38116 at (0.2444, 6.2187, 8.2915,
-/// 0.2444), as reported by Reklaitis, Ravindran and Ragsdell (1983); printed to 4 digits, that
-/// solution evaluates to 2.38151. Not proven optimal. Deb (1991) reports 2.43 at (0.2489, 6.1730,
-/// 8.1789, 0.2533).
+/// Bounds h ∈ [0.125, 10], l, t, b ∈ [0.1, 10]; best known 2.3811341 at (0.24436895, 6.2186069,
+/// 8.2914718, 0.24436895), feasible, found with genoxide's SHADE and checked by several runs,
+/// which all end within 3e-9 of it. Not proven optimal. Reklaitis, Ravindran and Ragsdell (1983)
+/// report 2.38116 at (0.2444, 6.2187, 8.2915, 0.2444); printed to 4 digits, that solution
+/// evaluates to 2.38151. Deb (1991) reports 2.43 at (0.2489, 6.1730, 8.1789, 0.2533).
 ///
 /// [`constraints`](Problem::constraints) gives the five constraints in this order, as `g(x) ≤ 0`.
 ///
@@ -225,8 +226,13 @@ impl Problem for WeldedBeamRagsdell {
 
     fn optimum(&self) -> Option<Optimum<Reals>> {
         Some(Optimum::best_known(
-            2.381_16,
-            vec![reals(&[0.2444, 6.2187, 8.2915, 0.2444])],
+            2.381_134_118_152_728_4,
+            vec![reals(&[
+                0.244_368_953_265_364_54,
+                6.218_606_921_256_014,
+                8.291_471_775_474_83,
+                0.244_368_953_453_794_95,
+            ])],
         ))
     }
 
@@ -265,7 +271,8 @@ const VOLUME: f64 = 1_296_000.0;
 /// 6059.714335048436 at (0.8125, 0.4375, 42.0984455958549, 176.6365958424394), proven global by
 /// Yang, Huyck, Karamanoglu and Khan (2013, *International Journal of Bio-Inspired Computation*
 /// 5(6): 329-335, eqs. 3 and 21): R is at the first constraint's limit and the volume is exactly
-/// 1,296,000, so evaluating the rounded solution gives a violation of the order of 1e-9.
+/// 1,296,000, so the solution's length is a few units in the last place longer than printed, to be
+/// feasible despite rounding.
 ///
 /// [`constraints`](Problem::constraints) gives g₁…g₄ of the design in this order, as `g(x) ≤ 0`.
 ///
@@ -329,12 +336,12 @@ impl Problem for PressureVessel {
     fn optimum(&self) -> Option<Optimum<Reals>> {
         Some(Optimum::proven(
             6_059.714_335_048_436,
-            vec![reals(&[
-                0.8125,
-                0.4375,
-                42.098_445_595_854_9,
-                176.636_595_842_439_4,
-            ])],
+            // R is at the first constraint's limit, and a longer vessel holds more
+            vec![feasible_by_growing(
+                reals(&[0.8125, 0.4375, 42.098_445_595_854_9, 176.636_595_842_439_4]),
+                &[3],
+                |x| self.values(x),
+            )],
         ))
     }
 
@@ -440,7 +447,8 @@ impl Problem for TensionCompressionSpring {
 ///
 /// Bounds x₁ ∈ [2.6, 3.6], x₂ ∈ [0.7, 0.8], x₃ ∈ [17, 28], x₄ ∈ [7.3, 8.3], x₅ ∈ [7.8, 8.3],
 /// x₆ ∈ [2.9, 3.9], x₇ ∈ [5.0, 5.5]; best known 2996.348165 at (3.5, 0.7, 17, 7.3, 7.8, 3.350214,
-/// 5.286683), from the restatement. Not proven optimal. The literature's formulations differ
+/// 5.286683), from the restatement, whose solution, printed to 6 digits, exceeds g₅ by 6.0e-7 and
+/// g₆ by 1.3e-7. Not proven optimal. The literature's formulations differ
 /// (Ray, 2003, AIAA Journal 41(3): 556-558): some print 7.477 for 7.4777, which doesn't give
 /// this value, and some let x₅ go down to 7.3.
 ///
@@ -617,6 +625,35 @@ impl Problem for GearTrain {
 // ---- three-bar truss -----------------------------------------------------------------------------
 
 // the length of the bars (cm), the load and the allowed stress (kN/cm²)
+// A solution with an active constraint can evaluate a rounding error above it (1e-16, or 1e-9 on
+// the pressure vessel's volume of 1,296,000) and so be infeasible, beaten under Deb's rules by any
+// feasible point. When the constraints only loosen as the genes `grow` get larger, this scales
+// them up by a unit in the last place at a time until no constraint is above 0; the value
+// changes by as little.
+fn feasible_by_growing<const N: usize>(
+    mut solution: Reals,
+    grow: &[usize],
+    constraints: impl Fn(&Reals) -> [f64; N],
+) -> Reals {
+    for _ in 0..256 {
+        if constraints(&solution).iter().all(|g| *g <= 0.0) {
+            break;
+        }
+        solution = solution
+            .iter()
+            .enumerate()
+            .map(|(i, x)| {
+                if grow.contains(&i) {
+                    x * (1.0 + f64::EPSILON)
+                } else {
+                    *x
+                }
+            })
+            .collect();
+    }
+    solution
+}
+
 const TRUSS_LENGTH: f64 = 100.0;
 const TRUSS_LOAD: f64 = 2.0;
 const TRUSS_STRESS: f64 = 2.0;
@@ -678,9 +715,11 @@ impl Problem for ThreeBarTruss {
 
     fn optimum(&self) -> Option<Optimum<Reals>> {
         let sqrt_3 = 3f64.sqrt();
+        let solution = reals(&[(3.0 + sqrt_3) / 6.0, 1.0 / 6f64.sqrt()]);
         Some(Optimum::proven(
             TRUSS_LENGTH * (SQRT_2 + 6f64.sqrt() / 2.0),
-            vec![reals(&[(3.0 + sqrt_3) / 6.0, 1.0 / 6f64.sqrt()])],
+            // larger cross-sections only lower the stresses
+            vec![feasible_by_growing(solution, &[0, 1], |x| self.values(x))],
         ))
     }
 
@@ -752,7 +791,13 @@ impl Problem for CantileverBeam {
     fn optimum(&self) -> Option<Optimum<Reals>> {
         let s: f64 = CANTILEVER.iter().map(|a| a.powf(0.25)).sum();
         let solution = CANTILEVER.iter().map(|a| s.cbrt() * a.powf(0.25)).collect();
-        Some(Optimum::proven(0.0624 * s.powf(4.0 / 3.0), vec![solution]))
+        Some(Optimum::proven(
+            0.0624 * s.powf(4.0 / 3.0),
+            // wider segments only lower the deflection
+            vec![feasible_by_growing(solution, &[0, 1, 2, 3, 4], |x| {
+                self.values(x)
+            })],
+        ))
     }
 
     fn reference(&self) -> &'static str {

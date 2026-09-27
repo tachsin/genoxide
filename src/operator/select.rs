@@ -329,7 +329,10 @@ impl Select for Rank {
     }
 }
 
-/// Truncation selection: uniformly random from the best `fraction` of the population.
+/// Truncation selection: uniformly random from the best `fraction` of the population, its best
+/// ⌈fraction × size⌉ individuals (at least 1). A product within a few units of the last place of
+/// a whole number counts as that number: 0.07 of 100 is 7, although `0.07 * 100.0` is
+/// 7.000000000000001 in floating point.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Truncation {
@@ -366,9 +369,22 @@ impl Select for Truncation {
         order.sort_by(|&a, &b| {
             objective.compare(fitness_of(population, b), fitness_of(population, a))
         });
-        let top = ((self.fraction * n as f64).ceil() as usize).clamp(1, n);
+        let top = truncation_size(self.fraction, n);
         (0..count).map(|_| order[rng.below(top)]).collect()
     }
+}
+
+// ⌈fraction × n⌉, from 1 to n, without the floating-point error of the product: 0.07 × 100 is
+// 7.000000000000001, whose ceiling would add a whole individual
+fn truncation_size(fraction: f64, n: usize) -> usize {
+    let product = fraction * n as f64;
+    let nearest = product.round();
+    let size = if (product - nearest).abs() <= 4.0 * f64::EPSILON * nearest {
+        nearest
+    } else {
+        product.ceil()
+    };
+    (size as usize).clamp(1, n)
 }
 
 /// Uniformly random selection, without selection pressure.
@@ -647,6 +663,33 @@ mod tests {
         );
         assert_eq!((counts[0], counts[2]), (0, 0));
         assert!((9_500..10_500).contains(&counts[1]), "{counts:?}");
+    }
+
+    #[test]
+    fn truncation_size_is_the_ceiling_without_floating_point_error() {
+        // fraction × size one ulp above a whole number, e.g. 0.07 * 100.0 == 7.000000000000001
+        for (fraction, n, size) in [
+            (0.07, 100, 7),
+            (0.14, 50, 7),
+            (0.28, 25, 7),
+            (0.55, 100, 55),
+            (0.17, 100, 17),
+            (0.81, 100, 81),
+            (0.1, 30, 3),
+            (1.0, 7, 7),
+        ] {
+            assert_eq!(truncation_size(fraction, n), size, "{fraction} of {n}");
+        }
+        // a fraction that isn't a whole number of individuals still rounds up, to at least 1
+        assert_eq!(truncation_size(0.5, 5), 3);
+        assert_eq!(truncation_size(0.3, 10), 3);
+        assert_eq!(truncation_size(0.31, 10), 4);
+        assert_eq!(truncation_size(0.001, 10), 1);
+        // no fraction from 0.01 to 1 in steps of 0.01 selects more than its share of 100
+        for percent in 1..=100 {
+            let fraction = percent as f64 / 100.0;
+            assert_eq!(truncation_size(fraction, 100), percent, "{fraction}");
+        }
     }
 
     fn any_scores() -> impl Strategy<Value = Vec<Option<f64>>> {
