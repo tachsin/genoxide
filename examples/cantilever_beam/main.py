@@ -34,5 +34,5 @@ for i, (width, exact) in enumerate(zip(x.tolist(), optimum.solutions[0])):
     print(f"{i + 1:>7}  {width:.6f}  {exact:.6f}")
 # the constraint is 61/x1³ + 37/x2³ + 19/x3³ + 7/x4³ + 1/x5³ ≤ 1, as g = that sum − 1 ≤ 0
 deflection = 1.0 + problem.constraints(x).tolist()[0]
-print(f"61/x1³ + 37/x2³ + 19/x3³ + 7/x4³ + 1/x5³ = {deflection:.6f} (at most 1)")
+print(f"61/x1^3 + 37/x2^3 + 19/x3^3 + 7/x4^3 + 1/x5^3 = {deflection:.6f} (at most 1)")
 trace.write()

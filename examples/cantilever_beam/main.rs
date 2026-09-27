@@ -50,7 +50,7 @@ fn main() -> Result<()> {
     }
     // the constraint is 61/x1³ + 37/x2³ + 19/x3³ + 7/x4³ + 1/x5³ ≤ 1, as g = that sum − 1 ≤ 0
     let deflection = 1.0 + problem.constraints(x).inequalities()[0];
-    println!("61/x1³ + 37/x2³ + 19/x3³ + 7/x4³ + 1/x5³ = {deflection:.6} (at most 1)");
+    println!("61/x1^3 + 37/x2^3 + 19/x3^3 + 7/x4^3 + 1/x5^3 = {deflection:.6} (at most 1)");
     trace.write();
     Ok(())
 }
