@@ -724,6 +724,41 @@ def test_version():
 # --- settings: NaN, infinity, wrong types and numbers that aren't whole --------------------------
 
 
+def test_no_crossover_needs_a_mutation_rate_above_zero():
+    # with neither crossover nor mutation, every child is a copy of its parent and the run stalls
+    total = lambda x: float(x.sum())
+    for genome, mutation, fitness in [
+        (gx.Binary(8), gx.BitFlip(count=1), total),
+        (gx.Integer((0, 9), length=4), gx.UniformMutation(count=1), total),
+        (gx.Real((0.0, 1.0), length=4), gx.PolynomialMutation(rate=0.5), total),
+        (gx.Permutation(5), gx.SwapMutation(), lambda x: float(x[0])),
+    ]:
+        ga = gx.Ga(
+            genome,
+            population_size=6,
+            select=gx.Tournament(2),
+            crossover=gx.NoCrossover(),
+            mutation=mutation,
+            mutation_rate=0.0,
+            seed=1,
+        )
+        with pytest.raises(ValueError, match="mutation_rate"):
+            ga.run(fitness, generations=5)
+    nsga2 = gx.Nsga2(
+        gx.Binary(8),
+        objectives=["maximize"] * 2,
+        population_size=6,
+        crossover=gx.NoCrossover(),
+        mutation=gx.BitFlip(count=1),
+        mutation_rate=0.0,
+    )
+    with pytest.raises(ValueError, match="mutation_rate"):
+        nsga2.run(lambda x: [float(x.sum()), float(x[0])], generations=5)
+    # a crossover that recombines may run without mutation
+    result = onemax_ga(mutation_rate=0.0).run(total, generations=5)
+    assert result.generations == 5
+
+
 def test_an_infinite_time_limit_is_no_limit():
     result = onemax_ga().run(lambda bits: 0.0, generations=3, time=math.inf)
     assert result.stop_reason == "generations"
