@@ -29,7 +29,7 @@ const TITLES = {
   tour: "The best tour",
   gantt: "The best schedule",
   contour: "The population on the function",
-  "multi-curve": "Error per function",
+  "multi-curve": "Error per problem",
   design: "The best design",
   "front-2d": "The front",
   "front-3d": "The front",
