@@ -259,6 +259,84 @@ impl<R: Representation, S, C, M> Ga<R, S, C, M> {
     pub fn memetic(&self) -> Option<(usize, usize)> {
         self.memetic
     }
+
+    /// Mutable access to the selection operator, to change it during a run (parameter control).
+    /// A change applies from the next generation's breeding, the next
+    /// [`ask`](Algorithm::ask) after a [`tell`](Algorithm::tell).
+    pub fn select_mut(&mut self) -> &mut S {
+        &mut self.select
+    }
+
+    /// Mutable access to the crossover operator, to change it during a run, e.g. to replace it
+    /// with one built by its own validating constructor. As [`select_mut`](Ga::select_mut).
+    pub fn crossover_mut(&mut self) -> &mut C {
+        &mut self.crossover
+    }
+
+    /// Mutable access to the mutation operator, to change it during a run, e.g. a Gaussian step
+    /// annealed over the run. As [`select_mut`](Ga::select_mut).
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let mut ga = Ga::builder(Real::uniform(4, -5.0..=5.0)?)
+    ///     .population_size(20)
+    ///     .select(Tournament::new(2)?)
+    ///     .crossover(UniformCrossover::new())
+    ///     .mutate(GaussianMutation::per_gene(0.5, 0.2)?)
+    ///     .minimize()
+    ///     .seed(1)
+    ///     .build()?;
+    /// let sphere = |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>();
+    /// for generation in 0..50 {
+    ///     let fitness: Vec<Fitness> = ga.ask().iter().map(|x| Fitness::new(sphere(x))).collect();
+    ///     ga.tell(&fitness)?;
+    ///     // the step shrinks from 20% to 1% of each gene's range
+    ///     let sigma = 0.2 * (0.01_f64 / 0.2).powf(f64::from(generation) / 49.0);
+    ///     *ga.mutate_mut() = GaussianMutation::per_gene(0.5, sigma)?;
+    /// }
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    pub fn mutate_mut(&mut self) -> &mut M {
+        &mut self.mutate
+    }
+}
+
+impl<R, S, C, M> Ga<R, S, C, M>
+where
+    R: Representation,
+    C: Crossover<R>,
+{
+    /// Changes the probability that a pair of parents is recombined, during a run. As
+    /// [`select_mut`](Ga::select_mut): it applies from the next generation's breeding.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] as for [`GaBuilder::crossover_rate`]: a rate outside [0, 1], or
+    /// 0 while the mutation rate is 0 too. The rate doesn't change on errors.
+    pub fn set_crossover_rate(&mut self, rate: f64) -> Result<()> {
+        let (crossover_rate, _) =
+            check_rates(rate, self.mutation_rate, self.crossover.recombines())?;
+        self.crossover_rate = crossover_rate;
+        self.crossover_chance = Chance::new(crossover_rate);
+        Ok(())
+    }
+
+    /// Changes the probability that a child is mutated, during a run. As
+    /// [`select_mut`](Ga::select_mut): it applies from the next generation's breeding.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] as for [`GaBuilder::mutation_rate`]: a rate outside [0, 1], or
+    /// 0 while every child would otherwise be a copy of a parent. The rate doesn't change on
+    /// errors.
+    pub fn set_mutation_rate(&mut self, rate: f64) -> Result<()> {
+        let (_, mutation_rate) =
+            check_rates(self.crossover_rate, rate, self.crossover.recombines())?;
+        self.mutation_rate = mutation_rate;
+        self.mutation_chance = Chance::new(mutation_rate);
+        Ok(())
+    }
 }
 
 impl<R, S, C, M> Ga<R, S, C, M>
@@ -1023,6 +1101,84 @@ mod tests {
         ] {
             assert!(builder(4).scheme(scheme).build().is_ok(), "{scheme:?}");
         }
+    }
+
+    #[test]
+    fn settings_changed_during_a_run_are_validated() {
+        let mut ga = builder(8).build().unwrap();
+        step(&mut ga);
+        assert!(matches!(
+            ga.set_crossover_rate(1.5),
+            Err(Error::InvalidSetting {
+                setting: "crossover_rate",
+                ..
+            })
+        ));
+        assert!(matches!(
+            ga.set_mutation_rate(-0.1),
+            Err(Error::InvalidSetting {
+                setting: "mutation_rate",
+                ..
+            })
+        ));
+        ga.set_crossover_rate(0.0).unwrap();
+        // both 0: every child would be a copy of a parent
+        assert!(matches!(
+            ga.set_mutation_rate(0.0),
+            Err(Error::InvalidSetting {
+                setting: "mutation_rate",
+                ..
+            })
+        ));
+        // unchanged on errors
+        assert_eq!(ga.crossover_rate(), 0.0);
+        assert_eq!(ga.mutation_rate(), 1.0);
+
+        let mut ga = Ga::builder(Binary::new(8).unwrap())
+            .population_size(10)
+            .select(Tournament::new(2).unwrap())
+            .crossover(NoCrossover)
+            .mutate(BitFlip::count(1).unwrap())
+            .seed(0)
+            .build()
+            .unwrap();
+        // without recombination, mutation is the only change
+        assert!(matches!(
+            ga.set_mutation_rate(0.0),
+            Err(Error::InvalidSetting {
+                setting: "mutation_rate",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_setting_changed_before_breeding_gives_the_run_built_with_it() {
+        let run = |mut ga: OneMaxGa, change: fn(&mut OneMaxGa)| {
+            step(&mut ga);
+            change(&mut ga);
+            for _ in 0..20 {
+                step(&mut ga);
+            }
+            ga.population().clone()
+        };
+        let built = builder(32)
+            .crossover_rate(0.3)
+            .mutation_rate(0.5)
+            .select(Tournament::new(4).unwrap())
+            .mutate(BitFlip::count(3).unwrap())
+            .build()
+            .unwrap();
+        let changed = |ga: &mut OneMaxGa| {
+            ga.set_crossover_rate(0.3).unwrap();
+            ga.set_mutation_rate(0.5).unwrap();
+            *ga.select_mut() = Tournament::new(4).unwrap();
+            *ga.mutate_mut() = BitFlip::count(3).unwrap();
+        };
+        let expected = run(built, |_| {});
+        assert_eq!(run(builder(32).build().unwrap(), changed), expected);
+        // and they do change the run
+        assert_ne!(run(builder(32).build().unwrap(), |_| {}), expected);
     }
 
     #[test]
