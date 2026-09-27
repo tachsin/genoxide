@@ -7,6 +7,10 @@ feasible ones. The result is checked against the optimum found by dynamic progra
     python examples/knapsack/main.py
 """
 
+import json
+import math
+import os
+
 import numpy as np
 
 import genoxide as gx
@@ -54,6 +58,73 @@ def optimum():
     return best[CAPACITY]
 
 
+# ---- the trace of the run, for the plot on the example's page -----------------------------------
+
+
+class Trace:
+    """A frame per recorded generation, at most ``most``: every ``every``-th generation, with
+    ``every`` doubling whenever there are ``most``, and the last generation."""
+
+    def __init__(self, most):
+        self.most, self.every, self.frames, self.last = most, 1, [], None
+
+    def record(self, progress, state):
+        """The generation's progress, the median score of its population and the plot's
+        ``state``."""
+        frame = {
+            "generation": progress.generation,
+            "evaluations": progress.evaluations,
+            "best": progress.best_fitness,
+            "median": median(progress.scores),
+            "state": state,
+        }
+        self.push(frame)
+
+    def push(self, frame):
+        """Keeps ``frame`` if it's of the ``every``-th generation, or as the last one."""
+        if frame["generation"] % self.every:
+            self.last = frame
+            return
+        self.frames.append(frame)
+        self.last = None
+        if len(self.frames) == self.most:
+            self.every *= 2
+            self.frames = [frame for frame in self.frames if frame["generation"] % self.every == 0]
+
+    def write(self, path, settings):
+        """Writes the settings and the frames to ``path``, a frame per line."""
+        frames = ",\n".join(to_json(frame) for frame in self.frames + [self.last] if frame)
+        with open(path, "w", encoding="utf-8", newline="\n") as file:
+            file.write(f'{to_json(settings)[:-1]},"frames":[\n{frames}\n]}}\n')
+
+
+def median(scores):
+    """The median of the valid scores, None without any."""
+    scores = sorted(float(score) for score in scores if not math.isnan(score))
+    middle = len(scores) // 2
+    if not scores:
+        return None
+    return scores[middle] if len(scores) % 2 else (scores[middle - 1] + scores[middle]) / 2
+
+
+def to_json(value):
+    """Compact JSON with sorted keys, and numbers rounded to 6 significant digits, as the Rust
+    example writes it."""
+    return json.dumps(rounded(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def rounded(value):
+    if isinstance(value, dict):
+        return {key: rounded(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [rounded(item) for item in value]
+    if isinstance(value, float):
+        return float(f"{value:.5e}") if math.isfinite(value) else None
+    return value
+
+
+# -------------------------------------------------------------------------------------------------
+
 ga = gx.Ga(
     gx.Binary(len(ITEMS)),
     population_size=60,
@@ -62,9 +133,35 @@ ga = gx.Ga(
     mutation=gx.BitFlip(rate=1 / len(ITEMS)),
     seed=7,
 )
-result = ga.run(value, stagnation=200, generations=2_000)
+trace = Trace(200) if "GENOXIDE_TRACE" in os.environ else None
+
+
+def record(progress):
+    if trace:
+        trace.record(progress, {"best": progress.best_genome.astype(int).tolist()})
+
+
+result = ga.run(value, stagnation=200, generations=2_000, on_generation=record)
 
 best = result.best_genome
 print(f"items {np.flatnonzero(best).tolist()}")
 print(f"value {VALUES[best].sum()}, weight {WEIGHTS[best].sum()} of {CAPACITY}")
 print(f"after {result.evaluations} evaluations; the optimum is {optimum()}")
+if trace:
+    trace.write(
+        os.environ["GENOXIDE_TRACE"],
+        {
+            "format": 1,
+            "example": "knapsack",
+            "objective": "maximize",
+            "x_label": "generations",
+            "y_label": "value",
+            "log_y": False,
+            "optimum": float(optimum()),
+            "plot": "knapsack",
+            "problem": {
+                "capacity": CAPACITY,
+                "items": [{"weight": weight, "value": value} for weight, value in ITEMS],
+            },
+        },
+    )

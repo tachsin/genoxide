@@ -6,8 +6,15 @@ read as a sequence of jobs (a permutation with repetition): the n-th time a job 
 operation starts as early as its job and its machine allow (a semi-active schedule). A genetic
 algorithm with order crossover and swap mutation searches the sequences.
 
+With ``GENOXIDE_TRACE=<file>``, it also writes the run's trace for the plot on the example's page:
+the best schedule so far, in at most 200 generations.
+
     python examples/jobshop_ft06/main.py
 """
+
+import json
+import math
+import os
 
 import genoxide as gx
 
@@ -48,6 +55,73 @@ def makespan(order):
     return float(max(starts[job][-1] + INSTANCE[job][-1][1] for job in range(JOBS)))
 
 
+# ---- the trace of the run, for the plot on the example's page -----------------------------------
+
+
+class Trace:
+    """A frame per recorded generation, at most ``most``: every ``every``-th generation, with
+    ``every`` doubling whenever there are ``most``, and the last generation."""
+
+    def __init__(self, most):
+        self.most, self.every, self.frames, self.last = most, 1, [], None
+
+    def record(self, progress, state):
+        """The generation's progress, the median score of its population and the plot's
+        ``state``."""
+        frame = {
+            "generation": progress.generation,
+            "evaluations": progress.evaluations,
+            "best": progress.best_fitness,
+            "median": median(progress.scores),
+            "state": state,
+        }
+        self.push(frame)
+
+    def push(self, frame):
+        """Keeps ``frame`` if it's of the ``every``-th generation, or as the last one."""
+        if frame["generation"] % self.every:
+            self.last = frame
+            return
+        self.frames.append(frame)
+        self.last = None
+        if len(self.frames) == self.most:
+            self.every *= 2
+            self.frames = [frame for frame in self.frames if frame["generation"] % self.every == 0]
+
+    def write(self, path, settings):
+        """Writes the settings and the frames to ``path``, a frame per line."""
+        frames = ",\n".join(to_json(frame) for frame in self.frames + [self.last] if frame)
+        with open(path, "w", encoding="utf-8", newline="\n") as file:
+            file.write(f'{to_json(settings)[:-1]},"frames":[\n{frames}\n]}}\n')
+
+
+def median(scores):
+    """The median of the valid scores, None without any."""
+    scores = sorted(float(score) for score in scores if not math.isnan(score))
+    middle = len(scores) // 2
+    if not scores:
+        return None
+    return scores[middle] if len(scores) % 2 else (scores[middle - 1] + scores[middle]) / 2
+
+
+def to_json(value):
+    """Compact JSON with sorted keys, and numbers rounded to 6 significant digits, as the Rust
+    example writes it."""
+    return json.dumps(rounded(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def rounded(value):
+    if isinstance(value, dict):
+        return {key: rounded(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [rounded(item) for item in value]
+    if isinstance(value, float):
+        return float(f"{value:.5e}") if math.isfinite(value) else None
+    return value
+
+
+# -------------------------------------------------------------------------------------------------
+
 ga = gx.Ga(
     gx.Permutation(JOBS * MACHINES),
     population_size=100,
@@ -57,7 +131,27 @@ ga = gx.Ga(
     objective="minimize",
     seed=1,
 )
-result = ga.run(makespan, target=OPTIMUM, generations=1_000)
+
+
+def operations(order):
+    """The operations of the schedule of ``order``: [job, operation, machine, start, end]."""
+    starts = schedule(order)
+    return [
+        [job, step, machine, starts[job][step], starts[job][step] + duration]
+        for job, steps in enumerate(INSTANCE)
+        for step, (machine, duration) in enumerate(steps)
+    ]
+
+
+trace = Trace(200) if "GENOXIDE_TRACE" in os.environ else None
+
+
+def record(progress):
+    if trace:
+        trace.record(progress, {"best": operations(progress.best_genome)})
+
+
+result = ga.run(makespan, target=OPTIMUM, generations=1_000, on_generation=record)
 
 print(
     f"makespan {result.best_fitness:.0f} after {result.generations} generations "
@@ -73,3 +167,18 @@ for machine in range(MACHINES):
         if on == machine
     )
     print(f"machine {machine}: jobs {[job for _, job in jobs]}")
+if trace:
+    trace.write(
+        os.environ["GENOXIDE_TRACE"],
+        {
+            "format": 1,
+            "example": "jobshop_ft06",
+            "objective": "minimize",
+            "x_label": "generations",
+            "y_label": "makespan",
+            "log_y": False,
+            "optimum": float(OPTIMUM),
+            "plot": "gantt",
+            "problem": {"machines": MACHINES, "jobs": INSTANCE},
+        },
+    )

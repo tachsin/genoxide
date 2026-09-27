@@ -9,4 +9,6 @@ description = "Batch fitness evaluation on the GPU with wgpu"
 bytemuck = "1.25"
 genoxide = { path = "../.." }
 pollster = "1.0"
+# the trace for the plot on the example's page
+serde_json = "1"
 wgpu = "30"
