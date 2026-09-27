@@ -15,8 +15,9 @@ The pressure vessel problem minimizes the cost of material, forming and welding 
 vessel with hemispherical heads, under four constraints: the minimum thicknesses of the shell and
 the heads for their radius, a volume of at least 1,296,000 cubic inches, and a length of at most
 240 inches. The shell and head thicknesses are multiples of 0.0625 inch, and the radius and length
-are continuous; the example rounds its first two real genes to whole numbers of 0.0625-inch plates.
-The fitness function returns the cost and the total violation (the volume's relative to 1,296,000),
-compared with Deb's feasibility rules, and SHADE, a differential evolution, runs for 50,000
-evaluations. The best known cost, 6059.714335, was proven globally optimal by Yang et al. (2013,
-International Journal of Bio-Inspired Computation 5(6): 329-335).
+are continuous. The example uses genoxide's `PressureVessel`, which rounds its first two real
+genes to whole 0.0625-inch plates and gives the rounded design with `design`. Its fitness is the
+cost and the total violation, compared with Deb's feasibility rules, and SHADE, a differential
+evolution, runs for 50,000 evaluations. The minimum cost, 6059.714335, was proven globally optimal
+by Yang et al. (2013, International Journal of Bio-Inspired Computation 5(6): 329-335). In Python,
+`run` evaluates the problem in Rust, so both versions print the same.

@@ -2,7 +2,7 @@
 
 use crate::config;
 use crate::errors::{genome_setting, setting};
-use crate::fitness::{Multi, Shared, Single};
+use crate::fitness::{Multi, Native, Shared, Single};
 use crate::genes::{self, Genes};
 use crate::operators::{
     AnySelect, ListCrossover, OrderCrossovers, OrderMutation, RealCrossover, RealMutation,
@@ -129,10 +129,29 @@ impl From<PyErr> for Failure {
 
 type Returns<'py> = std::result::Result<Bound<'py, PyDict>, Failure>;
 
-// a test problem runs with its objectives, minimized, and a real genome of its dimensions
+// a test problem runs with its objectives, minimized, and a genome of its type and dimensions
 fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
+    if let problems::Problem::Integer(problem) = problem {
+        let name = problem.name();
+        if run.objectives.len() != 1 {
+            return Err(format!(
+                "{name} has one objective: use a single-objective algorithm"
+            ));
+        }
+        let dimensions = problem.integer().genome_len();
+        return match &run.genome {
+            config::Genome::Integer { bounds } if bounds.len() == dimensions => Ok(()),
+            config::Genome::Integer { bounds } => Err(format!(
+                "{name} has {dimensions} dimensions, but the genome has {} genes",
+                bounds.len()
+            )),
+            _ => Err(format!("{name} needs an Integer genome")),
+        };
+    }
     let (name, objectives, dimensions) = match problem {
         problems::Problem::Single(problem) => (problem.name(), 1, problem.real().genome_len()),
+        // checked above
+        problems::Problem::Integer(_) => return Ok(()),
         problems::Problem::Multi(config) => {
             let (name, dimensions) = problems::name_and_dimensions(*config);
             (name, config.objectives(), dimensions)
@@ -659,7 +678,8 @@ where
     let shared = &context.shared;
     let parallel = context.parallel;
     let problem = match &context.problem {
-        Some(problems::Problem::Single(problem)) => Some(problem.as_ref()),
+        Some(problems::Problem::Single(problem)) => Some(Native::Real(problem.as_ref())),
+        Some(problems::Problem::Integer(problem)) => Some(Native::Integer(problem.as_ref())),
         _ => None,
     };
     let fitness = Single { shared, problem };

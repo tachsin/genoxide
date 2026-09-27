@@ -24,6 +24,7 @@ fn _genoxide(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(problems::constraints, module)?)?;
     module.add_function(wrap_pyfunction!(problems::optimal_front, module)?)?;
     module.add_function(wrap_pyfunction!(problems::problem_names, module)?)?;
+    module.add_function(wrap_pyfunction!(problems::design, module)?)?;
     module.add_function(wrap_pyfunction!(problems::multi_problem_names, module)?)?;
     module.add_function(wrap_pyfunction!(indicators::indicator, module)?)?;
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;

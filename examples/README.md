@@ -34,6 +34,8 @@ python examples/tsp_berlin52/main.py
 | [Function suite](function_suite/) | continuous | Rust, Python |
 | [Himmelblau's function](himmelblau/) | continuous | Rust, Python |
 | [Pressure vessel design](pressure_vessel/) | constrained | Rust, Python |
+| [Welded beam design](welded_beam/) | constrained | Rust, Python |
+| [Gear train design](gear_train/) | integer | Rust, Python |
 | [ZDT1](zdt1/) | multi-objective | Rust, Python |
 | [BNH, a constrained two-objective problem](bnh/) | multi-objective | Rust, Python |
 | [Kursawe's disconnected front](kursawe/) | multi-objective | Rust, Python |
