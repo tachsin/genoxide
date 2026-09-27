@@ -1,5 +1,5 @@
 //! The trace of the first form's run for the plot on the example's page, written to the file
-//! that `GENOXIDE_TRACE` names: the best design so far and its constraint violations, in at most
+//! that `GENOXIDE_TRACE` names: the best design so far and its constraints, in at most
 //! 200 generations. The Python example writes the same file.
 
 use genoxide::observer::Snapshot;
@@ -28,7 +28,7 @@ impl Trace {
     }
 
     // records a generation of the first run, the first form's: the best design so far and its
-    // constraint violations
+    // constraints (g, satisfied at or below 0)
     pub fn record(&mut self, snapshot: &Snapshot<'_, Reals>) {
         if snapshot.progress().generation() == 0 {
             self.runs += 1;
@@ -38,11 +38,7 @@ impl Trace {
         }
         let best = snapshot.best().genome();
         let constraints = WeldedBeam.constraints(best);
-        let violations: Vec<f64> = constraints
-            .inequalities()
-            .iter()
-            .map(|&g| g.max(0.0))
-            .collect();
+        let violations: Vec<f64> = constraints.inequalities().to_vec();
         let state = json!({ "best": &best[..], "violations": violations });
         self.frames.push(frame(snapshot, state));
     }
