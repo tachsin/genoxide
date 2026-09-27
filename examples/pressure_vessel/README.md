@@ -11,13 +11,69 @@ order: 70
 
 # Pressure vessel design
 
-The pressure vessel problem minimizes the cost of material, forming and welding of a cylindrical
-vessel with hemispherical heads, under four constraints: the minimum thicknesses of the shell and
-the heads for their radius, a volume of at least 1,296,000 cubic inches, and a length of at most
-240 inches. The shell and head thicknesses are multiples of 0.0625 inch, and the radius and length
-are continuous. The example uses genoxide's `PressureVessel`, which rounds its first two real
-genes to whole 0.0625-inch plates and gives the rounded design with `design`. Its fitness is the
-cost and the total violation, compared with Deb's feasibility rules, and SHADE, a differential
-evolution, runs for 50,000 evaluations. The minimum cost, 6059.714335, was proven globally optimal
-by Yang et al. (2013, International Journal of Bio-Inspired Computation 5(6): 329-335). In Python,
-`run` evaluates the problem in Rust, so both versions print the same.
+## The problem
+
+Sandgren (1990) designs a cylindrical pressure vessel capped at both ends by hemispherical heads.
+The goal is the lowest total cost of material, forming and welding. There are four design variables,
+in inches: the thickness of the shell T_s, the thickness of the heads T_h, the inner radius R and
+the length L of the cylinder. The thicknesses come in multiples of 0.0625 inch, the available steel
+plates. The radius and the length are continuous.
+
+In the form that Coello Coello (2000, Computers in Industry 41(2): 113-127) restates, in the
+notation of Kannan and Kramer (1994, Journal of Mechanical Design 116(2): 405-411):
+
+```text
+minimize   0.6224 T_s R L + 1.7781 T_h R² + 3.1661 T_s² L + 19.84 T_s² R
+subject to T_s ≥ 0.0193 R
+           T_h ≥ 0.00954 R
+           π R² L + 4/3 π R³ ≥ 1,296,000
+           L ≤ 240
+```
+
+The first two constraints are the least thicknesses for the radius. The third is a volume of at
+least 1,296,000 cubic inches, 750 cubic feet. The fourth limits the length.
+
+## What makes it hard
+
+The problem mixes discrete and continuous variables, under constraints. The volume constraint pushes
+R and L up, the cost pulls them down, and the thickness constraints make a larger radius need
+thicker plates. At the optimum, two constraints bind: the shell is exactly as thin as its radius
+allows, and the volume is exactly 1,296,000. The other two have slack.
+
+The discrete thicknesses make the cost a step function of them. Between plate sizes, it doesn't
+change; at each size, it jumps.
+
+## Representation
+
+A `Real` genome of 4 genes: T_s and T_h in [0.0625, 6.1875] (1 to 99 plates), R and L in [10, 200].
+genoxide's `PressureVessel` rounds the first two genes to the nearest whole plate when it evaluates
+a genome, and its `design` method gives the rounded design. Any real-valued algorithm can then
+search the genes.
+
+The fitness is the cost and the total constraint violation, the sum of how far each constraint is
+exceeded, in its own units. genoxide compares fitnesses with Deb's feasibility rules (Deb, 2000,
+Computer Methods in Applied Mechanics and Engineering 186: 311-338): a feasible design beats an
+infeasible one, two feasible ones compare by cost, and two infeasible ones by violation.
+
+## Algorithm
+
+SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), a differential evolution that adapts its
+scale factor and crossover rate from successful trials, with genoxide's defaults: its published
+population of 100, and a restart after 200 generations without progress. It runs for 50,000
+evaluations.
+
+## Output
+
+The first line gives the cost of the best design, the evaluations, and the known minimum. The second
+gives the design's constraint violation; 0 means it's feasible. The third gives the design: the
+shell and head thicknesses, rounded to whole plates, the radius and the length. In Python, `run`
+evaluates the problem in Rust, so both versions print the same.
+
+The project page plays this run back.
+
+## Good results
+
+The minimum cost is 6059.714335, at T_s = 0.8125 (13 plates), T_h = 0.4375 (7 plates), R = 42.098446
+and L = 176.636596. Yang et al. (2013, International Journal of Bio-Inspired Computation 5(6):
+329-335) proved it globally optimal. The run finds it to the six printed decimals, with no
+violation.

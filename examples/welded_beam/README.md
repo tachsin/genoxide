@@ -11,14 +11,69 @@ order: 72
 
 # Welded beam design
 
-The welded beam problem minimizes the cost of a beam welded to a support that carries 6000 lb at
-14 inches. The genes are the weld's thickness h and length l and the bar's height t and thickness
-b, and the constraints limit the weld's shear stress, the bar's bending stress, its buckling load
-and its deflection. Two forms circulate. `WeldedBeam` has seven constraints (Rao, 1996, as restated
-by Coello Coello, 2000, Computers in Industry 41(2): 113-127), with a best known cost of 1.724852.
-`WeldedBeamRagsdell` has five (Ragsdell and Phillips, 1976, as restated by Deb, 2000, Computer
-Methods in Applied Mechanics and Engineering 186: 311-338), with a best known cost of 2.38116. The
-example runs SHADE, a differential evolution, for 40,000 evaluations on each, with Deb's
-feasibility rules, and prints the best cost, its violation and its design. On the five-constraint
-form it finds 2.381134, below the best known cost. In Python, `run` evaluates the problems in Rust,
-so both versions print the same.
+## The problem
+
+A bar is welded to a rigid support and carries a load of 6000 lb at its free end, 14 inches away.
+Ragsdell and Phillips (1976) posed the problem of choosing its dimensions for the lowest cost. There
+are four variables, in inches: the weld's thickness h and length l, and the bar's height t and
+thickness b. In both forms of the literature, the cost is
+
+```text
+1.10471 h² l + 0.04811 t b (14 + l)
+```
+
+It grows with the size of the weld (h² l) and the volume of the bar (t b (14 + l)). The constraints
+limit the shear stress in the weld to 13,600 psi, the bending stress in the bar to 30,000 psi and
+the deflection of its end to 0.25 inch. The load must stay below the bar's buckling load, and the
+weld can't be thicker than the bar (h ≤ b).
+
+Two forms of the problem circulate in the literature:
+
+- `WeldedBeam` has seven constraints: the five above, a limit on a cost-like term, 0.10471 h² +
+  0.04811 t b (14 + l) ≤ 5, and h ≥ 0.125. It follows Rao (1996, Engineering Optimization, Wiley) as
+  restated by Coello Coello (2000, Computers in Industry 41(2): 113-127). Its best known cost is
+  1.724852 (Cagnina, Esquivel and Coello Coello, 2008, Informatica 32: 319-326).
+- `WeldedBeamRagsdell` has five, after Ragsdell and Phillips (1976) as restated by Deb (2000,
+  Computer Methods in Applied Mechanics and Engineering 186: 311-338). Its best known cost is
+  2.38116 (Reklaitis, Ravindran and Ragsdell, 1983, Engineering Optimization: Methods and
+  Applications, Wiley).
+
+The two forms also differ in the constants of their shear stress and buckling formulas, so the same
+beam has different stresses in each. Their best costs aren't comparable.
+
+## What makes it hard
+
+The constraints are nonlinear, and several bind at once. At the best designs that the example finds
+for both forms, four hold with equality: the shear stress, the bending stress, the buckling load and
+h ≤ b. The deflection has slack. A search has to approach a corner where four curved boundaries
+meet, from inside the feasible region or across it.
+
+## Representation
+
+A `Real` genome of 4 genes, (h, l, t, b), within each form's bounds: h and b in [0.1, 2] and l and t
+in [0.1, 10] for `WeldedBeam`; h in [0.125, 10] and the others in [0.1, 10] for
+`WeldedBeamRagsdell`. The fitness is the cost and the total constraint violation, the sum of how far
+each constraint is exceeded. genoxide compares fitnesses with Deb's feasibility rules (Deb, 2000): a
+feasible design beats an infeasible one, two feasible ones compare by cost, and two infeasible ones
+by violation.
+
+## Algorithm
+
+SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), a differential evolution that adapts its
+scale factor and crossover rate from successful trials, with genoxide's defaults: its published
+population of 100, and a restart after 200 generations without progress. It runs for 40,000
+evaluations on each form.
+
+## Output
+
+Two lines per form. The first gives the form, the cost of the best design, its constraint violation
+(0 means feasible) and the best known cost. The second gives the design: h, l, t and b. In both, h
+equals b: the constraint h ≤ b binds. In Python, `run` evaluates the problems in Rust, so both
+versions print the same.
+
+## Good results
+
+On the seven-constraint form, the run reaches the best known cost, 1.724852, with no violation. On
+the five-constraint form, it finds 2.381134, below the best known 2.38116, also with no violation.
+The best known design is published to 4 digits, and evaluated as printed it costs 2.38151. The run's
+design costs less than both.
