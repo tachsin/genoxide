@@ -395,6 +395,13 @@ def test_das_dennis():
     assert np.array_equal(gx.das_dennis(2, 2), [[0.0, 1.0], [0.5, 0.5], [1.0, 0.0]])
     with pytest.raises(ValueError, match="2 to 6 objectives, not 7"):
         gx.das_dennis(7, 2)
+    # too many points is an error, not an allocation that aborts the interpreter
+    with pytest.raises(ValueError, match=r"das_dennis\(6, 200\) would have .* more than 2\^24"):
+        gx.das_dennis(6, 200)
+    with pytest.raises(ValueError, match=r"more than 2\^24"):
+        gx.das_dennis(2, 2**24)
+    with pytest.raises(ValueError, match=r"optimal_front takes at most 2\^24 points"):
+        gx.problems.Dtlz2(objectives=3).optimal_front(10**11)
 
 
 def test_a_generation_of_copies_makes_no_batch_call():

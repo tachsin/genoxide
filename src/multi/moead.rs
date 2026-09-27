@@ -5,7 +5,7 @@ use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
 use crate::genome::Representation;
-use crate::operator::{Crossover, Mutate, check_probability, check_rates};
+use crate::operator::{Crossover, Mutate, check_probability, check_rates, check_size};
 use crate::rng::Chance;
 use crate::{Error, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
@@ -592,6 +592,7 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
                 format!("MOEA/D needs at least 2 weight vectors, got {size}"),
             );
         }
+        check_size("weights", size)?;
         for weights in &self.weights {
             let valid = weights.iter().all(|w| *w >= 0.0 && w.is_finite())
                 && weights.iter().any(|w| *w > 0.0);
@@ -643,14 +644,20 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
             .map(|(own, a)| {
                 let distance =
                     |b: &[f64; M]| a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum::<f64>();
-                let mut order: Vec<usize> = (0..size).collect();
-                order.sort_by(|&i, &j| {
+                let nearer = |&i: &usize, &j: &usize| {
                     distance(&self.weights[i])
                         .total_cmp(&distance(&self.weights[j]))
                         .then((i != own).cmp(&(j != own)))
                         .then(i.cmp(&j))
-                });
-                order.truncate(count);
+                };
+                // the `count` nearest, then only they sorted: O(size) per weight vector, not
+                // O(size log size), and the same order, as `nearer` is a total order
+                let mut order: Vec<usize> = (0..size).collect();
+                if count < size {
+                    order.select_nth_unstable_by(count, nearer);
+                    order.truncate(count);
+                }
+                order.sort_by(nearer);
                 order
             })
             .collect();
@@ -789,6 +796,37 @@ mod tests {
         assert_eq!(moead.neighborhoods()[0], [0, 1, 2]);
         assert_eq!(moead.neighborhoods()[2], [2, 1, 3]);
         assert_eq!(moead.neighborhoods()[4], [4, 3, 2]);
+        // the same as sorting every weight vector by distance, with its ties, for every size
+        let weights = crate::multi::das_dennis::<3>(6);
+        for neighbors in [2, 5, 7, weights.len(), weights.len() + 3] {
+            let moead = Moead::builder(
+                Real::uniform(3, 0.0..=1.0).unwrap(),
+                [Minimize; 3],
+                weights.clone(),
+            )
+            .neighbors(neighbors)
+            .crossover(SimulatedBinaryCrossover::new(20.0).unwrap())
+            .mutate(PolynomialMutation::per_gene(1.0 / 3.0, 20.0).unwrap())
+            .seed(0)
+            .build()
+            .unwrap();
+            for (own, neighborhood) in moead.neighborhoods().iter().enumerate() {
+                let distance = |i: usize| -> f64 {
+                    (0..3)
+                        .map(|k| (weights[i][k] - weights[own][k]).powi(2))
+                        .sum()
+                };
+                let mut sorted: Vec<usize> = (0..weights.len()).collect();
+                sorted.sort_by(|&i, &j| {
+                    distance(i)
+                        .total_cmp(&distance(j))
+                        .then((i != own).cmp(&(j != own)))
+                        .then(i.cmp(&j))
+                });
+                sorted.truncate(neighbors);
+                assert_eq!(*neighborhood, sorted);
+            }
+        }
     }
 
     #[test]

@@ -150,8 +150,22 @@ fn spherical<const M: usize>(x: &[f64], radius: f64, alpha: f64) -> [f64; M] {
     })
 }
 
+// Das and Dennis's points, as many as `MultiProblem::optimal_front` promises: none for 0, exactly
+// `points` for 2 objectives (0 and 1 would otherwise give both ends), and the smallest set of
+// at least `points` for more
+fn simplex_points<const M: usize>(points: usize) -> Vec<[f64; M]> {
+    if points == 0 {
+        return Vec::new();
+    }
+    let mut simplex = das_dennis::<M>(divisions_for::<M>(points));
+    if M == 2 {
+        simplex.truncate(points);
+    }
+    simplex
+}
+
 fn spherical_front<const M: usize>(points: usize) -> Vec<[f64; M]> {
-    das_dennis::<M>(divisions_for::<M>(points))
+    simplex_points::<M>(points)
         .into_iter()
         .map(|p| {
             let norm = p.iter().map(|v| v * v).sum::<f64>().sqrt();
@@ -165,7 +179,7 @@ impl<const M: usize> Dtlz1<M> {
 
     // Das and Dennis's points, halved
     fn front(points: usize) -> Vec<[f64; M]> {
-        das_dennis::<M>(divisions_for::<M>(points))
+        simplex_points::<M>(points)
             .into_iter()
             .map(|p| p.map(|v| v / 2.0))
             .collect()
