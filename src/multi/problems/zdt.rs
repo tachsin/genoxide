@@ -4,6 +4,7 @@
 
 use super::{MultiProblem, evenly};
 use crate::genome::{Real, Reals};
+use crate::math;
 use crate::multi::MultiFitnessFunction;
 use std::f64::consts::PI;
 
@@ -228,7 +229,7 @@ pub(super) const ZDT3_PIECES: [(f64, f64); 5] = [
 
 // ZDT3's front, f₂ as a function of f₁
 fn zdt3_f2(f1: f64) -> f64 {
-    1.0 - f1.sqrt() - f1 * (10.0 * PI * f1).sin()
+    1.0 - f1.sqrt() - f1 * math::sin(10.0 * PI * f1)
 }
 
 impl MultiFitnessFunction<Reals, 2> for Zdt3 {
@@ -244,7 +245,7 @@ impl MultiFitnessFunction<Reals, 2> for Zdt3 {
         let ratio = x[0] / g;
         [
             x[0],
-            g * (1.0 - ratio.sqrt() - ratio * (10.0 * PI * x[0]).sin()),
+            g * (1.0 - ratio.sqrt() - ratio * math::sin(10.0 * PI * x[0])),
         ]
     }
 }
@@ -296,7 +297,7 @@ impl MultiFitnessFunction<Reals, 2> for Zdt4 {
             + 10.0 * (x.len() - 1) as f64
             + x[1..]
                 .iter()
-                .map(|xi| xi * xi - 10.0 * (4.0 * PI * xi).cos())
+                .map(|xi| xi * xi - 10.0 * math::cos(4.0 * PI * xi))
                 .sum::<f64>();
         [x[0], g * (1.0 - (x[0] / g).sqrt())]
     }
@@ -335,8 +336,8 @@ impl MultiFitnessFunction<Reals, 2> for Zdt6 {
     ///
     /// If `x` is empty.
     fn evaluate(&self, x: &Reals) -> [f64; 2] {
-        let f1 = 1.0 - (-4.0 * x[0]).exp() * (6.0 * PI * x[0]).sin().powi(6);
-        let g = 1.0 + 9.0 * tail_mean(x).powf(0.25);
+        let f1 = 1.0 - math::exp(-4.0 * x[0]) * math::powi(math::sin(6.0 * PI * x[0]), 6);
+        let g = 1.0 + 9.0 * math::powf(tail_mean(x), 0.25);
         [f1, g * (1.0 - (f1 / g) * (f1 / g))]
     }
 }
@@ -449,8 +450,8 @@ mod tests {
     // ZDT6's front starts where f₁ = 1 − exp(−4x) sin⁶(6πx) is smallest, at x = atan(9π) / (6π)
     #[test]
     fn zdt6_starts_at_the_minimum_of_f1() {
-        let f1 = |x: f64| 1.0 - (-4.0 * x).exp() * (6.0 * PI * x).sin().powi(6);
-        let x = (9.0 * PI).atan() / (6.0 * PI);
+        let f1 = |x: f64| 1.0 - math::exp(-4.0 * x) * math::powi(math::sin(6.0 * PI * x), 6);
+        let x = math::atan(9.0 * PI) / (6.0 * PI);
         assert!((f1(x) - ZDT6_START).abs() < 1e-15);
         // a dense grid finds nothing lower
         let smallest = (0..=100_000)

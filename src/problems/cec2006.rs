@@ -19,6 +19,7 @@
 use super::{Constraints, Optimum, Problem};
 use crate::engine::FitnessFunction;
 use crate::genome::{Real, Reals};
+use crate::math;
 
 /// The report's tolerance δ of an equality constraint: `|h(x)| ≤ 0.0001` counts as met.
 pub const EQUALITY_TOLERANCE: f64 = 0.0001;
@@ -154,8 +155,8 @@ const G02_DIMENSIONS: usize = 20;
 impl G02 {
     fn value(&self, x: &Reals) -> f64 {
         let x = &x[..G02_DIMENSIONS];
-        let fourth: f64 = x.iter().map(|xi| xi.cos().powi(4)).sum();
-        let product: f64 = x.iter().map(|xi| xi.cos().powi(2)).product();
+        let fourth: f64 = x.iter().map(|xi| math::powi(math::cos(*xi), 4)).sum();
+        let product: f64 = x.iter().map(|xi| math::powi(math::cos(*xi), 2)).product();
         let weighted: f64 = x
             .iter()
             .enumerate()
@@ -261,7 +262,7 @@ impl G03 {
     fn value(&self, x: &Reals) -> f64 {
         let n = G03_DIMENSIONS as f64;
         let product: f64 = x[..G03_DIMENSIONS].iter().product();
-        -n.sqrt().powi(G03_DIMENSIONS as i32) * product
+        -math::powi(n.sqrt(), G03_DIMENSIONS as i32) * product
     }
 }
 
@@ -289,7 +290,7 @@ impl Problem for G03 {
         let radius = 1.0 + self.tolerance.max(0.0);
         let n = G03_DIMENSIONS as f64;
         Some(Optimum::proven(
-            -radius.powf(n / 2.0),
+            -math::powf(radius, n / 2.0),
             vec![Reals::from(vec![(radius / n).sqrt(); G03_DIMENSIONS])],
         ))
     }
@@ -413,7 +414,7 @@ impl G05 {
 
     fn value(&self, x: &Reals) -> f64 {
         let (x1, x2) = (x[0], x[1]);
-        3.0 * x1 + 0.000_001 * x1.powi(3) + 2.0 * x2 + (0.000_002 / 3.0) * x2.powi(3)
+        3.0 * x1 + 0.000_001 * math::powi(x1, 3) + 2.0 * x2 + (0.000_002 / 3.0) * math::powi(x2, 3)
     }
 }
 
@@ -466,9 +467,9 @@ impl Problem for G05 {
         Constraints::new(
             vec![-x4 + x3 - 0.55, -x3 + x4 - 0.55],
             vec![
-                1000.0 * (-x3 - 0.25).sin() + 1000.0 * (-x4 - 0.25).sin() + 894.8 - x1,
-                1000.0 * (x3 - 0.25).sin() + 1000.0 * (x3 - x4 - 0.25).sin() + 894.8 - x2,
-                1000.0 * (x4 - 0.25).sin() + 1000.0 * (x4 - x3 - 0.25).sin() + 1294.8,
+                1000.0 * math::sin(-x3 - 0.25) + 1000.0 * math::sin(-x4 - 0.25) + 894.8 - x1,
+                1000.0 * math::sin(x3 - 0.25) + 1000.0 * math::sin(x3 - x4 - 0.25) + 894.8 - x2,
+                1000.0 * math::sin(x4 - 0.25) + 1000.0 * math::sin(x4 - x3 - 0.25) + 1294.8,
             ],
         )
     }
@@ -488,7 +489,7 @@ pub struct G06;
 
 impl G06 {
     fn value(&self, x: &Reals) -> f64 {
-        (x[0] - 10.0).powi(3) + (x[1] - 20.0).powi(3)
+        math::powi(x[0] - 10.0, 3) + math::powi(x[1] - 20.0, 3)
     }
 }
 
@@ -526,8 +527,8 @@ impl Problem for G06 {
         let (x1, x2) = (x[0], x[1]);
         Constraints::new(
             vec![
-                -(x1 - 5.0).powi(2) - (x2 - 5.0).powi(2) + 100.0,
-                (x1 - 6.0).powi(2) + (x2 - 5.0).powi(2) - 82.81,
+                -math::powi(x1 - 5.0, 2) - math::powi(x2 - 5.0, 2) + 100.0,
+                math::powi(x1 - 6.0, 2) + math::powi(x2 - 5.0, 2) - 82.81,
             ],
             Vec::new(),
         )
@@ -668,11 +669,11 @@ mod tests {
             assert!(h.abs() <= EQUALITY_TOLERANCE * (1.0 + 1e-9), "{h}");
         }
         // at x₃ = x₄ = 0: h₅ = 2000 sin(−0.25) + 1294.8, and x₁, x₂ make h₃, h₄ zero
-        let a = 2000.0 * (-0.25f64).sin() + 894.8;
+        let a = 2000.0 * math::sin(-0.25f64) + 894.8;
         let (value, violation) = G05::default().evaluate(&reals(&[a, a, 0.0, 0.0]));
         assert_close(
             value,
-            5.0 * a + 0.000_001 * a.powi(3) + (0.000_002 / 3.0) * a.powi(3),
+            5.0 * a + 0.000_001 * math::powi(a, 3) + (0.000_002 / 3.0) * math::powi(a, 3),
             1e-15,
         );
         assert_close(violation, a + 400.0 - EQUALITY_TOLERANCE, 1e-12);

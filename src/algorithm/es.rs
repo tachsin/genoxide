@@ -2,7 +2,7 @@
 
 use super::{Algorithm, Candidates};
 use crate::genome::{Real, Reals, Representation};
-use crate::math::{exp, log};
+use crate::math::{exp, ln};
 use crate::operator::check_size;
 use crate::operator::mutate::{MAX_STEP, reflect};
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
@@ -195,7 +195,7 @@ impl Es {
             for (index, step) in steps.iter_mut().enumerate() {
                 let log_mean: f64 = parents
                     .iter()
-                    .map(|&parent| weight * log(self.steps[parent][index]))
+                    .map(|&parent| weight * ln(self.steps[parent][index]))
                     .sum();
                 *step = exp(log_mean);
             }

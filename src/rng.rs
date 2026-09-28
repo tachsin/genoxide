@@ -1,6 +1,6 @@
 //! Portable, seedable random number generation with independent streams.
 
-use crate::math::log;
+use crate::math::ln;
 use rand::{Rng, SeedableRng, TryRng};
 use rand_chacha::ChaCha8Rng;
 use std::convert::Infallible;
@@ -109,7 +109,7 @@ impl StreamRng {
             let v = 2.0 * self.unit_f64() - 1.0;
             let s = u * u + v * v;
             if s > 0.0 && s < 1.0 {
-                return u * (-2.0 * log(s) / s).sqrt();
+                return u * (-2.0 * ln(s) / s).sqrt();
             }
         }
     }
@@ -169,7 +169,7 @@ impl StreamRng {
                 let mut index = 0;
                 while index < n {
                     // failures before the next success: floor(ln(u) / ln(1 - p)), u in (0, 1]
-                    let skip = log(1.0 - self.unit_f64()) / log_complement;
+                    let skip = ln(1.0 - self.unit_f64()) / log_complement;
                     if skip >= (n - index) as f64 {
                         break;
                     }
@@ -233,7 +233,7 @@ impl Chance {
             let log_complement = if probability < 1e-8 {
                 -probability - probability * probability / 2.0
             } else {
-                log(1.0 - probability)
+                ln(1.0 - probability)
             };
             Chance::Skip {
                 threshold: threshold(),
@@ -508,7 +508,7 @@ mod tests {
     /// Fixed values: these must never change for the same major version, on any platform.
     #[test]
     fn portable_log_and_chosen_values() {
-        let logs = [log(0.5), log(1e-300), log(0.999), log(1.0 - 2f64.powi(-53))];
+        let logs = [ln(0.5), ln(1e-300), ln(0.999), ln(1.0 - 2f64.powi(-53))];
         assert_eq!(
             logs.map(f64::to_bits),
             [

@@ -57,9 +57,8 @@ result = cmaes.run(
     problem, target=f_star + ERROR, evaluations=BUDGET, on_generation=trace.on_generation
 )
 
-# the platform's sin can change the run's path from one operating system to another: the example
-# prints what doesn't depend on it, without the evaluations of a run that meets its target, and
-# the solution to 4 significant digits
+# the example prints what runs with other seeds agree on: no evaluations of a run that meets its
+# target, and the solution to 4 significant digits
 value = result.best_fitness
 print("CMA-ES with Deb's feasibility rules on g05, seed 1")
 if result.stop_reason == "target":

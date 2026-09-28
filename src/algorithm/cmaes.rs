@@ -2,7 +2,7 @@
 
 use super::{Algorithm, Candidates};
 use crate::genome::{Real, Reals, Representation};
-use crate::math::{exp, log};
+use crate::math::{exp, ln};
 use crate::operator::check_size;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
@@ -111,7 +111,7 @@ impl Parameters {
         let dimensions = n as f64;
         let mu = lambda / 2;
         let raw: Vec<f64> = (1..=mu)
-            .map(|i| log((lambda as f64 + 1.0) / 2.0) - log(i as f64))
+            .map(|i| ln((lambda as f64 + 1.0) / 2.0) - ln(i as f64))
             .collect();
         let sum: f64 = raw.iter().sum();
         let weights: Vec<f64> = raw.iter().map(|w| w / sum).collect();
@@ -260,7 +260,7 @@ impl Cmaes {
     /// bounds are equal is fixed, and not searched), `4 + ⌊3 ln n⌋`: 10 for 10 genes, 17 for
     /// 100.
     pub fn default_population_size(n: usize) -> usize {
-        4 + (3.0 * log(n.max(1) as f64)) as usize
+        4 + (3.0 * ln(n.max(1) as f64)) as usize
     }
 
     /// The representation.
@@ -378,7 +378,7 @@ impl Cmaes {
                 // from λ₀ to λ_large / 2, as a large run always comes first
                 let u = self.rng.unit_f64();
                 let ratio = 0.5 * self.large_lambda as f64 / self.initial_lambda as f64;
-                let lambda = (self.initial_lambda as f64 * exp(u * u * log(ratio))) as usize;
+                let lambda = (self.initial_lambda as f64 * exp(u * u * ln(ratio))) as usize;
                 let u = self.rng.unit_f64();
                 let sigma = self.initial_step * exp(-2.0 * u * std::f64::consts::LN_10);
                 (lambda.max(2), sigma, true)

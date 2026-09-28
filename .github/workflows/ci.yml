@@ -162,17 +162,14 @@ jobs:
           maturin develop --release
           # the tests run the README's code blocks and the module docstring's example too
           pytest -v
-          # every example in Python, examples/<name>/main.py, printing what its output.txt has
-          # (Linux's output). Except function_suite on macOS and Windows: their math libraries
-          # round sin and cos differently in the last bit, and its long runs drift apart.
+          # every example in Python, examples/<name>/main.py, printing what its output.txt has, on
+          # every platform: the test problems use genoxide's portable math
           for example in ../examples/*/main.py; do
             folder=$(dirname "$example")
             echo "::group::$example"
             python "$example" | tee output.actual
             echo "::endgroup::"
-            if [ "$(basename "$folder")" != function_suite ] || [ "$RUNNER_OS" = Linux ]; then
-              diff <(tr -d '\r' < "$folder/output.txt") <(tr -d '\r' < output.actual)
-            fi
+            diff <(tr -d '\r' < "$folder/output.txt") <(tr -d '\r' < output.actual)
           done
 
   msrv:

@@ -93,16 +93,16 @@ front, evenly spaced in f₁, give 0.5045 and an IGD+ of 0.0020.
 
 The first front has 6 solutions, only one of them with an f₁ below 0.6404. NSGA-II finds the
 front's upper left end quickly: its front has the smallest f₁, 0.2808, from generation 8. It ends
-with 100 solutions, 45 of them in the lower half of the range: the front is spread evenly, against
+with 100 solutions, 43 of them in the lower half of the range: the front is spread evenly, against
 the 6% that the map from x₁ gives.
 
-It is the convergence that is slow. The front's smallest g falls below 2 at about generation 52,
-and below 1.1 at about 112, but after 250 generations g is still 1.005 to 1.011 on the front. The
-run ends with an IGD+ of 0.0078 and a hypervolume of 0.4951, 97.5% of the whole front's: just above
+It is the convergence that is slow. The front's smallest g falls below 2 at about generation 51,
+and below 1.1 at about 112, but after 250 generations g is still 1.005 to 1.010 on the front. The
+run ends with an IGD+ of 0.0070 and a hypervolume of 0.4962, 97.7% of the whole front's: just above
 the front all along it.
 
-On seeds 1 to 5, NSGA-II ends between 0.4935 and 0.4953, with an IGD+ of about 0.0075 to 0.0087.
-More generations help: after 500, it ends between 0.5026 and 0.5031, with an IGD+ of about 0.0030,
-and after 1,000 between 0.5031 and 0.5035. With the same settings and 250 generations, SPEA2 ends
-between 0.4926 and 0.4961, SMS-EMOA between 0.4905 and 0.4942, and MOEA/D lower, between 0.4870
+On seeds 1 to 5, NSGA-II ends between 0.4948 and 0.4971, with an IGD+ of about 0.0064 to 0.0079.
+More generations help: after 500, it ends between 0.5025 and 0.5031, with an IGD+ of about 0.0030,
+and after 1,000 between 0.5032 and 0.5037. With the same settings and 250 generations, SPEA2 ends
+between 0.4935 and 0.4952, SMS-EMOA between 0.4905 and 0.4965, and MOEA/D lower, between 0.4870
 and 0.4883.

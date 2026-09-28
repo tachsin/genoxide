@@ -4,6 +4,7 @@
 
 use super::{MultiProblem, das_dennis, divisions_for};
 use crate::genome::{Real, Reals};
+use crate::math;
 use crate::multi::MultiFitnessFunction;
 use std::f64::consts::PI;
 
@@ -126,7 +127,7 @@ fn rastrigin_g(tail: &[f64]) -> f64 {
         * (tail.len() as f64
             + tail
                 .iter()
-                .map(|x| (x - 0.5) * (x - 0.5) - (20.0 * PI * (x - 0.5)).cos())
+                .map(|x| (x - 0.5) * (x - 0.5) - math::cos(20.0 * PI * (x - 0.5)))
                 .sum::<f64>())
 }
 
@@ -139,12 +140,12 @@ fn sphere_g(tail: &[f64]) -> f64 {
 fn spherical<const M: usize>(x: &[f64], radius: f64, alpha: f64) -> [f64; M] {
     std::array::from_fn(|m| {
         let mut f = radius;
-        let angle = |xi: f64| if alpha == 1.0 { xi } else { xi.powf(alpha) } * PI / 2.0;
+        let angle = |xi: f64| if alpha == 1.0 { xi } else { math::powf(xi, alpha) } * PI / 2.0;
         for &xi in &x[..M - 1 - m] {
-            f *= angle(xi).cos();
+            f *= math::cos(angle(xi));
         }
         if m > 0 {
-            f *= angle(x[M - 1 - m]).sin();
+            f *= math::sin(angle(x[M - 1 - m]));
         }
         f
     })
@@ -319,7 +320,7 @@ mod tests {
         // DTLZ4 at x₁ = x₂ = 0.5 on the front: both angles are 0.5¹⁰⁰ π/2 ≈ 1.2e-30, so
         // f = (cos θ cos θ, cos θ sin θ, sin θ) = (1, θ, θ) to double precision: the bias
         // towards f₁ that the paper describes
-        let theta = 0.5f64.powi(100) * PI / 2.0;
+        let theta = math::powi(0.5f64, 100) * PI / 2.0;
         let f = Dtlz4::<3>::default().evaluate(&at(&[0.5; 12]));
         assert_eq!(f[0], 1.0);
         assert_close(&f[1..], &[theta, theta]);

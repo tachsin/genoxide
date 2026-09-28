@@ -8,6 +8,7 @@ use super::{
 };
 use crate::constraint::at_most;
 use crate::genome::{Real, Reals};
+use crate::math;
 use crate::multi::MultiFitnessFunction;
 use crate::problems::Constraints;
 use std::f64::consts::{FRAC_PI_2, PI};
@@ -277,15 +278,18 @@ impl MultiFitnessFunction<Reals, 2> for FonsecaFleming {
                 .map(|xi| (xi - sign * shift) * (xi - sign * shift))
                 .sum::<f64>()
         };
-        [1.0 - (-distance(1.0)).exp(), 1.0 - (-distance(-1.0)).exp()]
+        [
+            1.0 - math::exp(-distance(1.0)),
+            1.0 - math::exp(-distance(-1.0)),
+        ]
     }
 }
 
 // the front of FON at s = t√n in [−1, 1]
 fn fonseca_fleming_front(s: f64) -> [f64; 2] {
     [
-        1.0 - (-(s - 1.0) * (s - 1.0)).exp(),
-        1.0 - (-(s + 1.0) * (s + 1.0)).exp(),
+        1.0 - math::exp(-(s - 1.0) * (s - 1.0)),
+        1.0 - math::exp(-(s + 1.0) * (s + 1.0)),
     ]
 }
 
@@ -313,7 +317,7 @@ impl MultiProblem<2> for FonsecaFleming {
     }
 
     fn nadir_point(&self) -> Option<[f64; 2]> {
-        let worst = 1.0 - (-4.0f64).exp();
+        let worst = 1.0 - math::exp(-4.0f64);
         Some([worst, worst])
     }
 }
@@ -381,11 +385,11 @@ impl MultiFitnessFunction<Reals, 2> for Kursawe {
     fn evaluate(&self, x: &Reals) -> [f64; 2] {
         let f1 = x
             .windows(2)
-            .map(|pair| -10.0 * (-0.2 * (pair[0] * pair[0] + pair[1] * pair[1]).sqrt()).exp())
+            .map(|pair| -10.0 * math::exp(-0.2 * (pair[0] * pair[0] + pair[1] * pair[1]).sqrt()))
             .sum();
         let f2 = x
             .iter()
-            .map(|xi| xi.abs().powf(0.8) + 5.0 * (xi * xi * xi).sin())
+            .map(|xi| math::powf(xi.abs(), 0.8) + 5.0 * math::sin(xi * xi * xi))
             .sum();
         [f1, f2]
     }
@@ -462,7 +466,7 @@ pub struct Poloni;
 
 // A₁ and A₂, or B₁ and B₂ at (x₁, x₂)
 fn poloni_terms(x1: f64, x2: f64) -> (f64, f64) {
-    let (s1, c1, s2, c2) = (x1.sin(), x1.cos(), x2.sin(), x2.cos());
+    let (s1, c1, s2, c2) = (math::sin(x1), math::cos(x1), math::sin(x2), math::cos(x2));
     (
         0.5 * s1 - 2.0 * c1 + s2 - 1.5 * c2,
         1.5 * s1 - c1 + 2.0 * s2 - 0.5 * c2,
@@ -631,9 +635,9 @@ impl MultiFitnessFunction<Reals, 3> for Viennet2 {
     fn evaluate(&self, x: &Reals) -> [f64; 3] {
         let (x1, x2) = (x[0], x[1]);
         [
-            (x1 - 2.0).powi(2) / 2.0 + (x2 + 1.0).powi(2) / 13.0 + 3.0,
-            (x1 + x2 - 3.0).powi(2) / 36.0 + (-x1 + x2 + 2.0).powi(2) / 8.0 - 17.0,
-            (x1 + 2.0 * x2 - 1.0).powi(2) / 175.0 + (2.0 * x2 - x1).powi(2) / 17.0 - 13.0,
+            math::powi(x1 - 2.0, 2) / 2.0 + math::powi(x2 + 1.0, 2) / 13.0 + 3.0,
+            math::powi(x1 + x2 - 3.0, 2) / 36.0 + math::powi(-x1 + x2 + 2.0, 2) / 8.0 - 17.0,
+            math::powi(x1 + 2.0 * x2 - 1.0, 2) / 175.0 + math::powi(2.0 * x2 - x1, 2) / 17.0 - 13.0,
         ]
     }
 }
@@ -702,9 +706,11 @@ impl MultiFitnessFunction<Reals, 3> for Viennet3 {
         let (x1, x2) = (x[0], x[1]);
         let squares = x1 * x1 + x2 * x2;
         [
-            0.5 * squares + squares.sin(),
-            (3.0 * x1 - 2.0 * x2 + 4.0).powi(2) / 8.0 + (x1 - x2 + 1.0).powi(2) / 27.0 + 15.0,
-            1.0 / (squares + 1.0) - 1.1 * (-squares).exp(),
+            0.5 * squares + math::sin(squares),
+            math::powi(3.0 * x1 - 2.0 * x2 + 4.0, 2) / 8.0
+                + math::powi(x1 - x2 + 1.0, 2) / 27.0
+                + 15.0,
+            1.0 / (squares + 1.0) - 1.1 * math::exp(-squares),
         ]
     }
 }
@@ -888,10 +894,10 @@ impl MultiProblem<2> for Srn {
         // x₂ from 2.5 to √218.75 on x₁ = −2.5
         let line = |t: f64| Self::at(-2.5, 2.5 + (top - 2.5) * t);
         // the circle of radius 15, by angle
-        let (start, end) = (top.atan2(-2.5), SRN_END_X2.atan2(SRN_END_X1));
+        let (start, end) = (math::atan2(top, -2.5), math::atan2(SRN_END_X2, SRN_END_X1));
         let circle = |t: f64| {
             let angle = start + (end - start) * t;
-            Self::at(15.0 * angle.cos(), 15.0 * angle.sin())
+            Self::at(15.0 * math::cos(angle), 15.0 * math::sin(angle))
         };
         let pieces = [
             Piece {
@@ -952,15 +958,15 @@ impl Tnk {
     fn values(&self, x: &Reals) -> [f64; 2] {
         let (x1, x2) = (x[0], x[1]);
         [
-            1.0 + 0.1 * (16.0 * x1.atan2(x2)).cos() - x1 * x1 - x2 * x2,
+            1.0 + 0.1 * math::cos(16.0 * math::atan2(x1, x2)) - x1 * x1 - x2 * x2,
             (x1 - 0.5) * (x1 - 0.5) + (x2 - 0.5) * (x2 - 0.5) - 0.5,
         ]
     }
 
     // the point of the first constraint's boundary at the angle φ from the x₂ axis
     fn boundary(angle: f64) -> [f64; 2] {
-        let radius = (1.0 + 0.1 * (16.0 * angle).cos()).sqrt();
-        [radius * angle.sin(), radius * angle.cos()]
+        let radius = (1.0 + 0.1 * math::cos(16.0 * angle)).sqrt();
+        [radius * math::sin(angle), radius * math::cos(angle)]
     }
 
     // the second constraint at the boundary point at `angle`
@@ -1077,11 +1083,11 @@ pub struct Osy;
 
 impl Osy {
     fn objectives(&self, x: &Reals) -> [f64; 2] {
-        let f1 = -(25.0 * (x[0] - 2.0).powi(2)
-            + (x[1] - 2.0).powi(2)
-            + (x[2] - 1.0).powi(2)
-            + (x[3] - 4.0).powi(2)
-            + (x[4] - 1.0).powi(2));
+        let f1 = -(25.0 * math::powi(x[0] - 2.0, 2)
+            + math::powi(x[1] - 2.0, 2)
+            + math::powi(x[2] - 1.0, 2)
+            + math::powi(x[3] - 4.0, 2)
+            + math::powi(x[4] - 1.0, 2));
         let f2 = x[..6].iter().map(|xi| xi * xi).sum();
         [f1, f2]
     }
@@ -1092,8 +1098,8 @@ impl Osy {
             x[0] + x[1] - 6.0,
             x[1] - x[0] - 2.0,
             x[0] - 3.0 * x[1] - 2.0,
-            (x[2] - 3.0).powi(2) + x[3] - 4.0,
-            4.0 - (x[4] - 3.0).powi(2) - x[5],
+            math::powi(x[2] - 3.0, 2) + x[3] - 4.0,
+            4.0 - math::powi(x[4] - 3.0, 2) - x[5],
         ]
     }
 
@@ -1381,7 +1387,7 @@ mod tests {
         let front = Schaffer1.optimal_front(11).expect("known");
         assert_eq!((front[0], front[10]), ([0.0, 4.0], [4.0, 0.0]));
         for [f1, f2] in front {
-            assert!((f2 - (f1.sqrt() - 2.0).powi(2)).abs() < 1e-12);
+            assert!((f2 - math::powi(f1.sqrt() - 2.0, 2)).abs() < 1e-12);
         }
         assert_eq!(Schaffer1.representation().bounds(), [-1000.0..=1000.0]);
         no_genome_dominates_the_front(&Schaffer1, 1e-9);
@@ -1421,10 +1427,10 @@ mod tests {
         let x = 1.0 / 3f64.sqrt();
         assert_close(
             &problem.evaluate(&at(&[x; 3])),
-            &[0.0, 1.0 - (-4.0f64).exp()],
+            &[0.0, 1.0 - math::exp(-4.0f64)],
         );
         // at the origin, Σ (1/√3)² = 1 in both
-        let value = 1.0 - (-1.0f64).exp();
+        let value = 1.0 - math::exp(-1.0f64);
         assert_close(&problem.evaluate(&at(&[0.0; 3])), &[value, value]);
         // equal variables in [−1/√n, 1/√n] lie on the front, for any n
         for n in [1, 3, 5] {
@@ -1445,11 +1451,11 @@ mod tests {
         // at the origin, two terms −10 e⁰, and 0
         assert_eq!(problem.evaluate(&at(&[0.0; 3])), [-20.0, 0.0]);
         // at (1, 1, 1): two terms −10 exp(−0.2 √2), and three 1 + 5 sin 1
-        let f1 = -20.0 * (-0.2 * 2f64.sqrt()).exp();
-        let f2 = 3.0 * (1.0 + 5.0 * 1f64.sin());
+        let f1 = -20.0 * math::exp(-0.2 * 2f64.sqrt());
+        let f2 = 3.0 * (1.0 + 5.0 * math::sin(1f64));
         assert_close(&problem.evaluate(&at(&[1.0; 3])), &[f1, f2]);
         // sin(xᵢ³), not sin³(xᵢ): at (2, 0, 0), 2^0.8 + 5 sin 8
-        let f2 = 2f64.powf(0.8) + 5.0 * 8f64.sin();
+        let f2 = math::powf(2f64, 0.8) + 5.0 * math::sin(8f64);
         assert_close(&problem.evaluate(&at(&[2.0, 0.0, 0.0]))[1..], &[f2]);
         assert!(problem.optimal_front(10).is_none());
     }
@@ -1461,12 +1467,12 @@ mod tests {
     fn kursawe_extremes() {
         // the term of f₂ is least at KURSAWE_X: its derivative is 0 there, and a grid of
         // 1,000,001 values over [−5, 5] has nothing lower
-        let term = |x: f64| x.abs().powf(0.8) + 5.0 * (x * x * x).sin();
-        let slope = |x: f64| -0.8 * (-x).powf(-0.2) + 15.0 * x * x * (x * x * x).cos();
+        let term = |x: f64| math::powf(x.abs(), 0.8) + 5.0 * math::sin(x * x * x);
+        let slope = |x: f64| -0.8 * math::powf(-x, -0.2) + 15.0 * x * x * math::cos(x * x * x);
         assert!(slope(KURSAWE_X).abs() < 1e-12);
         assert!((term(KURSAWE_X) - KURSAWE_TERM).abs() < 1e-14);
         let x = KURSAWE_X.abs();
-        assert!(((-0.2 * (2.0 * x * x).sqrt()).exp() - KURSAWE_DECAY).abs() < 1e-15);
+        assert!((math::exp(-0.2 * (2.0 * x * x).sqrt()) - KURSAWE_DECAY).abs() < 1e-15);
         let least = (0..=1_000_000)
             .map(|i| term(-5.0 + i as f64 * 1e-5))
             .fold(f64::INFINITY, f64::min);
@@ -1510,10 +1516,15 @@ mod tests {
         // B = A at (1, 2): f₁ is 1, its minimum; f₂ = 4² + 3²
         assert_close(&Poloni.evaluate(&at(&[1.0, 2.0])), &[1.0, 25.0]);
         // at the origin: B₁ = −2 − 1.5 and B₂ = −1 − 0.5; f₂ = 9 + 1
-        let (s1, c1, s2, c2) = (1f64.sin(), 1f64.cos(), 2f64.sin(), 2f64.cos());
+        let (s1, c1, s2, c2) = (
+            math::sin(1f64),
+            math::cos(1f64),
+            math::sin(2f64),
+            math::cos(2f64),
+        );
         let a1 = 0.5 * s1 - 2.0 * c1 + s2 - 1.5 * c2;
         let a2 = 1.5 * s1 - c1 + 2.0 * s2 - 0.5 * c2;
-        let f1 = 1.0 + (a1 + 3.5).powi(2) + (a2 + 1.5).powi(2);
+        let f1 = 1.0 + math::powi(a1 + 3.5, 2) + math::powi(a2 + 1.5, 2);
         assert_close(&Poloni.evaluate(&at(&[0.0, 0.0])), &[f1, 10.0]);
         assert_eq!(Poloni.representation().bounds()[1], -PI..=PI);
         // the ends of the front: f₁ at (−3, −1), and f₂ at (1, 2)
@@ -1684,7 +1695,7 @@ mod tests {
         // the optimal solutions x₁ = x₂ = t reach the front
         for t in [0.0, 1.0, 2.5, 5.0] {
             let (f, violation) = Bnh.evaluate(&at(&[t, t]));
-            assert_close(&f, &[8.0 * t * t, 2.0 * (t - 5.0).powi(2)]);
+            assert_close(&f, &[8.0 * t * t, 2.0 * math::powi(t - 5.0, 2)]);
             assert_eq!(violation, 0.0);
         }
         assert_eq!(Bnh.representation().bounds()[1], -15.0..=30.0);
@@ -1707,8 +1718,8 @@ mod tests {
         let [x1, x2] = [SRN_END_X1, SRN_END_X2];
         assert!((x1 * x1 + x2 * x2 - 225.0).abs() < 1e-12);
         // there, f₂ is smallest along the circle
-        let f2 = |angle: f64| Srn::at(15.0 * angle.cos(), 15.0 * angle.sin())[1];
-        let angle = x2.atan2(x1);
+        let f2 = |angle: f64| Srn::at(15.0 * math::cos(angle), 15.0 * math::sin(angle))[1];
+        let angle = math::atan2(x2, x1);
         assert!(f2(angle) < f2(angle - 1e-4) && f2(angle) < f2(angle + 1e-4));
         // the origin violates the second constraint by 10, (15, 15) the first by 225
         assert_eq!(Srn.evaluate(&at(&[0.0, 0.0])).1, 10.0);

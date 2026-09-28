@@ -65,8 +65,8 @@ checked against the originals (https://github.com/tachsin/genoxide/issues/168), 
   genetic algorithm: NSGA-II. IEEE Transactions on Evolutionary Computation 6(2): 182-197.
   doi:10.1109/4235.996017
 
-The functions use the platform's trigonometric and exponential functions, so their values can
-differ in the last bit between platforms.
+The functions are evaluated in Rust with genoxide's portable math, so their values are the same to
+the bit on every platform.
 """
 
 from __future__ import annotations

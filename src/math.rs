@@ -1,19 +1,40 @@
-//! Portable math: the same bits on every platform.
+//! Portable math: the same bits on every platform, at native speed.
 //!
-//! The platform `ln`, `exp` and `powf` can differ in the last bit between systems (they come from
-//! the C library or from compiler intrinsics), which would change random choices made with them.
-//! These are ports of fdlibm (the basis of most libm implementations), which only use basic
-//! floating point operations: IEEE 754 makes their results exact to the bit, so they give the same
-//! result everywhere. `sqrt` needs no port: IEEE 754 requires it to be correctly rounded.
+//! The platform `sin`, `cos`, `exp`, `ln`, `powf` and the like come from the operating system's C
+//! library or from compiler intrinsics, and their last bit can differ between Linux, macOS and
+//! Windows. A fitness function that calls them can then rank two solutions differently on
+//! different systems, and a seeded run drifts apart. The functions here only use basic floating
+//! point operations, which IEEE 754 makes exact to the bit, so they give the same result
+//! everywhere, within 1 ulp of the true value: `exp` and `ln` are ports of fdlibm (the basis of
+//! most libm implementations), the rest come from the [`libm`](https://docs.rs/libm) crate (Rust's
+//! port of musl's libm). They are about as fast as the platform's: `sin`, `cos`, `atan2` and
+//! `cbrt` are faster than glibc's, `exp` and `ln` a few nanoseconds slower. `sqrt` needs no
+//! replacement: IEEE 754 requires it to be correctly rounded, so `f64::sqrt` is portable already.
+//!
+//! The test problems in [`problems`](crate::problems) and
+//! [`multi::problems`](crate::multi::problems) use these, and so should a fitness function that
+//! must give the same results on every platform:
+//!
+//! ```
+//! use genoxide::math;
+//! use genoxide::prelude::*;
+//!
+//! // Rastrigin, the same on every platform
+//! let rastrigin = |x: &Reals| {
+//!     10.0 * x.len() as f64
+//!         + x.iter()
+//!             .map(|xi| xi * xi - 10.0 * math::cos(std::f64::consts::TAU * xi))
+//!             .sum::<f64>()
+//! };
+//! # let _ = rastrigin;
+//! assert_eq!(math::cos(0.0), 1.0);
+//! ```
 
-/// The natural logarithm of `x`, the same on every platform: `-inf` for 0, NaN for negative `x`
-/// and NaN, `inf` for `inf`.
+/// The natural logarithm of `x`, the same on every platform, within 1 ulp: `-inf` for 0, NaN for
+/// negative `x` and NaN, `inf` for `inf`.
 ///
-/// The platform `ln` can differ in the last bit between systems, which would change the random
-/// choices made with it. This is fdlibm's `__ieee754_log` (the basis of most libm
-/// implementations), which only uses basic floating point operations: IEEE 754 makes their results
-/// exact to the bit, so this gives the same result everywhere, within 1 ulp of the true logarithm.
-pub(crate) fn log(x: f64) -> f64 {
+/// fdlibm's `__ieee754_log`, which the random choices of genoxide's operators use too.
+pub fn ln(x: f64) -> f64 {
     // fdlibm's constants, by their exact bits
     const LN2_HI: f64 = f64::from_bits(0x3fe6_2e42_fee0_0000); // 6.93147180369123816490e-1
     const LN2_LO: f64 = f64::from_bits(0x3dea_39ef_3579_3c76); // 1.90821492927058770002e-10
@@ -89,9 +110,9 @@ pub(crate) fn log(x: f64) -> f64 {
 
 /// `e` to the power `x`, the same on every platform, within 1 ulp of the true value.
 ///
-/// fdlibm's `__ieee754_exp`. Overflows to infinity above about 709.78, and underflows to 0 below
+/// fdlibm's `__ieee754_exp`, which the random choices of genoxide's operators use too. Overflows to infinity above about 709.78, and underflows to 0 below
 /// about -745.13.
-pub(crate) fn exp(x: f64) -> f64 {
+pub fn exp(x: f64) -> f64 {
     // fdlibm's constants, by their exact bits
     const O_THRESHOLD: f64 = f64::from_bits(0x4086_2e42_fefa_39ef); // 7.09782712893383973096e2
     const U_THRESHOLD: f64 = f64::from_bits(0xc087_4910_d52d_3051); // -7.45133219101941108420e2
@@ -159,7 +180,8 @@ pub(crate) fn exp(x: f64) -> f64 {
     }
 }
 
-/// `base` to the power `exponent`, for `base >= 0`, the same on every platform.
+/// `base` to the power `exponent`, for `base >= 0`, the same on every platform: the operators'
+/// quick power. [`powf`] is the accurate one.
 ///
 /// Computed as `exp(exponent * ln(base))`, so the relative error grows with
 /// `|exponent * ln(base)|`: about 1e-13 for the operators' uses, where the result is between 0
@@ -178,7 +200,95 @@ pub(crate) fn pow(base: f64, exponent: f64) -> f64 {
     if exponent == 1.0 {
         return base;
     }
-    exp(exponent * log(base))
+    exp(exponent * ln(base))
+}
+
+macro_rules! from_libm {
+    ($($(#[$doc:meta])* $name:ident = $libm:ident($($arg:ident),+);)+) => {
+        $(
+            $(#[$doc])*
+            #[inline]
+            #[must_use]
+            pub fn $name($($arg: f64),+) -> f64 {
+                libm::$libm($($arg),+)
+            }
+        )+
+    };
+}
+
+from_libm! {
+    /// The sine of `x` (in radians), the same on every platform, within 1 ulp.
+    sin = sin(x);
+    /// The cosine of `x` (in radians), the same on every platform, within 1 ulp.
+    cos = cos(x);
+    /// The tangent of `x` (in radians), the same on every platform, within 1 ulp.
+    tan = tan(x);
+    /// The arcsine of `x`, in radians in [-π/2, π/2], the same on every platform; NaN outside
+    /// [-1, 1].
+    asin = asin(x);
+    /// The arccosine of `x`, in radians in [0, π], the same on every platform; NaN outside [-1, 1].
+    acos = acos(x);
+    /// The arctangent of `x`, in radians in [-π/2, π/2], the same on every platform.
+    atan = atan(x);
+    /// The four-quadrant arctangent of `y / x`, in radians in [-π, π], the same on every platform,
+    /// as `y.atan2(x)`.
+    atan2 = atan2(y, x);
+    /// The hyperbolic sine of `x`, the same on every platform.
+    sinh = sinh(x);
+    /// The hyperbolic cosine of `x`, the same on every platform.
+    cosh = cosh(x);
+    /// The hyperbolic tangent of `x`, the same on every platform.
+    tanh = tanh(x);
+    /// `2` to the power `x`, the same on every platform.
+    exp2 = exp2(x);
+    /// `e^x - 1`, accurate near 0, the same on every platform.
+    exp_m1 = expm1(x);
+    /// `ln(1 + x)`, accurate near 0, the same on every platform.
+    ln_1p = log1p(x);
+    /// The base-2 logarithm of `x`, the same on every platform.
+    log2 = log2(x);
+    /// The base-10 logarithm of `x`, the same on every platform.
+    log10 = log10(x);
+    /// `base` to the power `exponent`, the same on every platform, within 1 ulp, with the special
+    /// cases of C's `pow` (as `base.powf(exponent)`). For an integer exponent, `f64::powi` is
+    /// faster.
+    powf = pow(base, exponent);
+    /// The cube root of `x`, the same on every platform.
+    cbrt = cbrt(x);
+    /// `sqrt(x² + y²)` without overflow or underflow in between, the same on every platform.
+    hypot = hypot(x, y);
+}
+
+/// `x` to the integer power `n`, the same on every platform.
+///
+/// `f64::powi` doesn't promise the same result everywhere, and doesn't give it: Windows' differs
+/// from Linux's, e.g. in the last bit of 7.6268145870115305^-3. This is binary exponentiation, as
+/// LLVM expands `powi` on Linux, written out so that the order of the rounded multiplications is
+/// fixed: exact for `n` in -1..=2, within a few ulps otherwise.
+#[inline]
+#[must_use]
+pub fn powi(x: f64, n: i32) -> f64 {
+    let mut base = x;
+    let mut exponent = n.unsigned_abs();
+    let mut result = 1.0;
+    loop {
+        if exponent & 1 == 1 {
+            result *= base;
+        }
+        exponent >>= 1;
+        if exponent == 0 {
+            break;
+        }
+        base *= base;
+    }
+    if n < 0 { 1.0 / result } else { result }
+}
+
+/// The sine and cosine of `x` (in radians), the same on every platform, as `x.sin_cos()`.
+#[inline]
+#[must_use]
+pub fn sin_cos(x: f64) -> (f64, f64) {
+    libm::sincos(x)
 }
 
 #[cfg(test)]
@@ -215,8 +325,8 @@ mod tests {
                 .filter(|&x| x > 0.0),
         );
         for x in values {
-            let (ours, std) = (log(x), x.ln());
-            assert!(ulps(ours, std) <= 1, "log({x:e}) = {ours:e}, std {std:e}");
+            let (ours, std) = (ln(x), x.ln());
+            assert!(ulps(ours, std) <= 1, "ln({x:e}) = {ours:e}, std {std:e}");
         }
     }
 
@@ -244,9 +354,9 @@ mod tests {
             let (ours, std) = (exp(x), x.exp());
             assert!(ulps(ours, std) <= 1, "exp({x:e}) = {ours:e}, std {std:e}");
         }
-        assert_eq!(log(0.0), f64::NEG_INFINITY);
-        assert_eq!(log(f64::INFINITY), f64::INFINITY);
-        assert!(log(-1.0).is_nan() && log(f64::NAN).is_nan());
+        assert_eq!(ln(0.0), f64::NEG_INFINITY);
+        assert_eq!(ln(f64::INFINITY), f64::INFINITY);
+        assert!(ln(-1.0).is_nan() && ln(f64::NAN).is_nan());
         assert_eq!(exp(710.0), f64::INFINITY);
         assert_eq!(exp(-746.0), 0.0);
         assert!(exp(f64::NAN).is_nan());
@@ -293,5 +403,87 @@ mod tests {
             ],
             "the portable math changed, which breaks reproducibility"
         );
+    }
+
+    /// The public functions from libm: fixed bits, on every platform, and within 1 ulp of std.
+    #[test]
+    fn libm_values() {
+        let values = [
+            sin(1.0),
+            cos(1.0),
+            sin(1e6),
+            cos(-420.9687),
+            tan(0.7),
+            atan(9.0 * std::f64::consts::PI),
+            atan2(1.0, -2.5),
+            powf(2.0, 0.8),
+            powf(0.3, 0.25),
+            cbrt(3.0),
+            sin_cos(2.0).0,
+            sin_cos(2.0).1,
+        ];
+        assert_eq!(
+            values.map(f64::to_bits),
+            [
+                4605754516372524270,  // 0.8414709848078965
+                4603041830072026764,  // 0.5403023058681398
+                13823348579196524647, // -0.34999350217129294
+                4607182318654989009,  // 0.999988881668367
+                4605761878818060462,  // 0.8422883804630794
+                4609593841035272243,  // 1.5354432975345957
+                4613399832362958176,  // 2.761086276477428
+                4610520041557582112,  // 1.7411011265922482
+                4604841292830345951,  // 0.7400828044922853
+                4609174133800058614,  // 1.4422495703074083
+                4606365442650518598,  // 0.9092974268256817
+                13824540291724702213, // -0.4161468365471424
+            ],
+            "the portable math changed, which breaks reproducibility"
+        );
+        let mut rng = StreamRng::seed_from_u64(1);
+        for _ in 0..20_000 {
+            let x = (rng.unit_f64() - 0.5) * 2000.0;
+            assert!(ulps(sin(x), x.sin()) <= 1, "sin({x})");
+            assert!(ulps(cos(x), x.cos()) <= 1, "cos({x})");
+            let y = rng.unit_f64() * 10.0;
+            assert!(
+                ulps(powf(y, x / 1000.0), y.powf(x / 1000.0)) <= 1,
+                "powf({y}, {x})"
+            );
+        }
+    }
+
+    /// Fixed bits on every platform, unlike `f64::powi`: Windows' differs from Linux's, e.g. in
+    /// the last bit of 7.6268145870115305^-3, and by more for large exponents.
+    #[test]
+    fn powi_values() {
+        let cases = [
+            (1.1, 3, 4608673110276677044),                 // 1.3310000000000004
+            (7.6268145870115305, -3, 4567343990406518369), // 0.002254085754944055
+            (0.3, -2, 4622444617537217422),                // 11.11111111111111
+            (2.5, 7, 4648579924938981376),                 // 610.3515625
+            (-1.7, 5, 13847554739229683444),               // -14.198569999999997
+            (3.3, 20, 4761950407933306278),                // 23457341881.036766
+            (0.9, -31, 4628070934801639606),               // 26.21091652880633
+        ];
+        for (x, n, bits) in cases {
+            assert_eq!(powi(x, n).to_bits(), bits, "powi({x}, {n})");
+        }
+        let mut rng = StreamRng::seed_from_u64(2);
+        for _ in 0..20_000 {
+            let x = (rng.unit_f64() - 0.5) * 20.0;
+            for n in [-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 20, 31] {
+                // accurate: within a few rounding errors of the portable powf
+                let (ours, accurate) = (powi(x, n), powf(x, f64::from(n)));
+                let error = ((ours - accurate) / accurate).abs();
+                assert!(
+                    error <= 16.0 * f64::EPSILON,
+                    "powi({x}, {n}) = {ours}, {accurate}"
+                );
+            }
+        }
+        assert_eq!(powi(0.0, -1), f64::INFINITY);
+        assert!(powi(f64::NAN, 2).is_nan());
+        assert_eq!(powi(f64::NAN, 0), 1.0);
     }
 }

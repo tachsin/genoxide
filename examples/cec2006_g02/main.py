@@ -40,7 +40,7 @@ print(
     f"f {value:.6f}, {'feasible' if result.violation == 0 else 'infeasible'} "
     f"(the best known: {best_known:.6f}, not proven)"
 )
-# the last digits of f differ between platforms: g02 calls the platform's cos
+# a gap below 1e-8 is the target's: its digits are rounding's
 if 0 <= gap < 1e-8:
     print("relative gap to the best known: below 1e-8")
 else:

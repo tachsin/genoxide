@@ -99,10 +99,7 @@ known value. The third gives the gap to the best known value, relative to its si
 give the best solution, x1 to x20, to 3 decimals, and the last the constraints active at it: those
 with |g(x)| ≤ 1e-6.
 
-In Python, `run` evaluates the problem in Rust, so both versions print the same. g02 calls the
-platform's `cos`, whose last bit can differ between operating systems, so the run can take a
-different path on another one. The output stays the same on Windows and Linux, with 6 digits of
-the value and 3 decimals of the solution.
+In Python, `run` evaluates the problem in Rust, so both versions print the same.
 
 The page's plot shows each variable on its range, and each constraint's state: violated, active or
 satisfied. Its curve shows the error f − f* of the best feasible solution, and of the population's
