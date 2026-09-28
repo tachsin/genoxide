@@ -160,5 +160,5 @@ On seeds 1 to 10, NSGA-II has an IGD+ of 0.1589 to 0.1820 after 250 generations 
 after 1,000 generations, at 0.1312 to 0.1443. So do the other operator settings tried with
 NSGA-II on seeds 1 to 3, with IGD+ from 0.146 to 0.157 after 1,000 generations: polynomial
 mutation with η = 5 or at a rate of 4/24, simulated binary crossover with η = 5, and blend
-crossover (α = 0.5). Arithmetic crossover is worse, at 0.233 to 0.243. The selection and the
+crossover (α = 0.5). Arithmetic crossover is worse, at 0.235 to 0.248. The selection and the
 operators change little: the difficulty is in how the variables depend on each other.

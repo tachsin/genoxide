@@ -1,4 +1,4 @@
-NSGA-III, SBX    92 solutions, IGD+ 0.1667, hypervolume 0.0333, largest gap 16.4°, median g 0.1744
-NSGA-II, SBX     92 solutions, IGD+ 0.3405, hypervolume 0.0031, largest gap 7.4°, median g 0.3515
-NSGA-II, uniform 92 solutions, IGD+ 0.0036, hypervolume 0.1320, largest gap 3.3°, median g 0.0000
+NSGA-III, SBX    92 solutions, IGD+ 0.0308, hypervolume 0.1107, largest gap 9.6°, median g 0.0220
+NSGA-II, SBX     92 solutions, IGD+ 0.0193, hypervolume 0.1206, largest gap 3.0°, median g 0.0169
+NSGA-II, uniform 92 solutions, IGD+ 0.0033, hypervolume 0.1319, largest gap 3.2°, median g 0.0001
 the whole front: hypervolume 0.1349

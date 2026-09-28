@@ -95,17 +95,21 @@ spaced in f₁, give 0.8714 and an IGD+ of 0.0023.
 Neither algorithm is caught on a local front in this run: ZDT4 shows here as slowness. The first
 front has g from 97 to 187. While g falls, both fronts gather at f₁ near 0 for a while, NSGA-II's
 around generations 32 to 40, SMS-EMOA's from 24 to 48. NSGA-II's front first has solutions below
-the nearest local front, g = 1.25, at about generation 120. It is entirely below it, with 100
-solutions, from generation 152. SMS-EMOA is slower at first: its front first goes below g = 1.25
-at about generation 160, is entirely below it from 176, and has 100 solutions from 200.
+the nearest local front, g = 1.25, at about generation 140. It has 100 solutions from generation
+160, and from 176 all of them are below it but for at most three with f₁ below 10⁻²⁸: no other
+solution has a smaller f₁, so none dominates them, whatever their g. SMS-EMOA is slower at first:
+its front first goes below g = 1.25 at about generation 150, and is entirely below it, with 100
+solutions, from 192.
 
-After the paper's 250 generations, neither is quite there. NSGA-II's front has g from about 1.01 to
-1.025, an IGD+ of 0.0087 and a hypervolume of 0.8605; SMS-EMOA's is closer, with an IGD+ of 0.0058
-and 0.8655. After 500, both are on the front: NSGA-II ends with g below 1.001, an IGD+ of 0.0031
-and 0.8706, SMS-EMOA with an IGD+ of 0.0028 and 0.8711.
+After the paper's 250 generations, NSGA-II is nearly there: its front has g from about 1.002 to
+1.004, an IGD+ of 0.0038 and a hypervolume of 0.8694. SMS-EMOA's front, with g from about 1.014
+to 1.019, is still spreading from f₁ = 0: it reaches only f₁ = 0.73, for an IGD+ of 0.0294 and
+0.8267, and f₁ = 1 at about generation 310. After 500, both are on the front: NSGA-II ends with g
+from 1.0008 to 1.0017, but for one solution with f₁ below 10⁻³⁵ and g = 1.25, an IGD+ of 0.0032
+and 0.8703, SMS-EMOA with an IGD+ of 0.0028 and 0.8711.
 
-On seeds 1 to 5, NSGA-II has an IGD+ of 0.0048 to 0.0141 after 250 generations, and 0.0031 to
-0.0039 after 500; SMS-EMOA 0.0035 to 0.0058, and 0.0025 to 0.0030. After 1,000 generations,
-SMS-EMOA's hypervolume, 0.8715 to 0.8721, passes that of the 100 evenly spaced points, since it
-places its points where they add the most area. With the same settings, SPEA2 is between the two
-after 250 generations, with 0.0039 to 0.0062, and MOEA/D is behind SMS-EMOA, with 0.0041 to 0.0098.
+On seeds 1 to 5, NSGA-II has an IGD+ of 0.0038 to 0.0072 after 250 generations, and 0.0030 to
+0.0034 after 500; SMS-EMOA 0.0028 to 0.0294, and 0.0024 to 0.0028. After 1,000 generations,
+SMS-EMOA's hypervolume, 0.8716 to 0.8721, passes that of the 100 evenly spaced points, since it
+places its points where they add the most area. With the same settings, SPEA2 has 0.0040 to 0.0078
+after 250 generations, no better than NSGA-II on any seed, and MOEA/D 0.0041 to 0.0098.

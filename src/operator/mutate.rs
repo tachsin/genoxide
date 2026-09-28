@@ -4,7 +4,7 @@ use super::{Mutate, check_rate};
 use crate::genome::{
     AdaptiveReal, AdaptiveReals, Binary, Bits, Integer, Integers, Order, Permutation, Real, Reals,
 };
-use crate::math::{exp, pow};
+use crate::math::{exp, exp_m1, ln_1p};
 use crate::rng::Chance;
 use crate::{Error, Result, StreamRng};
 use std::ops::RangeInclusive;
@@ -331,7 +331,9 @@ impl Mutate<Real> for GaussianMutation {
 ///
 /// The distribution index `eta` sets the step size: the larger, the closer the new value to the
 /// old one. Common values are 20 (the NSGA-II default) and 5 to 100. Steps shrink near the bounds,
-/// so the new value is always within them.
+/// so the new value is always within them. Close to a bound, half the steps go toward it, to a
+/// uniformly random point between the gene and the bound, so a gene can approach a bound by any
+/// number of orders of magnitude, and reach it.
 ///
 /// A picked gene always changes. A per-gene mutation changes no gene with probability
 /// `(1 − rate)^n`; in a genetic algorithm, such a child is a copy that inherits its parent's
@@ -388,23 +390,32 @@ fn check_eta(eta: f64) -> Result<f64> {
     }
 }
 
-// Deb's bounded polynomial mutation of `current` in `range`
+// Deb's bounded polynomial mutation of `current` in `range`.
+//
+// With δ the distance to the bound in the step's direction as a fraction of the width, and u the
+// random number, Deb's step toward the lower bound is `(2u + (1 − 2u)(1 − δ)^(η+1))^(1/(η+1)) − 1`
+// (and the mirror image toward the upper one). Computed as written, `1 − δ` rounds to 1 for δ
+// below 2⁻⁵⁴, which makes the step 0, and the final `− 1` cancels for small steps. The same step
+// without the cancellations: `(1 − δ)^(η+1) − 1 = exp_m1((η+1) ln_1p(−δ))`, so the base less 1 is
+// `(1 − 2u) exp_m1((η+1) ln_1p(−δ))`, and the step is `exp_m1(ln_1p(that) / (η+1))`.
 fn polynomial(current: f64, range: &RangeInclusive<f64>, eta: f64, rng: &mut StreamRng) -> f64 {
     let (start, end) = (*range.start(), *range.end());
     let width = end - start;
     let random = rng.unit_f64();
-    let power = 1.0 / (eta + 1.0);
-    let step = if random < 0.5 {
-        let complement = 1.0 - (current - start) / width;
-        let value = 2.0 * random + (1.0 - 2.0 * random) * pow(complement.max(0.0), eta + 1.0);
-        pow(value, power) - 1.0
-    } else {
-        let complement = 1.0 - (end - current) / width;
-        let value =
-            2.0 * (1.0 - random) + 2.0 * (random - 0.5) * pow(complement.max(0.0), eta + 1.0);
-        1.0 - pow(value, power)
+    // the size of Deb's step toward a bound `distance` away, both as fractions of the width, for a
+    // weight of 1 − 2u or 2u − 1, in [0, 1]
+    let step = |distance: f64, weight: f64| {
+        let decay = exp_m1((eta + 1.0) * ln_1p(-distance.min(1.0)));
+        -exp_m1(ln_1p(weight * decay) / (eta + 1.0))
     };
-    (current + step * width).clamp(start, end)
+    let new = if random < 0.5 {
+        // toward `start`: 1 − 2u is exact, and in (0, 1]
+        current - step((current - start) / width, 1.0 - 2.0 * random) * width
+    } else {
+        // toward `end`: 2u − 1 is exact, and in [0, 1)
+        current + step((end - current) / width, 2.0 * random - 1.0) * width
+    };
+    new.clamp(start, end)
 }
 
 impl Mutate<Real> for PolynomialMutation {
@@ -802,6 +813,182 @@ mod tests {
         assert!(mean > 0.01, "mean {mean}");
     }
 
+    // `trials` polynomial mutations (η = 20) of a gene at `current` in `range`: the fraction that
+    // moved toward `bound`, the fraction that landed on it, and the mean of
+    // (new − bound) / (current − bound) over those that moved toward it
+    fn toward_bound(range: RangeInclusive<f64>, current: f64, bound: f64) -> (f64, f64, f64) {
+        let trials = 20_000usize;
+        let real = Real::new([range]).unwrap();
+        let mutation = PolynomialMutation::count(1, 20.0).unwrap();
+        let mut rng = StreamRng::seed_from_u64(3);
+        let (mut toward, mut landed, mut ratios) = (0, 0, 0.0);
+        for _ in 0..trials {
+            let mut genome = Reals::from(vec![current]);
+            mutation.mutate(&real, &mut genome, &mut rng);
+            assert!(real.validate(&genome).is_ok(), "{genome:?}");
+            let new = genome[0];
+            if (new - bound).abs() < (current - bound).abs() {
+                toward += 1;
+                landed += usize::from(new == bound);
+                ratios += (new - bound) / (current - bound);
+            }
+        }
+        let fraction = |count: usize| count as f64 / trials as f64;
+        (fraction(toward), fraction(landed), ratios / toward as f64)
+    }
+
+    #[test]
+    fn polynomial_steps_toward_a_nearby_bound() {
+        // half the steps go toward the bound, as far from it; close to it, where (1 − δ)^(η+1) is
+        // about 1 − (η+1)δ, uniformly between the bound and the gene: the mean ratio is 1/2
+        for offset in [1e-300, 1e-20, 1e-16, 1e-3] {
+            for (range, current, bound) in [(0.0..=1.0, offset, 0.0), (-1.0..=0.0, -offset, 0.0)] {
+                let (toward, _, ratio) = toward_bound(range, current, bound);
+                assert!((toward - 0.5).abs() < 0.02, "{current:e}: {toward} toward");
+                assert!((ratio - 0.5).abs() < 0.02, "{current:e}: ratio {ratio}");
+            }
+        }
+        // one representable value from the bound, every step toward it lands on it: the half of
+        // them that go more than half the way, the rest round back to the gene, which is no
+        // change, and are drawn again, so a third of the mutations
+        let one_ulp = [
+            (0.0..=1.0, 5e-324, 0.0),
+            (-1.0..=0.0, -5e-324, 0.0),
+            (1.0..=2.0, 1.0 + f64::EPSILON, 1.0),
+            (0.0..=1.0, 1.0 - f64::EPSILON / 2.0, 1.0),
+            (-3.0..=-1.0, -1.0 - f64::EPSILON, -1.0),
+        ];
+        for (range, current, bound) in one_ulp {
+            let (toward, landed, _) = toward_bound(range, current, bound);
+            assert!(
+                (toward - 1.0 / 3.0).abs() < 0.02,
+                "{current:e}: {toward} toward"
+            );
+            assert_eq!(landed, toward, "{current:e}");
+        }
+    }
+
+    #[test]
+    fn polynomial_mutation_reaches_the_bounds_exactly() {
+        // keeping only the steps toward the bound: the gene falls by a factor e per step on
+        // average near it, from 10⁻³ to the smallest subnormal in about 740 steps, and then onto it
+        let real = Real::uniform(1, -1.0..=1.0).unwrap();
+        let mutation = PolynomialMutation::count(1, 20.0).unwrap();
+        let mut rng = StreamRng::seed_from_u64(4);
+        let starts = [0.5, 1e-3, 1e-16, 1e-20, 1e-300];
+        for (current, bound) in starts
+            .iter()
+            .flat_map(|&offset| [(-1.0 + offset, -1.0), (1.0 - offset, 1.0), (offset, -1.0)])
+        {
+            let mut gene = current;
+            let mut mutations = 0;
+            while gene != bound {
+                let mut genome = Reals::from(vec![gene]);
+                mutation.mutate(&real, &mut genome, &mut rng);
+                if (genome[0] - bound).abs() < (gene - bound).abs() {
+                    gene = genome[0];
+                }
+                mutations += 1;
+                assert!(mutations < 10_000, "{current:e} stuck at {gene:e}");
+            }
+        }
+        // and a bound at 0, through the subnormals
+        let real = Real::uniform(1, 0.0..=1.0).unwrap();
+        for start in starts {
+            let mut gene = start;
+            let mut mutations = 0;
+            while gene != 0.0 {
+                let mut genome = Reals::from(vec![gene]);
+                mutation.mutate(&real, &mut genome, &mut rng);
+                gene = gene.min(genome[0]);
+                mutations += 1;
+                assert!(mutations < 10_000, "{start} stuck at {gene:e}");
+            }
+        }
+    }
+
+    // Deb's polynomial mutation as the paper writes it, in plain floating point: accurate away
+    // from the bounds
+    fn deb_polynomial(current: f64, range: &RangeInclusive<f64>, eta: f64, random: f64) -> f64 {
+        let (start, end) = (*range.start(), *range.end());
+        let width = end - start;
+        let power = 1.0 / (eta + 1.0);
+        let step = if random < 0.5 {
+            let complement = 1.0 - (current - start) / width;
+            let value = 2.0 * random + (1.0 - 2.0 * random) * complement.powf(eta + 1.0);
+            value.powf(power) - 1.0
+        } else {
+            let complement = 1.0 - (end - current) / width;
+            let value = 2.0 * (1.0 - random) + 2.0 * (random - 0.5) * complement.powf(eta + 1.0);
+            1.0 - value.powf(power)
+        };
+        current + step * width
+    }
+
+    #[test]
+    fn polynomial_steps_are_debs_away_from_the_bounds() {
+        // the same random number, the same new value to rounding
+        let mut rng = StreamRng::seed_from_u64(5);
+        for _ in 0..20_000 {
+            let range = -2.0..=3.0;
+            let current = -2.0 + 5.0 * (0.001 + 0.998 * rng.unit_f64());
+            let eta = 100.0 * rng.unit_f64();
+            let random = rng.clone().unit_f64();
+            let ours = polynomial(current, &range, eta, &mut rng);
+            let deb = deb_polynomial(current, &range, eta, random);
+            assert!(
+                (ours - deb).abs() < 1e-11,
+                "{current} η {eta} u {random}: {ours}, Deb's {deb}"
+            );
+        }
+    }
+
+    #[test]
+    fn polynomial_step_distribution_is_debs() {
+        // Deb's distribution function: the new value is below `y` for random numbers below
+        // `cdf(y)`, since the new value grows with the random number
+        fn cdf(current: f64, eta: f64, y: f64) -> f64 {
+            // on [0, 1]
+            if y < current {
+                let bound = (1.0 - current).powf(eta + 1.0);
+                let value = (1.0 + y - current).powf(eta + 1.0);
+                (value - bound) / (2.0 * (1.0 - bound))
+            } else {
+                let bound = current.powf(eta + 1.0);
+                let value = (1.0 - y + current).powf(eta + 1.0);
+                1.0 - (value - bound) / (2.0 * (1.0 - bound))
+            }
+        }
+        let real = Real::uniform(1, 0.0..=1.0).unwrap();
+        let mut rng = StreamRng::seed_from_u64(6);
+        let trials = 20_000;
+        for (current, eta) in [(0.3, 20.0), (0.05, 5.0), (0.9, 1.0), (0.5, 0.0)] {
+            let mutation = PolynomialMutation::count(1, eta).unwrap();
+            let mut values: Vec<f64> = (0..trials)
+                .map(|_| {
+                    let mut genome = Reals::from(vec![current]);
+                    mutation.mutate(&real, &mut genome, &mut rng);
+                    genome[0]
+                })
+                .collect();
+            values.sort_by(f64::total_cmp);
+            // Kolmogorov-Smirnov: the largest distance between the two distribution functions,
+            // below 1.95 / √n at the 0.1 % level
+            let distance = values
+                .iter()
+                .enumerate()
+                .map(|(i, &y)| {
+                    let expected = cdf(current, eta, y);
+                    (expected - i as f64 / trials as f64)
+                        .abs()
+                        .max((expected - (i + 1) as f64 / trials as f64).abs())
+                })
+                .fold(0.0, f64::max);
+            let limit = 1.95 / f64::from(trials).sqrt();
+            assert!(distance < limit, "{current} η {eta}: {distance}");
+        }
+    }
+
     #[test]
     fn per_gene_rates_are_exact() {
         // 5 genes at rate 0.2: no change with probability 0.8⁵, one gene on average
@@ -927,6 +1114,39 @@ mod tests {
             let mut genome = original.clone();
             PolynomialMutation::count(count, eta).unwrap().mutate(&real, &mut genome, &mut rng);
             check(genome, Some(count.min(len)))?;
+        }
+
+        #[test]
+        fn polynomial_stays_within_the_bounds(
+            start in -1e6..1e6f64,
+            width_exponent in -12.0..12.0f64,
+            position in 0usize..6,
+            fraction in 0.0..=1.0f64,
+            ulps in 1u64..1000,
+            eta in 0.0..200.0f64,
+            seed: u64,
+        ) {
+            let end = start + 10f64.powf(width_exponent);
+            let range = start..=end;
+            // on a bound, a few representable values from one, or anywhere
+            let current = match position {
+                0 => start,
+                1 => end,
+                2 => (0..ulps).fold(start, |x, _| x.next_up()).min(end),
+                3 => (0..ulps).fold(end, |x, _| x.next_down()).max(start),
+                _ => (start + fraction * (end - start)).clamp(start, end),
+            };
+            prop_assume!(start < end && range.contains(&current));
+            let mut rng = StreamRng::seed_from_u64(seed);
+            for _ in 0..20 {
+                let new = polynomial(current, &range, eta, &mut rng);
+                prop_assert!(range.contains(&new), "{current} in {range:?}: {new}");
+            }
+            let real = Real::new([range]).unwrap();
+            let mut genome = Reals::from(vec![current]);
+            PolynomialMutation::count(1, eta).unwrap().mutate(&real, &mut genome, &mut rng);
+            prop_assert!(real.validate(&genome).is_ok());
+            prop_assert_ne!(genome[0], current);
         }
 
         #[test]

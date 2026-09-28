@@ -83,13 +83,13 @@ A good front has 100 solutions spread from (0, 1) to (1, 0), an IGD+ near 0 and 
 0.5433. No set of 100 points reaches that hypervolume: 100 points of the optimal front, evenly
 spaced in f₁, give 0.5383 and an IGD+ of 0.0023.
 
-The run shows the shrinking front. From generation 16 to 64, every solution on the front has an f₁
-below 0.0001, while g falls from about 2.4 to 1.15. Only when g is near 1 does the front spread
-again: its largest f₁ reaches 0.5 at generation 92, and 1 at about 150; it has 100 solutions from
-generation 108. It ends with 100 solutions, g below 1.007, an IGD+ of 0.0035 and a hypervolume of
-0.5360, 98.7% of the whole front's.
+The run shows the shrinking front. From generation 15 to 72, the front's largest f₁ is below 0.0001
+in all but 7 generations, and below 0.04 in all, while g falls from about 2.4 to 1.1. Only when g
+is near 1 does the front spread again: its largest f₁ reaches 0.5 at generation 133, and 1 at
+about 175; it has 100 solutions from generation 120. It ends with 100 solutions, g below 1.008, an
+IGD+ of 0.0032 and a hypervolume of 0.5366, 98.8% of the whole front's.
 
-On seeds 1 to 5, NSGA-II ends between 0.5359 and 0.5365, with an IGD+ of 0.0033 to 0.0035. With
+On seeds 1 to 5, NSGA-II ends between 0.5359 and 0.5366, with an IGD+ of 0.0032 to 0.0035. With
 the same settings, SPEA2 ends between 0.5361 and 0.5370, and SMS-EMOA, which keeps the solutions
-that add the most hypervolume, between 0.5379 and 0.5383, with an IGD+ of about 0.0025: about as
+that add the most hypervolume, between 0.5376 and 0.5382, with an IGD+ of about 0.0025: about as
 close as the 100 evenly spaced points.

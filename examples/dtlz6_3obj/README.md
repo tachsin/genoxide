@@ -1,7 +1,7 @@
 ---
 title: DTLZ6 with 3 objectives
 category: multi-objective
-summary: Minimize three conflicting objectives whose Pareto front is a curve, behind a distance function that only exact zeros satisfy, with NSGA-II and NSGA-III.
+summary: Minimize three conflicting objectives whose Pareto front is a curve, behind a distance function that only falls steeply right next to the bound, with NSGA-II and NSGA-III.
 reference: "Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2001). Scalable Test Problems for Evolutionary Multi-Objective Optimization. TIK-Report 112, Computer Engineering and Networks Laboratory, ETH Zürich."
 reference_url: https://sop.tik.ee.ethz.ch/publicationListFiles/dtlz2001a.pdf
 optimum: "the curve f₁ = f₂ = cos θ / √2, f₃ = sin θ for θ in [0, π/2]; hypervolume 0.1349 (reference point (0.7778, 0.7778, 1.1))"
@@ -48,20 +48,20 @@ The front is a curve, as for DTLZ5: three objectives, but one dimension.
 
 And g is hard to bring to 0. x^0.1 falls steeply only near 0: it is 0.63 at x = 0.01, 0.1 at 10⁻¹⁰
 and still 0.01 at 10⁻²⁰. A random solution has g near 9, since x^0.1 averages 1/1.1 over [0, 1].
-For g below 0.1, all ten distance variables have to be below 10⁻²⁰. In practice they have to be
-exactly 0, on the lower bound.
+For g below 0.1, all ten distance variables have to be below 10⁻²⁰, and for g below 0.001, below
+10⁻⁴⁰. g is 0 only where they are exactly 0, on the lower bound.
 
-Polynomial mutation can get close. Near the lower bound, half of its moves take a gene to a random
-point between the bound and the gene: a gene falls by orders of magnitude, a few mutations at a
-time. But it can't take the last step alone. genoxide's polynomial mutation computes 1 − x, which
-rounds to 1 below about 5.6 × 10⁻¹⁷ for genes in [0, 1]. Tried 100,000 times each, a mutation of a
-gene at 10⁻¹⁶ sets it to exactly 0 a third of the time and raises it otherwise, and a mutation of a
-gene at 5 × 10⁻¹⁷ or below always raises it. So exact zeros appear one gene at a time, and
-crossover has to bring ten of them together in one genome.
+Polynomial mutation gets there, slowly. Near the lower bound, half of its moves take a gene to a
+uniformly random point between the bound and the gene: a factor of e smaller on average, an order
+of magnitude in about 2.3 such moves, all the way down to 5 × 10⁻³²⁴, the smallest positive
+floating-point number, and from there to 0. With one gene mutated per child, and ten variables to
+lower by tens of orders of magnitude, that takes hundreds of generations.
 
-Simulated binary crossover (SBX) can't: it spreads each gene between the values of the two parents,
-and a 0 and a 2 × 10⁻¹⁷ give two children between them, neither of them 0. Uniform crossover can:
-it takes each gene from either parent, unchanged.
+Crossover can speed it up by bringing together small values found in different genomes, since each
+distance variable adds to g on its own. Uniform crossover does: it takes each gene from either
+parent, unchanged. Simulated binary crossover (SBX) doesn't: as in NSGA-II's code, it leaves a gene
+alone where the two parents' values are within 10⁻¹⁴ of each other, so below that it neither
+spreads nor exchanges them, and each genome has to lower its own ten variables by mutation.
 
 ## Representation
 
@@ -71,7 +71,7 @@ fitness is the three objectives. In Python, `run` evaluates it in Rust.
 ## Algorithm
 
 Three runs, with a population of 92, polynomial mutation with η = 20 at a rate of 1/12 per gene,
-one gene per child on average, and 400 generations:
+one gene per child on average, and 1,000 generations:
 
 - NSGA-III (Deb and Jain, 2014, IEEE Transactions on Evolutionary Computation 18(4): 577-601), with
   SBX with η = 30, the 91 reference directions of Das and Dennis's method with 12 divisions, and a
@@ -83,9 +83,9 @@ one gene per child on average, and 400 generations:
   1/2, at a crossover rate of 0.9.
 
 Uniform crossover works here because of two properties of DTLZ6: the distance variables' optimum is
-the lower bound, a value that the search reaches exactly, and each distance variable adds to g on
-its own, so the zeros of different genomes can be combined. Uniform crossover makes no new values
-of a gene. On a problem whose optimal values aren't shared in this way, it would do less.
+the lower bound, shared by all of them, and each distance variable adds to g on its own, so the
+small values of different genomes can be combined. Uniform crossover makes no new values of a gene.
+On a problem whose optimal values aren't shared in this way, it would do less.
 
 ## Output
 
@@ -115,24 +115,22 @@ The plot shows the run with uniform crossover, with the curve as faint dots.
 No finite set reaches 0.1349. 92 points evenly spread along the curve have a hypervolume of 0.1331,
 an IGD+ of 0.0020 and gaps of 1.0°.
 
-NSGA-II with uniform crossover reaches the front. Its front has 92 solutions, all with g = 0, an
-IGD+ of 0.0036, a hypervolume of 0.1320 and a largest gap of 3.3°: as good as NSGA-II's front on
-DTLZ5. Its initial front has 66 solutions with g from 8.1 to 9.7. For 240 generations, polynomial
-mutation lowers the distance variables: the median g on the front is 2.8 at generation 100, 1.0
-at 180 and 0.5 at 240, and the smallest variable goes from 10⁻³ to 10⁻¹⁶. The first exact zeros
-appear at generation 220. Uniform crossover spreads them: 204 of the population's 920 distance
-variables are 0 at generation 260, and 819 at generation 320, when the first genome has all ten.
-By generation 340, every genome has all ten at 0, and the front is on the curve.
+NSGA-II with uniform crossover reaches the front. Its front has 92 solutions, all with g below
+0.0001, an IGD+ of 0.0033, a hypervolume of 0.1319 and a largest gap of 3.2°: as good as NSGA-II's
+front on DTLZ5. Its initial front has 66 solutions with g from 8.1 to 9.7. The distance variables
+fall steadily: the median g on the front is 2.8 at generation 100, 0.26 at 300, 0.024 at 500,
+0.0025 at 700 and 0.0001 at 1,000, a factor of about 3 every 100 generations from generation 300
+on, which is 5 orders of magnitude in each variable. At generation 1,000, every distance variable in
+the population is below 10⁻⁴⁷. None is exactly 0 yet: by generation 3,000, they are below 10⁻¹⁴⁵.
 
-With SBX, neither algorithm gets there. After 400 generations, NSGA-III's front has a median g of
-0.17, an IGD+ of 0.1667 and a hypervolume of 0.0333, and NSGA-II's a median g of 0.35, an IGD+ of
-0.3405 and 0.0031. More generations don't help. Run for 3,000, both stop converging by generation
-1,000: NSGA-II with every solution at g = 0.067 to 0.069, NSGA-III with its best at g = 0.080. In
-the NSGA-II run, 644 of the 920 distance variables are 0 by then, but no genome has all ten. The
-others sit between 2.5 × 10⁻¹⁷ and 5.1 × 10⁻¹⁷, where each adds about 0.022 to g, and mutation can
-only raise them.
+With SBX, both algorithms converge too, but slower. After 1,000 generations, NSGA-III's front has a
+median g of 0.022, an IGD+ of 0.0308 and a hypervolume of 0.1107, and NSGA-II's a median g of 0.017,
+an IGD+ of 0.0193 and 0.1206. Run for 3,000, NSGA-II reaches a median g of 0.0006, an IGD+ of
+0.0036 and a hypervolume of 0.1318, as with uniform crossover, and NSGA-III a median g of 0.0005
+and an IGD+ of 0.0100, with its solutions spread as on DTLZ5.
 
-Over seeds 1 to 10, after 400 generations, NSGA-II with uniform crossover has an IGD+ of 0.0033 to
-0.0037, with g below 0.0001 on every solution. With SBX, NSGA-III has 0.148 to 0.241, and
-NSGA-II 0.214 to 0.396. NSGA-III with uniform crossover reaches g = 0 too, but spreads its
-solutions as it does on DTLZ5, with an IGD+ of 0.0096 to 0.0126 and largest gaps of 8.5° to 12.4°.
+Over seeds 1 to 10, after 1,000 generations, NSGA-II with uniform crossover has an IGD+ of 0.0030 to
+0.0035, with g below 0.0001 on every solution. With SBX, NSGA-III has 0.0244 to 0.0356, and NSGA-II
+0.0145 to 0.0237. NSGA-III with uniform crossover gets about as close to the front, with a median
+g of 0.0001 to 0.0003, but spreads its solutions as it does on DTLZ5, with an IGD+ of 0.0072 to
+0.0115 and largest gaps of 7.5° to 10.4°.

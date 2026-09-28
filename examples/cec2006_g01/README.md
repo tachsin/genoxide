@@ -79,7 +79,7 @@ Other algorithms of genoxide do worse, in four runs each with the same budget an
 without restarts ends at local minima, between −12.7 and −11.3. With restarts from a growing
 population (IPOP), it meets the target after 90,000 to 235,000 evaluations, and L-SHADE, whose
 population shrinks over the budget, after 80,000 to 88,000. A GA with simulated binary crossover
-and polynomial mutation ends between −14.998 and −14.997, and particle swarm optimization between
+and polynomial mutation ends between −14.998 and −14.996, and particle swarm optimization between
 −12 and −7.
 
 ## Output
