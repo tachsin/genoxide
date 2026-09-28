@@ -34,6 +34,11 @@
 //! - one thread: genoxide's `parallel` feature is off (Cargo.toml), and the engines evaluate
 //!   sequentially (rule 4.3);
 //! - each seed goes to the algorithm's `.seed(...)`, so a seed repeats a run exactly (rule 5.2).
+//!
+//! `run.py versions` counts the CPU instructions of each solver's run with Callgrind (rule 10).
+//! It sets `GENOXIDE_BENCH_SOLVER` to one solver's name, and the adapter runs only that solver; a
+//! name no solver has runs none, which counts the startup. Without the variable, every solver
+//! runs.
 
 use genoxide::Objective::Minimize;
 use genoxide::multi::{Decomposition, Moead, Nsga3, SmsEmoa, Spea2, das_dennis};
@@ -264,6 +269,13 @@ fn attempt_seed(seed: u64, restart: u64) -> u64 {
     }
 }
 
+/// Whether `solver` runs: every solver, or only the one `GENOXIDE_BENCH_SOLVER` names
+fn selected(solver: &str) -> bool {
+    static ONLY: LazyLock<Option<String>> =
+        LazyLock::new(|| std::env::var("GENOXIDE_BENCH_SOLVER").ok());
+    ONLY.as_deref().is_none_or(|only| only == solver)
+}
+
 /// The generations in a row without a genome to evaluate after which an attempt has converged
 /// (rule 2.2)
 const STALL_GENERATIONS: u64 = 10;
@@ -309,6 +321,9 @@ where
     A: Algorithm<Genome = G>,
     G: Genome + Json,
 {
+    if !selected(solver) {
+        return Ok(());
+    }
     let maximize = args.problem == "onemax";
     let better = |a: f64, b: f64| if maximize { a > b } else { a < b };
     let reaches = |value: f64| {
@@ -584,6 +599,9 @@ fn solve_front<A, const M: usize>(
 where
     A: genoxide::multi::MultiObjectiveAlgorithm<M, Genome = Reals>,
 {
+    if !selected(solver) {
+        return Ok(());
+    }
     // every variable is in [0, 1]: SBX and polynomial mutation keep the genes inside their
     // bounds (rule 2.4), and the adapter counts any evaluated genome outside them
     let (calls, outside) = (AtomicU64::new(0), AtomicU64::new(0));

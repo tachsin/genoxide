@@ -43,7 +43,7 @@ Interactive, with each bar's numbers: [tachsin.gr/projects/genoxide/benchmarks](
 - [Distance to the optimum at the end](distance_to_optimum.svg)
 - [Hypervolume of the multi-objective fronts](hypervolume.svg)
 - [Time of the multi-objective runs](front_time.svg)
-- [Instructions per evaluation](instructions.svg), 5 libraries counted
+- [genoxide's versions](genoxide_versions.svg): the CPU instructions of the same runs in each release, genoxide only ([rule 10](rules.md#10-instruction-counts-genoxides-versions))
 
 ## Coverage
 
@@ -476,15 +476,3 @@ Expected time and evaluations to target: the expected running time (ERT), what a
 | zdt3-30-matched | pymoo / spea2 | 10 | 0 | 1.3275 | 1.3267 to 1.3281 | 1.78 s | 25,000 | 13,994 |
 | zdt3-30-matched | radiate / nsga2 | 10 | 0 | 1.2068 | 1.1087 to 1.2792 | 88.6 ms | 25,028 | 282,900 |
 | zdt3-30-matched | radiate / nsga3 | 10 | 0 | 1.1919 | 1.0397 to 1.2504 | 69.7 ms | 25,000 | 359,447 |
-
-## Instructions per evaluation
-
-OneMax 1000 (matched), counted by Callgrind: the framework and the fitness function together, without the startup and imports. It's the cost per evaluation: a generation's work is divided by the children the library evaluates in it, so it depends on how many it evaluates.
-
-| Library / solver | Instructions per evaluation |
-|---|---|
-| genoxide / ga | 3,336 |
-| genoxide_python / ga | 32,052 |
-| radiate / ga | 65,956 |
-| pygad / ga | 1,532,481 |
-| deap / ga | 4,463,100 |

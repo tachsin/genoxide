@@ -1,6 +1,7 @@
 "use client";
 
 import ChartShell from "./ChartShell";
+import VersionPanel from "./VersionPanel";
 
 /**
  * The benchmark page's interactive charts, one per kind, each drawing the
@@ -36,9 +37,12 @@ export function ToTargetChart({ views, libraries }) {
   return <ChartShell views={views} libraries={libraries} grid={LONG_PANELS} limit={12} name="To target" />;
 }
 
-/** The CPU instructions of one evaluation, framework and fitness function together: one panel. */
-export function InstructionsChart({ views, libraries }) {
-  return <ChartShell views={views} libraries={libraries} grid="max-w-2xl" name="Instructions per evaluation" />;
+/**
+ * genoxide's versions: the CPU instructions of the same runs in each version,
+ * a panel per scenario, a line per method across the versions.
+ */
+export function VersionsChart({ views, libraries }) {
+  return <ChartShell views={views} libraries={libraries} grid={PANELS} name="genoxide's versions" Panel={VersionPanel} />;
 }
 
 /**

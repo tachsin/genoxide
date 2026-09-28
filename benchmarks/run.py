@@ -10,8 +10,9 @@ Usage:
     python run.py check                      # test the adapters against the rules, before a run,
                                              # --jobs scenarios at a time
     python run.py chart                      # redraw the charts of the latest results
-    python run.py instructions               # count the instructions per evaluation with Callgrind
-                                             # into the latest results (--results <file>), --jobs
+    python run.py versions --genoxide 0.8.0  # count the CPU instructions of genoxide 0.8.0's runs
+                                             # with Callgrind into docs/benchmarks/genoxide-versions.json
+                                             # (--genoxide path: this repository's genoxide), --jobs
                                              # at a time; unpinned is fine
     python run.py --libraries genoxide --update results/<file>.json
                                              # rerun one library, keep the others' results, if a
@@ -26,8 +27,9 @@ Usage:
 
 Results are written to results/<timestamp>.json (all runs), results/latest.md (table) and
 results/charts/ (charts: *.svg, and charts.json, their numbers for the project site's interactive
-charts). `python run.py instructions`, or `--instructions` on a run, counts the instructions per
-evaluation with Callgrind (Linux, Valgrind).
+charts). `python run.py versions` compares genoxide's versions by the CPU instructions of the same
+runs, counted with Callgrind (Linux, Valgrind), in docs/benchmarks/genoxide-versions.json and the
+genoxide_versions chart.
 """
 
 import argparse
@@ -43,7 +45,6 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-import threading
 import time
 import venv
 from pathlib import Path
@@ -161,8 +162,6 @@ ADAPTERS = {
         "version": ("command", ["bash", str(ROOT / "adapters" / "jenetics" / "run.sh"), "--version"]),
         "language": "Java",
         "release": ("maven", "io.jenetics", "jenetics"),
-        # Callgrind can't follow a JIT-compiled runtime in reasonable time
-        "instructions": False,
     },
     "jmetal": {
         # the JDK and the pinned jars are downloaded into ~/opt, and compiled into ~/bench-targets
@@ -171,8 +170,6 @@ ADAPTERS = {
         "version": ("command", ["bash", str(ROOT / "adapters" / "jmetal" / "run.sh"), "--version"]),
         "language": "Java",
         "release": ("maven", "org.uma.jmetal", "jmetal-core"),
-        # Callgrind can't follow a JIT-compiled runtime in reasonable time
-        "instructions": False,
     },
     "evolutionary_jl": {
         # installs the pinned packages and precompiles, then runs with one thread
@@ -181,8 +178,6 @@ ADAPTERS = {
         "version": ("command", ["bash", str(ROOT / "adapters" / "evolutionary_jl" / "run.sh"), "--version"]),
         "language": "Julia",
         "release": ("julia", "Evolutionary"),
-        # Callgrind can't follow a JIT-compiled runtime in reasonable time
-        "instructions": False,
     },
     "metaheuristics_jl": {
         "build": ["bash", str(ROOT / "adapters" / "metaheuristics_jl" / "run.sh"), "--build"],
@@ -190,7 +185,6 @@ ADAPTERS = {
         "version": ("command", ["bash", str(ROOT / "adapters" / "metaheuristics_jl" / "run.sh"), "--version"]),
         "language": "Julia",
         "release": ("julia", "Metaheuristics"),
-        "instructions": False,
     },
     "openga": {
         # the header at a pinned commit, compiled with g++ -O3
@@ -421,74 +415,226 @@ def valid(runs):
     return [run for run in runs if not run.get("invalid")]
 
 
-# Instructions per evaluation, with Callgrind: each adapter runs with a budget of N and of 2N
-# evaluations, and (I(2N) - I(N)) / (E(2N) - E(N)) cancels the startup, imports and setup. It's the
-# cost per evaluation, framework and fitness together, so it depends on how many children a library
-# evaluates per generation; no library reaches the target of OneMax 1000 within 2N evaluations.
-INSTRUCTIONS_SCENARIO = ("onemax", 1000, "matched")
-INSTRUCTIONS_EVALUATIONS = 3_000
+# genoxide's versions, compared by the CPU instructions of the same runs (rule 10 of
+# docs/benchmarks/rules.md). The same adapter source is built against each version of genoxide:
+# a release from crates.io, or this repository's genoxide. In every scenario, each of the
+# adapter's solvers makes one run with seed VERSIONS_SEED, to its target or its budget, without a
+# time cap, alone in a process under Callgrind (GENOXIDE_BENCH_SOLVER names it). The adapter's
+# startup, a process that runs no solver, is subtracted. genoxide gives the same run for a seed on
+# every platform, and Callgrind's counts don't depend on the machine's load: a count changes only
+# with genoxide, the adapter, the Rust toolchain or Valgrind. The history of every version measured
+# is committed in VERSIONS_FILE, and the genoxide_versions chart is drawn from it.
+VERSIONS_FILE = ROOT.parent / "docs" / "benchmarks" / "genoxide-versions.json"
+VERSIONS_SEED = 0
+# no time cap: under Callgrind a run takes about 50 times as long, and it must end where it ends
+# without Callgrind
+VERSIONS_SECONDS = 10_000_000.0
+SOLVER_VARIABLE = "GENOXIDE_BENCH_SOLVER"
+# a solver name no adapter has: the process runs no solver, for the startup's instructions
+NO_SOLVER = "none"
+# the copies of the adapter built against genoxide's releases, one folder per version
+VERSION_BUILDS = GENOXIDE_ADAPTER / "target" / "versions"
+# where the release dates come from
+CRATES_API = "https://crates.io/api/v1/crates/genoxide"
 
 
-def count_instructions(adapter, evaluations):
-    """(instructions, {solver: evaluations}) of one run under Callgrind."""
-    problem, size, mode = INSTRUCTIONS_SCENARIO
-    command = ["valgrind", "--tool=callgrind", "--callgrind-out-file=/dev/null"] + adapter["command"] + [
-        problem, str(size), mode, "0", "0", str(evaluations), "36000",
-    ]
-    completed = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
+def version_key(version):
+    """A version's numbers, to sort them: 0.10.0 after 0.9.1; a build of this repository's genoxide
+    (0.8.0+abc1234) after its release."""
+    base, _, build = version.partition("+")
+    return tuple(int(number) for number in re.findall(r"\d+", base)), bool(build)
+
+
+def build_genoxide(version):
+    """(command, version, source) of the genoxide adapter built against `version` of genoxide, a
+    release on crates.io, or "path" for this repository's genoxide; None if the adapter doesn't
+    compile against it. Each builds a copy of the adapter in VERSION_BUILDS whose Cargo.toml asks
+    for `genoxide = "=version"` or this repository's path, with the adapter's Cargo.lock and
+    profile: nothing in the repository changes, and every version builds the same way."""
+    repository = version == "path"
+    if not repository and not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise SystemExit(f"--genoxide {version}: expected a release, e.g. 0.8.0, or path")
+    folder = VERSION_BUILDS / ("repository" if repository else version)
+    (folder / "src").mkdir(parents=True, exist_ok=True)
+    for source in (GENOXIDE_ADAPTER / "src").iterdir():
+        shutil.copy2(source, folder / "src" / source.name)
+    # the adapter's locked dependencies, as far as the version allows
+    shutil.copy2(GENOXIDE_ADAPTER / "Cargo.lock", folder / "Cargo.lock")
+    dependency = f"path = {json.dumps(ROOT.parent.as_posix())}" if repository else f'version = "={version}"'
+    manifest, replaced = re.subn(r'(?m)^genoxide = \{ path = "[^"]*"', lambda _: f"genoxide = {{ {dependency}",
+                                 (GENOXIDE_ADAPTER / "Cargo.toml").read_text(encoding="utf-8"))
+    if replaced != 1:
+        raise SystemExit(f"{GENOXIDE_ADAPTER / 'Cargo.toml'}: no `genoxide = {{ path = ... }}` dependency to replace")
+    # a crate of its own, outside any workspace
+    (folder / "Cargo.toml").write_text(manifest.rstrip() + "\n\n[workspace]\n", encoding="utf-8", newline="\n")
+    print(f"building the genoxide adapter against "
+          + ("this repository's genoxide" if repository else f"genoxide {version} from crates.io") + " ...", flush=True)
+    completed = subprocess.run(["cargo", "build", "--release", "--quiet", "--manifest-path", str(folder / "Cargo.toml")],
+                               capture_output=True, text=True)
+    if completed.returncode != 0:
+        errors = [line for line in completed.stderr.splitlines() if line.startswith("error")]
+        print(f"genoxide {version}: the adapter doesn't compile against it, so it's skipped: "
+              + ("; ".join(dict.fromkeys(errors[:8])) or completed.stderr.strip()[-500:]), flush=True)
+        return None
+    command = [str(folder / "target" / "release" / "ga_bench_genoxide")]
+    if not repository:
+        return command, version, "crates.io"
+    # this repository's genoxide: its version and commit, marked when its sources have uncommitted changes
+    label = library_version("cargo", "genoxide", folder)
+    if "+" not in label:
+        # without its commit (git can't read the repository), still apart from the release
+        label += "+repository"
+    changed = subprocess.run(["git", "status", "--porcelain", "--", "src", "Cargo.toml", "Cargo.lock"],
+                             capture_output=True, text=True, cwd=ROOT.parent).stdout.strip()
+    return command, f"{label}.modified" if changed and "+" in label else label, "repository"
+
+
+def version_runs(command, scenario, solver=None, callgrind=False):
+    """(runs, instructions) of the adapter `command` in `scenario` with seed VERSIONS_SEED and no
+    time cap: every solver, or only `solver` (NO_SOLVER: none); with `callgrind`, under Callgrind,
+    the instructions of the whole process, otherwise None."""
+    problem, size, mode, budget, _ = scenario
+    environment = {name: value for name, value in os.environ.items() if name != SOLVER_VARIABLE}
+    if solver:
+        environment[SOLVER_VARIABLE] = solver
+    prefix = ["valgrind", "--tool=callgrind", "--callgrind-out-file=/dev/null"] if callgrind else []
+    full = prefix + command + [problem, str(size), mode, str(VERSIONS_SEED), str(VERSIONS_SEED), str(budget),
+                               str(VERSIONS_SECONDS)]
+    completed = subprocess.run(full, capture_output=True, text=True, cwd=ROOT, env=environment)
     match = re.search(r"Collected\s*:\s*(\d+)", completed.stderr)
-    if completed.returncode != 0 or not match:
+    if completed.returncode != 0 or (callgrind and not match):
         print(completed.stderr[-2000:], file=sys.stderr)
-        raise SystemExit(f"callgrind failed: {' '.join(command)}")
+        raise SystemExit(f"failed: {SOLVER_VARIABLE}={solver or ''} {' '.join(full)}")
     runs = [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
-    return int(match.group(1)), {run["solver"]: run["evaluations"] for run in runs}
+    return runs, int(match.group(1)) if callgrind else None
 
 
-def measure_instructions(libraries, jobs=None):
-    """Instructions per evaluation of each library in the instructions scenario, in the order of
-    `libraries`. The Callgrind runs go in parallel, `jobs` at a time: their counts don't depend on
-    the load."""
-    names = [name for name in libraries if ADAPTERS[name].get("instructions", True)]
-    lock = threading.Lock()
+def same_run(a, b):
+    """Whether two runs of the same solver and seed made the same search."""
+    keys = ("solver", "evaluations", "generations") + (("front", "solutions") if "front" in a else ("best", "solution"))
+    return all(a.get(key) == b.get(key) for key in keys)
 
-    def count(name, evaluations):
-        if evaluations == INSTRUCTIONS_EVALUATIONS:
-            with lock:
-                print(f"instructions: {name} (callgrind) ...", flush=True)
-        return count_instructions(ADAPTERS[name], evaluations)
 
+def measure_version(command, jobs=None):
+    """{scenario: {"startup": instructions, "methods": {solver: {...}}}} of the adapter `command`
+    (VERSIONS_SEED, rule 10). Each solver's entry: its instructions without the startup, its
+    evaluations and, with a target, whether it reached it and its best value, or, multi-objective,
+    its front's hypervolume. The runs go in parallel, `jobs` at a time."""
+    import check
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=jobs or os.cpu_count())
-    # each library's two runs, in the order of the libraries
-    futures = {name: [pool.submit(count, name, budget)
-                      for budget in (INSTRUCTIONS_EVALUATIONS, 2 * INSTRUCTIONS_EVALUATIONS)]
-               for name in names}
-    rows = []
     try:
-        for name in names:
-            (low, low_evaluations), (high, high_evaluations) = (future.result() for future in futures[name])
-            if not high_evaluations:
-                # the library can't run the scenario
+        # every solver without Callgrind first: which solvers run, and the runs Callgrind's must repeat
+        native = {scenario_name(*scenario[:3]): pool.submit(version_runs, command, scenario) for scenario in SCENARIOS}
+        native = {name: future.result()[0] for name, future in native.items()}
+        # the longest runs first
+        longest = sorted(((scenario, run["solver"], run["time_s"]) for scenario in SCENARIOS
+                        for run in native[scenario_name(*scenario[:3])]), key=lambda job: -job[2])
+        counts = {(scenario_name(*scenario[:3]), solver): pool.submit(version_runs, command, scenario, solver, True)
+                  for scenario, solver, _ in longest}
+        counts |= {(scenario_name(*scenario[:3]), NO_SOLVER): pool.submit(version_runs, command, scenario, NO_SOLVER,
+                                                                          True) for scenario in SCENARIOS}
+        measured = {}
+        for problem, size, mode, budget, _ in SCENARIOS:
+            name = scenario_name(problem, size, mode)
+            if not native[name]:
+                # a scenario this version's adapter doesn't run
                 continue
-            # the instructions are the whole process's: they're one solver's only if it runs alone
-            if len(high_evaluations) != 1 or set(low_evaluations) != set(high_evaluations):
-                raise SystemExit(
-                    f"instructions: the {name} adapter runs {len(high_evaluations)} solvers in "
-                    f"{scenario_name(*INSTRUCTIONS_SCENARIO)} ({', '.join(sorted(high_evaluations))}), and the "
-                    "instructions of the process can't be divided between them. Run one solver there, or set "
-                    "\"instructions\": False on the adapter.")
-            (solver, evaluations), = high_evaluations.items()
-            row = {
-                "library": name,
-                "solver": solver,
-                "instructions_per_evaluation": (high - low) / (evaluations - low_evaluations[solver]),
-            }
-            with lock:
-                print(f"instructions: {name} / {solver}: {format_count(row['instructions_per_evaluation'])} "
-                      "per evaluation", flush=True)
-            rows.append(row)
+            runs, startup = counts[(name, NO_SOLVER)].result()
+            if runs:
+                raise SystemExit(f"{name}: the adapter ran {len(runs)} solvers with {SOLVER_VARIABLE}={NO_SOLVER}")
+            methods = {}
+            for run in native[name]:
+                counted, instructions = counts[(name, run["solver"])].result()
+                if len(counted) != 1 or not same_run(counted[0], run):
+                    raise SystemExit(f"{name}: {run['solver']} didn't make the same run under Callgrind as without it")
+                entry = {"instructions": instructions - startup, "evaluations": run["evaluations"]}
+                if is_front(problem):
+                    entry["hypervolume"] = round(front_hypervolume(run), 6)
+                else:
+                    entry["reached"] = bool(run["success"])
+                    entry["best"] = run["best"]
+                failures = check.check_run(run, problem, size, budget, VERSIONS_SECONDS)
+                if failures:
+                    # recorded, not left out: the history shows what the version did
+                    entry["invalid"] = failures
+                    print(f"warning: {name}: {'; '.join(failures)}", flush=True)
+                methods[run["solver"]] = entry
+                print(f"{name}: {run['solver']}: {format_count(entry['instructions'])} instructions, "
+                      f"{format_count(run['evaluations'])} evaluations"
+                      + ("" if is_front(problem) else ", target reached" if run["success"] else ", target not reached"),
+                      flush=True)
+            measured[name] = {"startup": startup, "methods": methods}
     finally:
         pool.shutdown(cancel_futures=True)
-    return rows
+    return measured
+
+
+def release_date(version):
+    """The day a release of genoxide was published on crates.io, or None if it can't be read."""
+    import outdated
+    try:
+        return json.loads(outdated.fetch(f"{CRATES_API}/{version}"))["version"]["created_at"][:10]
+    except Exception as error:  # noqa: BLE001: the date is only informative
+        print(f"warning: the release date of genoxide {version}: {error}", flush=True)
+        return None
+
+
+def tool_version(command):
+    return subprocess.run(command, capture_output=True, text=True).stdout.strip()
+
+
+def load_versions(history):
+    """The history file of genoxide's versions: {"format": 1, "seed": ..., "versions": [...]}."""
+    if history.exists():
+        return json.loads(history.read_text(encoding="utf-8"))
+    return {"format": 1, "seed": VERSIONS_SEED, "versions": []}
+
+
+def save_versions(data, history):
+    """The history file, a version per block, sorted by version."""
+    data["versions"].sort(key=lambda row: version_key(row["version"]))
+    history.parent.mkdir(parents=True, exist_ok=True)
+    history.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+
+
+def measure_versions(versions, history, jobs, charts, png=False):
+    """Measures each of `versions` (rule 10) into the history file, in place of its previous row,
+    and redraws the genoxide_versions chart into `charts`. A version the adapter doesn't compile
+    against is reported and skipped."""
+    data = load_versions(history)
+    skipped = []
+    for version in versions:
+        built = build_genoxide(version)
+        if built is None:
+            skipped.append(version)
+            continue
+        command, label, source = built
+        print(f"genoxide {label}: counting the instructions of every run with Callgrind ...", flush=True)
+        row = {
+            "version": label,
+            "source": source,
+            "released": release_date(label) if source == "crates.io" else None,
+            "measured": datetime.date.today().isoformat(),
+            "machine": describe_platform(),
+            "rustc": tool_version(["rustc", "--version"]),
+            "valgrind": tool_version(["valgrind", "--version"]),
+            "scenarios": measure_version(command, jobs),
+        }
+        # one row per version, and at most one of this repository's genoxide, until a newer release
+        base = version_key(label)[0]
+        data["versions"] = [
+            other for other in data["versions"]
+            if other["version"] != label
+            and not (source == "repository" and other.get("source") == "repository")
+            and not (source == "crates.io" and other.get("source") == "repository"
+                     and version_key(other["version"])[0] < base)
+        ] + [row]
+        data["seed"] = VERSIONS_SEED
+        save_versions(data, history)
+        print(f"genoxide {label}: written to {history}", flush=True)
+    if skipped:
+        print(f"skipped, the adapter doesn't compile against them: genoxide {', '.join(skipped)}", flush=True)
+    draw_versions_of(history, charts, png)
 
 
 def median(values):
@@ -824,22 +970,6 @@ def invalid_list(runs):
     return "\n".join(lines)
 
 
-def instructions_table(rows):
-    """Instructions per evaluation, fewest first, as in the chart."""
-    problem, size, mode = INSTRUCTIONS_SCENARIO
-    lines = [
-        f"{PROBLEM_NAMES[problem]} {size} ({mode}), counted by Callgrind: the framework and the fitness "
-        "function together, without the startup and imports. It's the cost per evaluation: a generation's work "
-        "is divided by the children the library evaluates in it, so it depends on how many it evaluates.",
-        "",
-        "| Library / solver | Instructions per evaluation |",
-        "|---|---|",
-    ]
-    for row in sorted(rows, key=lambda row: row["instructions_per_evaluation"]):
-        lines.append(f"| {row['library']} / {row['solver']} | {format_count(row['instructions_per_evaluation'])} |")
-    return "\n".join(lines)
-
-
 LIBRARY_NAMES = {"genoxide": "genoxide", "genoxide_python": "genoxide (Python)", "genetic_algorithm": "genetic_algorithm", "deap": "DEAP",
                  "pygad": "PyGAD", "pymoo": "pymoo", "radiate": "radiate", "moors": "moors", "pycma": "pycma",
                  "nevergrad": "Nevergrad", "scipy": "SciPy", "pygmo": "pygmo", "openga": "openGA",
@@ -913,42 +1043,17 @@ def significant(value, digits=6):
     return None if value is None else float(f"{value:.{digits}g}")
 
 
-def draw_charts(results, out_dir, formats=("svg",)):
+def draw_charts(results, out_dir, formats=("svg",), history=VERSIONS_FILE):
     """Bar charts of a results file: time and evaluations to target, the distance to the optimum,
-    cost per evaluation, the hypervolume and time of the multi-objective fronts, and each library's
-    overall score (overall_scores). Their numbers go to charts.json beside them, for the
+    the hypervolume and time of the multi-objective fronts, and each library's overall score
+    (overall_scores); and, from the `history` file of genoxide's versions, the instructions of
+    their runs (draw_versions_chart). Their numbers go to charts.json beside them, for the
     interactive charts of the project site: recorded as each chart draws them, so the file and the
     charts can't disagree."""
-    import matplotlib
-    matplotlib.use("agg")
-    import matplotlib.pyplot as plt
-    from matplotlib import font_manager
+    plt = pyplot()
     from matplotlib.patches import Patch
     from matplotlib.ticker import FuncFormatter, LogLocator, MaxNLocator
 
-    # Inter if installed (~/.local/share/fonts), DejaVu Sans otherwise; text as paths, so a chart
-    # looks the same everywhere, whatever fonts the viewer has
-    for path in Path.home().glob(".local/share/fonts/**/Inter-*.ttf"):
-        font_manager.fontManager.addfont(str(path))
-    plt.rcParams.update({
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Inter", "DejaVu Sans"],
-        "font.size": 8,
-        "svg.fonttype": "path",
-        "svg.hashsalt": "genoxide-benchmarks",
-        "axes.edgecolor": "#9a9a9a",
-        "axes.linewidth": 0.6,
-        "xtick.color": "#333333",
-        "ytick.color": "#555555",
-        "ytick.major.width": 0.5,
-        "ytick.minor.width": 0.3,
-        "ytick.minor.size": 1.5,
-        "axes.grid": True,
-        "axes.grid.axis": "y",
-        "grid.color": "#e8e8e8",
-        "grid.linewidth": 0.5,
-        "axes.axisbelow": True,
-    })
     out_dir.mkdir(parents=True, exist_ok=True)
     versions = results.get("versions", {})
     languages = results.get("languages") or {name: ADAPTERS.get(name, {}).get("language", "") for name in versions}
@@ -1335,22 +1440,6 @@ def draw_charts(results, out_dir, formats=("svg",)):
                 axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
         save(figure, "distance_to_optimum")
 
-    # --- cost per evaluation ------------------------------------------------------------------------
-    instructions = results.get("instructions")
-    if instructions:
-        problem, size, mode = INSTRUCTIONS_SCENARIO
-        figure, axes = chart(
-            "instructions",
-            "CPU instructions per evaluation, framework and fitness function together (lower is better)",
-            f"{PROBLEM_NAMES[problem]} {size} ({mode}), counted by Callgrind: exact, whatever the machine's load; "
-            "startup and imports excluded · " + context,
-            [("instructions", len(instructions))], {row["library"] for row in instructions}, "instructions")
-        axis = axes["instructions"]
-        bars(axis, instructions, lambda row: row["instructions_per_evaluation"], short_number)
-        axis.yaxis.set_major_locator(LogLocator(base=10, numticks=6))
-        axis.yaxis.set_major_formatter(count_ticks)
-        save(figure, "instructions")
-
     # --- multi-objective ------------------------------------------------------------------------------
     # the runs the time cap stopped apart from the others
     front_rows = summarize_fronts(runs, caps, split=True)
@@ -1468,12 +1557,214 @@ def draw_charts(results, out_dir, formats=("svg",)):
         # first in charts.json, as on the site
         data["charts"] = {"overall": data["charts"].pop("overall"), **data["charts"]}
 
-    # the numbers of every chart drawn, compact, one chart per line
+    # --- genoxide's versions (rule 10), from their history file ---------------------------------------
+    if history is not None and history.exists():
+        record = draw_versions_chart(load_versions(history), out_dir, formats)
+        if record:
+            data["charts"]["genoxide_versions"] = record
+
+    write_charts_json(data, out_dir)
+
+
+def pyplot():
+    """matplotlib's pyplot, in the style of every chart of the harness."""
+    import matplotlib
+    matplotlib.use("agg")
+    import matplotlib.pyplot as plt
+    from matplotlib import font_manager
+
+    # Inter if installed (~/.local/share/fonts), DejaVu Sans otherwise; text as paths, so a chart
+    # looks the same everywhere, whatever fonts the viewer has
+    for path in Path.home().glob(".local/share/fonts/**/Inter-*.ttf"):
+        font_manager.fontManager.addfont(str(path))
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Inter", "DejaVu Sans"],
+        "font.size": 8,
+        "svg.fonttype": "path",
+        "svg.hashsalt": "genoxide-benchmarks",
+        "axes.edgecolor": "#9a9a9a",
+        "axes.linewidth": 0.6,
+        "xtick.color": "#333333",
+        "ytick.color": "#555555",
+        "ytick.major.width": 0.5,
+        "ytick.minor.width": 0.3,
+        "ytick.minor.size": 1.5,
+        "axes.grid": True,
+        "axes.grid.axis": "y",
+        "grid.color": "#e8e8e8",
+        "grid.linewidth": 0.5,
+        "axes.axisbelow": True,
+    })
+    return plt
+
+
+def write_charts_json(data, out_dir):
+    """charts.json: the run and the libraries on the first line, then one chart per line, compact."""
+    data = dict(data)
     lines = [f"{json.dumps(name)}:{json.dumps(record, ensure_ascii=False, separators=(',', ':'))}"
              for name, record in data.pop("charts").items()]
     head = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     (out_dir / "charts.json").write_text(f'{head[:-1]},"charts":{{\n' + ",\n".join(lines) + "\n}}\n",
                                          encoding="utf-8", newline="\n")
+
+
+# the methods of genoxide's versions chart, a color each, in the harness's palette
+SOLVER_COLORS = {"ga": "#4c78a8", "local_search": "#f58518", "cma_es": "#54a24b", "de": "#b279a2", "es": "#9d755d",
+                 "nsga2": "#72b7b2", "nsga3": "#e0b000", "spea2": "#ff9da6", "sms_emoa": "#79706e",
+                 "moead": "#1b9e77"}
+
+
+def draw_versions_chart(history, out_dir, formats=("svg",)):
+    """genoxide_versions: a panel per scenario, genoxide's versions on the x axis, a line per method
+    through the instructions of its run in each version (rule 10), hollow where it didn't reach the
+    target. Returns its record for charts.json, or None without a version."""
+    rows = sorted(history.get("versions", []), key=lambda row: version_key(row["version"]))
+    if not rows:
+        return None
+    plt = pyplot()
+    from matplotlib.lines import Line2D
+    from matplotlib.ticker import FuncFormatter, LogLocator, MaxNLocator
+
+    versions = [row["version"] for row in rows]
+    order = {scenario_name(*scenario[:3]): index for index, scenario in enumerate(SCENARIOS)}
+    scenarios = sorted({name for row in rows for name in row["scenarios"]}, key=lambda s: (order.get(s, len(order)), s))
+
+    def methods(scenario):
+        return list(dict.fromkeys(solver for row in rows for solver in row["scenarios"].get(scenario, {}).get("methods", {})))
+
+    solvers = list(dict.fromkeys(solver for scenario in scenarios for solver in methods(scenario)))
+    others = iter(color for color in PALETTE if color not in SOLVER_COLORS.values())
+    colors = {solver: SOLVER_COLORS.get(solver) or next(others, "#888888") for solver in solvers}
+
+    def unique(key):
+        return "; ".join(dict.fromkeys(str(row.get(key)) for row in rows if row.get(key)))
+
+    seed = history.get("seed", VERSIONS_SEED)
+    title = "genoxide's versions: CPU instructions of the same runs (lower is better)"
+    parts = [
+        f"each method of the benchmark, one run per scenario with seed {seed}, to its target or its evaluation budget, "
+        "without a time cap",
+        "counted by Callgrind, the adapter's startup subtracted: exact, whatever the machine's load",
+        "filled: the run reached the target; hollow: it didn't within the budget; multi-objective: the whole budget",
+        unique("rustc"), unique("valgrind"), unique("machine"),
+        f"measured {unique('measured')}",
+    ]
+    subtitle = " · ".join(part for part in parts if part)
+    record = {"file": "genoxide_versions.svg", "title": title, "subtitle": subtitle, "quantity": "instructions",
+              "libraries": [], "seed": seed,
+              "versions": [{"version": row["version"], "source": row.get("source"), "released": row.get("released"),
+                            "measured": row.get("measured")} for row in rows],
+              "panels": []}
+
+    width, margin, columns = 12.0, 0.1, 5
+    left_room, gap, panel_height, title_height, ticks_height = 0.55, 0.32, 1.45, 0.42, 0.42
+    panel_width = (width - 2 * margin - columns * left_room - (columns - 1) * gap) / columns
+    lines = [""]
+    for part in subtitle.split(" · "):
+        if lines[-1] and len(lines[-1]) + len(part) + 3 > 200:
+            lines.append("")
+        lines[-1] += (" · " if lines[-1] else "") + part
+    subtitle_text = "\n".join(textwrap.fill(line, 200) for line in lines)
+    legend_top = 0.62 + subtitle_text.count("\n") * 0.14
+    legend_rows = (len(solvers) + 1 + 5) // 6
+    header = legend_top + legend_rows * 0.19 + 0.1
+    panel_rows = [scenarios[i:i + columns] for i in range(0, len(scenarios), columns)]
+    height = header + len(panel_rows) * (title_height + panel_height + ticks_height) + 0.05
+    figure = plt.figure(figsize=(width, height))
+    figure.patch.set_facecolor("white")
+    figure.text(margin / width, 1 - 0.12 / height, title, fontsize=12.5, fontweight="bold", va="top")
+    figure.text(margin / width, 1 - 0.40 / height, subtitle_text, fontsize=7.8, color="#555555", va="top",
+                linespacing=1.3)
+    handles = [Line2D([], [], color=colors[solver], marker="o", markersize=4, linewidth=1.2,
+                      label=SOLVER_NAMES.get(solver, solver)) for solver in solvers]
+    handles.append(Line2D([], [], color="#666666", marker="o", markersize=4, markerfacecolor="white", linewidth=0,
+                          label="target not reached"))
+    figure.legend(handles=handles, loc="upper left", bbox_to_anchor=(margin / width, 1 - legend_top / height),
+                  ncol=6, frameon=False, fontsize=7.5, handlelength=1.6, columnspacing=1.6, borderaxespad=0.0,
+                  labelspacing=0.35)
+    count_ticks = FuncFormatter(lambda value, _position: short_number(value))
+    y = height - header
+    for panel_row in panel_rows:
+        y -= title_height + panel_height
+        for column, scenario in enumerate(panel_row):
+            x = margin + left_room + column * (panel_width + left_room + gap)
+            axis = figure.add_axes((x / width, y / height, panel_width / width, panel_height / height))
+            front = is_front(scenario.split("-")[0])
+            values, bars = [], []
+            for solver in methods(scenario):
+                points = []
+                for index, row in enumerate(rows):
+                    entry = row["scenarios"].get(scenario, {}).get("methods", {}).get(solver)
+                    if entry is None:
+                        continue
+                    points.append((index, entry["instructions"], entry.get("reached", True)))
+                    bar = {"library": "genoxide", "solver": solver, "method": SOLVER_NAMES.get(solver, solver),
+                           "version": row["version"], "label": f"{SOLVER_NAMES.get(solver, solver)} {row['version']}",
+                           "color": colors[solver], "value": entry["instructions"],
+                           "text": short_number(entry["instructions"]), "evaluations": entry["evaluations"], "runs": 1}
+                    if front:
+                        bar["hypervolume"] = entry.get("hypervolume")
+                    else:
+                        bar["reached"] = int(entry.get("reached", False))
+                    if entry.get("invalid"):
+                        bar["invalid"] = True
+                    bars.append(bar)
+                values += [value for _, value, _ in points]
+                axis.plot([p[0] for p in points], [p[1] for p in points], color=colors[solver], linewidth=1.2,
+                          zorder=2)
+                axis.scatter([p[0] for p in points], [p[1] for p in points], s=16, zorder=3, linewidths=1.0,
+                             edgecolors=colors[solver],
+                             facecolors=[colors[solver] if reached else "white" for _, _, reached in points])
+            log = bool(values) and min(values) > 0 and max(values) / min(values) >= 10
+            if log:
+                axis.set_yscale("log")
+                low, high = min(values), max(values)
+                axis.set_ylim(low / 2, high * 2)
+                axis.yaxis.set_major_locator(LogLocator(base=10, numticks=6))
+            else:
+                # from 0: a change of a fraction of a percent stays as small as it is
+                axis.set_ylim(0, max(values, default=1) * 1.25)
+                axis.yaxis.set_major_locator(MaxNLocator(4))
+            axis.yaxis.set_major_formatter(count_ticks)
+            axis.set_xlim(-0.5, len(versions) - 0.5)
+            axis.set_xticks(range(len(versions)), versions, fontsize=6.5,
+                            rotation=45 if len(versions) > 4 else 0, ha="right" if len(versions) > 4 else "center",
+                            rotation_mode="anchor")
+            axis.tick_params(axis="x", length=2, pad=2)
+            axis.tick_params(axis="y", labelsize=6.3, length=2, pad=1.5)
+            axis.spines[["top", "right"]].set_visible(False)
+            budget = BUDGETS.get(scenario)
+            detail = f"budget {short_number(budget)} evaluations" if budget else ""
+            axis.set_title(scenario_title(scenario), fontsize=8.2, loc="left", fontweight="bold", pad=11)
+            axis.text(0, 1.015, detail, transform=axis.transAxes, fontsize=6.6, color="#666666", va="bottom")
+            record["panels"].append({"key": scenario, "title": scenario_title(scenario), "detail": detail, "log": log,
+                                     "better": "lower", "objectives": "multi" if front else "single",
+                                     "budget": budget, "bars": bars})
+        y -= ticks_height
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for extension in formats:
+        figure.savefig(out_dir / f"genoxide_versions.{extension}",
+                       metadata={"Date": None} if extension == "svg" else None, dpi=200)
+    plt.close(figure)
+    return record
+
+
+def update_versions_chart(history, out_dir, formats=("svg",)):
+    """Redraws the genoxide_versions chart of the history file into `out_dir`, and puts its record
+    into the charts.json there, the other charts as they are."""
+    record = draw_versions_chart(load_versions(history), out_dir, formats)
+    if record is None:
+        return
+    charts = out_dir / "charts.json"
+    if not charts.exists():
+        print(f"{out_dir / 'genoxide_versions.svg'} drawn; no charts.json there to add its numbers to "
+              "(`run.py chart --charts` writes one)", flush=True)
+        return
+    data = json.loads(charts.read_text(encoding="utf-8"))
+    data["charts"]["genoxide_versions"] = record
+    write_charts_json(data, out_dir)
+    print(f"{out_dir / 'genoxide_versions.svg'} drawn, and its numbers written to {charts}", flush=True)
 
 
 # The cores that times are measured on, under WSL: the two favoured P-cores (the highest turbo
@@ -1548,25 +1839,38 @@ def describe_platform(cores=None):
     return described
 
 
-def draw_charts_of(results_file, out_dir, png=False):
-    """Draws the charts of a results file, with the .venv's matplotlib if this Python has none."""
+def draw_charts_of(results_file, out_dir, png=False, history=VERSIONS_FILE):
+    """Draws the charts of a results file, and of the history of genoxide's versions, with the
+    .venv's matplotlib if this Python has none."""
     try:
         import matplotlib  # noqa: F401
     except ImportError:
         subprocess.run(
-            [str(VENV_PYTHON), str(ROOT / "run.py"), "chart", "--results", str(results_file), "--charts", str(out_dir)]
-            + (["--png"] if png else []),
+            [str(VENV_PYTHON), str(ROOT / "run.py"), "chart", "--results", str(results_file), "--charts", str(out_dir),
+             "--history", str(history)] + (["--png"] if png else []),
             check=True,
         )
         return
     results = json.loads(Path(results_file).read_text(encoding="utf-8"))
     results.setdefault("timestamp", Path(results_file).stem)
-    draw_charts(results, out_dir, formats=("svg", "png") if png else ("svg",))
+    draw_charts(results, out_dir, formats=("svg", "png") if png else ("svg",), history=history)
+
+
+def draw_versions_of(history, out_dir, png=False):
+    """Draws the chart of genoxide's versions into `out_dir` and its charts.json, with the .venv's
+    matplotlib if this Python has none."""
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        subprocess.run([str(VENV_PYTHON), str(ROOT / "run.py"), "versions", "--history", str(history), "--charts",
+                        str(out_dir)] + (["--png"] if png else []), check=True)
+        return
+    update_versions_chart(history, out_dir, formats=("svg", "png") if png else ("svg",))
 
 
 def markdown_report(report):
     """results/latest.md, which becomes docs/benchmarks/results.md: the coverage, and the tables of
-    the single-objective, multi-objective and instructions results."""
+    the single-objective and multi-objective results."""
     header = [f"# Results {report['timestamp']}", "",
               f"Seeds per scenario: {report['seeds']}, wall time cap per run: "
               f"{describe_caps(scenario_caps(report['max_seconds'], report['runs']))}",
@@ -1587,8 +1891,6 @@ def markdown_report(report):
     table = markdown_table(report["summary"])
     if report["front_summary"]:
         table += "\n\n## Multi-objective\n\n" + front_table(report["front_summary"])
-    if report.get("instructions"):
-        table += "\n\n## Instructions per evaluation\n\n" + instructions_table(report["instructions"])
     # a blank line between the list and the table, or the table becomes part of the list
     return "\n".join(header) + "\n" + table + "\n"
 
@@ -1679,49 +1981,27 @@ def build(libraries, labels):
     return versions
 
 
-def count_into(results_file, libraries, labels, jobs, charts):
-    """Counts the instructions of `libraries` into a results file, in place of their previous counts,
-    and redraws results/latest.md and the charts from it."""
-    report = json.loads(results_file.read_text(encoding="utf-8"))
-    versions = build(libraries, labels)
-    for name in libraries:
-        if versions[name] != report["versions"][name]:
-            print(f"warning: {name} is {versions[name]} now, {report['versions'][name]} in {results_file.name}",
-                  flush=True)
-    instructions = measure_instructions(libraries, jobs)
-    kept = [row for row in report.get("instructions") or [] if row["library"] not in libraries]
-    order = list(report["versions"])
-    report["instructions"] = sorted(kept + instructions, key=lambda row: order.index(row["library"]))
-    results_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    # the summaries from the runs, as for the charts: the file's may come from older code
-    caps = scenario_caps(report.get("max_seconds", 60.0), report["runs"])
-    markdown = markdown_report({"timestamp": results_file.stem, **report,
-                                "summary": summarize(report["runs"], caps),
-                                "front_summary": summarize_fronts(report["runs"], caps)})
-    (ROOT / "results" / "latest.md").write_text(markdown, encoding="utf-8")
-    print()
-    print(markdown)
-    draw_charts_of(results_file, charts)
-    print(f"instruction counts of {', '.join(libraries)} written to {results_file}", flush=True)
-
-
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", nargs="?", choices=["run", "setup", "check", "chart", "instructions", "outdated"],
+    parser.add_argument("command", nargs="?", choices=["run", "setup", "check", "chart", "versions", "outdated"],
                         default="run")
     parser.add_argument("--seeds", type=int, default=10)
     parser.add_argument("--max-seconds", type=float,
                         help="wall time cap per run, in every scenario (default: each scenario's own)")
     parser.add_argument("--quick", action="store_true", help="small scenarios, 3 seeds")
     parser.add_argument("--scenarios", nargs="*", help="scenario names, e.g. onemax-100-matched (default all)")
-    parser.add_argument("--libraries", nargs="*", choices=list(ADAPTERS),
-                        help="default all; for instructions, the libraries of the results file")
-    parser.add_argument("--results", type=Path,
-                        help="results file to chart or to count the instructions into (default: the latest)")
-    parser.add_argument("--charts", type=Path, default=ROOT / "results" / "charts", help="folder for the charts")
-    parser.add_argument("--instructions", action="store_true",
-                        help="count the instructions with Callgrind right after the timed runs")
+    parser.add_argument("--libraries", nargs="*", choices=list(ADAPTERS), help="default all")
+    parser.add_argument("--results", type=Path, help="results file to chart (default: the latest)")
+    parser.add_argument("--charts", type=Path,
+                        help="folder for the charts (default: results/charts; for versions, docs/benchmarks, where "
+                             "the history file is)")
+    parser.add_argument("--genoxide", nargs="+", metavar="VERSION",
+                        help="with versions, the versions of genoxide to measure: releases on crates.io, e.g. "
+                             "0.8.0, or path, this repository's genoxide")
+    parser.add_argument("--history", type=Path, default=VERSIONS_FILE,
+                        help="the history file of genoxide's versions (default: "
+                             f"{VERSIONS_FILE.relative_to(ROOT.parent).as_posix()})")
     parser.add_argument("--jobs", type=int, default=os.cpu_count(),
                         help="Callgrind runs, or check scenarios, at a time (default: the number of cores)")
     parser.add_argument("--png", action="store_true", help="also draw the charts as PNG, e.g. to preview them")
@@ -1746,20 +2026,21 @@ def main():
                         help="with outdated --issue, print what it would do to the issue instead")
     args = parser.parse_args()
 
-    counted = None
-    if args.command == "instructions":
-        # the results file to count the instructions into, and its libraries
-        counted = args.results or latest_results()
-        counted_versions = json.loads(counted.read_text(encoding="utf-8"))["versions"]
-        missing = [name for name in args.libraries or [] if name not in counted_versions]
-        if missing:
-            raise SystemExit(f"{', '.join(missing)}: not in {counted.name}")
-        if args.libraries is None:
-            args.libraries = [name for name in counted_versions if name in ADAPTERS]
-        # Callgrind can't run every runtime: those libraries have no count
-        args.libraries = [name for name in args.libraries if ADAPTERS[name].get("instructions", True)]
-        if not args.libraries:
-            raise SystemExit("no library to count the instructions of")
+    if args.command == "versions":
+        # genoxide's versions (rule 10): no timed run, so no check and no pinning
+        charts = args.charts or args.history.parent
+        if not args.genoxide:
+            # the chart of the history file, as it is
+            draw_versions_of(args.history, charts, png=args.png)
+            return
+        if not shutil.which("valgrind"):
+            raise SystemExit("counting the instructions needs Valgrind (Linux)")
+        measure_versions(args.genoxide, args.history, args.jobs, charts, png=args.png)
+        return
+    if args.genoxide:
+        raise SystemExit("--genoxide is for `run.py versions`")
+    if args.charts is None:
+        args.charts = ROOT / "results" / "charts"
     if args.libraries is None:
         args.libraries = list(ADAPTERS)
 
@@ -1783,7 +2064,7 @@ def main():
         return
     if args.command == "chart":
         results_file = args.results or latest_results()
-        draw_charts_of(results_file, args.charts, png=args.png)
+        draw_charts_of(results_file, args.charts, png=args.png, history=args.history)
         print(f"charts of {results_file.name} in {args.charts}")
         return
     if not VENV_PYTHON.exists():
@@ -1797,13 +2078,6 @@ def main():
     if unchecked:
         raise SystemExit(f"{', '.join(unchecked)}: the adapter hasn't passed `python run.py check` since it last "
                          "changed. Check it first (docs/benchmarks/rules.md).")
-    if args.instructions or counted:
-        if not shutil.which("valgrind"):
-            raise SystemExit("counting the instructions needs Valgrind")
-    if counted:
-        # counts don't depend on the cores: no pinning
-        count_into(counted, args.libraries, labels, args.jobs, args.charts)
-        return
     pinned = None
     if is_wsl() and not args.allow_unpinned:
         pinned = tuple(int(core) for core in args.cores.split(","))
@@ -1845,8 +2119,6 @@ def main():
             runs += run_adapter(ADAPTERS[name], problem, size, mode, seeds, max_evaluations,
                                 caps[scenario_name(problem, size, mode)])
 
-    instructions = measure_instructions(args.libraries, args.jobs) if args.instructions else None
-
     if previous:
         # the results of the other libraries and scenarios, as they were
         rerun = {scenario_name(*scenario[:3]) for scenario in scenarios}
@@ -1856,9 +2128,6 @@ def main():
             or scenario_name(run["problem"], run["size"], run["mode"]) not in rerun
         ] + runs
         versions = {**previous["versions"], **versions}
-        # the other libraries' counts; the rerun ones' are counted again, now or with `run.py instructions`
-        kept = [row for row in previous.get("instructions") or [] if row["library"] not in args.libraries]
-        instructions = kept + (instructions or [])
 
     # the time cap of each scenario of the results
     caps = {name: caps[name] for name in dict.fromkeys(scenario_name(r["problem"], r["size"], r["mode"]) for r in runs)}
@@ -1873,18 +2142,14 @@ def main():
     languages = {name: ADAPTERS[name]["language"] for name in versions if name in ADAPTERS}
     report = {"date": datetime.date.today().isoformat(), "timestamp": timestamp, "versions": versions,
               "languages": languages, "seeds": seeds, "max_seconds": caps, "platform": platform,
-              "runs": runs, "summary": rows, "front_summary": front_rows, "instructions": instructions}
+              "runs": runs, "summary": rows, "front_summary": front_rows}
     results_file = results / f"{timestamp}.json"
     results_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
     markdown = markdown_report(report)
     (results / "latest.md").write_text(markdown, encoding="utf-8")
     print()
     print(markdown)
-    draw_charts_of(results_file, args.charts)
-    if not args.instructions:
-        rerun = f" --libraries {' '.join(args.libraries)}" if previous else ""
-        print(f"next: count the instructions with `python run.py instructions{rerun}` (unpinned, to use every core)",
-              flush=True)
+    draw_charts_of(results_file, args.charts, history=args.history)
 
 
 if __name__ == "__main__":

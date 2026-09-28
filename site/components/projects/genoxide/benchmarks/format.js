@@ -14,7 +14,8 @@ const short = new Intl.NumberFormat("en", { maximumSignificantDigits: 3 });
 export const QUANTITY_NAMES = {
   seconds: "Time",
   evaluations: "Evaluations",
-  instructions: "Instructions per evaluation",
+  // genoxide's versions chart: the CPU instructions of a whole run
+  instructions: "Instructions",
   hypervolume: "Hypervolume",
   distance: "Distance to the optimum",
   score: "Score",
@@ -68,8 +69,19 @@ export function percent(share) {
   return `${Math.round(share * 100)}%`;
 }
 
+const count = new Intl.NumberFormat("en");
+
 /** The notes of a bar, in words: why it's missing, how many runs reached the target, were stopped or failed. */
 export function barNotes(bar) {
+  // a point of genoxide's versions chart: one run of a method in a version
+  if (typeof bar.version === "string") {
+    const notes = [];
+    if (typeof bar.evaluations === "number") notes.push(`${count.format(bar.evaluations)} evaluations`);
+    if (typeof bar.reached === "number") notes.push(bar.reached ? "reached the target" : "didn't reach the target within the budget");
+    if (typeof bar.hypervolume === "number") notes.push(`hypervolume ${bar.hypervolume.toFixed(4)}, for the whole budget`);
+    if (bar.invalid) notes.push("failed a check of the rules");
+    return notes;
+  }
   // a missing value's label says it all, as the harness's chart writes it
   if (bar.value === null) return [bar.missing ? `too few runs reached the target: ${bar.missing}` : "no value"];
   const notes = [];
