@@ -43,6 +43,8 @@ pub enum Algorithm {
         strategy: Option<DeStrategy>,
         control: Option<DeControl>,
         restarts: Option<DeRestarts>,
+        /// Each trial built on its own random stream, in parallel.
+        parallel_breeding: Option<bool>,
     },
     Cmaes {
         population_size: Option<usize>,
