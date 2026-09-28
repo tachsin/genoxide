@@ -2,6 +2,7 @@
 //! without writing a program, and as examples of the protocol.
 
 use genoxide::genome::Reals;
+use genoxide::math;
 use genoxide::multi::MultiFitnessFunction;
 use genoxide::multi::problems::{Schaffer1, Zdt1};
 use std::f64::consts::{E, TAU};
@@ -35,7 +36,7 @@ pub const FUNCTIONS: &[Function] = &[
             vec![
                 10.0 * x.len() as f64
                     + x.iter()
-                        .map(|xi| xi * xi - 10.0 * (TAU * xi).cos())
+                        .map(|xi| xi * xi - 10.0 * math::cos(TAU * xi))
                         .sum::<f64>(),
             ]
         },
@@ -59,8 +60,8 @@ pub const FUNCTIONS: &[Function] = &[
         score: |x| {
             let n = x.len() as f64;
             let squares = x.iter().map(|xi| xi * xi).sum::<f64>() / n;
-            let cosines = x.iter().map(|xi| (TAU * xi).cos()).sum::<f64>() / n;
-            vec![-20.0 * (-0.2 * squares.sqrt()).exp() - cosines.exp() + 20.0 + E]
+            let cosines = x.iter().map(|xi| math::cos(TAU * xi)).sum::<f64>() / n;
+            vec![-20.0 * math::exp(-0.2 * squares.sqrt()) - math::exp(cosines) + 20.0 + E]
         },
     },
     Function {

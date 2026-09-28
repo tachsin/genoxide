@@ -76,8 +76,8 @@
 //! Optima not given to full precision by the sources are derived from the formulas, and the docs
 //! say how.
 //!
-//! The problems use the platform's trigonometric and exponential functions, so their values can
-//! differ in the last bit between platforms, unlike the rest of genoxide.
+//! The problems compute their trigonometric and exponential functions with [`math`](crate::math),
+//! so their values are the same to the bit on every platform, like the rest of genoxide.
 //!
 //! [`Engine`]: crate::Engine
 

@@ -1,4 +1,4 @@
 minimum: -12569.49
-CMA-ES: -7593.76, with 8 of 30 genes within 1 of 420.97
+CMA-ES: -7871.22, with 8 of 30 genes within 1 of 420.97
 PSO: -8573.03, with 11 of 30 genes within 1 of 420.97
 L-SHADE: -12569.49, with 30 of 30 genes within 1 of 420.97

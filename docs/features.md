@@ -7,7 +7,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 | | |
 |---|---|
 | **Checked settings** | Invalid settings are errors from `build()`, before anything runs. An operator that doesn't fit the genome is a compile error. |
-| **Reproducible** | The same seed gives the same result, on any number of threads and on 32- or 64-bit machines. |
+| **Reproducible** | The same seed gives the same result, on any number of threads, on 32- or 64-bit machines and on every operating system (with `genoxide::math` in place of `f64::sin` and the like in a fitness function). |
 | **Safe** | `#![forbid(unsafe_code)]`: memory safety from the compiler, and parallel code without data races. |
 | **Fast** | Compiled Rust, bit-packed binary genomes, and parallel or batch evaluation. |
 

@@ -32,9 +32,7 @@ for name, algorithm in (
 ):
     result = algorithm.run(problem, target=target, evaluations=BUDGET)
     # the error to the minimum (rounding can put a solution a few ulps below it), what stopped
-    # the run, and how many genes are more than 0.01 from the minimum's. Not the evaluations: the
-    # function calls the platform's sin, and a run that meets the target takes a slightly
-    # different number of them on each operating system
+    # the run, and how many genes are more than 0.01 from the minimum's
     error = max(result.best_fitness - optimum.value, 0.0)
     stop = "at the target" if result.stop_reason == "target" else "with the budget spent"
     off = int(np.sum(np.abs(result.best_genome - optimum.solutions[0]) > 0.01))

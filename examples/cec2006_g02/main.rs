@@ -65,7 +65,7 @@ fn main() -> Result<()> {
             "infeasible"
         },
     );
-    // the last digits of f differ between platforms: g02 calls the platform's cos
+    // a gap below 1e-8 is the target's: its digits are rounding's
     if (0.0..1e-8).contains(&gap) {
         println!("relative gap to the best known: below 1e-8");
     } else {

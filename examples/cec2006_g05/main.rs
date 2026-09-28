@@ -43,9 +43,8 @@ fn main() -> Result<()> {
         .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
-    // the platform's sin can change the run's path from one operating system to another: the
-    // example prints what doesn't depend on it, without the evaluations of a run that meets its
-    // target, and the solution to 4 significant digits
+    // the example prints what runs with other seeds agree on: no evaluations of a run that meets
+    // its target, and the solution to 4 significant digits
     let best = outcome.best_fitness();
     let value = best.score().expect("valid");
     let x = outcome.best_genome();

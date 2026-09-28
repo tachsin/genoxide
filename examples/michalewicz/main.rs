@@ -52,8 +52,7 @@ fn main() -> Result<()> {
 }
 
 // the error to the minimum, what stopped the run, and how many genes are more than 0.01 from the
-// minimum's. Not the evaluations: the function calls the platform's sin, and a run that meets the
-// target takes a slightly different number of them on each operating system
+// minimum's
 fn report(name: &str, outcome: &Outcome<Reals>, optimum: &Optimum<Reals>) {
     let best = outcome.best_fitness().score().expect("valid");
     // rounding can put a solution a few ulps below the minimum

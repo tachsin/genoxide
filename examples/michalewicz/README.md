@@ -77,10 +77,8 @@ number of genes, 180, and shrinks linearly to 4 over the budget.
 The first line gives the dimension, the minimum and the budget. Then one line per algorithm: the
 error of its best point, which is its value minus the minimum, to 4 decimals; whether the run
 stopped at the target, within 1e-8 of the minimum, or with the budget spent; and how many of its 10
-genes are more than 0.01 from the minimum's. The lines don't give the evaluations: the function
-calls the platform's `sin`, and a run that meets the target takes a slightly different number of
-evaluations on Windows and on Linux. In Python, `run` evaluates the function in Rust, so both
-versions print the same.
+genes are more than 0.01 from the minimum's. In Python, `run` evaluates the function in Rust, so
+both versions print the same.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/michalewicz) plays back another
 run: L-SHADE on Michalewicz in 2 dimensions, so that the population can be drawn on the function's

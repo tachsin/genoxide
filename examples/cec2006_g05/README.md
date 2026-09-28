@@ -96,11 +96,9 @@ negative when it's satisfied. An equality met within the tolerance is always "ac
 gives how far |h| exceeds 0.0001. In Python, `run` evaluates the problem in Rust, so both versions
 print the same.
 
-The equalities call the platform's `sin`, whose last bit can differ between operating systems. A run
-can then take a different path, and stop after a different number of evaluations at a slightly
-different point of the tube. The example prints only what doesn't depend on it: no evaluation
-counts, and the solution to 4 digits. With seeds 1 to 12, x1 ended between 679.944 and 679.946.
-This run is the same on Windows and Linux.
+Runs with other seeds stop after a different number of evaluations, at a slightly different point
+of the tube. The example prints what they agree on: no evaluation counts, and the solution to 4
+digits. With seeds 1 to 12, x1 ended between 679.944 and 679.946.
 
 The page shows each variable on its range, and each constraint's state.
 

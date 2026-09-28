@@ -19,6 +19,7 @@
 use super::{Constraints, Optimum, Problem};
 use crate::engine::FitnessFunction;
 use crate::genome::{Real, Reals};
+use crate::math;
 
 /// The report's tolerance δ of an equality constraint: `|h(x)| ≤ 0.0001` counts as met.
 pub const EQUALITY_TOLERANCE: f64 = 0.0001;
@@ -154,8 +155,8 @@ const G02_DIMENSIONS: usize = 20;
 impl G02 {
     fn value(&self, x: &Reals) -> f64 {
         let x = &x[..G02_DIMENSIONS];
-        let fourth: f64 = x.iter().map(|xi| xi.cos().powi(4)).sum();
-        let product: f64 = x.iter().map(|xi| xi.cos().powi(2)).product();
+        let fourth: f64 = x.iter().map(|xi| math::cos(*xi).powi(4)).sum();
+        let product: f64 = x.iter().map(|xi| math::cos(*xi).powi(2)).product();
         let weighted: f64 = x
             .iter()
             .enumerate()
@@ -289,7 +290,7 @@ impl Problem for G03 {
         let radius = 1.0 + self.tolerance.max(0.0);
         let n = G03_DIMENSIONS as f64;
         Some(Optimum::proven(
-            -radius.powf(n / 2.0),
+            -math::powf(radius, n / 2.0),
             vec![Reals::from(vec![(radius / n).sqrt(); G03_DIMENSIONS])],
         ))
     }
@@ -466,9 +467,9 @@ impl Problem for G05 {
         Constraints::new(
             vec![-x4 + x3 - 0.55, -x3 + x4 - 0.55],
             vec![
-                1000.0 * (-x3 - 0.25).sin() + 1000.0 * (-x4 - 0.25).sin() + 894.8 - x1,
-                1000.0 * (x3 - 0.25).sin() + 1000.0 * (x3 - x4 - 0.25).sin() + 894.8 - x2,
-                1000.0 * (x4 - 0.25).sin() + 1000.0 * (x4 - x3 - 0.25).sin() + 1294.8,
+                1000.0 * math::sin(-x3 - 0.25) + 1000.0 * math::sin(-x4 - 0.25) + 894.8 - x1,
+                1000.0 * math::sin(x3 - 0.25) + 1000.0 * math::sin(x3 - x4 - 0.25) + 894.8 - x2,
+                1000.0 * math::sin(x4 - 0.25) + 1000.0 * math::sin(x4 - x3 - 0.25) + 1294.8,
             ],
         )
     }
@@ -668,7 +669,7 @@ mod tests {
             assert!(h.abs() <= EQUALITY_TOLERANCE * (1.0 + 1e-9), "{h}");
         }
         // at x₃ = x₄ = 0: h₅ = 2000 sin(−0.25) + 1294.8, and x₁, x₂ make h₃, h₄ zero
-        let a = 2000.0 * (-0.25f64).sin() + 894.8;
+        let a = 2000.0 * math::sin(-0.25f64) + 894.8;
         let (value, violation) = G05::default().evaluate(&reals(&[a, a, 0.0, 0.0]));
         assert_close(
             value,

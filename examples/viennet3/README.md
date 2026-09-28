@@ -110,9 +110,6 @@ of each objective's range from the ideal point, so that the extreme solutions co
 4 decimals. For the whole front, the hypervolume is about 5.3255: 43,192 points of the two curves
 give 5.3254, and a 4,001 × 4,001 grid of the variables gives 5.3255.
 
-The test problem calls the platform's sin and exp, whose last bit can differ between operating
-systems. The example prints 5 significant digits, and gives the same output on Windows and Linux.
-
 [The project page](https://tachsin.gr/projects/genoxide/examples/viennet3) plays this run back.
 
 ## Good results

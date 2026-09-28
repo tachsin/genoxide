@@ -96,10 +96,10 @@ function's contour.
 ## Good results
 
 The minimum is −12569.49, with all 30 genes at 420.97. Only L-SHADE reaches it, after about 222,000
-evaluations. CMA-ES ends at −7593.76, with 8 genes at 420.97, and PSO at −8573.03, with 11.
+evaluations. CMA-ES ends at −7871.22, with 8 genes at 420.97, and PSO at −8573.03, with 11.
 
 The difference isn't the seed's. With seeds 1 to 10, L-SHADE reaches the minimum every time, after
-216,000 to 223,000 evaluations. CMA-ES with IPOP restarts ends between −7594 and −8957, and PSO on a
+216,000 to 223,000 evaluations. CMA-ES with IPOP restarts ends between −7694 and −8523, and PSO on a
 ring between −8451 and −9326. These results agree with the
 [function suite](https://tachsin.gr/projects/genoxide/examples/function-suite) in 10 dimensions,
 where CMA-ES and PSO stay far from the minimum and a differential evolution comes within 1e-5 of it.

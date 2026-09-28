@@ -19,6 +19,7 @@
 use super::{Constraints, Optimum, Problem};
 use crate::engine::FitnessFunction;
 use crate::genome::{Integer, Integers, Real, Reals};
+use crate::math;
 use std::f64::consts::{PI, SQRT_2};
 
 // bounds that are valid by construction
@@ -810,10 +811,13 @@ impl Problem for CantileverBeam {
     }
 
     fn optimum(&self) -> Option<Optimum<Reals>> {
-        let s: f64 = CANTILEVER.iter().map(|a| a.powf(0.25)).sum();
-        let solution = CANTILEVER.iter().map(|a| s.cbrt() * a.powf(0.25)).collect();
+        let s: f64 = CANTILEVER.iter().map(|a| math::powf(*a, 0.25)).sum();
+        let solution = CANTILEVER
+            .iter()
+            .map(|a| math::cbrt(s) * math::powf(*a, 0.25))
+            .collect();
         Some(Optimum::proven(
-            0.0624 * s.powf(4.0 / 3.0),
+            0.0624 * math::powf(s, 4.0 / 3.0),
             // wider segments only lower the deflection
             vec![feasible_by_growing(solution, &[0, 1, 2, 3, 4], |x| {
                 self.values(x)

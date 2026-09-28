@@ -4,6 +4,7 @@
 
 use super::{MultiProblem, das_dennis, divisions_for};
 use crate::genome::{Real, Reals};
+use crate::math;
 use crate::multi::MultiFitnessFunction;
 use std::f64::consts::PI;
 
@@ -126,7 +127,7 @@ fn rastrigin_g(tail: &[f64]) -> f64 {
         * (tail.len() as f64
             + tail
                 .iter()
-                .map(|x| (x - 0.5) * (x - 0.5) - (20.0 * PI * (x - 0.5)).cos())
+                .map(|x| (x - 0.5) * (x - 0.5) - math::cos(20.0 * PI * (x - 0.5)))
                 .sum::<f64>())
 }
 
@@ -139,12 +140,12 @@ fn sphere_g(tail: &[f64]) -> f64 {
 fn spherical<const M: usize>(x: &[f64], radius: f64, alpha: f64) -> [f64; M] {
     std::array::from_fn(|m| {
         let mut f = radius;
-        let angle = |xi: f64| if alpha == 1.0 { xi } else { xi.powf(alpha) } * PI / 2.0;
+        let angle = |xi: f64| if alpha == 1.0 { xi } else { math::powf(xi, alpha) } * PI / 2.0;
         for &xi in &x[..M - 1 - m] {
-            f *= angle(xi).cos();
+            f *= math::cos(angle(xi));
         }
         if m > 0 {
-            f *= angle(x[M - 1 - m]).sin();
+            f *= math::sin(angle(x[M - 1 - m]));
         }
         f
     })
