@@ -219,12 +219,12 @@ x*. "Max" marks an objective negated from a maximization (inferred from the repo
 | g16 | 5 | nonlinear | 0.0204% | 4 | 34 | 0 | 0 | 4 | | −1.90515525853479 | 7-10 |
 | g17 | 6 | nonlinear | 0.0000% | 0 | 0 | 0 | 4 | 4 | | 8853.53967480648 (see errata) | 10 |
 | g18 | 9 | quadratic | 0.0000% | 0 | 13 | 0 | 0 | 6 | yes (−area) | −0.866025403784439 | 11 |
-| g19 | 15 | nonlinear | 33.4761% | 0 | 5 | 0 | 0 | 0 | | 32.6555929502463 | 11-12 |
-| g20 | 24 | linear | 0.0000% | 0 | 6 | 2 | 12 | 16 | | 0.2049794002 (Table 4; x* slightly infeasible) | 12-13 |
+| g19 | 15 | nonlinear | 33.4761% | 0 | 5 | 0 | 0 | 0 (5 at x*, errata 9) | | 32.6555929502463 | 11-12 |
+| g20 | 24 | linear | 0.0000% | 0 | 6 | 2 | 12 | 16 | | 0.2049794002 (Table 4; x* infeasible, g₁ = 0.1438; none feasible, errata 3) | 12-13 |
 | g21 | 7 | linear | 0.0000% | 0 | 1 | 0 | 5 | 6 | | 193.724510070035 | 13 |
-| g22 | 22 | linear | 0.0000% | 0 | 1 | 8 | 11 | 19 | | 236.430975504001 | 13-14 |
+| g22 | 22 | linear | 0.0000% | 0 | 1 | 8 | 11 | 19 | | 236.430975504001 (236.370313314566 exists, errata 9) | 13-14 |
 | g23 | 9 | linear | 0.0000% | 0 | 2 | 3 | 1 | 6 | | −400.055099999999584 | 14-15 |
-| g24 | 2 | linear | 79.6556% | 0 | 2 | 0 | 0 | 2 | yes (−x₁ − x₂) | −5.50801327159536 | 15 |
+| g24 | 2 | linear | 79.6556% (g₁ alone; 44.206% with both, errata 9) | 0 | 2 | 0 | 0 | 2 | yes (−x₁ − x₂) | −5.50801327159536 | 15 |
 
 "Max" for g02, g03, g08 and g12 agrees with Runarsson and Yao (2000, IEEE TEVC 4(3): 284-294,
 doi:10.1109/4235.873238) and Michalewicz and Schoenauer (1996, Evolutionary Computation 4(1):
