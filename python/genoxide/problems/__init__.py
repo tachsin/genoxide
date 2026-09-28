@@ -14,10 +14,10 @@ fitness function::
 core, and a seed gives the same result as the same Rust program. Calling ``problem(x)`` or
 ``problem.evaluate(genomes)`` runs the same Rust code.
 
-The multi-objective problems, such as :class:`Zdt1`, :class:`Dtlz2` and the constrained
-:class:`Bnh`, derive from :class:`MultiProblem` and run with the multi-objective algorithms. They
-give their ``objectives`` and, where it's known, their ``optimal_front(points)`` for
-:mod:`genoxide.indicators`::
+The multi-objective problems, such as :class:`Zdt1`, :class:`Dtlz2`, :class:`Wfg4` and the
+constrained :class:`Bnh`, derive from :class:`MultiProblem` and run with the multi-objective
+algorithms. They give their ``objectives`` and, where it's known, their
+``optimal_front(points)`` for :mod:`genoxide.indicators`::
 
     problem = gx.problems.Bnh()
     nsga2 = gx.Nsga2(
@@ -46,7 +46,8 @@ pressure vessel)::
     print(result.best_fitness, result.violation, problem.design(result.best_genome))
 
 All problems here are minimized, on :class:`genoxide.Real` genomes except the gear train's
-:class:`genoxide.Integer`. Each class's docstring gives
+:class:`genoxide.Integer` and :class:`Zdt5`'s :class:`genoxide.Binary`. Each class's docstring
+gives
 the function, its bounds, its optimum or front and its source. Many originals are books, reports
 or proceedings that aren't online, and some functions have no known origin: their definitions
 are taken from later papers that restate them, named in the docstrings, and are still to be
@@ -78,7 +79,7 @@ from typing import Any, ClassVar
 
 import numpy as np
 
-from .. import Integer, Real, _genoxide, _whole
+from .. import Binary, Integer, Real, _genoxide, _whole
 
 __all__ = [
     "Problem",
@@ -106,6 +107,7 @@ __all__ = [
     "Zdt2",
     "Zdt3",
     "Zdt4",
+    "Zdt5",
     "Zdt6",
     "Schaffer1",
     "Schaffer2",
@@ -124,6 +126,18 @@ __all__ = [
     "Dtlz2",
     "Dtlz3",
     "Dtlz4",
+    "Dtlz5",
+    "Dtlz6",
+    "Dtlz7",
+    "Wfg1",
+    "Wfg2",
+    "Wfg3",
+    "Wfg4",
+    "Wfg5",
+    "Wfg6",
+    "Wfg7",
+    "Wfg8",
+    "Wfg9",
 ]
 
 @dataclass(frozen=True, eq=False)
@@ -166,9 +180,12 @@ class _Described:
         return len(self._info["bounds"])
 
     @property
-    def genome(self) -> Real | Integer:
+    def genome(self) -> Real | Integer | Binary:
         """The search space, e.g. ``Real((-5.12, 5.12), length=10)``; ``Integer`` bounds for a
-        problem of whole numbers, such as :class:`genoxide.problems.engineering.GearTrain`."""
+        problem of whole numbers, such as :class:`genoxide.problems.engineering.GearTrain`, and
+        a ``Binary`` length for one of bit strings, such as :class:`Zdt5`."""
+        if self._info["genome"] == "binary":
+            return Binary(len(self._info["bounds"]))
         kind = Integer if self._info["genome"] == "integer" else Real
         bounds = [tuple(pair) for pair in self._info["bounds"]]
         if all(pair == bounds[0] for pair in bounds):
@@ -699,6 +716,36 @@ class Zdt6(_Sized):
     _type: ClassVar[str] = "zdt6"
 
 
+@dataclass(frozen=True)
+class Zdt5(MultiProblem):
+    """ZDT5: a deceptive problem on bit strings, whose front is 31 points, ``f₂ = 10 / f₁`` for
+    f₁ from 1 to 31.
+
+    The genome is a :class:`genoxide.Binary` of 80 bits: x₁ of 30 bits, then x₂ … x₁₁ of 5 bits
+    each. ``f₁ = 1 + u(x₁)``, u counting the ones; ``g = Σᵢ₌₂¹¹ v(u(xᵢ))``, with
+    ``v(u) = 2 + u`` for u < 5 and ``v(5) = 1``; ``f₂ = g / f₁``. The optimal solutions have
+    x₂ … x₁₁ all ones, g = 10. Each 5-bit substring is deceptive, drawn to all zeros (v = 2): the
+    best deceptive front has g = 11. ``optimal_front(31)`` gives the 31 points; fewer are spread
+    evenly over them, and more repeat some.
+
+    ``Zdt5(first_bits=30, substrings=10)``: other sizes have ``first_bits`` bits in x₁ and
+    ``substrings`` substrings of 5 bits, at least 1 each, and the front ``f₂ = substrings / f₁``
+    for f₁ from 1 to ``first_bits + 1``. The problem takes genomes of 0s and 1s, or booleans.
+
+    Zitzler, E., Deb, K. and Thiele, L. (2000). Comparison of multiobjective evolutionary
+    algorithms: empirical results. Evolutionary Computation 8(2): 173-195, eq. 11, p. 178.
+    """
+
+    first_bits: int = 30
+    substrings: int = 10
+    _type: ClassVar[str] = "zdt5"
+
+    def _describe(self) -> dict[str, Any]:
+        first_bits = _whole("Zdt5.first_bits", self.first_bits, minimum=1)
+        substrings = _whole("Zdt5.substrings", self.substrings, minimum=1)
+        return {"type": self._type, "first_bits": first_bits, "substrings": substrings}
+
+
 @dataclass(frozen=True, init=False)
 class _Dtlz(MultiProblem):
     """DTLZ with ``objectives`` objectives, 2 to 6, and ``variables`` variables, at least
@@ -777,6 +824,276 @@ class Dtlz4(_Dtlz):
     """
 
     _type: ClassVar[str] = "dtlz4"
+
+
+@dataclass(frozen=True, init=False)
+class Dtlz5(_Dtlz):
+    """DTLZ5 (the technical report's numbering; not in the 2002 paper): DTLZ2 with its angles
+    mapped so that the front is a curve, for 2 and 3 objectives.
+    ``Dtlz5(objectives=3, variables=None)``: 2 to 6 objectives, and at least as many variables,
+    None for ``objectives + 9``.
+
+    ``g = Σ (xᵢ − 0.5)²`` over the last k variables, ``θ₁ = x₁π/2``,
+    ``θᵢ = π (1 + 2g xᵢ) / (4 (1 + g))`` for the others, and the objectives of DTLZ2 at these
+    angles, on a sphere of radius ``1 + g``. The report's eq. 25 writes ``cos(θᵢπ/2)`` for
+    ``cos θᵢ`` and leaves θ₁ undefined; its eqs. 8 and 10 give this reading. The optimal
+    solutions have the last k variables at 0.5. The front is DTLZ2's quarter circle for 2
+    objectives, and the curve ``f₁ = f₂ = cos θ₁ / √2``, ``f₃ = sin θ₁`` for 3. For 4 or more
+    it isn't a curve (Huband et al., 2006) and isn't known: ``optimal_front`` and
+    ``nadir_point`` are None, and ``ideal_point`` the origin.
+
+    Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2001). Scalable Test Problems for
+    Evolutionary Multi-Objective Optimization. TIK-Report 112, ETH Zürich, eq. 25, p. 20.
+    """
+
+    _type: ClassVar[str] = "dtlz5"
+
+
+@dataclass(frozen=True, init=False)
+class Dtlz6(_Dtlz):
+    """DTLZ6 (the technical report's numbering; the 2002 paper's DTLZ5): :class:`Dtlz5` with
+    ``g = Σ xᵢ^0.1`` over the last k variables, which makes the same front harder to reach.
+    ``Dtlz6(objectives=3, variables=None)``: 2 to 6 objectives, and at least as many variables,
+    None for ``objectives + 9``.
+
+    The optimal solutions have the last k variables at 0. The front and the ideal and nadir
+    points are :class:`Dtlz5`'s.
+
+    Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2001). Scalable Test Problems for
+    Evolutionary Multi-Objective Optimization. TIK-Report 112, ETH Zürich, eq. 26, p. 21.
+    """
+
+    _type: ClassVar[str] = "dtlz6"
+
+
+@dataclass(frozen=True, init=False)
+class Dtlz7(_Dtlz):
+    """DTLZ7 (the technical report's numbering; the 2002 paper's DTLZ6): a front of 2^(M−1)
+    disconnected regions. ``Dtlz7(objectives=3, variables=None)``: 2 to 6 objectives, and at
+    least as many variables, None for ``objectives + 19``.
+
+    ``fᵢ = xᵢ`` for the first M − 1, ``g = 1 + 9 Σ xᵢ / k`` over the last k variables,
+    ``f_M = (1 + g) (M − Σ fᵢ (1 + sin 3πfᵢ) / (1 + g))``. The optimal solutions have the last k
+    variables at 0: the front is ``f_M = 2M − Σ fᵢ (1 + sin 3πfᵢ)`` with each fᵢ in
+    [0, 0.2514118360889171] or (0.6316265307000612, 0.8594008566447239], ranges derived from
+    the definition. ``optimal_front`` is a grid over them.
+
+    Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2001). Scalable Test Problems for
+    Evolutionary Multi-Objective Optimization. TIK-Report 112, ETH Zürich, eq. 27, p. 22.
+    """
+
+    _type: ClassVar[str] = "dtlz7"
+
+
+@dataclass(frozen=True, init=False)
+class _Wfg(MultiProblem):
+    """WFG with ``objectives`` objectives, 2 to 6, ``position`` position parameters k (None for
+    the recommended 4 with 2 objectives and 2 (objectives − 1) with more; a positive multiple of
+    objectives − 1) and ``distance`` distance parameters l (20 by default): k + l variables, the
+    i-th in [0, 2i]. The field ``objective_count`` keeps the number, as the ``objectives``
+    property lists the objectives."""
+
+    objective_count: int
+    position: int | None
+    distance: int
+    _even: ClassVar[bool] = False
+
+    def __init__(
+        self, objectives: int = 3, position: int | None = None, distance: int = 20
+    ) -> None:
+        object.__setattr__(self, "objective_count", objectives)
+        object.__setattr__(self, "position", position)
+        object.__setattr__(self, "distance", distance)
+
+    def _describe(self) -> dict[str, Any]:
+        name = type(self).__name__
+        objectives = _whole(f"{name}.objectives", self.objective_count, minimum=2)
+        if objectives > 6:
+            raise ValueError(f"{name}.objectives is at most 6, not {objectives}")
+        position = self.position
+        if position is not None:
+            position = _whole(f"{name}.position", position, minimum=1, maximum=2**24)
+            if position % (objectives - 1):
+                raise ValueError(
+                    f"{name}.position is a multiple of {objectives - 1} (objectives − 1), not "
+                    f"{position}"
+                )
+        distance = _whole(f"{name}.distance", self.distance, minimum=1, maximum=2**24)
+        if self._even and distance % 2:
+            raise ValueError(f"{name}.distance is even, not {distance}")
+        return {
+            "type": self._type,
+            "objectives": objectives,
+            "position": position,
+            "distance": distance,
+        }
+
+
+@dataclass(frozen=True, init=False)
+class Wfg1(_Wfg):
+    """WFG1: a front of convex and mixed convex/concave parts, behind a flat region and a strong
+    polynomial bias. ``Wfg1(objectives=3, position=None, distance=20)``.
+
+    The distance parameters are shifted (``s_linear(y, 0.35)``) and given a flat region
+    (``b_flat(y, 0.8, 0.75, 0.85)``), every parameter is biased (``b_poly(y, 0.02)``) and each
+    group reduced by a sum weighted by 2i. h₁…h_{M−1} are convex and h_M mixed,
+    ``1 − x₁ − cos(10πx₁ + π/2) / 10π``. The optimal solutions have the distance parameters at
+    0.35 × 2i. In floating point, zᵢ / 2i is never exactly 0.35 for some i (3, 6, 12, 24, 48,
+    …), and the bias turns that last bit into a distance of about 0.48 in the parameter: with
+    such indices among the distance parameters, as in the default sizes, no genome reaches the
+    front (the distance stays above about 0.069 for k = 4, l = 20), as with the authors'
+    toolkit.
+
+    Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test
+    problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation
+    10(5): 477-506: its table XIV, with tables X and XI; values checked against the authors'
+    C++ toolkit, version 2006.03.28.
+    """
+
+    _type: ClassVar[str] = "wfg1"
+
+
+@dataclass(frozen=True, init=False)
+class Wfg2(_Wfg):
+    """WFG2: a convex front in six disconnected regions, with a non-separable reduction.
+    ``Wfg2(objectives=3, position=None, distance=20)``, ``distance`` even.
+
+    The distance parameters are shifted (``s_linear(y, 0.35)``) and reduced in pairs
+    (``r_nonsep``). h₁…h_{M−1} are convex and h_M disconnected, ``1 − x₁ cos²(5πx₁)``. The
+    optimal solutions have the distance parameters at 0.35 × 2i and x₁ where h_M is below all
+    its values at smaller x₁: [0, 0.0416], (0.1297, 0.2096], (0.3549, 0.4050], (0.5641, 0.6034],
+    (0.7691, 0.8025] and (0.9724, 1]. For 3 objectives or more, ``optimal_front`` samples evenly
+    spread directions and leaves out those between the regions.
+
+    Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test
+    problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation
+    10(5): 477-506: its table XIV, with tables X and XI; values checked against the authors'
+    C++ toolkit, version 2006.03.28.
+    """
+
+    _type: ClassVar[str] = "wfg2"
+    _even: ClassVar[bool] = True
+
+
+@dataclass(frozen=True, init=False)
+class Wfg3(_Wfg):
+    """WFG3: meant to have a degenerate linear front, a line for any number of objectives.
+    ``Wfg3(objectives=3, position=None, distance=20)``, ``distance`` even.
+
+    WFG2's transitions with the linear shape, and x₂…x_{M−1} fixed at 0.5 at the optimal
+    distance, 0.35 × 2i: those solutions make a line, which the paper takes for the whole front.
+    For 3 objectives or more, solutions off the optimal distance are optimal too (Ishibuchi,
+    Masuda and Nojima (2016), IEEE Transactions on Evolutionary Computation 20(5): 807-813, not
+    yet checked against the letter, #168): with 3 objectives, e.g. (3, 1, 1). The front,
+    ideal and nadir points are then None; with 2 objectives, the front is the segment from
+    (0, 4) to (2, 0).
+
+    Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test
+    problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation
+    10(5): 477-506: its table XIV, with tables X and XI; values checked against the authors'
+    C++ toolkit, version 2006.03.28.
+    """
+
+    _type: ClassVar[str] = "wfg3"
+    _even: ClassVar[bool] = True
+
+
+@dataclass(frozen=True, init=False)
+class Wfg4(_Wfg):
+    """WFG4: a concave front, ``Σ (fₘ / 2m)² = 1``, behind many local fronts: every parameter
+    is shifted by the multimodal ``s_multi(y, 30, 10, 0.35)``.
+    ``Wfg4(objectives=3, position=None, distance=20)``. The optimal solutions have the distance
+    parameters at 0.35 × 2i.
+
+    Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test
+    problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation
+    10(5): 477-506: its table XIV, with tables X and XI; values checked against the authors'
+    C++ toolkit, version 2006.03.28.
+    """
+
+    _type: ClassVar[str] = "wfg4"
+
+
+@dataclass(frozen=True, init=False)
+class Wfg5(_Wfg):
+    """WFG5: a concave front, ``Σ (fₘ / 2m)² = 1``, with deceptive parameters: every parameter
+    is shifted by ``s_decept(y, 0.35, 0.001, 0.05)``.
+    ``Wfg5(objectives=3, position=None, distance=20)``. The optimal solutions have the distance
+    parameters at 0.35 × 2i.
+
+    Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test
+    problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation
+    10(5): 477-506: its table XIV, with tables X and XI; values checked against the authors'
+    C++ toolkit, version 2006.03.28.
+    """
+
+    _type: ClassVar[str] = "wfg5"
+
+
+@dataclass(frozen=True, init=False)
+class Wfg6(_Wfg):
+    """WFG6: a concave front, ``Σ (fₘ / 2m)² = 1``, non-separable: each group is reduced by
+    ``r_nonsep``, the distance parameters all together.
+    ``Wfg6(objectives=3, position=None, distance=20)``. The optimal solutions have the distance
+    parameters at 0.35 × 2i.
+
+    Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test
+    problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation
+    10(5): 477-506: its table XIV, with tables X and XI; values checked against the authors'
+    C++ toolkit, version 2006.03.28.
+    """
+
+    _type: ClassVar[str] = "wfg6"
+
+
+@dataclass(frozen=True, init=False)
+class Wfg7(_Wfg):
+    """WFG7: a concave front, ``Σ (fₘ / 2m)² = 1``, each position parameter biased by the mean
+    of the parameters after it (``b_param``). ``Wfg7(objectives=3, position=None, distance=20)``.
+    The optimal solutions have the distance parameters at 0.35 × 2i.
+
+    Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test
+    problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation
+    10(5): 477-506: its table XIV, with tables X and XI; values checked against the authors'
+    C++ toolkit, version 2006.03.28.
+    """
+
+    _type: ClassVar[str] = "wfg7"
+
+
+@dataclass(frozen=True, init=False)
+class Wfg8(_Wfg):
+    """WFG8: a concave front, ``Σ (fₘ / 2m)² = 1``, each distance parameter biased by the mean
+    of the parameters before it (``b_param``). ``Wfg8(objectives=3, position=None,
+    distance=20)``. The optimal distance parameters depend on the position:
+    ``zᵢ = 2i × 0.35^(1 / (0.02 + 49.98 v(u)))`` with u the mean of y₁…yᵢ₋₁ (yⱼ = zⱼ / 2j),
+    from z_{k+1} on.
+
+    Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test
+    problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation
+    10(5): 477-506: its table XIV, with tables X and XI; values checked against the authors'
+    C++ toolkit, version 2006.03.28.
+    """
+
+    _type: ClassVar[str] = "wfg8"
+
+
+@dataclass(frozen=True, init=False)
+class Wfg9(_Wfg):
+    """WFG9: a concave front, ``Σ (fₘ / 2m)² = 1``, multimodal, deceptive and non-separable:
+    each parameter biased by the mean of those after it, the position parameters deceptive and
+    the distance parameters multimodal, then reduced as in :class:`Wfg6`.
+    ``Wfg9(objectives=3, position=None, distance=20)``. The optimal distance parameters:
+    zₙ = 0.35 × 2n, then ``zᵢ = 2i × 0.35^(1 / (0.02 + 1.96 u))`` with u the mean of
+    yᵢ₊₁…yₙ, from z_{n−1} back.
+
+    Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test
+    problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation
+    10(5): 477-506: its table XIV, with tables X and XI; values checked against the authors'
+    C++ toolkit, version 2006.03.28.
+    """
+
+    _type: ClassVar[str] = "wfg9"
 
 
 

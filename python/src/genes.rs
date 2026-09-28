@@ -25,6 +25,11 @@ pub trait Genes: Genome {
     fn integers(&self) -> Option<&Integers> {
         None
     }
+
+    /// The genome as bits, if it is: what the binary test problems evaluate.
+    fn bits(&self) -> Option<&Bits> {
+        None
+    }
 }
 
 impl Genes for Bits {
@@ -32,6 +37,10 @@ impl Genes for Bits {
 
     fn push_genes(&self, genes: &mut Vec<bool>) {
         genes.extend(self.iter());
+    }
+
+    fn bits(&self) -> Option<&Bits> {
+        Some(self)
     }
 }
 

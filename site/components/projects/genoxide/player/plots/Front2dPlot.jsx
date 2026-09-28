@@ -39,6 +39,8 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
   const palette = categorical(dark);
   const objectives = problem.objectives ?? ["f1", "f2"];
   const trueFront = Array.isArray(problem.true_front) ? problem.true_front : null;
+  // a front of separate points (e.g. ZDT5's, on a binary genome) is drawn as rings, not a line
+  const discrete = problem.true_front_kind === "points";
 
   const target = useMemo(() => {
     const pts = [...names.flatMap((n) => fronts[n] ?? []), ...names.flatMap((n) => infeasible[n] ?? []), ...(trueFront ?? [])];
@@ -52,7 +54,7 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
   const legend = [
     ...names.map((n, k) => ({ label: n, color: palette[k % palette.length], shape: SHAPES[k % SHAPES.length] })),
     ...(hasInfeasible ? [{ label: "infeasible", shape: "ring", className: "text-base-content/50" }] : []),
-    ...(trueFront ? [{ label: "true front", shape: "line", className: "text-base-content/45" }] : []),
+    ...(trueFront ? [{ label: "true front", shape: discrete ? "ring" : "line", className: "text-base-content/45" }] : []),
   ];
 
   return (
@@ -118,7 +120,12 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
                 </clipPath>
               </defs>
               <g clipPath={`url(#${clip})`}>
-              {trueFront ? (
+              {trueFront && discrete
+                ? trueFront.map((p, i) => (
+                    <circle key={`t${i}`} cx={x(p[0])} cy={y(p[1])} r={5} fill="none" className="stroke-base-content/45" strokeWidth={1.5} />
+                  ))
+                : null}
+              {trueFront && !discrete ? (
                 <path d={frontPath(trueFront, x, y)} fill="none" className="stroke-base-content/45" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
               ) : null}
               {points.map((q, i) => (

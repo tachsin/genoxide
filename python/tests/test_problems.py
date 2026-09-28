@@ -70,17 +70,33 @@ MULTI_PROBLEMS = [
     gx.problems.Dtlz2,
     gx.problems.Dtlz3,
     gx.problems.Dtlz4,
+    gx.problems.Dtlz5,
+    gx.problems.Dtlz6,
+    gx.problems.Dtlz7,
+    gx.problems.Wfg1,
+    gx.problems.Wfg2,
+    gx.problems.Wfg3,
+    gx.problems.Wfg4,
+    gx.problems.Wfg5,
+    gx.problems.Wfg6,
+    gx.problems.Wfg7,
+    gx.problems.Wfg8,
+    gx.problems.Wfg9,
 ]
+
+# on bit strings, and so not in the registry of real problems
+BINARY_PROBLEMS = [gx.problems.Zdt5]
 
 
 def test_the_classes_are_the_rust_registry():
     assert [cls().name for cls in PROBLEMS + CONSTRAINED] == gx._genoxide.problem_names()
     two = [cls().name for cls in MULTI_PROBLEMS if len(cls().objectives) == 2]
     three = [cls().name for cls in MULTI_PROBLEMS if len(cls().objectives) == 3]
-    # the DTLZ problems have 3 objectives by default
-    assert two == gx._genoxide.multi_problem_names(2)[:-4]
+    # the DTLZ and WFG problems have 3 objectives by default
+    assert two == gx._genoxide.multi_problem_names(2)[:-16]
     assert three == gx._genoxide.multi_problem_names(3)
-    assert sorted(cls.__name__ for cls in PROBLEMS + MULTI_PROBLEMS) == sorted(
+    classes = PROBLEMS + MULTI_PROBLEMS + BINARY_PROBLEMS
+    assert sorted(cls.__name__ for cls in classes) == sorted(
         name for name in gx.problems.__all__ if name not in ("Problem", "MultiProblem", "Optimum")
     )
     submodules = gx.problems.cec2006.__all__ + gx.problems.engineering.__all__
@@ -420,6 +436,212 @@ def test_multi_objective_values_at_chosen_points():
     assert gx.problems.Constr().ideal_point == pytest.approx([7 / 18, 1])
 
 
+def test_dtlz5_to_7_values_at_chosen_points():
+    # DTLZ5 with the distance variables at 1: g = 2.5, θ₂ = π (1 + 5x₂) / 14 = π/4 at x₂ = 0.5;
+    # at x₁ = 0, 3.5 (cos π/4, sin π/4, 0)
+    x = np.ones(12)
+    x[:2] = [0.0, 0.5]
+    assert gx.problems.Dtlz5()(x) == pytest.approx([3.5 / math.sqrt(2), 3.5 / math.sqrt(2), 0])
+    # DTLZ6 there: g = 10, θ₂ = π (1 + 20x₂) / 44 = π/4, a radius of 11
+    assert gx.problems.Dtlz6()(x) == pytest.approx([11 / math.sqrt(2), 11 / math.sqrt(2), 0])
+    # DTLZ7 with the distance variables at 0: g = 1, and at f₁ = f₂ = 0.5, sin 1.5π = −1, h = 3
+    x = np.zeros(22)
+    x[:2] = 0.5
+    assert list(gx.problems.Dtlz7()(x)) == pytest.approx([0.5, 0.5, 6.0])
+    # the fronts: DTLZ5's curve for 3 objectives, unknown for 4; DTLZ7's regions
+    front = gx.problems.Dtlz5().optimal_front(20)
+    assert front.shape == (20, 3)
+    assert np.allclose(front[:, 0], front[:, 1]) and np.allclose((front**2).sum(axis=1), 1)
+    four = gx.problems.Dtlz6(objectives=4)
+    assert four.optimal_front(20) is None and four.nadir_point is None
+    assert list(four.ideal_point) == [0.0] * 4
+    assert gx.problems.Dtlz5().nadir_point == pytest.approx([1 / math.sqrt(2)] * 2 + [1])
+    front = gx.problems.Dtlz7(objectives=2).optimal_front(30)
+    phi = front[:, 0] * (1 + np.sin(3 * math.pi * front[:, 0]))
+    assert front.shape == (30, 2) and np.allclose(front[:, 1], 4 - phi)
+    assert gx.problems.Dtlz7().nadir_point == pytest.approx([0.8594008566447239] * 2 + [6])
+    assert gx.problems.Dtlz7().dimensions == 22
+    assert gx.problems.Dtlz5(objectives=5).dimensions == 14
+
+
+# ---- ZDT5, on bit strings -----------------------------------------------------------------------
+
+
+def test_zdt5_describes_itself():
+    problem = gx.problems.Zdt5()
+    assert isinstance(problem, gx.problems.MultiProblem)
+    assert problem.name == "ZDT5"
+    assert problem.genome == gx.Binary(80)
+    assert problem.dimensions == 80
+    assert problem.objectives == ["minimize", "minimize"]
+    assert problem.constraint_count == 0
+    assert problem.reference and problem.reference_url.startswith("https://")
+    assert gx.problems.Zdt5.__doc__
+    assert list(problem.ideal_point) == [1.0, 10 / 31]
+    assert list(problem.nadir_point) == [31.0, 10.0]
+    front = problem.optimal_front(31)
+    assert front.tolist() == [[f1, 10 / f1] for f1 in range(1, 32)]
+    assert problem.optimal_front(3).tolist() == [[1.0, 10.0], [16.0, 10 / 16], [31.0, 10 / 31]]
+    small = gx.problems.Zdt5(first_bits=3, substrings=2)
+    assert small.genome == gx.Binary(13)
+    assert list(small.nadir_point) == [4.0, 2.0]
+
+
+def test_zdt5_values_at_chosen_points():
+    problem = gx.problems.Zdt5()
+    # all zeros: f₁ = 1, and every substring at its deceptive attractor, v = 2: g = 20
+    assert list(problem(np.zeros(80, dtype=bool))) == [1.0, 20.0]
+    # all ones: f₁ = 31, g = 10
+    assert list(problem(np.ones(80))) == [31.0, 10 / 31]
+    # 7 ones in x₁, and substrings with 0 to 4 ones then five full: g = 2 + 3 + 4 + 5 + 6 + 5
+    x = np.zeros(80, dtype=bool)
+    x[:7] = True
+    for i, ones in enumerate([0, 1, 2, 3, 4, 5, 5, 5, 5, 5]):
+        x[30 + 5 * i : 30 + 5 * i + ones] = True
+    assert list(problem(x)) == [8.0, 25 / 8]
+    genomes = np.random.default_rng(1).integers(0, 2, size=(20, 80)).astype(bool)
+    values = problem.evaluate(genomes)
+    assert values.shape == (20, 2)
+    assert np.array_equal(np.array([problem(genome) for genome in genomes]), values)
+    # f₁ f₂ = g, at least 10
+    assert np.all(values[:, 0] * values[:, 1] >= 10)
+    assert problem.constraints(np.ones(80)).shape == (0,)
+
+
+def test_zdt5_rejects_what_isnt_its_genome():
+    problem = gx.problems.Zdt5()
+    with pytest.raises(ValueError, match="ZDT5 takes bits, 0 or 1, as genes, not 0.5"):
+        problem(np.full(80, 0.5))
+    with pytest.raises(ValueError, match="ZDT5 takes genomes of 80 bits, not 79"):
+        problem(np.zeros(79))
+    with pytest.raises(ValueError, match="ZDT5 takes genomes of 80 bits, not 3"):
+        problem.constraints([0, 1, 1])
+    with pytest.raises(ValueError, match="Zdt5.substrings is at least 1, not 0"):
+        gx.problems.Zdt5(substrings=0).genome
+    nsga2 = gx.Nsga2(
+        gx.Real((0, 1), length=80),
+        objectives=problem.objectives,
+        population_size=10,
+        crossover=gx.SimulatedBinaryCrossover(15),
+        mutation=gx.PolynomialMutation(20, rate=0.5),
+    )
+    with pytest.raises(ValueError, match="ZDT5 needs a Binary genome"):
+        nsga2.run(problem, generations=1)
+    with pytest.raises(ValueError, match="ZDT5 has 80 bits, but the genome has 79"):
+        _zdt5_nsga2(gx.Binary(79)).run(problem, generations=1)
+    with pytest.raises(ValueError, match="Bnh needs a Real genome|BNH needs a Real genome"):
+        _zdt5_nsga2(gx.Binary(2)).run(gx.problems.Bnh(), generations=1)
+
+
+def _zdt5_nsga2(genome):
+    return gx.Nsga2(
+        genome,
+        objectives=["minimize", "minimize"],
+        population_size=40,
+        crossover=gx.UniformCrossover(),
+        mutation=gx.BitFlip(rate=1 / 80),
+        seed=3,
+    )
+
+
+@pytest.mark.parametrize("parallel", [False, True])
+def test_a_native_zdt5_run_equals_a_run_with_python_calls(parallel):
+    problem = gx.problems.Zdt5()
+    algorithm = _zdt5_nsga2(problem.genome)
+    native = algorithm.run(problem, generations=30, parallel=parallel)
+    python = algorithm.run(lambda x: problem(x), generations=30)
+    batch = algorithm.run(problem.evaluate, generations=30, batch=True)
+    for other in (python, batch):
+        assert np.array_equal(other.front_objectives, native.front_objectives)
+        assert np.array_equal(other.front_genomes, native.front_genomes)
+        assert other.evaluations == native.evaluations
+    assert native.front_genomes.dtype == bool
+    assert np.all(native.front_objectives[:, 0] * native.front_objectives[:, 1] >= 10)
+
+
+def _spread_point(n, a, b):
+    """z with zᵢ = 2i ((a i + b) mod 1), as in the Rust tests."""
+    i = np.arange(1, n + 1, dtype=np.float64)
+    return 2 * i * np.fmod(a * i + b, 1.0)
+
+
+# the values of the authors' C++ toolkit (version 2006.03.28), compiled and run at the point
+WFG_VALUES = [
+    (gx.problems.Wfg1, [2.9521691109522714, 0.97445227500261]),
+    (gx.problems.Wfg2, [1.5793517175960388, 3.8576901485363813]),
+    (gx.problems.Wfg3, [1.9138827838827839, 1.9238827838827837]),
+    (gx.problems.Wfg4, [1.4056727977183536, 3.7515601023124354]),
+    (gx.problems.Wfg5, [2.0899502646748944, 3.2324642099371106]),
+    (gx.problems.Wfg6, [2.470388403034529, 2.5745763998994367]),
+    (gx.problems.Wfg7, [1.3020135240884834, 4.037767908965662]),
+    (gx.problems.Wfg8, [2.4877866969669267, 2.7674219485001066]),
+    (gx.problems.Wfg9, [2.624356071590899, 2.9327440749083484]),
+]
+
+
+@pytest.mark.parametrize("cls, expected", WFG_VALUES)
+def test_wfg_values_match_the_toolkit(cls, expected):
+    problem = cls(objectives=2, position=2, distance=4)
+    assert problem.genome == gx.Real([(0.0, 2.0 * i) for i in range(1, 7)])
+    assert list(problem(_spread_point(6, 0.37, 0.11))) == pytest.approx(expected, rel=1e-13)
+
+
+def test_wfg_sizes_and_fronts():
+    # k = 4 for 2 objectives, 2 (M − 1) for more, and l = 20
+    assert gx.problems.Wfg1(objectives=2).dimensions == 24
+    assert gx.problems.Wfg4().dimensions == 24
+    assert gx.problems.Wfg9(objectives=5).dimensions == 28
+    assert gx.problems.Wfg2(objectives=4, position=3, distance=6).dimensions == 9
+    assert gx.problems.Wfg5(4) == gx.problems.Wfg5(objectives=4)
+    # the concave fronts: Σ (fₘ / 2m)² = 1, spanning [0, 2m]
+    problem = gx.problems.Wfg4(objectives=3)
+    front = problem.optimal_front(91)
+    assert front.shape == (91, 3)
+    assert np.allclose(((front / [2, 4, 6]) ** 2).sum(axis=1), 1)
+    assert list(problem.ideal_point) == [0, 0, 0]
+    assert list(problem.nadir_point) == [2, 4, 6]
+    # WFG2's disconnected front and WFG1's: exactly the points asked for, with 2 objectives
+    assert gx.problems.Wfg2(objectives=2).optimal_front(50).shape == (50, 2)
+    assert len(gx.problems.Wfg1(objectives=4).optimal_front(50)) >= 50
+    # WFG3: the segment from (0, 4) to (2, 0) with 2 objectives; not known with more
+    front = gx.problems.Wfg3(objectives=2).optimal_front(5)
+    assert front.tolist() == [[0, 4], [0.5, 3], [1, 2], [1.5, 1], [2, 0]]
+    wfg3 = gx.problems.Wfg3()
+    assert wfg3.optimal_front(10) is None and wfg3.nadir_point is None
+    # WFG9's optimal distance parameters, from the last back: on the front
+    k, l = 4, 6
+    y = [0.35]
+    for count in range(1, l):
+        y.append(0.35 ** (1 / (0.02 + 1.96 * np.mean(y))))
+    y = np.r_[np.full(k, 0.5), y[::-1]]
+    f = gx.problems.Wfg9(objectives=3, position=k, distance=l)(y * 2 * np.arange(1, k + l + 1))
+    assert ((f / [2, 4, 6]) ** 2).sum() == pytest.approx(1, rel=1e-12)
+
+
+@pytest.mark.parametrize(
+    "problem, message",
+    [
+        (gx.problems.Wfg1(objectives=3, position=3), "Wfg1.position is a multiple of 2"),
+        (gx.problems.Wfg2(distance=5), "Wfg2.distance is even, not 5"),
+        (gx.problems.Wfg4(distance=0), "Wfg4.distance is at least 1, not 0"),
+        (gx.problems.Wfg4(objectives=7), "Wfg4.objectives is at most 6, not 7"),
+        (gx.problems.Wfg6(position=0), "Wfg6.position is at least 1, not 0"),
+    ],
+)
+def test_wrong_wfg_sizes_are_errors(problem, message):
+    with pytest.raises(ValueError, match=message):
+        problem.genome
+
+
+def test_wfg_sizes_are_checked_in_rust_too():
+    description = '{"type": "wfg2", "objectives": 3, "position": 4, "distance": 3}'
+    with pytest.raises(ValueError, match="WFG2 needs an even number of distance parameters"):
+        gx._genoxide.problem_info(description)
+    description = '{"type": "wfg1", "objectives": 3, "position": 3, "distance": 4}'
+    with pytest.raises(ValueError, match="WFG1 needs a positive multiple of 2"):
+        gx._genoxide.problem_info(description)
+
+
 def _non_dominated_2d(values):
     """The non-dominated rows of an (n, 2) array."""
     values = values[np.lexsort((values[:, 1], values[:, 0]))]
@@ -505,7 +727,9 @@ def nsga2(genome, objectives, **settings):
     )
 
 
-@pytest.mark.parametrize("cls", [gx.problems.Bnh, gx.problems.Zdt1, gx.problems.Viennet1])
+@pytest.mark.parametrize(
+    "cls", [gx.problems.Bnh, gx.problems.Zdt1, gx.problems.Viennet1, gx.problems.Wfg9]
+)
 @pytest.mark.parametrize("parallel", [False, True])
 def test_a_native_multi_objective_run_equals_a_run_with_python_calls(cls, parallel):
     problem = cls()

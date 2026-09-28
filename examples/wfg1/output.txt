@@ -1,0 +1,6 @@
+NSGA-II  after 250 generations: 100 solutions, IGD+ 1.2140, hypervolume 1.2022
+NSGA-II  after 2500 generations: 100 solutions, IGD+ 0.3906, hypervolume 4.7759
+SMS-EMOA after 250 generations: 50 solutions, IGD+ 1.3683, hypervolume 0.5789
+SMS-EMOA after 2500 generations: 100 solutions, IGD+ 0.4506, hypervolume 4.4470
+the closest front, 0.0695 away: IGD+ 0.0868, hypervolume 6.2985 with 100 points
+the whole front: hypervolume 6.7857

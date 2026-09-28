@@ -1,0 +1,5 @@
+NSGA-II  after 250 generations: 100 solutions, IGD+ 0.0339, hypervolume 5.4776, largest gap 0.1219
+NSGA-II  after 1000 generations: 100 solutions, IGD+ 0.0176, hypervolume 5.5732, largest gap 0.1229
+SMS-EMOA after 250 generations: 100 solutions, IGD+ 0.0133, hypervolume 5.5891, largest gap 0.0634
+SMS-EMOA after 1000 generations: 100 solutions, IGD+ 0.0083, hypervolume 5.6289, largest gap 0.0626
+the whole front: hypervolume 5.6800; 100 evenly spaced points: gaps of 0.0452

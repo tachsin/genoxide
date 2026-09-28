@@ -1,0 +1,9 @@
+NSGA-II  after 250 generations: 100 solutions, IGD+ 0.1734, hypervolume 2.5378
+         distance from the front 0.0245 to 0.2689, mean 0.1247
+NSGA-II  after 1000 generations: 100 solutions, IGD+ 0.1483, hypervolume 2.6289
+         distance from the front 0.0109 to 0.2113, mean 0.1109
+SMS-EMOA after 250 generations: 100 solutions, IGD+ 0.1657, hypervolume 2.6118
+         distance from the front 0.0109 to 0.3208, mean 0.1073
+SMS-EMOA after 1000 generations: 100 solutions, IGD+ 0.1397, hypervolume 2.6884
+         distance from the front 0.0043 to 0.2132, mean 0.0888
+the whole front: hypervolume 3.3968

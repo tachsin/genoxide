@@ -6,7 +6,7 @@ reference: "Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2002). Scalable m
 reference_url: https://doi.org/10.1109/CEC.2002.1007032
 optimum: "hypervolume 0.8074 (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 106
+order: 116
 ---
 
 # DTLZ2 with 3 objectives

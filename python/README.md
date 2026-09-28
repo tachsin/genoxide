@@ -173,12 +173,13 @@ result = de.run(problem, target=problem.optimum.value + 1e-8, evaluations=200_00
 print(result.best_fitness, result.evaluations, problem.reference)
 ```
 
-The multi-objective problems, `Zdt1` to `Zdt6`, `Dtlz1(objectives, variables)` to `Dtlz4`,
-`Schaffer1`, `Schaffer2`, `FonsecaFleming`, `Kursawe`, `Poloni`, `Viennet1` to `Viennet3` and the
-constrained `Bnh`, `Srn`, `Tnk`, `Osy` and `Constr`, run with the multi-objective algorithms in the
-same way. Each gives its `objectives`, for the algorithm, and `optimal_front(points)`, None where
-the front isn't known; a constrained one returns `(objectives, violation)` and gives its
-`constraints(x)`.
+The multi-objective problems, `Zdt1` to `Zdt6` (`Zdt5` on a `Binary` genome),
+`Dtlz1(objectives, variables)` to `Dtlz7`,
+`Wfg1(objectives, position, distance)` to `Wfg9`, `Schaffer1`, `Schaffer2`, `FonsecaFleming`,
+`Kursawe`, `Poloni`, `Viennet1` to `Viennet3` and the constrained `Bnh`, `Srn`, `Tnk`, `Osy` and
+`Constr`, run with the multi-objective algorithms in the same way. Each gives its `objectives`,
+for the algorithm, and `optimal_front(points)`, None where the front isn't known; a constrained one
+returns `(objectives, violation)` and gives its `constraints(x)`.
 
 Two submodules have constrained single-objective problems, whose fitness is `(score,
 violation)`: `gx.problems.cec2006` has CEC 2006's `G01()` to `G06()`, and
