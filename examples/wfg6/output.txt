@@ -1,0 +1,9 @@
+NSGA-II after 250 generations: 100 solutions, IGD+ 0.0688, hypervolume 2.9932
+  distance 0.05173 to 0.06253; genes shifted 0.4716 to 0.5400
+NSGA-II after 1000 generations: 100 solutions, IGD+ 0.0632, hypervolume 3.0316
+  distance 0.04862 to 0.06590; genes shifted 0.4123 to 0.5533
+SMS-EMOA after 250 generations: 100 solutions, IGD+ 0.0625, hypervolume 3.0187
+  distance 0.04214 to 0.05065; genes shifted 0.4108 to 0.4639
+SMS-EMOA after 1000 generations: 100 solutions, IGD+ 0.0522, hypervolume 3.0894
+  distance 0.04061 to 0.04128; genes shifted 0.4159 to 0.4205
+the whole front: hypervolume 3.3968
