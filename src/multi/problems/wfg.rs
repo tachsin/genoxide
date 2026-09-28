@@ -360,8 +360,8 @@ wfg!(
     /// `h_M` mixed, with A = 5 and α = 1: `1 − x₁ − cos(10πx₁ + π/2) / 10π`. Separable and
     /// unimodal. The optimal solutions have the distance parameters at 0.35 × 2i, and the front
     /// is `fₘ = 2m hₘ(x₁…x_{M−1})` for x in [0, 1]^(M−1), where x₁ = 0.2, 0.4, 0.6 and 0.8 are
-    /// the flat spots of `h_M`. The bias crowds the solutions at x = 0: the paper's NSGA-II
-    /// covered little of the front.
+    /// the flat spots of `h_M`. The bias, y^0.02, crowds the solutions at x = 1: the paper's
+    /// NSGA-II covered little of the front.
     ///
     /// In floating point, `zᵢ / 2i` is never exactly 0.35 for some i (3, 6, 12, 24, 48, 53, …),
     /// and `b_poly(·, 0.02)` turns the last bit into a distance of 0.48 in that parameter
