@@ -6,7 +6,7 @@ reference: "Sandgren, E. (1990). Nonlinear integer and discrete programming in m
 reference_url: https://doi.org/10.1115/1.2912596
 optimum: "2.700857e-12 (squared error of the ratio)"
 languages: [rust, python]
-order: 85
+order: 96
 ---
 
 # Gear train design

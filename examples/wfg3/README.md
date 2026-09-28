@@ -6,7 +6,7 @@ reference: "Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review 
 reference_url: https://doi.org/10.1109/TEVC.2005.861417
 optimum: "the segment from (0, 4) to (2, 0); hypervolume 5.68 (reference point (2.2, 4.4))"
 languages: [rust, python]
-order: 108
+order: 118
 ---
 
 # WFG3

@@ -6,7 +6,7 @@ reference: "Osyczka, A. and Kundu, S. (1995). A new method to solve generalized 
 reference_url: https://doi.org/10.1007/BF01743536
 optimum: "a front in five pieces, from (−274, 76) to (−42, 4); hypervolume 16546.1 (reference point (−20, 85))"
 languages: [rust, python]
-order: 104
+order: 114
 ---
 
 # OSY (Osyczka and Kundu)

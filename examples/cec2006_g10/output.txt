@@ -1,0 +1,7 @@
+CMA-ES with IPOP restarts and Deb's feasibility rules on g10, seed 1
+stopped by the target after 73880 evaluations: f(x) - f* 6.9e-5, feasible
+first feasible after 560 evaluations, f(x) - f* <= 1e-4 after 72760
+1 restart, populations 10, 20
+f(x) 7049.25, f* 7049.25 (proven)
+x1 579.211, x2 1360.41, x3 5109.63, x4 182.010, x5 295.615, x6 217.990, x7 286.395, x8 395.615
+g1 active, g2 active, g3 active, g4 -0.0001372, g5 -0.00007857, g6 -0.00005312

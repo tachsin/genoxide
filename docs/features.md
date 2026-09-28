@@ -39,7 +39,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - **Particle swarm optimization:** global or ring topology, constriction coefficients, velocity limits.
 - **Local search:** hill climbing (first-improvement or best-of-k, with plateau moves), simulated annealing, tabu search, iterated local search. Any mutation serves as the neighborhood.
 - **Test problems** (`problems`): Sphere, the axis-parallel ellipsoid, Schwefel 1.2 and 2.26, Rastrigin, Rosenbrock, Ackley, Griewank, Levy, Zakharov, Styblinski-Tang, Michalewicz, Himmelblau, Branin, Goldstein-Price and the six-hump camel, each with its bounds, known optimum and reference, in Rust and Python.
-- **Constrained test problems:** CEC 2006's g01-g06 (`problems::cec2006`), and the engineering design problems (`problems::engineering`): the welded beam in two forms, the pressure vessel, the tension/compression spring, the speed reducer, the gear train (integer), the three-bar truss, the cantilever beam and the car side impact, each with its optimum or best known solution and references, in Rust and Python.
+- **Constrained test problems:** CEC 2006's g01-g18 (`problems::cec2006`), and the engineering design problems (`problems::engineering`): the welded beam in two forms, the pressure vessel, the tension/compression spring, the speed reducer, the gear train (integer), the three-bar truss, the cantilever beam and the car side impact, each with its optimum or best known solution and references, in Rust and Python.
 
 ## Multi-objective
 

@@ -46,8 +46,8 @@
 //!
 //! Two submodules hold constrained problems, whose fitness is `(score, violation)`:
 //!
-//! - [`cec2006`]: the CEC 2006 constrained problems g01 to g06
-//!   ([`G01`](cec2006::G01) … [`G06`](cec2006::G06)), with 2 to 20 dimensions, inequality and
+//! - [`cec2006`]: the CEC 2006 constrained problems g01 to g18
+//!   ([`G01`](cec2006::G01) … [`G18`](cec2006::G18)), with 2 to 20 dimensions, inequality and
 //!   equality constraints, and the optimum or best known solution of their report;
 //! - [`engineering`]: engineering design problems, the welded beam in two forms, the pressure
 //!   vessel, the tension/compression spring, the speed reducer, the gear train (on
@@ -376,6 +376,18 @@ pub fn all() -> Vec<Box<dyn DynProblem>> {
         boxed(cec2006::G04),
         boxed(cec2006::G05::default()),
         boxed(cec2006::G06),
+        boxed(cec2006::G07),
+        boxed(cec2006::G08),
+        boxed(cec2006::G09),
+        boxed(cec2006::G10),
+        boxed(cec2006::G11::default()),
+        boxed(cec2006::G12),
+        boxed(cec2006::G13::default()),
+        boxed(cec2006::G14::default()),
+        boxed(cec2006::G15::default()),
+        boxed(cec2006::G16),
+        boxed(cec2006::G17::default()),
+        boxed(cec2006::G18),
         boxed(engineering::WeldedBeam),
         boxed(engineering::WeldedBeamRagsdell),
         boxed(engineering::PressureVessel),
@@ -396,7 +408,7 @@ mod tests {
     #[test]
     fn the_registry_describes_every_problem() {
         let problems = all();
-        assert_eq!(problems.len(), 30);
+        assert_eq!(problems.len(), 42);
         let names: HashSet<_> = problems.iter().map(|problem| problem.name()).collect();
         assert_eq!(names.len(), problems.len(), "names are unique");
         let mut rng = StreamRng::seed_from_u64(0);
@@ -427,9 +439,16 @@ mod tests {
                 let scale = optimum.value().abs().max(1.0);
                 assert!(error <= tolerance * scale, "{}", problem.name());
                 // a proven optimum is feasible: under Deb's rules, any feasible point beats an
-                // infeasible one, however far worse
+                // infeasible one, however far worse; the report's x* of g07 and g09 are rounded,
+                // and exceed a constraint by 6e-14 and 4e-16
                 if optimum.is_proven() {
-                    assert!(fitness.is_feasible(), "{}: {fitness:?}", problem.name());
+                    let rounded = ["G07", "G09"].contains(&problem.name());
+                    let slack = if rounded { 1e-12 } else { 0.0 };
+                    assert!(
+                        fitness.violation() <= slack,
+                        "{}: {fitness:?}",
+                        problem.name()
+                    );
                 }
             }
         }
@@ -454,11 +473,12 @@ mod tests {
                     assert!(score >= optimum - slack, "{}: {genome:?}", problem.name());
                 }
             }
-            // the corners of the box; the three-bar truss's stresses are undefined at x₁ = 0
+            // the corners of the box; the three-bar truss's stresses and g08's value are undefined
+            // at x₁ = 0
             let low: Reals = real.bounds().iter().map(|range| *range.start()).collect();
             let high: Reals = real.bounds().iter().map(|range| *range.end()).collect();
             for corner in [low, high] {
-                if problem.name() == "ThreeBarTruss" && corner[0] == 0.0 {
+                if ["ThreeBarTruss", "G08"].contains(&problem.name()) && corner[0] == 0.0 {
                     continue;
                 }
                 let fitness = problem.evaluate(&corner);

@@ -232,8 +232,8 @@ division finite (documented), and their evaluate returns an invalid fitness at 0
 tests use those. Printing errors to repair: g04's x* lacks an opening parenthesis; **g23's x\*
 prints 8 numbers for n = 9**: a comma is missing, x₈ = 200 and x₉ = 0.0100000100000100008 (then
 f = −400.0551, checked by hand); **g24's x\* is printed as "2.329520197477623.17849307411774"**:
-x = (2.32952019747762, 3.17849307411774) (the sum gives f*, checked by hand); g16's x₂* is 5.7e-15
-below its lower bound 68.6 (clamp it in tests).
+x = (2.32952019747762, 3.17849307411774) (the sum gives f*, checked by hand); g16's x₂*,
+68.5999999999999943, is 68.6 itself in double precision (checked in batch 5: no clamp needed).
 
 **Data tables:** g19 needs the report's Table 1 (p. 12: e, c, d, a; b is inline on p. 11); g20
 needs Table 2 (p. 13: a, b, c, d, e; k = 0.7302 × 530 × 14.7/40). g14's c₁..c₁₀ and g16's long
@@ -251,7 +251,11 @@ with a tolerance of 1e-9 relative.
    negative errors (Takahama and Sakai 2006 report down to −1.2e-12).
 2. **g17:** evaluating the report's own x* gives 30x₁ + 28x₂ = 8853.534016…, below the stated
    f* = 8853.53967480648; later papers use **8853.5338748065** (e.g. Xu, He and Shang,
-   arXiv:1903.04886, Table VIII). **Which paper first reported it is unverified.** The objective
+   arXiv:1903.04886, Table VIII). **Which paper first reported it is unverified.** Checked in
+   batch 5: the report's f* is 30(x₁ + h₁) + 28(x₂ + h₂) at its x*, the value of the organizers'
+   code, which evaluates f₁ and f₂ at the right-hand sides of h₁ and h₂; and the report's x* with
+   x₁ lowered to 201.78446249355 (h₁ at the tolerance) gives 8853.5338748065 to all its digits,
+   which `G17` uses as its best known solution. The objective
    jumps at x₂ = 100 and x₁ = 300 (piecewise), x₂* sits just below 100, and f₁ is defined for
    x₁ < 400 and f₂ for x₂ < 1000 while the bounds include 400 and 1000: the implementation picks the
    closed end and documents it.
@@ -260,12 +264,16 @@ with a tolerance of 1e-9 relative.
 4. **g22:** the earlier best known was 382.902205; 236.430975504001 is εDE's. Spettel, Ba and
    Arnold (2022, Evolutionary Computation 30(4): 531-553, doi:10.1162/evco_a_00311) state a better
    value exists: **unverified (paywalled)**.
-5. g10: Table 3 says a = 6, the text names only g1-g3 as active.
+5. g10: Table 3 says a = 6, the text names only g1-g3 as active; at x* all six are active (to
+   1e-10, checked in batch 5). g16: Table 3 says LI = 4 and a = 4; g₂, g₅ and g₆ are the linear
+   ones, and g₂, g₃, g₄, g₅ and g₃₆ are active at x* (x₂ at its lower bound). The x* of g07 and
+   g09 exceed g₁ by 6e-14 and 4e-16 (rounding; the report says so for g07).
 6. g04: some engineering papers use Himmelblau's variant with 0.00026 x₁x₄ in g1 (optimum about
    −31025.56); the CEC form uses 0.0006262 and has −30665.539. genoxide implements the CEC form.
    **The variant's value is unverified.**
 7. Typography only: "93 disjointed spheres" in g12 means 9³ = 729; "+ +2x₃" in g14's h1 and
-   "+ +x₃²" in g15's h1; unbalanced parentheses in g17's h2 and h3.
+   "+ +x₃²" in g15's h1; unbalanced parentheses in g17's h2, h3 and h4; "c₁₀ = −22.179,." in g14; g18's constraints
+   are labelled gg₁…gg₁₃; g17's eq. 35 writes f(x₁) + f(x₂) for f₁(x₁) + f₂(x₂).
 8. g12's constraint is a disjunction: min over p, q, r ∈ {1..9} of (x₁−p)² + (x₂−q)² + (x₃−r)² −
    0.0625 ≤ 0, one NI constraint.
 
@@ -958,7 +966,7 @@ algorithms come on top of these.
 | 2 | done ([#177](https://github.com/tachsin/genoxide/pull/177)) | `MultiProblem` (the breaking change), constraints in multi-objective problems, the pymoo test values replaced (section 5); the classic two- and three-objective problems | Schaffer 1, Schaffer 2, Fonseca-Fleming, Kursawe, Poloni, Viennet 1-3, BNH, SRN, TNK, OSY, CONSTR (13; WATER is batch 9's water resource planning) | `bnh` (NSGA-II on a constrained problem, IGD+ to the analytic front; multi-objective); `kursawe` (disconnected front, SPEA2 vs NSGA-II); new `schaffer1`, `schaffer2`, `fonseca_fleming`, `poloni`, `srn`, `tnk`, `osy` and `constr` (NSGA-II), and `viennet1`, `viennet2` and `viennet3` (NSGA-III) |
 | 3 | done ([#191](https://github.com/tachsin/genoxide/pull/191)) | Engineering design, single objective, and the mixed-variable convention (`design()`) | Welded beam, Pressure vessel, Tension/compression spring, Speed reducer, Gear train (integer), Three-bar truss, Cantilever beam, Car side impact (single objective) (8), and CEC 2006 g01-g06 (6) | `pressure_vessel` (switch to `engineering::PressureVessel`); new `welded_beam` (constrained); new `gear_train` (integer genome; category integer); new `tension_compression_spring`, `speed_reducer`, `three_bar_truss`, `cantilever_beam`, `car_side_impact` and `cec2006_g01` to `cec2006_g06` |
 | 4 | done (#270) | Scalable many-objective problems | DTLZ5, DTLZ6, DTLZ7, ZDT5 (binary), WFG1-WFG9 (13) | an example per problem: `zdt5`, `dtlz5_3obj`, `dtlz6_3obj`, `dtlz7_3obj`, `wfg1` to `wfg9` (2 objectives); later, `wfg_many_objective`: NSGA-III and MOEA/D on WFG4 and WFG9 with 5 objectives, IGD to the sampled front |
-| 5 |  | CEC 2006, part 2 | g07-g18 (12) | `cec2006_g07` to `cec2006_g18`; `cec2006`: SHADE with Deb's rules on all of the problems so far, printing f − f* and feasibility, as in the report's evaluation criteria |
+| 5 | done (#277) | CEC 2006, part 2 | g07-g18 (12) | `cec2006_g07` to `cec2006_g18`; `cec2006`: SHADE with Deb's rules on all of the problems so far, printing f − f* and feasibility, as in the report's evaluation criteria |
 | 6 |  | CEC 2006, part 3, and the low-dimensional classics with tables | g19-g24 (6), Hartmann 3-D, Hartmann 6-D, Shekel 5/7/10, Easom, Eggholder, Schaffer F6 (8) | `cec2006_g19` to `cec2006_g24` and an example per function (e.g. `hartmann_3d`, `eggholder`); `cec2006` covers all 24 |
 | 7 |  | Constrained test problems with tunable difficulty (CTP needs its paper first: every CTP detail is unverified) | CTP1-CTP8 (8), C1-DTLZ1, C1-DTLZ3, C2-DTLZ2, C2-convex-DTLZ2, C3-DTLZ1, C3-DTLZ4 (6) | `ctp` (NSGA-II on CTP2/CTP7's disconnected feasible fronts); `c2_dtlz2` (NSGA-III with constraints, 3 objectives) |
 | 8 |  | Scaled and inverted DTLZ, and MW | Convex DTLZ2, scaled DTLZ1, scaled DTLZ2, inverted DTLZ1 (4), MW1-MW14 (14) | `mw` (constrained multi-objective, several fronts) |

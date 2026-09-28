@@ -75,6 +75,28 @@ pub enum Config {
         tolerance: Option<f64>,
     },
     G06 {},
+    G07 {},
+    G08 {},
+    G09 {},
+    G10 {},
+    G11 {
+        tolerance: Option<f64>,
+    },
+    G12 {},
+    G13 {
+        tolerance: Option<f64>,
+    },
+    G14 {
+        tolerance: Option<f64>,
+    },
+    G15 {
+        tolerance: Option<f64>,
+    },
+    G16 {},
+    G17 {
+        tolerance: Option<f64>,
+    },
+    G18 {},
     WeldedBeam {},
     WeldedBeamRagsdell {},
     PressureVessel {},
@@ -766,6 +788,28 @@ fn build(config: Config) -> Result<Problem, String> {
             problems::boxed(cec2006::G05::with_tolerance(equality_tolerance(tolerance)?))
         }
         Config::G06 {} => problems::boxed(cec2006::G06),
+        Config::G07 {} => problems::boxed(cec2006::G07),
+        Config::G08 {} => problems::boxed(cec2006::G08),
+        Config::G09 {} => problems::boxed(cec2006::G09),
+        Config::G10 {} => problems::boxed(cec2006::G10),
+        Config::G11 { tolerance } => {
+            problems::boxed(cec2006::G11::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G12 {} => problems::boxed(cec2006::G12),
+        Config::G13 { tolerance } => {
+            problems::boxed(cec2006::G13::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G14 { tolerance } => {
+            problems::boxed(cec2006::G14::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G15 { tolerance } => {
+            problems::boxed(cec2006::G15::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G16 {} => problems::boxed(cec2006::G16),
+        Config::G17 { tolerance } => {
+            problems::boxed(cec2006::G17::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G18 {} => problems::boxed(cec2006::G18),
         Config::WeldedBeam {} => problems::boxed(engineering::WeldedBeam),
         Config::WeldedBeamRagsdell {} => problems::boxed(engineering::WeldedBeamRagsdell),
         Config::PressureVessel {} => problems::boxed(engineering::PressureVessel),
