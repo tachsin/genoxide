@@ -597,9 +597,9 @@ impl EsBuilder {
     ///   it often is with a fast fitness function: an offspring draws a normal random number and
     ///   takes an exponential per gene, and intermediate recombination averages the genes and
     ///   step sizes of ρ parents. Measured with parallel evaluation of the sphere function on 20
-    ///   threads, a generation of a (15/15_I, 100)-ES took 3× less time with parallel breeding
-    ///   with 50 genes and 9× less with 1000; a (100/100_I, 700)-ES with 50 genes 12× less; about
-    ///   3.4× on 4 threads. With a slow fitness function breeding takes little of the time.
+    ///   threads, a generation of a (15/15_I, 100)-ES with 100 genes took 0.80 ms with sequential
+    ///   breeding and 0.13 ms with parallel breeding, about 6× less; more with longer genomes or
+    ///   more offspring. With a slow fitness function breeding takes little of the time.
     ///
     /// Checkpoints keep the setting. A run with it resumes identically, also without the
     /// `parallel` feature, then making the same offspring on one thread.
