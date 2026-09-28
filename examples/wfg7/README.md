@@ -6,7 +6,7 @@ reference: "Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review 
 reference_url: https://doi.org/10.1109/TEVC.2005.861417
 optimum: "the quarter ellipse (f₁/2)² + (f₂/4)² = 1; hypervolume 3.3968 (reference point (2.2, 4.4))"
 languages: [rust, python]
-order: 112
+order: 122
 ---
 
 # WFG7

@@ -6,7 +6,7 @@ reference: "Srinivas, N. and Deb, K. (1994). Multiobjective optimization using n
 reference_url: https://doi.org/10.1162/evco.1994.2.3.221
 optimum: "a front in three pieces, from (10.1, 2.61) to (222.97, −217.74); hypervolume 35478.6 (reference point (245, 25))"
 languages: [rust, python]
-order: 102
+order: 112
 ---
 
 # SRN (Srinivas and Deb)

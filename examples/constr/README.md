@@ -6,7 +6,7 @@ reference: "Deb, K., Pratap, A., Agarwal, S. and Meyarivan, T. (2002). A fast an
 reference_url: https://doi.org/10.1109/4235.996017
 optimum: "the front f₂ = 7/f₁ − 9 for f₁ in [7/18, 2/3], then f₂ = 1/f₁ for f₁ in [2/3, 1]; hypervolume 5.3327 (reference point (1.1, 10))"
 languages: [rust, python]
-order: 105
+order: 115
 ---
 
 # CONSTR

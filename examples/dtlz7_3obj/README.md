@@ -6,7 +6,7 @@ reference: "Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2001). Scalable T
 reference_url: https://sop.tik.ee.ethz.ch/publicationListFiles/dtlz2001a.pdf
 optimum: "f₃ = 6 − φ(f₁) − φ(f₂), φ(f) = f (1 + sin 3πf), with f₁ and f₂ in [0, 0.2514] or (0.6316, 0.8594]; hypervolume 1.7392 (reference point (0.9453, 0.9453, 6.6))"
 languages: [rust, python]
-order: 121
+order: 131
 ---
 
 # DTLZ7 with 3 objectives

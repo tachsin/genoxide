@@ -6,7 +6,7 @@ reference: "Stanley, K. O. and Miikkulainen, R. (2002). Evolving neural networks
 reference_url: https://doi.org/10.1162/106365602320169811
 optimum: "0 (squared error)"
 languages: [rust, python]
-order: 130
+order: 140
 ---
 
 # XOR neuroevolution
