@@ -291,8 +291,11 @@ function main(args)
     for seed in seed_from:seed_to
         Random.seed!(seed)
         budget = Budget(max_evaluations, max_seconds, target)  # the clock starts
-        generations, ended_by = run(budget, seed)
+        outcome = run(budget, seed)
+        # the clock stops as the run returns: `run`'s result type isn't known here, so Julia
+        # compiles its destructuring on the first timed run (the warm-up doesn't use the result)
         elapsed = seconds(budget)
+        generations, ended_by = outcome
         if problem == "onemax"
             best, solution = -Int(budget.best), Int.(budget.solution)
         else
