@@ -36,6 +36,18 @@ CONSTRAINED = [
     gx.problems.cec2006.G04,
     gx.problems.cec2006.G05,
     gx.problems.cec2006.G06,
+    gx.problems.cec2006.G07,
+    gx.problems.cec2006.G08,
+    gx.problems.cec2006.G09,
+    gx.problems.cec2006.G10,
+    gx.problems.cec2006.G11,
+    gx.problems.cec2006.G12,
+    gx.problems.cec2006.G13,
+    gx.problems.cec2006.G14,
+    gx.problems.cec2006.G15,
+    gx.problems.cec2006.G16,
+    gx.problems.cec2006.G17,
+    gx.problems.cec2006.G18,
     gx.problems.engineering.WeldedBeam,
     gx.problems.engineering.WeldedBeamRagsdell,
     gx.problems.engineering.PressureVessel,
@@ -309,9 +321,49 @@ def test_constrained_values_at_chosen_points():
     assert value == pytest.approx(1.74830941, rel=1e-8) and violation == 0
 
 
+def test_cec2006_g07_to_g18_at_chosen_points():
+    cec2006 = gx.problems.cec2006
+    # g07 at the origin: 100 + 4·25 + 9 + 2 + 7·121 + 2·100 + 49 + 45, and g₆, g₇, g₈ exceed 0
+    # by 8, 34 and 768
+    assert cec2006.G07()(np.zeros(10)) == (1352.0, 810.0)
+    # g09 at the origin: 100 + 5·144 + 3·121, feasible
+    assert cec2006.G09()(np.zeros(7)) == (1183.0, 0.0)
+    # g10 at the lower corner: 100 + 1000 + 1000, and g₆ = −10000 + 1250000 + 10000 − 25000
+    assert cec2006.G10()([100, 1000, 1000, 10, 10, 10, 10, 10]) == (2100.0, 1_225_000.0)
+    # g11's optimum is 3/4 − δ at (±√(1/2 − δ), 1/2), and 3/4 with no tolerance
+    optimum = cec2006.G11().optimum
+    assert optimum.value == pytest.approx(0.7499) and optimum.solutions.shape == (2, 2)
+    assert cec2006.G11(tolerance=0).optimum.value == 0.75
+    # g12 halfway between sphere centers: 3·0.5² − 0.0625 from the nearest
+    value, violation = cec2006.G12()([1.5, 1.5, 1.5])
+    assert value == pytest.approx(-0.6325) and violation == 0.6875
+    assert cec2006.G12().constraint_count == 1
+    assert cec2006.G16().constraint_count == 38
+    # g17: the report's x* is feasible, at 8853.53401643571, above the best known
+    problem = cec2006.G17()
+    x = [
+        201.784467214523659,
+        99.9999999999999005,
+        383.071034852773266,
+        420,
+        -10.9076584514292652,
+        0.0731482312084287128,
+    ]
+    value, violation = problem(x)
+    assert value == pytest.approx(8853.53401643571, rel=1e-13) and violation == 0
+    assert problem.optimum.value == pytest.approx(8853.5338748065, rel=1e-15)
+    assert not problem.optimum.proven
+    for cls in (cec2006.G13, cec2006.G14, cec2006.G15, cec2006.G17):
+        assert cls(tolerance=1e-6).optimum is None
+    # g18's best known is −√3/2 to its digits
+    assert cec2006.G18().optimum.value == pytest.approx(-math.sqrt(3) / 2, rel=1e-15)
+
+
 def test_invalid_tolerances_are_errors():
     with pytest.raises(ValueError, match="equality tolerance is a finite number"):
         gx.problems.cec2006.G03(tolerance=-1.0).genome
+    with pytest.raises(ValueError, match="equality tolerance is a finite number"):
+        gx.problems.cec2006.G17(tolerance=-0.5).genome
 
 
 def test_mixed_problems_round_their_discrete_genes():

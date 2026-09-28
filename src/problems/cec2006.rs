@@ -1,17 +1,38 @@
-//! The constrained problems of the CEC 2006 special session, g01 to g06.
+//! The constrained problems of the CEC 2006 special session, g01 to g18.
 //!
 //! Liang, J. J., Runarsson, T. P., Mezura-Montes, E., Clerc, M., Suganthan, P. N., Coello
 //! Coello, C. A. and Deb, K. (2006). *Problem Definitions and Evaluation Criteria for the CEC 2006
 //! Special Session on Constrained Real-Parameter Optimization.* Technical report, Nanyang
 //! Technological University, Singapore, 18 September 2006. The definitions, bounds, solutions and
-//! values are the report's (pages 3-4 and table 4). Each problem's docs name the report's source
+//! values are the report's (pages 3-11 and table 4). Each problem's docs name the report's source
 //! for it; those sources are still to be read
 //! ([#168](https://github.com/tachsin/genoxide/issues/168)).
 //!
 //! Every problem is minimized. Its fitness is `(f(x), violation)`, the violation being
 //! `Σ max(0, gᵢ(x)) + Σ max(0, |hⱼ(x)| − δ)`. The report counts an equality as met when
 //! `|hⱼ(x)| ≤ δ`, with δ = [`EQUALITY_TOLERANCE`]; `with_tolerance` changes it. Problems that the
-//! sources maximize (g02, g03) are negated, as in the report.
+//! sources maximize (g02, g03, g08, g12, g18) are negated, as in the report.
+//!
+//! | Problem | n | Constraints | Optimum |
+//! |---|---|---|---|
+//! | [`G01`] | 13 | 9 linear inequalities | −15 |
+//! | [`G02`] | 20 | 2 inequalities | −0.80361910412559, best known |
+//! | [`G03`] | 10 | 1 equality | −1.00050010001 (δ = 10⁻⁴) |
+//! | [`G04`] | 5 | 6 inequalities | −30665.53867178332 |
+//! | [`G05`] | 4 | 2 linear inequalities, 3 equalities | 5126.4967140071, best known |
+//! | [`G06`] | 2 | 2 inequalities | −6961.81387558015 |
+//! | [`G07`] | 10 | 3 linear and 5 nonlinear inequalities | 24.30620906818 |
+//! | [`G08`] | 2 | 2 inequalities | −0.0958250414180359 |
+//! | [`G09`] | 7 | 4 inequalities | 680.630057374402 |
+//! | [`G10`] | 8 | 3 linear and 3 nonlinear inequalities | 7049.24802052867 |
+//! | [`G11`] | 2 | 1 equality | 0.7499 (δ = 10⁻⁴) |
+//! | [`G12`] | 3 | 1 inequality: 729 disjoint spheres | −1 |
+//! | [`G13`] | 5 | 3 equalities | 0.053941514041898, best known |
+//! | [`G14`] | 10 | 3 linear equalities | −47.7648884594915, best known |
+//! | [`G15`] | 3 | 2 equalities | 961.715022289961, best known |
+//! | [`G16`] | 5 | 38 inequalities | −1.90515525853479, best known |
+//! | [`G17`] | 6 | 4 equalities | 8853.5338748065, best known |
+//! | [`G18`] | 9 | 13 inequalities | −0.866025403784439, best known |
 
 // the report's solutions keep every digit it prints
 #![allow(clippy::excessive_precision)]
@@ -535,6 +556,1123 @@ impl Problem for G06 {
     }
 }
 
+// ---- g07 -----------------------------------------------------------------------------------------
+
+/// g07: a quadratic in 10 dimensions with 3 linear and 5 nonlinear inequalities,
+/// `x₁² + x₂² + x₁x₂ − 14x₁ − 16x₂ + (x₃ − 10)² + 4(x₄ − 5)² + (x₅ − 3)² + 2(x₆ − 1)² + 5x₇² +
+/// 7(x₈ − 11)² + 2(x₉ − 10)² + (x₁₀ − 7)² + 45`.
+///
+/// Bounds [−10, 10]¹⁰; minimum 24.30620906818 at the report's x*, with g₁…g₆ active. The
+/// objective and all the constraints are convex (derived from the definition), so the minimum is
+/// global. The report's x* exceeds g₁ by 6·10⁻¹⁴, from rounding, as the report says.
+///
+/// The report's eqs. 16-17 (p. 5), after Hock and Schittkowski (1981).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct G07;
+
+impl G07 {
+    fn value(&self, x: &Reals) -> f64 {
+        let x = |i: usize| x[i - 1];
+        let square = |v: f64| v * v;
+        square(x(1)) + square(x(2)) + x(1) * x(2) - 14.0 * x(1) - 16.0 * x(2)
+            + square(x(3) - 10.0)
+            + 4.0 * square(x(4) - 5.0)
+            + square(x(5) - 3.0)
+            + 2.0 * square(x(6) - 1.0)
+            + 5.0 * square(x(7))
+            + 7.0 * square(x(8) - 11.0)
+            + 2.0 * square(x(9) - 10.0)
+            + square(x(10) - 7.0)
+            + 45.0
+    }
+}
+
+cec2006!(G07, |_problem| 0.0);
+
+impl Problem for G07 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G07"
+    }
+
+    fn representation(&self) -> Real {
+        bounds(&[(-10.0, 10.0); 10])
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::proven(
+            24.306_209_068_18,
+            vec![reals(&[
+                2.171_996_341_426_92,
+                2.363_683_041_603_4,
+                8.773_925_739_131_57,
+                5.095_984_437_451_73,
+                0.990_654_756_560_493,
+                1.430_573_928_534_63,
+                1.321_644_153_643_06,
+                9.828_725_765_244_95,
+                8.280_091_588_735_6,
+                8.375_926_647_734_7,
+            ])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// g₁…g₈ of the report's eq. 17.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let x = |i: usize| x[i - 1];
+        let square = |v: f64| v * v;
+        Constraints::new(
+            vec![
+                -105.0 + 4.0 * x(1) + 5.0 * x(2) - 3.0 * x(7) + 9.0 * x(8),
+                10.0 * x(1) - 8.0 * x(2) - 17.0 * x(7) + 2.0 * x(8),
+                -8.0 * x(1) + 2.0 * x(2) + 5.0 * x(9) - 2.0 * x(10) - 12.0,
+                3.0 * square(x(1) - 2.0) + 4.0 * square(x(2) - 3.0) + 2.0 * square(x(3))
+                    - 7.0 * x(4)
+                    - 120.0,
+                5.0 * square(x(1)) + 8.0 * x(2) + square(x(3) - 6.0) - 2.0 * x(4) - 40.0,
+                square(x(1)) + 2.0 * square(x(2) - 2.0) - 2.0 * x(1) * x(2) + 14.0 * x(5)
+                    - 6.0 * x(6),
+                0.5 * square(x(1) - 8.0) + 2.0 * square(x(2) - 4.0) + 3.0 * square(x(5))
+                    - x(6)
+                    - 30.0,
+                -3.0 * x(1) + 6.0 * x(2) + 12.0 * square(x(9) - 8.0) - 7.0 * x(10),
+            ],
+            Vec::new(),
+        )
+    }
+}
+
+// ---- g08 -----------------------------------------------------------------------------------------
+
+/// g08: `−sin³(2πx₁) sin(2πx₂) / (x₁³(x₁ + x₂))` in 2 dimensions, with 2 nonlinear inequalities: a
+/// maximization, negated.
+///
+/// Bounds [0, 10]²; minimum −0.0958250414180359 at the report's x*, where no constraint is active.
+/// The value is 0/0 at x₁ = 0, the lower bound, and so the fitness is invalid there.
+///
+/// The report's eqs. 18-19 (p. 5), after Koziel and Michalewicz (1999).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct G08;
+
+impl G08 {
+    fn value(&self, x: &Reals) -> f64 {
+        let (x1, x2) = (x[0], x[1]);
+        let tau = std::f64::consts::TAU;
+        -math::powi(math::sin(tau * x1), 3) * math::sin(tau * x2) / (math::powi(x1, 3) * (x1 + x2))
+    }
+}
+
+cec2006!(G08, |_problem| 0.0);
+
+impl Problem for G08 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G08"
+    }
+
+    fn representation(&self) -> Real {
+        bounds(&[(0.0, 10.0); 2])
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::proven(
+            -0.095_825_041_418_035_9,
+            vec![reals(&[1.227_971_352_607_525_99, 4.245_373_366_122_748_85])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// g₁ = x₁² − x₂ + 1 and g₂ = 1 − x₁ + (x₂ − 4)², the report's eq. 19.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let (x1, x2) = (x[0], x[1]);
+        Constraints::new(
+            vec![x1 * x1 - x2 + 1.0, 1.0 - x1 + (x2 - 4.0) * (x2 - 4.0)],
+            Vec::new(),
+        )
+    }
+}
+
+// ---- g09 -----------------------------------------------------------------------------------------
+
+/// g09: `(x₁ − 10)² + 5(x₂ − 12)² + x₃⁴ + 3(x₄ − 11)² + 10x₅⁶ + 7x₆² + x₇⁴ − 4x₆x₇ − 10x₆ − 8x₇`,
+/// a polynomial in 7 dimensions with 4 nonlinear inequalities.
+///
+/// Bounds [−10, 10]⁷; minimum 680.630057374402 at the report's x*, with g₁ and g₄ active. The
+/// report's x* exceeds g₁ by 4·10⁻¹⁶, from rounding.
+///
+/// The report's eqs. 20-21 (pp. 5-6), after Hock and Schittkowski (1981).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct G09;
+
+impl G09 {
+    fn value(&self, x: &Reals) -> f64 {
+        let x = |i: usize| x[i - 1];
+        let square = |v: f64| v * v;
+        square(x(1) - 10.0)
+            + 5.0 * square(x(2) - 12.0)
+            + math::powi(x(3), 4)
+            + 3.0 * square(x(4) - 11.0)
+            + 10.0 * math::powi(x(5), 6)
+            + 7.0 * square(x(6))
+            + math::powi(x(7), 4)
+            - 4.0 * x(6) * x(7)
+            - 10.0 * x(6)
+            - 8.0 * x(7)
+    }
+}
+
+cec2006!(G09, |_problem| 0.0);
+
+impl Problem for G09 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G09"
+    }
+
+    fn representation(&self) -> Real {
+        bounds(&[(-10.0, 10.0); 7])
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::proven(
+            680.630_057_374_402,
+            vec![reals(&[
+                2.330_499_351_474_051_74,
+                1.951_372_368_471_145_92,
+                -0.477_541_399_510_615_805,
+                4.365_726_249_236_258_74,
+                -0.624_486_959_100_388_983,
+                1.038_130_994_109_621_73,
+                1.594_226_678_067_151_9,
+            ])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// g₁…g₄ of the report's eq. 21.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let x = |i: usize| x[i - 1];
+        let square = |v: f64| v * v;
+        Constraints::new(
+            vec![
+                -127.0
+                    + 2.0 * square(x(1))
+                    + 3.0 * math::powi(x(2), 4)
+                    + x(3)
+                    + 4.0 * square(x(4))
+                    + 5.0 * x(5),
+                -282.0 + 7.0 * x(1) + 3.0 * x(2) + 10.0 * square(x(3)) + x(4) - x(5),
+                -196.0 + 23.0 * x(1) + square(x(2)) + 6.0 * square(x(6)) - 8.0 * x(7),
+                4.0 * square(x(1)) + square(x(2)) - 3.0 * x(1) * x(2)
+                    + 2.0 * square(x(3))
+                    + 5.0 * x(6)
+                    - 11.0 * x(7),
+            ],
+            Vec::new(),
+        )
+    }
+}
+
+// ---- g10 -----------------------------------------------------------------------------------------
+
+/// g10: `x₁ + x₂ + x₃`, linear in 8 dimensions, with 3 linear and 3 nonlinear (bilinear)
+/// inequalities.
+///
+/// Bounds x₁ ∈ [100, 10000], x₂, x₃ ∈ [1000, 10000], x₄…x₈ ∈ [10, 1000]; minimum
+/// 7049.24802052867 at the report's x*, where all six constraints are active (to 10⁻¹⁰): the
+/// report's table 3 counts six, its text names only g₁, g₂ and g₃.
+///
+/// The report's eq. 22 and the constraints below it (p. 6), after Hock and Schittkowski (1981).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct G10;
+
+impl G10 {
+    fn value(&self, x: &Reals) -> f64 {
+        x[0] + x[1] + x[2]
+    }
+}
+
+cec2006!(G10, |_problem| 0.0);
+
+impl Problem for G10 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G10"
+    }
+
+    fn representation(&self) -> Real {
+        let mut ranges = vec![(100.0, 10_000.0), (1000.0, 10_000.0), (1000.0, 10_000.0)];
+        ranges.extend([(10.0, 1000.0); 5]);
+        bounds(&ranges)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::proven(
+            7_049.248_020_528_67,
+            vec![reals(&[
+                579.306_685_017_979_589,
+                1_359.970_678_079_356_05,
+                5_109.970_657_431_333_17,
+                182.017_699_630_615_34,
+                295.601_173_702_746_792,
+                217.982_300_369_384_632,
+                286.416_525_927_868_52,
+                395.601_173_702_746_735,
+            ])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// g₁…g₆ of the report's p. 6.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let x = |i: usize| x[i - 1];
+        Constraints::new(
+            vec![
+                -1.0 + 0.0025 * (x(4) + x(6)),
+                -1.0 + 0.0025 * (x(5) + x(7) - x(4)),
+                -1.0 + 0.01 * (x(8) - x(5)),
+                -x(1) * x(6) + 833.332_52 * x(4) + 100.0 * x(1) - 83_333.333,
+                -x(2) * x(7) + 1250.0 * x(5) + x(2) * x(4) - 1250.0 * x(4),
+                -x(3) * x(8) + 1_250_000.0 + x(3) * x(5) - 2500.0 * x(5),
+            ],
+            Vec::new(),
+        )
+    }
+}
+
+// ---- g11 -----------------------------------------------------------------------------------------
+
+/// g11: `x₁² + (x₂ − 1)²` in 2 dimensions, subject to `x₂ = x₁²`.
+///
+/// Bounds [−1, 1]². With the equality met to within δ, the minimum is `3/4 − δ` at
+/// x = (±√(1/2 − δ), 1/2), derived from the definition (on the upper edge of the tolerance,
+/// x₂ = x₁² + δ, the value `u + (1 − u − δ)²` of u = x₁² is least at u = 1/2 − δ): 0.7499 for the
+/// report's δ, the report's f(x*). Without the tolerance it would be 3/4 at
+/// (±1/√2, 1/2).
+///
+/// The report's eqs. 23-24 (p. 6), after Koziel and Michalewicz (1999).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct G11 {
+    tolerance: f64,
+}
+
+impl G11 {
+    /// The problem with an equality tolerance δ of `tolerance`, instead of the report's
+    /// [`EQUALITY_TOLERANCE`].
+    pub fn with_tolerance(tolerance: f64) -> Self {
+        Self { tolerance }
+    }
+
+    /// The equality tolerance δ.
+    pub fn tolerance(&self) -> f64 {
+        self.tolerance
+    }
+
+    fn value(&self, x: &Reals) -> f64 {
+        let (x1, x2) = (x[0], x[1]);
+        x1 * x1 + (x2 - 1.0) * (x2 - 1.0)
+    }
+}
+
+impl Default for G11 {
+    /// The problem with the report's tolerance, [`EQUALITY_TOLERANCE`].
+    fn default() -> Self {
+        Self::with_tolerance(EQUALITY_TOLERANCE)
+    }
+}
+
+cec2006!(G11, |problem| problem.tolerance);
+
+impl Problem for G11 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G11"
+    }
+
+    fn representation(&self) -> Real {
+        bounds(&[(-1.0, 1.0); 2])
+    }
+
+    /// The minimum for the tolerance δ: `u + (1 − x₂)²` at x₁ = ±√u, with u = max(0, 1/2 − δ)
+    /// and x₂ = min(1, u + δ); `3/4 − δ` for δ < 1/2.
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        let tolerance = self.tolerance.max(0.0);
+        let u = (0.5 - tolerance).max(0.0);
+        let x2 = (u + tolerance).min(1.0);
+        let x1 = u.sqrt();
+        let solutions = if x1 == 0.0 {
+            vec![reals(&[0.0, x2])]
+        } else {
+            vec![reals(&[-x1, x2]), reals(&[x1, x2])]
+        };
+        Some(Optimum::proven(u + (1.0 - x2) * (1.0 - x2), solutions))
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// h = x₂ − x₁², the report's eq. 24.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let (x1, x2) = (x[0], x[1]);
+        Constraints::new(Vec::new(), vec![x2 - x1 * x1])
+    }
+}
+
+// ---- g12 -----------------------------------------------------------------------------------------
+
+/// g12: `−(100 − (x₁ − 5)² − (x₂ − 5)² − (x₃ − 5)²)/100` in 3 dimensions, feasible inside any of
+/// 9³ = 729 disjoint spheres: a maximization, negated.
+///
+/// The one constraint is met when some sphere of radius 0.25 centered on (p, q, r), with
+/// p, q, r ∈ {1, …, 9}, contains x: `g = min over p, q, r of (x₁ − p)² + (x₂ − q)² + (x₃ − r)²
+/// − 0.0625 ≤ 0`, computed from the nearest center, since the sum is separable. Bounds [0, 10]³;
+/// minimum −1 at (5, 5, 5), the center of a sphere, where no constraint is active.
+///
+/// The report's eq. 25 and the constraint below it (p. 6), after Koziel and Michalewicz (1999).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct G12;
+
+impl G12 {
+    fn value(&self, x: &Reals) -> f64 {
+        let squares: f64 = x[..3].iter().map(|xi| (xi - 5.0) * (xi - 5.0)).sum();
+        -(100.0 - squares) / 100.0
+    }
+}
+
+cec2006!(G12, |_problem| 0.0);
+
+impl Problem for G12 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G12"
+    }
+
+    fn representation(&self) -> Real {
+        bounds(&[(0.0, 10.0); 3])
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::proven(-1.0, vec![reals(&[5.0, 5.0, 5.0])]))
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// g, the squared distance to the nearest of the 729 centers, less 0.0625.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let squares: f64 = x[..3]
+            .iter()
+            .map(|&xi| {
+                let center = xi.round().clamp(1.0, 9.0);
+                (xi - center) * (xi - center)
+            })
+            .sum();
+        Constraints::new(vec![squares - 0.0625], Vec::new())
+    }
+}
+
+// ---- g13 -----------------------------------------------------------------------------------------
+
+/// g13: `exp(x₁x₂x₃x₄x₅)` in 5 dimensions, with 3 nonlinear equalities.
+///
+/// Bounds x₁, x₂ ∈ [−2.3, 2.3], x₃…x₅ ∈ [−3.2, 3.2]; best known 0.053941514041898 at the report's
+/// x*, which meets the equalities within the tolerance δ only, as g05's. Not proven optimal.
+///
+/// The report's eqs. 26-27 (pp. 6-7), after Hock and Schittkowski (1981).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct G13 {
+    tolerance: f64,
+}
+
+impl G13 {
+    /// The problem with an equality tolerance δ of `tolerance`, instead of the report's
+    /// [`EQUALITY_TOLERANCE`]. Its best known solution is the report's, for the report's δ only.
+    pub fn with_tolerance(tolerance: f64) -> Self {
+        Self { tolerance }
+    }
+
+    /// The equality tolerance δ.
+    pub fn tolerance(&self) -> f64 {
+        self.tolerance
+    }
+
+    fn value(&self, x: &Reals) -> f64 {
+        math::exp(x[..5].iter().product())
+    }
+}
+
+impl Default for G13 {
+    /// The problem with the report's tolerance, [`EQUALITY_TOLERANCE`].
+    fn default() -> Self {
+        Self::with_tolerance(EQUALITY_TOLERANCE)
+    }
+}
+
+cec2006!(G13, |problem| problem.tolerance);
+
+impl Problem for G13 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G13"
+    }
+
+    fn representation(&self) -> Real {
+        bounds(&[
+            (-2.3, 2.3),
+            (-2.3, 2.3),
+            (-3.2, 3.2),
+            (-3.2, 3.2),
+            (-3.2, 3.2),
+        ])
+    }
+
+    /// The report's best known solution, for the report's tolerance; `None` for another.
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        (self.tolerance == EQUALITY_TOLERANCE).then(|| {
+            Optimum::best_known(
+                0.053_941_514_041_898,
+                vec![reals(&[
+                    -1.717_142_240_03,
+                    1.595_721_240_494_68,
+                    1.827_250_240_627_1,
+                    -0.763_659_881_912_867,
+                    -0.763_659_867_364_98,
+                ])],
+            )
+        })
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// h₁, h₂, h₃ of the report's eq. 27.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let x = |i: usize| x[i - 1];
+        let squares: f64 = (1..=5).map(|i| x(i) * x(i)).sum();
+        Constraints::new(
+            Vec::new(),
+            vec![
+                squares - 10.0,
+                x(2) * x(3) - 5.0 * x(4) * x(5),
+                math::powi(x(1), 3) + math::powi(x(2), 3) + 1.0,
+            ],
+        )
+    }
+}
+
+// ---- g14 -----------------------------------------------------------------------------------------
+
+// g14's lower bound: the report's bounds are open at 0 (the logarithm), and this is the smallest
+// positive normal number, for which every logarithm stays finite
+const G14_LOW: f64 = f64::MIN_POSITIVE;
+
+// the report's c₁…c₁₀ of g14 (p. 7)
+const G14_C: [f64; 10] = [
+    -6.089, -17.164, -34.054, -5.914, -24.721, -14.986, -24.1, -10.708, -26.662, -22.179,
+];
+
+/// g14: `Σ xᵢ (cᵢ + ln(xᵢ / Σⱼ xⱼ))` in 10 dimensions, with 3 linear equalities.
+///
+/// Bounds (0, 10]¹⁰, closed here at `f64::MIN_POSITIVE` (2.2·10⁻³⁰⁸), the smallest positive
+/// normal number; the value is 0 · ln 0, undefined, and so the fitness invalid at 0. Best known
+/// −47.7648884594915 at the report's x*, which meets the equalities within the tolerance δ only.
+/// Not proven optimal.
+///
+/// The report's eqs. 28-29 (p. 7), after Himmelblau, D. M. (1972). *Applied Nonlinear
+/// Programming.* McGraw-Hill.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct G14 {
+    tolerance: f64,
+}
+
+impl G14 {
+    /// The problem with an equality tolerance δ of `tolerance`, instead of the report's
+    /// [`EQUALITY_TOLERANCE`]. Its best known solution is the report's, for the report's δ only.
+    pub fn with_tolerance(tolerance: f64) -> Self {
+        Self { tolerance }
+    }
+
+    /// The equality tolerance δ.
+    pub fn tolerance(&self) -> f64 {
+        self.tolerance
+    }
+
+    fn value(&self, x: &Reals) -> f64 {
+        let x = &x[..10];
+        let sum: f64 = x.iter().sum();
+        x.iter()
+            .zip(G14_C)
+            .map(|(&xi, c)| xi * (c + math::ln(xi / sum)))
+            .sum()
+    }
+}
+
+impl Default for G14 {
+    /// The problem with the report's tolerance, [`EQUALITY_TOLERANCE`].
+    fn default() -> Self {
+        Self::with_tolerance(EQUALITY_TOLERANCE)
+    }
+}
+
+cec2006!(G14, |problem| problem.tolerance);
+
+impl Problem for G14 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G14"
+    }
+
+    fn representation(&self) -> Real {
+        bounds(&[(G14_LOW, 10.0); 10])
+    }
+
+    /// The report's best known solution, for the report's tolerance; `None` for another.
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        (self.tolerance == EQUALITY_TOLERANCE).then(|| {
+            Optimum::best_known(
+                -47.764_888_459_491_5,
+                vec![reals(&[
+                    0.040_668_411_321_628_2,
+                    0.147_721_240_492_452,
+                    0.783_205_732_104_114,
+                    0.001_414_339_318_890_84,
+                    0.485_293_636_780_388,
+                    0.000_693_183_051_556_082,
+                    0.027_405_204_068_776_6,
+                    0.017_950_966_021_481_8,
+                    0.037_326_818_685_971_7,
+                    0.096_884_460_433_684_5,
+                ])],
+            )
+        })
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// h₁, h₂, h₃ of the report's eq. 29.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let x = |i: usize| x[i - 1];
+        Constraints::new(
+            Vec::new(),
+            vec![
+                x(1) + 2.0 * x(2) + 2.0 * x(3) + x(6) + x(10) - 2.0,
+                x(4) + 2.0 * x(5) + x(6) + x(7) - 1.0,
+                x(3) + x(7) + x(8) + 2.0 * x(9) + x(10) - 1.0,
+            ],
+        )
+    }
+}
+
+// ---- g15 -----------------------------------------------------------------------------------------
+
+/// g15: `1000 − x₁² − 2x₂² − x₃² − x₁x₂ − x₁x₃`, a quadratic in 3 dimensions, subject to a sphere
+/// `x₁² + x₂² + x₃² = 25` and a plane `8x₁ + 14x₂ + 7x₃ = 56`.
+///
+/// Bounds [0, 10]³; best known 961.715022289961 at the report's x*, which meets the equalities
+/// within the tolerance δ only. Not proven optimal.
+///
+/// The report's eqs. 30-31 (p. 7), after Himmelblau (1972).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct G15 {
+    tolerance: f64,
+}
+
+impl G15 {
+    /// The problem with an equality tolerance δ of `tolerance`, instead of the report's
+    /// [`EQUALITY_TOLERANCE`]. Its best known solution is the report's, for the report's δ only.
+    pub fn with_tolerance(tolerance: f64) -> Self {
+        Self { tolerance }
+    }
+
+    /// The equality tolerance δ.
+    pub fn tolerance(&self) -> f64 {
+        self.tolerance
+    }
+
+    fn value(&self, x: &Reals) -> f64 {
+        let (x1, x2, x3) = (x[0], x[1], x[2]);
+        1000.0 - x1 * x1 - 2.0 * x2 * x2 - x3 * x3 - x1 * x2 - x1 * x3
+    }
+}
+
+impl Default for G15 {
+    /// The problem with the report's tolerance, [`EQUALITY_TOLERANCE`].
+    fn default() -> Self {
+        Self::with_tolerance(EQUALITY_TOLERANCE)
+    }
+}
+
+cec2006!(G15, |problem| problem.tolerance);
+
+impl Problem for G15 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G15"
+    }
+
+    fn representation(&self) -> Real {
+        bounds(&[(0.0, 10.0); 3])
+    }
+
+    /// The report's best known solution, for the report's tolerance; `None` for another.
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        (self.tolerance == EQUALITY_TOLERANCE).then(|| {
+            Optimum::best_known(
+                961.715_022_289_961,
+                vec![reals(&[
+                    3.512_128_126_117_951_33,
+                    0.216_987_510_429_556_135,
+                    3.552_178_549_291_799_21,
+                ])],
+            )
+        })
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// h₁ = x₁² + x₂² + x₃² − 25 and h₂ = 8x₁ + 14x₂ + 7x₃ − 56, the report's eq. 31.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let (x1, x2, x3) = (x[0], x[1], x[2]);
+        Constraints::new(
+            Vec::new(),
+            vec![
+                x1 * x1 + x2 * x2 + x3 * x3 - 25.0,
+                8.0 * x1 + 14.0 * x2 + 7.0 * x3 - 56.0,
+            ],
+        )
+    }
+}
+
+// ---- g16 -----------------------------------------------------------------------------------------
+
+// the lower and upper limits of g16's y₁…y₁₇, the report's g₅…g₃₈ (eq. 33)
+const G16_LIMITS: [(f64, f64); 17] = [
+    (213.1, 405.23),
+    (17.505, 1053.6667),
+    (11.275, 35.03),
+    (214.228, 665.585),
+    (7.458, 584.463),
+    (0.961, 265.916),
+    (1.612, 7.046),
+    (0.146, 0.222),
+    (107.99, 273.366),
+    (922.693, 1286.105),
+    (926.832, 1444.046),
+    (18.766, 537.141),
+    (1072.163, 3247.039),
+    (8961.448, 26844.086),
+    (0.063, 0.386),
+    (71084.33, 140000.0),
+    (2802713.0, 12146108.0),
+];
+
+/// g16: a nonlinear function of 5 variables through a chain of 17 intermediate quantities y₁…y₁₇
+/// and c₁…c₁₇, with 38 inequalities, most of them bounds on the yᵢ.
+///
+/// `f = 0.000117y₁₄ + 0.1365 + 0.00002358y₁₃ + 0.000001502y₁₆ + 0.0321y₁₂ + 0.004324y₅ +
+/// 0.0001c₁₅/c₁₆ + 37.48y₂/c₁₂ − 0.0000005843y₁₇`, with the yᵢ and cᵢ of the report's eq. 34.
+/// Bounds x₁ ∈ [704.4148, 906.3855], x₂ ∈ [68.6, 288.88], x₃ ∈ [0, 134.75],
+/// x₄ ∈ [193, 287.0966], x₅ ∈ [25, 84.1988]; best known −1.90515525853479 at the report's x*,
+/// where g₂, g₃, g₄, g₅ and g₃₆ are active (the report's table 3 counts four) and x₂ is at its lower
+/// bound. Not proven optimal.
+///
+/// The report's eqs. 32-34 (pp. 7-10), after Himmelblau (1972).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct G16;
+
+// g16's intermediate quantities: y₁…y₁₇ and c₁…c₁₇ at y[0..17] and c[0..17]
+struct G16Chain {
+    y: [f64; 17],
+    c: [f64; 17],
+}
+
+impl G16 {
+    // the report's eq. 34, in its order
+    fn chain(x: &Reals) -> G16Chain {
+        let (x1, x2, x3, x4, x5) = (x[0], x[1], x[2], x[3], x[4]);
+        let mut y = [0.0; 17];
+        let mut c = [0.0; 17];
+        y[0] = x2 + x3 + 41.6;
+        c[0] = 0.024 * x4 - 4.62;
+        y[1] = 12.5 / c[0] + 12.0;
+        c[1] = 0.000_353_5 * x1 * x1 + 0.5311 * x1 + 0.087_05 * y[1] * x1;
+        c[2] = 0.052 * x1 + 78.0 + 0.002_377 * y[1] * x1;
+        y[2] = c[1] / c[2];
+        y[3] = 19.0 * y[2];
+        c[3] = 0.047_82 * (x1 - y[2])
+            + 0.1956 * (x1 - y[2]) * (x1 - y[2]) / x2
+            + 0.6376 * y[3]
+            + 1.594 * y[2];
+        c[4] = 100.0 * x2;
+        c[5] = x1 - y[2] - y[3];
+        c[6] = 0.950 - c[3] / c[4];
+        y[4] = c[5] * c[6];
+        y[5] = x1 - y[4] - y[3] - y[2];
+        c[7] = (y[4] + y[3]) * 0.995;
+        y[6] = c[7] / y[0];
+        y[7] = c[7] / 3798.0;
+        c[8] = y[6] - 0.0663 * y[6] / y[7] - 0.3153;
+        y[8] = 96.82 / c[8] + 0.321 * y[0];
+        y[9] = 1.29 * y[4] + 1.258 * y[3] + 2.29 * y[2] + 1.71 * y[5];
+        y[10] = 1.71 * x1 - 0.452 * y[3] + 0.580 * y[2];
+        c[9] = 12.3 / 752.3;
+        c[10] = (1.75 * y[1]) * (0.995 * x1);
+        c[11] = 0.995 * y[9] + 1998.0;
+        y[11] = c[9] * x1 + c[10] / c[11];
+        y[12] = c[11] - 1.75 * y[1];
+        y[13] = 3623.0 + 64.4 * x2 + 58.4 * x3 + 146_312.0 / (y[8] + x5);
+        c[12] = 0.995 * y[9] + 60.8 * x2 + 48.0 * x4 - 0.1121 * y[13] - 5095.0;
+        y[14] = y[12] / c[12];
+        y[15] = 148_000.0 - 331_000.0 * y[14] + 40.0 * y[12] - 61.0 * y[14] * y[12];
+        c[13] = 2324.0 * y[9] - 28_740_000.0 * y[1];
+        y[16] = 14_130_000.0 - 1328.0 * y[9] - 531.0 * y[10] + c[13] / c[11];
+        c[14] = y[12] / y[14] - y[12] / 0.52;
+        c[15] = 1.104 - 0.72 * y[14];
+        c[16] = y[8] + x5;
+        G16Chain { y, c }
+    }
+
+    fn value(&self, x: &Reals) -> f64 {
+        let G16Chain { y, c } = Self::chain(x);
+        0.000_117 * y[13]
+            + 0.1365
+            + 0.000_023_58 * y[12]
+            + 0.000_001_502 * y[15]
+            + 0.0321 * y[11]
+            + 0.004_324 * y[4]
+            + 0.0001 * c[14] / c[15]
+            + 37.48 * y[1] / c[11]
+            - 0.000_000_584_3 * y[16]
+    }
+}
+
+cec2006!(G16, |_problem| 0.0);
+
+impl Problem for G16 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G16"
+    }
+
+    fn representation(&self) -> Real {
+        bounds(&[
+            (704.4148, 906.3855),
+            (68.6, 288.88),
+            (0.0, 134.75),
+            (193.0, 287.0966),
+            (25.0, 84.1988),
+        ])
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::best_known(
+            -1.905_155_258_534_79,
+            vec![reals(&[
+                705.174_537_070_090_537,
+                // 68.6 in double precision
+                68.599_999_999_999_994_3,
+                102.899_999_999_999_991,
+                282.324_931_593_660_324,
+                37.584_116_425_805_483_2,
+            ])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// g₁…g₃₈ of the report's eq. 33: four, then a lower and an upper limit of each of
+    /// y₁…y₁₇.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let G16Chain { y, c } = Self::chain(x);
+        let (x2, x3) = (x[1], x[2]);
+        let mut inequalities = vec![
+            0.28 / 0.72 * y[4] - y[3],
+            x3 - 1.5 * x2,
+            3496.0 * y[1] / c[11] - 21.0,
+            110.6 + y[0] - 62_212.0 / c[16],
+        ];
+        for (yi, (low, high)) in y.iter().zip(G16_LIMITS) {
+            inequalities.extend([low - yi, yi - high]);
+        }
+        Constraints::new(inequalities, Vec::new())
+    }
+}
+
+// ---- g17 -----------------------------------------------------------------------------------------
+
+/// g17: `f₁(x₁) + f₂(x₂)`, piecewise linear in 6 dimensions, with 4 nonlinear equalities.
+///
+/// f₁ is 30x₁ below x₁ = 300 and 31x₁ from there; f₂ is 28x₂ below x₂ = 100, 29x₂ below 200 and
+/// 30x₂ from there. The report defines f₁ for x₁ < 400 and f₂ for x₂ < 1000, and its bounds
+/// include 400 and 1000: here the last pieces include them.
+///
+/// Bounds x₁ ∈ [0, 400], x₂ ∈ [0, 1000], x₃, x₄ ∈ [340, 420], x₅ ∈ [−1000, 1000],
+/// x₆ ∈ [0, 0.5236]; best known 8853.5338748065, reached by the report's x* with x₁ lowered to
+/// 201.78446249355, where h₁ reaches the tolerance δ. Not proven optimal. The report's x* itself
+/// evaluates to 8853.53401643571; the report prints 8853.53967480648, which is the value of its
+/// organizers' code, where f₁ and f₂ take the right-hand sides of h₁ and h₂ instead of x₁ and x₂.
+/// Later papers give 8853.5338748065, which the lowered x₁ reaches: its source is unverified.
+///
+/// The report's eqs. 35-36 (p. 10), after Himmelblau (1972).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct G17 {
+    tolerance: f64,
+}
+
+impl G17 {
+    /// The problem with an equality tolerance δ of `tolerance`, instead of the report's
+    /// [`EQUALITY_TOLERANCE`]. Its best known solution is for the report's δ only.
+    pub fn with_tolerance(tolerance: f64) -> Self {
+        Self { tolerance }
+    }
+
+    /// The equality tolerance δ.
+    pub fn tolerance(&self) -> f64 {
+        self.tolerance
+    }
+
+    fn value(&self, x: &Reals) -> f64 {
+        let (x1, x2) = (x[0], x[1]);
+        let f1 = if x1 < 300.0 { 30.0 * x1 } else { 31.0 * x1 };
+        let f2 = if x2 < 100.0 {
+            28.0 * x2
+        } else if x2 < 200.0 {
+            29.0 * x2
+        } else {
+            30.0 * x2
+        };
+        f1 + f2
+    }
+}
+
+impl Default for G17 {
+    /// The problem with the report's tolerance, [`EQUALITY_TOLERANCE`].
+    fn default() -> Self {
+        Self::with_tolerance(EQUALITY_TOLERANCE)
+    }
+}
+
+cec2006!(G17, |problem| problem.tolerance);
+
+impl Problem for G17 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G17"
+    }
+
+    // 0.5236 is the report's bound, which is close to π/6
+    #[allow(clippy::approx_constant)]
+    fn representation(&self) -> Real {
+        bounds(&[
+            (0.0, 400.0),
+            (0.0, 1000.0),
+            (340.0, 420.0),
+            (340.0, 420.0),
+            (-1000.0, 1000.0),
+            (0.0, 0.5236),
+        ])
+    }
+
+    /// The best known solution, for the report's tolerance; `None` for another.
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        (self.tolerance == EQUALITY_TOLERANCE).then(|| {
+            Optimum::best_known(
+                8_853.533_874_806_5,
+                vec![reals(&[
+                    201.784_462_493_55,
+                    99.999_999_999_999_900_5,
+                    383.071_034_852_773_266,
+                    420.0,
+                    -10.907_658_451_429_265_2,
+                    0.073_148_231_208_428_712_8,
+                ])],
+            )
+        })
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// h₁…h₄ of the report's eq. 36.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let (x1, x2, x3, x4, x5, x6) = (x[0], x[1], x[2], x[3], x[4], x[5]);
+        let product = x3 * x4 / 131.078;
+        let (third, fourth) = (0.907_98 * x3 * x3 / 131.078, 0.907_98 * x4 * x4 / 131.078);
+        let (sin, cos) = math::sin_cos(1.475_88);
+        Constraints::new(
+            Vec::new(),
+            vec![
+                -x1 + 300.0 - product * math::cos(1.484_77 - x6) + third * cos,
+                -x2 - product * math::cos(1.484_77 + x6) + fourth * cos,
+                -x5 - product * math::sin(1.484_77 + x6) + fourth * sin,
+                200.0 - product * math::sin(1.484_77 - x6) + third * sin,
+            ],
+        )
+    }
+}
+
+// ---- g18 -----------------------------------------------------------------------------------------
+
+/// g18: `−0.5(x₁x₄ − x₂x₃ + x₃x₉ − x₅x₉ + x₅x₈ − x₆x₇)`, a quadratic in 9 dimensions with 13
+/// nonlinear inequalities: a maximization, negated.
+///
+/// Bounds x₁…x₈ ∈ [−10, 10], x₉ ∈ [0, 20]; best known −0.866025403784439 (−√3/2 to its digits) at
+/// the report's x*, with g₁, g₃, g₄, g₆, g₇ and g₉ active. Not proven optimal.
+///
+/// The report's eqs. 37-38 (p. 11), after Himmelblau (1972).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct G18;
+
+impl G18 {
+    fn value(&self, x: &Reals) -> f64 {
+        let x = |i: usize| x[i - 1];
+        -0.5 * (x(1) * x(4) - x(2) * x(3) + x(3) * x(9) - x(5) * x(9) + x(5) * x(8) - x(6) * x(7))
+    }
+}
+
+cec2006!(G18, |_problem| 0.0);
+
+impl Problem for G18 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "G18"
+    }
+
+    fn representation(&self) -> Real {
+        let mut ranges = vec![(-10.0, 10.0); 8];
+        ranges.push((0.0, 20.0));
+        bounds(&ranges)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::best_known(
+            -0.866_025_403_784_439,
+            vec![reals(&[
+                -0.657_776_192_427_943_163,
+                -0.153_418_773_482_438_542,
+                0.323_413_871_675_240_938,
+                -0.946_257_611_651_304_398,
+                -0.657_776_194_376_798_906,
+                -0.753_213_434_632_691_414,
+                0.323_413_874_123_576_972,
+                -0.346_462_947_962_331_735,
+                0.599_794_662_852_175_42,
+            ])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        REPORT
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some(REPORT_URL)
+    }
+
+    /// g₁…g₁₃ of the report's eq. 38.
+    fn constraints(&self, x: &Reals) -> Constraints {
+        let x = |i: usize| x[i - 1];
+        let square = |v: f64| v * v;
+        Constraints::new(
+            vec![
+                square(x(3)) + square(x(4)) - 1.0,
+                square(x(9)) - 1.0,
+                square(x(5)) + square(x(6)) - 1.0,
+                square(x(1)) + square(x(2) - x(9)) - 1.0,
+                square(x(1) - x(5)) + square(x(2) - x(6)) - 1.0,
+                square(x(1) - x(7)) + square(x(2) - x(8)) - 1.0,
+                square(x(3) - x(5)) + square(x(4) - x(6)) - 1.0,
+                square(x(3) - x(7)) + square(x(4) - x(8)) - 1.0,
+                square(x(7)) + square(x(8) - x(9)) - 1.0,
+                x(2) * x(3) - x(1) * x(4),
+                -x(3) * x(9),
+                x(5) * x(9),
+                x(6) * x(7) - x(5) * x(8),
+            ],
+            Vec::new(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -691,5 +1829,270 @@ mod tests {
         assert_eq!(G06.evaluate(&reals(&[15.0, 5.0])), (-3250.0, 0.0));
         // (13, 0) is inside the first circle: g₁ = −64 − 25 + 100 = 11, and f = 27 − 8000
         assert_eq!(G06.evaluate(&reals(&[13.0, 0.0])), (-7973.0, 11.0));
+    }
+
+    #[test]
+    fn g07() {
+        check_optimum(&G07, 1e-13, 1e-12);
+        let x = G07.optimum().expect("known").solutions()[0].clone();
+        assert_active(&G07.constraints(&x), &[1, 2, 3, 4, 5, 6], 1e-9);
+        // at the origin: f = 100 + 4·25 + 9 + 2 + 7·121 + 2·100 + 49 + 45 = 1352, and g₆ = 2·4,
+        // g₇ = 0.5·64 + 2·16 − 30 = 34 and g₈ = 12·64 = 768 are violated (g₂ = 0 is met)
+        let origin = Reals::from(vec![0.0; 10]);
+        assert_eq!(G07.evaluate(&origin), (1352.0, 810.0));
+        assert_eq!(G07.constraints(&origin).len(), 8);
+        assert_eq!(G07.representation().bounds()[9], -10.0..=10.0);
+    }
+
+    #[test]
+    fn g08() {
+        check_optimum(&G08, 1e-14, 0.0);
+        // at (1/4, 17/4): both sines are 1, so f = −1 / ((1/4)³ · 9/2) = −128/9; g₂ = 1 − 1/4 +
+        // 1/16 is violated, g₁ = 1/16 − 17/4 + 1 is met
+        let (value, violation) = G08.evaluate(&reals(&[0.25, 4.25]));
+        assert_close(value, -128.0 / 9.0, 1e-12);
+        assert_eq!(violation, 0.8125);
+        // at (1, 4): sin(2π) = 0 to rounding, g₁ = −2 and g₂ = 0
+        let (value, violation) = G08.evaluate(&reals(&[1.0, 4.0]));
+        assert!(value.abs() < 1e-40 && violation == 0.0);
+        // 0/0 at x₁ = 0
+        assert!(G08.evaluate(&reals(&[0.0, 5.0])).0.is_nan());
+    }
+
+    #[test]
+    fn g09() {
+        check_optimum(&G09, 1e-14, 1e-12);
+        let x = G09.optimum().expect("known").solutions()[0].clone();
+        assert_active(&G09.constraints(&x), &[1, 4], 1e-9);
+        // at the origin: f = 100 + 5·144 + 3·121 = 1183, feasible (g₄ = 0)
+        assert_eq!(G09.evaluate(&Reals::from(vec![0.0; 7])), (1183.0, 0.0));
+    }
+
+    #[test]
+    fn g10() {
+        check_optimum(&G10, 1e-14, 0.0);
+        let x = G10.optimum().expect("known").solutions()[0].clone();
+        // all six are active, not only the three the report's text names
+        assert_active(&G10.constraints(&x), &[1, 2, 3, 4, 5, 6], 1e-9);
+        // at the lower corner (100, 1000, 1000, 10, …, 10): f = 2100, g₅ = 0, and g₆ =
+        // −10000 + 1250000 + 10000 − 25000 is violated
+        let corner = reals(&[100.0, 1000.0, 1000.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
+        assert_eq!(G10.evaluate(&corner), (2100.0, 1_225_000.0));
+        assert_eq!(G10.representation().bounds()[1], 1000.0..=10_000.0);
+    }
+
+    #[test]
+    fn g11() {
+        check_optimum(&G11::default(), 1e-15, 0.0);
+        // the report's f(x*), 0.7499 = 3/4 − δ
+        let optimum = G11::default().optimum().expect("known");
+        assert_close(optimum.value(), 0.7499, 1e-15);
+        assert_eq!(optimum.solutions().len(), 2);
+        // the report's x*
+        let report = reals(&[-0.707_036_070_037_170_616, 0.500_000_004_333_606_807]);
+        let (value, violation) = G11::default().evaluate(&report);
+        assert_close(value, 0.7499, 1e-9);
+        assert_eq!(violation, 0.0);
+        // on the parabola at x₁ = 0: f = 1, feasible; at (0, 1): f = 0, h = 1
+        assert_eq!(G11::default().evaluate(&reals(&[0.0, 0.0])), (1.0, 0.0));
+        let (value, violation) = G11::default().evaluate(&reals(&[0.0, 1.0]));
+        assert_eq!(value, 0.0);
+        assert_close(violation, 1.0 - EQUALITY_TOLERANCE, 1e-15);
+        // without the tolerance: 3/4 at (±1/√2, 1/2)
+        let exact = G11::with_tolerance(0.0).optimum().expect("known");
+        assert_eq!(exact.value(), 0.75);
+        assert_close(
+            exact.solutions()[1][0],
+            std::f64::consts::FRAC_1_SQRT_2,
+            1e-15,
+        );
+        // with δ ≥ 1/2 the best is x₁ = 0, x₂ = min(1, δ): (1 − 0.6)² for δ = 0.6, 0 for δ = 1
+        let wide = G11::with_tolerance(0.6).optimum().expect("known");
+        assert_close(wide.value(), 0.16, 1e-15);
+        assert_eq!(wide.solutions(), [reals(&[0.0, 0.6])]);
+        assert_eq!(
+            G11::with_tolerance(1.0).optimum().expect("known").value(),
+            0.0
+        );
+        check_optimum(&G11::with_tolerance(0.6), 1e-15, 0.0);
+    }
+
+    #[test]
+    fn g12() {
+        check_optimum(&G12, 0.0, 0.0);
+        // the center of the sphere at (1, 1, 1): f = −(100 − 3·16)/100, feasible
+        assert_eq!(G12.evaluate(&reals(&[1.0, 1.0, 1.0])), (-0.52, 0.0));
+        // halfway between centers: 3·0.5² from the nearest, less 0.0625; f = −(100 − 3·3.5²)/100
+        let (value, violation) = G12.evaluate(&reals(&[1.5, 1.5, 1.5]));
+        assert_close(value, -0.6325, 1e-15);
+        assert_eq!(violation, 0.6875);
+        // the corners are 1 from the nearest center in each gene: 3 − 0.0625; f = −(100 − 75)/100
+        for corner in [0.0, 10.0] {
+            let (value, violation) = G12.evaluate(&Reals::from(vec![corner; 3]));
+            assert_eq!((value, violation), (-0.25, 2.9375));
+        }
+        // the nearest center gives the minimum over all 729
+        let mut rng = crate::StreamRng::seed_from_u64(3);
+        let real = G12.representation();
+        for _ in 0..200 {
+            let x = real.random_genome(&mut rng);
+            let mut least = f64::INFINITY;
+            for p in 1..=9 {
+                for q in 1..=9 {
+                    for r in 1..=9 {
+                        let (p, q, r) = (f64::from(p), f64::from(q), f64::from(r));
+                        let d = (x[0] - p).powi(2) + (x[1] - q).powi(2) + (x[2] - r).powi(2);
+                        least = least.min(d - 0.0625);
+                    }
+                }
+            }
+            assert_close(G12.constraints(&x).inequalities()[0], least, 1e-12);
+        }
+    }
+
+    #[test]
+    fn g13() {
+        check_optimum(&G13::default(), 1e-14, 1e-12);
+        let x = G13::default().optimum().expect("known").solutions()[0].clone();
+        for h in G13::default().constraints(&x).equalities() {
+            assert!(h.abs() <= EQUALITY_TOLERANCE * (1.0 + 1e-9), "{h}");
+        }
+        // at the origin: f = e⁰ = 1, and h = (−10, 0, 1)
+        let (value, violation) = G13::default().evaluate(&Reals::from(vec![0.0; 5]));
+        assert_eq!(value, 1.0);
+        assert_close(violation, 11.0 - 2.0 * EQUALITY_TOLERANCE, 1e-15);
+        assert!(G13::with_tolerance(0.0).optimum().is_none());
+    }
+
+    #[test]
+    fn g14() {
+        check_optimum(&G14::default(), 1e-14, 1e-12);
+        // all genes 0.1: Σ x = 1, so f = 0.1 Σ c + ln 0.1, and h = (−1.3, −0.5, −0.4)
+        let tenths = Reals::from(vec![0.1; 10]);
+        let (value, violation) = G14::default().evaluate(&tenths);
+        assert_close(value, 0.1 * -186.577 + math::ln(0.1), 1e-14);
+        assert_close(violation, 2.2 - 3.0 * EQUALITY_TOLERANCE, 1e-14);
+        // f is homogeneous: doubling x doubles it
+        let x = G14::default().optimum().expect("known").solutions()[0].clone();
+        let doubled: Reals = x.iter().map(|xi| 2.0 * xi).collect();
+        assert_close(
+            G14::default().evaluate(&doubled).0,
+            2.0 * G14::default().evaluate(&x).0,
+            1e-14,
+        );
+        // 0 · ln 0 at 0; the lower bound is finite
+        let mut zero = vec![0.1; 10];
+        zero[0] = 0.0;
+        assert!(G14::default().evaluate(&Reals::from(zero)).0.is_nan());
+        let (value, _) = G14::default().evaluate(&Reals::from(vec![G14_LOW; 10]));
+        assert!(value.is_finite());
+        assert!(G14::with_tolerance(0.0).optimum().is_none());
+    }
+
+    #[test]
+    fn g15() {
+        check_optimum(&G15::default(), 1e-14, 1e-12);
+        // (5, 0, 0) is on the sphere, h₂ = 40 − 56; f = 1000 − 25
+        let (value, violation) = G15::default().evaluate(&reals(&[5.0, 0.0, 0.0]));
+        assert_eq!(value, 975.0);
+        assert_close(violation, 16.0 - EQUALITY_TOLERANCE, 1e-15);
+        // (0, 4, 0) is on the plane, h₁ = 16 − 25; f = 1000 − 32
+        let (value, violation) = G15::default().evaluate(&reals(&[0.0, 4.0, 0.0]));
+        assert_eq!(value, 968.0);
+        assert_close(violation, 9.0 - EQUALITY_TOLERANCE, 1e-15);
+        assert!(G15::with_tolerance(0.0).optimum().is_none());
+    }
+
+    #[test]
+    fn g16() {
+        check_optimum(&G16, 1e-14, 0.0);
+        let x = G16.optimum().expect("known").solutions()[0].clone();
+        // the report's x₂*, 68.5999999999999943, is the lower bound 68.6 in double precision
+        assert_eq!(x[1], 68.6);
+        let constraints = G16.constraints(&x);
+        assert_eq!(constraints.len(), 38);
+        assert_active(&constraints, &[2, 3, 4, 5, 36], 1e-8);
+        // at (800, 100, 50, 200, 50): y₁ = 100 + 50 + 41.6 and y₂ = 12.5/(0.024·200 − 4.62) + 12
+        let point = reals(&[800.0, 100.0, 50.0, 200.0, 50.0]);
+        let constraints = G16.constraints(&point);
+        let g = constraints.inequalities();
+        let (y1, y2) = (191.6, 12.5 / 0.18 + 12.0);
+        assert_eq!(g[1], 50.0 - 150.0);
+        for (i, expected) in [
+            (4, 213.1 - y1),
+            (5, y1 - 405.23),
+            (6, 17.505 - y2),
+            (7, y2 - 1053.6667),
+        ] {
+            assert_close(g[i], expected, 1e-12);
+        }
+    }
+
+    #[test]
+    fn g17() {
+        check_optimum(&G17::default(), 1e-15, 0.0);
+        let problem = G17::default();
+        // the report's x*, which is feasible and evaluates to 8853.53401643571
+        let report = reals(&[
+            201.784_467_214_523_659,
+            99.999_999_999_999_900_5,
+            383.071_034_852_773_266,
+            420.0,
+            -10.907_658_451_429_265_2,
+            0.073_148_231_208_428_712_8,
+        ]);
+        let (value, violation) = problem.evaluate(&report);
+        assert_close(value, 8_853.534_016_435_71, 1e-13);
+        assert_eq!(violation, 0.0);
+        // the report's f(x*) is 30(x₁ + h₁) + 28(x₂ + h₂): the right-hand sides of h₁ and h₂
+        let constraints = problem.constraints(&report);
+        let h = constraints.equalities();
+        assert_close(
+            30.0 * (report[0] + h[0]) + 28.0 * (report[1] + h[1]),
+            8_853.539_674_806_48,
+            1e-13,
+        );
+        // the pieces, the last including the upper bounds
+        let x = |x1: f64, x2: f64| reals(&[x1, x2, 380.0, 380.0, 0.0, 0.0]);
+        assert_eq!(
+            problem.evaluate(&x(299.0, 99.0)).0,
+            30.0 * 299.0 + 28.0 * 99.0
+        );
+        assert_eq!(
+            problem.evaluate(&x(300.0, 100.0)).0,
+            31.0 * 300.0 + 29.0 * 100.0
+        );
+        assert_eq!(problem.evaluate(&x(0.0, 200.0)).0, 30.0 * 200.0);
+        assert_eq!(
+            problem.evaluate(&x(400.0, 1000.0)).0,
+            31.0 * 400.0 + 30.0 * 1000.0
+        );
+        // with x₃ = x₄ and x₆ = 0, h₁ + x₁ − 300 = h₂ + x₂ and h₃ + x₅ = h₄ − 200
+        let point = reals(&[50.0, 60.0, 380.0, 380.0, 70.0, 0.0]);
+        let constraints = problem.constraints(&point);
+        let h = constraints.equalities();
+        assert_close(h[0] + 50.0 - 300.0, h[1] + 60.0, 1e-12);
+        assert_close(h[2] + 70.0, h[3] - 200.0, 1e-12);
+        assert!(G17::with_tolerance(0.0).optimum().is_none());
+    }
+
+    #[test]
+    fn g18() {
+        check_optimum(&G18, 1e-14, 0.0);
+        let x = G18.optimum().expect("known").solutions()[0].clone();
+        assert_active(&G18.constraints(&x), &[1, 3, 4, 6, 7, 9], 1e-9);
+        // the best known value is −√3/2 to its digits
+        assert_close(
+            G18.optimum().expect("known").value(),
+            -(3f64.sqrt()) / 2.0,
+            1e-15,
+        );
+        // at the origin: f = 0, g₁…g₉ = −1 and g₁₀…g₁₃ = 0
+        let mut origin = vec![0.0; 9];
+        assert_eq!(G18.evaluate(&Reals::from(origin.clone())), (0.0, 0.0));
+        // x₉ = 2 alone: g₂ = 4 − 1, g₄ = (0 − 2)² − 1 and g₉ = (0 − 2)² − 1
+        origin[8] = 2.0;
+        assert_eq!(G18.evaluate(&Reals::from(origin)), (0.0, 9.0));
+        assert_eq!(G18.representation().bounds()[8], 0.0..=20.0);
     }
 }

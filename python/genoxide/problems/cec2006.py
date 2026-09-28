@@ -1,4 +1,4 @@
-"""The constrained problems of the CEC 2006 special session, g01 to g06, evaluated in Rust.
+"""The constrained problems of the CEC 2006 special session, g01 to g18, evaluated in Rust.
 
 Liang, J. J., Runarsson, T. P., Mezura-Montes, E., Clerc, M., Suganthan, P. N., Coello Coello,
 C. A. and Deb, K. (2006). Problem Definitions and Evaluation Criteria for the CEC 2006 Special
@@ -28,7 +28,27 @@ from typing import Any, ClassVar
 
 from . import Problem
 
-__all__ = ["EQUALITY_TOLERANCE", "G01", "G02", "G03", "G04", "G05", "G06"]
+__all__ = [
+    "EQUALITY_TOLERANCE",
+    "G01",
+    "G02",
+    "G03",
+    "G04",
+    "G05",
+    "G06",
+    "G07",
+    "G08",
+    "G09",
+    "G10",
+    "G11",
+    "G12",
+    "G13",
+    "G14",
+    "G15",
+    "G16",
+    "G17",
+    "G18",
+]
 
 EQUALITY_TOLERANCE = 0.0001
 """The report's tolerance δ of an equality constraint: ``|h(x)| <= 0.0001`` counts as met."""
@@ -138,3 +158,184 @@ class G06(Problem):
     """
 
     _type: ClassVar[str] = "g06"
+
+
+@dataclass(frozen=True)
+class G07(Problem):
+    """g07: a quadratic in 10 dimensions with 3 linear and 5 nonlinear inequalities,
+    ``x₁² + x₂² + x₁x₂ − 14x₁ − 16x₂ + (x₃ − 10)² + 4(x₄ − 5)² + (x₅ − 3)² + 2(x₆ − 1)² + 5x₇²
+    + 7(x₈ − 11)² + 2(x₉ − 10)² + (x₁₀ − 7)² + 45``.
+
+    Bounds [−10, 10]¹⁰; minimum 24.30620906818 at the report's x*, with six constraints active.
+    The problem is convex, so the minimum is global; the report's x* exceeds g₁ by 6e-14, from
+    rounding.
+
+    The report's eqs. 16-17 (p. 5), after Hock and Schittkowski (1981).
+    """
+
+    _type: ClassVar[str] = "g07"
+
+
+@dataclass(frozen=True)
+class G08(Problem):
+    """g08: ``−sin³(2πx₁) sin(2πx₂) / (x₁³(x₁ + x₂))`` in 2 dimensions, with 2 nonlinear
+    inequalities: a maximization, negated.
+
+    Bounds [0, 10]²; minimum −0.0958250414180359 at (1.22797135260752599, 4.24537336612274885).
+    The value is 0/0, and so the fitness invalid, at x₁ = 0.
+
+    The report's eqs. 18-19 (p. 5), after Koziel and Michalewicz (1999).
+    """
+
+    _type: ClassVar[str] = "g08"
+
+
+@dataclass(frozen=True)
+class G09(Problem):
+    """g09: ``(x₁ − 10)² + 5(x₂ − 12)² + x₃⁴ + 3(x₄ − 11)² + 10x₅⁶ + 7x₆² + x₇⁴ − 4x₆x₇ − 10x₆
+    − 8x₇``, a polynomial in 7 dimensions with 4 nonlinear inequalities.
+
+    Bounds [−10, 10]⁷; minimum 680.630057374402 at the report's x*, with g₁ and g₄ active.
+
+    The report's eqs. 20-21 (pp. 5-6), after Hock and Schittkowski (1981).
+    """
+
+    _type: ClassVar[str] = "g09"
+
+
+@dataclass(frozen=True)
+class G10(Problem):
+    """g10: ``x₁ + x₂ + x₃``, linear in 8 dimensions, with 3 linear and 3 bilinear inequalities.
+
+    Bounds x₁ in [100, 10000], x₂, x₃ in [1000, 10000], x₄…x₈ in [10, 1000]; minimum
+    7049.24802052867 at the report's x*, where all six constraints are active.
+
+    The report's eq. 22 (p. 6), after Hock and Schittkowski (1981).
+    """
+
+    _type: ClassVar[str] = "g10"
+
+
+@dataclass(frozen=True)
+class G11(_WithTolerance):
+    """g11: ``x₁² + (x₂ − 1)²`` in 2 dimensions, subject to ``x₂ = x₁²``.
+
+    Bounds [−1, 1]²; minimum ``3/4 − δ`` at (±√(1/2 − δ), 1/2), derived from the definition:
+    0.7499 for the report's δ, and 3/4 at (±1/√2, 1/2) without the tolerance. ``tolerance`` is δ,
+    :data:`EQUALITY_TOLERANCE` if None.
+
+    The report's eqs. 23-24 (p. 6), after Koziel and Michalewicz (1999).
+    """
+
+    tolerance: float | None = None
+    _type: ClassVar[str] = "g11"
+
+
+@dataclass(frozen=True)
+class G12(Problem):
+    """g12: ``−(100 − (x₁ − 5)² − (x₂ − 5)² − (x₃ − 5)²)/100`` in 3 dimensions, feasible inside
+    any of 9³ = 729 disjoint spheres of radius 0.25 centered on (p, q, r), p, q, r in 1…9: a
+    maximization, negated.
+
+    Bounds [0, 10]³; minimum −1 at (5, 5, 5). The one constraint is the squared distance to the
+    nearest center, less 0.0625.
+
+    The report's eq. 25 (p. 6), after Koziel and Michalewicz (1999).
+    """
+
+    _type: ClassVar[str] = "g12"
+
+
+@dataclass(frozen=True)
+class G13(_WithTolerance):
+    """g13: ``exp(x₁x₂x₃x₄x₅)`` in 5 dimensions, with 3 nonlinear equalities.
+
+    Bounds x₁, x₂ in [−2.3, 2.3], x₃…x₅ in [−3.2, 3.2]; best known 0.053941514041898, which
+    meets the equalities within the tolerance only, for the report's δ only (``optimum`` is None
+    for another). ``tolerance`` is δ, :data:`EQUALITY_TOLERANCE` if None.
+
+    The report's eqs. 26-27 (pp. 6-7), after Hock and Schittkowski (1981).
+    """
+
+    tolerance: float | None = None
+    _type: ClassVar[str] = "g13"
+
+
+@dataclass(frozen=True)
+class G14(_WithTolerance):
+    """g14: ``Σ xᵢ (cᵢ + ln(xᵢ / Σⱼ xⱼ))`` in 10 dimensions, with 3 linear equalities.
+
+    Bounds (0, 10]¹⁰, closed at 2.2e-308, the smallest positive normal number (the fitness is
+    invalid at 0); best known −47.7648884594915, for the report's δ only (``optimum`` is None for
+    another). ``tolerance`` is δ, :data:`EQUALITY_TOLERANCE` if None.
+
+    The report's eqs. 28-29 (p. 7), after Himmelblau, D. M. (1972). Applied Nonlinear
+    Programming. McGraw-Hill.
+    """
+
+    tolerance: float | None = None
+    _type: ClassVar[str] = "g14"
+
+
+@dataclass(frozen=True)
+class G15(_WithTolerance):
+    """g15: ``1000 − x₁² − 2x₂² − x₃² − x₁x₂ − x₁x₃``, a quadratic in 3 dimensions, subject to
+    ``x₁² + x₂² + x₃² = 25`` and ``8x₁ + 14x₂ + 7x₃ = 56``.
+
+    Bounds [0, 10]³; best known 961.715022289961, for the report's δ only (``optimum`` is None for
+    another). ``tolerance`` is δ, :data:`EQUALITY_TOLERANCE` if None.
+
+    The report's eqs. 30-31 (p. 7), after Himmelblau (1972).
+    """
+
+    tolerance: float | None = None
+    _type: ClassVar[str] = "g15"
+
+
+@dataclass(frozen=True)
+class G16(Problem):
+    """g16: a nonlinear function of 5 variables through a chain of 17 intermediate quantities,
+    with 38 inequalities, most of them limits on those quantities.
+
+    Bounds x₁ in [704.4148, 906.3855], x₂ in [68.6, 288.88], x₃ in [0, 134.75], x₄ in
+    [193, 287.0966], x₅ in [25, 84.1988]; best known −1.90515525853479, with five constraints
+    active.
+
+    The report's eqs. 32-34 (pp. 7-10), after Himmelblau (1972).
+    """
+
+    _type: ClassVar[str] = "g16"
+
+
+@dataclass(frozen=True)
+class G17(_WithTolerance):
+    """g17: ``f₁(x₁) + f₂(x₂)``, piecewise linear in 6 dimensions, with 4 nonlinear equalities:
+    f₁ is 30x₁ below 300 and 31x₁ from there, f₂ is 28x₂ below 100, 29x₂ below 200 and 30x₂ from
+    there.
+
+    Bounds x₁ in [0, 400], x₂ in [0, 1000], x₃, x₄ in [340, 420], x₅ in [−1000, 1000], x₆ in
+    [0, 0.5236]; best known 8853.5338748065, reached by the report's x* with x₁ lowered to
+    201.78446249355, for the report's δ only (``optimum`` is None for another). The report's x*
+    itself evaluates to 8853.53401643571; the report prints 8853.53967480648, the value of its
+    organizers' code, which evaluates f₁ and f₂ at the right-hand sides of h₁ and h₂.
+    ``tolerance`` is δ, :data:`EQUALITY_TOLERANCE` if None.
+
+    The report's eqs. 35-36 (p. 10), after Himmelblau (1972).
+    """
+
+    tolerance: float | None = None
+    _type: ClassVar[str] = "g17"
+
+
+@dataclass(frozen=True)
+class G18(Problem):
+    """g18: ``−0.5(x₁x₄ − x₂x₃ + x₃x₉ − x₅x₉ + x₅x₈ − x₆x₇)``, a quadratic in 9 dimensions with 13
+    nonlinear inequalities: a maximization, negated.
+
+    Bounds x₁…x₈ in [−10, 10], x₉ in [0, 20]; best known −0.866025403784439 (−√3/2 to its
+    digits), with six constraints active.
+
+    The report's eqs. 37-38 (p. 11), after Himmelblau (1972).
+    """
+
+    _type: ClassVar[str] = "g18"
