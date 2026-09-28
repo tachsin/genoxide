@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.1](https://github.com/tachsin/genoxide/compare/v0.9.0...v0.9.1) - 2026-09-28
+
+### <!-- 0 -->Added
+
+- batch 5 of the test problems, CEC 2006's g07-g18, each with its example ([#277](https://github.com/tachsin/genoxide/pull/277))
+
 ## [0.9.0](https://github.com/tachsin/genoxide/compare/v0.8.0...v0.9.0) - 2026-09-28
 
 ### <!-- 0 -->Added
