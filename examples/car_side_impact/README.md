@@ -101,8 +101,8 @@ number of genes, 126, and shrinks linearly to 4 over the budget of 20,000 evalua
 Its shrinking population gets to the best known weight sooner than SHADE (Tanabe and Fukunaga,
 2013, IEEE CEC 2013: 71-78) with genoxide's defaults, as in the welded beam example, whose
 population stays at 100. With seeds 1 to 5, L-SHADE comes within 1e-12 of the best known weight,
-relative to it, after 18,500 to 19,400 evaluations, and SHADE after SHADE_RANGE; SHADE doesn't
-restart on the way.
+relative to it, after 18,500 to 19,400 evaluations. SHADE, which doesn't restart on the way,
+ends 7e-12 to 6e-11 above it after 30,000 evaluations.
 
 CMA-ES, which solves the cantilever beam example, puts the other six thicknesses on their bounds and
 limits, but leaves x₆ where it happens to be: between 0.89 and 1.10 with seeds 1 to 5. After 30,000
