@@ -79,7 +79,8 @@ export default async function BenchmarksPage() {
         <div className="proj-lead mt-5 space-y-3 text-lg">
           <p>
             genoxide and its Python package run the same problems as 15 other evolutionary computation libraries in
-            Rust, C++, Python, Java and Julia, with the same fitness functions, evaluation budgets and time caps (60 seconds to a target, 600 for a front).
+            Rust, C++, Python, Java and Julia, with the same fitness functions, evaluation budgets and time cap (60
+            seconds to a target).
           </p>
           <p>
             Matched scenarios run the same algorithm in every library to measure framework cost; idiomatic scenarios
@@ -96,27 +97,18 @@ export default async function BenchmarksPage() {
         <h2 id="bench-problems" className="font-semibold text-xl tracking-tight">
           Problems
         </h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div className="proj-card p-5">
-            <p className="text-base-content/55 text-xs uppercase tracking-wide">Single-objective, to a target</p>
-            <ul className="mt-3 flex flex-wrap gap-1.5">
-              {BENCHMARK_PROBLEMS.single.map((p) => (
-                <li key={p} className="proj-tag">
-                  {p}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="proj-card p-5">
-            <p className="text-base-content/55 text-xs uppercase tracking-wide">Multi-objective, by hypervolume</p>
-            <ul className="mt-3 flex flex-wrap gap-1.5">
-              {BENCHMARK_PROBLEMS.multi.map((p) => (
-                <li key={p} className="proj-tag">
-                  {p}
-                </li>
-              ))}
-            </ul>
-          </div>
+        <div className="proj-card mt-4 p-5">
+          <p className="text-base-content/55 text-xs uppercase tracking-wide">Single-objective, to a target</p>
+          <ul className="mt-3 flex flex-wrap gap-1.5">
+            {BENCHMARK_PROBLEMS.map((p) => (
+              <li key={p} className="proj-tag">
+                {p}
+              </li>
+            ))}
+          </ul>
+          <p className="proj-lead mt-3 text-sm">
+            Multi-objective benchmarks are left out for now: they come back once genoxide solves these problems well.
+          </p>
         </div>
       </section>
 

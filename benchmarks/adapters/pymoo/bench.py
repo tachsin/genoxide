@@ -5,8 +5,7 @@ Usage:
     python bench.py values <problem> <size>
 
 The first prints one JSON line per solver per seed, see ../../README.md for the fields. The second
-reads one JSON solution per line and prints its value (or list of objectives), with the fitness
-functions below.
+reads one JSON solution per line and prints its value, with the fitness functions below.
 
 Every method and setting, where pymoo documents it, and the separate test runs are on the library's
 page: docs/benchmarks/libraries/pymoo.md. The citations "docs/source/..." are files of the pymoo
@@ -32,8 +31,6 @@ How a run follows the rules (docs/benchmarks/rules.md):
   that reaches the target, recorded by `Counter` per row.
 - Rule 2.4: every evaluated solution is inside the bounds through pymoo's own bound handling;
   `outside` counts those that aren't, as pymoo proposed them.
-- A multi-objective run stops after the generation that reaches its budget, and its front is the
-  non-dominated part of the final population (rule 7.2).
 """
 
 import os
@@ -48,11 +45,6 @@ import sys
 import time
 
 import numpy as np
-from pymoo.algorithms.moo.moead import MOEAD
-from pymoo.algorithms.moo.nsga2 import NSGA2
-from pymoo.algorithms.moo.nsga3 import NSGA3
-from pymoo.algorithms.moo.sms import SMSEMOA
-from pymoo.algorithms.moo.spea2 import SPEA2, SPEA2Survival
 from pymoo.algorithms.soo.nonconvex.brkga import BRKGA
 from pymoo.algorithms.soo.nonconvex.cmaes import CMAES
 from pymoo.algorithms.soo.nonconvex.de import DE
@@ -62,20 +54,14 @@ from pymoo.algorithms.soo.nonconvex.nelder import NelderMead
 from pymoo.core.duplicate import ElementwiseDuplicateElimination
 from pymoo.core.problem import Problem
 from pymoo.core.termination import TerminateIfAny, Termination
-from pymoo.decomposition.pbi import PBI
-from pymoo.decomposition.tchebicheff import Tchebicheff
 from pymoo.operators.crossover.ox import OrderCrossover
 from pymoo.operators.crossover.pntx import TwoPointCrossover
-from pymoo.operators.crossover.sbx import SBX
 from pymoo.operators.mutation.bitflip import BitflipMutation
 from pymoo.operators.mutation.inversion import InversionMutation
-from pymoo.operators.mutation.pm import PM
 from pymoo.operators.sampling.lhs import LHS
 from pymoo.operators.sampling.rnd import BinaryRandomSampling, PermutationRandomSampling
 from pymoo.optimize import minimize
 from pymoo.termination.default import DefaultSingleObjectiveTermination
-from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
-from pymoo.util.ref_dirs import get_reference_directions
 
 # -------------------------------------------------------------------------------------------------
 # Fitness functions, identical to problems.py, vectorized: X holds one solution per row
@@ -130,53 +116,6 @@ def ackley(X):
             - np.exp(np.sum(np.cos(2 * np.pi * D), axis=1) / n) + 20 + math.e)
 
 
-def zdt_g(X):
-    return 1 + 9 * np.sum(X[:, 1:], axis=1) / (X.shape[1] - 1)
-
-
-def zdt1(X):
-    g = zdt_g(X)
-    return np.column_stack([X[:, 0], g * (1 - np.sqrt(X[:, 0] / g))])
-
-
-def zdt2(X):
-    g = zdt_g(X)
-    return np.column_stack([X[:, 0], g * (1 - (X[:, 0] / g) ** 2)])
-
-
-def zdt3(X):
-    g = zdt_g(X)
-    h = 1 - np.sqrt(X[:, 0] / g) - X[:, 0] / g * np.sin(10 * np.pi * X[:, 0])
-    return np.column_stack([X[:, 0], g * h])
-
-
-def dtlz2(X, objectives):
-    g = np.sum((X[:, objectives - 1:] - 0.5) ** 2, axis=1)
-    columns = []
-    for m in range(objectives):
-        f = 1 + g
-        for i in range(objectives - 1 - m):
-            f = f * np.cos(X[:, i] * np.pi / 2)
-        if m > 0:
-            f = f * np.sin(X[:, objectives - 1 - m] * np.pi / 2)
-        columns.append(f)
-    return np.column_stack(columns)
-
-
-def dtlz1(X, objectives):
-    tail = X[:, objectives - 1:]
-    g = 100 * (tail.shape[1] + np.sum((tail - 0.5) ** 2 - np.cos(20 * np.pi * (tail - 0.5)), axis=1))
-    columns = []
-    for m in range(objectives):
-        f = 0.5 * (1 + g)
-        for i in range(objectives - 1 - m):
-            f = f * X[:, i]
-        if m > 0:
-            f = f * (1 - X[:, objectives - 1 - m])
-        columns.append(f)
-    return np.column_stack(columns)
-
-
 # the real-valued problems: fitness function and bounds
 REAL_PROBLEMS = {
     "rastrigin": (rastrigin, -5.12, 5.12),
@@ -184,30 +123,13 @@ REAL_PROBLEMS = {
     "ackley": (ackley, -32.768, 32.768),
 }
 
-# (fitness function of (X, size), variables, population size, Das-Dennis divisions)
-FRONT_PROBLEMS = {
-    "zdt1": (lambda X, size: zdt1(X), lambda size: size, 100, 99),
-    "zdt2": (lambda X, size: zdt2(X), lambda size: size, 100, 99),
-    "zdt3": (lambda X, size: zdt3(X), lambda size: size, 100, 99),
-    # size: the number of objectives, with k = 10 (DTLZ2) and 5 (DTLZ1) distance variables
-    "dtlz2": (dtlz2, lambda size: size + 9, 92, 12),
-    "dtlz1": (dtlz1, lambda size: size + 4, 92, 12),
-}
-
-
-def front_objectives(problem_name, size):
-    return 2 if problem_name.startswith("zdt") else size
-
-
 def values(problem_name, size):
     """`values <problem> <size>`: the value of each solution read from stdin (rule 1.2)."""
     for line in sys.stdin:
         if not line.strip():
             continue
         X = np.array([json.loads(line)], dtype=float)
-        if problem_name in FRONT_PROBLEMS:
-            print(json.dumps([float(v) for v in FRONT_PROBLEMS[problem_name][0](X, size)[0]]))
-        elif problem_name == "onemax":
+        if problem_name == "onemax":
             print(json.dumps(int(-onemax(X)[0])))
         elif problem_name == "nqueens":
             print(json.dumps(int(nqueens(X)[0])))
@@ -556,114 +478,6 @@ def run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, ma
             }), flush=True)
 
 
-# -------------------------------------------------------------------------------------------------
-# Multi-objective: the matched settings of every library
-# -------------------------------------------------------------------------------------------------
-
-
-class FrontProblem(Problem, Generations):
-    """A multi-objective problem whose evaluations are counted."""
-
-    def __init__(self, function, size, n_var, n_obj):
-        Problem.__init__(self, n_var=n_var, n_obj=n_obj, xl=0.0, xu=1.0)
-        Generations.__init__(self)
-        self.function = function
-        self.size = size
-        # evaluated solutions outside the bounds, as pymoo proposed them (rule 2.4)
-        self.outside = 0
-
-    def _evaluate(self, X, out, *args, **kwargs):
-        self.evaluations += len(X)
-        self.outside += count_outside(X, self.xl, self.xu)
-        out["F"] = self.function(X, self.size)
-
-
-class FrontTermination(Termination):
-    """Ends a run after the generation that reaches max_evaluations, or at max_seconds."""
-
-    def __init__(self, problem, max_evaluations, deadline):
-        super().__init__()
-        self.problem = problem
-        self.max_evaluations = max_evaluations
-        self.deadline = deadline
-
-    def _update(self, algorithm):
-        self.problem.end_generation()
-        if self.problem.evaluations >= self.max_evaluations or time.perf_counter() >= self.deadline:
-            return 1.0
-        return 0.0
-
-
-def front_solvers(problem_name, size):
-    """NSGA-II, SPEA2 and SMS-EMOA: SBX with eta 15 at 0.9, polynomial mutation with eta 20 at
-    1 / n. NSGA-III: Das-Dennis directions (99 divisions with 2 objectives, 12 with 3), SBX with
-    eta 30 at 1. MOEA/D: 20 neighbors, mating in the neighborhood at 0.9, Tchebycheff (PBI with
-    theta 5 for DTLZ), SBX with eta 20 at 1. No duplicate elimination (MOEA/D has none), and
-    SMS-EMOA makes one child per step (n_offsprings=1), as in the matched settings. pymoo's defaults
-    for the rest."""
-    _, variables, population, divisions = FRONT_PROBLEMS[problem_name]
-    n = variables(size)
-    objectives = front_objectives(problem_name, size)
-    ref_dirs = get_reference_directions("das-dennis", objectives, n_partitions=divisions)
-
-    def mutation():
-        return PM(eta=20, prob_var=1.0 / n)
-
-    def sbx():
-        return SBX(prob=0.9, eta=15)
-
-    return [
-        ("nsga2", lambda: NSGA2(pop_size=population, crossover=sbx(), mutation=mutation(),
-                                eliminate_duplicates=False)),
-        ("nsga3", lambda: NSGA3(ref_dirs, pop_size=population, crossover=SBX(prob=1.0, eta=30),
-                                mutation=mutation(), eliminate_duplicates=False)),
-        # SPEA2's default survival, SPEA2Survival(normalize=True), is one object shared by every
-        # SPEA2 of the process, and it keeps its normalization points from run to run: a new one
-        # per run, with the same setting, makes each run as when it's alone (see the library's page)
-        ("spea2", lambda: SPEA2(pop_size=population, crossover=sbx(), mutation=mutation(),
-                                survival=SPEA2Survival(normalize=True), eliminate_duplicates=False)),
-        ("sms_emoa", lambda: SMSEMOA(pop_size=population, n_offsprings=1, crossover=sbx(),
-                                     mutation=mutation(), eliminate_duplicates=False)),
-        ("moead", lambda: MOEAD(ref_dirs, n_neighbors=20, prob_neighbor_mating=0.9,
-                                decomposition=Tchebicheff() if objectives == 2 else PBI(theta=5),
-                                crossover=SBX(prob=1.0, eta=20), mutation=mutation())),
-    ]
-
-
-def run_fronts(problem_name, size, mode, seed_from, seed_to, max_evaluations, max_seconds):
-    function, variables, _, _ = FRONT_PROBLEMS[problem_name]
-    n, objectives = variables(size), front_objectives(problem_name, size)
-    for seed in range(seed_from, seed_to + 1):
-        for solver, make_algorithm in front_solvers(problem_name, size):
-            np.random.seed(seed)
-            start = time.perf_counter()
-            problem = FrontProblem(function, size, n, objectives)
-            termination = FrontTermination(problem, max_evaluations, start + max_seconds)
-            algorithm = make_algorithm()
-            minimize(problem, algorithm, termination, seed=seed, verbose=False,
-                     copy_algorithm=False, copy_termination=False)
-            elapsed = time.perf_counter() - start
-            # rule 7.2: the non-dominated part of the final population (for SPEA2, its archive),
-            # not pymoo's res.opt, which for NSGA-III is only the solutions closest to its directions
-            X, F = algorithm.pop.get("X", "F")
-            front = NonDominatedSorting().do(F, only_non_dominated_front=True)
-            print(json.dumps({
-                "library": "pymoo",
-                "solver": solver,
-                "problem": problem_name,
-                "size": size,
-                "mode": mode,
-                "seed": seed,
-                "time_s": round(elapsed, 6),
-                "generations": algorithm.n_gen,
-                "evaluations": problem.evaluations,
-                "last_generation": problem.last_generation(),
-                "front": [[float(v) for v in F[i]] for i in front],
-                "solutions": [[float(v) for v in X[i]] for i in front],
-                "outside": problem.outside,
-            }), flush=True)
-
-
 def main():
     if len(sys.argv) == 4 and sys.argv[1] == "values":
         values(sys.argv[2], int(sys.argv[3]))
@@ -674,9 +488,7 @@ def main():
     problem_name, size, mode = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     seed_from, seed_to = int(sys.argv[4]), int(sys.argv[5])
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
-    if problem_name in FRONT_PROBLEMS:
-        run_fronts(problem_name, size, mode, seed_from, seed_to, max_evaluations, max_seconds)
-    elif problem_name in ("onemax", "nqueens") or problem_name in REAL_PROBLEMS:
+    if problem_name in ("onemax", "nqueens") or problem_name in REAL_PROBLEMS:
         run_single(problem_name, size, mode, seed_from, seed_to, max_evaluations, max_seconds)
     else:
         print(f"unknown problem {problem_name}", file=sys.stderr)

@@ -20,9 +20,9 @@
 //!   in 200 tries (EmptyMatingResult, ga.rs `run`, "Terminating the algorithm early"). The adapter
 //!   sets the iteration count above any budget and stops the run from an AdaptiveController
 //!   (src/algorithms/helpers/controller.rs: "may ... request an early stop"), called after every
-//!   generation: at the evaluation budget, at the time limit and (single-objective) at the target.
+//!   generation: at the evaluation budget, at the time limit and at the target.
 //!   The budget is checked after each generation, so the last one can go over it by less than one
-//!   generation. A single-objective run that ends early by itself is restarted, attempt 0 with
+//!   generation. A run that ends early by itself is restarted, attempt 0 with
 //!   the seed itself and restart r with (seed + 1) * 1_000_000 + r, keeping the best (rule 2.2).
 //! - The fitness function records the first evaluation whose value reaches the target
 //!   (`first_hit`), which also ends the run after its generation.
@@ -31,8 +31,7 @@
 //! - Not run (decision 1 of the fairness review: matched scenarios use only the library's own
 //!   components): matched OneMax (moors' tournaments are binary and its single-objective survival
 //!   keeps the best of parents and offspring; it has no tournament of 3 and no generational
-//!   replacement) and the multi-objective scenarios (moors has no polynomial mutation). The
-//!   adapter prints nothing for them; the `values` command still evaluates them.
+//!   replacement). The adapter prints nothing for it; the `values` command still evaluates it.
 
 use moors::{
     AdaptiveController, AlgorithmBuilder, AlgorithmContext, BitFlipMutation,
@@ -117,82 +116,6 @@ fn ackley(x: &[f64]) -> f64 {
     let squares = shifted().map(|v| v * v).sum::<f64>() / n;
     let cosines = shifted().map(|v| (2.0 * PI * v).cos()).sum::<f64>() / n;
     -20.0 * (-0.2 * squares.sqrt()).exp() - cosines.exp() + 20.0 + E
-}
-
-fn zdt_g(x: &[f64]) -> f64 {
-    1.0 + 9.0 * x[1..].iter().sum::<f64>() / (x.len() - 1) as f64
-}
-
-fn zdt1(x: &[f64], f: &mut [f64]) {
-    let g = zdt_g(x);
-    f[0] = x[0];
-    f[1] = g * (1.0 - (x[0] / g).sqrt());
-}
-
-fn zdt2(x: &[f64], f: &mut [f64]) {
-    let g = zdt_g(x);
-    f[0] = x[0];
-    f[1] = g * (1.0 - (x[0] / g).powi(2));
-}
-
-fn zdt3(x: &[f64], f: &mut [f64]) {
-    let g = zdt_g(x);
-    f[0] = x[0];
-    f[1] = g * (1.0 - (x[0] / g).sqrt() - x[0] / g * (10.0 * PI * x[0]).sin());
-}
-
-/// DTLZ2 with M = f.len() objectives; the last n - M + 1 variables are the distance variables
-fn dtlz2(x: &[f64], f: &mut [f64]) {
-    let m = f.len();
-    let g: f64 = x[m - 1..].iter().map(|v| (v - 0.5).powi(2)).sum();
-    for (i, value) in f.iter_mut().enumerate() {
-        let mut v = 1.0 + g;
-        for xj in &x[..m - 1 - i] {
-            v *= (xj * PI / 2.0).cos();
-        }
-        if i > 0 {
-            v *= (x[m - 1 - i] * PI / 2.0).sin();
-        }
-        *value = v;
-    }
-}
-
-/// DTLZ1 with M = f.len() objectives; the last n - M + 1 variables are the distance variables
-fn dtlz1(x: &[f64], f: &mut [f64]) {
-    let m = f.len();
-    let tail = &x[m - 1..];
-    let g = 100.0
-        * (tail.len() as f64
-            + tail
-                .iter()
-                .map(|v| (v - 0.5).powi(2) - (20.0 * PI * (v - 0.5)).cos())
-                .sum::<f64>());
-    for (i, value) in f.iter_mut().enumerate() {
-        let mut v = 0.5 * (1.0 + g);
-        for xj in &x[..m - 1 - i] {
-            v *= xj;
-        }
-        if i > 0 {
-            v *= 1.0 - x[m - 1 - i];
-        }
-        *value = v;
-    }
-}
-
-type Objectives = fn(&[f64], &mut [f64]);
-
-/// A multi-objective problem of the given size: (function, variables, objectives), as
-/// problems.py FRONT_VARIABLES and FRONT_OBJECTIVES
-fn front_problem(problem: &str, size: usize) -> (Objectives, usize, usize) {
-    match problem {
-        "zdt1" => (zdt1, size, 2),
-        "zdt2" => (zdt2, size, 2),
-        "zdt3" => (zdt3, size, 2),
-        // size: the number of objectives, with 10 distance variables (DTLZ2) or 5 (DTLZ1)
-        "dtlz2" => (dtlz2, size + 9, size),
-        "dtlz1" => (dtlz1, size + 4, size),
-        _ => unreachable!(),
-    }
 }
 
 // the variable bounds: moors clamps the offspring to the bounds of the constraints function
@@ -629,7 +552,7 @@ fn run_single(output: &mut dyn Write, args: &Args, seed: u64) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// `values <problem> <size>`: the value (or objectives) of each solution read from stdin
+// `values <problem> <size>`: the value of each solution read from stdin
 // ---------------------------------------------------------------------------------------------
 
 fn values(problem: &str, size: usize) {
@@ -653,17 +576,7 @@ fn values(problem: &str, size: usize) {
                 v => v.parse().expect("a number"),
             })
             .collect();
-        let text = match problem {
-            "onemax" | "nqueens" | "rastrigin" | "rosenbrock" | "ackley" => {
-                json_value(problem, (SooProblem::of(problem, size).value)(&x))
-            }
-            _ => {
-                let (function, _, objectives) = front_problem(problem, size);
-                let mut out = vec![0.0; objectives];
-                function(&x, &mut out);
-                json_reals(&out)
-            }
-        };
+        let text = json_value(problem, (SooProblem::of(problem, size).value)(&x));
         writeln!(stdout, "{text}").expect("write value");
     }
 }
@@ -698,8 +611,6 @@ fn main() {
             "onemax" | "nqueens" | "rastrigin" | "rosenbrock" | "ackley" => {
                 run_single(&mut *output, &args, seed)
             }
-            // matched multi-objective: not run (see the top of the file), print nothing
-            "zdt1" | "zdt2" | "zdt3" | "dtlz2" | "dtlz1" => {}
             other => {
                 eprintln!("unknown problem {other}");
                 std::process::exit(2);
@@ -737,51 +648,6 @@ mod tests {
         assert!(close(ackley(&x), 20.92235706225884));
         assert_eq!(attempt_seed(4, 0), 4);
         assert_eq!(attempt_seed(0, 3), 1_000_003);
-    }
-
-    #[test]
-    fn multi_objective() {
-        let x = [
-            0.449, 0.652, 0.789, 0.094, 0.028, 0.836, 0.433, 0.762, 0.002, 0.445, 0.722, 0.229,
-            0.945, 0.901, 0.031, 0.025, 0.541, 0.939, 0.381, 0.217, 0.422, 0.029, 0.222, 0.438,
-            0.496, 0.233, 0.231, 0.219, 0.46, 0.29,
-        ];
-        let check = |f: Objectives, x: &[f64], m: usize, expected: &[f64]| {
-            let mut out = vec![0.0; m];
-            f(x, &mut out);
-            assert!(
-                out.iter().zip(expected).all(|(a, b)| close(*a, *b)),
-                "{out:?} != {expected:?}"
-            );
-        };
-        check(zdt1, &x, 2, &[0.449, 3.270875429024877]);
-        check(zdt2, &x, 2, &[0.449, 4.685221019573797]);
-        check(zdt3, &x, 2, &[0.449, 2.8220969834206637]);
-        check(
-            dtlz2,
-            &x[..12],
-            3,
-            &[0.8038438063617359, 1.3210517735402911, 1.3165521791315096],
-        );
-        check(
-            dtlz1,
-            &x[..7],
-            3,
-            &[76.18466998901395, 40.66298336836941, 143.392109131221],
-        );
-        let mut optimum = [0.0; 30];
-        optimum[0] = 0.25;
-        check(zdt1, &optimum, 2, &[0.25, 0.5]);
-        let mut optimum = [0.5; 12];
-        optimum[0] = 0.3;
-        optimum[1] = 0.6;
-        check(
-            dtlz2,
-            &optimum,
-            3,
-            &[0.5237204946142994, 0.7208394201673423, 0.45399049973954675],
-        );
-        check(dtlz1, &optimum[..7], 3, &[0.09, 0.06, 0.35]);
     }
 
     #[test]

@@ -9,9 +9,9 @@ import { sameRun, useHighlight } from "./Highlight";
 /**
  * One panel of a benchmark chart: a horizontal bar per library and method,
  * in the harness's order (best first; missing values, then the runs the time
- * cap stopped, last), on a log axis or, for the hypervolume, a linear one
- * zoomed where the harness zoomed it (`axis_from`). Every number comes from
- * charts.json: a bar's label is its `text`, as in the SVG chart.
+ * cap stopped, last), on a log axis or, for the overall score, a linear one.
+ * Every number comes from charts.json: a bar's label is its `text`, as in the
+ * SVG chart.
  *
  * Hover a bar, or focus the panel and use the arrow keys, for its numbers:
  * for an overall score, its points in each scenario too (`ratios`, the
@@ -56,18 +56,16 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
   // the axis covers every bar, shown or not, so it doesn't move when the panel expands
   const domain = useMemo(() => {
     const values = all.map((b) => b.value).filter((v) => typeof v === "number");
-    const zoomed = typeof panel.axis_from === "number";
     const positive = values.filter((v) => v > 0);
     if (panel.log && positive.length) {
       const lo = 10 ** Math.floor(Math.log10(Math.min(...positive) / 2));
       return [lo, Math.max(...positive) * 1.05];
     }
-    const lo = zoomed ? panel.axis_from : 0;
     // a fixed end, e.g. 100 for a score
-    if (typeof panel.axis_to === "number") return [lo, panel.axis_to];
+    if (typeof panel.axis_to === "number") return [0, panel.axis_to];
     const hi = values.length ? Math.max(...values) : 1;
-    return [lo, hi + (hi - lo) * 0.06 || 1];
-  }, [all, panel.log, panel.axis_from, panel.axis_to]);
+    return [0, hi * 1.06 || 1];
+  }, [all, panel.log, panel.axis_to]);
   const titles = useMemo(
     () => Object.fromEntries((panel.scenarios ?? []).map((scenario) => [scenario.key, scenario.title])),
     [panel.scenarios],
@@ -181,9 +179,6 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
             return (
               <>
                 <defs>
-                  <pattern id={`${patterns}-stub`} width={4} height={4} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                    <line x1={0} x2={0} y1={0} y2={4} stroke="var(--color-base-100)" strokeWidth={1.6} />
-                  </pattern>
                   <pattern id={`${patterns}-cap`} width={4} height={4} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
                     <line x1={0} x2={0} y1={0} y2={4} stroke="var(--color-base-100)" strokeWidth={1.2} />
                     <line x1={0} x2={4} y1={0} y2={0} stroke="var(--color-base-100)" strokeWidth={1.2} />
@@ -223,9 +218,9 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
                       );
                       end = cx + 4;
                     } else {
-                      const stub = bar.below_axis || bar.value <= domain[0];
+                      const stub = bar.value <= domain[0];
                       end = stub ? area.left + Math.max(4, (area.right - area.left) * 0.04) : Math.max(area.left + 2, x(bar.value));
-                      const hatch = bar.ended_on_cap ? "cap" : stub && bar.below_axis ? "stub" : null;
+                      const hatch = bar.ended_on_cap ? "cap" : null;
                       mark = (
                         <g opacity={hatch ? 0.6 : 1}>
                           <rect x={area.left} y={y + (ROW - BAR) / 2} width={end - area.left} height={BAR} rx={2} fill={color} />

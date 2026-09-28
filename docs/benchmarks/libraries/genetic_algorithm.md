@@ -107,7 +107,6 @@ Other documented settings (5 seeds each, the earlier shift in [−1, 1], restart
 ## Can't run
 
 - Matched OneMax 100 and 1000: no generational replacement without elitism.
-- The multi-objective scenarios: the library optimizes one `isize` fitness. AGENTS.md suggests a weighted sum, which gives one point of the front.
 
 ## Bugs found
 

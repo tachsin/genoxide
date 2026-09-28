@@ -14,9 +14,7 @@ docs/benchmarks/libraries/nevergrad.md:
 - N-Queens: NgIohTuned, RotatedTwoPointsDE and GeneticDE on a real array whose argsort is the
   permutation, Nevergrad's documented way to optimize a permutation;
 - Rastrigin, Ackley and Rosenbrock: NgIohTuned, OnePlusOne and CMA, on a bounded Array.
-It prints nothing for the matched OneMax (Nevergrad has no GA with the matched operators) and for
-the multi-objective scenarios, which run only NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA
-(rule 6.1): Nevergrad has none of them.
+It prints nothing for the matched OneMax (Nevergrad has no GA with the matched operators).
 
 Every run ends only at the target, the budget or the time cap (rules 2.1 and 2.2 of
 docs/benchmarks/rules.md): Nevergrad's optimizers have no stop criterion, they give a candidate at
@@ -126,7 +124,6 @@ REAL_PROBLEMS = {
     "rosenbrock": (rosenbrock, (-5.0, 10.0)),
     "ackley": (ackley, (-32.768, 32.768)),
 }
-UNSUPPORTED = {"zdt1", "zdt2", "zdt3", "dtlz1", "dtlz2"}
 
 
 class Problem:
@@ -306,7 +303,7 @@ def main():
     seed_from, seed_to = int(sys.argv[4]), int(sys.argv[5])
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
 
-    if problem in UNSUPPORTED or (problem == "onemax" and mode != "idiomatic"):
+    if problem == "onemax" and mode != "idiomatic":
         return
     if problem in REAL_PROBLEMS or problem in ("onemax", "nqueens"):
         run_single(problem, size, mode, seed_from, seed_to, max_evaluations, max_seconds)

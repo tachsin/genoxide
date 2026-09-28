@@ -4,10 +4,9 @@
 //!   ga_bench_genoxide <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
 //!   ga_bench_genoxide values <problem> <size>
 //!
-//! The first prints one JSON line per solver per seed, with the best solution (or the final front
-//! and its solutions), see ../../README.md for the fields. The second reads one JSON solution per
-//! line from stdin and prints its value (or its list of objectives), with the fitness functions
-//! below.
+//! The first prints one JSON line per solver per seed, with the best solution, see ../../README.md
+//! for the fields. The second reads one JSON solution per line from stdin and prints its value,
+//! with the fitness functions below.
 //!
 //! How each problem is solved, where genoxide's docs recommend each method and where each setting
 //! comes from, what was left out and why, and the separate test runs:
@@ -40,8 +39,6 @@
 //! name no solver has runs none, which counts the startup. Without the variable, every solver
 //! runs.
 
-use genoxide::Objective::Minimize;
-use genoxide::multi::{Decomposition, Moead, Nsga3, SmsEmoa, Spea2, das_dennis};
 use genoxide::prelude::*;
 use std::cell::Cell;
 use std::f64::consts::{E, PI};
@@ -116,73 +113,6 @@ fn ackley(genome: &Reals) -> f64 {
     let squares = shifted().map(|x| x * x).sum::<f64>() / n;
     let cosines = shifted().map(|x| (2.0 * PI * x).cos()).sum::<f64>() / n;
     -20.0 * (-0.2 * squares.sqrt()).exp() - cosines.exp() + 20.0 + E
-}
-
-// The multi-objective problems, all objectives minimized, all variables in [0, 1]
-
-fn zdt_g(x: &[f64]) -> f64 {
-    1.0 + 9.0 * x[1..].iter().sum::<f64>() / (x.len() - 1) as f64
-}
-
-fn zdt1(x: &Reals) -> [f64; 2] {
-    let g = zdt_g(x);
-    [x[0], g * (1.0 - (x[0] / g).sqrt())]
-}
-
-fn zdt2(x: &Reals) -> [f64; 2] {
-    let g = zdt_g(x);
-    [x[0], g * (1.0 - (x[0] / g).powi(2))]
-}
-
-fn zdt3(x: &Reals) -> [f64; 2] {
-    let g = zdt_g(x);
-    [
-        x[0],
-        g * (1.0 - (x[0] / g).sqrt() - x[0] / g * (10.0 * PI * x[0]).sin()),
-    ]
-}
-
-// DTLZ1 and DTLZ2 with M objectives: objective m is the scale times head(v) of each of the first
-// M - 1 - m variables, times last(v) of the next one for m > 0
-fn dtlz<const M: usize>(
-    x: &[f64],
-    scale: f64,
-    head: impl Fn(f64) -> f64,
-    last: impl Fn(f64) -> f64,
-) -> [f64; M] {
-    let mut values = [0.0; M];
-    for (m, value) in values.iter_mut().enumerate() {
-        let mut f = scale;
-        for &v in &x[..M - 1 - m] {
-            f *= head(v);
-        }
-        if m > 0 {
-            f *= last(x[M - 1 - m]);
-        }
-        *value = f;
-    }
-    values
-}
-
-fn dtlz2<const M: usize>(x: &Reals) -> [f64; M] {
-    let g = x[M - 1..].iter().map(|v| (v - 0.5).powi(2)).sum::<f64>();
-    dtlz::<M>(
-        x,
-        1.0 + g,
-        |v| (v * PI / 2.0).cos(),
-        |v| (v * PI / 2.0).sin(),
-    )
-}
-
-fn dtlz1<const M: usize>(x: &Reals) -> [f64; M] {
-    let tail = &x[M - 1..];
-    let g = 100.0
-        * (tail.len() as f64
-            + tail
-                .iter()
-                .map(|v| (v - 0.5).powi(2) - (20.0 * PI * (v - 0.5)).cos())
-                .sum::<f64>());
-    dtlz::<M>(x, 0.5 * (1.0 + g), |v| v, |v| 1.0 - v)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -580,185 +510,6 @@ fn run_real(args: &Args, seed: u64) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Multi-objective runs
-// ---------------------------------------------------------------------------------------------
-
-// Builds one multi-objective algorithm with `build(seed)` and runs it with `fitness`, counting
-// every call, and prints the non-dominated individuals of its final population (rule 7.2) and
-// their solutions. A run has a budget and no target; run.py computes the hypervolume the same way
-// for every library. None of these algorithms has a convergence criterion (rule 2.2); an attempt
-// that evaluates nothing for `STALL_GENERATIONS` generations in a row starts again with the seed
-// `(seed + 1) * 1_000_000 + restart`, and the front is the last attempt's.
-fn solve_front<A, const M: usize>(
-    args: &Args,
-    seed: u64,
-    solver: &str,
-    build: impl Fn(u64) -> Result<A>,
-    fitness: fn(&Reals) -> [f64; M],
-) -> Result<()>
-where
-    A: genoxide::multi::MultiObjectiveAlgorithm<M, Genome = Reals>,
-{
-    if !selected(solver) {
-        return Ok(());
-    }
-    // every variable is in [0, 1]: SBX and polynomial mutation keep the genes inside their
-    // bounds (rule 2.4), and the adapter counts any evaluated genome outside them
-    let (calls, outside) = (AtomicU64::new(0), AtomicU64::new(0));
-    let counted = |genome: &Reals| {
-        calls.fetch_add(1, Ordering::Relaxed);
-        if !genome.iter().all(|x| (0.0..=1.0).contains(x)) {
-            outside.fetch_add(1, Ordering::Relaxed);
-        }
-        fitness(genome)
-    };
-    // the last generation's evaluations (rule 2.3): the count after each generation, and the
-    // generation's size
-    let (evaluated, last_generation) = (Cell::new(0u64), Cell::new(0u64));
-    let cap = Duration::from_secs_f64(args.max_seconds);
-    let (mut generations, mut reported, mut restart) = (0, 0, 0);
-    let start = Instant::now();
-    let outcome = loop {
-        let used = calls.load(Ordering::Relaxed);
-        let outcome = MultiEngine::new(build(attempt_seed(seed, restart))?, &counted)
-            .stop_when(
-                Stop::evaluations(args.max_evaluations - used)
-                    .or(Stop::time(cap.saturating_sub(start.elapsed())))
-                    .or(stalled()),
-            )
-            .on_generation(|_| {
-                let evaluations = calls.load(Ordering::Relaxed);
-                last_generation.set(evaluations - evaluated.replace(evaluations));
-            })
-            .run()?;
-        generations += outcome.generations();
-        reported += outcome.evaluations();
-        if outcome.stop_reason() != StopReason::Custom
-            || calls.load(Ordering::Relaxed) >= args.max_evaluations
-            || start.elapsed() >= cap
-        {
-            break outcome;
-        }
-        restart += 1;
-    };
-    let time_s = start.elapsed().as_secs_f64();
-    let evaluations = calls.load(Ordering::Relaxed);
-    compare_counts(args, solver, seed, evaluations, reported);
-    // the non-dominated individuals of the final population, each with its solution
-    let (front, solutions): (Vec<String>, Vec<String>) = outcome
-        .front()
-        .iter()
-        .filter_map(|individual| {
-            let values = individual.fitness()?.values()?;
-            Some((numbers(&values), individual.genome().json()))
-        })
-        .unzip();
-    let restarts = if restart > 0 {
-        format!(",\"restarts\":{restart}")
-    } else {
-        String::new()
-    };
-    println!(
-        "{{{},\"last_generation\":{}{restarts},\"outside\":{},\"front\":[{}],\"solutions\":[{}]}}",
-        args.header(solver, seed, time_s, generations, evaluations),
-        last_generation.get(),
-        outside.load(Ordering::Relaxed),
-        front.join(","),
-        solutions.join(","),
-    );
-    Ok(())
-}
-
-// The matched settings (benchmarks/README.md), with genoxide's own operators: NSGA-II, SPEA2 and
-// SMS-EMOA with 100 individuals (92 with 3 objectives), SBX with η 15 at 0.9 (their default rate)
-// and polynomial mutation with η 20 at 1 / n; NSGA-III with Das-Dennis directions (99 divisions
-// with 2 objectives, 12 with 3) and SBX with η 30 at 1 (its default rate); MOEA/D with 100 weight
-// vectors (91 with 3 objectives), 20 neighbors and parents from the neighborhood with probability
-// 0.9 (its defaults), Tchebycheff (PBI with θ 5 with 3 objectives), SBX with η 20 at 1 (its
-// default rate). No duplicate elimination (on by default in genoxide, so turned off here), and
-// SMS-EMOA is steady-state: one child per generation.
-fn run_front_problem<const M: usize>(
-    args: &Args,
-    seed: u64,
-    variables: usize,
-    fitness: fn(&Reals) -> [f64; M],
-) -> Result<()> {
-    let (population, divisions) = if M == 2 { (100, 99) } else { (92, 12) };
-    let real = || Real::uniform(variables, 0.0..=1.0);
-    let mutation = || PolynomialMutation::per_gene(1.0 / variables as f64, 20.0);
-    let objectives = [Minimize; M];
-
-    let nsga2 = |seed| {
-        Nsga2::builder(real()?, objectives)
-            .population_size(population)
-            .crossover(SimulatedBinaryCrossover::new(15.0)?)
-            .mutate(mutation()?)
-            .eliminate_duplicates(false)
-            .seed(seed)
-            .build()
-    };
-    solve_front(args, seed, "nsga2", nsga2, fitness)?;
-    let nsga3 = |seed| {
-        Nsga3::builder(real()?, objectives, das_dennis::<M>(divisions))
-            .population_size(population)
-            .crossover(SimulatedBinaryCrossover::new(30.0)?)
-            .mutate(mutation()?)
-            .eliminate_duplicates(false)
-            .seed(seed)
-            .build()
-    };
-    solve_front(args, seed, "nsga3", nsga3, fitness)?;
-    let spea2 = |seed| {
-        Spea2::builder(real()?, objectives)
-            .population_size(population)
-            .crossover(SimulatedBinaryCrossover::new(15.0)?)
-            .mutate(mutation()?)
-            .eliminate_duplicates(false)
-            .seed(seed)
-            .build()
-    };
-    solve_front(args, seed, "spea2", spea2, fitness)?;
-    let sms_emoa = |seed| {
-        SmsEmoa::builder(real()?, objectives)
-            .population_size(population)
-            .offspring(1)
-            .crossover(SimulatedBinaryCrossover::new(15.0)?)
-            .mutate(mutation()?)
-            .eliminate_duplicates(false)
-            .seed(seed)
-            .build()
-    };
-    solve_front(args, seed, "sms_emoa", sms_emoa, fitness)?;
-    let moead = |seed| {
-        let decomposition = if M == 2 {
-            Decomposition::Tchebycheff
-        } else {
-            Decomposition::Pbi { theta: 5.0 }
-        };
-        Moead::builder(real()?, objectives, das_dennis::<M>(divisions))
-            .decomposition(decomposition)
-            .crossover(SimulatedBinaryCrossover::new(20.0)?)
-            .mutate(mutation()?)
-            .seed(seed)
-            .build()
-    };
-    solve_front(args, seed, "moead", moead, fitness)
-}
-
-fn run_front(args: &Args, seed: u64) -> Result<()> {
-    // ZDT: `size` variables; DTLZ: `size` objectives, with k = 10 (DTLZ2) and 5 (DTLZ1) distance
-    // variables (problems.py)
-    match (args.problem.as_str(), args.size) {
-        ("zdt1", n) => run_front_problem(args, seed, n, zdt1),
-        ("zdt2", n) => run_front_problem(args, seed, n, zdt2),
-        ("zdt3", n) => run_front_problem(args, seed, n, zdt3),
-        ("dtlz2", 3) => run_front_problem(args, seed, 3 + 9, dtlz2::<3>),
-        ("dtlz1", 3) => run_front_problem(args, seed, 3 + 4, dtlz1::<3>),
-        (other, size) => unreachable!("unsupported problem {other} {size}"),
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
 // The values command (rule 1.2)
 // ---------------------------------------------------------------------------------------------
 
@@ -791,11 +542,6 @@ fn value(problem: &str, size: usize, x: Vec<f64>) -> Result<String> {
         ("rastrigin", _) => format!("{:?}", rastrigin(&Reals::from(x))),
         ("rosenbrock", _) => format!("{:?}", rosenbrock(&Reals::from(x))),
         ("ackley", _) => format!("{:?}", ackley(&Reals::from(x))),
-        ("zdt1", _) => numbers(&zdt1(&Reals::from(x))),
-        ("zdt2", _) => numbers(&zdt2(&Reals::from(x))),
-        ("zdt3", _) => numbers(&zdt3(&Reals::from(x))),
-        ("dtlz2", 3) => numbers(&dtlz2::<3>(&Reals::from(x))),
-        ("dtlz1", 3) => numbers(&dtlz1::<3>(&Reals::from(x))),
         (other, size) => panic!("unsupported problem {other} {size}"),
     })
 }
@@ -842,7 +588,6 @@ fn main() -> Result<()> {
             "onemax" => run_onemax(&args, seed)?,
             "nqueens" => run_nqueens(&args, seed)?,
             "rastrigin" | "rosenbrock" | "ackley" => run_real(&args, seed)?,
-            "zdt1" | "zdt2" | "zdt3" | "dtlz1" | "dtlz2" => run_front(&args, seed)?,
             other => {
                 eprintln!("unknown problem {other}");
                 std::process::exit(2);
@@ -855,8 +600,6 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use genoxide::multi::MultiFitnessFunction;
-    use genoxide::multi::problems::{Dtlz1, Dtlz2, Zdt1, Zdt2, Zdt3};
 
     #[test]
     fn shifted_functions() {
@@ -870,37 +613,5 @@ mod tests {
         assert_eq!(ACKLEY_SHIFT[4], 3.893227722772275);
         assert!((rastrigin(&Reals::from(x.clone())) - 145.90969988928046).abs() < 1e-9);
         assert!((ackley(&Reals::from(x.clone())) - 20.92235706225884).abs() < 1e-9);
-    }
-
-    // genoxide's own test problems (multi::problems) agree with the adapter's functions
-    #[test]
-    fn genoxide_test_problems_agree() {
-        let close = |a: &[f64], b: &[f64]| {
-            a.len() == b.len()
-                && a.iter()
-                    .zip(b)
-                    .all(|(a, b)| (a - b).abs() <= 1e-12 * a.abs().max(b.abs()).max(1.0))
-        };
-        for i in 0..50 {
-            let point = |n: usize| -> Reals {
-                (0..n)
-                    .map(|j| ((i * 7919 + j * 104_729) % 1000) as f64 / 999.0)
-                    .collect()
-            };
-            let x = point(30);
-            assert!(close(&zdt1(&x), Zdt1::new(30).evaluate(&x).as_ref()));
-            assert!(close(&zdt2(&x), Zdt2::new(30).evaluate(&x).as_ref()));
-            assert!(close(&zdt3(&x), Zdt3::new(30).evaluate(&x).as_ref()));
-            let x = point(12);
-            assert!(close(
-                &dtlz2::<3>(&x),
-                Dtlz2::<3>::default().evaluate(&x).as_ref()
-            ));
-            let x = point(7);
-            assert!(close(
-                &dtlz1::<3>(&x),
-                Dtlz1::<3>::default().evaluate(&x).as_ref()
-            ));
-        }
     }
 }

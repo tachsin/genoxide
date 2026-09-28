@@ -4,7 +4,7 @@
 //!   ga_bench_radiate <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
 //!   ga_bench_radiate values <problem> <size>
 //! The first prints one JSON line per solver per seed (see ../../README.md, "Adding a library"),
-//! the second reads one JSON solution per line and prints its value (or objectives) per line.
+//! the second reads one JSON solution per line and prints its value per line.
 //!
 //! What runs where, and where radiate recommends it: docs/benchmarks/libraries/radiate.md.
 //!
@@ -13,8 +13,7 @@
 //! `population_size * offspring_fraction` offspring (offspring selector, then crossover and
 //! mutation). Only the individuals whose genome changed are evaluated again. By default it
 //! replaces every individual older than `max_age` = 20 generations with a random one
-//! (radiate-engines-1.3.1/src/builder/mod.rs, `max_age: 20`; steps/filter.rs). Multi-objective
-//! problems use the same engine with the NSGA-II or NSGA-III selectors.
+//! (radiate-engines-1.3.1/src/builder/mod.rs, `max_age: 20`; steps/filter.rs).
 //!
 //! Every run ends only at the target, the budget or the time cap (rule 2.1): the adapter's
 //! `until` limit is the engine's only stop criterion, checked after every generation, and radiate
@@ -23,8 +22,7 @@
 //! Rule 2.2: radiate evaluates only the individuals an alterer changed, so an attempt can go on
 //! without evaluating anything; after 10 generations in a row without an evaluation, the `until`
 //! limit ends the attempt, and the engine starts again from a new random population, seeded
-//! `(seed + 1) * 1_000_000 + restart`, keeping the budget and the best (a multi-objective run
-//! reports the last attempt's front).
+//! `(seed + 1) * 1_000_000 + restart`, keeping the budget and the best.
 //! Bounds (rule 2.4): `FloatCodec::vector` draws the genes in the problem's range and sets it as
 //! their bounds, and radiate's float alterers write through `FloatGene::set_allele` or
 //! `safe_clamp`, which clamp to them. The fitness wrapper counts, without clipping, every
@@ -111,80 +109,7 @@ fn ackley(x: &[f64]) -> f64 {
     -20.0 * (-0.2 * squares.sqrt()).exp() - cosines.exp() + 20.0 + E
 }
 
-fn zdt_g(x: &[f64]) -> f64 {
-    1.0 + 9.0 * x[1..].iter().sum::<f64>() / (x.len() - 1) as f64
-}
-
-fn zdt1(x: &[f64], _: usize) -> Vec<f64> {
-    let g = zdt_g(x);
-    vec![x[0], g * (1.0 - (x[0] / g).sqrt())]
-}
-
-fn zdt2(x: &[f64], _: usize) -> Vec<f64> {
-    let g = zdt_g(x);
-    vec![x[0], g * (1.0 - (x[0] / g).powi(2))]
-}
-
-fn zdt3(x: &[f64], _: usize) -> Vec<f64> {
-    let g = zdt_g(x);
-    let r = x[0] / g;
-    vec![x[0], g * (1.0 - r.sqrt() - r * (10.0 * PI * x[0]).sin())]
-}
-
-/// `objectives` objectives of `objectives + 9` variables (k = 10)
-fn dtlz2(x: &[f64], objectives: usize) -> Vec<f64> {
-    let g = x[objectives - 1..].iter().map(|v| (v - 0.5).powi(2)).sum::<f64>();
-    (0..objectives)
-        .map(|m| {
-            let mut f = 1.0 + g;
-            for v in &x[..objectives - 1 - m] {
-                f *= (v * PI / 2.0).cos();
-            }
-            if m > 0 {
-                f *= (x[objectives - 1 - m] * PI / 2.0).sin();
-            }
-            f
-        })
-        .collect()
-}
-
-/// `objectives` objectives of `objectives + 4` variables (k = 5)
-fn dtlz1(x: &[f64], objectives: usize) -> Vec<f64> {
-    let tail = &x[objectives - 1..];
-    let g = 100.0
-        * (tail.len() as f64
-            + tail
-                .iter()
-                .map(|v| (v - 0.5).powi(2) - (20.0 * PI * (v - 0.5)).cos())
-                .sum::<f64>());
-    (0..objectives)
-        .map(|m| {
-            let mut f = 0.5 * (1.0 + g);
-            for v in &x[..objectives - 1 - m] {
-                f *= v;
-            }
-            if m > 0 {
-                f *= 1.0 - x[objectives - 1 - m];
-            }
-            f
-        })
-        .collect()
-}
-
-type Objectives = fn(&[f64], usize) -> Vec<f64>;
 type Function = fn(&[f64]) -> f64;
-
-/// The objectives, the number of variables and the number of objectives of a front problem
-fn front_problem(problem: &str, size: usize) -> Option<(Objectives, usize, usize)> {
-    Some(match problem {
-        "zdt1" => (zdt1 as Objectives, size, 2),
-        "zdt2" => (zdt2, size, 2),
-        "zdt3" => (zdt3, size, 2),
-        "dtlz2" => (dtlz2, size + 9, size),
-        "dtlz1" => (dtlz1, size + 4, size),
-        _ => return None,
-    })
-}
 
 fn real_problem(problem: &str) -> Option<(Function, std::ops::Range<f64>)> {
     Some(match problem {
@@ -193,10 +118,6 @@ fn real_problem(problem: &str) -> Option<(Function, std::ops::Range<f64>)> {
         "ackley" => (ackley, -32.768..32.768),
         _ => return None,
     })
-}
-
-fn alleles(genotype: &Genotype<FloatChromosome<f64>>) -> Vec<f64> {
-    genotype[0].as_slice().iter().map(|gene| *gene.allele()).collect()
 }
 
 /// `f` of the alleles of a genotype, in the fitness functions: radiate's genes aren't a slice of
@@ -295,10 +216,6 @@ impl Budget {
 
     fn outside(&self) -> usize {
         self.outside.load(Ordering::Relaxed)
-    }
-
-    fn count(&self) {
-        self.evaluations.fetch_add(1, Ordering::Relaxed);
     }
 
     fn evaluations(&self) -> usize {
@@ -725,183 +642,10 @@ fn run_real(args: &Args, seed: u64) {
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// Multi-objective
-// ---------------------------------------------------------------------------------------------
-
-/// The distinct non-dominated points (to minimize) among `points`: their indices
-fn non_dominated(points: &[Vec<f64>]) -> Vec<usize> {
-    let dominates = |a: &Vec<f64>, b: &Vec<f64>| {
-        a.iter().zip(b).all(|(x, y)| x <= y) && a.iter().zip(b).any(|(x, y)| x < y)
-    };
-    let mut front: Vec<usize> = Vec::new();
-    for (i, point) in points.iter().enumerate() {
-        if !points.iter().any(|other| dominates(other, point))
-            && !front.iter().any(|&j| &points[j] == point)
-        {
-            front.push(i);
-        }
-    }
-    front
-}
-
 /// A JSON array of numbers at full precision
 fn json_row(row: &[f64]) -> String {
     let values: Vec<String> = row.iter().map(|v| format!("{v:?}")).collect();
     format!("[{}]", values.join(","))
-}
-
-fn json_rows(rows: &[Vec<f64>]) -> String {
-    let rows: Vec<String> = rows.iter().map(|row| json_row(row)).collect();
-    format!("[{}]", rows.join(","))
-}
-
-/// The matched settings (README, "Scenarios"): NSGA-II with 100 individuals (92 with 3
-/// objectives), SBX with η 15 at 0.9 and polynomial mutation with η 20 at 1 / n; NSGA-III with
-/// Das-Dennis reference directions (99 divisions with 2 objectives: 100 directions, population
-/// 100; 12 with 3: 91 directions, population 92), SBX with η 30 at 1, the same mutation.
-///
-/// NSGA-II and NSGA-III select the next population from parents plus offspring. In radiate's
-/// engine that is `population_size(2 * mu)` with `offspring_fraction(0.5)`: every generation keeps
-/// mu survivors of the 2 mu individuals (parents and their offspring) by the NSGA-II / NSGA-III
-/// selector, and breeds mu offspring. The front reported is the non-dominated set of the mu the
-/// survivor selector keeps of the last 2 mu, i.e. NSGA-II's (NSGA-III's) population after the
-/// last generation (rule 7.2). radiate's own Pareto archive (`front_size`, by default 800 to 900
-/// of all the non-dominated individuals seen) is not reported: the other libraries report their
-/// population.
-///
-/// Differences from the textbook algorithms, all radiate's own:
-/// - the initial population has 2 mu random individuals, not mu: radiate keeps the population at
-///   the size of the initial one (its survivor and offspring counts are fractions of the initial
-///   population's length, radiate-engines-1.3.1/src/builder/config.rs, `survivor_count` and
-///   `offspring_count`), so a first population of mu (`population(..)`) would keep mu / 2 survivors
-///   and breed mu / 2 offspring in every generation. The extra mu evaluations come out of the
-///   budget.
-/// - the mating pool is drawn from all 2 mu individuals (parents and offspring of the previous
-///   generation), not from the mu survivors
-/// - NSGA-II: the crowding distance is computed over the whole population, not per front
-///   (radiate-core-1.3.1/src/objectives/pareto.rs, `crowding_distance`)
-/// - NSGA-III: the objectives are normalized by the population's ideal and nadir points, without
-///   the extreme-point hyperplane (radiate-selectors-1.3.1/src/nsga3.rs, `ObjectiveBounds`)
-/// - `max_age` is off: radiate by default replaces individuals older than 20 generations with
-///   random ones
-/// - scores are f32 (radiate's `Score`); the front is recomputed in f64
-///
-/// Bugs, not worked around (rule 8.4, pkalivas/radiate#28):
-/// - radiate's SimulatedBinaryCrossover changes one of the two parents (the other is re-evaluated
-///   unchanged), crosses each variable with probability 0.5, and centres the child on
-///   (p1 - p2) / 2 where SBX has (p1 + p2) / 2, clamped to the bounds
-///   (radiate-alters-1.3.1/src/crossovers/simulated_binary.rs, lines 50-68)
-/// - radiate's PolynomialMutator puts the mutated variable at lower + δ (upper - lower) where
-///   polynomial mutation has x + δ (upper - lower), so it lands next to a bound
-///   (radiate-alters-1.3.1/src/mutators/polynomial.rs, line 58)
-fn run_front(args: &Args, seed: u64) {
-    let (function, variables, objectives) = front_problem(&args.problem, args.size).unwrap();
-    // (population, NSGA-III divisions)
-    let (mu, divisions) = match objectives {
-        2 => (100, 99),
-        3 => (92, 12),
-        _ => {
-            eprintln!("radiate adapter: the multi-objective settings are for 2 and 3 objectives");
-            return;
-        }
-    };
-    let rate = 1.0 / variables as f32;
-
-    for solver in ["nsga2", "nsga3"] {
-        // rule 2.2: an attempt that evaluates nothing for STALL_GENERATIONS generations starts
-        // again with the next seed of `attempt_seed`; the front is the last attempt's (rule 7.2)
-        let start = Instant::now();
-        let counter: Arc<Budget> = Budget::new(args, start, true, f64::NEG_INFINITY);
-        let (mut generations, mut restart) = (0, 0);
-        let (time_s, points, solutions) = loop {
-            let attempt = random_provider::scoped_seed(attempt_seed(seed, restart), || {
-                let fitness = Arc::clone(&counter);
-                let builder = GeneticEngine::builder()
-                    .codec(FloatCodec::vector(variables, 0.0_f64..1.0))
-                    .raw_fitness_fn(move |genotype: &Genotype<FloatChromosome<f64>>| {
-                        fitness.count();
-                        with_alleles(genotype, |x| {
-                            fitness.check_bounds(x, 0.0, 1.0);
-                            function(x, objectives)
-                                .into_iter()
-                                .map(|v| v as f32)
-                                .collect::<Vec<f32>>()
-                        })
-                    })
-                    .multi_objective(vec![Optimize::Minimize; objectives])
-                    .population_size(2 * mu)
-                    .offspring_fraction(0.5)
-                    .max_age(usize::MAX);
-                let engine = match solver {
-                    // NSGA-II: binary tournament on rank and crowding distance for the mating
-                    // pool, rank and crowding distance for the survivors
-                    "nsga2" => builder
-                        .offspring_selector(TournamentNSGA2Selector::new())
-                        .survivor_selector(NSGA2Selector::new())
-                        .alter(alters!(
-                            SimulatedBinaryCrossover::new(0.9, 15.0),
-                            PolynomialMutator::new(rate, 20.0)
-                        ))
-                        .build(),
-                    // NSGA-III: random mating, reference-direction niching for the survivors
-                    _ => builder
-                        .offspring_selector(RandomSelector::new())
-                        .survivor_selector(NSGA3Selector::new(divisions))
-                        .alter(alters!(
-                            SimulatedBinaryCrossover::new(1.0, 30.0),
-                            PolynomialMutator::new(rate, 20.0)
-                        ))
-                        .build(),
-                };
-                let generation = run_engine(&counter, engine, true);
-                generations += generation.index();
-                if !counter.done() {
-                    return None;
-                }
-                // the survivors of the last generation, as NSGA-II (NSGA-III) selects them
-                let population: &[Phenotype<FloatChromosome<f64>>] =
-                    generation.population().as_ref();
-                let survivors = if solver == "nsga2" {
-                    NSGA2Selector::new().select(population, generation.objective(), mu)
-                } else {
-                    NSGA3Selector::new(divisions).select(population, generation.objective(), mu)
-                };
-                let time_s = start.elapsed().as_secs_f64();
-                // their objectives in f64 (radiate keeps f32 scores); not counted as evaluations
-                let solutions: Vec<Vec<f64>> = survivors
-                    .iter()
-                    .map(|&i| alleles(population[i].genotype()))
-                    .collect();
-                let points: Vec<Vec<f64>> =
-                    solutions.iter().map(|x| function(x, objectives)).collect();
-                Some((time_s, points, solutions))
-            });
-            if let Some(attempt) = attempt {
-                break attempt;
-            }
-            restart += 1;
-        };
-        let restarts = if restart > 0 {
-            format!(",\"restarts\":{restart}")
-        } else {
-            String::new()
-        };
-        let front = non_dominated(&points);
-        let front_points: Vec<Vec<f64>> = front.iter().map(|&i| points[i].clone()).collect();
-        let front_solutions: Vec<Vec<f64>> = front.iter().map(|&i| solutions[i].clone()).collect();
-        println!(
-            "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"last_generation\":{}{restarts},\"outside\":{},\"front\":{},\"solutions\":{}}}",
-            args.problem,
-            args.size,
-            args.mode,
-            counter.evaluations(),
-            counter.last_generation(),
-            counter.outside(),
-            json_rows(&front_points),
-            json_rows(&front_solutions),
-        );
-    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -923,18 +667,13 @@ fn parse_numbers(line: &str) -> Vec<f64> {
         .collect()
 }
 
-fn values(problem: &str, size: usize) {
+fn values(problem: &str, _size: usize) {
     for line in std::io::stdin().lock().lines() {
         let line = line.expect("stdin");
         if line.trim().is_empty() {
             continue;
         }
         let x = parse_numbers(&line);
-        if let Some((function, variables, objectives)) = front_problem(problem, size) {
-            assert_eq!(x.len(), variables, "{problem} {size} has {variables} variables");
-            println!("{}", json_row(&function(&x, objectives)));
-            continue;
-        }
         let value = match problem {
             "onemax" => onemax(x.iter().map(|&v| v != 0.0)),
             "nqueens" => nqueens(x.iter().map(|&v| v as usize)),
@@ -973,7 +712,6 @@ fn main() {
             "onemax" => run_onemax(&args, seed),
             "nqueens" => run_nqueens(&args, seed),
             "rastrigin" | "rosenbrock" | "ackley" => run_real(&args, seed),
-            "zdt1" | "zdt2" | "zdt3" | "dtlz1" | "dtlz2" => run_front(&args, seed),
             // unsupported: print nothing
             other => {
                 eprintln!("radiate adapter: unsupported problem {other}");
@@ -1001,18 +739,6 @@ mod tests {
         assert_eq!(onemax([true, false, true].into_iter()), 2.0);
         // all 8 queens on one diagonal: 7 conflicts
         assert_eq!(nqueens(0..8), 7.0);
-        let mut zdt = vec![0.0; 30];
-        zdt[0] = 0.25;
-        assert_eq!(zdt1(&zdt, 2), vec![0.25, 0.5]);
-        // on the optimal fronts: DTLZ2's objectives on the unit sphere, DTLZ1's summing to 0.5
-        let mut x2 = vec![0.5; 12];
-        x2[0] = 0.3;
-        x2[1] = 0.6;
-        assert!((dtlz2(&x2, 3).iter().map(|f| f * f).sum::<f64>() - 1.0).abs() < 1e-12);
-        let mut x1 = vec![0.5; 7];
-        x1[0] = 0.3;
-        x1[1] = 0.6;
-        assert!((dtlz1(&x1, 3).iter().sum::<f64>() - 0.5).abs() < 1e-12);
     }
 
     #[test]

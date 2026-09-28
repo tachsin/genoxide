@@ -9,13 +9,13 @@ Know a better way to solve one of these problems with openGA? [Open a benchmark 
 
 - **openGA's loop** ([bench.cpp#L20](../../../benchmarks/adapters/openga/bench.cpp#L20)): each generation keeps the whole population ([`transfer`, L582-599](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L582-L599)) and adds round(population × `crossover_fraction`) children ([L1669](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1669)). Each child has two distinct parents from a rank roulette with chance 1/√(rank + 1) ([L1132-1147](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1132-L1147), [L1586-1594](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1586-L1594)), and is mutated with probability `mutation_rate` ([L1613-1628](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1613-L1628)). Survival keeps the `elite_count` best of parents and children and fills the rest by rank roulette ([L1021-1061](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1021-L1061)).
 - **Evaluations:** counted in `eval_solution`, with the first hit ([bench.cpp#L147](../../../benchmarks/adapters/openga/bench.cpp#L147)). openGA evaluates each child once and never a parent again.
-- **Stop:** the adapter calls `solve_init` and `solve_next_generation`, the two halves of `solve()` ([L402-503](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L402-L503)), and stops after the generation that reaches the target, the budget or the time ([`run_ga`, bench.cpp#L397](../../../benchmarks/adapters/openga/bench.cpp#L397)). A run may pass its budget by one generation, or one initial population when an attempt starts (`last_generation`).
+- **Stop:** the adapter calls `solve_init` and `solve_next_generation`, the two halves of `solve()` ([L402-503](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L402-L503)), and stops after the generation that reaches the target, the budget or the time ([`run_ga`, bench.cpp#L327](../../../benchmarks/adapters/openga/bench.cpp#L327)). A run may pass its budget by one generation, or one initial population when an attempt starts (`last_generation`).
 - **Keeping going (rule 2.2)** ([`stop_critera`, L1705-1740](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1705-L1740)):
-  - `generation_max` is lifted (`INT_MAX`, [bench.cpp#L341](../../../benchmarks/adapters/openga/bench.cpp#L341)). The mutation's `shrink_scale` ([L531-539](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L531-L539)) depends only on the generation number (1 up to generation 5, then 1/√(generation − 4), squared with probability 0.4 and reset to 1 with probability 0.06), so this doesn't change it.
+  - `generation_max` is lifted (`INT_MAX`, [bench.cpp#L271](../../../benchmarks/adapters/openga/bench.cpp#L271)). The mutation's `shrink_scale` ([L531-539](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L531-L539)) depends only on the generation number (1 up to generation 5, then 1/√(generation − 4), squared with probability 0.4 and reset to 1 with probability 0.06), so this doesn't change it.
   - The best and average stalls (`best_stall_max` generations with a best-cost change below `tol_stall_best`, or `average_stall_max` with an average-cost change below `tol_stall_average`) end an attempt. openGA has no restart mechanism, so the adapter starts a new GA from a new random population with the seeds of rule 2.2 ([bench.cpp#L136](../../../benchmarks/adapters/openga/bench.cpp#L136)). Runs report `restarts`.
   - `user_request_stop` is never set.
-- **Best solution:** the best of each attempt's last generation (`best_chromosome_index`), which the elite keeps; `best` is recomputed after the clock ([bench.cpp#L471](../../../benchmarks/adapters/openga/bench.cpp#L471)). `values` uses the same fitness functions ([bench.cpp#L747](../../../benchmarks/adapters/openga/bench.cpp#L747)).
-- **Bounds (rule 2.4):** initial genes inside the bounds; the examples' mutation redraws the whole child while a gene is out of range; their crossover stays between the parents. Counted as `outside` ([bench.cpp#L655](../../../benchmarks/adapters/openga/bench.cpp#L655)).
+- **Best solution:** the best of each attempt's last generation (`best_chromosome_index`), which the elite keeps; `best` is recomputed after the clock ([bench.cpp#L401](../../../benchmarks/adapters/openga/bench.cpp#L401)). `values` uses the same fitness functions ([bench.cpp#L677](../../../benchmarks/adapters/openga/bench.cpp#L677)).
+- **Bounds (rule 2.4):** initial genes inside the bounds; the examples' mutation redraws the whole child while a gene is out of range; their crossover stays between the parents. Counted as `outside` ([bench.cpp#L585](../../../benchmarks/adapters/openga/bench.cpp#L585)).
 - **Shift** (rule 1.4): computed once ([bench.cpp#L203](../../../benchmarks/adapters/openga/bench.cpp#L203)).
 - **One thread:** `multi_threading = false` ([L1557-1561](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1557-L1561), [L1678-1682](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1678-L1682)).
 - **Seeds:** openGA seeds its private `std::mt19937_64` from the clock ([L371-374](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L371-L374)) and has no setter. The adapter seeds it through the standard explicit-instantiation access to a private member ([bench.cpp#L114](../../../benchmarks/adapters/openga/bench.cpp#L114)).
@@ -26,10 +26,10 @@ Know a better way to solve one of these problems with openGA? [Open a benchmark 
 ## Binary: OneMax 100 and 1000
 
 **Methods:**
-- **Matched: not run** ([bench.cpp#L499](../../../benchmarks/adapters/openga/bench.cpp#L499)). openGA has none of the matched GA's components: no tournament selection, no two-point crossover or bit flip (no operators), and no generational replacement without elitism.
-- **Idiomatic** ([bench.cpp#L525-L548](../../../benchmarks/adapters/openga/bench.cpp#L525-L548)): no binary example, so openGA assist's default settings: population 200 ("medium", [main.js#L435-436](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L435-L436), the default in [index.html#L24](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/index.html#L24)), `crossover_fraction` 0.7, `mutation_rate` 0.2 ([#L460-461](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L460-L461)), `elite_count` 10 ([#L465](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L465)). The generated crossover mixes the parents per gene ([#L282-295](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L282-L295)): uniform crossover for 0/1 genes. The generated mutation adds a real-valued step ([#L259-279](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L259-L279)); the manual says to adapt the operators to the genes' type (p. 6), so the adapter uses a bit flip at 1/n.
+- **Matched: not run** ([bench.cpp#L429](../../../benchmarks/adapters/openga/bench.cpp#L429)). openGA has none of the matched GA's components: no tournament selection, no two-point crossover or bit flip (no operators), and no generational replacement without elitism.
+- **Idiomatic** ([bench.cpp#L455-L478](../../../benchmarks/adapters/openga/bench.cpp#L455-L478)): no binary example, so openGA assist's default settings: population 200 ("medium", [main.js#L435-436](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L435-L436), the default in [index.html#L24](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/index.html#L24)), `crossover_fraction` 0.7, `mutation_rate` 0.2 ([#L460-461](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L460-L461)), `elite_count` 10 ([#L465](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L465)). The generated crossover mixes the parents per gene ([#L282-295](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L282-L295)): uniform crossover for 0/1 genes. The generated mutation adds a real-valued step ([#L259-279](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L259-L279)); the manual says to adapt the operators to the genes' type (p. 6), so the adapter uses a bit flip at 1/n.
 
-**Keeping going:** the assist program's `best_stall_max` 10 ([#L464](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L464)) and openGA's other stall defaults ([L346-349](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L346-L349), manual p. 4): `tol_stall_best` 1e-6, `average_stall_max` 10, `tol_stall_average` 1e-4 ([bench.cpp#L365](../../../benchmarks/adapters/openga/bench.cpp#L365)). Its `generation_max` 1000 ([#L447](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L447)) is lifted.
+**Keeping going:** the assist program's `best_stall_max` 10 ([#L464](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L464)) and openGA's other stall defaults ([L346-349](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L346-L349), manual p. 4): `tol_stall_best` 1e-6, `average_stall_max` 10, `tol_stall_average` 1e-4 ([bench.cpp#L295](../../../benchmarks/adapters/openga/bench.cpp#L295)). Its `generation_max` 1000 ([#L447](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L447)) is lifted.
 
 **Left out:** the 2-variable real-valued example's settings ([so-1](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/examples/so-1/example_so1.cpp#L138-L149): population 20, `mutation_rate` 0.4): not for binary genes.
 
@@ -43,7 +43,7 @@ In 3 of the 5 runs, a later attempt reaches the target.
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods:** no permutation example, so the assist settings, as for OneMax ([bench.cpp#L554](../../../benchmarks/adapters/openga/bench.cpp#L554)). openGA has no permutation operators, so the adapter uses the usual ones: a random permutation, order crossover (OX1, one child) and a swap of two genes.
+**Methods:** no permutation example, so the assist settings, as for OneMax ([bench.cpp#L484](../../../benchmarks/adapters/openga/bench.cpp#L484)). openGA has no permutation operators, so the adapter uses the usual ones: a random permutation, order crossover (OX1, one child) and a swap of two genes.
 
 **Keeping going:** the assist program's stall criteria, as for OneMax.
 
@@ -58,7 +58,7 @@ In 3 of the 5 runs, a later attempt reaches the target.
 
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
-**Methods** ([bench.cpp#L699](../../../benchmarks/adapters/openga/bench.cpp#L699)), with the operators of openGA's examples ([bench.cpp#L636](../../../benchmarks/adapters/openga/bench.cpp#L636)): genes uniform in the bounds; crossover r·a + (1 − r)·b with a new r per gene; mutation of every gene by mu·(rnd01() − rnd01()), redrawing the child while a gene is out of bounds ([bench.cpp#L667](../../../benchmarks/adapters/openga/bench.cpp#L667)).
+**Methods** ([bench.cpp#L629](../../../benchmarks/adapters/openga/bench.cpp#L629)), with the operators of openGA's examples ([bench.cpp#L566](../../../benchmarks/adapters/openga/bench.cpp#L566)): genes uniform in the bounds; crossover r·a + (1 − r)·b with a new r per gene; mutation of every gene by mu·(rnd01() − rnd01()), redrawing the child while a gene is out of bounds ([bench.cpp#L597](../../../benchmarks/adapters/openga/bench.cpp#L597)).
 - **`ga`:** [examples/so-rastrigin](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/examples/so-rastrigin/so-rastrigin.cpp), openGA's only example with an n-dimensional real vector, as written: population 10,000, `elite_count` 10, `crossover_fraction` 0.7, `mutation_rate` 0.1 ([#L145-159](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/examples/so-rastrigin/so-rastrigin.cpp#L145-L159)), mu = 1.7 · rnd01() · shrink_scale ([#L66](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/examples/so-rastrigin/so-rastrigin.cpp#L66)). Ackley uses it too.
 - **`ga_assist`:** the assist program for real variables: the OneMax settings and mu = 0.2 · shrink_scale ([main.js#L265](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/assist/main.js#L265), "adjustable", used as generated).
 
@@ -86,11 +86,11 @@ The capped `ga` runs of Rastrigin 30 stopped after 1.1 to 1.3 million of the 2 m
 
 ## Continuous, unimodal: Rosenbrock 10
 
-**Methods:** `ga_assist`, as above ([bench.cpp#L715](../../../benchmarks/adapters/openga/bench.cpp#L715)): openGA has no example for a unimodal function, so its default, the assist program.
+**Methods:** `ga_assist`, as above ([bench.cpp#L645](../../../benchmarks/adapters/openga/bench.cpp#L645)): openGA has no example for a unimodal function, so its default, the assist program.
 
 **Keeping going:** as above.
 
-**Left out:** `ga`, the so-rastrigin example: an example for a multimodal function ([bench.cpp#L706](../../../benchmarks/adapters/openga/bench.cpp#L706)). The rest as above.
+**Left out:** `ga`, the so-rastrigin example: an example for a multimodal function ([bench.cpp#L636](../../../benchmarks/adapters/openga/bench.cpp#L636)). The rest as above.
 
 **Separate tests:**
 
@@ -98,21 +98,15 @@ The capped `ga` runs of Rastrigin 30 stopped after 1.1 to 1.3 million of the 2 m
 |---|---|---|---|---|---|---|---|
 | rosenbrock-10-idiomatic | ga_assist | 5 | 0 | - | 1.308, 0.02888, 3.093 | 1 | 0 |
 
-## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1
-
-**Not run** ([bench.cpp#L811](../../../benchmarks/adapters/openga/bench.cpp#L811)). The matched NSGA-III needs the library's own SBX and polynomial mutation, and openGA ships no operators. openGA has no NSGA-II, SPEA2, MOEA/D or SMS-EMOA (`GA_MODE`, [L42-47](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L42-L47)).
-
 ## Can't run
 
 - Matched OneMax 100 and 1000: no tournament selection, two-point crossover, bit flip or generational replacement.
-- The multi-objective scenarios: no SBX and no polynomial mutation.
 
 ## Bugs found
 
 **The single-objective survival can't keep a child** ([Arash-codedev/openGA#30](https://github.com/Arash-codedev/openGA/issues/30), open; not worked around).
 - `generate_selection_chance` builds cumulative rank chances over parents and children but divides by the value at index population − 1 ([L1145](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1145)). Every child's value is then above 1, and `select_parent` ([L1586-1594](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1586-L1594)), with r in [0, 1), never returns a child. So a child survives only among the `elite_count` best ([`select_population_SO`, L1021-1061](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1021-L1061)).
 - In the same loop ([L1057](https://github.com/Arash-codedev/openGA/blob/f9b15e70600e20491504391dec6de5c64eb18913/src/openGA.hpp#L1057)), after drawing index j it blocks `sorted_indices[j]` instead of j, so j can be drawn again and the population fills with copies.
-- NSGA-III has its own survival and isn't affected.
 
 Effect: the population collapses to copies of a few individuals. N-Queens 32, seed 0, without the stall criteria: 117 distinct permutations of 200 after one generation, 14 after 20, and 1 from generation 100 on; with them, attempts end after about 30 generations (110 to 140 restarts per run). Rastrigin 10, seed 0 (earlier shift in [−1, 1]): 285 distinct individuals of 10,000 after 10 generations, about 210 after; at generation 70 the average is 1.006 and the best 0.997, one coordinate a basin away from the optimum. So the continuous results are near whole numbers.
 

@@ -13,9 +13,9 @@
 // generator, openGA assist (assist/main.js), which the README recommends for starting a program.
 // Header lines below are of src/openGA.hpp at the pinned commit.
 //
-// The matched scenarios (OneMax matched, the multi-objective ones) aren't run: a matched scenario
-// uses only the library's own operators, and openGA has none (no two-point crossover, bit flip,
-// SBX or polynomial mutation). The adapter prints nothing for them; `values` still evaluates them.
+// The matched OneMax scenarios aren't run: a matched scenario uses only the library's own
+// operators, and openGA has none (no two-point crossover or bit flip). The adapter prints nothing
+// for them; `values` still evaluates them.
 //
 // openGA's loop (EA::Genetic, SOGA mode), which the adapter can't change:
 // - every generation keeps the whole population (transfer, L582-599) and adds
@@ -236,58 +236,7 @@ double ackley(const std::vector<double> &x) {
     return -20.0 * std::exp(-0.2 * std::sqrt(squares / n)) - std::exp(cosines / n) + 20.0 + E;
 }
 
-double zdt_g(const std::vector<double> &x) {
-    double sum = 0.0;
-    for (size_t i = 1; i < x.size(); i++) sum += x[i];
-    return 1.0 + 9.0 * sum / double(x.size() - 1);
-}
-
-std::vector<double> zdt1(const std::vector<double> &x, int) {
-    const double g = zdt_g(x);
-    return {x[0], g * (1.0 - std::sqrt(x[0] / g))};
-}
-
-std::vector<double> zdt2(const std::vector<double> &x, int) {
-    const double g = zdt_g(x);
-    return {x[0], g * (1.0 - (x[0] / g) * (x[0] / g))};
-}
-
-std::vector<double> zdt3(const std::vector<double> &x, int) {
-    const double g = zdt_g(x);
-    return {x[0], g * (1.0 - std::sqrt(x[0] / g) - x[0] / g * std::sin(10.0 * PI * x[0]))};
-}
-
-std::vector<double> dtlz2(const std::vector<double> &x, int objectives) {
-    double g = 0.0;
-    for (size_t i = objectives - 1; i < x.size(); i++) g += (x[i] - 0.5) * (x[i] - 0.5);
-    std::vector<double> f(objectives);
-    for (int m = 0; m < objectives; m++) {
-        double v = 1.0 + g;
-        for (int i = 0; i < objectives - 1 - m; i++) v *= std::cos(x[i] * PI / 2.0);
-        if (m > 0) v *= std::sin(x[objectives - 1 - m] * PI / 2.0);
-        f[m] = v;
-    }
-    return f;
-}
-
-std::vector<double> dtlz1(const std::vector<double> &x, int objectives) {
-    const double k = double(x.size() - (objectives - 1));
-    double sum = 0.0;
-    for (size_t i = objectives - 1; i < x.size(); i++)
-        sum += (x[i] - 0.5) * (x[i] - 0.5) - std::cos(20.0 * PI * (x[i] - 0.5));
-    const double g = 100.0 * (k + sum);
-    std::vector<double> f(objectives);
-    for (int m = 0; m < objectives; m++) {
-        double v = 0.5 * (1.0 + g);
-        for (int i = 0; i < objectives - 1 - m; i++) v *= x[i];
-        if (m > 0) v *= 1.0 - x[objectives - 1 - m];
-        f[m] = v;
-    }
-    return f;
-}
-
 using RealFunction = double (*)(const std::vector<double> &);
-using ObjectiveFunction = std::vector<double> (*)(const std::vector<double> &, int);
 
 struct RealProblem {
     RealFunction function;
@@ -304,25 +253,6 @@ bool real_problem(const std::string &problem, RealProblem &out) {
         out = {ackley, -32.768, 32.768};
     else
         return false;
-    return true;
-}
-
-// the multi-objective problems, for the `values` command only: variables and objectives for the
-// scenario's size (problems.py FRONT_VARIABLES, FRONT_OBJECTIVES)
-bool front_problem(const std::string &problem, int size, ObjectiveFunction &function, int &variables,
-                   int &objectives) {
-    if (problem == "zdt1" || problem == "zdt2" || problem == "zdt3") {
-        function = problem == "zdt1" ? zdt1 : problem == "zdt2" ? zdt2 : zdt3;
-        variables = size;
-        objectives = 2;
-    } else if (problem == "dtlz2" || problem == "dtlz1") {
-        // size: the number of objectives, with k = 10 (DTLZ2) or 5 (DTLZ1)
-        function = problem == "dtlz2" ? dtlz2 : dtlz1;
-        objectives = size;
-        variables = problem == "dtlz2" ? objectives + 9 : objectives + 4;
-    } else {
-        return false;
-    }
     return true;
 }
 
@@ -717,8 +647,8 @@ void solve_real_all(const Args &args, long long seed, const RealProblem &problem
 }
 
 // -------------------------------------------------------------------------------------------------
-// values <problem> <size>: one JSON array per line on stdin, its value (or objectives) per line,
-// with the fitness functions of the runs
+// values <problem> <size>: one JSON array per line on stdin, its value per line, with the
+// fitness functions of the runs
 // -------------------------------------------------------------------------------------------------
 
 std::vector<double> parse_array(const std::string &line) {
@@ -744,13 +674,10 @@ std::vector<double> parse_array(const std::string &line) {
     return values;
 }
 
-int values_command(const std::string &problem, int size) {
+int values_command(const std::string &problem) {
     RealProblem real_one;
-    ObjectiveFunction function;
-    int variables, objectives;
     const bool is_real = real_problem(problem, real_one);
-    const bool is_front = front_problem(problem, size, function, variables, objectives);
-    if (!is_real && !is_front && problem != "onemax" && problem != "nqueens") {
+    if (!is_real && problem != "onemax" && problem != "nqueens") {
         std::fprintf(stderr, "unknown problem: %s\n", problem.c_str());
         return 2;
     }
@@ -766,8 +693,6 @@ int values_command(const std::string &problem, int size) {
             std::printf("%s\n", number(nqueens(order)).c_str());
         } else if (is_real) {
             std::printf("%s\n", real(real_one.function(x)).c_str());
-        } else {
-            std::printf("%s\n", json_array(function(x, objectives), false).c_str());
         }
     }
     std::fflush(stdout);
@@ -784,7 +709,7 @@ int main(int argc, char **argv) {
     // the shifts are computed before any run
     rastrigin_shift = shifts(5.12);
     ackley_shift = shifts(32.768);
-    if (argc == 4 && std::strcmp(argv[1], "values") == 0) return values_command(argv[2], std::atoi(argv[3]));
+    if (argc == 4 && std::strcmp(argv[1], "values") == 0) return values_command(argv[2]);
     if (argc != 8) {
         std::fprintf(stderr,
                      "usage: ga_bench_openga <problem> <size> <mode> <seed_from> <seed_to> "
@@ -808,7 +733,7 @@ int main(int argc, char **argv) {
         else if (real_problem(p, real_one))
             solve_real_all(args, seed, real_one);
         else
-            return 0;  // the multi-objective scenarios (matched) and anything else: print nothing
+            return 0;  // anything else: print nothing
     }
     return 0;
 }

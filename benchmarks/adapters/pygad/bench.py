@@ -5,7 +5,7 @@ Usage:
     python bench.py values <problem> <size>    (one JSON solution per line on stdin)
 
 The first prints one JSON line per solver per seed, see ../../README.md for the fields; the second
-prints the value (or objectives) of each solution with the fitness functions below.
+prints the value of each solution with the fitness functions below.
 
 The methods, their settings, where PyGAD's docs and examples show them, what was left out and the
 separate test runs are in docs/benchmarks/libraries/pygad.md. Every setting below cites the PyGAD
@@ -53,12 +53,9 @@ class Budget:
         # the evaluations when the last generation started: PyGAD calls on_fitness at the start of
         # every generation
         self.generation_start = 0
-        # the box of a continuous or multi-objective problem, and the evaluated solutions outside it
-        # (rule 2.4)
+        # the box of a continuous problem, and the evaluated solutions outside it (rule 2.4)
         if problem in REAL_PROBLEMS:
             self.bounds = REAL_PROBLEMS[problem][1:]
-        elif problem in FRONT_PROBLEMS:
-            self.bounds = (0.0, 1.0)
         else:
             self.bounds = None
         self.outside = 0
@@ -171,65 +168,6 @@ REAL_PROBLEMS = {
     "rastrigin": (rastrigin, -5.12, 5.12),
     "rosenbrock": (rosenbrock, -5.0, 10.0),
     "ackley": (ackley, -32.768, 32.768),
-}
-
-
-# multi-objective problems, minimized, all variables in [0, 1]
-def zdt_g(X):
-    return 1 + 9 * numpy.sum(X[:, 1:], axis=1) / (X.shape[1] - 1)
-
-
-def zdt1(X):
-    g = zdt_g(X)
-    return numpy.column_stack([X[:, 0], g * (1 - numpy.sqrt(X[:, 0] / g))])
-
-
-def zdt2(X):
-    g = zdt_g(X)
-    return numpy.column_stack([X[:, 0], g * (1 - (X[:, 0] / g) ** 2)])
-
-
-def zdt3(X):
-    g = zdt_g(X)
-    h = 1 - numpy.sqrt(X[:, 0] / g) - X[:, 0] / g * numpy.sin(10 * numpy.pi * X[:, 0])
-    return numpy.column_stack([X[:, 0], g * h])
-
-
-def dtlz2(X, objectives):
-    g = numpy.sum((X[:, objectives - 1:] - 0.5) ** 2, axis=1)
-    columns = []
-    for m in range(objectives):
-        f = 1 + g
-        for i in range(objectives - 1 - m):
-            f = f * numpy.cos(X[:, i] * numpy.pi / 2)
-        if m > 0:
-            f = f * numpy.sin(X[:, objectives - 1 - m] * numpy.pi / 2)
-        columns.append(f)
-    return numpy.column_stack(columns)
-
-
-def dtlz1(X, objectives):
-    tail = X[:, objectives - 1:]
-    g = 100 * (tail.shape[1] + numpy.sum((tail - 0.5) ** 2 - numpy.cos(20 * numpy.pi * (tail - 0.5)), axis=1))
-    columns = []
-    for m in range(objectives):
-        f = 0.5 * (1 + g)
-        for i in range(objectives - 1 - m):
-            f = f * X[:, i]
-        if m > 0:
-            f = f * (1 - X[:, objectives - 1 - m])
-        columns.append(f)
-    return numpy.column_stack(columns)
-
-
-# (fitness function of the size, number of variables, number of objectives); the size of DTLZ is
-# its number of objectives, with k = 10 (DTLZ2) and 5 (DTLZ1) distance variables
-FRONT_PROBLEMS = {
-    "zdt1": (lambda size: zdt1, lambda size: size, lambda size: 2),
-    "zdt2": (lambda size: zdt2, lambda size: size, lambda size: 2),
-    "zdt3": (lambda size: zdt3, lambda size: size, lambda size: 2),
-    "dtlz2": (lambda size: lambda X: dtlz2(X, size), lambda size: size + 9, lambda size: size),
-    "dtlz1": (lambda size: lambda X: dtlz1(X, size), lambda size: size + 4, lambda size: size),
 }
 
 
@@ -354,130 +292,6 @@ def run_single(problem, size, mode, seed, budget):
 
 
 # -------------------------------------------------------------------------------------------------
-# Multi-objective: NSGA-II and NSGA-III with the matched settings
-#
-# PyGAD 3.7.0 runs NSGA-II or NSGA-III when the fitness function returns several values and
-# parent_selection_type is one of theirs (docs multi_objective.md; utils/parent_selection.py,
-# nsga.py, nsga2.py, nsga3.py). But NSGA-II and NSGA-III are parent selections there: a generation
-# (utils/engine.py, run) selects the parents from the population, crosses and mutates them, and the
-# next population is either the keep_elitism best of the current one, by PyGAD's NSGA-II sort (front,
-# then crowding distance), followed by the offspring, or, with keep_parents -1, the parents followed
-# by the offspring. Each algorithm's survival is built from these settings, with N the matched
-# population, 100 (92 with 3 objectives), and a PyGAD population of 2N:
-#
-# - NSGA-II: keep_elitism N, and N offspring. The N elites of each generation are the best N of the
-#   previous elites and their offspring by the NSGA-II sort, which is NSGA-II's survival. The parents
-#   come from PyGAD's own binary tournament ("tournament_nsga2", K_tournament 2: the lower front
-#   wins, then the larger crowding distance, then a random one). Because PyGAD selects the parents
-#   before the elites, it draws them from all 2N, the N survivors and the N offspring that won't all
-#   survive, not from the N survivors only, and its two contestants are drawn with replacement.
-# - NSGA-III: parent_selection_type "nsga3" with Das-Dennis reference points of 99 divisions with 2
-#   objectives, 12 with 3 (nsga3_num_divisions), num_parents_mating N, keep_elitism 0 and
-#   keep_parents -1. The parents are the N survivors of the 2N by NSGA-III's niching, and the next
-#   population is those survivors and their N offspring: NSGA-III's survival.
-#
-# The operators are PyGAD's own (rule 6.1 and the matched settings), bugs included:
-# - Crossover: "sbx" (utils/crossover.py, sbx_crossover) with sbx_crossover_eta 15 and
-#   crossover_probability 0.9 (NSGA-II), 30 and every child crossed (NSGA-III, crossover_probability
-#   unset). PyGAD's sbx makes one child per pair, always the one below the parents' midpoint
-#   (ahmedfgad/GeneticAlgorithmPython#369), crosses every gene, and its crossover_probability makes
-#   each parent eligible with that probability, and crosses two parents drawn from the eligible ones.
-# - Mutation: "polynomial" (utils/mutation.py, polynomial_mutation), Deb's bounded polynomial
-#   mutation: η 20, each gene with probability 1 / n (mutation_probability), within init_range_low
-#   and init_range_high.
-#
-# Other differences from the textbook algorithms and from the other libraries' runs:
-# - The initial population has 2N random individuals, so the first generation costs N more
-#   evaluations.
-# - PyGAD's crowding distance normalizes each objective by its range over the whole population, not
-#   over the front.
-# - An offspring identical to an elite or a parent of the previous generation takes its fitness
-#   without an evaluation (utils/engine.py, cal_pop_fitness). The evaluations printed are the true
-#   number of rows evaluated.
-# - PyGAD maximizes, so the fitness function returns the negated objectives. The front is printed
-#   minimized.
-# - Its non-dominated sorting compares every pair of individuals in Python (utils/nsga.py), and it
-#   sorts the population two or three times per generation. The time cap can stop a run before the
-#   budget.
-# The front printed is the non-dominated part of the final N survivors: the elites (NSGA-II) or the
-# parents (NSGA-III) that PyGAD selects from the last population after the last generation.
-# -------------------------------------------------------------------------------------------------
-
-
-def non_dominated(points):
-    """The indices of the points (minimized) that no other point dominates."""
-    return [
-        i for i, p in enumerate(points)
-        if not any(all(a <= b for a, b in zip(q, p)) and any(a < b for a, b in zip(q, p)) for q in points)
-    ]
-
-
-def run_front(problem, size, solver, seed, budget):
-    """Runs NSGA-II or NSGA-III; returns PyGAD's GA of the last attempt and the generations of
-    all attempts. An attempt that evaluates nothing for STALL_GENERATIONS generations in a row
-    starts again, as in run_single (rule 2.2); the front is the last attempt's."""
-    function = FRONT_PROBLEMS[problem][0](size)
-    n = FRONT_PROBLEMS[problem][1](size)
-    objectives = FRONT_PROBLEMS[problem][2](size)
-    population_size = 100 if objectives == 2 else 92
-
-    def fitness_func(ga, solutions, indices):
-        X = numpy.asarray(solutions, dtype=float)
-        budget.count(X)
-        return -function(X)
-
-    # the evaluations at the end of the last generation, and the generations in a row without one
-    stall = {"end": 0, "idle": 0}
-
-    def on_generation(ga):
-        stall["idle"] = stall["idle"] + 1 if budget.evaluations == stall["end"] else 0
-        stall["end"] = budget.evaluations
-        if budget.exhausted() or stall["idle"] >= STALL_GENERATIONS:
-            return "stop"
-
-    common = dict(
-        num_generations=GENERATIONS, fitness_func=fitness_func, on_generation=on_generation,
-        on_fitness=budget.on_fitness, fitness_batch_size=2 * population_size,
-        num_genes=n, gene_type=float, init_range_low=0.0, init_range_high=1.0,
-        # N survivors and N offspring per generation
-        sol_per_pop=2 * population_size, num_parents_mating=population_size,
-        crossover_type="sbx",
-        mutation_type="polynomial", polynomial_mutation_eta=20.0, mutation_probability=1.0 / n,
-        suppress_warnings=True,
-    )
-    generations = 0
-    for restart in range(sys.maxsize):
-        stall.update(end=budget.evaluations, idle=0)
-        if solver == "nsga2":
-            ga = pygad.GA(**common, random_seed=attempt_seed(seed, restart), keep_elitism=population_size,
-                          parent_selection_type="tournament_nsga2", K_tournament=2,
-                          sbx_crossover_eta=15.0, crossover_probability=0.9)
-        else:
-            ga = pygad.GA(**common, random_seed=attempt_seed(seed, restart), keep_elitism=0, keep_parents=-1,
-                          parent_selection_type="nsga3", nsga3_num_divisions=99 if objectives == 2 else 12,
-                          sbx_crossover_eta=30.0)
-        ga.run()
-        generations += ga.generations_completed
-        if budget.exhausted():
-            return ga, generations
-        budget.restarts += 1
-
-
-def front_of(ga, solver):
-    """The non-dominated part of the final survivors: the N elites, or the N parents, PyGAD selects
-    from the last population (rule 7.2)."""
-    if solver == "nsga2":
-        survivors = numpy.asarray(ga.last_generation_elitism_indices, dtype=int)
-    else:
-        survivors = numpy.asarray(ga.last_generation_parents_indices, dtype=int)
-    fitness = numpy.asarray(ga.last_generation_fitness, dtype=float)[survivors]
-    points = [[-float(v) for v in row] for row in fitness]
-    solutions = [[float(v) for v in ga.population[i]] for i in survivors]
-    front = non_dominated(points)
-    return [points[i] for i in front], [solutions[i] for i in front]
-
-
-# -------------------------------------------------------------------------------------------------
 
 # rule 5.3: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took CAPPED of
 # it) without reaching the target runs no more seeds; only in a scenario with a target
@@ -486,18 +300,12 @@ CAPPED = 0.98
 
 
 def values(problem, size):
-    """Prints the value, or the objectives, of each solution read from stdin."""
-    if problem in FRONT_PROBLEMS:
-        function = FRONT_PROBLEMS[problem][0](size)
-    else:
-        function = {"onemax": onemax, "nqueens": nqueens}.get(problem) or REAL_PROBLEMS[problem][0]
+    """Prints the value of each solution read from stdin."""
+    function = {"onemax": onemax, "nqueens": nqueens}.get(problem) or REAL_PROBLEMS[problem][0]
     for line in sys.stdin:
         if line.strip():
             result = function(numpy.asarray([json.loads(line)]))[0]
-            if problem in FRONT_PROBLEMS:
-                print(json.dumps([float(v) for v in result]), flush=True)
-            else:
-                print(json.dumps(result.item()), flush=True)
+            print(json.dumps(result.item()), flush=True)
 
 
 def main():
@@ -510,9 +318,7 @@ def main():
     problem, size, mode = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     seed_from, seed_to = int(sys.argv[4]), int(sys.argv[5])
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
-    if problem in FRONT_PROBLEMS:
-        solvers = ["nsga2", "nsga3"]
-    elif problem in ("onemax", "nqueens") or problem in REAL_PROBLEMS:
+    if problem in ("onemax", "nqueens") or problem in REAL_PROBLEMS:
         solvers = ["ga"]
     else:
         print(f"unknown problem {problem}", file=sys.stderr)
@@ -528,10 +334,7 @@ def main():
             # the clock starts before PyGAD's constructor, which creates the initial population
             start = time.perf_counter()
             budget = Budget(problem, size, max_evaluations, max_seconds, start)
-            if problem in FRONT_PROBLEMS:
-                ga, generations = run_front(problem, size, solver, seed, budget)
-            else:
-                generations = run_single(problem, size, mode, seed, budget)
+            generations = run_single(problem, size, mode, seed, budget)
             elapsed = time.perf_counter() - start
 
             result = {
@@ -542,24 +345,18 @@ def main():
             }
             if budget.restarts:
                 result.update(restarts=budget.restarts)
-            if problem in FRONT_PROBLEMS:
-                # after the clock (rule 4.1)
-                front, solutions = front_of(ga, solver)
-                result.update(outside=budget.outside, front=front, solutions=solutions)
-                success = False
-            else:
-                real = problem in REAL_PROBLEMS
-                success = budget.reached()
-                if real:
-                    result.update(outside=budget.outside)
-                result.update(
-                    best=float(budget.best) if real else int(budget.best), target=budget.target,
-                    success=success,
-                    solution=[float(v) if real else int(v) for v in budget.solution],
-                    first_hit=budget.first_hit and {"evaluations": budget.first_hit[0],
-                                                    "time_s": round(budget.first_hit[1], 6)},
-                )
-            capped[solver] += (problem not in FRONT_PROBLEMS and index < EARLY_SEEDS and not success
+            real = problem in REAL_PROBLEMS
+            success = budget.reached()
+            if real:
+                result.update(outside=budget.outside)
+            result.update(
+                best=float(budget.best) if real else int(budget.best), target=budget.target,
+                success=success,
+                solution=[float(v) if real else int(v) for v in budget.solution],
+                first_hit=budget.first_hit and {"evaluations": budget.first_hit[0],
+                                                "time_s": round(budget.first_hit[1], 6)},
+            )
+            capped[solver] += (index < EARLY_SEEDS and not success
                                and elapsed >= CAPPED * max_seconds)
             print(json.dumps(result), flush=True)
 

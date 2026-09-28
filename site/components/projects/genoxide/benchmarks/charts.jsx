@@ -44,11 +44,3 @@ export function ToTargetChart({ views, libraries }) {
 export function VersionsChart({ views, libraries }) {
   return <ChartShell views={views} libraries={libraries} grid={PANELS} name="genoxide's versions" Panel={VersionPanel} />;
 }
-
-/**
- * The multi-objective scenarios: the final front's hypervolume, or the time
- * of the budget, per scenario; the runs the time cap stopped apart, hatched.
- */
-export function FrontChart({ views, libraries }) {
-  return <ChartShell views={views} libraries={libraries} grid={LONG_PANELS} limit={12} name="Multi-objective" />;
-}

@@ -1,8 +1,8 @@
 # Benchmarks
 
-16 evolutionary computation libraries in 5 languages, genoxide included, and genoxide's Python package, on the same problems: OneMax, N-Queens, Rastrigin, Rosenbrock, Ackley, ZDT1 to 3, DTLZ1 and 2. Every library gets the same fitness functions, evaluation budgets and time caps. Matched scenarios run the same algorithm in every library; idiomatic scenarios run what each library's own docs recommend. Every setting and every bug found is documented per library, and a better way to run one is [welcome](rules.md#9-open-documentation).
+16 evolutionary computation libraries in 5 languages, genoxide included, and genoxide's Python package, on the same single-objective problems: OneMax, N-Queens, Rastrigin, Rosenbrock and Ackley. Multi-objective benchmarks are left out for now: they come back once genoxide solves these problems well. Every library gets the same fitness functions, evaluation budgets and time caps. Matched scenarios run the same algorithm in every library; idiomatic scenarios run what each library's own docs recommend. Every setting and every bug found is documented per library, and a better way to run one is [welcome](rules.md#9-open-documentation).
 
-[![Overall score: each library's speed to a solution over the 14 scenarios](overall.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
+[![Overall score: each library's speed to a solution over the 9 scenarios](overall.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
 
 Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, evenly per order of magnitude of time in between; the overall score is the mean over the scenarios a library runs ([rule 8.5](rules.md#8-reporting)).
 

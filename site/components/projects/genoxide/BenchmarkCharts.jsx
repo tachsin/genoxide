@@ -1,12 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { HighlightProvider } from "@/components/projects/genoxide/benchmarks/Highlight";
-import {
-  FrontChart,
-  OverallChart,
-  SummaryChart,
-  ToTargetChart,
-  VersionsChart,
-} from "@/components/projects/genoxide/benchmarks/charts";
+import { OverallChart, SummaryChart, ToTargetChart, VersionsChart } from "@/components/projects/genoxide/benchmarks/charts";
 import RunDetails from "@/components/projects/genoxide/benchmarks/RunDetails";
 import { BENCHMARK_RUN_ENDPOINT } from "@/lib/projects/genoxide/benchmarks";
 import { BLOB_BASE, RAW_BASE } from "@/lib/projects/genoxide/github";
@@ -16,7 +10,6 @@ const KINDS = {
   overall: OverallChart,
   summary: SummaryChart,
   "to-target": ToTargetChart,
-  front: FrontChart,
   versions: VersionsChart,
 };
 

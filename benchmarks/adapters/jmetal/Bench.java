@@ -10,9 +10,8 @@
  *
  * - The problems are jMetal problems (Abstract*Problem) whose evaluate() calls the fitness
  *   functions below and counts the evaluations (rule 3), not jMetal's own problem classes. A
- *   single-objective run ends inside evaluate(), at the target, the budget or the time cap (rule
- *   2.1), by an exception the adapter catches; a multi-objective run ends through a Termination (or
- *   SPEA2's stopping condition) checked after each generation.
+ *   run ends inside evaluate(), at the target, the budget or the time cap (rule 2.1), by an
+ *   exception the adapter catches.
  * - One thread (rule 4.3): jMetal evaluates sequentially (SequentialEvaluation and
  *   SequentialSolutionListEvaluator, its defaults); run.sh runs the JVM with the serial garbage
  *   collector and with -Xbatch, so the JIT compiles on the calling thread's time.
@@ -29,15 +28,10 @@
  *   first reaches the target, in evaluate(), and prints it as "first_hit".
  */
 
-import org.uma.jmetal.algorithm.multiobjective.spea2.SPEA2;
 import org.uma.jmetal.algorithm.singleobjective.differentialevolution.DifferentialEvolution;
 import org.uma.jmetal.algorithm.singleobjective.evolutionstrategy.CovarianceMatrixAdaptationEvolutionStrategy;
 import org.uma.jmetal.algorithm.singleobjective.evolutionstrategy.EvolutionStrategyBuilder;
 import org.uma.jmetal.component.algorithm.EvolutionaryAlgorithm;
-import org.uma.jmetal.component.algorithm.multiobjective.MOEADBuilder;
-import org.uma.jmetal.component.algorithm.multiobjective.NSGAIIBuilder;
-import org.uma.jmetal.component.algorithm.multiobjective.NSGAIIIBuilder;
-import org.uma.jmetal.component.algorithm.multiobjective.SMSEMOABuilder;
 import org.uma.jmetal.component.algorithm.singleobjective.GeneticAlgorithmBuilder;
 import org.uma.jmetal.component.catalogue.common.termination.Termination;
 import org.uma.jmetal.operator.crossover.impl.DifferentialEvolutionCrossover;
@@ -47,7 +41,6 @@ import org.uma.jmetal.operator.crossover.impl.SinglePointCrossover;
 import org.uma.jmetal.operator.mutation.impl.BitFlipMutation;
 import org.uma.jmetal.operator.mutation.impl.PermutationSwapMutation;
 import org.uma.jmetal.operator.mutation.impl.PolynomialMutation;
-import org.uma.jmetal.operator.selection.impl.BinaryTournamentSelection;
 import org.uma.jmetal.operator.selection.impl.DifferentialEvolutionSelection;
 import org.uma.jmetal.problem.binaryproblem.impl.AbstractBinaryProblem;
 import org.uma.jmetal.problem.doubleproblem.impl.AbstractDoubleProblem;
@@ -57,21 +50,14 @@ import org.uma.jmetal.solution.binarysolution.BinarySolution;
 import org.uma.jmetal.solution.doublesolution.DoubleSolution;
 import org.uma.jmetal.solution.permutationsolution.PermutationSolution;
 import org.uma.jmetal.solution.permutationsolution.impl.IntegerPermutationSolution;
-import org.uma.jmetal.util.aggregationfunction.impl.PenaltyBoundaryIntersection;
-import org.uma.jmetal.util.aggregationfunction.impl.Tschebyscheff;
 import org.uma.jmetal.util.evaluator.impl.SequentialSolutionListEvaluator;
 import org.uma.jmetal.util.pseudorandom.JMetalRandom;
-import org.uma.jmetal.util.referencepoint.ReferencePointGenerator;
-import org.uma.jmetal.util.sequencegenerator.impl.RandomPermutationCycle;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
@@ -160,60 +146,6 @@ public final class Bench {
         return -20.0 * Math.exp(-0.2 * Math.sqrt(squares / n)) - Math.exp(cosines / n) + 20.0 + Math.E;
     }
 
-    static double zdtG(double[] x) {
-        double sum = 0.0;
-        for (int i = 1; i < x.length; i++) sum += x[i];
-        return 1.0 + 9.0 * sum / (x.length - 1);
-    }
-
-    static double[] zdt1(double[] x) {
-        double g = zdtG(x);
-        return new double[] {x[0], g * (1.0 - Math.sqrt(x[0] / g))};
-    }
-
-    static double[] zdt2(double[] x) {
-        double g = zdtG(x);
-        double r = x[0] / g;
-        return new double[] {x[0], g * (1.0 - r * r)};
-    }
-
-    static double[] zdt3(double[] x) {
-        double g = zdtG(x);
-        double r = x[0] / g;
-        return new double[] {x[0], g * (1.0 - Math.sqrt(r) - r * Math.sin(10.0 * Math.PI * x[0]))};
-    }
-
-    /** DTLZ1 with 3 objectives (7 variables, k = 5). */
-    static double[] dtlz1(double[] x) {
-        double sum = 0.0;
-        for (int i = 2; i < x.length; i++) {
-            double d = x[i] - 0.5;
-            sum += d * d - Math.cos(20.0 * Math.PI * d);
-        }
-        double g = 100.0 * ((x.length - 2) + sum);
-        return new double[] {
-            0.5 * x[0] * x[1] * (1.0 + g),
-            0.5 * x[0] * (1.0 - x[1]) * (1.0 + g),
-            0.5 * (1.0 - x[0]) * (1.0 + g),
-        };
-    }
-
-    /** DTLZ2 with 3 objectives (12 variables, k = 10). */
-    static double[] dtlz2(double[] x) {
-        double g = 0.0;
-        for (int i = 2; i < x.length; i++) {
-            double d = x[i] - 0.5;
-            g += d * d;
-        }
-        double a = x[0] * Math.PI / 2.0;
-        double b = x[1] * Math.PI / 2.0;
-        return new double[] {
-            (1.0 + g) * Math.cos(a) * Math.cos(b),
-            (1.0 + g) * Math.cos(a) * Math.sin(b),
-            (1.0 + g) * Math.sin(a),
-        };
-    }
-
     /** A single-objective real-valued problem: its function and bounds. */
     record RealFunction(ToDoubleFunction<double[]> function, double lower, double upper) {}
 
@@ -228,22 +160,6 @@ public final class Bench {
                 double[] s = shift(size, 32.768);
                 yield new RealFunction(x -> ackley(x, s), -32.768, 32.768);
             }
-            default -> null;
-        };
-    }
-
-    // (function, variables, objectives, population size, Das-Dennis divisions)
-    record FrontFunction(Function<double[], double[]> function, int variables, int objectives, int population,
-                         int divisions) {}
-
-    static FrontFunction frontFunction(String name, int size) {
-        return switch (name) {
-            case "zdt1" -> new FrontFunction(Bench::zdt1, size, 2, 100, 99);
-            case "zdt2" -> new FrontFunction(Bench::zdt2, size, 2, 100, 99);
-            case "zdt3" -> new FrontFunction(Bench::zdt3, size, 2, 100, 99);
-            // size: the number of objectives (3); the variable counts are fixed
-            case "dtlz1" -> size == 3 ? new FrontFunction(Bench::dtlz1, 7, 3, 92, 12) : null;
-            case "dtlz2" -> size == 3 ? new FrontFunction(Bench::dtlz2, 12, 3, 92, 12) : null;
             default -> null;
         };
     }
@@ -353,11 +269,6 @@ public final class Bench {
 
         boolean done() {
             return reached() || evaluations >= maxEvaluations || timeUp || System.nanoTime() >= deadline;
-        }
-
-        /** Multi-objective: checked between generations. */
-        boolean exhausted() {
-            return evaluations >= maxEvaluations || System.nanoTime() >= deadline;
         }
 
         /** Counts a solution the library evaluates outside [lower, upper] (rule 2.4). */
@@ -485,30 +396,6 @@ public final class Bench {
             solution.objectives()[0] = value;
             if (budget.better(value)) budget.solution = x;
             budget.record(value);
-            return solution;
-        }
-    }
-
-    static final class FrontProblem extends AbstractDoubleProblem {
-        final Function<double[], double[]> function;
-        final Budget budget;
-
-        FrontProblem(String name, FrontFunction front, Budget budget) {
-            this.function = front.function();
-            this.budget = budget;
-            numberOfObjectives(front.objectives());
-            numberOfConstraints(0);
-            name(name);
-            variableBounds(Collections.nCopies(front.variables(), 0.0), Collections.nCopies(front.variables(), 1.0));
-        }
-
-        @Override
-        public DoubleSolution evaluate(DoubleSolution solution) {
-            budget.evaluations++;
-            double[] x = values(solution);
-            budget.bounds(x, 0.0, 1.0);
-            double[] f = function.apply(x);
-            System.arraycopy(f, 0, solution.objectives(), 0, f.length);
             return solution;
         }
     }
@@ -760,191 +647,6 @@ public final class Bench {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Multi-objective runs
-    // ---------------------------------------------------------------------------------------------
-
-    /** The indexes of the non-dominated points (minimized), without duplicates. */
-    static List<Integer> nonDominated(List<double[]> points) {
-        List<Integer> front = new ArrayList<>();
-        for (int i = 0; i < points.size(); i++) {
-            double[] p = points.get(i);
-            boolean keep = true;
-            for (int j = 0; j < points.size() && keep; j++) {
-                double[] q = points.get(j);
-                if (j == i) continue;
-                boolean notWorse = true;
-                boolean better = false;
-                for (int k = 0; k < p.length; k++) {
-                    if (q[k] > p[k]) notWorse = false;
-                    if (q[k] < p[k]) better = true;
-                }
-                if (notWorse && (better || j < i)) keep = false; // dominated, or a duplicate seen before
-            }
-            if (keep) front.add(i);
-        }
-        return front;
-    }
-
-    /** SPEA2 (classic implementation) stopping at the budget, with its iterations. */
-    static final class BudgetSPEA2 extends SPEA2<DoubleSolution> {
-        final Budget budget;
-
-        BudgetSPEA2(FrontProblem problem, int population, SBXCrossover crossover, PolynomialMutation mutation,
-                    Budget budget) {
-            super(problem, Integer.MAX_VALUE, population, crossover, mutation, new BinaryTournamentSelection<>(),
-                new SequentialSolutionListEvaluator<>(), 1);
-            this.budget = budget;
-        }
-
-        @Override
-        protected boolean isStoppingConditionReached() {
-            budget.endGeneration();
-            return budget.exhausted();
-        }
-
-        long generations() {
-            return iterations - 1;
-        }
-    }
-
-    /** Das-Dennis weights for MOEA/D, as the weight file jMetal reads for 3 objectives. */
-    static Path weightDirectory(int objectives, int divisions) throws IOException {
-        Path directory = Files.createTempDirectory("jmetal-weights");
-        directory.toFile().deleteOnExit();
-        List<double[]> weights = ReferencePointGenerator.generateSingleLayer(objectives, divisions);
-        Path file = directory.resolve("W" + objectives + "D_" + weights.size() + ".dat");
-        try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(file))) {
-            for (double[] w : weights) {
-                StringBuilder line = new StringBuilder();
-                for (int k = 0; k < w.length; k++) {
-                    if (k > 0) line.append(' ');
-                    line.append(w[k]);
-                }
-                out.println(line);
-            }
-        }
-        file.toFile().deleteOnExit();
-        return directory;
-    }
-
-    // the matched multi-objective algorithms (rule 6.1); jMetal's others, such as SMPSO, aren't run.
-    // Bounds (rule 2.4): SBXCrossover and PolynomialMutation repair a value outside the bounds to
-    // the bound (RepairDoubleSolutionWithBoundValue, their default).
-    static final String[] FRONT_SOLVERS = {"nsga2", "nsga3", "spea2", "moead", "sms_emoa"};
-
-    static void runFront(Args args, boolean print) throws IOException {
-        FrontFunction front = frontFunction(args.problem(), args.size());
-        if (front == null) return;
-        int n = front.variables();
-        int m = front.objectives();
-        int population = front.population();
-        String weights = weightDirectory(m, front.divisions()).toString();
-
-        for (long seed = args.seedFrom(); seed <= args.seedTo(); seed++) {
-            for (String solver : FRONT_SOLVERS) {
-                JMetalRandom.getInstance().setSeed(seed);
-                Budget budget = new Budget(args.maxEvaluations(), args.maxSeconds(), true, Double.NEGATIVE_INFINITY);
-                FrontProblem problem = new FrontProblem(args.problem(), front, budget);
-                long[] generations = {0};
-                // checked after the initial population and after every generation
-                Termination termination = status -> {
-                    budget.endGeneration();
-                    if (budget.exhausted()) return true;
-                    generations[0]++;
-                    return false;
-                };
-                PolynomialMutation mutation = new PolynomialMutation(1.0 / n, 20.0);
-                // the clock started with the budget, above, and stops when the algorithm ends
-                long end;
-                List<DoubleSolution> result;
-                switch (solver) {
-                    case "nsga2" -> {
-                        // N parents, N children, SBX η 15 at 0.9, PM η 20 at 1 / n
-                        var algorithm = new NSGAIIBuilder<>(problem, population, population,
-                                new SBXCrossover(0.9, 15.0), mutation)
-                            .setTermination(termination)
-                            .build();
-                        algorithm.run();
-                        end = System.nanoTime();
-                        result = algorithm.result();
-                    }
-                    case "nsga3" -> {
-                        // Das-Dennis directions (99 divisions: 100 for 2 objectives; 12: 91 for 3),
-                        // the population rounded up to a multiple of 4 by jMetal (100, 92),
-                        // SBX η 30 at 1, PM η 20 at 1 / n
-                        var algorithm = new NSGAIIIBuilder<>(problem, front.divisions(),
-                                new SBXCrossover(1.0, 30.0), mutation)
-                            .setTermination(termination)
-                            .build();
-                        algorithm.run();
-                        end = System.nanoTime();
-                        result = algorithm.result();
-                    }
-                    case "spea2" -> {
-                        // the classic implementation (no component version): population and archive
-                        // N, binary tournament, SBX η 15 at 0.9, PM η 20 at 1 / n, k = 1; its result
-                        // is the non-dominated part of its archive of N
-                        var algorithm = new BudgetSPEA2(problem, population, new SBXCrossover(0.9, 15.0), mutation,
-                            budget);
-                        algorithm.run();
-                        end = System.nanoTime();
-                        generations[0] = algorithm.generations();
-                        result = algorithm.result();
-                    }
-                    case "moead" -> {
-                        // 100 weights (91 Das-Dennis weights for 3 objectives), 20 neighbors,
-                        // parents from the neighborhood with probability 0.9, at most 2
-                        // replacements, Tchebycheff (PBI θ 5 for 3 objectives), SBX η 20 at 1,
-                        // PM η 20 at 1 / n; one child per step (jMetal's MOEA/D is steady-state)
-                        int weightCount = m == 2 ? 100 : ReferencePointGenerator.calculateNumberOfReferencePoints(m, front.divisions());
-                        var algorithm = new MOEADBuilder<>(problem, weightCount, new SBXCrossover(1.0, 20.0), mutation,
-                                weights, new RandomPermutationCycle(weightCount), false)
-                            .setAggregationFunction(m == 2 ? new Tschebyscheff(false)
-                                : new PenaltyBoundaryIntersection(5.0, false))
-                            .setTermination(termination)
-                            .build();
-                        algorithm.run();
-                        end = System.nanoTime();
-                        result = algorithm.result();
-                    }
-                    default -> {
-                        // SMS-EMOA: population N, one child per step, SBX η 15 at 0.9, PM η 20 at 1 / n
-                        var algorithm = new SMSEMOABuilder<>(problem, population, new SBXCrossover(0.9, 15.0), mutation)
-                            .setTermination(termination)
-                            .build();
-                        algorithm.run();
-                        end = System.nanoTime();
-                        result = algorithm.result();
-                    }
-                }
-                List<double[]> points = new ArrayList<>();
-                for (DoubleSolution solution : result) points.add(solution.objectives().clone());
-                List<Integer> set = nonDominated(points);
-                double time = (end - budget.start) / 1e9;
-                if (!print) continue;
-                StringBuilder frontJson = new StringBuilder("[");
-                StringBuilder solutionsJson = new StringBuilder("[");
-                for (int i = 0; i < set.size(); i++) {
-                    if (i > 0) {
-                        frontJson.append(',');
-                        solutionsJson.append(',');
-                    }
-                    frontJson.append(json(points.get(set.get(i))));
-                    solutionsJson.append(json(values(result.get(set.get(i)))));
-                }
-                System.out.println("{\"library\":\"" + LIBRARY + "\",\"solver\":\"" + solver
-                    + "\",\"problem\":\"" + args.problem() + "\",\"size\":" + args.size()
-                    + ",\"mode\":\"" + args.mode() + "\",\"seed\":" + seed
-                    + ",\"time_s\":" + String.format(Locale.ROOT, "%.6f", time)
-                    + ",\"generations\":" + generations[0] + ",\"evaluations\":" + budget.evaluations
-                    + ",\"last_generation\":" + budget.lastGeneration()
-                    + ",\"outside\":" + budget.outside
-                    + ",\"front\":" + frontJson.append(']') + ",\"solutions\":" + solutionsJson.append(']') + "}");
-            }
-        }
-    }
-
-    // ---------------------------------------------------------------------------------------------
     // `values`: the adapter's fitness functions at given solutions (rule 1.2)
     // ---------------------------------------------------------------------------------------------
 
@@ -963,16 +665,13 @@ public final class Bench {
 
     static void values(String problem, int size) throws IOException {
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-        FrontFunction front = frontFunction(problem, size);
         RealFunction real = realFunction(problem, size);
         StringBuilder out = new StringBuilder();
         String line;
         while ((line = in.readLine()) != null) {
             if (line.isBlank()) continue;
             double[] x = parse(line);
-            if (front != null) {
-                out.append(json(front.function().apply(x)));
-            } else if (real != null) {
+            if (real != null) {
                 out.append(number(real.function().applyAsDouble(x)));
             } else if (problem.equals("onemax")) {
                 BitSet bits = new BitSet(x.length);
@@ -1009,14 +708,6 @@ public final class Bench {
         return text.append(']').toString();
     }
 
-    static void run(Args args, boolean print) throws IOException {
-        if (frontFunction(args.problem(), args.size()) != null) {
-            runFront(args, print);
-        } else {
-            runSingle(args, print);
-        }
-    }
-
     static String version() {
         String version = EvolutionaryAlgorithm.class.getPackage().getImplementationVersion();
         return version != null ? version : "7.5";
@@ -1041,8 +732,8 @@ public final class Bench {
         Args args = new Args(argv[0], Integer.parseInt(argv[1]), argv[2], Long.parseLong(argv[3]),
             Long.parseLong(argv[4]), Long.parseLong(argv[5]), Double.parseDouble(argv[6]));
         // JIT warm-up (rule 4.2): every solver once on the same problem, untimed and unprinted
-        run(new Args(args.problem(), args.size(), args.mode(), WARM_UP_SEED, WARM_UP_SEED,
+        runSingle(new Args(args.problem(), args.size(), args.mode(), WARM_UP_SEED, WARM_UP_SEED,
             WARM_UP_EVALUATIONS, args.maxSeconds()), false);
-        run(args, true);
+        runSingle(args, true);
     }
 }

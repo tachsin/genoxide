@@ -8,7 +8,7 @@ import { useHighlight } from "./Highlight";
 
 /**
  * What every benchmark chart has around its panels: a switch between its
- * views (time or evaluations, hypervolume or time), the legend of its
+ * views (time or evaluations), the legend of its
  * libraries, which highlights one across every chart of the page, the panels,
  * their numbers as tables, and a link to the harness's own chart.
  *
@@ -160,7 +160,6 @@ function KeyNote({ panels }) {
     bars.some((bar) => bar.value === null) ? "×: too few runs reached the target for a value" : null,
     bars.some((bar) => bar.note) ? "*: a note that doesn't fit beside the bar" : null,
     bars.some((bar) => bar.ended_on_cap) ? "cross-hatched, past a dotted line: the runs the time cap stopped" : null,
-    bars.some((bar) => bar.below_axis) ? "hatched stub: a value below the axis's start" : null,
     bars.some((bar) => typeof bar.version === "string" && bar.reached === 0) ? "hollow: the run didn't reach the target within its budget" : null,
   ].filter(Boolean);
   if (!parts.length) return null;

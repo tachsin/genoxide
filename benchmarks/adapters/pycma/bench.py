@@ -148,7 +148,7 @@ PROBLEMS = {
     "rosenbrock": (rosenbrock, (-5.0, 10.0)),
     "ackley": (ackley, (-32.768, 32.768)),
 }
-UNSUPPORTED = {"onemax", "nqueens", "zdt1", "zdt2", "zdt3", "dtlz1", "dtlz2"}
+UNSUPPORTED = {"onemax", "nqueens"}
 
 
 # -------------------------------------------------------------------------------------------------

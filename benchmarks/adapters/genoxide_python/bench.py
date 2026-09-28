@@ -6,10 +6,10 @@ Usage:
     python bench.py values <problem> <size>
     python bench.py --self-check
 
-The first prints one JSON line per solver per seed, with the best solution (or the final front and
-its solutions), see ../../README.md for the fields. The second reads one JSON solution per line
-from stdin and prints its value (or its list of objectives), with the fitness functions below. The
-third compares the fitness functions with problems.py at random points.
+The first prints one JSON line per solver per seed, with the best solution, see ../../README.md for
+the fields. The second reads one JSON solution per line from stdin and prints its value, with the
+fitness functions below. The third compares the fitness functions with problems.py at random
+points.
 
 The methods are those python/README.md recommends for the problem type ("Choosing an
 algorithm"), chosen as rule 6.2 says: the same as the Rust adapter's, except the evolution strategy,
@@ -18,10 +18,10 @@ standard value from the literature (rule 6.6). Where each comes from, and the se
 docs/benchmarks/libraries/genoxide_python.md. The fitness functions are written as python/README.md
 writes them:
 - a function per genome for OneMax and N-Queens, as its first example;
-- `batch=True` with vectorized numpy functions, a generation per call, for the real-valued and
-  multi-objective problems, as its Rastrigin example ("one call per generation"). A batch is the
-  same algorithm: the package asks for the same genomes either way ("The same seed repeats a run
-  exactly: one genome at a time, in batches or in parallel").
+- `batch=True` with vectorized numpy functions, a generation per call, for the real-valued
+  problems, as its Rastrigin example ("one call per generation"). A batch is the same algorithm:
+  the package asks for the same genomes either way ("The same seed repeats a run exactly: one
+  genome at a time, in batches or in parallel").
 
 The rules (docs/benchmarks/rules.md), as this adapter follows them:
 - each fitness function counts the genomes it evaluates itself (rule 3), and records the first
@@ -59,16 +59,16 @@ import genoxide as gx
 
 # -------------------------------------------------------------------------------------------------
 # Fitness functions, identical to problems.py. Each counts the genomes it evaluates in EVALUATIONS,
-# the real-valued ones count the genomes outside the bounds in OUTSIDE (rule 2.4), and the
-# single-objective ones record the first evaluation that reaches the target in HIT (rule 3.3).
+# the real-valued ones count the genomes outside the bounds in OUTSIDE (rule 2.4), and each records
+# the first evaluation that reaches the target in HIT (rule 3.3).
 # -------------------------------------------------------------------------------------------------
 
 EVALUATIONS = 0
 OUTSIDE = 0
 # the rows of the latest batch: with batch=True a call is a generation (rule 2.3)
 BATCH = 0
-# the target of the run (None outside a single-objective run), whether it's a maximum, the start
-# of the run's clock, and the first hit: {"evaluations": E, "time_s": T}
+# the target of the run (None outside a run), whether it's a maximum, the start of the run's clock,
+# and the first hit: {"evaluations": E, "time_s": T}
 HIT = {"target": None, "maximize": False, "start": 0.0, "first": None}
 
 
@@ -166,66 +166,6 @@ REAL_PROBLEMS = {
     "rastrigin": (rastrigin, -5.12, 5.12),
     "rosenbrock": (rosenbrock, -5.0, 10.0),
     "ackley": (ackley, -32.768, 32.768),
-}
-
-
-def zdt_g(x):
-    return 1 + 9 * x[:, 1:].sum(axis=1) / (x.shape[1] - 1)
-
-
-def zdt1(x):
-    count(x, 0.0, 1.0)
-    f1, g = x[:, 0], zdt_g(x)
-    return np.column_stack([f1, g * (1 - np.sqrt(f1 / g))])
-
-
-def zdt2(x):
-    count(x, 0.0, 1.0)
-    f1, g = x[:, 0], zdt_g(x)
-    return np.column_stack([f1, g * (1 - (f1 / g) ** 2)])
-
-
-def zdt3(x):
-    count(x, 0.0, 1.0)
-    f1, g = x[:, 0], zdt_g(x)
-    return np.column_stack([f1, g * (1 - np.sqrt(f1 / g) - f1 / g * np.sin(10 * np.pi * f1))])
-
-
-def dtlz(x, scale, objectives, head, last):
-    """DTLZ1 and DTLZ2: objective m is scale times head(v) of each of the first M - 1 - m
-    variables, times last(v) of the next one for m > 0."""
-    values = []
-    for m in range(objectives):
-        f = scale.copy()
-        for i in range(objectives - 1 - m):
-            f *= head(x[:, i])
-        if m > 0:
-            f *= last(x[:, objectives - 1 - m])
-        values.append(f)
-    return np.column_stack(values)
-
-
-def dtlz2(x, objectives=3):
-    count(x, 0.0, 1.0)
-    g = np.sum((x[:, objectives - 1:] - 0.5) ** 2, axis=1)
-    return dtlz(x, 1 + g, objectives, lambda v: np.cos(v * np.pi / 2), lambda v: np.sin(v * np.pi / 2))
-
-
-def dtlz1(x, objectives=3):
-    count(x, 0.0, 1.0)
-    tail = x[:, objectives - 1:]
-    g = 100 * (tail.shape[1] + np.sum((tail - 0.5) ** 2 - np.cos(20 * np.pi * (tail - 0.5)), axis=1))
-    return dtlz(x, 0.5 * (1 + g), objectives, lambda v: v, lambda v: 1 - v)
-
-
-# (fitness function, variables, objectives, population size, Das-Dennis divisions)
-FRONT_PROBLEMS = {
-    "zdt1": (zdt1, lambda size: size, 2, 100, 99),
-    "zdt2": (zdt2, lambda size: size, 2, 100, 99),
-    "zdt3": (zdt3, lambda size: size, 2, 100, 99),
-    # size: the number of objectives, with k = 10 (DTLZ2) and 5 (DTLZ1)
-    "dtlz2": (dtlz2, lambda size: size + 9, 3, 92, 12),
-    "dtlz1": (dtlz1, lambda size: size + 4, 3, 92, 12),
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -332,43 +272,6 @@ def real_solvers(problem, size):
     return [cmaes, de, ga]
 
 
-def front_solvers(problem, size):
-    """The matched settings (benchmarks/README.md), with the package's own operators: NSGA-II,
-    SPEA2 and SMS-EMOA with SBX with eta 15 at 0.9 (their default rate) and polynomial mutation
-    with eta 20 at 1 / n; NSGA-III with Das-Dennis directions (99 divisions with 2 objectives, 12
-    with 3) and SBX with eta 30 at 1; MOEA/D with SBX with eta 20 at 1, 20 neighbors and
-    neighborhood mating 0.9 (its defaults), Tchebycheff, or PBI with theta 5 with 3 objectives. No
-    duplicate elimination (on by default, so turned off), and SMS-EMOA is steady-state: one child
-    per generation. SBX and polynomial mutation keep the genes in [0, 1] (rule 2.4)."""
-    function, variables, objectives, population, divisions = FRONT_PROBLEMS[problem]
-    n = variables(size)
-    genome = gx.Real((0.0, 1.0), length=n)
-    minimize = ["minimize"] * objectives
-    mutation = gx.PolynomialMutation(20.0, rate=1.0 / n)
-    sbx = gx.SimulatedBinaryCrossover(15.0)
-    directions = gx.das_dennis(objectives, divisions)
-    solvers = [
-        ("nsga2", lambda seed: gx.Nsga2(
-            genome, objectives=minimize, population_size=population, crossover=sbx,
-            mutation=mutation, eliminate_duplicates=False, seed=seed)),
-        ("nsga3", lambda seed: gx.Nsga3(
-            genome, objectives=minimize, reference_directions=directions,
-            population_size=population, crossover=gx.SimulatedBinaryCrossover(30.0),
-            mutation=mutation, eliminate_duplicates=False, seed=seed)),
-        ("spea2", lambda seed: gx.Spea2(
-            genome, objectives=minimize, population_size=population, crossover=sbx,
-            mutation=mutation, eliminate_duplicates=False, seed=seed)),
-        ("sms_emoa", lambda seed: gx.SmsEmoa(
-            genome, objectives=minimize, population_size=population, crossover=sbx,
-            mutation=mutation, offspring=1, eliminate_duplicates=False, seed=seed)),
-        ("moead", lambda seed: gx.Moead(
-            genome, objectives=minimize, weights=directions,
-            decomposition=gx.Tchebycheff() if objectives == 2 else gx.Pbi(5.0),
-            crossover=gx.SimulatedBinaryCrossover(20.0), mutation=mutation, seed=seed)),
-    ]
-    return function, solvers
-
-
 # -------------------------------------------------------------------------------------------------
 # Runs
 # -------------------------------------------------------------------------------------------------
@@ -459,48 +362,6 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
     }), flush=True)
 
 
-def solve_front(common, solver, seed, make, function, max_evaluations, max_seconds):
-    """Runs one multi-objective solver and prints the non-dominated individuals of its final
-    population (rule 7.2) and their solutions. A run has a budget and no target. None of these
-    algorithms has a convergence criterion (rule 2.2); an attempt that evaluates nothing for
-    STALL_GENERATIONS generations in a row (a child identical to a parent isn't evaluated) ends by
-    its on_generation callback and starts again with the next seed of attempt_seed, and the front
-    is the last attempt's."""
-    global EVALUATIONS, OUTSIDE, BATCH
-    EVALUATIONS = OUTSIDE = BATCH = 0
-    generation = {"end": 0, "idle": 0}
-
-    def active(progress):
-        generation["idle"] = generation["idle"] + 1 if EVALUATIONS == generation["end"] else 0
-        generation["end"] = EVALUATIONS
-        return generation["idle"] < STALL_GENERATIONS
-
-    generations = reported = restart = 0
-    start = time.perf_counter()
-    while True:
-        generation["idle"] = 0
-        result = make(attempt_seed(seed, restart)).run(
-            function, batch=True, evaluations=max_evaluations - EVALUATIONS,
-            time=max(max_seconds - (time.perf_counter() - start), 0.0), on_generation=active)
-        generations += result.generations
-        reported += result.evaluations
-        if (generation["idle"] < STALL_GENERATIONS or EVALUATIONS >= max_evaluations
-                or time.perf_counter() - start >= max_seconds):
-            break
-        restart += 1
-    elapsed = time.perf_counter() - start
-    compare(common, solver, seed, EVALUATIONS, reported)
-    extra = {"restarts": restart} if restart else {}
-    print(json.dumps({
-        **common, "solver": solver, "seed": seed, "time_s": round(elapsed, 6),
-        "generations": generations, "evaluations": EVALUATIONS,
-        # a batch is a generation (rule 2.3)
-        "last_generation": BATCH, **extra, "outside": OUTSIDE,
-        "front": result.front_objectives.tolist(),
-        "solutions": result.front_genomes.tolist(),
-    }), flush=True)
-
-
 def main():
     global EVALUATIONS, OUTSIDE, BATCH
     if sys.argv[1:] == ["--self-check"]:
@@ -518,12 +379,6 @@ def main():
     common = {"library": "genoxide_python", "problem": problem, "size": size, "mode": mode}
 
     for seed in range(seed_from, seed_to + 1):
-        if problem in FRONT_PROBLEMS:
-            function, solvers = front_solvers(problem, size)
-            for solver, make in solvers:
-                solve_front(common, solver, seed, make, function, max_evaluations, max_seconds)
-            continue
-
         if problem == "onemax":
             solvers, target = onemax_solvers(size, mode), size
         elif problem == "nqueens":
@@ -538,18 +393,13 @@ def main():
 
 
 def value(problem, size, solution):
-    """The value of one solution (or its objectives), with the functions the runs call."""
+    """The value of one solution, with the functions the runs call."""
     if problem == "onemax":
         return onemax(np.array(solution, dtype=bool))
     if problem == "nqueens":
         return nqueens(np.array(solution, dtype=np.int64))
     x = np.array([solution], dtype=np.float64)
-    if problem in REAL_PROBLEMS:
-        return float(REAL_PROBLEMS[problem][0](x)[0])
-    function, variables, objectives, *_ = FRONT_PROBLEMS[problem]
-    if problem.startswith("dtlz"):
-        return function(x, size)[0].tolist()
-    return function(x)[0].tolist()
+    return float(REAL_PROBLEMS[problem][0](x)[0])
 
 
 def values(problem, size):
@@ -585,10 +435,6 @@ def self_check():
                 close(value(name, size, x.tolist()), problems.value(name, size, x.tolist()), name)
     for name in ("rastrigin", "ackley"):
         close(value(name, 30, problems.shift(name, 30)), 0.0, f"{name} at the optimum")
-    for name, (_, variables, *_rest) in FRONT_PROBLEMS.items():
-        size = 30 if name.startswith("zdt") else 3
-        for x in rng.random((20, variables(size))):
-            close(value(name, size, x.tolist()), problems.value(name, size, x.tolist()), name)
     # the outside count: a row with one gene past a bound counts once
     global EVALUATIONS, OUTSIDE
     OUTSIDE = 0

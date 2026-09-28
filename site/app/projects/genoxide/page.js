@@ -343,7 +343,7 @@ export default async function GenoxidePage() {
           </span>
           <h2 className="mt-5 font-semibold text-2xl tracking-tight">Benchmarks</h2>
           <p className="proj-lead mt-2">
-            Single- and multi-objective problems under public rules, with every setting and method documented.
+            Single-objective problems under public rules, with every setting and method documented.
           </p>
           <span className="mt-auto inline-flex items-center gap-1 pt-6 font-medium text-primary text-sm">
             How it's measured

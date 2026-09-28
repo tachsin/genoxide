@@ -72,7 +72,6 @@ lq-CMA-ES's model takes about 30 times as much time per evaluation as `cma_es`.
 ## Can't run
 
 - OneMax, N-Queens: CMA-ES optimizes real numbers; pycma's `integer_variables` option isn't presented for binary strings or permutations.
-- The multi-objective scenarios: pycma optimizes one objective.
 
 ## Bugs found
 

@@ -4,8 +4,8 @@ page shows beside a method's runs (run.py writes it into the run details, runs/<
 METHOD_CODE maps a library to its adapter's file (relative to adapters/) and, per solver (the
 "solver" its runs print), a list of (scenarios, blocks): the first entry whose scenarios match a
 scenario gives the blocks of code that build and run the solver there, the setup first. Scenarios
-are "*" (every one), "real" (Rastrigin, Rosenbrock, Ackley), "front" (the multi-objective ones), a
-problem ("onemax") or a problem and its mode ("onemax-matched"), several separated by spaces.
+are "*" (every one), "real" (Rastrigin, Rosenbrock, Ackley), a problem ("onemax") or a problem
+and its mode ("onemax-matched"), several separated by spaces.
 
 A block is found by symbol, not by line number, so the map survives changes to the adapters (and
 the adapters don't change for it: their hashes decide which ones need a new check):
@@ -25,23 +25,16 @@ ADAPTERS_DIR = Path(__file__).resolve().parent / "adapters"
 # the most lines of a block the details keep; the link to the code covers all of it
 MAX_LINES = 80
 REAL = {"rastrigin", "rosenbrock", "ackley"}
-FRONT = {"zdt1", "zdt2", "zdt3", "dtlz1", "dtlz2"}
 LANGUAGES = {".py": "python", ".rs": "rust", ".java": "java", ".jl": "julia", ".cpp": "cpp"}
 COMMENTS = ("#", "//", "/*", "*", "@")
 CLOSERS = ("}", ")", "]")
 
-FRONT_SETUP = {"start": "fn run_front_problem<const M: usize>(", "end": "let objectives = [Minimize; M];"}
 RADIATE_BINARY = {"start": "let build = |budget: Arc<Budget>| {", "after": "for solver in IDIOMATIC_BINARY {"}
 RADIATE_PERMUTATION = {"start": "let build = |budget: Arc<Budget>| {", "after": "for solver in IDIOMATIC_PERMUTATION {"}
 RADIATE_REAL = {"start": "let build = |budget: Arc<Budget>| {", "after": "for solver in IDIOMATIC_REAL {"}
-RADIATE_FRONT = [{"start": "let builder = GeneticEngine::builder()", "after": 'for solver in ["nsga2", "nsga3"] {'},
-                 {"start": "let (mu, divisions) = match objectives {", "end": "let rate = 1.0 / variables as f32;"}]
 MOORS = [{"start": "macro_rules! ga {"}, {"start": "macro_rules! run {"}]
 GENOXIDE_PYTHON_SOLVE = {"start": "def solve("}
-GENOXIDE_PYTHON_FRONT = [{"start": "def front_solvers(", "end": "directions = gx.das_dennis("},
-                         {"start": "def solve_front("}]
 PYMOO_SOLVE = {"start": "def solve("}
-PYMOO_FRONT = [{"start": "def front_solvers(", "end": "return SBX(prob=0.9, eta=15)"}, {"start": "def run_fronts("}]
 PYCMA = [{"start": "def solve("}, {"start": "def solvers("}]
 NEVERGRAD_ONEMAX = {"start": 'if problem == "onemax":', "after": "def __init__(self, problem, size):"}
 NEVERGRAD_NQUEENS = {"start": 'elif problem == "nqueens":'}
@@ -53,15 +46,13 @@ JENETICS_EVOLVE = {"start": "static <G extends Gene<?, G>, C extends Comparable<
                    "after": "return evolve(engine, budget, 0, seed);"}
 JMETAL_GA = 'solvers.add(new Solver("ga", (budget, seed) -> runComponent(budget, termination ->'
 JMETAL_COMPONENT = {"start": "static <S extends Solution<?>> long runComponent("}
-JMETAL_FRONT = {"start": "static void runFront(", "end": "PolynomialMutation mutation = new PolynomialMutation(1.0 / n, 20.0);"}
 EVOLUTIONARY_RESTARTS = {"start": "function run_restarting(start, budget::Budget, seed)"}
 EVOLUTIONARY_ONEMAX = {"start": 'tolerance = mode == "matched" ? typemax(Int) : 10', "end": "end"}
 EVOLUTIONARY_REAL = [{"start": "solve(method; successive_f_tol = 10) = (budget, seed) -> run_restarting(budget, seed) do rng"},
                      EVOLUTIONARY_RESTARTS]
-METAHEURISTICS = [{"start": "function algorithm_kwargs(budget, seed; front = false, matched = false)"},
+METAHEURISTICS = [{"start": "function algorithm_kwargs(budget, seed)"},
                   {"start": "function run_restarting(start, budget::Budget, seed)"}]
 METAHEURISTICS_REAL = {"start": "solve(make) = (budget, seed) -> optimize(", "after": "function real_solvers(problem, size)"}
-METAHEURISTICS_FRONT = {"start": "solve(make) = (budget, seed) -> optimize(", "after": "function front_solvers(problem, size)"}
 
 METHOD_CODE = {
     "genoxide": {
@@ -79,11 +70,6 @@ METHOD_CODE = {
             "cma_es": [("real", [{"start": "let cmaes = |seed| {"}])],
             "de": [("real", [{"start": "let de = |seed|"}])],
             "es": [("rosenbrock", [{"start": "let es = |seed| {"}])],
-            "nsga2": [("front", [{"start": "let nsga2 = |seed| {"}, FRONT_SETUP])],
-            "nsga3": [("front", [{"start": "let nsga3 = |seed| {"}, FRONT_SETUP])],
-            "spea2": [("front", [{"start": "let spea2 = |seed| {"}, FRONT_SETUP])],
-            "sms_emoa": [("front", [{"start": "let sms_emoa = |seed| {"}, FRONT_SETUP])],
-            "moead": [("front", [{"start": "let moead = |seed| {"}, FRONT_SETUP])],
         },
     },
     "genetic_algorithm": {
@@ -123,9 +109,6 @@ METHOD_CODE = {
             "ga_pmx": [("nqueens", [RADIATE_PERMUTATION])],
             "ga_blend": [("real", [RADIATE_REAL])],
             "ga_intermediate": [("real", [RADIATE_REAL])],
-            "nsga2": [("front", [RADIATE_FRONT[0], {"start": '"nsga2" => builder'}, RADIATE_FRONT[1]])],
-            "nsga3": [("front", [RADIATE_FRONT[0], {"start": "_ => builder", "after": '"nsga2" => builder'},
-                                 RADIATE_FRONT[1]])],
         },
     },
     "genoxide_python": {
@@ -143,11 +126,6 @@ METHOD_CODE = {
                                           GENOXIDE_PYTHON_SOLVE])],
             "cma_es": [("real", [{"start": "def real_solvers(", "end": "function, True)"}, GENOXIDE_PYTHON_SOLVE])],
             "de": [("real", [{"start": "def real_solvers(", "end": 'de = ("de"'}, GENOXIDE_PYTHON_SOLVE])],
-            "nsga2": [("front", [{"start": '("nsga2", lambda seed: gx.Nsga2('}, *GENOXIDE_PYTHON_FRONT])],
-            "nsga3": [("front", [{"start": '("nsga3", lambda seed: gx.Nsga3('}, *GENOXIDE_PYTHON_FRONT])],
-            "spea2": [("front", [{"start": '("spea2", lambda seed: gx.Spea2('}, *GENOXIDE_PYTHON_FRONT])],
-            "sms_emoa": [("front", [{"start": '("sms_emoa", lambda seed: gx.SmsEmoa('}, *GENOXIDE_PYTHON_FRONT])],
-            "moead": [("front", [{"start": '("moead", lambda seed: gx.Moead('}, *GENOXIDE_PYTHON_FRONT])],
         },
     },
     "deap": {
@@ -164,8 +142,6 @@ METHOD_CODE = {
                                       {"start": "def cx_exponential("}]),
                 ("rosenbrock", [{"start": "def solve_de("}, {"start": "def bounded_evaluate("}]),
             ],
-            "nsga2": [("front", [{"start": "def solve_front("}])],
-            "nsga3": [("front", [{"start": "def solve_front("}])],
         },
     },
     "pygad": {
@@ -177,8 +153,6 @@ METHOD_CODE = {
                 ("real", [{"start": "function, low, high = REAL_PROBLEMS[problem]",
                            "end": "return config, function, False"}, {"start": "def run_single("}]),
             ],
-            "nsga2": [("front", [{"start": "def run_front("}])],
-            "nsga3": [("front", [{"start": "def run_front("}])],
         },
     },
     "pymoo": {
@@ -195,11 +169,6 @@ METHOD_CODE = {
             "nelder_mead": [("rosenbrock", [{"start": 'if problem_name == "rosenbrock":'}, PYMOO_SOLVE])],
             "de": [("rastrigin ackley", [{"start": "def de():"}, PYMOO_SOLVE])],
             "es": [("rastrigin ackley", [{"start": "def es():"}, PYMOO_SOLVE])],
-            "nsga2": [("front", [{"start": '("nsga2", lambda: NSGA2('}, *PYMOO_FRONT])],
-            "nsga3": [("front", [{"start": '("nsga3", lambda: NSGA3('}, *PYMOO_FRONT])],
-            "spea2": [("front", [{"start": '("spea2", lambda: SPEA2('}, *PYMOO_FRONT])],
-            "sms_emoa": [("front", [{"start": '("sms_emoa", lambda: SMSEMOA('}, *PYMOO_FRONT])],
-            "moead": [("front", [{"start": '("moead", lambda: MOEAD('}, *PYMOO_FRONT])],
         },
     },
     "pycma": {
@@ -257,7 +226,6 @@ METHOD_CODE = {
                             {"start": "class Restarts:"}])],
             "simulated_annealing": [("*", [{"start": 'solvers.append(("simulated_annealing", udp, Reanneal('},
                                            {"start": "class Reanneal:"}])],
-            "nsga2": [("*", [{"start": "def front_solvers("}, {"start": "def evolve_front("}])],
         },
     },
     "openga": {
@@ -295,12 +263,6 @@ METHOD_CODE = {
             "de": [("real", [{"start": 'solvers.add(new Solver("de", (budget, seed) -> {'}])],
             "cma_es": [("real", [{"start": 'solvers.add(new Solver("cma_es", (budget, seed) ->'},
                                  {"start": "static long cmaes("}])],
-            "nsga2": [("front", [{"start": 'case "nsga2" -> {'}, JMETAL_FRONT])],
-            "nsga3": [("front", [{"start": 'case "nsga3" -> {'}, JMETAL_FRONT])],
-            "spea2": [("front", [{"start": 'case "spea2" -> {'}, {"start": "static final class BudgetSPEA2"},
-                                 JMETAL_FRONT])],
-            "moead": [("front", [{"start": 'case "moead" -> {'}, JMETAL_FRONT])],
-            "sms_emoa": [("front", [{"start": "default -> {", "after": 'case "moead" -> {'}, JMETAL_FRONT])],
         },
     },
     "evolutionary_jl": {
@@ -328,7 +290,6 @@ METHOD_CODE = {
                 ("rastrigin ackley", [{"start": "de = solve(() -> DE(populationSize = 100, F = 0.9); "
                                                 "successive_f_tol = 25)"}, *EVOLUTIONARY_REAL]),
             ],
-            "nsga2": [("front", [{"start": "function run_front(problem, size, budget, seed)"}])],
         },
     },
     "metaheuristics_jl": {
@@ -345,14 +306,6 @@ METHOD_CODE = {
                              METAHEURISTICS_REAL, METAHEURISTICS[0]])],
             "pso": [("real", [{"start": '("pso", solve(kwargs -> PSO(; kwargs...)), identity),'},
                               METAHEURISTICS_REAL, METAHEURISTICS[0]])],
-            "nsga2": [("front", [{"start": '("nsga2", solve(kwargs -> NSGA2('}, METAHEURISTICS_FRONT,
-                                 METAHEURISTICS[0]])],
-            "nsga3": [("front", [{"start": '("nsga3", solve(kwargs -> NSGA3('}, METAHEURISTICS_FRONT,
-                                 METAHEURISTICS[0]])],
-            "spea2": [("front", [{"start": '("spea2", solve(kwargs -> SPEA2('}, METAHEURISTICS_FRONT,
-                                 METAHEURISTICS[0]])],
-            "sms_emoa": [("front", [{"start": '("sms_emoa", solve(kwargs -> SMS_EMOA('}, METAHEURISTICS_FRONT,
-                                    METAHEURISTICS[0]])],
         },
     },
 }
@@ -363,7 +316,7 @@ def matches(key, problem, mode):
     for token in key.split():
         if token == "*" or token == problem or token == f"{problem}-{mode}":
             return True
-        if (token == "real" and problem in REAL) or (token == "front" and problem in FRONT):
+        if token == "real" and problem in REAL:
             return True
     return False
 

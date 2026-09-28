@@ -810,8 +810,6 @@ fn main() {
                 real_evolve(&args, seed);
                 real_hill_climb(&args, seed);
             }
-            // no multi-objective strategy: print nothing
-            "zdt1" | "zdt2" | "zdt3" | "dtlz1" | "dtlz2" => {}
             other => {
                 eprintln!("unknown problem {}", other);
                 std::process::exit(2);
