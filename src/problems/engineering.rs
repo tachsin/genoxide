@@ -848,12 +848,16 @@ impl Problem for CantileverBeam {
 /// front door (≤ 15.7 mm/ms), each a response surface as printed in the restatement's appendix.
 ///
 /// Bounds x₁, x₃, x₄ ∈ [0.5, 1.5], x₂ ∈ [0.45, 1.35], x₅ ∈ [0.875, 2.625], x₆, x₇ ∈ [0.4, 1.2];
-/// the restatement gives no optimum. Best known 23.585658 at (0.5, 1.225732, 0.5, 1.207111,
-/// 0.875, 0.884329, 0.4), with the lower rib deflection, the pubic force and the front door's
-/// velocity at their limits, found by SLSQP from 300 starting points and by genoxide's SHADE,
-/// whose runs all end within 4e-9 of it. Not proven optimal. The weight is
-/// the first objective of the restatement's three-objective problem; the original has four more
-/// variables (two materials, the barrier's height and hitting position), fixed in these surfaces.
+/// the restatement gives no optimum. Best known 23.585657980780084 at (0.5, 1.225732, 0.5,
+/// 1.207111, 0.875, 0.884189, 0.4): x₁, x₃, x₅ and x₇ on their lower bounds, and the lower rib
+/// deflection, the pubic force and the front door's velocity on their limits, which give x₂, x₄
+/// and x₆ in turn. Stored to the last bit: each of x₂, x₄ and x₆ is the smallest `f64` whose
+/// constraint holds when evaluated, so the violation is exactly 0. SLSQP from 2,000 random
+/// starting points, and from the design of genoxide's L-SHADE, finds no other minimum, and the
+/// seven active constraints' Lagrange multipliers there are positive: a strict local minimum.
+/// The constraints aren't convex, so it isn't proven optimal. The weight is the first objective
+/// of the restatement's three-objective problem; the original has four more variables (two
+/// materials, the barrier's height and hitting position), fixed in these surfaces.
 ///
 /// [`constraints`](Problem::constraints) gives g₁…g₁₀ in this order, each as the response
 /// minus its limit.
@@ -937,15 +941,15 @@ impl Problem for CarSideImpact {
 
     fn optimum(&self) -> Option<Optimum<Reals>> {
         Some(Optimum::best_known(
-            23.585_657_984_054_272,
+            23.585_657_980_780_084,
             vec![reals(&[
-                0.500_000_000_431_087_8,
-                1.225_732_323_099_214,
-                0.500_000_000_001_969_3,
-                1.207_110_858_745_761_3,
-                0.875_000_000_000_002_2,
-                0.884_328_591_666_781_2,
-                0.400_000_000_000_005,
+                0.5,
+                1.225_732_323_232_322_5,
+                0.5,
+                1.207_110_858_585_857_6,
+                0.875,
+                0.884_189_120_488_052_4,
+                0.4,
             ])],
         ))
     }
@@ -1248,8 +1252,32 @@ mod tests {
     #[test]
     fn car_side_impact() {
         let optimum = CarSideImpact.optimum().expect("a best known design");
-        let best = CarSideImpact.evaluate(&optimum.solutions()[0]);
-        assert_eq!(best, (optimum.value(), 0.0));
+        let best = &optimum.solutions()[0];
+        assert_eq!(CarSideImpact.evaluate(best), (optimum.value(), 0.0));
+        // the lower rib deflection, the pubic force and the front door's velocity are on their
+        // limits, to the last bit: x₂, x₄ or x₆ one step lower violates them
+        let g = CarSideImpact.constraints(best);
+        for (gene, constraint) in [(1, 6), (3, 7), (5, 9)] {
+            assert_eq!(g.inequalities()[constraint], 0.0);
+            let mut lower = best.clone();
+            lower[gene] = lower[gene].next_down();
+            let g = CarSideImpact.constraints(&lower);
+            assert!(g.inequalities()[constraint] > 0.0, "x{}", gene + 1);
+        }
+        // the example's L-SHADE design, 23.58565798078049, is feasible and 1.7e-14 heavier,
+        // relative to it
+        let run = reals(&[
+            0.500_000_000_000_000_2,
+            1.225_732_323_232_359_4,
+            0.500_000_000_000_001_3,
+            1.207_110_858_585_885,
+            0.875_000_000_000_000_2,
+            0.884_189_121_233_704_5,
+            0.400_000_000_000_011_9,
+        ]);
+        let (weight, violation) = CarSideImpact.evaluate(&run);
+        assert_eq!(violation, 0.0);
+        assert!(optimum.value() < weight && weight < optimum.value() * (1.0 + 2e-14));
         // at the lower bounds: the weight, and every response by hand
         let low = reals(&[0.5, 0.45, 0.5, 0.5, 0.875, 0.4, 0.4]);
         let weight = 1.98
