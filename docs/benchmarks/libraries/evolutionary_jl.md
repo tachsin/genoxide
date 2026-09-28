@@ -87,7 +87,7 @@ The adapter prints nothing for any other scenario ([`SCENARIOS`, lines 220-224](
 
 Every run ended at the failed eigendecomposition, after 96,901 to 102,031 evaluations (0.12 to 0.14 s). Their best values hardly changed after the first 20,000 evaluations (by less than 0.01%).
 
-For the bug report only, not in the benchmark: the same runs with a copy of `update_state!` in which the three CMA-ES bugs below are fixed reached the target with seeds 0 to 4 in 4,859 to 6,527 evaluations. Fixing the step size and the overwritten matrix only: 4 of 5 (5,291 to 6,281 evaluations; seed 0 stayed at 3.99, Rosenbrock's local minimum). The library as it is: none, best values 7.44 to 103.7.
+For the bug report only, not in the benchmark: the same runs, seeds 0 to 9, with a copy of `update_state!` in which some of the three CMA-ES bugs below are fixed. The step size (in the ‖p_σ‖²/n form of Hansen's update) and the overwritten matrix: 10 of 10 reached the target, in 4,958 to 6,366 evaluations (median about 6,000), like pycma. The step size alone: 5 of 10, after 263,000 to 460,000. The overwritten matrix alone, or the rank-μ update alone: none. All three: 9 of 10, in about 4,800 to 8,000; with seed 8, σ grows without bound at a corner of the box, because the library clips the samples and moves the mean with the clipped ones, while the paths use the unclipped ones. The library as it is: none, best values 7.44 to 608.6.
 
 ## Can't run
 

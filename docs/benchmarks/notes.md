@@ -68,7 +68,7 @@ The benchmark runs what a library's users get, so its results show its bugs ([ru
 | [jMetal](libraries/jmetal.md#bugs-found) 7.5 | CMA-ES computes χ_n with integer divisions, √n instead of 3.085 for n = 10 | σ shrinks a little faster than intended | not yet |
 | [pygmo](libraries/pygmo.md#bugs-found) 2.19.8 | `de` draws r1, r2, r3 without excluding the target | about 3% of trials use the target | not yet |
 | [pygmo](libraries/pygmo.md#bugs-found) 2.19.8 | the docstrings of `cmaes` (and `sade`, `de1220`, `xnes`) swap `ftol` and `xtol` | documentation only | not yet |
-| [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | `fast_fill_random` keeps positions instead of row numbers, so about 0.14% of DE trials have repeated indices or the target among them | the Rastrigin runs, slightly | not yet |
+| [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | `fast_fill_random` keeps positions instead of row numbers, so about 0.14% of DE trials have repeated indices or the target among them | the Rastrigin runs: the trials with r2 = r3 are a crossover without a difference vector, and halve the error at the end (69.6 as it is, 125.7 with the fix) | not yet |
 | [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | DE ignores `dither`; its docs don't mention the polynomial mutation it applies by default | the adapter sets `prob_mut=0.0` | not yet |
 | [Metaheuristics.jl](libraries/metaheuristics_jl.md#bugs-found) 3.5.0 | the `DE` docstring gives F = 1.0 as the default; the code's is 0.7 | none: F is set | not yet |
 

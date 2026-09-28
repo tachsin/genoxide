@@ -31,7 +31,7 @@ Found a setting that brings genoxide closer to a definition, or a difference thi
 | each child mutated with probability 0.2, each bit flipping at 1/1000 | `.mutation_rate(0.2)`, `BitFlip::per_gene(1.0 / 1000.0)` |
 | generational, no elitism | `.scheme(Scheme::Generational { elitism: 0 })` |
 
-**Differences:** a child identical to its parent isn't evaluated again, also one that a crossover or a mutation turned back into it; DEAP evaluates every crossed or mutated child. That saves evaluations, and it's counted as it happens (rule 3.2).
+**Differences:** a child identical to its parent isn't evaluated again, also one that a crossover or a mutation turned back into it; DEAP evaluates every crossed or mutated child. That saves evaluations, and it's counted as it happens (rule 3.2). With these settings the population converges to near-copies, so the saving is large: about 45% of the children DEAP evaluates are copies of a parent, and without them DEAP would need about 56,000 evaluations, like genoxide. The search is the same: with seeds 0 to 2, genoxide reached the target after 517 to 610 generations, DEAP after 566 to 587.
 
 **Separate tests:** 5 of 5 reached the target, first hits at 52,465 to 58,170 evaluations (median 53,597), in about 14 ms each.
 
