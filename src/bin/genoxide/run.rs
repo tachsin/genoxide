@@ -717,18 +717,10 @@ where
         return Err(failure);
     }
     let outcome = setting(outcome)?;
-    // the front, without copies of a genome
-    let mut members: Vec<&genoxide::Individual<A::Genome, Scores<N>>> = Vec::new();
-    for individual in outcome.front() {
-        if members
-            .iter()
-            .all(|member| member.genome() != individual.genome())
-        {
-            members.push(individual);
-        }
-    }
-    let front: Vec<Value> = members
-        .into_iter()
+    // the front, each genome once
+    let front: Vec<Value> = outcome
+        .front()
+        .iter()
         .map(|individual| {
             let scores = individual.fitness();
             json!({

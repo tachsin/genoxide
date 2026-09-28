@@ -101,16 +101,12 @@ fn front_of(snapshot: &MultiSnapshot<'_, Reals, 2>) -> Vec<[f64; 2]> {
 }
 
 // the size of a front, its solutions on each region (f₁ within 0.01 of the region's range), its
-// IGD+ to 500 points of the optimal front, evenly spread along it, and its hypervolume; copies of
-// a point count once
+// IGD+ to 500 points of the optimal front, evenly spread along it, and its hypervolume. A front has
+// each solution once, though MOEA/D's subproblems can hold copies of one.
 fn report(name: &str, generations: u64, front: &[[f64; 2]]) {
-    // each point once: MOEA/D's subproblems can hold copies of a solution
-    let mut front = front.to_vec();
-    front.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])));
-    front.dedup();
     let optimal = Wfg2::<2>::default().optimal_front(500).expect("known");
-    let distance = igd_plus(&front, &optimal, &[Minimize; 2]);
-    let volume = hypervolume(&front, &REFERENCE, &[Minimize; 2]);
+    let distance = igd_plus(front, &optimal, &[Minimize; 2]);
+    let volume = hypervolume(front, &REFERENCE, &[Minimize; 2]);
     let counts: Vec<String> = REGIONS
         .iter()
         .map(|(low, high)| {

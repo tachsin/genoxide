@@ -222,6 +222,41 @@ where
     }
 }
 
+// the members of `population` at `indices`, each genome once: the first of its copies. A front
+// never holds copies of a genome, which MOEA/D's subproblems and a population bred without
+// duplicate elimination can.
+pub(crate) fn distinct<G, const M: usize>(
+    population: &Population<G, Scores<M>>,
+    indices: impl IntoIterator<Item = usize>,
+) -> Vec<Individual<G, Scores<M>>>
+where
+    G: crate::genome::Genome,
+{
+    let mut members: Vec<Individual<G, Scores<M>>> = Vec::new();
+    // the fingerprints of the members so far, each with the position of a member that has it
+    let mut seen = Fingerprints::default();
+    for index in indices {
+        let individual = &population[index];
+        let genome = individual.genome();
+        let copy = match seen.entry(fingerprint(genome)) {
+            Entry::Vacant(entry) => {
+                entry.insert(members.len());
+                false
+            }
+            // almost always the same genome; if not, two genomes share the fingerprint, and the
+            // genome is compared with every member
+            Entry::Occupied(entry) => {
+                members[*entry.get()].genome() == genome
+                    || members.iter().any(|member| member.genome() == genome)
+            }
+        };
+        if !copy {
+            members.push(individual.clone());
+        }
+    }
+    members
+}
+
 // the scores of individuals, invalid if not evaluated
 pub(crate) fn scores_of<G, const M: usize>(
     individuals: &[Individual<G, Scores<M>>],
@@ -358,5 +393,47 @@ mod tests {
         assert_eq!(mutations_for_20_children(1), 20);
         // every child twice in a row: every second one is a copy, but the last isn't needed
         assert_eq!(mutations_for_20_children(2), 39);
+    }
+
+    #[test]
+    fn distinct_keeps_the_first_of_each_genomes_copies() {
+        let scored = |genes: Vec<f64>, value: f64| {
+            let mut individual = Individual::unevaluated(Reals::from(genes));
+            individual.set_fitness(Scores::new([value, -value]));
+            individual
+        };
+        let population = Population::new(vec![
+            scored(vec![1.0, 2.0], 1.0),
+            scored(vec![3.0, 4.0], 2.0),
+            scored(vec![1.0, 2.0], 1.0),
+            // the same objective values, another genome: kept
+            scored(vec![5.0, 6.0], 2.0),
+            scored(vec![3.0, 4.0], 2.0),
+        ]);
+        let genes = |members: Vec<Individual<Reals, Scores<2>>>| {
+            let genomes = members.iter().map(|member| member.genome().to_vec());
+            genomes.collect::<Vec<_>>()
+        };
+        assert_eq!(
+            genes(distinct(&population, 0..5)),
+            [vec![1.0, 2.0], vec![3.0, 4.0], vec![5.0, 6.0]]
+        );
+        // in the order of the indices
+        assert_eq!(
+            genes(distinct(&population, [4, 2, 1, 0])),
+            [vec![3.0, 4.0], vec![1.0, 2.0]]
+        );
+        assert!(distinct(&population, []).is_empty());
+    }
+
+    #[test]
+    fn distinct_compares_genomes_that_share_a_fingerprint() {
+        let population: Population<Colliding, Scores<1>> = [3, 1, 3, 2, 1]
+            .into_iter()
+            .map(|k| Individual::unevaluated(Colliding(k)))
+            .collect();
+        let members = distinct(&population, 0..5);
+        let genomes: Vec<u64> = members.iter().map(|member| member.genome().0).collect();
+        assert_eq!(genomes, [3, 1, 2]);
     }
 }

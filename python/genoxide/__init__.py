@@ -765,7 +765,9 @@ class Result:
 
 @dataclass(frozen=True, eq=False)
 class MultiResult:
-    """The result of a multi-objective run: its final non-dominated front, without copies."""
+    """The result of a multi-objective run: its final non-dominated front, each genome once (the
+    first of its copies), as in the last generation's ``MultiProgress``. Different genomes with the
+    same objective values each have a row."""
 
     front_genomes: np.ndarray
     """The genomes of the front, a row each."""
@@ -825,7 +827,7 @@ class MultiProgress:
     seconds: float
     """The time since the run started."""
     front_size: int
-    """The number of non-dominated individuals in the population, copies included."""
+    """The number of non-dominated individuals in the population, each genome once."""
     population: np.ndarray = field(repr=False)
     """The population after the generation, a genome per row."""
     objectives: np.ndarray = field(repr=False)
@@ -834,8 +836,8 @@ class MultiProgress:
     """The population's constraint violations: 0 for a feasible solution, NaN for an invalid
     one."""
     front_objectives: np.ndarray = field(repr=False)
-    """The objective values of the population's non-dominated individuals, copies included, a
-    row each."""
+    """The objective values of the population's non-dominated individuals, each genome once, a
+    row each: the ``front_objectives`` of ``MultiResult`` after the last generation."""
     front_violations: np.ndarray = field(repr=False)
     """Their constraint violations."""
 

@@ -143,7 +143,8 @@ impl<'a, G: Genome, const M: usize> MultiSnapshot<'a, G, M> {
         self.population
     }
 
-    /// The non-dominated individuals of the current population.
+    /// The non-dominated individuals of the current population, each genome once: see
+    /// [`MultiObjectiveAlgorithm::front`].
     pub fn front(&self) -> &'a [Individual<G, Scores<M>>] {
         self.front
     }
@@ -171,13 +172,15 @@ pub struct MultiOutcome<G: Genome, const M: usize> {
 }
 
 impl<G: Genome, const M: usize> MultiOutcome<G, M> {
-    /// The non-dominated individuals of the final population: the best trade-offs found.
+    /// The non-dominated individuals of the final population: the best trade-offs found, each
+    /// genome once (see [`MultiObjectiveAlgorithm::front`]). It's the last generation's
+    /// [`MultiSnapshot::front`].
     pub fn front(&self) -> &[Individual<G, Scores<M>>] {
         &self.front
     }
 
-    /// The objective values of the front, for plotting or further analysis; invalid scores are
-    /// left out.
+    /// The objective values of the front, for plotting or further analysis, in its order; invalid
+    /// scores are left out. Different genomes with the same values give a row each.
     pub fn front_values(&self) -> Vec<[f64; M]> {
         self.front
             .iter()

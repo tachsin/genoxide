@@ -41,6 +41,10 @@ pub trait MultiObjectiveAlgorithm<const M: usize> {
 
     /// The non-dominated individuals of the current population: its first front, the best
     /// trade-offs found. Empty before the first [`tell`](MultiObjectiveAlgorithm::tell).
+    ///
+    /// Each genome is in it once: of copies of a genome in the population (which MOEA/D's
+    /// subproblems, or breeding without duplicate elimination, can hold), the front has the first.
+    /// Different genomes with the same objective values are all in it.
     fn front(&self) -> &[Individual<Self::Genome, Scores<M>>];
 
     /// The individuals evaluated in the last generation that didn't survive into the population.
