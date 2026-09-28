@@ -1,136 +1,111 @@
 # pygmo (C++ via Python, 2.19.8)
 
-pygmo is the Python interface of pagmo, ESA's C++ library of optimization algorithms built around the island model; the 2.19.8 wheel bundles pagmo 2.19.1. The algorithms run in C++ and call a Python user-defined problem (UDP) for every evaluation. Its docs are at [esa.github.io/pygmo2](https://esa.github.io/pygmo2/): the [list of algorithms](https://esa.github.io/pygmo2/overview.html#list-of-algorithms), with the problem types each handles, and the [tutorials](https://esa.github.io/pygmo2/tutorials/tutorials.html), which show which algorithm and settings to use for which problem. pagmo's C++ docs are at [esa.github.io/pagmo2](https://esa.github.io/pagmo2/).
+pygmo is the Python interface of pagmo, ESA's C++ library of optimization algorithms built around the island model; the 2.19.8 wheel bundles pagmo 2.19.1. The algorithms run in C++ and call a Python user-defined problem (UDP) for every evaluation. Its docs are at [esa.github.io/pygmo2](https://esa.github.io/pygmo2/), with the [list of algorithms](https://esa.github.io/pygmo2/overview.html#list-of-algorithms); pagmo's C++ docs are at [esa.github.io/pagmo2](https://esa.github.io/pagmo2/). The source links below are to pagmo [v2.19.1](https://github.com/esa/pagmo2/tree/v2.19.1).
 
-Adapter: [benchmarks/adapters/pygmo/](../../../benchmarks/adapters/pygmo/).
-Know a better way to solve one of these problems with pygmo? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
+Adapter: [benchmarks/adapters/pygmo/bench.py](../../../benchmarks/adapters/pygmo/bench.py).
+Can pygmo be set closer to a definition than this page says? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
+
+## What it runs
+
+| Problem | Method ([rules, section 6](../rules.md#6-the-methods)) | pygmo | Solver |
+|---|---|---|---|
+| OneMax 1000 | the GA | can't run it (below) | |
+| Rastrigin 30 (no target, 300,000 evaluations) | DE/rand/1/bin | [`de`](https://esa.github.io/pygmo2/algorithms.html#pygmo.de), variant 7 | `de` |
+| Rosenbrock 10 | CMA-ES | [`cmaes`](https://esa.github.io/pygmo2/algorithms.html#pygmo.cmaes) | `cma_es` |
 
 ## How the adapter runs pygmo
 
-- **Fitness functions:** a UDP with `fitness(x)` and `batch_fitness(dvs)` ([`Problem`](../../../benchmarks/adapters/pygmo/bench.py#L188-L225)), in numpy, as [coding_udp_simple](https://esa.github.io/pygmo2/tutorials/coding_udp_simple.html) shows ([bench.py#L149-L185](../../../benchmarks/adapters/pygmo/bench.py#L149-L185)). pagmo minimizes, so OneMax returns minus the number of ones.
-- **Batch evaluation (rule 3.4):** `cmaes` and `gaco` get [`member_bfe`](https://esa.github.io/pygmo2/bfe.html#pygmo.member_bfe), which calls `batch_fitness` in the same thread ([`with_bfe`](../../../benchmarks/adapters/pygmo/bench.py#L228-L232)); with the same seed, each gave the same evaluations and final population with and without it. `sga`, `ihs`, `sade`, `xnes` and `simulated_annealing` take no evaluator.
-- **Evaluations:** the adapter's [`Counter`](../../../benchmarks/adapters/pygmo/bench.py#L81-L118) counts every row, keeps the best and records the first hit; `get_fevals` isn't used.
-- **Stop:** the counter raises an exception from inside the fitness at the target, the budget (a batch is cut there) or the 60 s cap; it passes through pagmo's C++ to the adapter.
-- **Keeping going (rule 2.2):** `gen` is lifted to cover the budget. An algorithm that stops on convergence restarts from a new random population with the seeds of rule 2.2 ([`Restarts`](../../../benchmarks/adapters/pygmo/bench.py#L259-L277)), the procedure of the [cmaes_vs_xnes tutorial](https://esa.github.io/pygmo2/tutorials/cmaes_vs_xnes.html) ("the best practice ... when algorithms have well defined exit conditions"); pygmo has no restart mechanism. Simulated annealing is the exception, below.
-- **Bounds (rule 2.4):** each algorithm's own, per section; counted in the UDP.
-- **One thread:** no islands, archipelagos or parallel evaluators; numpy's BLAS with 1 thread. pagmo's `batch_fitness` also runs TBB worker threads (20 in a test, 1.6 times more CPU than wall time), with no pygmo setting for them. The adapter starts TBB with one CPU, by a batch evaluation of a trivial problem before any run, and then restores the process's CPUs ([`start_tbb_with_one_thread`](../../../benchmarks/adapters/pygmo/bench.py#L62-L71)).
-- **Seeds:** `pg.population(..., seed=)` and the algorithm's `seed`.
-- **Separate tests:** 2026-09-25, pygmo 2.19.8, seeds 0 to 4, the scenario's budget, 60 s cap, rule 5.3, with other tests on the machine. `outside` was 0 in every run.
+- **Fitness functions:** a UDP with `fitness(x)` and `batch_fitness(dvs)` ([`Problem`](../../../benchmarks/adapters/pygmo/bench.py#L165-L196)), in numpy, as [coding_udp_simple](https://esa.github.io/pygmo2/tutorials/coding_udp_simple.html) shows ([bench.py#L138-L162](../../../benchmarks/adapters/pygmo/bench.py#L138-L162)).
+- **Batch evaluation (rule 3.4):** `cmaes` accepts a batch fitness evaluator and gets [`member_bfe`](https://esa.github.io/pygmo2/bfe.html#pygmo.member_bfe), which calls `batch_fitness` with a generation, in the same thread. It's the same search: with and without it, seeds 0 to 2 gave the same first hits and best values. `de` takes no evaluator.
+- **Evaluations:** the adapter's [`Counter`](../../../benchmarks/adapters/pygmo/bench.py#L79-L116) counts every decision vector, keeps the best and records the first hit; `get_fevals` isn't used.
+- **Stop:** the counter raises an exception from inside the fitness at the target (Rosenbrock only; Rastrigin has none), the budget (a batch is cut there) or the 60 s cap; it passes through pagmo's C++ to the adapter.
+- **No convergence criterion (rule 2.2):** `gen`, a limit that's only a budget, covers the whole budget ([`budget_generations`](../../../benchmarks/adapters/pygmo/bench.py#L199-L202)). `ftol` and `xtol` are 0: both algorithms stop when a spread is *below* them (`dx < xtol`, `df < ftol` in `de`; the last step's length `< xtol` and the population's `df < ftol` in `cmaes`), which a spread of 0 isn't. One call of `evolve` runs to the end; there are no restarts, so no restart seeds.
+- **Errors (rule 8.4):** any other exception from `evolve` ends the run, reported in `ended_by` ([bench.py#L293-L302](../../../benchmarks/adapters/pygmo/bench.py#L293-L302)). None happened in the tests.
+- **One thread:** no islands, archipelagos or parallel evaluators; numpy's BLAS with 1 thread ([bench.py#L32-L34](../../../benchmarks/adapters/pygmo/bench.py#L32-L34)). pagmo's `batch_fitness` also runs TBB worker threads, with no pygmo setting for them: the adapter starts TBB with one CPU, by a batch evaluation of a trivial problem before any run, and then restores the process's CPUs ([`start_tbb_with_one_thread`](../../../benchmarks/adapters/pygmo/bench.py#L60-L72)).
+- **Seeds:** the run's seed goes to `pg.population(..., seed=)` and to the algorithm's `seed`.
+- **`last_generation`:** pagmo doesn't call back between generations, but both algorithms evaluate a population of their size first and then that many a generation ([`last_generation`](../../../benchmarks/adapters/pygmo/bench.py#L122-L126)).
+- **Separate tests:** 2026-09-28, pygmo 2.19.8, seeds 0 to 2, the scenario's budget (300,000 for Rastrigin 30, 500,000 for Rosenbrock 10) and 60 s cap, with other processes on the machine. `outside` was 0 in every run.
 
-## Binary: OneMax 100 (idiomatic)
+## Rastrigin 30: DE/rand/1/bin
 
-The bits are integer genes in [0, 1] (`get_nix`, as in [coding_udp_minlp](https://esa.github.io/pygmo2/tutorials/coding_udp_minlp.html)).
+**Code:** [`run_de`](../../../benchmarks/adapters/pygmo/bench.py#L210-L224): `pg.de(gen, F=0.5, CR=0.9, variant=7, ftol=0.0, xtol=0.0, seed)` evolving `pg.population(problem, 100, seed)`.
 
-**Methods** ([bench.py#L321-L346](../../../benchmarks/adapters/pygmo/bench.py#L321-L346)): pygmo recommends nothing for binary problems; its [list of algorithms](https://esa.github.io/pygmo2/overview.html#list-of-algorithms) flags three single-objective ones for integers ("I"), all run with their defaults:
-- **`ga`:** [`sga`](https://esa.github.io/pygmo2/algorithms.html#pygmo.sga): exponential crossover at 0.9, mutation at 0.02 per gene (an integer gene is drawn again), tournaments of 2.
-- **`ihs`:** [`ihs`](https://esa.github.io/pygmo2/algorithms.html#pygmo.ihs), improved harmony search.
-- **`gaco`:** [`gaco`](https://esa.github.io/pygmo2/algorithms.html#pygmo.gaco), extended ant colony optimization ("both continuous and integer variables"), with `member_bfe`.
-- Populations: 20 for sga and ihs, the tutorials' size ([evolving_a_population](https://esa.github.io/pygmo2/tutorials/evolving_a_population.html), [solving_schwefel_20](https://esa.github.io/pygmo2/tutorials/solving_schwefel_20.html), pagmo's [quick start](https://esa.github.io/pagmo2/quickstart.html)); 63 for gaco, which its default kernel of 63 needs.
+**No target:** Rastrigin 30 is measured by the time a run takes for its budget of 300,000 evaluations and by its error at the end. The counter never stops a run at a value, only at the budget or the time cap ([`solvers_of`](../../../benchmarks/adapters/pygmo/bench.py#L246-L256), [bench.py#L291-L292](../../../benchmarks/adapters/pygmo/bench.py#L291-L292)), and every run prints `"target": null`, `"success": false` and `"first_hit": null`.
 
-**Keeping going:** sga and ihs run to the budget. gaco stops after 100,000 generations or evaluations without improvement (`impstop`, `evalstop`) and restarts; it never got there.
+**Configuration** ([rule 6.3](../rules.md#6-the-methods)):
 
-**Left out:**
-- NSGA-II and MACO, also flagged for integers: multi-objective.
-- The other single-objective algorithms: they "will optimise the relaxed problem", so their bits wouldn't be 0 or 1.
+| Definition | pygmo | Source |
+|---|---|---|
+| NP = 100, uniform in the box | a population of 100; each decision vector drawn uniformly in the bounds | `pg.population`; [population.cpp#L62-L78](https://github.com/esa/pagmo2/blob/v2.19.1/src/population.cpp#L62-L78) |
+| v = x_r1 + F (x_r2 − x_r3), F = 0.5 fixed | `variant=7`, "rand/1/bin" in the docstring; `F=0.5`, fixed for the run | [de.cpp#L229-L239](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/de.cpp#L229-L239) |
+| r1, r2, r3 distinct, different from i | 5 distinct indices drawn from the whole population, i included: a difference, below | [de.cpp#L142-L149](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/de.cpp#L142-L149) |
+| Binomial crossover, CR = 0.9, one j_rand | `CR=0.9`; the loop over the genes starts at a uniform index and always takes the last gene it visits ("change at least one parameter"), which is uniform too: the same as j_rand | [de.cpp#L231-L238](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/de.cpp#L231-L238) |
+| A trial gene outside the box drawn again uniformly | `force_bounds_random`: the reference repair ("done by creating a random number in the bounds", [de docs](https://esa.github.io/pagmo2/docs/cpp/algorithms/de.html)) | [de.cpp#L279](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/de.cpp#L279) |
+| u replaces x_i if f(u) ≤ f(x_i) | `newfitness[0] <= fit[i][0]` | [de.cpp#L281-L295](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/de.cpp#L281-L295) |
+| Generational | the mutants are built from `popold`, the previous generation; the replacements go to `popnew`, swapped in at the end of the generation | [de.cpp#L297-L300](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/de.cpp#L297-L300) |
+| No archive, adaptation, restarts or convergence criterion | none in `de`; `ftol` and `xtol` 0; `gen` covers the budget | [de.cpp#L302-L322](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/de.cpp#L302-L322) |
 
-**Separate tests** (the best value is the number of ones):
+**Differences:**
+- **x_i can be one of r1, r2, r3.** `de` draws its indices (five, of which rand/1 uses three) from the whole population, without excluding i, so 3% of the trials use x_i as the base or a difference vector. Storn and Price's definition, and their code that pagmo says it's based on, draw them different from i. It doesn't change the algorithm: the mutation, the crossover, the rates, the selection and the replacement are rand/1/bin's, and 97% of the trials draw their indices as defined.
 
-OneMax 100, idiomatic (200,000 evaluations):
+**Bounds (rule 2.4):** the reference repair, above.
 
-| Solver | Runs | Reached | First hit: median evaluations | Best: median (best, worst) | Capped |
+**Separate tests** (no target, budget 300,000; the error is the best value at the end, the optimum being 0):
+
+| Solver | Runs | Time: median (fastest, slowest) | Error at the end: median (best, worst) | Capped |
+|---|---|---|---|---|
+| de | 3 | 2.43 s (2.35, 2.49) | 142 (115, 182) | 0 |
+
+Every run used the whole budget: 3,000 generations of 100.
+
+## Rosenbrock 10: CMA-ES
+
+**Code:** [`run_cma_es`](../../../benchmarks/adapters/pygmo/bench.py#L227-L243): `pg.cmaes(gen, sigma0=0.3, ftol=0.0, xtol=0.0, force_bounds=True, seed)` with `member_bfe`, evolving `pg.population(problem, 10, seed)`. The other parameters are at their defaults: `cc`, `cs`, `c1` and `cmu` at −1 ("automatically assigned"), `memory=False` (one call of `evolve`).
+
+**Configuration** ([rule 6.4](../rules.md#6-the-methods)):
+
+| Definition | pygmo | Source |
+|---|---|---|
+| λ = 10 | the population's size, 10 | [cmaes.cpp#L120](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/cmaes.cpp#L120) |
+| μ = 5, w_i ∝ ln((λ + 1) / 2) − ln i, positive, summing to 1 | `mu = lam / 2`; `weights(i) = log(mu + 0.5) - log(i + 1)`, normalized; no negative weights (no active CMA) | [cmaes.cpp#L121](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/cmaes.cpp#L121), [#L165-L170](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/cmaes.cpp#L165-L170) |
+| CSA, rank-one and rank-μ updates, h_σ, Hansen's rates | the defaults of `cc`, `cs`, `c1`, `cmu` and the damping, table below | [cmaes.cpp#L173-L191](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/cmaes.cpp#L173-L191), [#L367-L383](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/cmaes.cpp#L367-L383) |
+| Mean uniform in the box | the best of the population's 10 points, each uniform in the bounds: a difference, below | [cmaes.cpp#L206-L209](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/cmaes.cpp#L206-L209) |
+| σ₀ = 4.5, C₀ = I | `sigma0=0.3`: `cmaes` starts from C₀ = diag(width²), so its steps are σ₀ × width = 0.3 × 15 = 4.5. The same distribution, and the same updates: CMA-ES scales σ and √C the same way | [cmaes.cpp#L213-L226](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/cmaes.cpp#L213-L226) |
+| Every evaluated solution in the box | `force_bounds=True`, clipping: a difference, below | [cmaes.cpp#L298-L311](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/cmaes.cpp#L298-L311) |
+| No restarts, no convergence criterion | `cmaes` has no restarts; `ftol` and `xtol` 0; `gen` covers the budget | [cmaes.cpp#L255-L274](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/cmaes.cpp#L255-L274) |
+
+**Learning rates and damping,** n = 10, λ = 10, μ_eff = 3.167:
+
+| Constant | Hansen's 2016 tutorial | pygmo |
+|---|---|---|
+| c_σ | (μ_eff + 2) / (n + μ_eff + 5) = 0.2844 | the same, 0.2844 |
+| d_σ | 1 + 2 max(0, √((μ_eff − 1) / (n + 1)) − 1) + c_σ = 1.2844 | the same, 1.2844 |
+| c_c | (4 + μ_eff / n) / (n + 4 + 2 μ_eff / n) = 0.2950 | the same, 0.2950 |
+| c_1 | 2 / ((n + 1.3)² + μ_eff) = 0.01528 | the same, 0.01528 |
+| c_μ | min(1 − c_1, 2 (μ_eff − 2 + 1 / μ_eff) / ((n + 2)² + μ_eff)) = 0.02015 | the same without the min (it doesn't bind), 0.02015 |
+| h_σ | 1 if ‖p_σ‖ / √(1 − (1 − c_σ)^(2(g+1))) < (1.4 + 2 / (n + 1)) E‖N(0, I)‖ = 4.879 | the form of Hansen's 2006 tutorial, ‖p_σ‖² / n / (1 − (1 − c_σ)^(2(g+1))) < 2 + 4 / (n + 1): a threshold of 4.862 |
+| σ update | σ exp((c_σ / d_σ)(‖p_σ‖ / E‖N(0, I)‖ − 1)) | the same, with the exponent capped at 0.6 |
+| Eigendecomposition | every generation, or lazily | lazily, every λ / (c_1 + c_μ) / n / 10 = 2.8 evaluations: every generation here |
+
+**Differences:**
+- **The initial mean is the best of 10 uniform points,** not one uniform point: `cmaes` starts at the best individual of the population it evolves, and that population is 10 points drawn uniformly in the box, so they cost 10 evaluations (counted). It's still a uniform draw, of 10 points instead of 1, from which the search starts at the best.
+- **h_σ** is Hansen's earlier published form, with a threshold of 4.862 instead of 4.879 for the corrected length of p_σ.
+- **The step-size change is capped** at a factor e^0.6 per generation. The cap acts only when ‖p_σ‖ > 11.4, 3.7 times its expected length.
+- **Bounds:** `force_bounds=True`, `cmaes`'s only bound handling, clips each gene outside the box to the bound before the sample is evaluated; genes inside aren't changed. The clipped sample is also the one the update uses (pycma's `BoundTransform` evaluates a transformed point and updates with the sample itself). In seeds 0 to 2, 1.0 to 1.3% of the evaluated samples had a gene on a bound (63 of 5,120, 54 of 5,980, 68 of 5,190). pagmo's source warns that clipping "screws up the whole covariance matrix machinery and worsen performances considerably"; with so few samples outside, the runs below reach the target in about 5,000 evaluations.
+
+**Separate tests** (budget 500,000):
+
+| Solver | Runs | Reached | First hit: median evaluations | Best value: median (best, worst) | Capped |
 |---|---|---|---|---|---|
-| ga | 5 | 5 | 1,582 | 100 (100, 100) | 0 |
-| ihs | 5 | 0 | | 92 (92, 90) | 0 |
-| gaco | 5 | 0 | | 74 (77, 73) | 0 |
+| cma_es | 3 | 3 | 5,187 | 0.00928 (0.00879, 0.00958) | 0 |
 
-## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
-
-**Methods** ([bench.py#L348-L381](../../../benchmarks/adapters/pygmo/bench.py#L348-L381)):
-- **`sade`:** [`sade`](https://esa.github.io/pygmo2/algorithms.html#pygmo.sade), jDE, with its defaults (rand/1/exp, `ftol` and `xtol` 1e-6) and population 20, as the examples on multimodal functions: pagmo's [quick start](https://esa.github.io/pagmo2/quickstart.html) (Schwefel 30, islands of 20) and [solving_schwefel_20](https://esa.github.io/pygmo2/tutorials/solving_schwefel_20.html). [cec2013_comp](https://esa.github.io/pygmo2/tutorials/cec2013_comp.html): "the particular instances choosen for cmaes and sade (jDE) are performing particularly well".
-- **`cma_es`:** [`cmaes`](https://esa.github.io/pygmo2/algorithms.html#pygmo.cmaes) as in [cmaes_vs_xnes](https://esa.github.io/pygmo2/tutorials/cmaes_vs_xnes.html): `cmaes(gen=4000, ftol=1e-8, xtol=1e-10)`, other parameters default (σ0 0.5 of the width), restarts, `member_bfe`. Its figures run Rastrigin and Ackley with three population sizes each, no preference; the first listed runs ([`cmaes_population`](../../../benchmarks/adapters/pygmo/bench.py#L306-L316)): 40 for Rastrigin 10 (40, 60, 100); from the dimension-20 figures, the closest, 100 for Rastrigin 30 (100, 150, 200) and 20 for Ackley 30 (20, 30, 40). [cec2013_comp](https://esa.github.io/pygmo2/tutorials/cec2013_comp.html) gives "a population of 50" only at dimension 2, and "a larger population size" at 10 without a number. Both tutorials ask for restarts.
-- **`simulated_annealing`:** Corana's [`simulated_annealing`](https://esa.github.io/pygmo2/algorithms.html#pygmo.simulated_annealing), one of "the two most successful algorithms" of [solving_schwefel_20](https://esa.github.io/pygmo2/tutorials/solving_schwefel_20.html), with its example: `simulated_annealing(10, 0.01, 5)` (Ts 10, Tf 0.01, 5 temperature adjustments), a population of 20 whose best it starts from, and reannealing. It's the only example in code on a multimodal function; [cec2013_comp](https://esa.github.io/pygmo2/tutorials/cec2013_comp.html) prints other settings (Tf 0.1, 300 temperature adjustments, 1 range adjustment, bins of 20) only inside a figure.
-
-**Bounds:**
-- sade: an allele outside the bounds is replaced by "a random number in the bounds" ([sade docs](https://esa.github.io/pagmo2/docs/cpp/algorithms/sade.html)).
-- CMA-ES: `force_bounds=True`, its only bound handling, which clips each sample ("the covariance matrix adaptation mechanism will worsen"). The tutorials run pygmo's own problems without it.
-- Simulated annealing mutates within `[max(x − w, lb), min(x + w, ub)]`.
-
-**Keeping going:**
-- sade and CMA-ES restart when they converge (`ftol`, `xtol`). pygmo has no IPOP or BIPOP.
-- Simulated annealing: its schedule length (500 evaluations per variable here) sets the cooling rate, (Tf / Ts)^(1 / n_T_adj), so it isn't lifted. It's annealed again from its best, as in [solving_schwefel_20](https://esa.github.io/pygmo2/tutorials/solving_schwefel_20.html) ("some reannealing"): each `evolve` starts from the population's best and puts its best back ([`Reanneal`](../../../benchmarks/adapters/pygmo/bench.py#L280-L297)).
-
-**Left out:**
-- `sea`, the Schwefel tutorial's other "most successful": at most 3 methods; in that tutorial's averaged plot simulated annealing gets to the optimum first.
-- `pso`: in the same plot it ends furthest from the optimum of the 7 algorithms.
-- `sga`, `gaco`, `ihs`: the tutorials don't use them on continuous problems.
-- `xnes`: [cmaes_vs_xnes](https://esa.github.io/pygmo2/tutorials/cmaes_vs_xnes.html) concludes that "CMA-ES is, on these three problems considered, outperforming consistently xNES".
-- `de`: pagmo presents sade as its improvement ([sade docs](https://esa.github.io/pagmo2/docs/cpp/algorithms/sade.html)). `de1220` is behind sade in the Schwefel plot, and `bee_colony` behind sade, de1220, simulated annealing and SEA.
-- `gwo`: its docs say it "results in a rather poor performance most of times".
-- `pso_gen`: "suited for stochastic optimization problems".
-- `mbh`: a meta-algorithm for local optimizers, used in the tutorials with NLopt's SLSQP on constrained problems. NLopt, Ipopt and SciPy optimizers: local methods.
-- Archipelagos and islands: parallel populations (rule 4.3).
-- pygmo's own `rastrigin` and `ackley`: not shifted, and evaluations must be counted around the adapter's functions (rule 3).
-
-**Separate tests:**
-
-Rastrigin 10 (500,000 evaluations):
-
-| Solver | Runs | Reached | First hit: median evaluations | Best: median (best, worst) | Capped | Restarts: median |
-|---|---|---|---|---|---|---|
-| sade | 5 | 5 | 4,973 | 0.0092 (0.0062, 0.0100) | 0 | 0 |
-| cma_es | 5 | 0 | | 0.995 (0.995, 0.995) | 0 | 75 |
-| simulated_annealing | 5 | 0 | | 2.12 (1.03, 3.04) | 0 | 99 |
-
-Rastrigin 30 (2,000,000 evaluations):
-
-| Solver | Runs | Reached | First hit: median evaluations | Best: median (best, worst) | Capped | Restarts: median |
-|---|---|---|---|---|---|---|
-| sade | 5 | 5 | 14,423 | 0.0090 (0.0066, 0.0099) | 0 | 0 |
-| cma_es | 5 | 0 | | 1.99 (1.99, 2.98) | 4 | 51 |
-| simulated_annealing | 3 | 0 | | 16.3 (15.2, 20.6) | 3 | 46 |
-
-Ackley 30 (1,000,000 evaluations):
-
-| Solver | Runs | Reached | First hit: median evaluations | Best: median (best, worst) | Capped | Restarts: median |
-|---|---|---|---|---|---|---|
-| sade | 5 | 5 | 12,276 | 0.0093 (0.0092, 0.0098) | 0 | 0 |
-| cma_es | 5 | 5 | 3,909 | 0.0097 (0.0089, 0.0100) | 0 | 0 |
-| simulated_annealing | 3 | 0 | | 0.328 (0.312, 0.384) | 3 | 52 |
-
-In these tests, every CMA-ES run on Rastrigin 10 ended at 0.995, one variable a period away from the optimum. The capped runs stopped after about 1.6 million evaluations (CMA-ES, Rastrigin 30) and 700,000 to 800,000 (simulated annealing).
-
-## Continuous, unimodal: Rosenbrock 10
-
-**Methods** ([bench.py#L348-L381](../../../benchmarks/adapters/pygmo/bench.py#L348-L381)):
-- **`sade`:** as above; [evolving_a_population](https://esa.github.io/pygmo2/tutorials/evolving_a_population.html) runs it on Rosenbrock 10 with its defaults and 20 individuals.
-- **`cma_es`:** the [cmaes_vs_xnes](https://esa.github.io/pygmo2/tutorials/cmaes_vs_xnes.html) code on Rosenbrock 10: `cmaes(gen=4000, ftol=1e-8, xtol=1e-10)`, restarts, `member_bfe`, and population 10, the first of `popsizes = [10,20,30]` (no preference, no default).
-- **`xnes`:** [`xnes`](https://esa.github.io/pygmo2/algorithms.html#pygmo.xnes), the same example's other method, with the same settings and population 10.
-
-**Bounds:** sade as above; CMA-ES and xNES with `force_bounds=True`.
-
-**Keeping going:** all three restart when they converge (`ftol`, `xtol`).
-
-**Left out:**
-- `de`: [using_island](https://esa.github.io/pygmo2/tutorials/using_island.html) and [coding_udi](https://esa.github.io/pygmo2/tutorials/coding_udi.html) run it on Rosenbrock 10 to show islands; sade is its improvement.
-- `simulated_annealing`, `sea`: used on Schwefel, not on a unimodal function.
-- NLopt, Ipopt and SciPy optimizers: the [nlopt tutorial](https://esa.github.io/pygmo2/tutorials/nlopt_basics.html) uses them on a constrained problem with gradients.
-- The others, as above.
-
-**Separate tests:**
-
-| Solver | Runs | Reached | First hit: median evaluations | Best: median (best, worst) | Capped | Restarts: median |
-|---|---|---|---|---|---|---|
-| sade | 5 | 5 | 26,967 | 0.0097 (0.0092, 0.0100) | 0 | 0 |
-| cma_es | 5 | 5 | 5,106 | 0.0080 (0.0075, 0.0098) | 0 | 0 |
-| xnes | 5 | 5 | 29,152 | 0.0096 (0.0086, 0.0097) | 0 | 2 |
-
-pagmo's source warns that `force_bounds` "screws up the whole covariance matrix machinery and worsen performances considerably". xNES starts with a step of the bounds' width, and its attempts often converge with a variable at a bound. Without `force_bounds` (5 seeds, earlier seeds `seed * 1000`), xNES reached the target in 6,759 to 10,886 evaluations and CMA-ES in 4,807 to 6,534, but they then evaluate points outside the bounds (rule 2.4).
+Seeds 3 to 9 too: seeds 3 and 8 converged to Rosenbrock's local minimum (3.99, near x₁ = −1) and sampled around it to the end of the budget, 500,000 evaluations in under a second; the other five reached the target in 4,308 to 5,441 evaluations.
 
 ## Can't run
 
-- OneMax 100 and 1000, matched: pagmo's only GA, [`sga`](https://esa.github.io/pygmo2/algorithms.html#pygmo.sga), has elitist reinsertion that can't be turned off ("the only reinsertion strategy provided is what we call pure elitism") and no two-point crossover (exponential, binomial, single-point or SBX).
-- N-Queens 32 and 64: pygmo has no permutation representation or operators.
+- **OneMax 1000:** pagmo's only GA, [`sga`](https://esa.github.io/pygmo2/algorithms.html#pygmo.sga), has elitist reinsertion that can't be turned off ("the only reinsertion strategy provided is what we call pure elitism"), and no two-point crossover (exponential, binomial, single-point or SBX).
 
 ## Bugs found
 
-None in the algorithms. Documentation: the docstrings of `sade`, `de1220`, `cmaes` and `xnes` describe `ftol` as "stopping criteria on the x tolerance" and `xtol` as "on the f tolerance", swapped; the code checks them the right way round.
+- **`de` doesn't exclude the target from r1, r2, r3** (above): its [index draw](https://github.com/esa/pagmo2/blob/v2.19.1/src/algorithms/de.cpp#L142-L149) takes five distinct indices from the whole population. pagmo's docs say the implementation "is based on the code provided in the official DE web site", whose indices differ from the target. Effect: 3% of the trials use x_i as the base or a difference vector. Kept as it is (rule 8.4).
+- **Documentation:** the docstring of `cmaes` describes `ftol` as "stopping criteria on the x tolerance" and `xtol` as "on the f tolerance", swapped; the code checks them the right way round. So do those of `sade`, `de1220` and `xnes`, which were in earlier versions of the benchmark.

@@ -1,29 +1,42 @@
 import { ExternalLink } from "lucide-react";
 import { HighlightProvider } from "@/components/projects/genoxide/benchmarks/Highlight";
-import { OverallChart, SummaryChart, ToTargetChart, VersionsChart } from "@/components/projects/genoxide/benchmarks/charts";
+import { ProblemChart, VersionsChart } from "@/components/projects/genoxide/benchmarks/charts";
 import RunDetails from "@/components/projects/genoxide/benchmarks/RunDetails";
 import { BENCHMARK_RUN_ENDPOINT } from "@/lib/projects/genoxide/benchmarks";
 import { BLOB_BASE, RAW_BASE } from "@/lib/projects/genoxide/github";
 import { GENOXIDE_COMMIT, GENOXIDE_LINKS } from "@/lib/projects/genoxide/meta";
 
 const KINDS = {
-  overall: OverallChart,
-  summary: SummaryChart,
-  "to-target": ToTargetChart,
+  problem: ProblemChart,
   versions: VersionsChart,
 };
 
 const path = (file) => file.split("/").map(encodeURIComponent).join("/");
 
 /**
+ * A chart of charts.json as a card of `scenario` shows it: its panel of that
+ * scenario only, and only the libraries of its bars; without a scenario, the
+ * chart as it is. Null when it has no bars there (the scenario awaits the
+ * next run).
+ */
+function forScenario(chart, scenario) {
+  if (!scenario) return chart;
+  const panels = chart.panels.filter((panel) => panel.key === scenario && panel.bars.length);
+  if (!panels.length) return null;
+  const used = new Set(panels.flatMap((panel) => panel.bars.map((bar) => bar.library)));
+  return { ...chart, panels, libraries: chart.libraries.filter((library) => used.has(library)) };
+}
+
+/**
  * The benchmark page's charts. With the published run's charts.json
  * (`data`), interactive ones, one per `charts` entry, each linking to the
- * harness's SVG chart; without it (a pin from before the file), the SVG
- * charts themselves (`images`), read at the pinned commit. Both have the
- * same numbers.
+ * harness's SVG chart; a card of a problem (`scenario`) shows that
+ * scenario's panel of each chart, or that it awaits the next run. Without
+ * charts.json (a pin from before the file), the SVG charts themselves
+ * (`images`), read at the pinned commit. Both have the same numbers.
  *
  * @param {object} props
- * @param {{ id: string, kind: string, title: string, caption: string, views: { data: string, label: string, file: string }[] }[]} props.charts
+ * @param {{ id: string, kind: string, scenario?: string, title: string, caption: string, views: { data: string, label: string, file: string }[] }[]} props.charts
  * @param {{ id: string, title: string, caption: string, file: string, wide?: boolean }[]} props.images
  * @param {{ run: object, libraries: object[], charts: Record<string, object> } | null} props.data  charts.json, or null
  * @param {string} props.resultsUrl  the tables of the published run
@@ -50,10 +63,12 @@ export default function BenchmarkCharts({ charts, images, data, resultsUrl, deta
         ...chart,
         Kind: KINDS[chart.kind],
         views: chart.views
-          .filter((view) => data.charts[view.data])
-          .map((view) => ({ key: view.data, label: view.label, chart: data.charts[view.data], href: `${BLOB_BASE}${path(view.file)}` })),
+          .map((view) => ({ view, chart: data.charts[view.data] && forScenario(data.charts[view.data], chart.scenario) }))
+          .filter(({ chart: shown }) => shown)
+          .map(({ view, chart: shown }) => ({ key: view.data, label: view.label, chart: shown, href: `${BLOB_BASE}${path(view.file)}` })),
       }))
-      .filter((chart) => chart.Kind && chart.views.length);
+      // a problem's card stays when its scenario awaits the next run; another chart needs its data
+      .filter((chart) => chart.Kind && (chart.views.length || chart.scenario));
     return (
       <HighlightProvider details={details}>
         <div className="grid gap-4">
@@ -70,11 +85,17 @@ export default function BenchmarkCharts({ charts, images, data, resultsUrl, deta
                   {title}
                 </h3>
                 <p className="proj-lead mt-1 mb-3 text-sm">{caption}</p>
-                <Kind views={views} libraries={used} />
+                {views.length ? (
+                  <Kind views={views} libraries={used} />
+                ) : (
+                  <p className="rounded-lg border border-base-content/15 border-dashed px-4 py-6 text-center text-base-content/65 text-sm">
+                    Awaiting the next run: the published run has no runs of this problem's method yet.
+                  </p>
+                )}
               </section>
             );
           })}
-          <p className="text-base-content/70 text-sm">The same numbers, with every method's range and throughput, are in the {tables}.</p>
+          <p className="text-base-content/70 text-sm">The same numbers, with every library's range and throughput, are in the {tables}.</p>
           {/* the runs of the bar selected in any chart above; the answers name the commit, so a new pin is new URLs */}
           {details ? (
             <RunDetails

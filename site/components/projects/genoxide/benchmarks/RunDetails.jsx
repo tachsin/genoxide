@@ -21,7 +21,7 @@ import { runHash, useHighlight } from "./Highlight";
  * @param {object} props
  * @param {string} props.endpoint  the route's URL, with its query string started (`?commit=…`)
  * @param {string} props.issuesUrl  where a new issue of the repository is opened
- * @param {string} props.methodologyUrl  benchmarks/README.md, for the matched and idiomatic settings
+ * @param {string} props.methodologyUrl  benchmarks/README.md, for the problems and their methods
  */
 
 const count = new Intl.NumberFormat("en");
@@ -179,13 +179,17 @@ function Details({ data, run, issuesUrl, methodologyUrl }) {
         <div>
           <h4 className="font-medium text-sm">The summary</h4>
           <Facts rows={summaryRows(method, scenario)} />
-          {method.parts?.length ? <Parts parts={method.parts} /> : null}
+          {method.parts?.length ? <Parts parts={method.parts} fixedBudget={Boolean(scenario.fixed_budget)} /> : null}
         </div>
       </div>
 
       <div>
         <h4 className="font-medium text-sm">Each seed</h4>
-        <SeedsTable runs={method.runs} caption={`${method.label}, ${scenario.title}: each seed's run`} />
+        <SeedsTable
+          runs={method.runs}
+          fixedBudget={Boolean(scenario.fixed_budget)}
+          caption={`${method.label}, ${scenario.title}: each seed's run`}
+        />
       </div>
 
       <details className="group">
@@ -259,25 +263,19 @@ function Facts({ rows }) {
 }
 
 const MODES = {
-  matched: "matched: the same algorithm and settings in every library that has them",
-  idiomatic: "idiomatic: what the library's documentation recommends",
+  matched: "matched: the problem's one method, the same in every library, with its own implementation",
 };
 
 function scenarioRows(scenario, methodologyUrl) {
-  const size =
-    scenario.problem === "onemax"
-      ? `${count.format(scenario.size)} bits`
-      : scenario.problem === "nqueens"
-        ? `${scenario.size} queens`
-        : `${scenario.size} variables`;
+  const size = scenario.problem === "onemax" ? `${count.format(scenario.size)} bits` : `${scenario.size} variables`;
   return [
     ["Problem", `${scenario.problem_name}, ${size}`],
     [
-      "Mode",
-      MODES[scenario.mode] ?? scenario.mode,
+      "Method",
+      scenario.method ? `${scenario.method}, ${MODES[scenario.mode] ?? scenario.mode}` : (MODES[scenario.mode] ?? scenario.mode),
       methodologyUrl ? (
-        <a href={`${methodologyUrl}#scenarios`} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-primary hover:underline">
-          the scenarios and matched settings
+        <a href={`${methodologyUrl}#the-suite`} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-primary hover:underline">
+          the problems and their methods
         </a>
       ) : null,
     ],
@@ -301,6 +299,22 @@ function summaryRows(method, scenario) {
   if (!s) return [["Runs", "every run failed a check of the rules: none is summarized"]];
   const tooFew = `too few runs reached the target (${s.reached}/${s.runs})`;
   const gap = (value) => (scenario.problem === "onemax" ? count.format(value) : formatValue(value));
+  if (scenario.fixed_budget) {
+    // no target: the time for the budget and the error at the end
+    return [
+      ["Target", "none: every run uses the fixed budget"],
+      [
+        "Median time for the budget",
+        typeof s.budget_time === "number" ? seconds(s.budget_time) : "–",
+        "of the runs that used the whole budget",
+      ],
+      ["Error at the end", `${gap(s.median_gap)} median`, `${gap(s.best_gap)} best, ${gap(s.worst_gap)} worst`],
+      ["Median evaluations", count.format(Math.round(s.median_evaluations))],
+      ["Ended early by the library", s.ended_early ? `${s.ended_early} of ${s.runs} runs` : "none"],
+      ["Evaluations per second", count.format(Math.round(s.evaluations_per_second))],
+      ["Stopped by the time cap", cappedText(s)],
+    ];
+  }
   return [
     ["Reached the target", `${s.reached} of ${s.runs} runs`],
     ["Expected time to target", typeof s.ert_time === "number" ? seconds(s.ert_time) : tooFew],
@@ -317,20 +331,22 @@ function summaryRows(method, scenario) {
 }
 
 /** The runs the time cap stopped and the others, summarized apart, as the charts show them. */
-function Parts({ parts }) {
+function Parts({ parts, fixedBudget }) {
   return (
     <ul className="mt-2 space-y-0.5 text-base-content/65 text-xs">
       {parts.map((part) => (
         <li key={String(part.ended_on_cap)}>
-          {part.ended_on_cap ? "Stopped by the time cap" : "The others"} ({part.runs}): reached {part.reached} of {part.runs},
-          median distance {formatValue(part.median_gap)}
+          {part.ended_on_cap ? "Stopped by the time cap" : "The others"} ({part.runs}):{" "}
+          {fixedBudget
+            ? `median error at the end ${formatValue(part.median_gap)}`
+            : `reached ${part.reached} of ${part.runs}, median distance ${formatValue(part.median_gap)}`}
         </li>
       ))}
     </ul>
   );
 }
 
-function SeedsTable({ runs, caption }) {
+function SeedsTable({ runs, caption, fixedBudget }) {
   return (
     <div className="mt-2 max-w-full overflow-x-auto">
       <table className="w-full min-w-[30rem] text-left text-xs">
@@ -367,7 +383,7 @@ function SeedsTable({ runs, caption }) {
               <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums">
                 {typeof run.evaluations === "number" ? count.format(run.evaluations) : "–"}
               </td>
-              <td className="whitespace-nowrap py-1 pr-3 tabular-nums">{outcome(run)}</td>
+              <td className="whitespace-nowrap py-1 pr-3 tabular-nums">{outcome(run, fixedBudget)}</td>
               <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums">{typeof run.best === "number" ? formatValue(run.best) : "–"}</td>
               <td className="py-1 text-base-content/65">{notes(run).join("; ")}</td>
             </tr>
@@ -378,7 +394,9 @@ function SeedsTable({ runs, caption }) {
   );
 }
 
-function outcome(run) {
+function outcome(run, fixedBudget) {
+  // a fixed budget has no target: how the run ended
+  if (fixedBudget) return run.ended_by ? "ended early by the library" : run.capped ? "stopped by the time cap" : "used the budget";
   if (run.reached) {
     const hit = run.first_hit;
     return hit ? `reached at ${count.format(hit.evaluations)} evals, ${seconds(hit.time_s)}` : "reached";
@@ -389,6 +407,7 @@ function outcome(run) {
 function notes(run) {
   const out = [];
   if (run.capped) out.push("stopped by the time cap");
+  if (run.ended_by) out.push(`ended by the library: ${run.ended_by}`);
   if (run.invalid) out.push(`invalid, left out: ${run.invalid.join("; ")}`);
   return out;
 }
@@ -439,11 +458,16 @@ function issueUrl({ issuesUrl, data, pageUrl }) {
   const settings = [
     typeof scenario.budget === "number" ? `budget ${count.format(scenario.budget)} evaluations` : null,
     typeof scenario.cap === "number" ? `time cap ${formatValue(scenario.cap)} s` : null,
-    typeof scenario.target === "number" ? `target ${formatValue(scenario.target)}` : null,
+    typeof scenario.target === "number" ? `target ${formatValue(scenario.target)}` : scenario.fixed_budget ? "no target" : null,
     `${scenario.seeds?.length ?? method.runs.length} seeds`,
   ].filter(Boolean);
   let numbers = "none summarized: every run failed a check of the rules";
-  if (s) {
+  if (s && scenario.fixed_budget) {
+    numbers =
+      `median time for the budget ${typeof s.budget_time === "number" ? seconds(s.budget_time) : "–"}, error at the end ${formatValue(s.median_gap)} median ` +
+      `(${formatValue(s.best_gap)} best, ${formatValue(s.worst_gap)} worst)` +
+      (s.ended_early ? `, ${s.ended_early} of ${s.runs} runs ended early by the library` : "");
+  } else if (s) {
     numbers =
       `reached the target in ${s.reached} of ${s.runs} runs` +
       (typeof s.ert_time === "number" ? `, expected time to target ${seconds(s.ert_time)}` : "") +

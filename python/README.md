@@ -243,13 +243,11 @@ result = ga.run(lambda bits: bits.sum(), generations=1_000, on_generation=report
 
 ## Benchmarks
 
-The package is benchmarked as a library of its own, genoxide (Python), beside the Rust library and 15 other libraries in Rust, C++, Python, Java and Julia, on 9 single-objective scenarios under the same public [rules](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md): single-threaded on the same machine, 10 seeds each. Multi-objective benchmarks are left out for now: they come back once genoxide solves these problems well.
+The package is benchmarked as a library of its own, genoxide (Python), beside the Rust library and the other libraries, on a small, matched suite: three problems, one method each, under public [rules](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md). Every library runs a problem only with its own implementation of that problem's method, set to the same written definition: a GA on OneMax 1000, DE/rand/1/bin on Rastrigin 30 (a fixed budget, measured by the time for it and the error at the end) and CMA-ES on Rosenbrock 10. Single-threaded on the same machine, 10 seeds each. More problems, and multi-objective ones, come back after these.
 
-[![Overall score: each library's speed to a solution over the 9 scenarios](https://raw.githubusercontent.com/tachsin/genoxide/main/docs/benchmarks/overall.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
+[![Expected time to target: a panel per problem, a bar per library](https://raw.githubusercontent.com/tachsin/genoxide/main/docs/benchmarks/time_to_target.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
 
-Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, evenly per order of magnitude of time in between; the overall score is the mean over the scenarios a library runs ([rule 8.5](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md#8-reporting)). A library's time is its fastest method's expected time to the target.
-
-**Interactive results, every chart and table: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).** The methodology and a page per library are in [docs/benchmarks](https://github.com/tachsin/genoxide/tree/main/docs/benchmarks).
+**Interactive results, a card per problem: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).** The methodology, the methods' definitions and a page per library are in [docs/benchmarks](https://github.com/tachsin/genoxide/tree/main/docs/benchmarks).
 
 ## The Rust library
 

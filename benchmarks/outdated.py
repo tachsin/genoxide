@@ -8,9 +8,7 @@ Each adapter of run.ADAPTERS with a "release" is checked, with the standard libr
 - ("crates", crate): pinned in the adapter's Cargo.lock, released on crates.io;
 - ("maven", group, artifact): pinned in the adapter's build.sh (<NAME>_VERSION=), released on
   Maven Central;
-- ("julia", package): pinned in the adapter's Manifest.toml, released in Julia's General registry;
-- ("github", repository, header): pinned to a commit in the adapter's build.sh (COMMIT=, VERSION=);
-  newer when the repository has a newer tag, or when its default branch changed the header.
+- ("julia", package): pinned in the adapter's Manifest.toml, released in Julia's General registry.
 
 `--issue` keeps one open GitHub issue, ISSUE_TITLE, listing the newer releases and the pins not
 rerun, with `gh`: it creates it, updates its body when the list changes, and closes it when no
@@ -98,8 +96,6 @@ def pinned_version(name, release):
     if kind == "julia":
         manifest = tomllib.loads(adapter_file(name, "Manifest.toml").read_text(encoding="utf-8"))
         return manifest["deps"][release[1]][0]["version"]
-    if kind == "github":
-        return shell_variable(name, "VERSION")
     raise ValueError(f"unknown registry {kind}")
 
 
@@ -113,7 +109,7 @@ def pinned_in(name, release, pinned):
         return [f"{folder}/Cargo.toml", f"{folder}/Cargo.lock"]
     if kind == "julia":
         return [f"{folder}/Project.toml", f"{folder}/Manifest.toml"]
-    # a shell script may repeat the version, e.g. Jenetics' run.sh
+    # a shell script may repeat the version, e.g. the adapter's run.sh
     return [f"{folder}/{file}" for file in ("build.sh", "run.sh")
             if adapter_file(name, file).is_file() and pinned in adapter_file(name, file).read_text(encoding="utf-8")]
 
@@ -137,20 +133,6 @@ def latest_version(name, release, pinned):
             f"https://raw.githubusercontent.com/JuliaRegistries/General/master/{package[0].upper()}/{package}/Versions.toml"
         ).decode("utf-8"))
         return newest(version for version, entry in versions.items() if not entry.get("yanked"))
-    if kind == "github":
-        repository, header = release[1], release[2]
-        api = f"https://api.github.com/repos/{repository}"
-        tag = newest(tag["name"] for tag in json.loads(fetch(f"{api}/tags?per_page=100"))).lstrip("v")
-        base = pinned.split("+")[0]
-        if version_key(tag) > version_key(base):
-            return tag
-        # the pinned commit is past the last tag: newer when the default branch changed the header since
-        branch = json.loads(fetch(api))["default_branch"]
-        commit = shell_variable(name, "COMMIT")
-        compare = json.loads(fetch(f"{api}/compare/{commit}...{branch}"))
-        if any(file["filename"] == header for file in compare.get("files", [])):
-            return f"{base}+{compare['commits'][-1]['sha'][:7]}"
-        return pinned
     raise ValueError(f"unknown registry {kind}")
 
 

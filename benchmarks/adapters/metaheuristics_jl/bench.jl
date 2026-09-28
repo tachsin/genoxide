@@ -6,10 +6,12 @@
 #        julia --project=<this folder> bench.jl --version
 # Prints one JSON line per solver per seed, see ../../README.md for the fields.
 #
-# The methods, their settings and where Metaheuristics.jl recommends them are explained in
-# docs/benchmarks/libraries/metaheuristics_jl.md; each one is cited next to its code below. "The
-# guide" is the "Quick Selection Guide" of docs/src/algorithms/index.md
-# (https://jmejia8.github.io/Metaheuristics.jl/stable/algorithms/).
+# The matched suite: one method per problem, set to the definition of docs/benchmarks/rules.md with
+# the library's own implementation. Metaheuristics.jl runs one of the three:
+# - rastrigin 30 matched: DE/rand/1/bin ("de").
+# Not onemax 1000 (no two-point crossover) nor rosenbrock 10 (no CMA-ES). Every other problem,
+# size or mode prints nothing. The settings, their sources and the differences from the definition
+# are on docs/benchmarks/libraries/metaheuristics_jl.md.
 #
 # Every solver is warmed up (compiled) with an untimed, unprinted run of the same problem, with
 # the seed 999,999, 50,000 evaluations and the scenario's time cap, before the timed runs (rule
@@ -25,33 +27,13 @@ BLAS.set_num_threads(1)
 # Fitness functions, identical to problems.py. Metaheuristics.jl minimizes.
 # -------------------------------------------------------------------------------------------------
 
-onemax(x::AbstractVector{Bool}) = -count(x)
-
-# Diagonal conflicts: for each diagonal, its queens minus one. 1-based: queen i in column p[i]
-function nqueens(p::AbstractVector{<:Integer})
-    n = length(p)
-    left = zeros(Int, 2n - 1)
-    right = zeros(Int, 2n - 1)
-    @inbounds for i in 1:n
-        left[i + p[i] - 1] += 1
-        right[n - i + p[i]] += 1
-    end
-    conflicts = 0
-    @inbounds for i in 1:(2n - 1)
-        left[i] > 1 && (conflicts += left[i] - 1)
-        right[i] > 1 && (conflicts += right[i] - 1)
-    end
-    return conflicts
-end
-
-# The shift of Rastrigin and Ackley, so that the optimum isn't at the origin:
+# The shift of Rastrigin, so that the optimum isn't at the origin:
 # s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1) for the 0-based gene index i, with `upper`
 # the box's upper bound, computed in this order (problems.py). Computed once, before any run, for up
 # to MAX_GENES genes.
 shift(index::Integer, upper) = 0.8 * upper * (2 * ((37 * (index - 1) + 11) % 101) / 101 - 1)
 const MAX_GENES = 1024
 const RASTRIGIN_SHIFT = [shift(index, 5.12) for index in 1:MAX_GENES]
-const ACKLEY_SHIFT = [shift(index, 32.768) for index in 1:MAX_GENES]
 
 function rastrigin(x::AbstractVector{<:Real})
     s = 10.0 * length(x)
@@ -62,38 +44,18 @@ function rastrigin(x::AbstractVector{<:Real})
     return s
 end
 
-function rosenbrock(x::AbstractVector{<:Real})
-    s = 0.0
-    for i in 1:(length(x) - 1)
-        s += 100.0 * (x[i + 1] - x[i]^2)^2 + (1.0 - x[i])^2
-    end
-    return s
-end
-
-function ackley(x::AbstractVector{<:Real})
-    n = length(x)
-    squares = 0.0
-    cosines = 0.0
-    for (v, offset) in zip(x, ACKLEY_SHIFT)
-        y = v - offset
-        squares += y * y
-        cosines += cos(2π * y)
-    end
-    return -20.0 * exp(-0.2 * sqrt(squares / n)) - exp(cosines / n) + 20.0 + ℯ
-end
-
-# (function, lower bound, upper bound)
-const REAL_PROBLEMS = Dict(
-    "rastrigin" => (rastrigin, -5.12, 5.12),
-    "rosenbrock" => (rosenbrock, -5.0, 10.0),
-    "ackley" => (ackley, -32.768, 32.768),
-)
-const REAL_TARGET = 0.01
+const RASTRIGIN_LOWER = -5.12
+const RASTRIGIN_UPPER = 5.12
+# Rastrigin 30 has no target: a run uses the whole budget (or stops at the time cap), measured by its
+# time and its error at the end (the best value; the optimum is 0). The budget's target is -Inf,
+# never reached, so no run stops early and first_hit stays null; the run prints "target": null.
+const NO_TARGET = -Inf
 
 # -------------------------------------------------------------------------------------------------
 # The budget: counts every evaluation (rule 3) and keeps the best value and solution. A termination
-# criterion stops the run at the target, at max_evaluations or at max_seconds, checked after every
-# iteration. The clock starts when the budget is created, just before the run (rule 4.1).
+# criterion stops the run at max_evaluations or at max_seconds (or at a target, which Rastrigin 30
+# doesn't have), checked after every iteration. The clock starts when the budget is created, just
+# before the run (rule 4.1).
 # -------------------------------------------------------------------------------------------------
 
 mutable struct Budget
@@ -142,10 +104,6 @@ exhausted(budget::Budget) =
     budget.evaluations >= budget.max_evaluations ||
     seconds(budget) >= budget.max_seconds
 
-# the "first_hit" field of a single-objective run
-first_hit(budget::Budget) = budget.first_hit_evaluations < 0 ? nothing :
-    (evaluations = budget.first_hit_evaluations, time_s = round(budget.first_hit_seconds, digits = 6))
-
 # a user-defined termination criterion, as the library's own (src/termination/budget.jl)
 struct BudgetTermination <: Metaheuristics.AbstractTermination
     budget::Budget
@@ -170,123 +128,58 @@ function counted(f, budget::Budget; bounds = nothing)
     end
 end
 
-# The options (Options docstring, docs/src/api.md) of one attempt: its seed, and what is left of the
-# evaluations and of the time. f_calls_limit is also what ECA uses to switch to exploitation at 95%
-# of it (eca_solution in src/algorithms/singleobjective/ECA/ECA.jl). The tolerances are the
-# defaults (f_tol 1e-12, f_tol_rel eps(), x_tol 1e-8). The iteration limit, only a budget, is
-# lifted (rule 2.2).
-options(budget::Budget, seed) = Options(
-    f_calls_limit = budget.max_evaluations - budget.evaluations,
-    time_limit = budget.max_seconds - seconds(budget),
-    iterations = typemax(Int) ÷ 4,
-    f_tol = 1e-12,
-    seed = seed,
-)
-
-# The termination: BudgetTermination, and the library's convergence criteria, which end the attempt
-# (rule 2.2): the one optimize checks always (default_stop_check in src/termination/default.jl:
-# CheckConvergence, all of AbsoluteFunctionConvergence(f_tol), RelativeFunctionConvergence(f_tol_rel),
-# SmallStandardDeviation and RelativeParameterConvergence(x_tol)), and the one it adds when the user
-# gives no termination (src/optimize/before.jl): the same CheckConvergence for one objective.
+# The options (Options docstring, docs/src/api.md) and termination of a run, with no convergence
+# criterion (rule 2.2):
+# - its seed (optimize seeds Julia's global generator with it, src/optimize/before.jl, which the
+#   operators use), the budget and the time cap; the iteration limit, only a budget, is lifted;
+# - optimize always checks CheckConvergence (default_stop_check, src/termination/default.jl), which
+#   needs all of AbsoluteFunctionConvergence(f_tol), RelativeFunctionConvergence(f_tol_rel),
+#   SmallStandardDeviation and RelativeParameterConvergence(x_tol), each a spread <= its
+#   tolerance (src/termination/convergence.jl): negative tolerances turn it off;
+# - a user termination replaces the CheckConvergence optimize adds without one
+#   (src/optimize/before.jl): BudgetTermination, which ends the run at the budget or the time cap.
+# DE evaluates every trial, so it never stalls (rule 2.2), and nothing else ends a run: no restarts.
 function algorithm_kwargs(budget, seed)
-    opts = options(budget, seed)
-    convergence = Metaheuristics.CheckConvergence(f_tol_abs = opts.f_tol, f_tol_rel = opts.f_tol_rel, x_tol = opts.x_tol)
-    return (options = opts, termination = Metaheuristics.Termination(checkany = [BudgetTermination(budget), convergence]))
-end
-
-# An attempt that ends before the target, the budget or the cap has converged. The library has no
-# restart after convergence: its Restart (docs/src/algorithms/singleobjective.md, "Restart")
-# replaces the population every 100 iterations whatever happens, and keeps the base method's stops.
-# So the method starts again from a new random start, with the seed (seed + 1) * 1,000,000 +
-# restart (rule 2.2); `budget` keeps the best solution and counts every evaluation.
-# Returns (the last attempt's status, iterations, restarts).
-function run_restarting(start, budget::Budget, seed)
-    iterations = 0
-    restart = 0
-    while true
-        status = start(restart == 0 ? seed : (seed + 1) * 1_000_000 + restart)
-        iterations += status.iteration
-        exhausted(budget) && return status, iterations, restart
-        restart += 1
-    end
+    options = Options(
+        f_calls_limit = budget.max_evaluations,
+        time_limit = budget.max_seconds,
+        iterations = typemax(Int) ÷ 4,
+        f_tol = -1.0,
+        f_tol_rel = -1.0,
+        x_tol = -1.0,
+        seed = seed,
+    )
+    return (options = options, termination = Metaheuristics.Termination(checkany = [BudgetTermination(budget)]))
 end
 
 # -------------------------------------------------------------------------------------------------
-# Solvers: (name, run(budget, seed) -> status, decode(best solution) -> reported solution)
+# Rastrigin 30, matched: DE/rand/1/bin ("de")
 # -------------------------------------------------------------------------------------------------
 
-bits(x) = Int.(x)
-zero_based(p) = p .- 1
-
-function onemax_solvers(size, mode)
-    # Matched: not run (rule 6.1). The library has no two-point crossover (its crossovers are
-    # UniformCrossover, OrderCrossover, SBX and BinomialCrossover), and the matched scenarios use
-    # only the library's own operators.
-    mode == "matched" && return nothing
-    run = function (budget, seed)
-        # the guide: "Binary: Use GA with BitFlipMutation". The binary example of the GA
-        # docstring (docs/src/algorithms/singleobjective.md, "GA"): GA() with its defaults,
-        # population 100, binary tournament, uniform crossover 0.5, BitFlipMutation(1e-5),
-        # elitist replacement
-        algorithm = GA(; algorithm_kwargs(budget, seed)...)
-        return optimize(counted(onemax, budget), BitArraySpace(size), algorithm; logger = generation_logger(budget))
-    end
-    return [("ga", run, bits)]
-end
-
-function nqueens_solvers(size)
-    # the guide: "Permutation-based: Use GA with OrderCrossover or BRKGA".
-    # docs/src/tutorials/n-queens.md: optimize(attacks, PermutationSpace(N), GA), i.e. the GA's
-    # defaults for permutations (get_parameters in src/algorithms/singleobjective/GA/GA.jl):
-    # population 100, binary tournament, OrderCrossover, SlightMutation, elitist replacement
-    ga = function (budget, seed)
-        N = 100
-        algorithm = GA(;
-            N = N,
-            initializer = Metaheuristics.RandomPermutation(; N),
-            selection = TournamentSelection(; N),
-            crossover = OrderCrossover(),
-            mutation = SlightMutation(),
-            environmental_selection = ElitistReplacement(),
-            algorithm_kwargs(budget, seed)...,
-        )
-        return optimize(counted(nqueens, budget), PermutationSpace(size), algorithm; logger = generation_logger(budget))
-    end
-    # the BRKGA docstring (docs/src/algorithms/combinatorial.md, "BRKGA"): random keys in [0, 1]^n
-    # decoded by sortperm, with the defaults (20 elites, 10 mutants, 70 offspring, bias 0.7)
-    brkga = function (budget, seed)
-        bounds = boxconstraints(lb = zeros(size), ub = ones(size))
-        return optimize(
-            counted(keys -> nqueens(sortperm(keys)), budget), bounds, BRKGA(; algorithm_kwargs(budget, seed)...);
-            logger = generation_logger(budget),
-        )
-    end
-    return [("ga", ga, zero_based), ("brkga", brkga, keys -> sortperm(keys) .- 1)]
-end
-
-function real_solvers(problem, size)
-    f, lower, upper = REAL_PROBLEMS[problem]
+# DE (src/algorithms/singleobjective/DE/DE.jl, docs/src/algorithms/singleobjective.md): N = 100,
+# F = 0.5 and CR = 0.9 fixed (F_min = F_max = F, CR_min = CR_max = CR: no dither), strategy :rand1:
+# v = x_r1 + F (x_r2 - x_r3) (DE_mutation, src/operators/mutation/mutation.jl), binomial crossover
+# with the target and a forced index j_rand (DE_crossover, src/operators/crossover/uniform.jl),
+# generational: all trials are built from the last population, then each replaces its target if
+# better (environmental_selection, DE.jl). The initial population is uniform in the box. Bounds:
+# a trial gene outside the box is redrawn between the bound it crossed and the best solution's gene
+# (evo_boundary_repairer!, src/common/repair.jl). Differences: r1, r2, r3 are distinct but may
+# include the target (DE_mutation isn't given its index); a trial replaces its target only if
+# strictly better (the definition: also on a tie); the repair.
+function rastrigin_de(size)
+    lower, upper = RASTRIGIN_LOWER, RASTRIGIN_UPPER
     bounds = boxconstraints(lb = fill(lower, size), ub = fill(upper, size))
-    # the bounds: the initial population within them, and each method's own repair (ECA and DE:
-    # evo_boundary_repairer!, ECA.jl and DE.jl; PSO: reset_to_violated_bounds!, PSO.jl)
-    solve(make) = (budget, seed) -> optimize(
-        counted(f, budget; bounds = (lower, upper)), bounds, make(algorithm_kwargs(budget, seed));
+    return (budget, seed) -> optimize(
+        counted(rastrigin, budget; bounds = (lower, upper)), bounds,
+        DE(; N = 100, F = 0.5, CR = 0.9, strategy = :rand1, algorithm_kwargs(budget, seed)...);
         logger = generation_logger(budget),
     )
-    # the guide: "Box-constrained (continuous): Use ECA, DE, PSO, or SHADE", the first three, with
-    # their defaults (their docstrings, docs/src/algorithms/singleobjective.md). ECA is also the
-    # default of optimize and the Quick Start's method on Rastrigin (docs/src/index.md); DE and PSO
-    # are "Good for multimodal".
-    return [
-        # ECA: K = 7, population K·D, η_max = 2, p_exploit 0.95, p_bin 0.02
-        ("eca", solve(kwargs -> ECA(; kwargs...)), identity),
-        # DE/rand/1/bin: population 10·D, F = 0.7, CR = 0.5 (the code's defaults; its docstring
-        # says F = 1.0)
-        ("de", solve(kwargs -> DE(; kwargs...)), identity),
-        # PSO: population 10·D, C1 = C2 = 2, ω = 0.8
-        ("pso", solve(kwargs -> PSO(; kwargs...)), identity),
-    ]
 end
+
+# (problem, size) => (solver, run(budget, seed) -> status), all matched
+const SCENARIOS = Dict(
+    ("rastrigin", 30) => size -> ("de", rastrigin_de(size)),
+)
 
 # the untimed warm-up run of every solver before the timed ones (rule 4.2), with the scenario's
 # time cap
@@ -294,7 +187,7 @@ const WARM_UP_EVALUATIONS = 50_000
 const WARM_UP_SEED = 999_999
 
 # rule 5.3: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took CAPPED of
-# it) without reaching the target runs no more seeds
+# it) runs no more seeds
 const EARLY_SEEDS = 3
 const CAPPED = 0.98
 
@@ -322,13 +215,7 @@ function print_values(problem, size)
         isempty(strip(line)) && continue
         text = strip(line, ['[', ']', ' ', '\t', '\r'])
         x = [parse(Float64, strip(s)) for s in split(text, ',') if !isempty(strip(s))]
-        if problem == "onemax"
-            println(json_value(-onemax(x .!= 0)))
-        elseif problem == "nqueens"
-            println(json_value(nqueens(round.(Int, x) .+ 1)))
-        elseif haskey(REAL_PROBLEMS, problem)
-            println(json_value(REAL_PROBLEMS[problem][1](x)))
-        end
+        problem == "rastrigin" && println(json_value(rastrigin(x)))
     end
     return
 end
@@ -351,46 +238,34 @@ function main(args)
     problem, size, mode = args[1], parse(Int, args[2]), args[3]
     seed_from, seed_to = parse(Int, args[4]), parse(Int, args[5])
     max_evaluations, max_seconds = parse(Int, args[6]), parse(Float64, args[7])
-    size <= MAX_GENES || error("at most $MAX_GENES genes")
 
-    if problem == "onemax"
-        solvers = onemax_solvers(size, mode)
-        solvers === nothing && return  # not run: print nothing
-        target = -size  # minimized
-    elseif problem == "nqueens"
-        solvers = nqueens_solvers(size)
-        target = 0
-    elseif haskey(REAL_PROBLEMS, problem)
-        solvers = real_solvers(problem, size)
-        target = REAL_TARGET
-    else
-        println(stderr, "metaheuristics_jl: unsupported problem $problem")
+    if mode != "matched" || !haskey(SCENARIOS, (problem, size))
+        # not in the suite: print nothing
+        println(stderr, "metaheuristics_jl: not run: $problem $size $mode")
         return
     end
+    solver, run = SCENARIOS[(problem, size)](size)
+    target = NO_TARGET
 
-    for (_, run, _) in solvers
-        budget = Budget(WARM_UP_EVALUATIONS, max_seconds, target)
-        run_restarting(s -> run(budget, s), budget, WARM_UP_SEED)
-    end
+    run(Budget(WARM_UP_EVALUATIONS, max_seconds, target), WARM_UP_SEED)
 
-    capped = Dict(solver => 0 for (solver, _, _) in solvers)
-    for seed in seed_from:seed_to, (solver, run, decode) in solvers
+    capped = 0
+    for seed in seed_from:seed_to
         index = seed - seed_from
-        index >= EARLY_SEEDS && capped[solver] == EARLY_SEEDS && continue
+        index >= EARLY_SEEDS && capped == EARLY_SEEDS && break
         budget = Budget(max_evaluations, max_seconds, target)  # the clock starts
-        _, iterations, restarts = run_restarting(s -> run(budget, s), budget, seed)
+        # the iterations, the initial population's included
+        iterations = run(budget, seed).iteration
         elapsed = seconds(budget)
-        best = problem == "onemax" ? -Int(budget.best) : problem == "nqueens" ? Int(budget.best) : budget.best
-        success = problem == "onemax" ? best >= size : budget.best <= target
-        capped[solver] += index < EARLY_SEEDS && !success && elapsed >= CAPPED * max_seconds
+        success = false  # no target
+        capped += index < EARLY_SEEDS && elapsed >= CAPPED * max_seconds
         print_line([
             "library" => "metaheuristics_jl", "solver" => solver, "problem" => problem, "size" => size,
             "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
             "generations" => iterations, "evaluations" => budget.evaluations,
-            "last_generation" => last_generation(budget), "restarts" => restarts,
-            (haskey(REAL_PROBLEMS, problem) ? ["outside" => budget.outside] : [])...,
-            "best" => best, "target" => problem == "onemax" ? size : target, "success" => success,
-            "first_hit" => first_hit(budget), "solution" => decode(budget.solution),
+            "last_generation" => last_generation(budget), "outside" => budget.outside,
+            "best" => budget.best, "target" => nothing, "success" => success,
+            "first_hit" => nothing, "solution" => budget.solution,
         ])
     end
     return

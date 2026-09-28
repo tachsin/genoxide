@@ -28,5 +28,5 @@ take a whole generation as a numpy array.
 - [Python API](api/python/): the reference of the Python package
 - [Rust API](https://docs.rs/genoxide) on docs.rs
 - [GitHub](https://github.com/tachsin/genoxide)
-- [Benchmark results](https://tachsin.gr/projects/genoxide/benchmarks), interactive: every chart and table, and an overall score per library
-- [Benchmarks](https://github.com/tachsin/genoxide/tree/main/docs/benchmarks): rules, methodology and the full tables
+- [Benchmark results](https://tachsin.gr/projects/genoxide/benchmarks), interactive: three problems, one method each, the same in every library
+- [Benchmarks](https://github.com/tachsin/genoxide/tree/main/docs/benchmarks): rules, the methods' definitions, methodology and the full tables

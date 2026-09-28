@@ -70,15 +70,13 @@ See [python/README.md](python/README.md) for the algorithms, operators and numpy
 
 ## Benchmarks
 
-genoxide and its Python package are benchmarked with 15 other libraries in Rust, C++, Python, Java and Julia, on 9 single-objective scenarios under the same public [rules](docs/benchmarks/rules.md): single-threaded on the same machine, 10 seeds each. Multi-objective benchmarks are left out for now: they come back once genoxide solves these problems well.
+genoxide and its Python package are benchmarked on a small, matched suite: three problems, one method each, under public [rules](docs/benchmarks/rules.md). Every library runs a problem only with its own implementation of that problem's method, set to the same written definition, so the results compare implementations of the same algorithm rather than each library's pick of a method: a GA on OneMax 1000, DE/rand/1/bin on Rastrigin 30 (a fixed budget, measured by the time for it and the error at the end) and CMA-ES on Rosenbrock 10. Single-threaded on the same machine, 10 seeds each. More problems, and multi-objective ones, come back after these.
 
-[![Overall score: each library's speed to a solution over the 9 scenarios](docs/benchmarks/overall.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
-
-Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, evenly per order of magnitude of time in between; the overall score is the mean over the scenarios a library runs ([rule 8.5](docs/benchmarks/rules.md#8-reporting)). A library's time is its fastest method's expected time to the target.
+[![Expected time to target: a panel per problem, a bar per library](docs/benchmarks/time_to_target.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
 
 genoxide's own releases are compared on the same runs by the CPU instructions Callgrind counts, exact whatever the machine's load: [genoxide_versions.svg](docs/benchmarks/genoxide_versions.svg) ([rule 10](docs/benchmarks/rules.md#10-instruction-counts-genoxides-versions)).
 
-**Interactive results, every chart and table: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).** The [methodology](benchmarks/README.md) and the [page for each library](docs/benchmarks/libraries/) give the methods and settings, and [results.md](docs/benchmarks/results.md) has the full tables.
+**Interactive results, a card per problem: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).** The [methodology](benchmarks/README.md), each method's [definition](docs/benchmarks/rules.md#6-the-methods) and the [page for each library](docs/benchmarks/libraries/) give the configurations and their differences, and [results.md](docs/benchmarks/results.md) has the full tables.
 
 ## Links
 

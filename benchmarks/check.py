@@ -122,8 +122,6 @@ def check_values(adapter, problem, size):
 def in_domain(problem, size, solution):
     if problem == "onemax":
         return len(solution) == size and all(bit in (0, 1, True, False) for bit in solution)
-    if problem == "nqueens":
-        return sorted(solution) == list(range(size))
     lower, upper = problems.REAL_BOUNDS[problem]
     return len(solution) == size and all(lower - 1e-12 <= v <= upper + 1e-12 for v in solution)
 
@@ -167,9 +165,16 @@ def check_run(r, problem, size, budget, cap):
     reached = problems.reached(problem, size, expected)
     if bool(r["success"]) != reached:
         failures.append(f"{where}: success {r['success']}, but the solution's value {expected} says {reached}")
-    if not reached and evaluations < budget and not capped:
+    goal = problems.target(problem, size)
+    if not (r["target"] == goal or (r["target"] is not None and goal is not None
+                                    and problems.close(r["target"], goal))):
+        failures.append(f"{where}: target {r['target']}, but the scenario's is {goal}")
+    # a run the library itself ended with an error (a crash, rule 8.4) says so in "ended_by": it
+    # ends there, not reached, since the matched methods have no restarts
+    if not reached and evaluations < budget and not capped and not r.get("ended_by"):
         failures.append(f"{where}: ended after {evaluations} of {budget} evaluations in {r['time_s']:.1f} s "
-                        "without reaching the target (rule 2.2: it must keep going)")
+                        + ("without reaching the target" if goal is not None else "of its fixed budget")
+                        + " (rule 2.2: it must keep going)")
     return failures + check_first_hit(r, where, reached)
 
 

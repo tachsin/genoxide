@@ -1,31 +1,30 @@
-"""Benchmark adapter for pygmo (the Python bindings of pagmo).
+"""Benchmark adapter for pygmo (the Python bindings of pagmo): the matched suite.
 
 Usage:
     python bench.py <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
     python bench.py values <problem> <size>     (one JSON solution per line on stdin)
 
-Prints one JSON line per solver per seed, see ../../README.md for the fields. Every method, setting
-and where pygmo recommends it is on the library's page, docs/benchmarks/libraries/pygmo.md, and
-next to the code below.
+Prints one JSON line per solver per seed, see ../../README.md for the fields. pygmo runs two
+matched scenarios, and prints nothing for any other problem, size or mode:
+- Rastrigin 30: DE/rand/1/bin, pygmo's de with variant 7 ("de"), with no target: every run uses
+  the whole budget (or the time cap), and prints "target": null, "success": false and
+  "first_hit": null;
+- Rosenbrock 10: CMA-ES, pygmo's cmaes ("cma_es"), to the target 0.01.
+pagmo's only GA, sga, can't run the matched OneMax (see the page). The settings, their sources and
+the differences from the definitions are on the library's page, docs/benchmarks/libraries/pygmo.md.
 
 pagmo's algorithms run in C++ and call the fitness of a Python user-defined problem (UDP),
-single-threaded (no islands or archipelagos). The algorithms that accept a batch fitness evaluator
-(cmaes, gaco) get pygmo's member_bfe, which evaluates a whole generation in one call of the
-UDP's batch_fitness, with numpy; the others call its fitness, one decision vector at a time. The
-UDP counts every decision vector evaluated (rule 3), the initial populations and every restart
-included, and keeps the best solution and the first evaluation that reaches the target. It also
-counts the evaluated solutions outside the bounds, as pagmo proposed them (rule 2.4: pagmo's own
-bound handling keeps them inside, see the page). How a run ends (rule 2):
-- the counter raises Stop from inside the fitness at the first of the target, the budget and the
-  time limit: after the evaluation, or the batch, that reaches the target; a batch that would go
-  past the budget is evaluated only up to it;
-- a limit that's only a budget (every algorithm's gen) is lifted: gen covers the whole budget;
-- an algorithm that ends on convergence (sade's, CMA-ES' and xNES' ftol and xtol, GACO's impstop and
-  evalstop) starts again from a new random population, the procedure of pygmo's cmaes_vs_xnes
-  tutorial for algorithms "with well defined exit conditions", with the run's seed first and
-  (seed + 1) * 1_000_000 + restart for restart 1 on;
-- simulated annealing's cooling schedule has a fixed length; it's annealed again from its best
-  point, as in the solving_schwefel_20 tutorial.
+single-threaded (no islands or archipelagos). cmaes accepts a batch fitness evaluator: it gets
+pygmo's member_bfe, which evaluates a generation in one call of the UDP's batch_fitness, with
+numpy; de takes none and calls its fitness, one decision vector at a time. The UDP counts every
+decision vector evaluated (rule 3), the initial population included, keeps the best solution and
+the first evaluation that reaches the target, and counts the evaluated solutions outside the bounds
+(rule 2.4). How a run ends (rule 2): the counter raises Stop from inside the fitness at the first of
+the target (if the scenario has one), the budget and the time limit, after the evaluation, or the
+batch, that reaches the target (a batch that would go past the budget is evaluated only up to it). The algorithms' gen is a
+budget only, set to cover the whole budget, and their ftol and xtol are 0, so their stopping tests
+never fire: one call of evolve runs to the end. An error of pagmo ends the run, reported in
+"ended_by" (rule 8.4).
 """
 
 import os
@@ -35,7 +34,6 @@ for variable in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
     os.environ[variable] = "1"
 
 import functools  # noqa: E402
-import itertools  # noqa: E402
 import json  # noqa: E402
 import math  # noqa: E402
 import sys  # noqa: E402
@@ -75,7 +73,7 @@ start_tbb_with_one_thread()
 
 
 class Stop(Exception):
-    """Raised by the fitness to end a single-objective run."""
+    """Raised by the fitness to end a run."""
 
 
 class Counter:
@@ -101,8 +99,8 @@ class Counter:
         return self.max_evaluations - self.evaluations
 
     def count(self, x, values):
-        """The evaluations of a single-objective run, the rows of x with their values: ends the run
-        (rule 2.1) by raising Stop."""
+        """The evaluations of the rows of x with their values: ends the run (rule 2.1) by raising
+        Stop."""
         now = time.perf_counter()
         before = self.evaluations
         self.evaluations += len(x)
@@ -121,20 +119,11 @@ class Counter:
 counter = Counter(0, 0.0, 0.0)
 
 
-def last_generation(evaluations, initial, per_generation):
+def last_generation(evaluations, per_generation):
     """The evaluations since the start of the last generation (rule 2.3). pagmo's algorithms run
-    in C++ and don't call back between generations, but each of these evaluates an initial
-    population of `initial` solutions, then per_generation solutions a generation; a restart
-    starts after a whole generation, with a population of per_generation."""
-    if evaluations <= initial:
-        return evaluations
-    return (evaluations - initial - 1) % per_generation + 1
-
-
-def restart_seed(seed, restart):
-    """The seed of attempt `restart` of a run (rule 2.2): the run's seed first, then
-    (seed + 1) * 1_000_000 + restart, so no two runs share a seed."""
-    return seed if restart == 0 else (seed + 1) * 1_000_000 + restart
+    in C++ and don't call back between generations, but both evaluate an initial population of
+    per_generation solutions (pygmo.population), then per_generation solutions a generation."""
+    return (evaluations - 1) % per_generation + 1 if evaluations else 0
 
 
 # -------------------------------------------------------------------------------------------------
@@ -146,16 +135,12 @@ def restart_seed(seed, restart):
 # -------------------------------------------------------------------------------------------------
 
 
-def onemax(x):
-    return np.sum(x, axis=1)  # the number of ones, maximized: the UDP minimizes its negative
-
-
 TARGET = 0.01
 
 
 @functools.cache
 def shift(n, upper):
-    """The optimum of rastrigin and ackley, away from the origin:
+    """The optimum of rastrigin, away from the origin:
     s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1), computed in this order."""
     return np.array([0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1) for i in range(n)])
 
@@ -170,33 +155,22 @@ def rosenbrock(x):
     return np.sum(100 * (x[:, 1:] - x[:, :-1] * x[:, :-1]) ** 2 + (1 - x[:, :-1]) ** 2, axis=1)
 
 
-def ackley(x):
-    n = x.shape[1]
-    y = x - shift(n, 32.768)
-    return (-20 * np.exp(-0.2 * np.sqrt(np.sum(y * y, axis=1) / n))
-            - np.exp(np.sum(np.cos(2 * np.pi * y), axis=1) / n) + 20 + np.e)
-
-
 # the real-valued problems: fitness function and bounds
 REAL_PROBLEMS = {
     "rastrigin": (rastrigin, -5.12, 5.12),
     "rosenbrock": (rosenbrock, -5.0, 10.0),
-    "ackley": (ackley, -32.768, 32.768),
 }
 
 
 class Problem:
     """A pagmo user-defined problem: a box-bounded fitness that counts its evaluations, with a batch
     fitness (tutorials/coding_udp_simple; pygmo.problem.batch_fitness: "the decision vectors ...
-    are all concatenated in a single array"). `sign` is -1 for OneMax, which is maximized (pagmo
-    minimizes)."""
+    are all concatenated in a single array")."""
 
-    def __init__(self, function, lower, upper, integers=0, sign=1.0):
+    def __init__(self, function, lower, upper):
         self.function = function
         self.lower = lower
         self.upper = upper
-        self.integers = integers
-        self.sign = sign
         self.low, self.high = np.array(lower, dtype=float), np.array(upper, dtype=float)
 
     def evaluate(self, x):
@@ -205,7 +179,7 @@ class Problem:
         x = x[:counter.left()]
         # rule 2.4: x as pagmo proposed it, not clipped here
         counter.outside += int(np.sum(np.any((x < self.low) | (x > self.high), axis=1)))
-        values = self.sign * self.function(x)
+        values = self.function(x)
         counter.count(x, values)
         return values[:, None]
 
@@ -221,171 +195,65 @@ class Problem:
     def get_bounds(self):
         return self.lower, self.upper
 
-    def get_nix(self):
-        return self.integers
-
-
-def with_bfe(uda):
-    """The algorithm with pygmo's member_bfe, which evaluates a generation in one call of the UDP's
-    batch_fitness, in this thread (rule 3.4). The search is the same as with fitness."""
-    uda.set_bfe(pg.bfe(pg.member_bfe()))
-    return uda
-
-
-# -------------------------------------------------------------------------------------------------
-# How the single-objective methods run
-# -------------------------------------------------------------------------------------------------
-
 
 def budget_generations(evaluations_per_generation):
-    """Generations enough to use up the whole budget: the counter ends the run first."""
+    """Generations enough to use up the whole budget: the counter ends the run first (rule 2.2:
+    gen is a limit that's only a budget, lifted)."""
     return counter.max_evaluations // evaluations_per_generation + 2
 
 
-class ToBudget:
-    """One call of evolve with the generations of the whole budget, for a method with no stop
-    criterion of its own besides its generations (sga, ihs)."""
-
-    def __init__(self, population_size, make_algorithm):
-        self.population_size = population_size
-        self.make_algorithm = make_algorithm  # seed -> UDA
-
-    def run(self, problem, seed):
-        population = pg.population(problem, self.population_size, seed=seed)
-        pg.algorithm(self.make_algorithm(seed)).evolve(population)
-        raise RuntimeError("the algorithm ended before its budget")
+# -------------------------------------------------------------------------------------------------
+# The methods: (solver, fitness function, population size, the run of one seed)
+# -------------------------------------------------------------------------------------------------
 
 
-class Restarts:
-    """Evolves a random population until the algorithm stops on convergence (its gen covers the
-    whole budget), then starts again from a new random population; the counter keeps the best
-    (rule 2.2). pygmo has no restart mechanism of its own; this is the procedure of
-    tutorials/cmaes_vs_xnes, "the best practice ... when algorithms have well defined exit
-    conditions", which assembles "the results in single runs containing multiple restarts".
-    Restart r uses the seed restart_seed(seed, r) for its population and its algorithm."""
-
-    def __init__(self, population_size, make_algorithm):
-        self.population_size = population_size
-        self.make_algorithm = make_algorithm  # seed -> UDA
-        self.restarts = 0
-
-    def run(self, problem, seed):
-        for restart in itertools.count():
-            self.restarts = restart
-            attempt_seed = restart_seed(seed, restart)
-            population = pg.population(problem, self.population_size, seed=attempt_seed)
-            pg.algorithm(self.make_algorithm(attempt_seed)).evolve(population)
+# DE/rand/1/bin on Rastrigin 30 (pagmo's de, src/algorithms/de.cpp): NP 100, F 0.5, CR 0.9
+DE_POPULATION = 100
 
 
-class Reanneal:
-    """Simulated annealing, annealed again from its best point after each annealing schedule, as in
-    tutorials/solving_schwefel_20 ("since we will be using some reannealing": 5 calls of evolve on
-    the same population). Each call starts from the population's best and puts its best back. The
-    schedule's length is part of its cooling rate ((Tf / Ts)^(1 / n_T_adj) per adjustment), so it
-    can't be lifted without changing the method."""
-
-    def __init__(self, population_size, make_algorithm):
-        self.population_size = population_size
-        self.make_algorithm = make_algorithm  # seed -> UDA
-        self.restarts = 0
-
-    def run(self, problem, seed):
-        population = pg.population(problem, self.population_size, seed=seed)
-        algorithm = pg.algorithm(self.make_algorithm(seed))
-        for restart in itertools.count():
-            self.restarts = restart
-            population = algorithm.evolve(population)
+def run_de(problem, seed):
+    # a population of 100 drawn uniformly in the bounds (pygmo.population), evolved by de with
+    # variant 7, rand/1/bin ("7 - rand/1/bin" in de's docstring), F 0.5 and CR 0.9. ftol and xtol 0:
+    # its stopping tests (dx < xtol, df < ftol) never fire. de draws r1, r2, r3 from the whole
+    # population, x_i included (see the page), redraws a trial gene outside the bounds uniformly
+    # in them, and replaces x_i when its trial is not worse (<=); the trials of a
+    # generation are built from the previous generation's population. It takes no bfe
+    population = pg.population(problem, DE_POPULATION, seed=seed)
+    algorithm = pg.algorithm(pg.de(gen=budget_generations(DE_POPULATION), F=0.5, CR=0.9, variant=7,
+                                   ftol=0.0, xtol=0.0, seed=seed))
+    algorithm.evolve(population)
 
 
-# the population of 20 of pygmo's tutorials: tutorials/evolving_a_population (sade on Rosenbrock
-# 10), tutorials/solving_schwefel_20 (sade, de, de1220, pso, simulated annealing on Schwefel 20)
-# and pagmo's quick start (tutorials/getting_started.cpp: sade on Schwefel 30, islands of 20)
-TUTORIAL_POPULATION = 20
+# CMA-ES on Rosenbrock 10 (pagmo's cmaes, src/algorithms/cmaes.cpp): lambda 10
+CMAES_POPULATION = 10
 
 
-def cmaes_population(problem, size):
-    """CMA-ES and xNES: the population sizes of tutorials/cmaes_vs_xnes, whose figures run each
-    function with three sizes and state no preference, so the first listed is taken (rule 6.2):
-    Rosenbrock 10 [10, 20, 30] (the tutorial's code), Rastrigin 10 [40, 60, 100], Ackley 10 [10,
-    20, 30], and above 10 variables the figures' largest dimension, 20: Rastrigin 20 [100, 150,
-    200], Ackley 20 [20, 30, 40]."""
-    if problem == "rosenbrock":
-        return 10
-    if problem == "rastrigin":
-        return 40 if size <= 10 else 100
-    return 10 if size <= 10 else 20
+def run_cma_es(problem, seed):
+    # lambda = the population's size, 10 (4 + floor(3 ln 10)); mu = lambda / 2 = 5, log weights;
+    # cc, cs, c1, cmu at -1, their default: computed from Hansen's formulas. sigma0 is relative to
+    # the bounds' width (cmaes starts from C = diag(width^2)): 0.3 gives a step of 4.5. The mean
+    # starts at the best of the population, 10 points drawn uniformly in the bounds. ftol and xtol
+    # 0: its stopping tests never fire. force_bounds=True, pagmo's only bound handling for cmaes,
+    # clips each sample to the bounds before it's evaluated ("The fitness will never be called
+    # outside the bounds"). It accepts a bfe: a generation in one batch (rule 3.4)
+    population = pg.population(problem, CMAES_POPULATION, seed=seed)
+    uda = pg.cmaes(gen=budget_generations(CMAES_POPULATION), sigma0=0.3, ftol=0.0, xtol=0.0,
+                   force_bounds=True, seed=seed)
+    uda.set_bfe(pg.bfe(pg.member_bfe()))
+    pg.algorithm(uda).evolve(population)
 
 
-def single_solvers(problem, size, mode):
-    """[(solver, problem, method, evaluations per generation)]"""
-    if problem == "onemax":
-        if mode == "matched":
-            # pagmo's only GA, sga, can't run the matched OneMax: its reinsertion is elitist (the
-            # best of parents and children), which can't be turned off ("the only reinsertion
-            # strategy provided is what we call pure elitism"), and it has no two-point crossover
-            return []
-        # binary genes as integers in [0, 1] (the integer dimension of tutorials/coding_udp_minlp)
-        udp = Problem(onemax, [0] * size, [1] * size, integers=size, sign=-1.0)
-
-        # the three single-objective algorithms that the algorithm list of pygmo's docs
-        # (overview.rst, "Heuristic Global Optimization") flags for integer programming (I), with
-        # their defaults
-        return [
-            # sga's defaults: exponential crossover 0.9, mutation 0.02 per gene (its polynomial
-            # mutation draws an integer gene again from its bounds), tournament of 2
-            ("ga", udp, ToBudget(TUTORIAL_POPULATION, lambda seed: pg.sga(
-                gen=budget_generations(TUTORIAL_POPULATION), seed=seed)), TUTORIAL_POPULATION),
-            # ihs' defaults; one evaluation per generation
-            ("ihs", udp, ToBudget(TUTORIAL_POPULATION, lambda seed: pg.ihs(
-                gen=budget_generations(1), seed=seed)), 1),
-            # gaco's defaults, whose kernel of 63 solutions needs a population of at least 63; its
-            # impstop and evalstop (100,000 generations or evaluations without improvement) end
-            # it, and it restarts. It accepts a bfe: a generation in one batch
-            ("gaco", udp, Restarts(63, lambda seed: with_bfe(pg.gaco(gen=budget_generations(63), seed=seed))),
-             63),
-        ]
-
-    if problem in REAL_PROBLEMS:
-        function, low, high = REAL_PROBLEMS[problem]
-        udp = Problem(function, [low] * size, [high] * size)
-        solvers = [
-            # sade (jDE) with its defaults (variant rand/1/exp, jDE adaptation, ftol and xtol 1e-6)
-            # and the tutorials' population of 20: pagmo's quick start, tutorials/evolving_a_population
-            # (Rosenbrock 10), tutorials/solving_schwefel_20, and tutorials/cec2013_comp, where
-            # "cmaes and sade (jDE) are performing particularly well". It restarts when it converges
-            ("sade", udp, Restarts(TUTORIAL_POPULATION, lambda seed: pg.sade(
-                gen=budget_generations(TUTORIAL_POPULATION), seed=seed)), TUTORIAL_POPULATION),
-        ]
-        # CMA-ES as in tutorials/cmaes_vs_xnes, the example in code on Rosenbrock 10 and, in its
-        # figures, on Rastrigin and Ackley: cmaes(gen=4000, ftol=1e-8, xtol=1e-10), with the
-        # population of cmaes_population, restarted as the tutorial does. With force_bounds,
-        # pagmo's only bound handling for it, which clips each sample to the bounds ("The fitness
-        # will never be called outside the bounds"). Its gen is only a budget, lifted (rule 2.2);
-        # ftol and xtol end an attempt. It accepts a bfe: a generation in one batch
-        population = cmaes_population(problem, size)
-        solvers.append(("cma_es", udp, Restarts(population, lambda seed: with_bfe(pg.cmaes(
-            gen=budget_generations(population), ftol=1e-8, xtol=1e-10, force_bounds=True, seed=seed))),
-            population))
-        if problem == "rosenbrock":
-            # xNES, the other method of the same example, with the same settings
-            solvers.append(("xnes", udp, Restarts(population, lambda seed: pg.xnes(
-                gen=budget_generations(population), ftol=1e-8, xtol=1e-10, force_bounds=True,
-                seed=seed)), population))
-        else:
-            # simulated annealing, one of "the two most successful algorithms" of
-            # tutorials/solving_schwefel_20, with its settings (Ts=10, Tf=0.01, n_T_adj=5, the
-            # other parameters default), its population of 20 and its reannealing; one evaluation
-            # per step
-            solvers.append(("simulated_annealing", udp, Reanneal(TUTORIAL_POPULATION, lambda seed: (
-                pg.simulated_annealing(Ts=10.0, Tf=0.01, n_T_adj=5, seed=seed))), 1))
-        return solvers
-
-    if problem == "nqueens":
-        # pagmo has no permutation representation
+def solvers_of(problem, size, mode):
+    """[(solver, fitness function, population size, run, target)] of a scenario: none outside the
+    matched suite. Rastrigin 30 has no target: its runs use the whole budget, measured by the time
+    they take and the error at the end."""
+    if mode != "matched":
         return []
-
-    print(f"unknown problem {problem}", file=sys.stderr)
-    sys.exit(2)
+    if problem == "rastrigin" and size == 30:
+        return [("de", rastrigin, DE_POPULATION, run_de, None)]
+    if problem == "rosenbrock" and size == 10:
+        return [("cma_es", rosenbrock, CMAES_POPULATION, run_cma_es, TARGET)]
+    return []
 
 
 # -------------------------------------------------------------------------------------------------
@@ -393,18 +261,14 @@ def single_solvers(problem, size, mode):
 
 def values(problem, size):
     """Evaluates the solutions on stdin with the adapter's fitness functions (rule 1.2)."""
+    if problem not in REAL_PROBLEMS:
+        print(f"pygmo doesn't run {problem}", file=sys.stderr)
+        sys.exit(2)
     for line in sys.stdin:
         if not line.strip():
             continue
         x = np.array([json.loads(line)], dtype=float)
-        if problem == "onemax":
-            value = int(onemax(x)[0])
-        elif problem in REAL_PROBLEMS:
-            value = float(REAL_PROBLEMS[problem][0](x)[0])
-        else:
-            print(f"pygmo can't evaluate {problem}", file=sys.stderr)
-            sys.exit(2)
-        print(json.dumps(value), flush=True)
+        print(json.dumps(float(REAL_PROBLEMS[problem][0](x)[0])), flush=True)
 
 
 def main():
@@ -419,25 +283,26 @@ def main():
     seed_from, seed_to = int(sys.argv[4]), int(sys.argv[5])
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
 
-    target = -size if problem == "onemax" else TARGET
     for seed in range(seed_from, seed_to + 1):
-        for solver, udp, method, per_generation in single_solvers(problem, size, mode):
-            problem_ = pg.problem(udp)
+        for solver, function, population_size, run, target in solvers_of(problem, size, mode):
+            _, low, high = REAL_PROBLEMS[problem]
+            problem_ = pg.problem(Problem(function, [low] * size, [high] * size))
             start = time.perf_counter()
-            counter = Counter(max_evaluations, start, max_seconds, target)
+            # without a target, the counter never stops at a value: only the budget and the time
+            counter = Counter(max_evaluations, start, max_seconds, -math.inf if target is None else target)
+            error = None
             try:
-                method.run(problem_, seed)
-            except Exception:
-                # Stop, raised by the fitness, reaches Python through pagmo's C++
+                run(problem_, seed)
+            except Exception as e:
+                # Stop, raised by the fitness, reaches Python through pagmo's C++; any other error
+                # is the library's, and ends the run there (rule 8.4)
                 if not counter.stopped:
-                    raise
+                    error = f"{type(e).__name__}: {e}"[:300]
+            else:
+                raise RuntimeError(f"{solver} ended before the budget")
             # the clock stops when the run ends (rule 4.1)
             elapsed = time.perf_counter() - start
-            if problem == "onemax":
-                best, solution = -int(counter.best), [int(v) for v in counter.best_x]
-            else:
-                best, solution = counter.best, [float(v) for v in counter.best_x]
-            run = {
+            result = {
                 "library": "pygmo",
                 "solver": solver,
                 "problem": problem,
@@ -445,22 +310,20 @@ def main():
                 "mode": mode,
                 "seed": seed,
                 "time_s": round(elapsed, 6),
-                # generations of per_generation evaluations (1 for ihs and simulated annealing)
-                "generations": counter.evaluations // per_generation,
+                # generations of population_size evaluations, the initial population included
+                "generations": counter.evaluations // population_size,
                 "evaluations": counter.evaluations,
-                "last_generation": last_generation(counter.evaluations, method.population_size, per_generation),
-                "best": best,
-                "target": size if problem == "onemax" else TARGET,
-                "success": counter.best <= target,
+                "last_generation": last_generation(counter.evaluations, population_size),
+                "best": counter.best,
+                "target": target,
+                "success": target is not None and counter.best <= target,
                 "first_hit": counter.first_hit,
-                "solution": solution,
+                "solution": [float(v) for v in counter.best_x],
+                "outside": counter.outside,
             }
-            if problem in REAL_PROBLEMS:
-                run["outside"] = counter.outside
-            if hasattr(method, "restarts"):
-                # restarts, or reannealings of simulated annealing
-                run["restarts"] = method.restarts
-            print(json.dumps(run), flush=True)
+            if error is not None:
+                result["ended_by"] = error
+            print(json.dumps(result), flush=True)
 
 
 if __name__ == "__main__":

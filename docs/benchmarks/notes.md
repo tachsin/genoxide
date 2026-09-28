@@ -1,81 +1,75 @@
 # Notes on the libraries
 
-An index for readers of the [benchmarks](../../benchmarks/README.md): what each library can't run, the bugs found, and the rule-level choices that affect many libraries. The details are on each library's page in [libraries/](libraries/). Where the [rules](rules.md) refer to "the notes", the details are there too. [results.md](results.md) has the numbers.
+An index for readers of the [benchmarks](../../benchmarks/README.md): which library runs which problem, how each differs from the methods' [definitions](rules.md#6-the-methods), what each can't run, and the bugs found. The details, with the sources, are on each library's page in [libraries/](libraries/). [results.md](results.md) has the numbers.
 
-## What each library can't run
+## Who runs what
 
-A library missing from a chart can't run that scenario. The benchmarks have single-objective scenarios only, for now: the multi-objective ones come back once genoxide solves these well.
+The suite is matched: three problems, one method each. A library runs a problem only with its own implementation of that problem's method ([rule 6.1](rules.md#6-the-methods)).
 
-| Library | Doesn't run | Why |
-|---|---|---|
-| [genoxide](libraries/genoxide.md#cant-run) | nothing | |
-| [genoxide (Python)](libraries/genoxide_python.md#cant-run) | nothing | |
-| [genetic_algorithm](libraries/genetic_algorithm.md#cant-run) | matched OneMax | no generational replacement without elitism |
-| [radiate](libraries/radiate.md#cant-run) | nothing | |
-| [moors](libraries/moors.md#cant-run) | matched OneMax | no tournament of 3 and no generational replacement |
-| [openGA](libraries/openga.md#cant-run) | matched OneMax | no tournament selection, two-point crossover, bit flip or generational replacement |
-| [pygmo](libraries/pygmo.md#cant-run) | matched OneMax; N-Queens | `sga`'s reinsertion is always elitist, and it has no two-point crossover; no permutation genome |
-| [DEAP](libraries/deap.md#cant-run) | nothing | |
-| [pymoo](libraries/pymoo.md#cant-run) | matched OneMax | no generational survival: its GA keeps the best of parents and children |
-| [PyGAD](libraries/pygad.md#cant-run) | nothing | |
-| [pycma](libraries/pycma.md#cant-run) | OneMax, N-Queens | CMA-ES optimizes real numbers |
-| [Nevergrad](libraries/nevergrad.md#cant-run) | matched OneMax | no GA with the matched operators |
-| [SciPy](libraries/scipy.md#cant-run) | OneMax, N-Queens | its optimizers minimize functions of real numbers |
-| [Jenetics](libraries/jenetics.md#cant-run) | matched OneMax | no bit-flip mutation among its own components |
-| [jMetal](libraries/jmetal.md#cant-run) | matched OneMax | no generational replacement without elitism and no two-point crossover for bits |
-| [Evolutionary.jl](libraries/evolutionary_jl.md#cant-run) | nothing | |
-| [Metaheuristics.jl](libraries/metaheuristics_jl.md#cant-run) | matched OneMax | no two-point crossover |
+| Library | OneMax 1000: GA | Rastrigin 30: DE/rand/1/bin | Rosenbrock 10: CMA-ES |
+|---|---|---|---|
+| [genoxide](libraries/genoxide.md) | ✓ | ✓ | ✓ |
+| [genoxide (Python)](libraries/genoxide_python.md) | ✓ | ✓ | ✓ |
+| [DEAP](libraries/deap.md) | ✓ | – no DE in the library, only in its examples | ✓ |
+| [PyGAD](libraries/pygad.md) | ✓ | – only a GA | – only a GA |
+| [radiate](libraries/radiate.md) | ✓ | – only a GA | – only a GA |
+| [pycma](libraries/pycma.md) | – CMA-ES only | – CMA-ES only | ✓ (the reference) |
+| [SciPy](libraries/scipy.md) | – no GA | ✓ | – no CMA-ES |
+| [pygmo](libraries/pygmo.md) | – `sga`'s reinsertion is always elitist, and it has no two-point crossover | ✓ | ✓ |
+| [pymoo](libraries/pymoo.md) | – its GA keeps the best of parents and children: no generational survival | ✓ | ✓ |
+| [jMetal](libraries/jmetal.md) | – no generational replacement without elitism, no two-point crossover for bits | ✓ | ✓ |
+| [Evolutionary.jl](libraries/evolutionary_jl.md) | ✓ | – its DE crosses the mutant with the base vector, not the target, and `BINX(CR)` keeps the base's gene with probability CR, with no forced gene | ✓ |
+| [Metaheuristics.jl](libraries/metaheuristics_jl.md) | – no two-point crossover | ✓ | – no CMA-ES in 3.5.0 |
 
-Runs that ran but didn't reach the target are in the charts: a cross for a target never reached.
+**Left the suite**, with none of the three methods as the definitions have them: genetic_algorithm (no generational replacement without elitism, no DE or CMA-ES), moors (no tournament of 3 or generational survival, no DE or CMA-ES), openGA (no tournament selection, two-point crossover or bit flip), Jenetics (no bit-flip mutation among its components, no DE or CMA-ES), and Nevergrad (no GA; its DE is current-to-best with its indices drawn with replacement, and steady-state; its CMA-ES starts a new pycma run by itself when pycma's `noeffectaxis` or `noeffectcoord` fires, which can't be turned off, and so has restarts). They come back with problems whose methods they have ([ROADMAP.md](../../ROADMAP.md#benchmarks)).
+
+## How each differs from the definitions
+
+Differences that don't change the algorithm ([rule 6.1](rules.md#6-the-methods)); each library's page has the sources.
+
+**OneMax 1000, the GA** (DEAP's `eaSimple` is the reference):
+- **genoxide, genoxide (Python):** a child identical to its parent isn't evaluated again.
+- **PyGAD:** a parent is crossed with probability 0.5 with the next eligible one, one child per crossover; each gene flips with probability 0.2 / n, the same mean of 0.2 bits per child; its two-point crossover always takes n / 2 genes (a bug, below).
+- **radiate:** each child is crossed with probability 0.5 with a random other child; each bit flips with probability 0.2 / n; cut points from 0..n; only changed children are evaluated.
+- **Evolutionary.jl:** `flip` flips exactly one bit of a mutated child, the same mean; the tournament draws its contestants from a shuffled permutation; every child is evaluated; an uncrossed pair passes the parents themselves (a bug, below).
+
+**Rastrigin 30, DE/rand/1/bin** (no target: a fixed budget of 300,000 evaluations; the errors at the end should agree across libraries within the seeds' spread):
+- **Bounds** (the reference redraws a gene outside the box uniformly in it, as SciPy and pygmo do): genoxide sets it halfway between the target's gene and the bound; jMetal clips it; pymoo redraws it between the bound and the base's gene; Metaheuristics.jl puts it between the bound and the best solution's gene.
+- **The indices:** pygmo and Metaheuristics.jl don't exclude the target from r1, r2 and r3, so about 3% of trials use it; pymoo draws each index column as a permutation of the population.
+- **Replacement:** jMetal, pymoo and Metaheuristics.jl replace only on a strictly better trial; a tie has probability about 0 on Rastrigin.
+- **SciPy:** a population of exactly 100 is given as an `init=` array of uniform points (its `popsize` is a multiple of n); its convergence test can't be turned off, and at `tol=0`, `atol=0` it ends a run whose 100 values are all equal, reported with `ended_by` ([rule 2.2](rules.md#2-the-budget)); the best individual is moved to the first slot each generation.
+- **pymoo:** `prob_mut=0.0`, an undocumented option passed through to its DE variant, turns off the polynomial mutation it otherwise applies to 10% of trials; the forced gene is used only when no gene came from the mutant.
+- **jMetal:** the population is sorted by fitness after each generation, so the targets are visited best first.
+
+**Rosenbrock 10, CMA-ES** (pycma is the reference):
+- **Learning rates for n = 10, λ = 10** (Hansen's 2016 tutorial: c_σ 0.2844, d_σ 1.2844, c_c 0.2950, c_1 0.01528, c_μ 0.02015): genoxide, pygmo, jMetal and Evolutionary.jl use the tutorial's values; pycma and pymoo (pycma inside) use c_σ 0.3196, d_σ 1.3196, c_μ 0.02355 and pycma's h_σ test; DEAP uses c_σ 0.3196, d_σ 1.3196, c_c 0.2857. All weights are 0.4563, 0.2708, 0.1622, 0.0852, 0.0255 (μ_eff 3.167), positive only.
+- **Bounds** (the reference is pycma's `BoundTransform`): genoxide draws a sample outside the box again, up to 100 times, then clips it; pygmo, jMetal and Evolutionary.jl clip it; DEAP evaluates the closest point in the box plus a penalty (`ClosestValidPenalty`).
+- **pycma:** `CMA_active=False`, since its default is active CMA; `maxstd_boundrange` off, its default cap of a coordinate's standard deviation at a third of the box.
+- **pymoo:** pycma's `noeffectaxis` and `noeffectcoord` can't be turned off; when one fires, the run ends there, with `ended_by`.
+- **pygmo:** the mean starts at the best of 10 uniform points (10 evaluations); h_σ in the 2006 form; the σ exponent capped at 0.6.
+- **jMetal:** 10 uniform initial evaluations it doesn't use; h_σ's exponent 2(g + 2); χ_n = √n (a bug, below).
+- **Evolutionary.jl:** its default weights are active, so the adapter passes the positive weights and, with them, the four learning rates by the library's own default formulas; the mean is the first of 5 uniform points; one type-probe evaluation.
 
 ## Bugs found
 
-The benchmark runs what a library's users get, so its results show its bugs ([rule 8.4](rules.md#8-reporting)). The exceptions say "worked around" in the effect column, and the library's page shows both results where the bug changes them. No bug was found in genoxide, its Python package, pycma or SciPy.
-
-The bugs found in the multi-objective algorithms and operators (radiate's SBX and polynomial mutation, [pkalivas/radiate#28](https://github.com/pkalivas/radiate/issues/28); moors' AGE-MOEA, [andresliszt/moo-rs#301](https://github.com/andresliszt/moo-rs/issues/301), SPEA2 and REVEA; Jenetics' SBX, [jenetics/jenetics#969](https://github.com/jenetics/jenetics/issues/969), crowding distance and `UFTournamentSelector`; Evolutionary.jl's `NSGA2`, [SciML/Evolutionary.jl#174](https://github.com/SciML/Evolutionary.jl/issues/174); Metaheuristics.jl's bounded SBX; pymoo's shared SPEA2 survival) left the tables with the multi-objective scenarios. They come back with them.
+The benchmark runs what a library's users get, so its results show its bugs ([rule 8.4](rules.md#8-reporting)). A run that a library ends with an error ends there, as not reached, with `ended_by`. No bug was found in genoxide, its Python package, pycma or SciPy.
 
 | Library | Bug | Effect on the results | Reported |
 |---|---|---|---|
-| [genetic_algorithm](libraries/genetic_algorithm.md#bugs-found) 0.27.3 | `call_repeatedly` with a seed repeats the same run in every repeat | none: the adapter restarts from a new seed itself | not yet |
-| [radiate](libraries/radiate.md#bugs-found) 1.3.1 | the guide recommends `ShuffleCrossover` for permutations, but its children aren't permutations | none: left out | not yet |
-| [radiate](libraries/radiate.md#bugs-found) 1.3.1 | the guide says `GaussianMutator` makes "small" changes, but its standard deviation is a quarter of the gene's initial range | none: not run | not yet |
-| [moors](libraries/moors.md#bugs-found) 0.2.11 | the README says `CloseDuplicatesCleaner` drops individuals within an ε-ball, but it compares ε with the squared distance | documentation only | not yet |
-| [openGA](libraries/openga.md#bugs-found) f9b15e7 | the single-objective survival's rank roulette can't pick a child, and can pick the same individual again | children survive only through the elite slots, and the population collapses to copies: no idiomatic continuous run reaches its target | [Arash-codedev/openGA#30](https://github.com/Arash-codedev/openGA/issues/30) |
-| [openGA](libraries/openga.md#bugs-found) | `solve_next_generation` stored `last_generation` only when it had fronts | none: fixed at the pinned commit f9b15e7 | [Arash-codedev/openGA#23](https://github.com/Arash-codedev/openGA/issues/23) |
-| [pygmo](libraries/pygmo.md#bugs-found) 2.19.8 | the docstrings of `sade`, `de1220`, `cmaes` and `xnes` swap the descriptions of `ftol` and `xtol` | documentation only | not yet |
-| [DEAP](libraries/deap.md#bugs-found) 1.4.4 | the DE example's exponential crossover stops copying when the random number is below CR, the inverse of Storn and Price's | its CR of 0.8 acts as 0.2: the DE runs change about one gene per child | not yet |
-| [DEAP](libraries/deap.md#bugs-found) 1.4.4 | the BIPOP-CMA-ES example takes the worst sample as the best, so its EqualFunVals and Stagnation criteria follow the worst values | only when a CMA-ES run restarts | not yet |
-| [DEAP](libraries/deap.md#bugs-found) 1.4.4 | the same example's EqualFunVals counts the equal generations since the start of the run, not in the last N | as above | not yet |
-| [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | `TournamentSelection(pressure=3)` draws 3 competitors, but the GA's comparison compares only the first 2 | none: no run uses a tournament of more than 2 | not yet |
-| [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | CMA-ES with seed 0 isn't repeatable: pycma reads 0 as "seed from the clock" | worked around: the adapter never passes 0 | not yet |
-| [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | pattern search draws its coordinate order from an unseeded generator | pattern search is left out (rule 5.2) | fixed on main in [54e13ec](https://github.com/anyoptimization/pymoo/commit/54e13ecd82e69880fc758561290618a8eb0998f8), after [anyoptimization/pymoo#794](https://github.com/anyoptimization/pymoo/issues/794); not released |
-| [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | the DE example's `dither="vector"` is silently ignored | documentation only | not yet |
-| [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | the binary and permutation pages name other crossovers in their text than in their code | documentation only; the adapter follows the code | not yet |
-| [PyGAD](libraries/pygad.md#bugs-found) 3.7.0 | `sbx` always makes the child below the parents' midpoint, which pulls every crossed gene towards the lower bound | the continuous runs: Ackley 30 and Rosenbrock 10 don't reach the target | [ahmedfgad/GeneticAlgorithmPython#369](https://github.com/ahmedfgad/GeneticAlgorithmPython/issues/369) |
-| [PyGAD](libraries/pygad.md#bugs-found) 3.7.0 | `two_points_crossover` draws only the first point; the second is always n / 2 after it | the matched OneMax runs | not yet |
-| [PyGAD](libraries/pygad.md#bugs-found) 3.7.0 | with `allow_duplicate_genes=False`, as in its permutation example, the random mutation never changes a permutation | the N-Queens runs converge to one board and reach the time cap after about 200 evaluations | not yet |
-| [PyGAD](libraries/pygad.md#bugs-found) 3.7.0 | the docs say `swap_mutation` swaps 2 random genes; it swaps a gene with the one half the length after it | none: not used | not yet |
-| [Nevergrad](libraries/nevergrad.md#bugs-found) 1.0.12 | the metamodel that `NgIohTuned` uses crashes with NumPy 2.5 (`float()` of an array) | worked around: the adapter restores the old conversion in that module; without it, every `ngiohtuned` continuous run crashes at the metamodel's first fit; the page shows both results | not yet |
-| [jMetal](libraries/jmetal.md#bugs-found) 7.5 | CMA-ES's step size grows without bound once it has converged | no CMA-ES run reaches a target | not yet |
-| [jMetal](libraries/jmetal.md#bugs-found) 7.5 | `CMAESUtils.tql2` throws `ArrayIndexOutOfBoundsException` when the covariance matrix holds NaN | worked around, labelled: the adapter catches the crash and starts a new attempt; without it, the run ends, often after about 200,000 evaluations; the page shows both results | not yet |
+| [PyGAD](libraries/pygad.md#bugs-found) 3.7.0 | `two_points_crossover` draws only the first point; the second is always n / 2 after it | the OneMax runs | not yet |
+| [Evolutionary.jl](libraries/evolutionary_jl.md#bugs-found) 0.12.1 | a GA offspring that isn't crossed is its parent, not a copy, and is mutated in place | the OneMax runs | not yet |
+| [Evolutionary.jl](libraries/evolutionary_jl.md#bugs-found) 0.12.1 | CMA-ES: `eigen!` overwrites the covariance matrix before its update | with the two below, no Rosenbrock run reaches the target, and runs end at a failed eigendecomposition after about 100,000 evaluations | not yet |
+| [Evolutionary.jl](libraries/evolutionary_jl.md#bugs-found) 0.12.1 | CMA-ES: σ is updated with ‖p_σ‖ / n instead of ‖p_σ‖ / E‖N(0, I)‖ (h_σ too) | σ shrinks about 7% a generation until it underflows | not yet |
+| [Evolutionary.jl](libraries/evolutionary_jl.md#bugs-found) 0.12.1 | CMA-ES: the rank-μ update uses z zᵀ instead of y yᵀ | as above | not yet |
+| [Evolutionary.jl](libraries/evolutionary_jl.md#bugs-found) 0.12.1 | DE crosses with the base vector, `BINX`'s CR is the probability of the base's gene, no forced gene, `K` documented but unused | none: its DE isn't run | not yet |
+| [jMetal](libraries/jmetal.md#bugs-found) 7.5 | CMA-ES computes C^(−1/2) with partly square-rooted eigenvalues, so σ grows without bound once the eigenvalues are below 1 | no Rosenbrock run reaches the target | not yet |
+| [jMetal](libraries/jmetal.md#bugs-found) 7.5 | `CMAESUtils.tql2` throws `ArrayIndexOutOfBoundsException` when the covariance matrix holds NaN | every Rosenbrock run ends there, after about 204,000 evaluations, with `ended_by` | not yet |
 | [jMetal](libraries/jmetal.md#bugs-found) 7.5 | CMA-ES draws its samples from a generator seeded with the clock | worked around: the adapter seeds it; the algorithm is unchanged | not yet |
-| [jMetal](libraries/jmetal.md#bugs-found) 7.5 | CMA-ES computes χₙ with integer divisions, 2.5% too large for n = 10 | σ shrinks a little faster than intended | not yet |
-| [jMetal](libraries/jmetal.md#bugs-found) 7.5 | the initial permutations ignore `JMetalRandom`'s seed | worked around: the adapter draws the same uniform permutation with `JMetalRandom` | not yet |
-| [jMetal](libraries/jmetal.md#bugs-found) 7.5 | coral reef optimization seeds its generators with the clock, one of them inside a method | coral reef optimization is left out (rule 5.2) | not yet |
-| [Evolutionary.jl](libraries/evolutionary_jl.md#bugs-found) 0.12.0 | CMA-ES doesn't converge in 30 dimensions | CMA-ES reaches no multimodal target | not yet |
-| [Evolutionary.jl](libraries/evolutionary_jl.md#bugs-found) 0.12.0 | a GA offspring that isn't crossed is its parent, not a copy, and is mutated in place | every GA run, matched and idiomatic | not yet |
-| [Evolutionary.jl](libraries/evolutionary_jl.md#bugs-found) 0.12.0 | the (μ+λ)-ES can overwrite a surviving parent | small: 3 of 40,000 generations in a test | not yet |
-| [Metaheuristics.jl](libraries/metaheuristics_jl.md#bugs-found) 3.5.0 | the `DE` docstring gives F = 1.0 as the default; the code's is 0.7 | documentation only | not yet |
+| [jMetal](libraries/jmetal.md#bugs-found) 7.5 | CMA-ES computes χ_n with integer divisions, √n instead of 3.085 for n = 10 | σ shrinks a little faster than intended | not yet |
+| [pygmo](libraries/pygmo.md#bugs-found) 2.19.8 | `de` draws r1, r2, r3 without excluding the target | about 3% of trials use the target | not yet |
+| [pygmo](libraries/pygmo.md#bugs-found) 2.19.8 | the docstrings of `cmaes` (and `sade`, `de1220`, `xnes`) swap `ftol` and `xtol` | documentation only | not yet |
+| [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | `fast_fill_random` keeps positions instead of row numbers, so about 0.14% of DE trials have repeated indices or the target among them | the Rastrigin runs, slightly | not yet |
+| [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | DE ignores `dither`; its docs don't mention the polynomial mutation it applies by default | the adapter sets `prob_mut=0.0` | not yet |
+| [Metaheuristics.jl](libraries/metaheuristics_jl.md#bugs-found) 3.5.0 | the `DE` docstring gives F = 1.0 as the default; the code's is 0.7 | none: F is set | not yet |
 
-## Rule-level choices
-
-These apply to many libraries. The [rules](rules.md) have the full text.
-
-- **Restarts on convergence** ([rule 2.2](rules.md#2-the-budget)). A limit that's only a budget, such as a number of generations, is lifted. A convergence criterion that's part of the method, or of the docs' example for the problem type, ends an attempt. The method then starts again, with the library's restart mechanism, else from a new random start. Some examples' criteria end attempts early and often: Jenetics' `bySteadyFitness(7)`, Evolutionary.jl's DE, pymoo's permutation GA. The matched scenarios have no convergence criterion. An attempt that makes no new evaluation for 10 generations has stalled, and restarts too, in every scenario.
-- **Only inside the bounds** ([rule 2.4](rules.md#2-the-budget)). Every evaluated solution lies inside the box, through the library's own bound handling. So pygmo's CMA-ES and xNES run with `force_bounds`, which pagmo warns worsens them. DEAP's CMA-ES and DE use `ClosestValidPenalty`, as DEAP's box-bounded ES example does. SciPy's `basinhopping` is left out.
-- **Evaluations are counted by the adapter** ([rule 3](rules.md#3-counting-evaluations)). A library that doesn't evaluate an unchanged copy again saves that evaluation: genoxide, DEAP, PyGAD and Jenetics. moors evaluates its parents again every generation, and those evaluations count.
-- **Seeds must repeat a run** ([rule 5.2](rules.md#5-seeds-and-repeated-runs)). A method that can't be seeded is left out: jMetal's coral reef optimization and pymoo's pattern search.
-- **Solvers stopped early** ([rule 5.3](rules.md#5-seeds-and-repeated-runs)). A solver whose first 3 seeds all reach the time cap without the target runs no more seeds.
-- **The docs decide** ([rule 6.2](rules.md#6-which-methods-run)). The idiomatic methods and settings are the ones a library's docs prefer, else their example for the problem type, else the defaults. The separate test runs never choose. Where a recommended setting does poorly here, the page says why.
-- **Matched means the library's own components** ([rule 6.1](rules.md#6-which-methods-run)). A library missing one doesn't run the scenario. It gets no component written by the adapter.
-- **At most 3 methods per library and problem type** ([rule 6.4](rules.md#6-which-methods-run)): the docs' first recommendations.
+**Found in methods no longer in the suite**, listed on the libraries' pages: PyGAD's `sbx` pulls children towards the lower bound ([ahmedfgad/GeneticAlgorithmPython#369](https://github.com/ahmedfgad/GeneticAlgorithmPython/issues/369)), its random mutation never changes a permutation, and its docs misdescribe `swap_mutation`; radiate's guide recommends `ShuffleCrossover` for permutations, whose children aren't permutations, and misdescribes `GaussianMutator`; DEAP's DE example's exponential crossover is inverted, and its BIPOP-CMA-ES example reads the sort order backwards; pymoo's tournament of more than 2 acts as binary, its CMAES with seed 0 isn't repeatable, its pattern search can't be seeded, and its binary and permutation pages disagree with their code; Evolutionary.jl's (μ+λ)-ES can overwrite a surviving parent; jMetal's initial permutations and coral reef optimization ignore its seed; Nevergrad's `NgIohTuned` metamodel crashes with NumPy 2.5. The bugs found in the libraries that left the suite (genetic_algorithm, moors, openGA, Jenetics) and in the multi-objective algorithms come back with them.

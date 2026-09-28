@@ -215,20 +215,19 @@ The test problem library of [docs/problems-plan.md](docs/problems-plan.md), batc
 
 [`benchmarks/`](benchmarks/) runs every library on the same problems, with identical fitness functions and budgets. Results are published for every release.
 
-- **Problems:** binary (OneMax, LeadingOnes, deceptive trap, NK landscapes, knapsack); permutation (N-Queens, TSPLIB, QAP, flow shop); continuous (BBOB / COCO functions such as Rastrigin, Rosenbrock, Ackley, in 10–100 dimensions); multi-objective (ZDT, DTLZ, WFG) later. The benchmarks run single-objective scenarios only for now: the multi-objective ones were taken out, and come back after genoxide solves the single-objective ones well.
-- **Measurements:** success rate, time and evaluations to target, evaluations per second, genoxide's own releases compared by the CPU instructions of the same runs (Callgrind, genoxide only), peak memory, and scaling with population, genome size and threads.
-- **Modes:** matched and idiomatic ([methodology](benchmarks/README.md#methodology)).
+- **Now: a small matched suite.** Three problems, one method each, the same in every library, with its own implementation set to a written definition ([rules](docs/benchmarks/rules.md#6-the-methods)): a GA on OneMax 1000, DE/rand/1/bin on Rastrigin 30 and CMA-ES on Rosenbrock 10. It compares implementations of the same algorithm, not each library's pick of a method.
+- **Later, after these:** more problems, one matched method each: binary (LeadingOnes, deceptive trap, NK landscapes, knapsack), permutation (N-Queens, TSPLIB, QAP, flow shop), continuous (BBOB / COCO functions in 10–100 dimensions); then multi-objective problems (ZDT, DTLZ, WFG) with a matched NSGA-II.
+- **Measurements:** success rate, time and evaluations to target, the distance to the optimum at the end, evaluations per second, genoxide's own releases compared by the CPU instructions of the same runs (Callgrind, genoxide only); later peak memory and scaling with population, genome size and threads.
 - **Output:** library versions, JSON, a markdown table and graphs.
-- **Libraries:**
+- **Libraries:** those with their own implementation of a suite's method. Now: genoxide and its Python package, DEAP, PyGAD, radiate, pycma, SciPy, pygmo, pymoo, jMetal, Evolutionary.jl and Metaheuristics.jl (the [methodology](benchmarks/README.md) lists which runs which). Others come back with the problems whose methods they have:
 
 | Language | Libraries |
 |---|---|
-| Python | DEAP, pymoo, PyGAD, EvoX, Nevergrad, pycma, geatpy |
-| Java | Jenetics, jMetal, MOEA Framework |
-| C++ | pagmo2, openGA, ParadisEO |
+| Python | Nevergrad, EvoX, geatpy |
+| Java | Jenetics, MOEA Framework |
+| C++ | openGA, ParadisEO |
 | C# | GeneticSharp |
-| Julia | Evolutionary.jl, Metaheuristics.jl |
-| Rust | radiate, moors, genetic_algorithm, genevo, oxigen |
+| Rust | moors, genetic_algorithm, genevo, oxigen |
 
 ## Not planned
 
