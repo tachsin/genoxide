@@ -17,12 +17,20 @@
 //! `population_size * offspring_fraction` offspring (offspring selector, then crossover and
 //! mutation). Only the individuals whose genome changed are evaluated again. By default it
 //! replaces every individual older than `max_age` = 20 generations with a random one
-//! (radiate-engines-1.3.1/src/builder/mod.rs, `max_age: 20`; steps/filter.rs).
+//! (radiate-engines-1.3.2/src/builder/mod.rs, `max_age: 20`; steps/filter.rs).
 //!
 //! Every run ends only at the target, the budget or the time cap (rule 2.1): the adapter's
 //! `until` limit is the engine's only stop criterion, checked after every generation, and radiate
 //! has no stop criterion of its own (an engine without a limit runs forever,
 //! docs/source/engine/index.md, "Common Pitfalls"), neither a budget nor a convergence test.
+//! The engine runs the way radiate's guide calls the cheap one (docs/source/engine/runtime.md and
+//! generations.md): `iter().until(closure).last()`, the runtime's own `last()`, which is `run()`,
+//! checks the closure against a borrowed `GenerationView` of the live engine and builds a
+//! `Generation` (a clone of the population and the metrics) only once, at the end; iterating, or
+//! the engine's `run(closure)`, would clone them every generation. The rest is radiate's
+//! defaults, which already do no extra work here: no diversity or species step, no Pareto front
+//! for one objective, no event subscribers, the serial executor. Its metrics step runs every
+//! generation and can't be turned off (radiate-engines-1.3.2/src/builder/mod.rs, `build_audit_step`).
 //! Rule 2.2: radiate evaluates only the individuals an alterer changed, so an attempt can go on
 //! without evaluating anything; after 10 generations in a row without an evaluation, the `until`
 //! limit ends the attempt, and the engine starts again from a new random population, seeded
@@ -32,7 +40,7 @@
 //! Seeded: every run is inside `random_provider::scoped_seed(seed, ..)`, which reseeds the
 //! thread-local generator radiate draws all its random numbers from (`random_provider::seed`
 //! only reseeds the global generator new threads start from, so it can't reseed a second run in
-//! the same thread; radiate-core-1.3.1/src/domain/random_provider.rs).
+//! the same thread; radiate-core-1.3.2/src/domain/random_provider.rs).
 //! Fitness: through `raw_fitness_fn`, radiate's documented way to evaluate the genotype without
 //! decoding it (docs/source/fitness.md, "Raw Fitness"). The values are computed in f64 like in the
 //! other adapters (radiate keeps them as an f32 `Score`, exact for OneMax's counts). The fitness

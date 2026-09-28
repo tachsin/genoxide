@@ -18,24 +18,25 @@ adapter does:
 - Rastrigin 30: DE/rand/1/bin with F 0.5, CR 0.9 and 100 individuals (`gx.De`);
 - Rosenbrock 10: CMA-ES with its defaults and no restarts (`gx.Cmaes`).
 Any other problem, size or mode prints nothing. How each setting maps to the definition:
-docs/benchmarks/libraries/genoxide_python.md. The fitness functions are written as python/README.md
-writes them:
-- a function per genome for OneMax, as its first example;
-- `batch=True` with vectorized numpy functions, a generation per call, for the real-valued
-  problems, as its Rastrigin example ("one call per generation"). A batch is the same algorithm:
-  the package asks for the same genomes either way ("The same seed repeats a run exactly: one
-  genome at a time, in batches or in parallel").
+docs/benchmarks/libraries/genoxide_python.md. The fitness functions are numpy, with `batch=True`, a
+generation per call, as python/README.md's Rastrigin example ("one call per generation") and its
+"Fitness functions" section ("Vectorized numpy ... pays its cost per call once per generation, not
+once per genome") write a fast one, and as rule 3.4 asks of a Python library with a documented
+batch interface. A batch is the same algorithm: the package asks for the same genomes either way
+("The same seed repeats a run exactly: one genome at a time, in batches or in parallel").
 
 The rules (docs/benchmarks/rules.md), as this adapter follows them:
-- each fitness function counts the genomes it evaluates itself (rule 3), and records the first
-  one that reaches the target ("first_hit"): that count is the reported "evaluations", and the
-  package's own `result.evaluations` must be the same (a difference is printed to stderr);
+- each fitness function counts the genomes it evaluates itself, a row of a batch each (rule 3),
+  and records the first one that reaches the target, in the batch's order ("first_hit"): that
+  count is the reported "evaluations", and the package's own `result.evaluations` must be the
+  same (a difference is printed to stderr);
 - a run ends at the target, the evaluation budget or the time cap only (rule 2.1). No method has
   a convergence criterion or restarts. The GA can stall, 10 generations in a row without a genome
   to evaluate (a child identical to a parent isn't evaluated): its `on_generation` callback then
   ends the attempt and the adapter starts it again with the seed `(seed + 1) * 1_000_000 +
-  restart`, keeping the best and counting every evaluation (rule 2.2). The same callback is the
-  GA's time cap. DE and CMA-ES evaluate every trial and sample, so they never stall;
+  restart`, keeping the best and counting every evaluation (rule 2.2). DE and CMA-ES evaluate
+  every trial and sample, so they never stall, and have no callback. The time cap is the
+  package's `time` stop, for every method;
 - every evaluated solution stays inside the bounds, by genoxide's own bound handling, and the
   fitness functions count any outside them ("outside", rule 2.4);
 - the clock starts before the algorithm object is created, and stops when `run` returns, whose
@@ -82,14 +83,6 @@ def count(x, low, high):
     OUTSIDE += int(np.count_nonzero(((x < low) | (x > high)).any(axis=1)))
 
 
-def record(value):
-    """Records the first hit of the target, if `value`, the latest evaluation's, reaches it."""
-    target = HIT["target"]
-    if target is not None and HIT["first"] is None and (
-            value >= target if HIT["maximize"] else value <= target):
-        HIT["first"] = {"evaluations": EVALUATIONS, "time_s": time.perf_counter() - HIT["start"]}
-
-
 def record_batch(values):
     """Records the first hit of the target among the values of the latest batch, in order."""
     target = HIT["target"]
@@ -101,13 +94,15 @@ def record_batch(values):
                         "time_s": time.perf_counter() - HIT["start"]}
 
 
-def onemax(bits):
-    """One genome, a numpy bool array, whose sum is numpy's (`bits.sum()`, as python/README.md)."""
-    global EVALUATIONS
-    EVALUATIONS += 1
-    value = int(bits.sum())
-    record(value)
-    return value
+def onemax(x):
+    """A generation, a genome per row (numpy bools): the ones of each row, numpy's sum (python/
+    README.md's OneMax, `bits.sum()`, over a batch)."""
+    global EVALUATIONS, BATCH
+    EVALUATIONS += len(x)
+    BATCH = len(x)
+    values = x.sum(axis=1)
+    record_batch(values)
+    return values
 
 
 @functools.cache
@@ -163,7 +158,7 @@ def onemax_ga(size):
         mutation_rate=0.2,
         scheme=gx.Generational(elitism=0),
         seed=seed,
-    ), onemax, False)
+    ), onemax, True)
 
 
 def rastrigin_de(size):
@@ -230,8 +225,9 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
     EVALUATIONS = OUTSIDE = BATCH = 0
     maximize = common["problem"] == "onemax"
     # the GA is the one solver here that can stall (every child a copy of a parent): DE and CMA-ES
-    # evaluate new genomes every generation. Its callback ends an attempt after STALL_GENERATIONS
-    # generations without an evaluation, and at the time cap
+    # evaluate new genomes every generation. Its `on_generation` callback ends an attempt after
+    # STALL_GENERATIONS generations without an evaluation: a batch function isn't called for such
+    # a generation, so the callback is the only way to see them
     can_stall = solver == "ga"
     # the last generation's evaluations, for the budget check (rule 2.3): the GA's callback, called
     # after every generation (each attempt's initial population included), records the count, the
@@ -239,11 +235,11 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
     # for the other solvers
     generation = {"end": 0, "last": 0, "idle": 0}
 
-    def in_time(progress):
+    def not_stalled(progress):
         generation["last"] = EVALUATIONS - generation["end"]
         generation["end"] = EVALUATIONS
         generation["idle"] = 0 if generation["last"] else generation["idle"] + 1
-        return generation["idle"] < STALL_GENERATIONS and time.perf_counter() - start < max_seconds
+        return generation["idle"] < STALL_GENERATIONS
 
     best = solution = None
     generations = reported = restart = 0
@@ -253,12 +249,11 @@ def solve(common, solver, seed, make, function, batch, target, max_evaluations, 
     while True:
         budget = max_evaluations - EVALUATIONS
         generation["idle"] = 0
-        if can_stall:
-            limits = {"on_generation": in_time}
-        else:
-            limits = {"time": max(max_seconds - (time.perf_counter() - start), 0.0)}
+        # the time cap: the package's `time` stop, the time left, checked after every generation
+        seconds = max(max_seconds - (time.perf_counter() - start), 0.0)
+        callback = {"on_generation": not_stalled} if can_stall else {}
         result = make(attempt_seed(seed, restart)).run(
-            function, batch=batch, target=target, evaluations=budget, **limits)
+            function, batch=batch, target=target, evaluations=budget, time=seconds, **callback)
         generations += result.generations
         reported += result.evaluations
         score = result.best_fitness
@@ -318,9 +313,9 @@ def main():
 
 
 def value(problem, size, solution):
-    """The value of one solution, with the functions the runs call."""
+    """The value of one solution, with the functions the runs call: a batch of one row."""
     if problem == "onemax":
-        return onemax(np.array(solution, dtype=bool))
+        return int(onemax(np.array([solution], dtype=bool))[0])
     x = np.array([solution], dtype=np.float64)
     return float(REAL_PROBLEMS[problem][0](x)[0])
 
