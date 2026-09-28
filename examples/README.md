@@ -85,6 +85,12 @@ python examples/tsp_berlin52/main.py
 | [CEC 2006 g16](cec2006_g16/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cec2006-g16) |
 | [CEC 2006 g17](cec2006_g17/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cec2006-g17) |
 | [CEC 2006 g18](cec2006_g18/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cec2006-g18) |
+| [CEC 2006 g19](cec2006_g19/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cec2006-g19) |
+| [CEC 2006 g20](cec2006_g20/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cec2006-g20) |
+| [CEC 2006 g21](cec2006_g21/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cec2006-g21) |
+| [CEC 2006 g22](cec2006_g22/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cec2006-g22) |
+| [CEC 2006 g23](cec2006_g23/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cec2006-g23) |
+| [CEC 2006 g24](cec2006_g24/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cec2006-g24) |
 | [Gear train design](gear_train/) | integer | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gear-train) |
 | [ZDT1](zdt1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zdt1) |
 | [ZDT2](zdt2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zdt2) |

@@ -1,0 +1,6 @@
+SHADE with Deb's feasibility rules on g20, seed 1
+stopped after 500086 evaluations: infeasible, violation 0.143712
+the report's best known: violation 0.143754, less violated after 98700 evaluations
+f(x) 0.204975, the report's 0.204979 (best known, infeasible)
+x1 1.6e-13, x2 3.1e-25, x3 1.0e-25, x4 1.2e-24, x5 8.1e-13, x6 1.4e-24, x7 6.9e-25, x8 4.7e-25, x9 6.1e-25, x10 2.3e-12, x11 7.8e-25, x12 8.0e-26, x13 0.158097, x14 8.7e-13, x15 9.6e-13, x16 2.3e-12, x17 0.530859, x18 1.1e-12, x19 3.3e-15, x20 2.2e-13, x21 1.7e-13, x22 0.311018, x23 5.4e-5, x24 7.1e-5
+g1 0.1437, g2 active, g3 active, g4 active, g5 active, g6 active, h1 active, h2 active, h3 active, h4 active, h5 active, h6 active, h7 active, h8 active, h9 active, h10 active, h11 active, h12 active, h13 active, h14 active
