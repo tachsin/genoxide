@@ -3,6 +3,7 @@ import importlib.metadata
 import json
 import math
 import pathlib
+import re
 import signal
 import threading
 
@@ -112,6 +113,67 @@ def test_real_algorithms_minimize(algorithm):
     assert result.best_fitness < 1e-2
     assert result.best_genome.dtype == np.float64
     assert np.all(np.abs(result.best_genome) <= 5.12)
+
+
+@pytest.mark.parametrize(
+    "strategy, control, restarts",
+    [
+        ("rand1", {"f": 0.5, "cr": 0.9}, None),
+        ("best1", {"min_f": 0.5, "max_f": 1.0, "cr": 0.9}, "never"),
+        ({"p": 0.1, "archive": 1.0}, {"c": 0.1}, {"tolerance": 1e-12, "patience": 50}),
+        ({"max_p": 0.2, "archive": 0.0}, {"memory": 6}, "never"),
+    ],
+)
+def test_de_strategies_controls_and_restarts(strategy, control, restarts):
+    shift = np.linspace(-2.0, 2.0, 5)
+    de = gx.De(
+        gx.Real((-5.12, 5.12), length=5),
+        population_size=40,
+        strategy=strategy,
+        control=control,
+        restarts=restarts,
+        objective="minimize",
+        seed=1,
+    )
+    result = de.run(lambda x: ((x - shift) ** 2).sum(axis=1), target=1e-8, evaluations=200_000, batch=True)
+    assert result.best_fitness <= 1e-8
+
+
+def test_de_settings_change_the_run():
+    def run(**settings):
+        de = gx.De(gx.Real((-5.12, 5.12), length=5), population_size=20, objective="minimize", seed=3, **settings)
+        return de.run(lambda x: (x * x).sum(axis=1), generations=300, batch=True)
+
+    default = run()
+    # SHADE's defaults, spelled out
+    same = run(
+        strategy={"max_p": 0.2, "archive": 1.0},
+        control={"memory": 100},
+        restarts={"tolerance": 1e-12, "patience": 200},
+    )
+    assert same.best_fitness == default.best_fitness
+    assert np.array_equal(same.best_genome, default.best_genome)
+    for settings in [
+        {"strategy": "rand1"},
+        {"control": {"f": 0.5, "cr": 0.9}},
+        # a restart after every generation without a better best
+        {"restarts": {"tolerance": 0.0, "patience": 1}},
+    ]:
+        assert run(**settings).best_fitness != default.best_fitness, settings
+
+
+def test_de_default_restarts_refine_large_scores():
+    # #256: g04's minimum is about -30665.5; SHADE's restarts used to stop it about 1e-5 above
+    problem = gx.problems.cec2006.G04()
+    target = problem.optimum.value + 1e-8
+
+    def run(restarts):
+        de = gx.De(problem.genome, objective=problem.objective, restarts=restarts, seed=1)
+        return de.run(problem, target=target, evaluations=500_000)
+
+    default, never = run(None), run("never")
+    assert default.best_fitness <= target
+    assert default.evaluations == never.evaluations
 
 
 def test_per_gene_bounds():
@@ -881,6 +943,22 @@ def test_a_wrong_type_is_an_error_that_names_the_setting():
         gx.Cmaes(gx.Real((0.0, 1.0), length=2), restarts="always").run(
             lambda x: 0.0, generations=1
         )
+    real = gx.Real((0.0, 1.0), length=2)
+    for settings, message in [
+        ({"strategy": "rand2"}, 'strategy is "rand1", "best1"'),
+        ({"strategy": {"p": 0.1}}, "strategy is"),
+        ({"strategy": {"p": 0.1, "archive": 1.0, "max_p": 0.2}}, "strategy is"),
+        ({"strategy": {"p": "0.1", "archive": 1.0}}, "strategy.p is a finite number"),
+        ({"control": "shade"}, 'control is {"f": ..., "cr": ...}'),
+        ({"control": {"f": 0.5}}, "control is"),
+        ({"control": {"memory": 6.0}}, "control.memory is a whole number"),
+        ({"restarts": "always"}, 'restarts is "never" or'),
+        ({"restarts": {"tolerance": 1e-12}}, "restarts is"),
+        ({"restarts": {"tolerance": float("nan"), "patience": 200}}, "restarts.tolerance is a finite number"),
+        ({"restarts": {"tolerance": 1e-12, "patience": 2.5}}, "restarts.patience is a whole number"),
+    ]:
+        with pytest.raises(ValueError, match=re.escape(message)):
+            gx.De(real, **settings).run(lambda x: 0.0, generations=1)
     with pytest.raises(ValueError, match="eliminate_duplicates is True or False"):
         gx.Nsga2(
             gx.Binary(8),
@@ -936,6 +1014,16 @@ def test_a_wrong_type_is_an_error_that_names_the_setting():
         ),
         (gx.Pso(gx.Real((0.0, 1.0), length=2), population_size=10, ring=0), "`ring`"),
         (gx.De(gx.Real((0.0, 1.0), length=2), l_shade=0), "`l_shade`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), strategy={"p": 0.0, "archive": 1.0}), "`strategy.p`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), strategy={"max_p": 1.5, "archive": 1.0}), "`strategy.max_p`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), strategy={"p": 0.1, "archive": -1.0}), "`strategy.archive`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), control={"f": 2.5, "cr": 0.9}), "`control.f`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), control={"min_f": 0.8, "max_f": 0.5, "cr": 0.9}), "`control.f`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), control={"f": 0.5, "cr": 1.5}), "`control.cr`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), control={"c": 0.0}), "`control.c`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), control={"memory": 0}), "`control.memory`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), restarts={"tolerance": -1.0, "patience": 200}), "`restarts`"),
+        (gx.De(gx.Real((0.0, 1.0), length=2), restarts={"tolerance": 1e-12, "patience": 0}), "`restarts`"),
     ],
 )
 def test_a_wrong_setting_is_named_as_in_python(algorithm, name):

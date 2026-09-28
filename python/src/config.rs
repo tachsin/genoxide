@@ -40,6 +40,9 @@ pub enum Algorithm {
         seed: Option<u64>,
         /// L-SHADE with this many evaluations, instead of the defaults.
         l_shade: Option<u64>,
+        strategy: Option<DeStrategy>,
+        control: Option<DeControl>,
+        restarts: Option<DeRestarts>,
     },
     Cmaes {
         population_size: Option<usize>,
@@ -202,6 +205,97 @@ pub enum Restarts {
     Never,
     Ipop,
     Bipop,
+}
+
+/// How differential evolution builds its mutant vectors: `"rand1"`, `"best1"`, `{p, archive}`
+/// (current-to-pbest/1) or `{max_p, archive}` (with a random `p` per trial).
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum DeStrategy {
+    Named(DeStrategyName),
+    CurrentToPBest(CurrentToPBest),
+    CurrentToPBestRandomP(CurrentToPBestRandomP),
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeStrategyName {
+    Rand1,
+    Best1,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CurrentToPBest {
+    pub p: f64,
+    pub archive: f64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CurrentToPBestRandomP {
+    pub max_p: f64,
+    pub archive: f64,
+}
+
+/// Where differential evolution's `F` and `CR` come from: `{f, cr}` (fixed), `{min_f, max_f, cr}`
+/// (dither), `{c}` (JADE) or `{memory}` (SHADE).
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum DeControl {
+    Fixed(Fixed),
+    Dither(Dither),
+    Jade(Jade),
+    Shade(Shade),
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Fixed {
+    pub f: f64,
+    pub cr: f64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Dither {
+    pub min_f: f64,
+    pub max_f: f64,
+    pub cr: f64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Jade {
+    pub c: f64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Shade {
+    pub memory: usize,
+}
+
+/// When differential evolution starts over: `"never"`, or on stagnation with
+/// `{tolerance, patience}`.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum DeRestarts {
+    Named(DeRestartsName),
+    OnStagnation(OnStagnation),
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeRestartsName {
+    Never,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OnStagnation {
+    pub tolerance: f64,
+    pub patience: u64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

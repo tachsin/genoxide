@@ -141,6 +141,22 @@ generations = 1000
 
     for (algorithm, extra) in [
         ("de", "population_size = 30"),
+        (
+            "de",
+            "population_size = 30\nstrategy = \"rand1\"\ncontrol = { f = 0.5, cr = 0.9 }\nrestarts = \"never\"",
+        ),
+        (
+            "de",
+            "strategy = { p = 0.1, archive = 1.0 }\ncontrol = { c = 0.1 }\nrestarts = { tolerance = 1e-12, patience = 100 }",
+        ),
+        (
+            "de",
+            "strategy = \"best1\"\ncontrol = { min_f = 0.5, max_f = 1.0, cr = 0.9 }",
+        ),
+        (
+            "de",
+            "strategy = { max_p = 0.2, archive = 0.0 }\ncontrol = { memory = 6 }",
+        ),
         ("pso", "population_size = 30\nring = 1"),
     ] {
         let text = format!(
@@ -330,6 +346,39 @@ fn run_files_are_checked() {
     expect(
         &CMAES.replace("evaluations = 50000", "time = \"5 weeks\""),
         "unknown unit",
+    );
+    // differential evolution's settings: their forms, then genoxide's checks
+    let de =
+        |settings: &str| CMAES.replace("type = \"cmaes\"", &format!("type = \"de\"\n{settings}"));
+    assert_eq!(
+        check(
+            &directory,
+            &de("strategy = \"rand1\"\ncontrol = { f = 0.5, cr = 0.9 }\nrestarts = \"never\"")
+        ),
+        Ok(())
+    );
+    expect(
+        &de("strategy = \"rand2\""),
+        "`algorithm.strategy`: \"rand1\", \"best1\", { p, archive } or { max_p, archive }",
+    );
+    expect(
+        &de("strategy = { p = 0.1 }"),
+        "`algorithm.strategy`: \"rand1\", \"best1\"",
+    );
+    expect(
+        &de("control = { f = 0.5 }"),
+        "`algorithm.control`: { f, cr }, { min_f, max_f, cr }, { c } or { memory }",
+    );
+    expect(
+        &de("restarts = \"ipop\""),
+        "`algorithm.restarts`: \"never\" or { tolerance, patience }",
+    );
+    expect(&de("strategy = { p = 0.0, archive = 1.0 }"), "`p`");
+    expect(&de("control = { f = 0.5, cr = 1.5 }"), "`cr`");
+    expect(&de("control = { memory = 0 }"), "`memory`");
+    expect(
+        &de("restarts = { tolerance = 1e-12, patience = 0 }"),
+        "`restarts`",
     );
     std::fs::remove_dir_all(&directory).unwrap();
 }

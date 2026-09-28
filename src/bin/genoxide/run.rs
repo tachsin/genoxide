@@ -192,6 +192,44 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
     }
 }
 
+fn de_strategy(strategy: config::DeStrategy) -> de::Strategy {
+    match strategy {
+        config::DeStrategy::Named(config::DeStrategyName::Rand1) => de::Strategy::Rand1,
+        config::DeStrategy::Named(config::DeStrategyName::Best1) => de::Strategy::Best1,
+        config::DeStrategy::CurrentToPBest(config::CurrentToPBest { p, archive }) => {
+            de::Strategy::CurrentToPBest { p, archive }
+        }
+        config::DeStrategy::CurrentToPBestRandomP(config::CurrentToPBestRandomP {
+            max_p,
+            archive,
+        }) => de::Strategy::CurrentToPBestRandomP { max_p, archive },
+    }
+}
+
+fn de_control(control: config::DeControl) -> de::Control {
+    match control {
+        config::DeControl::Fixed(config::Fixed { f, cr }) => de::Control::Fixed { f, cr },
+        config::DeControl::Dither(config::Dither { min_f, max_f, cr }) => {
+            de::Control::Dither { min_f, max_f, cr }
+        }
+        config::DeControl::Jade(config::Jade { c }) => de::Control::Jade { c },
+        config::DeControl::Shade(config::Shade { memory }) => de::Control::Shade { memory },
+    }
+}
+
+fn de_restarts(restarts: config::DeRestarts) -> de::Restarts {
+    match restarts {
+        config::DeRestarts::Named(config::DeRestartsName::Never) => de::Restarts::Never,
+        config::DeRestarts::OnStagnation(config::OnStagnation {
+            tolerance,
+            patience,
+        }) => de::Restarts::OnStagnation {
+            tolerance,
+            patience,
+        },
+    }
+}
+
 // the algorithms only for real genomes, and the others
 fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -> Result<Value> {
     match algorithm {
@@ -199,6 +237,9 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             population_size,
             seed,
             l_shade,
+            strategy,
+            control,
+            restarts,
         } => {
             let mut builder = match l_shade {
                 Some(evaluations) => De::l_shade(real, evaluations),
@@ -209,6 +250,15 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             }
             if let Some(seed) = seed {
                 builder = builder.seed(seed);
+            }
+            if let Some(strategy) = strategy {
+                builder = builder.strategy(de_strategy(strategy));
+            }
+            if let Some(control) = control {
+                builder = builder.control(de_control(control));
+            }
+            if let Some(restarts) = restarts {
+                builder = builder.restarts(de_restarts(restarts));
             }
             let builder = builder.objective(context.single_objective()?);
             generational(setting(builder.build())?, context)

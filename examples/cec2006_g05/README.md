@@ -83,7 +83,7 @@ report's criterion; with IPOP restarts (Auger and Hansen, 2005, IEEE CEC 2005: 1
 met the target. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default
 differential evolution, met it on 24 of 25 runs, after a median of 148,000 evaluations (at most
 246,100). The other run found a feasible solution 45 above f*, and then restarted every 200
-generations without finding a better one. Without restarts (`de::Restarts::Never`), SHADE
+generations without finding a better one. Without restarts (`de::Restarts::Never`, or `restarts="never"` in Python), SHADE
 met the target on all 25, after a median of 150,600 evaluations.
 
 ## Output
