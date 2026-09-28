@@ -24,11 +24,25 @@ The adapter prints nothing for any other scenario ([`SCENARIOS`, lines 220-224](
 - **Stop:** the `callback` of [`Options`](https://docs.sciml.ai/Evolutionary/stable/tutorial/#General-options), called after the initial population and after every generation, ends the run at the target, the budget or the time cap, and marks the generation's end for `last_generation` ([`options`, lines 123-136](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L123-L136)).
 - **No convergence criterion (rule 2.2):** `iterations = typemax(Int)` lifts the iteration limit (1,000 by default, 1,500 for CMA-ES), and `successive_f_tol = typemax(Int)` turns off the convergence test, which ends a run once the method's metric (`AbsDiff(1e-12)` for GA and CMA-ES) has held for more than `successive_f_tol` generations (`optimize`, `src/api/optimize.jl`, lines 123-127). Both are documented options.
 - **Ended by the library (rule 8.4):** the CMA-ES ends a run itself when its covariance matrix can't be decomposed (`update_state!` catches the error and returns `true`, `src/cmaes.jl`, lines 156-162). That isn't worked around, and the methods have no restarts: the run ends there, not reached, and its line says `"ended_by": "eigendecomposition failed"` ([`run_once`, lines 138-149](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L138-L149)). Both methods evaluate every child, so neither stalls.
-- **Time:** from the run's `Budget`, created just before `optimize` builds the initial population. Each method first makes the warm-up run of rule 4.2 ([line 289](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L289)).
+- **Time:** from the run's `Budget`, created just before `optimize` builds the initial population, to the moment the run returns, before the adapter reads anything from its result ([lines 293-298](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L293-L298)). Each method first makes the warm-up run of rule 4.2 ([line 289](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L289)).
 - **Seeds (rule 5.2):** a `Xoshiro(seed)` passed as the `rng` of `Options`, which the operators and the initial population use. The same seed repeats a run, and seed 1 gives the same alone as after seed 0 (tested for both methods).
 - **One thread:** [run.sh](../../../benchmarks/adapters/evolutionary_jl/run.sh) runs Julia with `--threads=1 --gcthreads=1,0` and BLAS with one thread.
 - **Version:** the published results measure 0.12.1, the version the adapter pins.
 - **Separate tests:** 2026-09-28, Evolutionary.jl 0.12.1, seeds 0 to 2, the scenario's budget, 60 s cap. `outside` was 0 in every run.
+
+### Where the time goes
+
+Audited on 2026-09-29 with Julia's sampling profiler, `@timed` (allocations, garbage collection, compilation) and seeds 0 to 2 timed three times, alternating the old and the new adapter.
+
+- **GA:** nearly all the time is the library's GA. `TPX` swaps its segment one bit at a time through the `BitVector`s (about 60%), and `tournament` allocates its groups (about 20%). The fitness function, `-count(x)` on a `BitVector`, takes under 1%, and the adapter's counter about 3%. A run allocates 32 MiB. The genome is a `BitVector`, as in the library's tutorial (`BitVector(zeros(30))`) and its OneMax test (`BitArray(rand(rng, Bool, N))`, `test/onemax.jl`).
+- **CMA-ES:** the library's `eigen!`, LAPACK's `syevr` on a 10 × 10 matrix, takes about 54%, and the rank-μ sum of `update_state!` 22%. The fitness function and the counter take under 1% together. A run allocates 428 MiB, and garbage collection takes about 10% of it.
+- **Nothing to set:** `store_trace = false`, `show_trace = false` and `parallelization = :serial` are the defaults of `Options` (`src/api/types.jl`, lines 119-131). The callback makes the library build a trace record, a `Dict`, every generation (`trace!`, `src/api/utilities.jl`, lines 32-48), which is negligible. It's the documented way to stop at the target.
+- **Compilation in the first timed run: fixed.** Julia compiled nothing during a timed run except once: the adapter took the method's result apart (`generations, ended_by = run(...)`) before stopping the clock. The result's type isn't known in `main`, and the warm-up doesn't use its result, so Julia compiled that on seed 0: 6 to 17 ms of its time. The clock now stops as the run returns. The runs are the same (the evaluations, best values, first hits and `ended_by` of seeds 0 to 2):
+
+| Seeds 0, 1, 2, three times | Time (s) before | Time (s) after |
+|---|---|---|
+| GA | 0.040, 0.041, 0.030; 0.049, 0.027, 0.024; 0.038, 0.029, 0.026 | 0.032, 0.029, 0.025; 0.034, 0.028, 0.026; 0.033, 0.029, 0.026 |
+| CMA-ES | 0.145, 0.148, 0.140; 0.150, 0.149, 0.143; 0.155, 0.146, 0.139 | 0.137, 0.144, 0.136; 0.137, 0.152, 0.141; 0.138, 0.151, 0.142 |
 
 ## OneMax 1000: the GA
 

@@ -15,22 +15,28 @@ Can pygmo be set closer to a definition than this page says? [Open a benchmark i
 
 ## How the adapter runs pygmo
 
-- **Fitness functions:** a UDP with `fitness(x)` and `batch_fitness(dvs)` ([`Problem`](../../../benchmarks/adapters/pygmo/bench.py#L165-L196)), in numpy, as [coding_udp_simple](https://esa.github.io/pygmo2/tutorials/coding_udp_simple.html) shows ([bench.py#L138-L162](../../../benchmarks/adapters/pygmo/bench.py#L138-L162)).
-- **Batch evaluation (rule 3.4):** `cmaes` accepts a batch fitness evaluator and gets [`member_bfe`](https://esa.github.io/pygmo2/bfe.html#pygmo.member_bfe), which calls `batch_fitness` with a generation, in the same thread. It's the same search: with and without it, seeds 0 to 2 gave the same first hits and best values. `de` takes no evaluator.
-- **Evaluations:** the adapter's [`Counter`](../../../benchmarks/adapters/pygmo/bench.py#L79-L116) counts every decision vector, keeps the best and records the first hit; `get_fevals` isn't used.
+- **Fitness functions:** a UDP with `fitness(x)` and `batch_fitness(dvs)` ([`Problem`](../../../benchmarks/adapters/pygmo/bench.py#L192-L228)), in numpy, as [coding_udp_simple](https://esa.github.io/pygmo2/tutorials/coding_udp_simple.html) shows: `fitness` gets one decision vector, a numpy array, and returns a list of one value ([bench.py#L153-L189](../../../benchmarks/adapters/pygmo/bench.py#L153-L189)). Each function has two forms, of one vector for `fitness` and of the rows of an array for `batch_fitness`; they give the same value to the bit, which `values` checks for every point `run.py check` evaluates.
+- **Batch evaluation (rule 3.4):** `cmaes` accepts a batch fitness evaluator and gets [`member_bfe`](https://esa.github.io/pygmo2/bfe.html#pygmo.member_bfe), which calls `batch_fitness` with a generation, in the same thread. It's the same search: with and without it, seeds 0 to 2 gave the same first hits and best values. `de` takes no evaluator: in pygmo 2.19.8 only `cmaes`, `gaco`, `maco`, `moead_gen`, `nsga2`, `nspso` and `pso_gen` have `set_bfe`. So `de` calls `fitness` once per evaluation, 300,000 times a run.
+- **Evaluations:** the adapter's [`Counter`](../../../benchmarks/adapters/pygmo/bench.py#L80-L130) counts every decision vector, keeps the best and records the first hit; `get_fevals` isn't used.
+- **The adapter's own cost (2026-09-29).** A profile of `de` showed most of a run in the adapter, not in pagmo or the fitness function: `fitness` wrapped each vector in an array of one row, evaluated it with the batch form, and counted it with array operations, about 9 µs a call, where pagmo's own call costs about 1 µs and the fitness function 2 µs. `fitness` now evaluates the vector itself, counts it with plain floats, and tests the bounds with its minimum and maximum; `batch_fitness` tests them the same way before it counts the rows outside. The search is unchanged: seeds 0 to 2 of both methods give the same evaluations, best values, solutions and first hits as before. A solution with a gene that isn't a number now counts as outside, as it does for pycma and pymoo; none occurred. Times of seeds 0 to 2, in WSL on 2 cores shared with other work, from 3 to 5 runs of each seed alternating the adapters before and after:
+
+  | Solver | Before | After |
+  |---|---|---|
+  | de, Rastrigin 30, 300,000 evaluations | 2.4 to 2.7 s | 1.1 to 1.2 s |
+  | cma_es, Rosenbrock 10, to the target | 10 to 12 ms | 7 to 9 ms |
 - **Stop:** the counter raises an exception from inside the fitness at the target (Rosenbrock only; Rastrigin has none), the budget (a batch is cut there) or the 60 s cap; it passes through pagmo's C++ to the adapter.
-- **No convergence criterion (rule 2.2):** `gen`, a limit that's only a budget, covers the whole budget ([`budget_generations`](../../../benchmarks/adapters/pygmo/bench.py#L199-L202)). `ftol` and `xtol` are 0: both algorithms stop when a spread is *below* them (`dx < xtol`, `df < ftol` in `de`; the last step's length `< xtol` and the population's `df < ftol` in `cmaes`), which a spread of 0 isn't. One call of `evolve` runs to the end; there are no restarts, so no restart seeds.
-- **Errors (rule 8.4):** any other exception from `evolve` ends the run, reported in `ended_by` ([bench.py#L293-L302](../../../benchmarks/adapters/pygmo/bench.py#L293-L302)). None happened in the tests.
-- **One thread:** no islands, archipelagos or parallel evaluators; numpy's BLAS with 1 thread ([bench.py#L32-L34](../../../benchmarks/adapters/pygmo/bench.py#L32-L34)). pagmo's `batch_fitness` also runs TBB worker threads, with no pygmo setting for them: the adapter starts TBB with one CPU, by a batch evaluation of a trivial problem before any run, and then restores the process's CPUs ([`start_tbb_with_one_thread`](../../../benchmarks/adapters/pygmo/bench.py#L60-L72)).
+- **No convergence criterion (rule 2.2):** `gen`, a limit that's only a budget, covers the whole budget ([`budget_generations`](../../../benchmarks/adapters/pygmo/bench.py#L231-L234)). `ftol` and `xtol` are 0: both algorithms stop when a spread is *below* them (`dx < xtol`, `df < ftol` in `de`; the last step's length `< xtol` and the population's `df < ftol` in `cmaes`), which a spread of 0 isn't. One call of `evolve` runs to the end; there are no restarts, so no restart seeds.
+- **Errors (rule 8.4):** any other exception from `evolve` ends the run, reported in `ended_by` ([bench.py#L329-L338](../../../benchmarks/adapters/pygmo/bench.py#L329-L338)). None happened in the tests.
+- **One thread:** no islands, archipelagos or parallel evaluators; numpy's BLAS with 1 thread ([bench.py#L33-L35](../../../benchmarks/adapters/pygmo/bench.py#L33-L35)). pagmo's `batch_fitness` also runs TBB worker threads, with no pygmo setting for them: the adapter starts TBB with one CPU, by a batch evaluation of a trivial problem before any run, and then restores the process's CPUs ([`start_tbb_with_one_thread`](../../../benchmarks/adapters/pygmo/bench.py#L61-L73)).
 - **Seeds:** the run's seed goes to `pg.population(..., seed=)` and to the algorithm's `seed`.
-- **`last_generation`:** pagmo doesn't call back between generations, but both algorithms evaluate a population of their size first and then that many a generation ([`last_generation`](../../../benchmarks/adapters/pygmo/bench.py#L122-L126)).
-- **Separate tests:** 2026-09-28, pygmo 2.19.8, seeds 0 to 2, the scenario's budget (300,000 for Rastrigin 30, 500,000 for Rosenbrock 10) and 60 s cap, with other processes on the machine. `outside` was 0 in every run.
+- **`last_generation`:** pagmo doesn't call back between generations, but both algorithms evaluate a population of their size first and then that many a generation ([`last_generation`](../../../benchmarks/adapters/pygmo/bench.py#L136-L140)).
+- **Separate tests:** 2026-09-29, pygmo 2.19.8, seeds 0 to 2, the scenario's budget (300,000 for Rastrigin 30, 500,000 for Rosenbrock 10) and 60 s cap, with other processes on the machine. `outside` was 0 in every run.
 
 ## Rastrigin 30: DE/rand/1/bin
 
-**Code:** [`run_de`](../../../benchmarks/adapters/pygmo/bench.py#L210-L224): `pg.de(gen, F=0.5, CR=0.9, variant=7, ftol=0.0, xtol=0.0, seed)` evolving `pg.population(problem, 100, seed)`.
+**Code:** [`run_de`](../../../benchmarks/adapters/pygmo/bench.py#L242-L256): `pg.de(gen, F=0.5, CR=0.9, variant=7, ftol=0.0, xtol=0.0, seed)` evolving `pg.population(problem, 100, seed)`.
 
-**No target:** Rastrigin 30 is measured by the time a run takes for its budget of 300,000 evaluations and by its error at the end. The counter never stops a run at a value, only at the budget or the time cap ([`solvers_of`](../../../benchmarks/adapters/pygmo/bench.py#L246-L256), [bench.py#L291-L292](../../../benchmarks/adapters/pygmo/bench.py#L291-L292)), and every run prints `"target": null`, `"success": false` and `"first_hit": null`.
+**No target:** Rastrigin 30 is measured by the time a run takes for its budget of 300,000 evaluations and by its error at the end. The counter never stops a run at a value, only at the budget or the time cap ([`solvers_of`](../../../benchmarks/adapters/pygmo/bench.py#L278-L288), [bench.py#L327-L328](../../../benchmarks/adapters/pygmo/bench.py#L327-L328)), and every run prints `"target": null`, `"success": false` and `"first_hit": null`.
 
 **Configuration** ([rule 6.3](../rules.md#6-the-methods)):
 
@@ -54,13 +60,13 @@ Can pygmo be set closer to a definition than this page says? [Open a benchmark i
 
 | Solver | Runs | Time: median (fastest, slowest) | Error at the end: median (best, worst) | Capped |
 |---|---|---|---|---|
-| de | 3 | 2.43 s (2.35, 2.49) | 142 (115, 182) | 0 |
+| de | 3 | 1.14 s (1.10, 1.16) | 142 (115, 182) | 0 |
 
-Every run used the whole budget: 3,000 generations of 100.
+Every run used the whole budget: 3,000 generations of 100. The times are the medians of 3 runs of each seed with the adapter of 2026-09-29; the adapter before it took 2.43 s (2.35, 2.49) on 2026-09-28, for the same runs.
 
 ## Rosenbrock 10: CMA-ES
 
-**Code:** [`run_cma_es`](../../../benchmarks/adapters/pygmo/bench.py#L227-L243): `pg.cmaes(gen, sigma0=0.3, ftol=0.0, xtol=0.0, force_bounds=True, seed)` with `member_bfe`, evolving `pg.population(problem, 10, seed)`. The other parameters are at their defaults: `cc`, `cs`, `c1` and `cmu` at −1 ("automatically assigned"), `memory=False` (one call of `evolve`).
+**Code:** [`run_cma_es`](../../../benchmarks/adapters/pygmo/bench.py#L259-L275): `pg.cmaes(gen, sigma0=0.3, ftol=0.0, xtol=0.0, force_bounds=True, seed)` with `member_bfe`, evolving `pg.population(problem, 10, seed)`. The other parameters are at their defaults: `cc`, `cs`, `c1` and `cmu` at −1 ("automatically assigned"), `memory=False` (one call of `evolve`).
 
 **Configuration** ([rule 6.4](../rules.md#6-the-methods)):
 

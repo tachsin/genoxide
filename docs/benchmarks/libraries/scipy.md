@@ -26,6 +26,7 @@ The adapter prints nothing for any other scenario ([`main`, lines 181-183](../..
 - **Seeds (rule 5.2):** a `numpy.random.Generator`, `np.random.default_rng(seed)`, draws the initial population and is then passed as `rng`. The same seed repeats a run, and seed 1 gives the same alone as after seed 0 (tested).
 - **One thread (rule 4.3):** numpy's BLAS set to one thread before the import ([lines 24-26](../../../benchmarks/adapters/scipy/bench.py#L24-L26)); `workers` stays 1.
 - **Separate tests:** 2026-09-28, SciPy 1.18.1, numpy 2.5.3, Python 3.13.9, seeds 0 to 2, the scenario's budget of 300,000 evaluations, 60 s cap, on a shared machine. `outside` was 0 in every run.
+- **Speed (checked 2026-09-29).** A profile (cProfile) of a run: about 56% is `_mutate_many` building the trials (42% its `_select_samples`, a Python call per trial), 17% evaluating the population, of which the fitness function is 10% and the adapter's counting 3% (about 7 µs a generation, 20 ms a run), and the rest `differential_evolution`'s own bookkeeping per generation. The adapter already uses the documented fastest setting, `vectorized=True`; checked again on 2026-09-29: seeds 0 to 2 (20,000 evaluations) give the same evaluations and best values with `vectorized=False`, in 2.3 to 2.9 times the time. `workers` would run evaluations in other processes (rule 4.3). Nothing changed.
 
 ## Rastrigin 30: DE/rand/1/bin
 

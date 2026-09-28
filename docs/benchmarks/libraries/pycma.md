@@ -25,6 +25,7 @@ The adapter prints nothing for any other scenario ([`main`, lines 187-189](../..
 - **Seeds (rule 5.2):** pycma samples from numpy's global random state (option `randn`, `np.random.randn`). The adapter seeds it with the run's seed, `np.random.seed(seed)`, and draws the initial mean from it too. The `seed` option is `np.nan`, "do nothing": pycma reads 0 as "seed from the clock" (`CMAOptions`: "`None` and `0` equate to `time`"). The same seed repeats a run, and seed 1 gives the same alone as after seed 0 (tested).
 - **One thread (rule 4.3):** numpy's BLAS set to one thread before the import ([lines 22-24](../../../benchmarks/adapters/pycma/bench.py#L22-L24)).
 - **Separate tests:** 2026-09-28, pycma 4.5.0, numpy 2.5.3, Python 3.13.9, the scenario's budget, 60 s cap, on a shared machine. `outside` was 0 in every run.
+- **Speed (checked 2026-09-29).** A profile (cProfile) of a run: `ask` takes about 53% (a third of the run is `BoundTransform` mapping each sample into the box), `tell` 41%, and the adapter 5%, of which the fitness function is 2%; the rest of the adapter is its counting, about 5 µs a generation. The ask-and-tell loop is already the leanest way pycma documents: `cma.fmin2` and `es.optimize` run the same loop and add `es.stop()`, the display and the logger every iteration; here the display and log files are off (`verbose=-9`, `verb_disp=0`, `verb_log=0`) and `es.stop()` is never called. No pycma option removes work without changing the search, so nothing changed.
 
 ## Rosenbrock 10: CMA-ES
 

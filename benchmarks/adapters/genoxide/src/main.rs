@@ -321,6 +321,15 @@ fn anywhere<G>(_: &G) -> bool {
     true
 }
 
+/// Whether every gene is in `bounds` (rule 2.4): one pass without a branch per gene, so the check
+/// costs little next to the fitness function
+fn within(genome: &Reals, bounds: &std::ops::RangeInclusive<f64>) -> bool {
+    let (low, high) = (*bounds.start(), *bounds.end());
+    genome
+        .iter()
+        .fold(true, |inside, &x| inside & (low <= x) & (x <= high))
+}
+
 // OneMax 1000: the GA of rule 6.2, DEAP's eaSimple (docs/benchmarks/rules.md): population 300,
 // tournament 3 (with replacement), two-point crossover of each consecutive pair with probability
 // 0.5, each child mutated with probability 0.2 by a bit-flip at 1 / size per gene, generational
@@ -352,7 +361,7 @@ const REAL_TARGET: f64 = 0.01;
 // box halfway between the target's gene and the bound (rule 2.4)
 fn run_rastrigin(args: &Args, seed: u64) -> Result<()> {
     let bounds = -RASTRIGIN_UPPER..=RASTRIGIN_UPPER;
-    let inside = |genome: &Reals| genome.iter().all(|x| bounds.contains(x));
+    let inside = |genome: &Reals| within(genome, &bounds);
     let build = |seed| {
         De::builder(Real::uniform(args.size, bounds.clone())?)
             .population_size(100)
@@ -373,7 +382,7 @@ fn run_rastrigin(args: &Args, seed: u64) -> Result<()> {
 // (rule 2.4)
 fn run_rosenbrock(args: &Args, seed: u64) -> Result<()> {
     let bounds = -5.0..=10.0;
-    let inside = |genome: &Reals| genome.iter().all(|x| bounds.contains(x));
+    let inside = |genome: &Reals| within(genome, &bounds);
     let build = |seed| {
         Cmaes::builder(Real::uniform(args.size, bounds.clone())?)
             .restarts(cmaes::Restarts::Never)

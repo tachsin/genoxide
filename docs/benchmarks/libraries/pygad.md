@@ -39,6 +39,14 @@ Found a setting that brings PyGAD closer to the definition, or a difference this
 
 **Separate tests:** 5 of 5 reached the target, first hits at a median of 113,594 evaluations.
 
+**Speed** (checked 2026-09-29, PyGAD 3.7.0, WSL with other processes running): seeds 0 to 2 took 7.4, 7.6 and 7.1 s, for 114,000, 116,100 and 107,700 evaluations. A profile of seed 0 puts nearly all of it in PyGAD's own operators, which loop in Python: `mutation_probs_by_space` draws a probability per gene and checks every gene of every child (about half of the run), `two_points_crossover` draws the parents' probabilities anew for each child (a sixth), `tournament_selection` (a sixth), and the initial population, built gene by gene from `gene_space` (a tenth). The batch fitness function and the adapter's counter take about 2%. PyGAD documents no faster way to run this GA:
+- **Batch fitness:** already on, `fitness_batch_size` of the whole population, as [Batch Fitness Calculation](https://pygad.readthedocs.io/en/latest/fitness_calculation.html#batch-fitness-calculation) shows.
+- **No extra work to turn off:** `save_solutions` and `save_best_solutions` are off (their defaults), there are no `on_parents`, `on_crossover` or `on_mutation` callbacks, `parallel_processing` is off (rule 4.3), and PyGAD logs nothing per generation. The adapter's callbacks, `on_fitness` and `on_generation`, only read counters.
+- **Binary genes:** `gene_space=[0, 1]` is PyGAD's documented binary gene ([Benchmark Problems](https://pygad.readthedocs.io/en/latest/benchmarks.html), "Knapsack"). Without it, `mutation_type="random"` adds a random value from a range to the gene, or replaces the gene with one (`mutation_by_replacement`), which can leave it unchanged or outside {0, 1}: not a bit flip, another algorithm. `mutation_num_genes` instead of `mutation_probability` changes a fixed number of genes per child, not 0.2 on average.
+- **A user-built initial population** (`initial_population`) would skip PyGAD's gene-by-gene initialization, but it's the adapter's code instead of the library's (rule 6.1), so it isn't used.
+
+So the adapter is unchanged.
+
 ## Can't run
 
 - Rastrigin 30 (DE/rand/1/bin) and Rosenbrock 10 (CMA-ES): PyGAD has only a GA.

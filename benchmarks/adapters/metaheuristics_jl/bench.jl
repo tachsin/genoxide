@@ -254,9 +254,12 @@ function main(args)
         index = seed - seed_from
         index >= EARLY_SEEDS && capped == EARLY_SEEDS && break
         budget = Budget(max_evaluations, max_seconds, target)  # the clock starts
-        # the iterations, the initial population's included
-        iterations = run(budget, seed).iteration
+        status = run(budget, seed)
+        # the clock stops as the run returns, before anything is read from its result (whose type
+        # isn't known here)
         elapsed = seconds(budget)
+        # the iterations, the initial population's included
+        iterations = status.iteration
         success = false  # no target
         capped += index < EARLY_SEEDS && elapsed >= CAPPED * max_seconds
         print_line([
