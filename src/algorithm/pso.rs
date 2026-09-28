@@ -220,6 +220,8 @@ impl Pso {
 
     // sets the fitness of the positions and the personal bests of a re-evaluation, in the order
     // asked, and the best from them
+    #[cold]
+    #[inline(never)]
     fn rescore(&mut self, fitness: &[Fitness]) {
         let objective = self.objective;
         let size = self.population.len();
@@ -254,6 +256,23 @@ impl Pso {
         self.best_generation = self.generation;
         self.rescored.clear();
         self.reevaluating = false;
+    }
+
+    // the genomes of a re-evaluation for the next ask: the positions, then the personal bests
+    // elsewhere
+    #[cold]
+    #[inline(never)]
+    fn ask_again(&mut self) {
+        let elsewhere = self
+            .personal_bests
+            .iter()
+            .zip(self.population.iter())
+            .filter(|(personal, particle)| personal.genome() != particle.genome())
+            .map(|(personal, _)| personal);
+        self.rescored.clear();
+        self.rescored.extend(self.population.iter().cloned());
+        self.rescored.extend(elsewhere.cloned());
+        self.pending.extend(0..self.rescored.len());
     }
 
     fn personal_best(&self, index: usize) -> Fitness {
@@ -301,6 +320,9 @@ impl Pso {
             .map(|index| self.neighborhood_best(index, global))
             .collect();
         let bounds = self.real.bounds();
+        // in registers for the loop, not read again after each random number
+        let (inertia, cognitive, social) = (self.inertia, self.cognitive, self.social);
+        let max_velocity = self.max_velocity;
         for (index, &guide) in guides.iter().enumerate() {
             let mut position = self.population[index].genome().clone();
             let personal = self.personal_bests[index].genome();
@@ -308,11 +330,11 @@ impl Pso {
             let velocity = &mut self.velocities[index];
             for j in 0..position.len() {
                 let (start, end) = (*bounds[j].start(), *bounds[j].end());
-                let limit = self.max_velocity * (end - start);
+                let limit = max_velocity * (end - start);
                 let (r1, r2) = (self.rng.unit_f64(), self.rng.unit_f64());
-                let mut v = self.inertia * velocity[j]
-                    + self.cognitive * r1 * (personal[j] - position[j])
-                    + self.social * r2 * (neighborhood[j] - position[j]);
+                let mut v = inertia * velocity[j]
+                    + cognitive * r1 * (personal[j] - position[j])
+                    + social * r2 * (neighborhood[j] - position[j]);
                 // NaN from overflowing terms of opposite signs
                 if v.is_nan() {
                     v = 0.0;
@@ -353,16 +375,7 @@ impl Algorithm for Pso {
         if !self.asked {
             self.pending.clear();
             if self.reevaluating {
-                let elsewhere = self
-                    .personal_bests
-                    .iter()
-                    .zip(self.population.iter())
-                    .filter(|(personal, particle)| personal.genome() != particle.genome())
-                    .map(|(personal, _)| personal);
-                self.rescored.clear();
-                self.rescored.extend(self.population.iter().cloned());
-                self.rescored.extend(elsewhere.cloned());
-                self.pending.extend(0..self.rescored.len());
+                self.ask_again();
             } else {
                 if self.started {
                     self.fly();

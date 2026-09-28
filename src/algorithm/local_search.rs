@@ -261,8 +261,24 @@ impl<R: Representation, M> LocalSearch<R, M> {
         Ok(())
     }
 
+    // the genomes of a re-evaluation for the next ask: the current solution, and the best if it's
+    // another genome
+    #[cold]
+    #[inline(never)]
+    fn ask_again(&mut self) {
+        let best = self.best.as_ref().expect("best after the first tell");
+        self.candidates.clear();
+        self.candidates.push(self.current[0].clone());
+        if best.genome() != self.current[0].genome() {
+            self.candidates.push(best.clone());
+        }
+        self.pending.extend(0..self.candidates.len());
+    }
+
     // sets the fitness of the current solution and of the best, in the order asked, and the best
     // from them
+    #[cold]
+    #[inline(never)]
     fn rescore(&mut self, fitness: &[Fitness]) {
         // the best is asked last, or with the current solution when it's the same
         let (current, best) = (fitness[0], fitness[fitness.len() - 1]);
@@ -356,13 +372,7 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
         if !self.asked {
             self.pending.clear();
             if self.reevaluating {
-                let best = self.best.as_ref().expect("best after the first tell");
-                self.candidates.clear();
-                self.candidates.push(self.current[0].clone());
-                if best.genome() != self.current[0].genome() {
-                    self.candidates.push(best.clone());
-                }
-                self.pending.extend(0..self.candidates.len());
+                self.ask_again();
             } else if self.started && self.restart_due() {
                 // iterated local search: kick the best solution
                 let (_, kicks) = self.restart.expect("a restart is due");
