@@ -49,7 +49,7 @@ Seeds: attempt 0 uses the run's seed. Restart r, from 1, uses `(seed + 1) * 1_00
 
 3.3. **The first hit.** Every run of a scenario with a target prints `"first_hit": {"evaluations": E, "time_s": T}`; a run of Rastrigin, which has none, prints `"target": null`, `"success": false` and `"first_hit": null`. E is the number of the first evaluation whose true value reaches the target, counting that evaluation. T is the run's clock at that evaluation. A run that never reaches the target prints `"first_hit": null`. The adapter's counter records it at each evaluation, whatever the library's stop granularity. The run still stops as rules 2.1 and 2.3 say. A first hit later than the scenario's time cap counts as not reached. **[checked]** `first_hit` is present when the solution reaches the target and null otherwise; E is at most the run's evaluations, and T at most its time.
 
-3.4. **Batch evaluation.** A Python library with a documented batch or vectorized evaluation interface evaluates a generation at once with numpy, as its users would, if the interface doesn't change the algorithm. Each row of a batch counts as one evaluation.
+3.4. **Batch evaluation.** A Python library with a documented batch or vectorized evaluation interface evaluates a generation at once with numpy, as its users would, if the interface doesn't change the algorithm. Each row of a batch counts as one evaluation. A library that calls the fitness function one solution at a time gets it on that solution alone: the adapter doesn't wrap it in a batch of one, and counts it with as little work as it can.
 
 ## 4. Time
 
@@ -65,7 +65,9 @@ Seeds: attempt 0 uses the run's seed. Restart r, from 1, uses `(seed + 1) * 1_00
 
 4.4. One run at a time, on the pinned P-cores, with nothing else running (see the [README](../../benchmarks/README.md#methodology)).
 
-4.5. **Builds.** Compiled adapters build with optimizations, for the default target, as their users would: no `-march=native` or `target-cpu=native`.
+4.5. **Builds.** Compiled adapters build with optimizations, for the default target, as their users would: no `-march=native` or `target-cpu=native`. Rust adapters build with `cargo build --release` and cargo's default release profile, with no `[profile.release]` of their own, unless the library documents another for programs that use it.
+
+4.6. **Each library at its best.** Each adapter runs its library the fastest way the library itself documents for the same algorithm (its examples, documented options and representations, its documented batch evaluation), single-threaded, and adds as little work of its own as the rules allow. Each library's page records where a run's time goes and what was checked; the audit of 2026-09-29 is on every page.
 
 ## 5. Seeds and repeated runs
 

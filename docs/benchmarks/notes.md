@@ -50,6 +50,17 @@ Differences that don't change the algorithm ([rule 6.1](rules.md#6-the-methods))
 - **jMetal:** 10 uniform initial evaluations it doesn't use; h_σ's exponent 2(g + 2); χ_n = √n (a bug, below).
 - **Evolutionary.jl:** its default weights are active, so the adapter passes the positive weights and, with them, the four learning rates by the library's own default formulas; the mean is the first of 5 uniform points; one type-probe evaluation.
 
+## The adapters at their libraries' best (2026-09-29)
+
+Every adapter was profiled for time spent outside the library, and checked against its library's docs for a faster documented way to run the same algorithm ([rule 4.6](rules.md#4-time)):
+
+- **DEAP, OneMax:** individuals are `array.array`s, as in DEAP's `onemax_short.py`, which its docs prefer to numpy arrays (lists before, whose deep copies took 96% of a run); the same operators and random draws, so the same runs, about 10 times faster.
+- **pygmo, DE:** `de` calls the fitness one vector at a time; the adapter now evaluates each vector directly instead of as a batch of one, with the same runs, 2.3 times faster.
+- **genoxide (Python), OneMax:** evaluated with a batch function (rule 3.4), and the package's `time` stop; the GA's `on_generation` callback, needed only for the stall check, costs about 17% of its time, because the package builds the population's arrays for it every generation.
+- **genoxide and radiate:** built with cargo's default release profile (rule 4.5; before: thin LTO and one codegen unit, 1 to 9% fewer instructions).
+- **Evolutionary.jl and Metaheuristics.jl:** the clock stops as soon as the run returns; before, Julia compiled the result's handling inside seed 0's timed run.
+- **Nothing to change:** pymoo, pycma, SciPy, PyGAD, jMetal and DEAP's CMA-ES already run the leanest way their docs describe; their pages give where the time goes.
+
 ## Bugs found
 
 The benchmark runs what a library's users get, so its results show its bugs ([rule 8.4](rules.md#8-reporting)). A run that a library ends with an error ends there, as not reached, with `ended_by`. No bug was found in genoxide, its Python package, pycma or SciPy.
@@ -66,6 +77,7 @@ The benchmark runs what a library's users get, so its results show its bugs ([ru
 | [jMetal](libraries/jmetal.md#bugs-found) 7.5 | `CMAESUtils.tql2` throws `ArrayIndexOutOfBoundsException` when the covariance matrix holds NaN | every Rosenbrock run ends there, after about 204,000 evaluations, with `ended_by` | [jMetal/jMetal#490](https://github.com/jMetal/jMetal/issues/490), fix proposed in [jMetal/jMetal#493](https://github.com/jMetal/jMetal/pull/493) |
 | [jMetal](libraries/jmetal.md#bugs-found) 7.5 | CMA-ES draws its samples from a generator seeded with the clock | worked around: the adapter seeds it; the algorithm is unchanged | [jMetal/jMetal#492](https://github.com/jMetal/jMetal/issues/492), fix proposed in [jMetal/jMetal#495](https://github.com/jMetal/jMetal/pull/495) |
 | [jMetal](libraries/jmetal.md#bugs-found) 7.5 | CMA-ES computes χ_n with integer divisions, √n instead of 3.085 for n = 10 | σ shrinks a little faster than intended | [jMetal/jMetal#491](https://github.com/jMetal/jMetal/issues/491), fix proposed in [jMetal/jMetal#494](https://github.com/jMetal/jMetal/pull/494) |
+| [jMetal](libraries/jmetal.md#bugs-found) 7.5 | the DE crossover's repair, `RepairDoubleSolutionWithBoundValue`, builds its bounds check's error message (two `Double.toString` per gene) on every call, whether the check fails or not; `ObjectiveComparator` too | about 60% of the DE's time: 2.6 times slower, the same runs | not yet |
 | [pygmo](libraries/pygmo.md#bugs-found) 2.19.8 | `de` draws r1, r2, r3 without excluding the target | about 3% of trials use the target | [esa/pagmo2#653](https://github.com/esa/pagmo2/issues/653), fix proposed in [esa/pagmo2#654](https://github.com/esa/pagmo2/pull/654) |
 | [pygmo](libraries/pygmo.md#bugs-found) 2.19.8 | the docstrings of `cmaes` (and `sade`, `de1220`, `xnes`) swap `ftol` and `xtol` | documentation only | [esa/pygmo2#195](https://github.com/esa/pygmo2/issues/195), fix proposed in [esa/pygmo2#196](https://github.com/esa/pygmo2/pull/196) and [esa/pagmo2#652](https://github.com/esa/pagmo2/pull/652) |
 | [pymoo](libraries/pymoo.md#bugs-found) 0.6.2 | `fast_fill_random` keeps positions instead of row numbers, so about 0.14% of DE trials have repeated indices or the target among them | the Rastrigin runs: the trials with r2 = r3 are a crossover without a difference vector, and halve the error at the end (69.6 as it is, 125.7 with the fix) | [anyoptimization/pymoo#799](https://github.com/anyoptimization/pymoo/issues/799), fix proposed in [anyoptimization/pymoo#800](https://github.com/anyoptimization/pymoo/pull/800) |

@@ -107,7 +107,7 @@ python run.py publish
 ```
 
 - It can't be combined with `--scenarios` or `--quick`. To add a problem, rerun every library.
-- It first reruns DEAP's GA on OneMax 1000, seeds 0 to 2. It refuses to go on if the median time differs from the file's by more than 3%, or if the evaluations differ. `--allow-drift` reruns anyway.
+- It first reruns DEAP's GA on OneMax 1000, seeds 0 to 2. It refuses to go on if the median time differs from the file's by more than 3%, or if the evaluations differ. `--allow-drift` reruns anyway. After a change to DEAP's adapter (such as its 2026-09-29 switch to `array.array` individuals), the reference itself changed: rerun every library, or DEAP alone with `--allow-drift` on the machine of the published results.
 - If the platform differs from the file's, the new file records both.
 
 **New releases.** `python run.py outdated` lists each library's pinned version, the version in the published results and its latest release. It marks a newer release "newer", and a pin that differs from the published results "not rerun". To benchmark a newer release, update the library's pin, check that its page still maps its configuration to the definitions, run `python run.py check --libraries <name>`, then rerun it alone with `--update` and publish it. A weekly workflow keeps an issue, "New releases of benchmarked libraries", open while any library has a newer release or isn't rerun at its pin.
