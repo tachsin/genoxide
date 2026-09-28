@@ -37,6 +37,12 @@ pub enum Topology {
     FullyConnected,
     /// Each island sends to another island chosen at random at every migration.
     Random,
+    /// No migration: the islands evolve apart for the whole run, e.g. each with settings of its
+    /// own, to compare them or to hedge between them, or independent starts of one algorithm.
+    /// They're still run together: their candidates evaluated at once (in parallel if asked),
+    /// one checkpoint, and one best. [`interval`](IslandsBuilder::interval) and
+    /// [`migrants`](IslandsBuilder::migrants) don't apply.
+    Isolated,
 }
 
 /// The island model: several algorithms of one type, the islands, that evolve apart and, every
@@ -203,6 +209,9 @@ impl<A: Migrate> Islands<A> {
 
     // sends copies of the best individuals of every island to its neighbors
     fn migrate(&mut self) -> Result<()> {
+        if self.topology == Topology::Isolated {
+            return Ok(());
+        }
         let count = self.islands.len();
         let objective = self.objective();
         let mut arriving: Vec<Vec<Individual<A::Genome>>> = vec![Vec::new(); count];
@@ -229,6 +238,7 @@ impl<A: Migrate> Islands<A> {
                     }
                     vec![to]
                 }
+                Topology::Isolated => Vec::new(),
             };
             for to in destinations {
                 arriving[to].extend(emigrants.iter().cloned());
@@ -332,7 +342,7 @@ impl<A: Migrate> Algorithm for Islands<A> {
             self.best = None;
         } else if self.started {
             self.generation += 1;
-            if self.generation % self.interval == 0 {
+            if self.topology != Topology::Isolated && self.generation % self.interval == 0 {
                 self.migrate()?;
             }
         }
@@ -459,7 +469,8 @@ impl<A: Migrate> IslandsBuilder<A> {
     /// # Errors
     ///
     /// [`Error::InvalidSetting`] for fewer than 2 islands, islands that already ran or that
-    /// don't share an objective and a representation, an interval of 0, or no migrants.
+    /// don't share an objective and a representation, or, unless the islands are
+    /// [`Topology::Isolated`], an interval of 0 or no migrants.
     pub fn build(self) -> Result<Islands<A>> {
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
         if self.islands.len() < 2 {
@@ -491,11 +502,14 @@ impl<A: Migrate> IslandsBuilder<A> {
         if self.islands.iter().any(|island| island.evaluations() > 0) {
             return invalid("islands", "the islands must not have run yet".to_string());
         }
-        if self.interval == 0 {
-            return invalid("interval", "at least 1 generation".to_string());
-        }
-        if self.migrants == 0 {
-            return invalid("migrants", "at least 1".to_string());
+        // isolated islands don't migrate: their interval and migrants don't apply
+        if self.topology != Topology::Isolated {
+            if self.interval == 0 {
+                return invalid("interval", "at least 1 generation".to_string());
+            }
+            if self.migrants == 0 {
+                return invalid("migrants", "at least 1".to_string());
+            }
         }
         let seed = self
             .seed
@@ -798,6 +812,36 @@ mod tests {
         };
         assert_eq!(run(5), run(5));
         assert_ne!(run(5), run(6));
+    }
+
+    #[test]
+    fn isolated_islands_never_migrate() {
+        // interval and migrants don't apply, even invalid ones
+        let mut islands = Islands::builder(vec![ga(0), ga(1), ga(2)])
+            .topology(Topology::Isolated)
+            .interval(0)
+            .migrants(0)
+            .build()
+            .unwrap();
+        // each island alone, run the same way: nothing arrives from the others
+        let mut alone = [ga(0), ga(1), ga(2)];
+        for _ in 0..30 {
+            step(&mut islands);
+            for island in &mut alone {
+                step(island);
+            }
+        }
+        for (together, apart) in islands.islands().iter().zip(&alone) {
+            assert_eq!(together.population(), apart.population());
+        }
+        let best = alone
+            .iter()
+            .map(|island| island.best().unwrap().fitness().unwrap())
+            .fold(None, |best: Option<Fitness>, fitness| match best {
+                Some(best) if !Objective::Maximize.is_better(fitness, best) => Some(best),
+                _ => Some(fitness),
+            });
+        assert_eq!(islands.best().unwrap().fitness(), best);
     }
 
     #[test]

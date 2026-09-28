@@ -435,7 +435,7 @@ fn main() -> genoxide::Result<()> {
         })
         .collect::<genoxide::Result<Vec<_>>>()?;
     let islands = Islands::builder(islands)
-        .topology(Topology::Ring) // or FullyConnected, Random
+        .topology(Topology::Ring) // or FullyConnected, Random, or Isolated: no migration
         .interval(10) // generations between migrations
         .migrants(2) // copies of each island's best, replacing the worst of the next
         .build()?;
