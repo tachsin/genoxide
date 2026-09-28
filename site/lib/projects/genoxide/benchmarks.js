@@ -20,6 +20,12 @@ const OVERALL_CAPTION =
   "Its time is its fastest method's expected time to the target or, with several objectives, its fastest method's time for the budget among those within 1% of the best hypervolume. " +
   "Hover a bar for its points in each scenario.";
 
+/** What genoxide's versions chart is (rule 10 of docs/benchmarks/rules.md), in short. */
+const VERSIONS_CAPTION =
+  "How genoxide's releases compare on the same benchmark runs: the CPU instructions Callgrind counts in one seeded run of each method, " +
+  "to its target or its evaluation budget. The counts are exact whatever the machine's load, so a change between versions is genoxide's. " +
+  "Hover a point for its evaluations, whether it reached the target and the change from the previous version.";
+
 /**
  * The interactive charts, in order: each a `kind` of component
  * (components/projects/genoxide/benchmarks/charts.jsx) and its `views`, the
@@ -52,13 +58,6 @@ export const BENCHMARK_CHARTS = [
     ],
   },
   {
-    id: "instructions",
-    kind: "instructions",
-    title: "Instructions per evaluation",
-    caption: "The framework's own cost around one evaluation.",
-    views: [{ data: "instructions", label: "Instructions", file: "docs/benchmarks/instructions.svg" }],
-  },
-  {
     id: "hypervolume",
     kind: "front",
     title: "Multi-objective fronts",
@@ -67,6 +66,14 @@ export const BENCHMARK_CHARTS = [
       { data: "hypervolume", label: "Hypervolume", file: "docs/benchmarks/hypervolume.svg" },
       { data: "front_time", label: "Time", file: "docs/benchmarks/front_time.svg" },
     ],
+  },
+  {
+    // genoxide only (rule 10): a pin whose charts.json doesn't have it leaves it out
+    id: "genoxide-versions",
+    kind: "versions",
+    title: "genoxide's versions",
+    caption: VERSIONS_CAPTION,
+    views: [{ data: "genoxide_versions", label: "Instructions", file: "docs/benchmarks/genoxide_versions.svg" }],
   },
 ];
 
@@ -99,16 +106,17 @@ export const BENCHMARK_IMAGES = [
     file: "docs/benchmarks/evaluations_to_target.svg",
   },
   {
-    id: "instructions",
-    title: "Instructions per evaluation",
-    caption: "The framework's own cost around one evaluation.",
-    file: "docs/benchmarks/instructions.svg",
-  },
-  {
     id: "hypervolume",
     title: "Hypervolume",
     caption: "Median hypervolume of the final front on ZDT and DTLZ problems.",
     file: "docs/benchmarks/hypervolume.svg",
+  },
+  {
+    id: "genoxide-versions",
+    title: "genoxide's versions",
+    caption: "The CPU instructions of one seeded run of each of genoxide's methods, in each of its releases.",
+    file: "docs/benchmarks/genoxide_versions.svg",
+    wide: true,
   },
 ];
 

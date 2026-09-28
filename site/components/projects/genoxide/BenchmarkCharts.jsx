@@ -2,10 +2,10 @@ import { ExternalLink } from "lucide-react";
 import { HighlightProvider } from "@/components/projects/genoxide/benchmarks/Highlight";
 import {
   FrontChart,
-  InstructionsChart,
   OverallChart,
   SummaryChart,
   ToTargetChart,
+  VersionsChart,
 } from "@/components/projects/genoxide/benchmarks/charts";
 import { BLOB_BASE, RAW_BASE } from "@/lib/projects/genoxide/github";
 
@@ -13,8 +13,8 @@ const KINDS = {
   overall: OverallChart,
   summary: SummaryChart,
   "to-target": ToTargetChart,
-  instructions: InstructionsChart,
   front: FrontChart,
+  versions: VersionsChart,
 };
 
 const path = (file) => file.split("/").map(encodeURIComponent).join("/");

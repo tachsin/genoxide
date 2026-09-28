@@ -160,3 +160,15 @@ genoxide and its Python package are two libraries here, as in the other charts. 
 9.2. Nothing about how a library is run is left to its code alone. The adapter points to its page, and the page points to the lines of the adapter.
 
 9.3. **Better ways are welcome.** If you know a better way to solve one of these problems with one of these libraries, open a [benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml): another method, a setting its docs recommend, or a function we missed. Say which library, problem and method, and where the library documents it. It's tested under these rules. If it does better, it replaces the current one, and the page records the change. That applies to genoxide too.
+
+## 10. Instruction counts: genoxide's versions
+
+CPU instructions are counted for genoxide only, to compare its versions on the same runs. The other libraries aren't counted: their times, evaluations and hypervolumes are in the charts above.
+
+10.1. **The same runs.** In every scenario, each of genoxide's methods makes one run with seed 0, the first seed of every timed run, to its target or its evaluation budget. There's no time cap: nothing else ends the run. The adapter is the same source for every version (`benchmarks/adapters/genoxide`), built against the version: a release from crates.io, or the repository's genoxide for an unreleased one. A version whose API the adapter doesn't compile against isn't measured.
+
+10.2. **Counted by Callgrind.** Each method runs alone in its process, under Valgrind's Callgrind. A process that runs no method, the adapter's startup, is counted too and subtracted. What's left is the run: building the algorithm, every evaluation, and printing the run's result line. The count is exact: it doesn't depend on the machine's load, and a seed gives the same run on every platform. It changes with genoxide, the adapter, the Rust compiler and Valgrind, which the history records with each version.
+
+10.3. **Checked.** Each run is made once without Callgrind too, and must be the same under it: the same evaluations and the same result. It's checked like a timed run (rules 1.3, 2.3, 2.4 and 3.3); a run that fails is recorded with its failures.
+
+10.4. **Reported.** `docs/benchmarks/genoxide-versions.json` keeps a row per version: the date it was measured and released, the machine, the compiler and Valgrind, and per scenario and method the instructions, the evaluations and whether the run reached the target (its best value), or, multi-objective, its front's hypervolume. The chart `genoxide_versions.svg` and its numbers in `charts.json` show each method's instructions across the versions, hollow where the run didn't reach the target. Fewer instructions to the same target mean less work: a cheaper evaluation, fewer evaluations, or both, which the evaluations tell apart.

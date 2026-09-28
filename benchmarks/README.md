@@ -42,7 +42,7 @@ The full protocol is in [rules.md](../docs/benchmarks/rules.md). In short:
 - **Multi-objective:** no target; each run uses its budget. `run.py` computes the hypervolume of the final front with the same code for every library.
 - **Bugs** in the libraries aren't worked around, except where a library's page says so and shows both results.
 
-**What time to target is made of.** Time to target is the number of evaluations times the cost of one evaluation, framework and fitness function together. With a cheap fitness function, as here, the library's own cost dominates. With an expensive one, the number of evaluations does, so the charts show evaluations to target and instructions per evaluation too.
+**What time to target is made of.** Time to target is the number of evaluations times the cost of one evaluation, framework and fitness function together. With a cheap fitness function, as here, the library's own cost dominates. With an expensive one, the number of evaluations does, so the charts show evaluations to target too.
 
 **Cores.** Times must be measured on fixed cores. The published results come from WSL on an Intel Core Ultra 7 265K, pinned to its two fastest P-cores, 8 and 19. Under WSL, `run.py` refuses to measure times unless the virtual machine is pinned. Pin it with [pin-wsl.ps1](pin-wsl.ps1) (below), or pin WSL's `vmmemWSL` process to the same cores with [Process Lasso](https://bitsum.com/).
 
@@ -100,11 +100,9 @@ python run.py check     # test the adapters against the rules (a timed run needs
 python run.py --quick    # small scenarios, 3 seeds
 python run.py            # all scenarios, 10 seeds
 python run.py --scenarios nqueens-64-idiomatic --seeds 20 --libraries genetic_algorithm deap
-python run.py instructions  # count the instructions per evaluation into the latest results
 python run.py chart      # redraw the charts of the latest results (--png also draws PNG previews)
+python run.py versions --genoxide 0.8.0  # count the instructions of genoxide 0.8.0's runs (below)
 ```
-
-A benchmark takes two steps. The timed run measures times and evaluations on the pinned cores. `python run.py instructions` then counts the instructions per evaluation into its results file. The counts don't depend on the load, so unpin WSL first: it runs up to `--jobs` Callgrind processes at once (default: one per core). `--instructions` on a timed run counts them right after it, on the pinned cores.
 
 `--allow-unpinned` skips the pinning check, for runs whose times don't count.
 
@@ -118,16 +116,33 @@ python run.py --update results/<timestamp>.json --libraries genoxide genoxide_py
 
 - It can't be combined with `--scenarios` or `--quick`. To add a scenario, rerun every library.
 - It first reruns DEAP's GA in matched OneMax 100, seeds 0 to 2. It refuses to go on if the median time differs from the file's by more than 3%, or if the evaluations differ. `--allow-drift` reruns anyway.
-- It keeps the other libraries' instruction counts. Count the rerun ones with `python run.py instructions --libraries ...`.
 - If the platform differs from the file's, the new file records both.
 
 **New releases.** `python run.py outdated` lists each library's pinned version, the version in the published results and its latest release, and marks the newer ones. To benchmark a newer release, update the library's pin, run `python run.py check --libraries <name>`, then rerun it alone with `--update`. A weekly workflow keeps an issue, "New releases of benchmarked libraries", open while any library has a newer release.
 
 **The version measured.** `--version-label genoxide=0.7.0` records genoxide and its Python package as 0.7.0, still followed by the commit, for a release benchmarked before `Cargo.toml` is bumped. It works for any library of `--libraries`.
 
-## Instructions per evaluation
+## genoxide's versions: instruction counts
 
-`python run.py instructions` counts CPU instructions with Callgrind, on Linux with [Valgrind](https://valgrind.org/); it can't run the Java and Julia runtimes. It writes the counts into the latest results file (`--results` for another), for the file's libraries or those of `--libraries`, and redraws `results/latest.md` and the charts. Each adapter runs matched OneMax 1000 with budgets of N = 3,000 and 2N evaluations. The difference, I(2N) − I(N), divided by the difference in evaluations, cancels startup and setup: what's left is the cost of one evaluation. A library that can't run matched OneMax has no count.
+CPU instructions are counted for genoxide only, to see how its versions solve the same problems ([rule 10](../docs/benchmarks/rules.md#10-instruction-counts-genoxides-versions)). The other libraries have times, evaluations and hypervolumes, not instruction counts.
+
+`python run.py versions --genoxide 0.8.0` measures genoxide 0.8.0, with Callgrind, on Linux with [Valgrind](https://valgrind.org/):
+
+- **The build.** The genoxide adapter, as it is in the repository, is copied to `adapters/genoxide/target/versions/0.8.0/` with `genoxide = "=0.8.0"` from crates.io in its Cargo.toml, and built there with the adapter's Cargo.lock. Nothing in the repository changes. `--genoxide path` builds it against the repository's genoxide instead, for an unreleased version: its row is labelled with the version and commit, e.g. `0.8.0+034f3cd`. There's at most one such row, and a newer release replaces it. A release whose API the adapter doesn't compile against is reported and skipped. Several versions can be given at once.
+- **The runs.** In every scenario, each method runs once with seed 0, to its target or its evaluation budget, with no time cap. The adapter runs one method per process when `GENOXIDE_BENCH_SOLVER` names it, and none with a name no method has: that process, the startup, is subtracted from each method's count. Each run is made without Callgrind too, and the two must be the same run.
+- **The history.** Each version is a row of [genoxide-versions.json](../docs/benchmarks/genoxide-versions.json), added or replaced: the version, its release date, the day it was measured, the machine, rustc and Valgrind, and per scenario the startup and, per method, the instructions, the evaluations, and whether it reached the target and its best value, or its front's hypervolume.
+- **The chart.** It redraws [genoxide_versions.svg](../docs/benchmarks/genoxide_versions.svg), a panel per scenario with the versions on the x axis, and its numbers in `charts.json` beside it. `python run.py versions` without `--genoxide` only redraws them. `python run.py chart` draws it too, from the same history file (`--history` for another).
+
+The counts don't depend on the load, so WSL needn't be pinned: it runs up to `--jobs` processes at once (default: one per core). Under Callgrind a run takes about 50 times as long; a version takes about 20 minutes on 20 cores, most of it CMA-ES on Rastrigin 30. A count changes with genoxide and also with the adapter, rustc or Valgrind: compare versions measured with the same ones, which each row records. After a change to the adapter or the toolchain, measure every version again. The build differs a little too: the same sources, built from crates.io and from the repository, count up to about 0.1% apart, so a change between a repository row and a release smaller than that isn't genoxide's.
+
+**A new release.** After a release is published on crates.io, add it to the history (a step of the release checklist in [CONTRIBUTING.md](../CONTRIBUTING.md#benchmarks)):
+
+```sh
+cd benchmarks
+python run.py versions --genoxide 0.8.1   # measures it, adds its row, redraws the chart
+```
+
+Then commit `docs/benchmarks/genoxide-versions.json`, `genoxide_versions.svg` and `charts.json`.
 
 ## Adding a library
 

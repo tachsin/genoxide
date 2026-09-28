@@ -76,6 +76,8 @@ genoxide and its Python package are benchmarked with 15 other libraries in Rust,
 
 Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, evenly per order of magnitude of time in between; the overall score is the mean over the scenarios a library runs ([rule 8.5](docs/benchmarks/rules.md#8-reporting)). A library's time is its fastest method's expected time to the target, or, with several objectives, its fastest method's time for the budget among those within 1% of the best hypervolume.
 
+genoxide's own releases are compared on the same runs by the CPU instructions Callgrind counts, exact whatever the machine's load: [genoxide_versions.svg](docs/benchmarks/genoxide_versions.svg) ([rule 10](docs/benchmarks/rules.md#10-instruction-counts-genoxides-versions)).
+
 **Interactive results, every chart and table: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).** The [methodology](benchmarks/README.md) and the [page for each library](docs/benchmarks/libraries/) give the methods and settings, and [results.md](docs/benchmarks/results.md) has the full tables.
 
 ## Links

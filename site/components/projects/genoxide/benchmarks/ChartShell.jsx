@@ -19,8 +19,9 @@ import { useHighlight } from "./Highlight";
  * @param {string} [props.grid]  the panels' grid classes, by the chart's container width
  * @param {number} [props.room]  px beside the bars for their labels, when they're long
  * @param {string} props.name  the chart's name, for its controls' labels
+ * @param {Function} [props.Panel]  what draws each panel: BarPanel, or VersionPanel for genoxide's versions
  */
-export default function ChartShell({ views, libraries, limit, grid = "", name, room }) {
+export default function ChartShell({ views, libraries, limit, grid = "", name, room, Panel = BarPanel }) {
   const [current, setCurrent] = useState(0);
   const view = views[current] ?? views[0];
   const { chart } = view;
@@ -59,7 +60,15 @@ export default function ChartShell({ views, libraries, limit, grid = "", name, r
                   {panel.detail ? <span className="block text-base-content/55 text-xs">{panel.detail}</span> : null}
                 </figcaption>
               ) : null}
-              <BarPanel panel={panel} quantity={quantity} libraries={libraries} limit={limit} label={chart.title} room={room} />
+              <Panel
+                panel={panel}
+                quantity={quantity}
+                libraries={libraries}
+                limit={limit}
+                label={chart.title}
+                room={room}
+                versions={chart.versions?.map((version) => version.version)}
+              />
               {panel.note ? <p className="mt-1 text-base-content/60 text-xs">{panel.note}</p> : null}
             </figure>
           ))}
@@ -152,6 +161,7 @@ function KeyNote({ panels }) {
     bars.some((bar) => bar.note) ? "*: a note that doesn't fit beside the bar" : null,
     bars.some((bar) => bar.ended_on_cap) ? "cross-hatched, past a dotted line: the runs the time cap stopped" : null,
     bars.some((bar) => bar.below_axis) ? "hatched stub: a value below the axis's start" : null,
+    bars.some((bar) => typeof bar.version === "string" && bar.reached === 0) ? "hollow: the run didn't reach the target within its budget" : null,
   ].filter(Boolean);
   if (!parts.length) return null;
   return (

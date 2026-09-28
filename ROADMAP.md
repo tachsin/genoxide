@@ -216,7 +216,7 @@ The test problem library of [docs/problems-plan.md](docs/problems-plan.md), batc
 [`benchmarks/`](benchmarks/) runs every library on the same problems, with identical fitness functions and budgets. Results are published for every release.
 
 - **Problems:** binary (OneMax, LeadingOnes, deceptive trap, NK landscapes, knapsack); permutation (N-Queens, TSPLIB, QAP, flow shop); continuous (BBOB / COCO functions such as Rastrigin, Rosenbrock, Ackley, in 10–100 dimensions); multi-objective (ZDT, DTLZ, WFG).
-- **Measurements:** success rate, time and evaluations to target, evaluations per second, instructions per evaluation (Callgrind, (I(2N) − I(N)) / (E(2N) − E(N)): startup cancels out), peak memory, and scaling with population, genome size and threads.
+- **Measurements:** success rate, time and evaluations to target, evaluations per second, genoxide's own releases compared by the CPU instructions of the same runs (Callgrind, genoxide only), peak memory, and scaling with population, genome size and threads.
 - **Modes:** matched and idiomatic ([methodology](benchmarks/README.md#methodology)).
 - **Output:** library versions, JSON, a markdown table and graphs.
 - **Libraries:**

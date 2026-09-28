@@ -6,6 +6,10 @@
 
 Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, evenly per order of magnitude of time in between; the overall score is the mean over the scenarios a library runs ([rule 8.5](rules.md#8-reporting)).
 
+genoxide's own releases are compared on the same runs by the CPU instructions Callgrind counts: one seeded run of each method per scenario, exact whatever the machine's load ([rule 10](rules.md#10-instruction-counts-genoxides-versions), history in [genoxide-versions.json](genoxide-versions.json)).
+
+[![genoxide's versions: the CPU instructions of the same runs](genoxide_versions.svg)](https://tachsin.gr/projects/genoxide/benchmarks#genoxide-versions)
+
 **Interactive results, every chart and table: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).**
 
 | Page | What it has |

@@ -1,0 +1,1286 @@
+{
+ "format": 1,
+ "seed": 0,
+ "versions": [
+  {
+   "version": "0.6.0",
+   "source": "crates.io",
+   "released": "2026-09-25",
+   "measured": "2026-09-28",
+   "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
+   "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+   "valgrind": "valgrind-3.22.0",
+   "scenarios": {
+    "onemax-100-matched": {
+     "startup": 404388,
+     "methods": {
+      "ga": {
+       "instructions": 15615842,
+       "evaluations": 4505,
+       "reached": true,
+       "best": 100.0
+      }
+     }
+    },
+    "onemax-1000-matched": {
+     "startup": 404451,
+     "methods": {
+      "ga": {
+       "instructions": 286537750,
+       "evaluations": 58171,
+       "reached": true,
+       "best": 1000.0
+      }
+     }
+    },
+    "onemax-100-idiomatic": {
+     "startup": 404430,
+     "methods": {
+      "ga": {
+       "instructions": 5610520,
+       "evaluations": 3664,
+       "reached": true,
+       "best": 100.0
+      }
+     }
+    },
+    "nqueens-32-idiomatic": {
+     "startup": 404449,
+     "methods": {
+      "local_search": {
+       "instructions": 4086496,
+       "evaluations": 1145,
+       "reached": true,
+       "best": 0.0
+      },
+      "ga": {
+       "instructions": 1471317340,
+       "evaluations": 276999,
+       "reached": true,
+       "best": 0.0
+      }
+     }
+    },
+    "nqueens-64-idiomatic": {
+     "startup": 404465,
+     "methods": {
+      "local_search": {
+       "instructions": 9673692,
+       "evaluations": 1920,
+       "reached": true,
+       "best": 0.0
+      },
+      "ga": {
+       "instructions": 7583889196,
+       "evaluations": 1000098,
+       "reached": false,
+       "best": 1.0
+      }
+     }
+    },
+    "rastrigin-10-idiomatic": {
+     "startup": 404519,
+     "methods": {
+      "cma_es": {
+       "instructions": 1434852924,
+       "evaluations": 131440,
+       "reached": true,
+       "best": 0.008683180275653513
+      },
+      "de": {
+       "instructions": 21441307,
+       "evaluations": 4580,
+       "reached": true,
+       "best": 0.009978947459359233
+      },
+      "ga": {
+       "instructions": 402660086,
+       "evaluations": 83377,
+       "reached": true,
+       "best": 0.0065169538690526
+      }
+     }
+    },
+    "rastrigin-30-idiomatic": {
+     "startup": 404549,
+     "methods": {
+      "cma_es": {
+       "instructions": 58305800413,
+       "evaluations": 927808,
+       "reached": true,
+       "best": 0.009790665496609563
+      },
+      "de": {
+       "instructions": 236290601,
+       "evaluations": 28880,
+       "reached": true,
+       "best": 0.008488793720061949
+      },
+      "ga": {
+       "instructions": 8373636527,
+       "evaluations": 782545,
+       "reached": true,
+       "best": 0.009987766364474737
+      }
+     }
+    },
+    "rosenbrock-10-idiomatic": {
+     "startup": 404516,
+     "methods": {
+      "cma_es": {
+       "instructions": 62435161,
+       "evaluations": 5840,
+       "reached": true,
+       "best": 0.008563689681615302
+      },
+      "de": {
+       "instructions": 29882302,
+       "evaluations": 7520,
+       "reached": true,
+       "best": 0.008919447541636295
+      },
+      "es": {
+       "instructions": 15048123597,
+       "evaluations": 500015,
+       "reached": false,
+       "best": 0.01354479867788113
+      }
+     }
+    },
+    "ackley-30-idiomatic": {
+     "startup": 404532,
+     "methods": {
+      "cma_es": {
+       "instructions": 366457038,
+       "evaluations": 3094,
+       "reached": true,
+       "best": 0.009430338431226648
+      },
+      "de": {
+       "instructions": 80372509,
+       "evaluations": 9240,
+       "reached": true,
+       "best": 0.009147188377145898
+      },
+      "ga": {
+       "instructions": 10911121645,
+       "evaluations": 1000029,
+       "reached": false,
+       "best": 0.03297456138564714
+      }
+     }
+    },
+    "zdt1-30-matched": {
+     "startup": 404482,
+     "methods": {
+      "nsga2": {
+       "instructions": 276861071,
+       "evaluations": 25009,
+       "hypervolume": 0.869318
+      },
+      "nsga3": {
+       "instructions": 397483862,
+       "evaluations": 25096,
+       "hypervolume": 0.870403
+      },
+      "spea2": {
+       "instructions": 3079974931,
+       "evaluations": 25086,
+       "hypervolume": 0.870671
+      },
+      "sms_emoa": {
+       "instructions": 7045451762,
+       "evaluations": 25000,
+       "hypervolume": 0.871892
+      },
+      "moead": {
+       "instructions": 481253863,
+       "evaluations": 25099,
+       "hypervolume": 0.868332
+      }
+     }
+    },
+    "zdt2-30-matched": {
+     "startup": 404485,
+     "methods": {
+      "nsga2": {
+       "instructions": 274525053,
+       "evaluations": 25085,
+       "hypervolume": 0.536494
+      },
+      "nsga3": {
+       "instructions": 391662076,
+       "evaluations": 25012,
+       "hypervolume": 0.536955
+      },
+      "spea2": {
+       "instructions": 2970296624,
+       "evaluations": 25026,
+       "hypervolume": 0.536459
+      },
+      "sms_emoa": {
+       "instructions": 6516548053,
+       "evaluations": 25000,
+       "hypervolume": 0.538598
+      },
+      "moead": {
+       "instructions": 480109992,
+       "evaluations": 25093,
+       "hypervolume": 0.535675
+      }
+     }
+    },
+    "zdt3-30-matched": {
+     "startup": 404489,
+     "methods": {
+      "nsga2": {
+       "instructions": 279916194,
+       "evaluations": 25064,
+       "hypervolume": 1.244732
+      },
+      "nsga3": {
+       "instructions": 400096076,
+       "evaluations": 25012,
+       "hypervolume": 1.325454
+      },
+      "spea2": {
+       "instructions": 3003974021,
+       "evaluations": 25076,
+       "hypervolume": 1.327072
+      },
+      "sms_emoa": {
+       "instructions": 7010458439,
+       "evaluations": 25000,
+       "hypervolume": 1.329266
+      },
+      "moead": {
+       "instructions": 476887966,
+       "evaluations": 25032,
+       "hypervolume": 1.321435
+      }
+     }
+    },
+    "dtlz2-3-matched": {
+     "startup": 404533,
+     "methods": {
+      "nsga2": {
+       "instructions": 284207114,
+       "evaluations": 25068,
+       "hypervolume": 0.692879
+      },
+      "nsga3": {
+       "instructions": 482592953,
+       "evaluations": 25023,
+       "hypervolume": 0.74431
+      },
+      "spea2": {
+       "instructions": 3634959580,
+       "evaluations": 25030,
+       "hypervolume": 0.731638
+      },
+      "sms_emoa": {
+       "instructions": 15257471942,
+       "evaluations": 25000,
+       "hypervolume": 0.75573
+      },
+      "moead": {
+       "instructions": 358600773,
+       "evaluations": 25021,
+       "hypervolume": 0.744064
+      }
+     }
+    },
+    "dtlz1-3-matched": {
+     "startup": 404529,
+     "methods": {
+      "nsga2": {
+       "instructions": 366297248,
+       "evaluations": 40036,
+       "hypervolume": 0.134961
+      },
+      "nsga3": {
+       "instructions": 629608021,
+       "evaluations": 40030,
+       "hypervolume": 0.139614
+      },
+      "spea2": {
+       "instructions": 4518975089,
+       "evaluations": 40080,
+       "hypervolume": 0.139144
+      },
+      "sms_emoa": {
+       "instructions": 19473331143,
+       "evaluations": 40000,
+       "hypervolume": 0.140163
+      },
+      "moead": {
+       "instructions": 485659549,
+       "evaluations": 40039,
+       "hypervolume": 0.139739
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "0.7.0",
+   "source": "crates.io",
+   "released": "2026-09-26",
+   "measured": "2026-09-28",
+   "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
+   "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+   "valgrind": "valgrind-3.22.0",
+   "scenarios": {
+    "onemax-100-matched": {
+     "startup": 411400,
+     "methods": {
+      "ga": {
+       "instructions": 15607700,
+       "evaluations": 4505,
+       "reached": true,
+       "best": 100.0
+      }
+     }
+    },
+    "onemax-1000-matched": {
+     "startup": 411454,
+     "methods": {
+      "ga": {
+       "instructions": 286343013,
+       "evaluations": 58171,
+       "reached": true,
+       "best": 1000.0
+      }
+     }
+    },
+    "onemax-100-idiomatic": {
+     "startup": 411432,
+     "methods": {
+      "ga": {
+       "instructions": 5607388,
+       "evaluations": 3664,
+       "reached": true,
+       "best": 100.0
+      }
+     }
+    },
+    "nqueens-32-idiomatic": {
+     "startup": 411452,
+     "methods": {
+      "local_search": {
+       "instructions": 4092311,
+       "evaluations": 1145,
+       "reached": true,
+       "best": 0.0
+      },
+      "ga": {
+       "instructions": 1471910669,
+       "evaluations": 276999,
+       "reached": true,
+       "best": 0.0
+      }
+     }
+    },
+    "nqueens-64-idiomatic": {
+     "startup": 411477,
+     "methods": {
+      "local_search": {
+       "instructions": 9683386,
+       "evaluations": 1920,
+       "reached": true,
+       "best": 0.0
+      },
+      "ga": {
+       "instructions": 7586030921,
+       "evaluations": 1000098,
+       "reached": false,
+       "best": 1.0
+      }
+     }
+    },
+    "rastrigin-10-idiomatic": {
+     "startup": 411521,
+     "methods": {
+      "cma_es": {
+       "instructions": 1434876146,
+       "evaluations": 131440,
+       "reached": true,
+       "best": 0.008683180275653513
+      },
+      "de": {
+       "instructions": 201007390,
+       "evaluations": 42000,
+       "reached": true,
+       "best": 0.009991326354992225
+      },
+      "ga": {
+       "instructions": 402664978,
+       "evaluations": 83377,
+       "reached": true,
+       "best": 0.0065169538690526
+      }
+     }
+    },
+    "rastrigin-30-idiomatic": {
+     "startup": 411551,
+     "methods": {
+      "cma_es": {
+       "instructions": 58305852732,
+       "evaluations": 927808,
+       "reached": true,
+       "best": 0.009790665496609563
+      },
+      "de": {
+       "instructions": 852623781,
+       "evaluations": 101500,
+       "reached": true,
+       "best": 0.009989680382318511
+      },
+      "ga": {
+       "instructions": 8373681657,
+       "evaluations": 782545,
+       "reached": true,
+       "best": 0.009987766364474737
+      }
+     }
+    },
+    "rosenbrock-10-idiomatic": {
+     "startup": 411518,
+     "methods": {
+      "cma_es": {
+       "instructions": 62444533,
+       "evaluations": 5840,
+       "reached": true,
+       "best": 0.008563689681615302
+      },
+      "de": {
+       "instructions": 152493628,
+       "evaluations": 38100,
+       "reached": true,
+       "best": 0.008217388637659341
+      },
+      "es": {
+       "instructions": 15047683585,
+       "evaluations": 500015,
+       "reached": false,
+       "best": 0.01354479867788113
+      }
+     }
+    },
+    "ackley-30-idiomatic": {
+     "startup": 411534,
+     "methods": {
+      "cma_es": {
+       "instructions": 366460478,
+       "evaluations": 3094,
+       "reached": true,
+       "best": 0.009430338431226648
+      },
+      "de": {
+       "instructions": 169401150,
+       "evaluations": 19500,
+       "reached": true,
+       "best": 0.009870227019743272
+      },
+      "ga": {
+       "instructions": 10911179748,
+       "evaluations": 1000029,
+       "reached": false,
+       "best": 0.03297456138564714
+      }
+     }
+    },
+    "zdt1-30-matched": {
+     "startup": 411458,
+     "methods": {
+      "nsga2": {
+       "instructions": 277102173,
+       "evaluations": 25009,
+       "hypervolume": 0.869318
+      },
+      "nsga3": {
+       "instructions": 397474780,
+       "evaluations": 25096,
+       "hypervolume": 0.870403
+      },
+      "spea2": {
+       "instructions": 3080004363,
+       "evaluations": 25086,
+       "hypervolume": 0.870671
+      },
+      "sms_emoa": {
+       "instructions": 7046292404,
+       "evaluations": 25000,
+       "hypervolume": 0.871892
+      },
+      "moead": {
+       "instructions": 481322592,
+       "evaluations": 25099,
+       "hypervolume": 0.868332
+      }
+     }
+    },
+    "zdt2-30-matched": {
+     "startup": 411461,
+     "methods": {
+      "nsga2": {
+       "instructions": 274760116,
+       "evaluations": 25085,
+       "hypervolume": 0.536494
+      },
+      "nsga3": {
+       "instructions": 391653257,
+       "evaluations": 25012,
+       "hypervolume": 0.536955
+      },
+      "spea2": {
+       "instructions": 2970326121,
+       "evaluations": 25026,
+       "hypervolume": 0.536459
+      },
+      "sms_emoa": {
+       "instructions": 6517448314,
+       "evaluations": 25000,
+       "hypervolume": 0.538598
+      },
+      "moead": {
+       "instructions": 480179500,
+       "evaluations": 25093,
+       "hypervolume": 0.535675
+      }
+     }
+    },
+    "zdt3-30-matched": {
+     "startup": 411465,
+     "methods": {
+      "nsga2": {
+       "instructions": 280159050,
+       "evaluations": 25064,
+       "hypervolume": 1.244732
+      },
+      "nsga3": {
+       "instructions": 400087220,
+       "evaluations": 25012,
+       "hypervolume": 1.325454
+      },
+      "spea2": {
+       "instructions": 3004011024,
+       "evaluations": 25076,
+       "hypervolume": 1.327072
+      },
+      "sms_emoa": {
+       "instructions": 7011408671,
+       "evaluations": 25000,
+       "hypervolume": 1.329266
+      },
+      "moead": {
+       "instructions": 476955587,
+       "evaluations": 25032,
+       "hypervolume": 1.321435
+      }
+     }
+    },
+    "dtlz2-3-matched": {
+     "startup": 411487,
+     "methods": {
+      "nsga2": {
+       "instructions": 284850997,
+       "evaluations": 25068,
+       "hypervolume": 0.692879
+      },
+      "nsga3": {
+       "instructions": 482631244,
+       "evaluations": 25023,
+       "hypervolume": 0.74431
+      },
+      "spea2": {
+       "instructions": 3634822631,
+       "evaluations": 25030,
+       "hypervolume": 0.731638
+      },
+      "sms_emoa": {
+       "instructions": 15267405162,
+       "evaluations": 25000,
+       "hypervolume": 0.75573
+      },
+      "moead": {
+       "instructions": 360100992,
+       "evaluations": 25021,
+       "hypervolume": 0.744064
+      }
+     }
+    },
+    "dtlz1-3-matched": {
+     "startup": 411483,
+     "methods": {
+      "nsga2": {
+       "instructions": 367311327,
+       "evaluations": 40036,
+       "hypervolume": 0.134961
+      },
+      "nsga3": {
+       "instructions": 629697585,
+       "evaluations": 40030,
+       "hypervolume": 0.139614
+      },
+      "spea2": {
+       "instructions": 4518722913,
+       "evaluations": 40080,
+       "hypervolume": 0.139144
+      },
+      "sms_emoa": {
+       "instructions": 19481053742,
+       "evaluations": 40000,
+       "hypervolume": 0.140163
+      },
+      "moead": {
+       "instructions": 488034367,
+       "evaluations": 40039,
+       "hypervolume": 0.139739
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "0.7.1",
+   "source": "crates.io",
+   "released": "2026-09-27",
+   "measured": "2026-09-28",
+   "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
+   "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+   "valgrind": "valgrind-3.22.0",
+   "scenarios": {
+    "onemax-100-matched": {
+     "startup": 411675,
+     "methods": {
+      "ga": {
+       "instructions": 15607695,
+       "evaluations": 4505,
+       "reached": true,
+       "best": 100.0
+      }
+     }
+    },
+    "onemax-1000-matched": {
+     "startup": 411729,
+     "methods": {
+      "ga": {
+       "instructions": 286343059,
+       "evaluations": 58171,
+       "reached": true,
+       "best": 1000.0
+      }
+     }
+    },
+    "onemax-100-idiomatic": {
+     "startup": 411707,
+     "methods": {
+      "ga": {
+       "instructions": 5607348,
+       "evaluations": 3664,
+       "reached": true,
+       "best": 100.0
+      }
+     }
+    },
+    "nqueens-32-idiomatic": {
+     "startup": 411727,
+     "methods": {
+      "local_search": {
+       "instructions": 4092228,
+       "evaluations": 1145,
+       "reached": true,
+       "best": 0.0
+      },
+      "ga": {
+       "instructions": 1471910672,
+       "evaluations": 276999,
+       "reached": true,
+       "best": 0.0
+      }
+     }
+    },
+    "nqueens-64-idiomatic": {
+     "startup": 411752,
+     "methods": {
+      "local_search": {
+       "instructions": 9683389,
+       "evaluations": 1920,
+       "reached": true,
+       "best": 0.0
+      },
+      "ga": {
+       "instructions": 7586030881,
+       "evaluations": 1000098,
+       "reached": false,
+       "best": 1.0
+      }
+     }
+    },
+    "rastrigin-10-idiomatic": {
+     "startup": 411796,
+     "methods": {
+      "cma_es": {
+       "instructions": 1434876149,
+       "evaluations": 131440,
+       "reached": true,
+       "best": 0.008683180275653513
+      },
+      "de": {
+       "instructions": 143274852,
+       "evaluations": 42000,
+       "reached": true,
+       "best": 0.009991326354992225
+      },
+      "ga": {
+       "instructions": 402664895,
+       "evaluations": 83377,
+       "reached": true,
+       "best": 0.0065169538690526
+      }
+     }
+    },
+    "rastrigin-30-idiomatic": {
+     "startup": 411826,
+     "methods": {
+      "cma_es": {
+       "instructions": 58305852735,
+       "evaluations": 927808,
+       "reached": true,
+       "best": 0.009790665496609563
+      },
+      "de": {
+       "instructions": 707233227,
+       "evaluations": 101500,
+       "reached": true,
+       "best": 0.009989680382318511
+      },
+      "ga": {
+       "instructions": 8373681703,
+       "evaluations": 782545,
+       "reached": true,
+       "best": 0.009987766364474737
+      }
+     }
+    },
+    "rosenbrock-10-idiomatic": {
+     "startup": 411793,
+     "methods": {
+      "cma_es": {
+       "instructions": 62444493,
+       "evaluations": 5840,
+       "reached": true,
+       "best": 0.008563689681615302
+      },
+      "de": {
+       "instructions": 96925578,
+       "evaluations": 38100,
+       "reached": true,
+       "best": 0.008217388637659341
+      },
+      "es": {
+       "instructions": 15047683588,
+       "evaluations": 500015,
+       "reached": false,
+       "best": 0.01354479867788113
+      }
+     }
+    },
+    "ackley-30-idiomatic": {
+     "startup": 411809,
+     "methods": {
+      "cma_es": {
+       "instructions": 366460539,
+       "evaluations": 3094,
+       "reached": true,
+       "best": 0.009430338431226648
+      },
+      "de": {
+       "instructions": 139703497,
+       "evaluations": 19500,
+       "reached": true,
+       "best": 0.009870227019743272
+      },
+      "ga": {
+       "instructions": 10911179794,
+       "evaluations": 1000029,
+       "reached": false,
+       "best": 0.03297456138564714
+      }
+     }
+    },
+    "zdt1-30-matched": {
+     "startup": 411733,
+     "methods": {
+      "nsga2": {
+       "instructions": 277102269,
+       "evaluations": 25009,
+       "hypervolume": 0.869318
+      },
+      "nsga3": {
+       "instructions": 397474847,
+       "evaluations": 25096,
+       "hypervolume": 0.870403
+      },
+      "spea2": {
+       "instructions": 3080004467,
+       "evaluations": 25086,
+       "hypervolume": 0.870671
+      },
+      "sms_emoa": {
+       "instructions": 7046292500,
+       "evaluations": 25000,
+       "hypervolume": 0.871892
+      },
+      "moead": {
+       "instructions": 481322688,
+       "evaluations": 25099,
+       "hypervolume": 0.868332
+      }
+     }
+    },
+    "zdt2-30-matched": {
+     "startup": 411736,
+     "methods": {
+      "nsga2": {
+       "instructions": 274760183,
+       "evaluations": 25085,
+       "hypervolume": 0.536494
+      },
+      "nsga3": {
+       "instructions": 391653324,
+       "evaluations": 25012,
+       "hypervolume": 0.536955
+      },
+      "spea2": {
+       "instructions": 2970326174,
+       "evaluations": 25026,
+       "hypervolume": 0.536459
+      },
+      "sms_emoa": {
+       "instructions": 6517448453,
+       "evaluations": 25000,
+       "hypervolume": 0.538598
+      },
+      "moead": {
+       "instructions": 480179596,
+       "evaluations": 25093,
+       "hypervolume": 0.535675
+      }
+     }
+    },
+    "zdt3-30-matched": {
+     "startup": 411740,
+     "methods": {
+      "nsga2": {
+       "instructions": 280159189,
+       "evaluations": 25064,
+       "hypervolume": 1.244732
+      },
+      "nsga3": {
+       "instructions": 400087244,
+       "evaluations": 25012,
+       "hypervolume": 1.325454
+      },
+      "spea2": {
+       "instructions": 3004011120,
+       "evaluations": 25076,
+       "hypervolume": 1.327072
+      },
+      "sms_emoa": {
+       "instructions": 7011408724,
+       "evaluations": 25000,
+       "hypervolume": 1.329266
+      },
+      "moead": {
+       "instructions": 476955640,
+       "evaluations": 25032,
+       "hypervolume": 1.321435
+      }
+     }
+    },
+    "dtlz2-3-matched": {
+     "startup": 411762,
+     "methods": {
+      "nsga2": {
+       "instructions": 284851050,
+       "evaluations": 25068,
+       "hypervolume": 0.692879
+      },
+      "nsga3": {
+       "instructions": 482631297,
+       "evaluations": 25023,
+       "hypervolume": 0.74431
+      },
+      "spea2": {
+       "instructions": 3634822770,
+       "evaluations": 25030,
+       "hypervolume": 0.731638
+      },
+      "sms_emoa": {
+       "instructions": 15267405301,
+       "evaluations": 25000,
+       "hypervolume": 0.75573
+      },
+      "moead": {
+       "instructions": 360101131,
+       "evaluations": 25021,
+       "hypervolume": 0.744064
+      }
+     }
+    },
+    "dtlz1-3-matched": {
+     "startup": 411758,
+     "methods": {
+      "nsga2": {
+       "instructions": 367311437,
+       "evaluations": 40036,
+       "hypervolume": 0.134961
+      },
+      "nsga3": {
+       "instructions": 629697638,
+       "evaluations": 40030,
+       "hypervolume": 0.139614
+      },
+      "spea2": {
+       "instructions": 4518722937,
+       "evaluations": 40080,
+       "hypervolume": 0.139144
+      },
+      "sms_emoa": {
+       "instructions": 19481053838,
+       "evaluations": 40000,
+       "hypervolume": 0.140163
+      },
+      "moead": {
+       "instructions": 488034492,
+       "evaluations": 40039,
+       "hypervolume": 0.139739
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "0.8.0",
+   "source": "crates.io",
+   "released": "2026-09-28",
+   "measured": "2026-09-28",
+   "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
+   "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+   "valgrind": "valgrind-3.22.0",
+   "scenarios": {
+    "onemax-100-matched": {
+     "startup": 407368,
+     "methods": {
+      "ga": {
+       "instructions": 15607700,
+       "evaluations": 4505,
+       "reached": true,
+       "best": 100.0
+      }
+     }
+    },
+    "onemax-1000-matched": {
+     "startup": 407422,
+     "methods": {
+      "ga": {
+       "instructions": 286342963,
+       "evaluations": 58171,
+       "reached": true,
+       "best": 1000.0
+      }
+     }
+    },
+    "onemax-100-idiomatic": {
+     "startup": 407400,
+     "methods": {
+      "ga": {
+       "instructions": 5607471,
+       "evaluations": 3664,
+       "reached": true,
+       "best": 100.0
+      }
+     }
+    },
+    "nqueens-32-idiomatic": {
+     "startup": 407420,
+     "methods": {
+      "local_search": {
+       "instructions": 4092271,
+       "evaluations": 1145,
+       "reached": true,
+       "best": 0.0
+      },
+      "ga": {
+       "instructions": 1471910669,
+       "evaluations": 276999,
+       "reached": true,
+       "best": 0.0
+      }
+     }
+    },
+    "nqueens-64-idiomatic": {
+     "startup": 407445,
+     "methods": {
+      "local_search": {
+       "instructions": 9683389,
+       "evaluations": 1920,
+       "reached": true,
+       "best": 0.0
+      },
+      "ga": {
+       "instructions": 7586030929,
+       "evaluations": 1000098,
+       "reached": false,
+       "best": 1.0
+      }
+     }
+    },
+    "rastrigin-10-idiomatic": {
+     "startup": 407489,
+     "methods": {
+      "cma_es": {
+       "instructions": 1434876108,
+       "evaluations": 131440,
+       "reached": true,
+       "best": 0.008683180275653513
+      },
+      "de": {
+       "instructions": 143275771,
+       "evaluations": 42000,
+       "reached": true,
+       "best": 0.009991326354992225
+      },
+      "ga": {
+       "instructions": 402664943,
+       "evaluations": 83377,
+       "reached": true,
+       "best": 0.0065169538690526
+      }
+     }
+    },
+    "rastrigin-30-idiomatic": {
+     "startup": 407519,
+     "methods": {
+      "cma_es": {
+       "instructions": 58305852780,
+       "evaluations": 927808,
+       "reached": true,
+       "best": 0.009790665496609563
+      },
+      "de": {
+       "instructions": 707235941,
+       "evaluations": 101500,
+       "reached": true,
+       "best": 0.009989680382318511
+      },
+      "ga": {
+       "instructions": 8373681622,
+       "evaluations": 782545,
+       "reached": true,
+       "best": 0.009987766364474737
+      }
+     }
+    },
+    "rosenbrock-10-idiomatic": {
+     "startup": 407486,
+     "methods": {
+      "cma_es": {
+       "instructions": 62444580,
+       "evaluations": 5840,
+       "reached": true,
+       "best": 0.008563689681615302
+      },
+      "de": {
+       "instructions": 96926727,
+       "evaluations": 38100,
+       "reached": true,
+       "best": 0.008217388637659341
+      },
+      "es": {
+       "instructions": 15047683588,
+       "evaluations": 500015,
+       "reached": false,
+       "best": 0.01354479867788113
+      }
+     }
+    },
+    "ackley-30-idiomatic": {
+     "startup": 407502,
+     "methods": {
+      "cma_es": {
+       "instructions": 366460482,
+       "evaluations": 3094,
+       "reached": true,
+       "best": 0.009430338431226648
+      },
+      "de": {
+       "instructions": 139704072,
+       "evaluations": 19500,
+       "reached": true,
+       "best": 0.009870227019743272
+      },
+      "ga": {
+       "instructions": 10911179799,
+       "evaluations": 1000029,
+       "reached": false,
+       "best": 0.03297456138564714
+      }
+     }
+    },
+    "zdt1-30-matched": {
+     "startup": 407426,
+     "methods": {
+      "nsga2": {
+       "instructions": 277102200,
+       "evaluations": 25009,
+       "hypervolume": 0.869318
+      },
+      "nsga3": {
+       "instructions": 397474836,
+       "evaluations": 25096,
+       "hypervolume": 0.870403
+      },
+      "spea2": {
+       "instructions": 3080004376,
+       "evaluations": 25086,
+       "hypervolume": 0.870671
+      },
+      "sms_emoa": {
+       "instructions": 7046292417,
+       "evaluations": 25000,
+       "hypervolume": 0.871892
+      },
+      "moead": {
+       "instructions": 485955457,
+       "evaluations": 25099,
+       "hypervolume": 0.868332
+      }
+     }
+    },
+    "zdt2-30-matched": {
+     "startup": 407429,
+     "methods": {
+      "nsga2": {
+       "instructions": 274760172,
+       "evaluations": 25085,
+       "hypervolume": 0.536494
+      },
+      "nsga3": {
+       "instructions": 391653227,
+       "evaluations": 25012,
+       "hypervolume": 0.536955
+      },
+      "spea2": {
+       "instructions": 2970326091,
+       "evaluations": 25026,
+       "hypervolume": 0.536459
+      },
+      "sms_emoa": {
+       "instructions": 6517448370,
+       "evaluations": 25000,
+       "hypervolume": 0.538598
+      },
+      "moead": {
+       "instructions": 484692758,
+       "evaluations": 25093,
+       "hypervolume": 0.535675
+      }
+     }
+    },
+    "zdt3-30-matched": {
+     "startup": 407433,
+     "methods": {
+      "nsga2": {
+       "instructions": 280159034,
+       "evaluations": 25064,
+       "hypervolume": 1.244732
+      },
+      "nsga3": {
+       "instructions": 400087190,
+       "evaluations": 25012,
+       "hypervolume": 1.325454
+      },
+      "spea2": {
+       "instructions": 3004011088,
+       "evaluations": 25076,
+       "hypervolume": 1.327072
+      },
+      "sms_emoa": {
+       "instructions": 7011408684,
+       "evaluations": 25000,
+       "hypervolume": 1.329266
+      },
+      "moead": {
+       "instructions": 481524337,
+       "evaluations": 25032,
+       "hypervolume": 1.321435
+      }
+     }
+    },
+    "dtlz2-3-matched": {
+     "startup": 407456,
+     "methods": {
+      "nsga2": {
+       "instructions": 284850938,
+       "evaluations": 25068,
+       "hypervolume": 0.692879
+      },
+      "nsga3": {
+       "instructions": 482631208,
+       "evaluations": 25023,
+       "hypervolume": 0.74431
+      },
+      "spea2": {
+       "instructions": 3634822644,
+       "evaluations": 25030,
+       "hypervolume": 0.731638
+      },
+      "sms_emoa": {
+       "instructions": 15267405218,
+       "evaluations": 25000,
+       "hypervolume": 0.75573
+      },
+      "moead": {
+       "instructions": 357871629,
+       "evaluations": 25021,
+       "hypervolume": 0.744064
+      }
+     }
+    },
+    "dtlz1-3-matched": {
+     "startup": 407452,
+     "methods": {
+      "nsga2": {
+       "instructions": 367311340,
+       "evaluations": 40036,
+       "hypervolume": 0.134961
+      },
+      "nsga3": {
+       "instructions": 629697549,
+       "evaluations": 40030,
+       "hypervolume": 0.139614
+      },
+      "spea2": {
+       "instructions": 4518722905,
+       "evaluations": 40080,
+       "hypervolume": 0.139144
+      },
+      "sms_emoa": {
+       "instructions": 19481053798,
+       "evaluations": 40000,
+       "hypervolume": 0.140163
+      },
+      "moead": {
+       "instructions": 485412935,
+       "evaluations": 40039,
+       "hypervolume": 0.139739
+      }
+     }
+    }
+   }
+  }
+ ]
+}
