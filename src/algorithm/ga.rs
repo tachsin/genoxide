@@ -517,8 +517,7 @@ where
 
     // the next population is the `count` best parents followed by the offspring
     fn keep_best_parents(&mut self, count: usize) {
-        self.population.sort_best_first(self.objective);
-        self.population.truncate(count);
+        self.population.keep_best(count, self.objective);
         self.population
             .iter_mut()
             .for_each(Individual::increment_age);
@@ -737,8 +736,7 @@ where
         }
         let count = migrants.len().min(self.population.len());
         let size = self.population.len();
-        self.population.sort_best_first(self.objective);
-        self.population.truncate(size - count);
+        self.population.keep_best(size - count, self.objective);
         self.population.extend(migrants.into_iter().take(count));
         if update_best(
             &mut self.best,
