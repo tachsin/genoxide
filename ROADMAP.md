@@ -44,7 +44,7 @@ From a review of existing libraries (e.g. genetic_algorithm, [issues #11 to #78]
 - **`Fitness`:** totally ordered `f64`, single or multi-objective (`[f64; M]`, with the number of objectives fixed at compile time), optional constraint violation; batch and async evaluation.
 - **Operators:** `Select`, `Crossover`, `Mutate`, generic over the genome; survival is each algorithm's scheme.
 - **`Algorithm`:** ask / tell state machines (GA, ES, CMA-ES, DE, PSO, NSGA-II, …).
-- **`Engine`:** termination, parallel evaluation, observers, cancellation.
+- **`Engine`:** termination, parallel evaluation, observers, cancellation, and a hook that changes the algorithm between generations (parameter control, re-evaluation).
 - **`Observer`:** statistics, hall of fame, Pareto archive, logging, checkpoints.
 - **Errors:** one typed error enum; no `&'static str` errors, no panics in library code.
 
@@ -162,7 +162,7 @@ Done means implemented, documented, tested (property tests for operators) and be
 - [x] Python fitness functions and vectorized numpy batch fitness
 - [x] Pythonic builders
 - [x] Examples matching the DEAP / pymoo tutorials
-- Zero-copy numpy genomes: moved to 0.9.
+- Zero-copy numpy genomes: moved to 0.11.
 
 ### 0.7: Correctness ✅
 Fixes from the review of 0.6.0 ([#116](https://github.com/tachsin/genoxide/issues/116)). Some change seeded results.
@@ -175,27 +175,48 @@ Fixes from the review of 0.6.0 ([#116](https://github.com/tachsin/genoxide/issue
 - [x] Benchmarks: numpy fitness in pymoo and PyGAD, timings on pinned P-cores
 - [x] DE defaults: SHADE's published settings, with its random `p` per trial
 
-### 0.8: Test problems
+### 0.8: Test problems ✅
 The test problem library of [docs/problems-plan.md](docs/problems-plan.md), batches 1 to 3, and the fixes from the review of 0.7 ([#201](https://github.com/tachsin/genoxide/issues/201) to [#229](https://github.com/tachsin/genoxide/issues/229)). `multi::problems::TestProblem` became `MultiProblem`: a breaking change.
 - [x] `problems`: 16 classic functions, CEC 2006's g01-g06 and 8 engineering design problems, each with its optimum and reference ([#170](https://github.com/tachsin/genoxide/pull/170), [#191](https://github.com/tachsin/genoxide/pull/191))
 - [x] `multi::problems`: `MultiProblem`, constraints, and 13 classic two- and three-objective problems ([#177](https://github.com/tachsin/genoxide/pull/177))
 - [x] The same problems in Python, evaluated in Rust, and `genoxide.indicators`
-- [x] Examples with their output checked in CI, a full explanation and a recorded run ([#193](https://github.com/tachsin/genoxide/pull/193), [#194](https://github.com/tachsin/genoxide/pull/194), [#198](https://github.com/tachsin/genoxide/pull/198))
-- [ ] The fixes from the review of 0.7
-- The later batches of the problem library follow in later releases.
+- [x] Examples with their output checked in CI, a full explanation and a recorded run ([#193](https://github.com/tachsin/genoxide/pull/193), [#194](https://github.com/tachsin/genoxide/pull/194), [#198](https://github.com/tachsin/genoxide/pull/198)), one per problem ([#253](https://github.com/tachsin/genoxide/pull/253))
+- [x] The fixes from the review of 0.7
+- [x] `genoxide::math`: the same results to the bit on every platform ([#263](https://github.com/tachsin/genoxide/pull/263))
+- [x] A GA's rates and operators changed between generations, and its population re-evaluated when the fitness function changes ([#248](https://github.com/tachsin/genoxide/pull/248), [#249](https://github.com/tachsin/genoxide/pull/249))
 
-### 0.9: Genetic programming and neuroevolution
-- [ ] Zero-copy numpy genomes in the Python package
+### 0.9: More test problems ✅
+- [x] Batch 4: DTLZ5-7, the binary ZDT5 and WFG1-9 ([#270](https://github.com/tachsin/genoxide/pull/270)); batch 5 in 0.9.1: CEC 2006's g07-g18 ([#277](https://github.com/tachsin/genoxide/pull/277)); each with its example
+- [x] A multi-objective front has each genome once, and polynomial mutation reaches the bounds: breaking fixes ([#273](https://github.com/tachsin/genoxide/pull/273), [#276](https://github.com/tachsin/genoxide/pull/276))
+- [x] Benchmarks: genoxide's releases compared by instruction counts ([#267](https://github.com/tachsin/genoxide/pull/267))
+- Genetic programming and neuroevolution, first planned for 0.9: moved to 0.11.
+
+### 0.10: Control and parallel breeding
+On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)).
+- [x] Parameter control: `Engine::control`, setters for DE, PSO and local search, `Islands::islands_mut` ([#292](https://github.com/tachsin/genoxide/pull/292)); in Python, `run(control=...)` ([#294](https://github.com/tachsin/genoxide/pull/294))
+- [x] Re-evaluation in every single-objective algorithm but the steady-state GA, for a fitness function that changes during a run ([#292](https://github.com/tachsin/genoxide/pull/292))
+- [x] Parallel breeding for the GA, DE and ES, the same results on any number of threads ([#289](https://github.com/tachsin/genoxide/pull/289), [#295](https://github.com/tachsin/genoxide/pull/295)), also in Python ([#296](https://github.com/tachsin/genoxide/pull/296))
+- [x] Isolated islands, without migration ([#293](https://github.com/tachsin/genoxide/pull/293))
+- [x] Faster: the Python package on bit genomes ([#291](https://github.com/tachsin/genoxide/pull/291)), the ES ([#298](https://github.com/tachsin/genoxide/pull/298))
+- [x] Benchmarks: a matched suite of three problems, one method each ([#284](https://github.com/tachsin/genoxide/pull/284)), with every library bug it found reported upstream ([notes](docs/benchmarks/notes.md#bugs-found))
+- [ ] What a fitness function computes besides the fitness, kept with the individuals ([#246](https://github.com/tachsin/genoxide/issues/246))
+
+### 0.11: Genetic programming and neuroevolution
 - [ ] Tree GP, strongly typed
 - [ ] Subtree crossover; point, subtree and hoist mutation; bloat control
 - [ ] Symbolic regression examples
 - [ ] NEAT (speciation, innovation numbers)
 - [ ] Neuroevolution with evolution strategies
+- [ ] Python: zero-copy numpy genomes, the ES, islands and checkpoints
 
-### 0.10: Frontier
+### 0.12: Frontier
 - [ ] Quality-diversity: MAP-Elites, CMA-ME, novelty search
 - [ ] LLM-guided evolution (async operators calling a language model)
 - [ ] Adaptive operator selection and automatic parameter tuning
+
+### Throughout
+- [ ] The test problem library's later batches, each problem with its example ([#260](https://github.com/tachsin/genoxide/issues/260)), checked against the original papers ([#168](https://github.com/tachsin/genoxide/issues/168))
+- [ ] More benchmark problems, one matched method each, once the current three are settled (see [Benchmarks](#benchmarks))
 
 ### 1.0: Stable
 - [ ] API stabilization, semver guarantees, MSRV policy
