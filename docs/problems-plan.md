@@ -275,9 +275,24 @@ with a tolerance of 1e-9 relative.
    jumps at x₂ = 100 and x₁ = 300 (piecewise), x₂* sits just below 100, and f₁ is defined for
    x₁ < 400 and f₂ for x₂ < 1000 while the bounds include 400 and 1000: the implementation picks the
    closed end and documents it.
-3. **g20** has no known feasible solution: the printed x* is slightly infeasible (Σx ≈ 1.0001).
-   `optimum()` returns the value as a best known, not proven, with that note.
-4. **g22:** the earlier best known was 382.902205; 236.430975504001 is εDE's. Spettel, Ba and
+3. **g20** has no known feasible solution, and none exists (below): the report calls its x*
+   "a little infeasible". `optimum()` returns the value as a best known, not proven, with that
+   note. Checked in batch 6: the x* meets the 14 equalities within δ but violates g₁ by 0.1438
+   (x₁₃ = 0.158 in (x₁ + x₁₃)/(Σx + e₁)); that total is 20 times the mean violation 0.00718768
+   that Takahama and Sakai (2006, "Constrained optimization by the ε constrained differential
+   evolution with gradient-based mutation and feasible elites", IEEE CEC 2006) give for it. It evaluates to 0.204979400285636, which table 4
+   truncates to 0.2049794002 (the text gives no f(x*)); `G20` stores table 4's value. **No
+   feasible solution exists** (derived in batch 6, not in the report): g₁…g₆ are nonnegative sums
+   over positive denominators, so they force x₁, x₂, x₃, x₇, x₈, x₉, x₁₃, x₁₄, x₁₅, x₁₉, x₂₀, x₂₁
+   to 0. With pᵢ = (xᵢ/bᵢ)/Σⱼ xⱼ/bⱼ over the six liquids left and S₂ = Σᵢ₌₁₃²⁴ xᵢ/bᵢ, h₁…h₁₂
+   give Σ cᵢpᵢ = 40 (to 6δ) and Σᵢ₌₁₃²⁴ xᵢ = S₂ Σ bᵢcᵢpᵢ/40; over distributions p with Σ cᵢpᵢ =
+   40 (an LP with two constraints, whose vertices mix x₅, the only cᵢ > 40, with one other), the
+   least is 109.57 S₂, with x₅ and x₁₀. h₁₄ gives S₂ ≥ (1.671 − δ − Σᵢ₌₁¹² xᵢ/dᵢ)/k ≥ 0.0115, so
+   Σx ≥ 1.26 where h₁₃ allows 1 + δ. The point of that bound, built in `G20`'s test, meets every
+   constraint but h₁₃, which it misses by 0.287. At the origin the equalities are 0/0: the fitness
+   is invalid there.
+4. **g22:** the earlier best known was 382.902205; 236.430975504001 is εDE's (Takahama and Sakai
+   2006 found it again, and cite it as new). Spettel, Ba and
    Arnold (2022, Evolutionary Computation 30(4): 531-553, doi:10.1162/evco_a_00311) state a better
    value exists: **unverified (paywalled)**.
 5. g10: Table 3 says a = 6, the text names only g1-g3 as active; at x* all six are active (to
@@ -292,6 +307,26 @@ with a tolerance of 1e-9 relative.
    are labelled gg₁…gg₁₃; g17's eq. 35 writes f(x₁) + f(x₂) for f₁(x₁) + f₂(x₂).
 8. g12's constraint is a disjunction: min over p, q, r ∈ {1..9} of (x₁−p)² + (x₂−q)² + (x₃−r)² −
    0.0625 ≤ 0, one NI constraint.
+9. **Checked in batch 6 (g19-g24).** The formulas, bounds and data were read from the typeset
+   report (tables 1 and 2 rendered at 300 dpi; c of g19 is symmetric, a₁₃…a₂₄ and b₁₃…b₂₄ of g20
+   repeat a₁…a₁₂ and b₁…b₁₂), and table 3's LI, NI, LE and NE counted from them: all match. Each
+   x* evaluates to the text's f(x*): g19 to 2.8e-14, g21 to 2.8e-14, g22 to 5.7e-14, g23 to
+   1.1e-13 (with the repaired x₈, x₉) and g24 exactly; g20 as in item 3. The organizers' C code
+   (fcnsuite.c, in the report's repository, with no license) was only read, to compare its
+   formulas with the report's: they agree, and no value was taken from it.
+   - g19: table 3 says a = 0; at x* all five constraints are active (|g| ≤ 1e-14). ρ: 33.467 %
+     of 2·10⁶ random points are feasible (table 3: 33.4761 %).
+   - g21: x* is on the tolerance boundary of all five equalities (|h| = δ, beyond it by 1e-12
+     from rounding), with g₁ active.
+   - g22: x* is feasible, every |h| < δ, and g₁ = −2.2e-7.
+   - g23: x* meets h₁…h₄ at |h| = δ, g₂ is active and g₁ = −2.5e-6. (0, 100, 0, 100, 0, 0, 100,
+     200, 0.01) meets every constraint exactly, at f = −400: the best known is 0.0551 lower
+     through the tolerance.
+   - g24: **table 3's ρ = 79.6556 % is the share where g₁ alone holds** (79.651 %, integrated);
+     with both constraints it is 44.206 %. g₂'s bound on x₂ is 4((x₁ − 1)(x₁ − 3))², so the
+     report's "two disconnected sub-regions" meet at (1, 0). The optimum is proven by reducing to
+     x₁ alone (the best x₂ is min(4, both bounds)): the minimum is where the bounds cross, a root
+     of x₁⁴ − 12x₁³ + 40x₁² − 48x₁ + 17, which the report's x₁ is to 1.5e-14.
 
 ### 1.3 Multi objective, unconstrained
 
@@ -983,7 +1018,7 @@ algorithms come on top of these.
 | 3 | done ([#191](https://github.com/tachsin/genoxide/pull/191)) | Engineering design, single objective, and the mixed-variable convention (`design()`) | Welded beam, Pressure vessel, Tension/compression spring, Speed reducer, Gear train (integer), Three-bar truss, Cantilever beam, Car side impact (single objective) (8), and CEC 2006 g01-g06 (6) | `pressure_vessel` (switch to `engineering::PressureVessel`); new `welded_beam` (constrained); new `gear_train` (integer genome; category integer); new `tension_compression_spring`, `speed_reducer`, `three_bar_truss`, `cantilever_beam`, `car_side_impact` and `cec2006_g01` to `cec2006_g06` |
 | 4 | done (#270) | Scalable many-objective problems | DTLZ5, DTLZ6, DTLZ7, ZDT5 (binary), WFG1-WFG9 (13) | an example per problem: `zdt5`, `dtlz5_3obj`, `dtlz6_3obj`, `dtlz7_3obj`, `wfg1` to `wfg9` (2 objectives); later, `wfg_many_objective`: NSGA-III and MOEA/D on WFG4 and WFG9 with 5 objectives, IGD to the sampled front |
 | 5 | done (#277) | CEC 2006, part 2 | g07-g18 (12) | `cec2006_g07` to `cec2006_g18`; `cec2006`: SHADE with Deb's rules on all of the problems so far, printing f − f* and feasibility, as in the report's evaluation criteria |
-| 6 |  | CEC 2006, part 3, and the low-dimensional classics with tables | g19-g24 (6), Hartmann 3-D, Hartmann 6-D, Shekel 5/7/10, Easom, Eggholder, Schaffer F6 (8) | `cec2006_g19` to `cec2006_g24` and an example per function: `hartmann3`, `hartmann6`, `shekel5`, `shekel7`, `shekel10`, `easom`, `eggholder`, `schaffer_f6`; `cec2006` covers all 24 |
+| 6 | done | CEC 2006, part 3, and the low-dimensional classics with tables | g19-g24 (6), Hartmann 3-D, Hartmann 6-D, Shekel 5/7/10, Easom, Eggholder, Schaffer F6 (8) | `cec2006_g19` to `cec2006_g24` and an example per function: `hartmann3`, `hartmann6`, `shekel5`, `shekel7`, `shekel10`, `easom`, `eggholder`, `schaffer_f6` (the `cec2006` comparison of all 24 is still to come) |
 | 7 |  | Constrained test problems with tunable difficulty (CTP needs its paper first: every CTP detail is unverified) | CTP1-CTP8 (8), C1-DTLZ1, C1-DTLZ3, C2-DTLZ2, C2-convex-DTLZ2, C3-DTLZ1, C3-DTLZ4 (6) | `ctp` (NSGA-II on CTP2/CTP7's disconnected feasible fronts); `c2_dtlz2` (NSGA-III with constraints, 3 objectives) |
 | 8 |  | Scaled and inverted DTLZ, and MW | Convex DTLZ2, scaled DTLZ1, scaled DTLZ2, inverted DTLZ1 (4), MW1-MW14 (14) | `mw` (constrained multi-objective, several fronts) |
 | 9 |  | Engineering design, several objectives | Two-bar truss, welded beam (2 objectives), disc brake, car side impact (3 objectives), speed reducer (2 objectives), four-bar truss, water resource planning, rocket injector, vehicle crashworthiness, conceptual marine design (10) | `two_bar_truss`; `car_side_impact` |

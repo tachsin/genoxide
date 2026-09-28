@@ -59,6 +59,12 @@ CONSTRAINED = [
     gx.problems.cec2006.G16,
     gx.problems.cec2006.G17,
     gx.problems.cec2006.G18,
+    gx.problems.cec2006.G19,
+    gx.problems.cec2006.G20,
+    gx.problems.cec2006.G21,
+    gx.problems.cec2006.G22,
+    gx.problems.cec2006.G23,
+    gx.problems.cec2006.G24,
     gx.problems.engineering.WeldedBeam,
     gx.problems.engineering.WeldedBeamRagsdell,
     gx.problems.engineering.PressureVessel,
@@ -390,6 +396,36 @@ def test_cec2006_g07_to_g18_at_chosen_points():
         assert cls(tolerance=1e-6).optimum is None
     # g18's best known is −√3/2 to its digits
     assert cec2006.G18().optimum.value == pytest.approx(-math.sqrt(3) / 2, rel=1e-15)
+
+
+def test_cec2006_g19_to_g24_at_chosen_points():
+    cec2006 = gx.problems.cec2006
+    # g19 at the origin: f = 0, and gⱼ = −eⱼ, violated by 15 + 27 + 36 + 18 + 12
+    assert cec2006.G19()(np.zeros(15)) == (0.0, 108.0)
+    # x₁₁…x₁₅ = 1 alone: f = Σ cᵢⱼ + 2 Σ dⱼ = 50 + 60, and only g₃ = 44 − 30 + 36 is violated
+    x = np.zeros(15)
+    x[10:] = 1
+    assert cec2006.G19()(x) == (110.0, 50.0)
+    # g20: the report's x* is infeasible, g₁ = (x₁ + x₁₃)/(Σ x + 0.1) = 0.1438
+    problem = cec2006.G20()
+    value, violation = problem(problem.optimum.solutions[0])
+    assert value == pytest.approx(0.2049794002, rel=1e-9)
+    assert violation == pytest.approx(0.14375, abs=1e-4)
+    assert not problem.optimum.proven and problem.constraint_count == 20
+    # g21 at x₄ = 100, x₅ = ln 800, x₆ = ln 400, x₇ = ln 500: only h₁ = 5000 ln 2 is violated
+    value, violation = cec2006.G21()([50, 0, 0, 100, math.log(800), math.log(400), math.log(500)])
+    assert value == 50 and violation == pytest.approx(5000 * math.log(2) - 1e-4, rel=1e-12)
+    assert cec2006.G22().constraint_count == 20
+    assert cec2006.G22().optimum.value == pytest.approx(236.430975504001, rel=1e-15)
+    # g23: x₂ = x₄ = x₇ = 100, x₈ = 200, x₉ = 0.01 meets every constraint exactly, at −400
+    assert cec2006.G23()([0, 100, 0, 100, 0, 0, 100, 200, 0.01]) == (-400.0, 0.0)
+    assert cec2006.G23().optimum.solutions[0][7] == 200
+    # g24: the two parts of the feasible region meet at (1, 0)
+    assert cec2006.G24()([1.0, 0.0]) == (-1.0, 0.0)
+    assert cec2006.G24()([1.0, 0.5]) == (-1.5, 0.5)
+    assert cec2006.G24().optimum.proven
+    for cls in (cec2006.G20, cec2006.G21, cec2006.G22, cec2006.G23):
+        assert cls(tolerance=1e-6).optimum is None
 
 
 def test_invalid_tolerances_are_errors():

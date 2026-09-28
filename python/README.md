@@ -182,7 +182,7 @@ for the algorithm, and `optimal_front(points)`, None where the front isn't known
 returns `(objectives, violation)` and gives its `constraints(x)`.
 
 Two submodules have constrained single-objective problems, whose fitness is `(score,
-violation)`: `gx.problems.cec2006` has CEC 2006's `G01()` to `G18()`, and
+violation)`: `gx.problems.cec2006` has CEC 2006's `G01()` to `G24()`, and
 `gx.problems.engineering` has `WeldedBeam()`, `WeldedBeamRagsdell()`, `PressureVessel()`,
 `TensionCompressionSpring()`, `SpeedReducer()`, `GearTrain()` (an `Integer` genome),
 `ThreeBarTruss()`, `CantileverBeam()` and `CarSideImpact()`. `PressureVessel` and `SpeedReducer`

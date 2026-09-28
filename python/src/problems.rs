@@ -105,6 +105,20 @@ pub enum Config {
         tolerance: Option<f64>,
     },
     G18 {},
+    G19 {},
+    G20 {
+        tolerance: Option<f64>,
+    },
+    G21 {
+        tolerance: Option<f64>,
+    },
+    G22 {
+        tolerance: Option<f64>,
+    },
+    G23 {
+        tolerance: Option<f64>,
+    },
+    G24 {},
     WeldedBeam {},
     WeldedBeamRagsdell {},
     PressureVessel {},
@@ -826,6 +840,20 @@ fn build(config: Config) -> Result<Problem, String> {
             problems::boxed(cec2006::G17::with_tolerance(equality_tolerance(tolerance)?))
         }
         Config::G18 {} => problems::boxed(cec2006::G18),
+        Config::G19 {} => problems::boxed(cec2006::G19),
+        Config::G20 { tolerance } => {
+            problems::boxed(cec2006::G20::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G21 { tolerance } => {
+            problems::boxed(cec2006::G21::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G22 { tolerance } => {
+            problems::boxed(cec2006::G22::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G23 { tolerance } => {
+            problems::boxed(cec2006::G23::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G24 {} => problems::boxed(cec2006::G24),
         Config::WeldedBeam {} => problems::boxed(engineering::WeldedBeam),
         Config::WeldedBeamRagsdell {} => problems::boxed(engineering::WeldedBeamRagsdell),
         Config::PressureVessel {} => problems::boxed(engineering::PressureVessel),

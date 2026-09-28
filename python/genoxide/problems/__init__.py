@@ -36,7 +36,7 @@ A constrained problem gives ``(objectives, violation)``, 0 when feasible, and it
 ``constraints(x)`` as ``g(x) <= 0``.
 
 Two submodules hold constrained single-objective problems, whose fitness is ``(score,
-violation)``: :mod:`genoxide.problems.cec2006` (g01 to g18 of the CEC 2006 competition) and
+violation)``: :mod:`genoxide.problems.cec2006` (g01 to g24 of the CEC 2006 competition) and
 :mod:`genoxide.problems.engineering` (engineering design problems such as the welded beam and the
 pressure vessel)::
 
