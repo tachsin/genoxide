@@ -4,8 +4,9 @@
 
 use crate::run::{WithObjectives, with_objectives};
 use genoxide::engine::{FitnessFunction, IntoFitness};
-use genoxide::genome::{Integer, Integers, Real, Reals, Representation};
-use genoxide::multi::problems::{self as multi, DynMultiProblem, try_boxed};
+use genoxide::genome::{Binary, Bits, Integer, Integers, Real, Reals, Representation};
+use genoxide::multi::problems::{self as multi, DynMultiProblem, MultiProblem, try_boxed};
+use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
 use genoxide::problems::{
     self, Constraints, DynProblem, Optimum, Problem as _, cec2006, engineering,
 };
@@ -106,6 +107,10 @@ pub enum MultiConfig {
     Zdt6 {
         variables: usize,
     },
+    Zdt5 {
+        first_bits: usize,
+        substrings: usize,
+    },
     Dtlz1 {
         objectives: usize,
         variables: Option<usize>,
@@ -119,6 +124,18 @@ pub enum MultiConfig {
         variables: Option<usize>,
     },
     Dtlz4 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    Dtlz5 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    Dtlz6 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    Dtlz7 {
         objectives: usize,
         variables: Option<usize>,
     },
@@ -159,7 +176,10 @@ impl MultiConfig {
             Self::Dtlz1 { objectives, .. }
             | Self::Dtlz2 { objectives, .. }
             | Self::Dtlz3 { objectives, .. }
-            | Self::Dtlz4 { objectives, .. } => objectives,
+            | Self::Dtlz4 { objectives, .. }
+            | Self::Dtlz5 { objectives, .. }
+            | Self::Dtlz6 { objectives, .. }
+            | Self::Dtlz7 { objectives, .. } => objectives,
             Self::Viennet1 {} | Self::Viennet2 {} | Self::Viennet3 {} => 3,
             _ => 2,
         }
@@ -193,6 +213,18 @@ impl MultiConfig {
             | Self::Dtlz4 {
                 objectives,
                 variables: n,
+            }
+            | Self::Dtlz5 {
+                objectives,
+                variables: n,
+            }
+            | Self::Dtlz6 {
+                objectives,
+                variables: n,
+            }
+            | Self::Dtlz7 {
+                objectives,
+                variables: n,
             } => {
                 if !(2..=6).contains(&objectives) {
                     return Err(format!(
@@ -204,12 +236,36 @@ impl MultiConfig {
                     None => Ok(()),
                 }
             }
+            Self::Zdt5 {
+                first_bits,
+                substrings,
+            } => {
+                at_least(first_bits, 1, "ZDT5", "bits in x₁")?;
+                at_least(substrings, 1, "ZDT5", "substrings")?;
+                let bits = substrings
+                    .checked_mul(5)
+                    .and_then(|bits| bits.checked_add(first_bits));
+                match bits {
+                    Some(bits) if bits <= 1 << 24 => Ok(()),
+                    _ => Err("ZDT5's genome has at most 2^24 bits".to_string()),
+                }
+            }
             _ => Ok(()),
         }
     }
 
     /// The problem, with `M` objectives: its number of objectives, checked before.
-    pub fn build<const M: usize>(&self) -> Box<dyn DynMultiProblem<M>> {
+    pub fn build<const M: usize>(&self) -> MultiNative<M> {
+        if let Self::Zdt5 {
+            first_bits,
+            substrings,
+        } = *self
+        {
+            let problem = try_binary::<_, 2, M>(multi::Zdt5::new(first_bits, substrings));
+            return MultiNative::Binary(
+                problem.expect("the number of objectives is the problem's"),
+            );
+        }
         let problem = match *self {
             Self::Zdt1 { variables } => try_boxed::<_, 2, M>(multi::Zdt1::new(variables)),
             Self::Zdt2 { variables } => try_boxed::<_, 2, M>(multi::Zdt2::new(variables)),
@@ -228,6 +284,15 @@ impl MultiConfig {
             Self::Dtlz4 { variables, .. } => Some(multi::boxed(
                 variables.map_or_else(multi::Dtlz4::<M>::default, multi::Dtlz4::<M>::new),
             )),
+            Self::Dtlz5 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::Dtlz5::<M>::default, multi::Dtlz5::<M>::new),
+            )),
+            Self::Dtlz6 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::Dtlz6::<M>::default, multi::Dtlz6::<M>::new),
+            )),
+            Self::Dtlz7 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::Dtlz7::<M>::default, multi::Dtlz7::<M>::new),
+            )),
             Self::Schaffer1 {} => try_boxed::<_, 2, M>(multi::Schaffer1),
             Self::Schaffer2 {} => try_boxed::<_, 2, M>(multi::Schaffer2),
             Self::FonsecaFleming { variables } => {
@@ -243,21 +308,173 @@ impl MultiConfig {
             Self::Tnk {} => try_boxed::<_, 2, M>(multi::Tnk),
             Self::Osy {} => try_boxed::<_, 2, M>(multi::Osy),
             Self::Constr {} => try_boxed::<_, 2, M>(multi::Constr),
+            // built above
+            Self::Zdt5 { .. } => None,
         };
-        problem.expect("the number of objectives is the problem's")
+        MultiNative::Real(problem.expect("the number of objectives is the problem's"))
     }
 }
 
-/// The name and the number of variables of the problem that `config` describes.
-pub fn name_and_dimensions(config: MultiConfig) -> (&'static str, usize) {
+/// A multi-objective problem with `M` objectives, evaluated in Rust: on real genomes, or on bit
+/// strings.
+pub enum MultiNative<const M: usize> {
+    Real(Box<dyn DynMultiProblem<M>>),
+    Binary(Box<dyn BinaryMultiProblem<M>>),
+}
+
+/// A multi-objective problem on [`Binary`] genomes, as a trait object: what [`DynMultiProblem`]
+/// is for real genomes.
+pub trait BinaryMultiProblem<const M: usize>: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn binary(&self) -> Binary;
+    fn evaluate(&self, genome: &Bits) -> Scores<M>;
+    fn reference(&self) -> &'static str;
+    fn reference_url(&self) -> Option<&'static str>;
+    fn constraint_count(&self) -> usize;
+    fn constraints(&self, genome: &Bits) -> Constraints;
+    fn optimal_front(&self, points: usize) -> Option<Vec<[f64; M]>>;
+    fn ideal_point(&self) -> Option<[f64; M]>;
+    fn nadir_point(&self) -> Option<[f64; M]>;
+}
+
+// a problem with K objectives behind `BinaryMultiProblem<M>`, built only when M = K
+struct BinaryBoxed<P, const K: usize>(P);
+
+// the values of an array of K values as one of M, when M = K
+fn resized<const K: usize, const M: usize>(values: [f64; K]) -> [f64; M] {
+    std::array::from_fn(|i| values[i])
+}
+
+impl<P, const K: usize, const M: usize> BinaryMultiProblem<M> for BinaryBoxed<P, K>
+where
+    P: MultiProblem<K, Representation = Binary> + Send + Sync,
+{
+    fn name(&self) -> &'static str {
+        self.0.name()
+    }
+
+    fn binary(&self) -> Binary {
+        self.0.representation()
+    }
+
+    fn evaluate(&self, genome: &Bits) -> Scores<M> {
+        let scores: Scores<K> = MultiFitnessFunction::evaluate(&self.0, genome)
+            .into_scores()
+            .unwrap_or_else(|_| Scores::invalid());
+        match scores.values() {
+            Some(values) => Scores::constrained(resized(values), scores.violation()),
+            None => Scores::invalid(),
+        }
+    }
+
+    fn reference(&self) -> &'static str {
+        self.0.reference()
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        self.0.reference_url()
+    }
+
+    fn constraint_count(&self) -> usize {
+        self.0.constraint_count()
+    }
+
+    fn constraints(&self, genome: &Bits) -> Constraints {
+        self.0.constraints(genome)
+    }
+
+    fn optimal_front(&self, points: usize) -> Option<Vec<[f64; M]>> {
+        let front = self.0.optimal_front(points)?;
+        Some(front.into_iter().map(resized).collect())
+    }
+
+    fn ideal_point(&self) -> Option<[f64; M]> {
+        self.0.ideal_point().map(resized)
+    }
+
+    fn nadir_point(&self) -> Option<[f64; M]> {
+        self.0.nadir_point().map(resized)
+    }
+}
+
+// `problem`, with K objectives, as a `BinaryMultiProblem<M>` if M = K
+fn try_binary<P, const K: usize, const M: usize>(
+    problem: P,
+) -> Option<Box<dyn BinaryMultiProblem<M>>>
+where
+    P: MultiProblem<K, Representation = Binary> + Send + Sync + 'static,
+{
+    (K == M).then(|| Box::new(BinaryBoxed::<P, K>(problem)) as Box<dyn BinaryMultiProblem<M>>)
+}
+
+// what both kinds of problems have, from the one or the other
+macro_rules! either {
+    ($problem:expr, $p:ident => $value:expr) => {
+        match $problem {
+            MultiNative::Real($p) => $value,
+            MultiNative::Binary($p) => $value,
+        }
+    };
+}
+
+impl<const M: usize> MultiNative<M> {
+    pub fn name(&self) -> &'static str {
+        either!(self, p => p.name())
+    }
+
+    /// The number of genes: variables, or bits.
+    pub fn genome_len(&self) -> usize {
+        match self {
+            Self::Real(p) => p.real().genome_len(),
+            Self::Binary(p) => p.binary().genome_len(),
+        }
+    }
+
+    /// Whether its genomes are bit strings.
+    pub fn is_binary(&self) -> bool {
+        matches!(self, Self::Binary(_))
+    }
+
+    fn constraint_count(&self) -> usize {
+        either!(self, p => p.constraint_count())
+    }
+
+    /// The scores of `genome`, or invalid ones for a genome of the other kind (the run checks
+    /// that the genome is the problem's).
+    pub fn evaluate<G: crate::genes::Genes>(&self, genome: &G) -> Scores<M> {
+        let scores = match self {
+            Self::Real(p) => genome.reals().map(|genome| p.evaluate(genome)),
+            Self::Binary(p) => genome.bits().map(|genome| p.evaluate(genome)),
+        };
+        scores.unwrap_or_else(Scores::invalid)
+    }
+
+    // a genome per row, as numpy arrays of the problem's number of genes: reals, or bits
+    fn rows(&self, genomes: &PyReadonlyArray2<'_, f64>) -> PyResult<Genomes> {
+        Ok(match self {
+            Self::Real(p) => Genomes::Real(rows(p.name(), &p.real(), genomes)?),
+            Self::Binary(p) => Genomes::Binary(bit_rows(p.name(), &p.binary(), genomes)?),
+        })
+    }
+}
+
+// the genomes of a problem's rows
+enum Genomes {
+    Real(Vec<Reals>),
+    Binary(Vec<Bits>),
+}
+
+/// The name and the number of genes of the problem that `config` describes, and whether its
+/// genomes are bit strings.
+pub fn name_and_dimensions(config: MultiConfig) -> (&'static str, usize, bool) {
     struct Describe(MultiConfig);
 
     impl WithObjectives for Describe {
-        type Output = (&'static str, usize);
+        type Output = (&'static str, usize, bool);
 
-        fn with<const N: usize>(self) -> (&'static str, usize) {
+        fn with<const N: usize>(self) -> (&'static str, usize, bool) {
             let problem = self.0.build::<N>();
-            (problem.name(), problem.real().genome_len())
+            (problem.name(), problem.genome_len(), problem.is_binary())
         }
     }
 
@@ -454,11 +671,11 @@ fn matrix<'py, const M: usize>(py: Python<'py>, points: &[[f64; M]]) -> Bound<'p
         .into_any()
 }
 
-/// The description of the problem that `problem` (JSON) describes: its name, bounds (a pair per
-/// gene), objectives ("minimize" or "maximize" each), number of constraints, reference and the
-/// reference's URL; for a single-objective problem, its optimum (None, or its value, solutions a
-/// row each, and whether it's proven); for a multi-objective one, its ideal and nadir points
-/// (None if unknown).
+/// The description of the problem that `problem` (JSON) describes: its name, genome ("real",
+/// "integer" or "binary"), bounds (a pair per gene, (0, 1) for a bit), objectives ("minimize" or
+/// "maximize" each), number of constraints, reference and the reference's URL; for a
+/// single-objective problem, its optimum (None, or its value, solutions a row each, and whether
+/// it's proven); for a multi-objective one, its ideal and nadir points (None if unknown).
 #[pyfunction]
 pub fn problem_info<'py>(py: Python<'py>, problem: &str) -> PyResult<Bound<'py, PyDict>> {
     let info = PyDict::new(py);
@@ -562,16 +779,31 @@ impl WithObjectives for MultiInfo<'_, '_> {
         let problem = self.config.build::<N>();
         let info = self.info;
         info.set_item("name", problem.name())?;
-        info.set_item("genome", "real")?;
-        info.set_item("bounds", bounds(&problem.real()))?;
+        match &problem {
+            MultiNative::Real(p) => {
+                info.set_item("genome", "real")?;
+                info.set_item("bounds", bounds(&p.real()))?;
+            }
+            MultiNative::Binary(p) => {
+                // a bit is 0 or 1
+                info.set_item("genome", "binary")?;
+                info.set_item("bounds", vec![(0, 1); p.binary().genome_len()])?;
+            }
+        }
         info.set_item("objectives", vec!["minimize"; N])?;
         info.set_item("constraints", problem.constraint_count())?;
         let point = |point: Option<[f64; N]>| point.map(|point| point.to_vec());
-        info.set_item("ideal_point", point(problem.ideal_point()))?;
-        info.set_item("nadir_point", point(problem.nadir_point()))?;
+        info.set_item(
+            "ideal_point",
+            point(either!(&problem, p => p.ideal_point())),
+        )?;
+        info.set_item(
+            "nadir_point",
+            point(either!(&problem, p => p.nadir_point())),
+        )?;
         info.set_item("optimum", self.py.None())?;
-        info.set_item("reference", problem.reference())?;
-        info.set_item("reference_url", problem.reference_url())?;
+        info.set_item("reference", either!(&problem, p => p.reference()))?;
+        info.set_item("reference_url", either!(&problem, p => p.reference_url()))?;
         Ok(())
     }
 }
@@ -668,6 +900,38 @@ fn whole(name: &str, gene: f64) -> PyResult<i64> {
     }
 }
 
+// a genome per row, as numpy arrays of the problem's number of bits whose values are 0 or 1
+fn bit_rows(
+    name: &str,
+    binary: &Binary,
+    genomes: &PyReadonlyArray2<'_, f64>,
+) -> PyResult<Vec<Bits>> {
+    let genomes = genomes.as_array();
+    let length = binary.genome_len();
+    if genomes.ncols() != length {
+        return Err(PyValueError::new_err(format!(
+            "{name} takes genomes of {length} bits, not {}",
+            genomes.ncols()
+        )));
+    }
+    genomes
+        .rows()
+        .into_iter()
+        .map(|row| row.iter().map(|&gene| bit(name, gene)).collect())
+        .collect()
+}
+
+// a gene of a bit string: 0 or 1 (False or True)
+fn bit(name: &str, gene: f64) -> PyResult<bool> {
+    match gene {
+        0.0 => Ok(false),
+        1.0 => Ok(true),
+        _ => Err(PyValueError::new_err(format!(
+            "{name} takes bits, 0 or 1, as genes, not {gene}"
+        ))),
+    }
+}
+
 // a genome of zeros for the problem's bounds, to count its constraints
 fn zeros(real: &Real) -> Reals {
     Reals::from(vec![0.0; real.genome_len()])
@@ -685,16 +949,17 @@ impl<'py> WithObjectives for MultiEvaluate<'py> {
     fn with<const N: usize>(self) -> PyResult<Bound<'py, PyAny>> {
         let py = self.py;
         let problem = self.config.build::<N>();
-        let genomes = rows(problem.name(), &problem.real(), &self.genomes)?;
+        let genomes = problem.rows(&self.genomes)?;
         let (values, violations): (Vec<[f64; N]>, Vec<f64>) = py.detach(|| {
-            genomes
+            let scores: Vec<Scores<N>> = match &genomes {
+                Genomes::Real(genomes) => genomes.iter().map(|x| problem.evaluate(x)).collect(),
+                Genomes::Binary(genomes) => genomes.iter().map(|x| problem.evaluate(x)).collect(),
+            };
+            scores
                 .iter()
-                .map(|genome| {
-                    let scores = problem.evaluate(genome);
-                    match scores.values() {
-                        Some(values) => (values, scores.violation()),
-                        None => ([f64::NAN; N], f64::NAN),
-                    }
+                .map(|scores| match scores.values() {
+                    Some(values) => (values, scores.violation()),
+                    None => ([f64::NAN; N], f64::NAN),
                 })
                 .unzip()
         });
@@ -766,9 +1031,25 @@ impl WithObjectives for MultiConstraints<'_> {
     type Output = PyResult<Constraints>;
 
     fn with<const N: usize>(self) -> PyResult<Constraints> {
-        let problem = self.config.build::<N>();
-        check_length(problem.name(), &problem.real(), self.genome)?;
-        Ok(problem.constraints(self.genome))
+        match self.config.build::<N>() {
+            MultiNative::Real(problem) => {
+                check_length(problem.name(), &problem.real(), self.genome)?;
+                Ok(problem.constraints(self.genome))
+            }
+            MultiNative::Binary(problem) => {
+                let (name, binary) = (problem.name(), problem.binary());
+                let bits = self.genome.iter().map(|&gene| bit(name, gene));
+                let genome = bits.collect::<PyResult<Bits>>()?;
+                if genome.len() != binary.genome_len() {
+                    return Err(PyValueError::new_err(format!(
+                        "{name} takes genomes of {} bits, not {}",
+                        binary.genome_len(),
+                        genome.len()
+                    )));
+                }
+                Ok(problem.constraints(&genome))
+            }
+        }
     }
 }
 
@@ -810,7 +1091,9 @@ impl<'py> WithObjectives for MultiFront<'py> {
 
     fn with<const N: usize>(self) -> PyResult<Bound<'py, PyAny>> {
         let problem = self.config.build::<N>();
-        let front = self.py.detach(|| problem.optimal_front(self.points));
+        let front = self
+            .py
+            .detach(|| either!(&problem, p => p.optimal_front(self.points)));
         Ok(match front {
             Some(front) => matrix(self.py, &front),
             None => self.py.None().into_bound(self.py),

@@ -1598,8 +1598,9 @@ class _MultiObjective(_Algorithm):
             (``return f1, f2``); or a tuple of those and an array of constraint violations.
             The function must be deterministic. A multi-objective problem of
             :mod:`genoxide.problems` is evaluated in Rust, with no Python call: ``batch`` doesn't
-            apply, and the genome must be a :class:`Real` with a gene per variable of the
-            problem, and the objectives the problem's, all "minimize".
+            apply, and the genome must be the problem's (``problem.genome``: a :class:`Real`
+            with a gene per variable, or a :class:`Binary` for :class:`~genoxide.problems.Zdt5`),
+            and the objectives the problem's, all "minimize".
         generations : int, optional
             Stops after this many generations, 0 or more. 0 evaluates only the initial
             population.

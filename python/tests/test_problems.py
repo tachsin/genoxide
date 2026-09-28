@@ -70,7 +70,13 @@ MULTI_PROBLEMS = [
     gx.problems.Dtlz2,
     gx.problems.Dtlz3,
     gx.problems.Dtlz4,
+    gx.problems.Dtlz5,
+    gx.problems.Dtlz6,
+    gx.problems.Dtlz7,
 ]
+
+# on bit strings, and so not in the registry of real problems
+BINARY_PROBLEMS = [gx.problems.Zdt5]
 
 
 def test_the_classes_are_the_rust_registry():
@@ -78,9 +84,10 @@ def test_the_classes_are_the_rust_registry():
     two = [cls().name for cls in MULTI_PROBLEMS if len(cls().objectives) == 2]
     three = [cls().name for cls in MULTI_PROBLEMS if len(cls().objectives) == 3]
     # the DTLZ problems have 3 objectives by default
-    assert two == gx._genoxide.multi_problem_names(2)[:-4]
+    assert two == gx._genoxide.multi_problem_names(2)[:-7]
     assert three == gx._genoxide.multi_problem_names(3)
-    assert sorted(cls.__name__ for cls in PROBLEMS + MULTI_PROBLEMS) == sorted(
+    classes = PROBLEMS + MULTI_PROBLEMS + BINARY_PROBLEMS
+    assert sorted(cls.__name__ for cls in classes) == sorted(
         name for name in gx.problems.__all__ if name not in ("Problem", "MultiProblem", "Optimum")
     )
     submodules = gx.problems.cec2006.__all__ + gx.problems.engineering.__all__
@@ -418,6 +425,129 @@ def test_multi_objective_values_at_chosen_points():
     assert np.allclose((front**2).sum(axis=1), 1)
     assert gx.problems.Kursawe().optimal_front(10) is None
     assert gx.problems.Constr().ideal_point == pytest.approx([7 / 18, 1])
+
+
+def test_dtlz5_to_7_values_at_chosen_points():
+    # DTLZ5 with the distance variables at 1: g = 2.5, θ₂ = π (1 + 5x₂) / 14 = π/4 at x₂ = 0.5;
+    # at x₁ = 0, 3.5 (cos π/4, sin π/4, 0)
+    x = np.ones(12)
+    x[:2] = [0.0, 0.5]
+    assert gx.problems.Dtlz5()(x) == pytest.approx([3.5 / math.sqrt(2), 3.5 / math.sqrt(2), 0])
+    # DTLZ6 there: g = 10, θ₂ = π (1 + 20x₂) / 44 = π/4, a radius of 11
+    assert gx.problems.Dtlz6()(x) == pytest.approx([11 / math.sqrt(2), 11 / math.sqrt(2), 0])
+    # DTLZ7 with the distance variables at 0: g = 1, and at f₁ = f₂ = 0.5, sin 1.5π = −1, h = 3
+    x = np.zeros(22)
+    x[:2] = 0.5
+    assert list(gx.problems.Dtlz7()(x)) == pytest.approx([0.5, 0.5, 6.0])
+    # the fronts: DTLZ5's curve for 3 objectives, unknown for 4; DTLZ7's regions
+    front = gx.problems.Dtlz5().optimal_front(20)
+    assert front.shape == (20, 3)
+    assert np.allclose(front[:, 0], front[:, 1]) and np.allclose((front**2).sum(axis=1), 1)
+    four = gx.problems.Dtlz6(objectives=4)
+    assert four.optimal_front(20) is None and four.nadir_point is None
+    assert list(four.ideal_point) == [0.0] * 4
+    assert gx.problems.Dtlz5().nadir_point == pytest.approx([1 / math.sqrt(2)] * 2 + [1])
+    front = gx.problems.Dtlz7(objectives=2).optimal_front(30)
+    phi = front[:, 0] * (1 + np.sin(3 * math.pi * front[:, 0]))
+    assert front.shape == (30, 2) and np.allclose(front[:, 1], 4 - phi)
+    assert gx.problems.Dtlz7().nadir_point == pytest.approx([0.8594008566447239] * 2 + [6])
+    assert gx.problems.Dtlz7().dimensions == 22
+    assert gx.problems.Dtlz5(objectives=5).dimensions == 14
+
+
+# ---- ZDT5, on bit strings -----------------------------------------------------------------------
+
+
+def test_zdt5_describes_itself():
+    problem = gx.problems.Zdt5()
+    assert isinstance(problem, gx.problems.MultiProblem)
+    assert problem.name == "ZDT5"
+    assert problem.genome == gx.Binary(80)
+    assert problem.dimensions == 80
+    assert problem.objectives == ["minimize", "minimize"]
+    assert problem.constraint_count == 0
+    assert problem.reference and problem.reference_url.startswith("https://")
+    assert gx.problems.Zdt5.__doc__
+    assert list(problem.ideal_point) == [1.0, 10 / 31]
+    assert list(problem.nadir_point) == [31.0, 10.0]
+    front = problem.optimal_front(31)
+    assert front.tolist() == [[f1, 10 / f1] for f1 in range(1, 32)]
+    assert problem.optimal_front(3).tolist() == [[1.0, 10.0], [16.0, 10 / 16], [31.0, 10 / 31]]
+    small = gx.problems.Zdt5(first_bits=3, substrings=2)
+    assert small.genome == gx.Binary(13)
+    assert list(small.nadir_point) == [4.0, 2.0]
+
+
+def test_zdt5_values_at_chosen_points():
+    problem = gx.problems.Zdt5()
+    # all zeros: f₁ = 1, and every substring at its deceptive attractor, v = 2: g = 20
+    assert list(problem(np.zeros(80, dtype=bool))) == [1.0, 20.0]
+    # all ones: f₁ = 31, g = 10
+    assert list(problem(np.ones(80))) == [31.0, 10 / 31]
+    # 7 ones in x₁, and substrings with 0 to 4 ones then five full: g = 2 + 3 + 4 + 5 + 6 + 5
+    x = np.zeros(80, dtype=bool)
+    x[:7] = True
+    for i, ones in enumerate([0, 1, 2, 3, 4, 5, 5, 5, 5, 5]):
+        x[30 + 5 * i : 30 + 5 * i + ones] = True
+    assert list(problem(x)) == [8.0, 25 / 8]
+    genomes = np.random.default_rng(1).integers(0, 2, size=(20, 80)).astype(bool)
+    values = problem.evaluate(genomes)
+    assert values.shape == (20, 2)
+    assert np.array_equal(np.array([problem(genome) for genome in genomes]), values)
+    # f₁ f₂ = g, at least 10
+    assert np.all(values[:, 0] * values[:, 1] >= 10)
+    assert problem.constraints(np.ones(80)).shape == (0,)
+
+
+def test_zdt5_rejects_what_isnt_its_genome():
+    problem = gx.problems.Zdt5()
+    with pytest.raises(ValueError, match="ZDT5 takes bits, 0 or 1, as genes, not 0.5"):
+        problem(np.full(80, 0.5))
+    with pytest.raises(ValueError, match="ZDT5 takes genomes of 80 bits, not 79"):
+        problem(np.zeros(79))
+    with pytest.raises(ValueError, match="ZDT5 takes genomes of 80 bits, not 3"):
+        problem.constraints([0, 1, 1])
+    with pytest.raises(ValueError, match="Zdt5.substrings is at least 1, not 0"):
+        gx.problems.Zdt5(substrings=0).genome
+    nsga2 = gx.Nsga2(
+        gx.Real((0, 1), length=80),
+        objectives=problem.objectives,
+        population_size=10,
+        crossover=gx.SimulatedBinaryCrossover(15),
+        mutation=gx.PolynomialMutation(20, rate=0.5),
+    )
+    with pytest.raises(ValueError, match="ZDT5 needs a Binary genome"):
+        nsga2.run(problem, generations=1)
+    with pytest.raises(ValueError, match="ZDT5 has 80 bits, but the genome has 79"):
+        _zdt5_nsga2(gx.Binary(79)).run(problem, generations=1)
+    with pytest.raises(ValueError, match="Bnh needs a Real genome|BNH needs a Real genome"):
+        _zdt5_nsga2(gx.Binary(2)).run(gx.problems.Bnh(), generations=1)
+
+
+def _zdt5_nsga2(genome):
+    return gx.Nsga2(
+        genome,
+        objectives=["minimize", "minimize"],
+        population_size=40,
+        crossover=gx.UniformCrossover(),
+        mutation=gx.BitFlip(rate=1 / 80),
+        seed=3,
+    )
+
+
+@pytest.mark.parametrize("parallel", [False, True])
+def test_a_native_zdt5_run_equals_a_run_with_python_calls(parallel):
+    problem = gx.problems.Zdt5()
+    algorithm = _zdt5_nsga2(problem.genome)
+    native = algorithm.run(problem, generations=30, parallel=parallel)
+    python = algorithm.run(lambda x: problem(x), generations=30)
+    batch = algorithm.run(problem.evaluate, generations=30, batch=True)
+    for other in (python, batch):
+        assert np.array_equal(other.front_objectives, native.front_objectives)
+        assert np.array_equal(other.front_genomes, native.front_genomes)
+        assert other.evaluations == native.evaluations
+    assert native.front_genomes.dtype == bool
+    assert np.all(native.front_objectives[:, 0] * native.front_objectives[:, 1] >= 10)
 
 
 def _non_dominated_2d(values):

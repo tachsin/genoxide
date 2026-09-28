@@ -161,13 +161,15 @@ fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
             _ => Err(format!("{name} needs an Integer genome")),
         };
     }
-    let (name, objectives, dimensions) = match problem {
-        problems::Problem::Single(problem) => (problem.name(), 1, problem.real().genome_len()),
+    let (name, objectives, dimensions, binary) = match problem {
+        problems::Problem::Single(problem) => {
+            (problem.name(), 1, problem.real().genome_len(), false)
+        }
         // checked above
         problems::Problem::Integer(_) => return Ok(()),
         problems::Problem::Multi(config) => {
-            let (name, dimensions) = problems::name_and_dimensions(*config);
-            (name, config.objectives(), dimensions)
+            let (name, dimensions, binary) = problems::name_and_dimensions(*config);
+            (name, config.objectives(), dimensions, binary)
         }
     };
     match (objectives, run.objectives.len()) {
@@ -194,6 +196,11 @@ fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
         }
     }
     match &run.genome {
+        config::Genome::Binary { length } if binary && *length == dimensions => Ok(()),
+        config::Genome::Binary { length } if binary => Err(format!(
+            "{name} has {dimensions} bits, but the genome has {length}"
+        )),
+        _ if binary => Err(format!("{name} needs a Binary genome")),
         config::Genome::Real { bounds } if bounds.len() == dimensions => Ok(()),
         config::Genome::Real { bounds } => Err(format!(
             "{name} has {dimensions} dimensions, but the genome has {} genes",
@@ -829,7 +836,7 @@ where
     };
     let fitness = Multi {
         shared,
-        problem: problem.as_deref(),
+        problem: problem.as_ref(),
     };
     let outcome = py.detach(|| {
         MultiEngine::new(algorithm, fitness)

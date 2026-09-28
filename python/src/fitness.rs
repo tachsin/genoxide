@@ -8,10 +8,9 @@
 //! without a call. The run raises the exception when it returns.
 
 use crate::genes::{self, Genes};
-use crate::problems::IntegerProblem;
+use crate::problems::{IntegerProblem, MultiNative};
 use genoxide::Fitness;
 use genoxide::engine::{FitnessFunction, IntoFitness, Progress};
-use genoxide::multi::problems::DynMultiProblem;
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
 use genoxide::problems::DynProblem;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
@@ -399,7 +398,7 @@ fn multi_values<const M: usize>(
 /// `genoxide::multi::problems`, evaluated in Rust without Python.
 pub struct Multi<'a, const M: usize> {
     pub shared: &'a Shared,
-    pub problem: Option<&'a dyn DynMultiProblem<M>>,
+    pub problem: Option<&'a MultiNative<M>>,
 }
 
 impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
@@ -411,10 +410,8 @@ impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
             return MultiValue::Invalid;
         }
         if let Some(problem) = self.problem {
-            // the run checks that the genome is real
-            return genome.reals().map_or(MultiValue::Invalid, |genome| {
-                MultiValue::Native(problem.evaluate(genome))
-            });
+            // the run checks that the genome is the problem's
+            return MultiValue::Native(problem.evaluate(genome));
         }
         Python::attach(|py| {
             let argument = Ok(genes::array(py, genome).into_any());
