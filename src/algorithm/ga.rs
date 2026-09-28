@@ -440,9 +440,11 @@ where
             self.offspring
                 .extend(children.into_iter().flatten().flatten());
         } else {
+            let offspring = &mut self.offspring;
             for (index, pair) in parents.chunks_exact(2).enumerate() {
-                let children = breeding.pair(pair, count - 2 * index, &mut self.rng);
-                self.offspring.extend(children.into_iter().flatten());
+                breeding.pair(pair, count - 2 * index, &mut self.rng, |child| {
+                    offspring.push(child)
+                });
             }
         }
 
@@ -557,9 +559,16 @@ where
     M: Mutate<R>,
 {
     // the first `wanted` (1 or more; at most 2 are made) children of the parents at the positions
-    // `pair`, drawing from `rng`: recombined with the crossover rate, each mutated with the
-    // mutation rate, and a copy of a parent with the parent's fitness
-    fn pair(&self, pair: &[usize], wanted: usize, rng: &mut StreamRng) -> Children<R::Genome> {
+    // `pair`, drawing from `rng`, each passed to `push`: recombined with the crossover rate, each
+    // mutated with the mutation rate, and a copy of a parent with the parent's fitness
+    #[inline]
+    fn pair(
+        &self,
+        pair: &[usize],
+        wanted: usize,
+        rng: &mut StreamRng,
+        mut push: impl FnMut(Individual<R::Genome>),
+    ) {
         let parents = [&self.population[pair[0]], &self.population[pair[1]]];
         let mut a = parents[0].genome().clone();
         let mut b = parents[1].genome().clone();
@@ -567,8 +576,7 @@ where
             self.crossover
                 .crossover(self.representation, &mut a, &mut b, rng);
         }
-        let mut children = [None, None];
-        for (slot, mut genome) in children.iter_mut().zip([a, b]).take(wanted) {
+        for mut genome in [a, b].into_iter().take(wanted) {
             if rng.chance(self.mutation_chance) {
                 self.mutate.mutate(self.representation, &mut genome, rng);
             }
@@ -580,8 +588,22 @@ where
             if let Some(fitness) = inherited {
                 child.set_fitness(fitness);
             }
-            *slot = Some(child);
+            push(child);
         }
+    }
+
+    // `pair`'s children as a value, for breeding on other threads
+    fn pair_children(
+        &self,
+        pair: &[usize],
+        wanted: usize,
+        rng: &mut StreamRng,
+    ) -> Children<R::Genome> {
+        let mut children = [None, None];
+        let mut slots = children.iter_mut();
+        self.pair(pair, wanted, rng, |child| {
+            *slots.next().expect("at most two children") = Some(child);
+        });
         children
     }
 }
@@ -608,7 +630,7 @@ where
         .enumerate()
         .map(|(index, pair)| {
             let mut rng = streams.derive(index as u64);
-            breeding.pair(pair, count - 2 * index, &mut rng)
+            breeding.pair_children(pair, count - 2 * index, &mut rng)
         })
         .collect_into_vec(&mut children);
     children
@@ -633,7 +655,7 @@ where
         .enumerate()
         .map(|(index, pair)| {
             let mut rng = streams.derive(index as u64);
-            breeding.pair(pair, count - 2 * index, &mut rng)
+            breeding.pair_children(pair, count - 2 * index, &mut rng)
         })
         .collect()
 }
