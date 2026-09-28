@@ -7,6 +7,7 @@ reference_url: https://doi.org/10.1162/106365600568202
 optimum: "the front f₂ = 1 − √f₁ for f₁ in [0, 1]; hypervolume 0.8767 (reference point (1.1, 1.1))"
 languages: [rust, python]
 order: 103
+family: ZDT
 ---
 
 # ZDT4

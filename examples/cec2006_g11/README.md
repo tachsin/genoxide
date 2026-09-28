@@ -7,6 +7,8 @@ reference_url: "https://github.com/P-N-Suganthan/CEC2006"
 optimum: "0.7499 (3/4 − 0.0001) at (±0.707036, 0.5) for the report's tolerance 0.0001, proven"
 languages: [rust, python]
 order: 87
+family: "CEC 2006"
+tab: g11
 ---
 
 # CEC 2006 g11

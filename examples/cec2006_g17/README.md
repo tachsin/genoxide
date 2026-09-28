@@ -7,6 +7,8 @@ reference_url: "https://github.com/P-N-Suganthan/CEC2006"
 optimum: "8853.5338748065 (best known, with the equalities met within 0.0001; the report prints 8853.53967480648)"
 languages: [rust, python]
 order: 93
+family: "CEC 2006"
+tab: g17
 ---
 
 # CEC 2006 g17

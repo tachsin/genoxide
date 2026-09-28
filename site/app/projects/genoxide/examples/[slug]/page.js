@@ -6,6 +6,7 @@ import Breadcrumbs from "@/components/projects/Breadcrumbs";
 import JsonLd from "@/components/projects/JsonLd";
 import LangCodeGroup from "@/components/projects/LangCodeGroup";
 import SourceUnavailable from "@/components/projects/SourceUnavailable";
+import ExampleFamilyTabs from "@/components/projects/genoxide/ExampleFamilyTabs";
 import ExampleOutput from "@/components/projects/genoxide/ExampleOutput";
 import ExamplePlayer from "@/components/projects/genoxide/player/ExamplePlayer";
 import { EXAMPLES_PATH, blobUrl, getExample, getExamples, runCommand } from "@/lib/projects/genoxide/examples";
@@ -111,6 +112,10 @@ export default async function ExamplePage({ params }) {
     <main className="proj-container pt-10 pb-8 sm:pt-14">
       <JsonLd data={structuredData} />
       <Breadcrumbs items={crumbs} />
+
+      {example.familyGroup ? (
+        <ExampleFamilyTabs family={example.familyGroup} current={example.slug} basePath={EXAMPLES_PATH} />
+      ) : null}
 
       <header className="proj-rise max-w-3xl">
         <div className="flex flex-wrap items-center gap-2">

@@ -7,6 +7,7 @@ reference_url: https://doi.org/10.1109/TEVC.2005.861417
 optimum: "the segment from (0, 4) to (2, 0); hypervolume 5.68 (reference point (2.2, 4.4))"
 languages: [rust, python]
 order: 118
+family: WFG
 ---
 
 # WFG3

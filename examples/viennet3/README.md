@@ -7,6 +7,7 @@ reference_url: https://doi.org/10.1080/00207729608929211
 optimum: "not known in closed form: two curves; hypervolume about 5.3255 (reference point (9.016, 17.2407, 0.2036))"
 languages: [rust, python]
 order: 134
+family: Viennet
 ---
 
 # Viennet 3

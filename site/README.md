@@ -13,14 +13,14 @@ app pins a commit that has it (`pnpm sync:genoxide --update` pins main's latest)
 
 | Folder | In the app |
 | --- | --- |
-| `app/projects/genoxide/` | the routes: overview, `/examples`, `/examples/[slug]`, `/benchmarks`, the sub-navigation layout and the Open Graph image |
+| `app/projects/genoxide/` | the routes: overview, `/examples`, `/examples/[slug]` and their layout (the sidebar of every example), `/benchmarks`, the sub-navigation layout and the Open Graph image |
 | `lib/projects/genoxide/` | the data: static facts (`meta.js`), and the examples, benchmarks and versions read from GitHub, crates.io and PyPI |
 
 The examples (and the benchmark page's file list and chart data, `docs/benchmarks/charts.json`) are read from GitHub at the pinned commit, not
 at `main`: the pages always get the files they were written for, and pinning a new commit is new
 URLs, so nothing the app cached from an older commit is served for it. An example added to `main`
 shows once the app pins a commit that has it. Links for readers ("view on GitHub") go to `main`.
-| `components/projects/genoxide/` | the components only these pages use; `player/` plays an example's recorded run (its `trace.json`), `benchmarks/` draws the benchmark page's interactive charts from `charts.json` |
+| `components/projects/genoxide/` | the components only these pages use; `ExamplesSidebar` lists every example (a column on wide screens, a drawer below), `ExampleFamilyTabs` shows the problems of an example's paper (its `family` in the front matter) as tabs, `player/` plays an example's recorded run (its `trace.json`), `benchmarks/` draws the benchmark page's interactive charts from `charts.json` |
 
 Nothing else in `site/` is copied: `scripts/berlin_districts.py` regenerates the Berlin map of the berlin52 example's tour plot (`player/plots/berlin.js`). Imports use the app's `@/` alias, which is the app's root.
 
