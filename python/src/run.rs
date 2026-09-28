@@ -345,6 +345,7 @@ fn real_algorithm<'py>(
             seed,
             restarts,
             initial_step,
+            covariance,
         } => {
             let mut builder = Cmaes::builder(real).objective(context.single_objective()?);
             if let Some(size) = population_size {
@@ -362,6 +363,12 @@ fn real_algorithm<'py>(
             }
             if let Some(step) = initial_step {
                 builder = builder.initial_step(step);
+            }
+            if let Some(covariance) = covariance {
+                builder = builder.covariance(match covariance {
+                    config::Covariance::Full => cmaes::Covariance::Full,
+                    config::Covariance::Diagonal => cmaes::Covariance::Diagonal,
+                });
             }
             generational(py, setting(builder.build())?, context)
         }

@@ -1,8 +1,9 @@
 //! Sphere: minimize the sum of the squares of 30 genes, the simplest unimodal function.
 //!
-//! Compares how fast CMA-ES, particle swarm optimization and a real-coded genetic algorithm close
-//! in on the minimum, 0 at the origin: the evaluations each takes until its error is at most 1,
-//! 1e-2, 1e-4, 1e-6 and 1e-8. The function is genoxide's `problems::Sphere`.
+//! Compares how fast CMA-ES, with a full and with a diagonal covariance matrix (sep-CMA-ES),
+//! particle swarm optimization and a real-coded genetic algorithm close in on the minimum, 0 at
+//! the origin: the evaluations each takes until its error is at most 1, 1e-2, 1e-4, 1e-6 and
+//! 1e-8. The function is genoxide's `problems::Sphere`.
 //!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of a run for the plot on the example's
 //! page, with `trace.rs`.
@@ -33,16 +34,22 @@ fn main() -> Result<()> {
     COLUMNS.iter().for_each(|column| print!("{column:>9}"));
     println!("{:>9}", "best");
 
-    let cmaes = Cmaes::builder(problem.representation())
-        .minimize()
-        .seed(1)
-        .build()?;
-    let mut reached = Reached::default();
-    let outcome = Engine::new(cmaes, problem)
-        .stop_when(stop())
-        .on_generation(|snapshot| reached.record(snapshot))
-        .run()?;
-    reached.print("CMA-ES", &outcome);
+    for (name, covariance) in [
+        ("CMA-ES", cmaes::Covariance::Full),
+        ("sep-CMA-ES", cmaes::Covariance::Diagonal),
+    ] {
+        let cmaes = Cmaes::builder(problem.representation())
+            .covariance(covariance)
+            .minimize()
+            .seed(1)
+            .build()?;
+        let mut reached = Reached::default();
+        let outcome = Engine::new(cmaes, problem)
+            .stop_when(stop())
+            .on_generation(|snapshot| reached.record(snapshot))
+            .run()?;
+        reached.print(name, &outcome);
+    }
 
     let pso = Pso::builder(problem.representation())
         .population_size(40)

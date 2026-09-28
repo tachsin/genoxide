@@ -176,6 +176,28 @@ def test_de_default_restarts_refine_large_scores():
     assert default.evaluations == never.evaluations
 
 
+def test_cmaes_covariance():
+    # a separable ellipsoid around a shifted minimum, each gene with its own scale
+    shift = np.linspace(-2.0, 2.0, 10)
+    weights = np.arange(1.0, 11.0)
+
+    def run(**settings):
+        cmaes = gx.Cmaes(gx.Real((-5.0, 5.0), length=10), objective="minimize", seed=2, **settings)
+        return cmaes.run(
+            lambda x: (weights * (x - shift) ** 2).sum(axis=1), target=1e-10, evaluations=100_000, batch=True
+        )
+
+    default, full, diagonal = run(), run(covariance="full"), run(covariance="diagonal")
+    # sep-CMA-ES solves it
+    assert diagonal.stop_reason == "target"
+    assert np.allclose(diagonal.best_genome, shift, atol=1e-4)
+    # "full" is the default, and the diagonal matrix is another run with the same seed
+    assert (full.best_fitness, full.evaluations) == (default.best_fitness, default.evaluations)
+    assert np.array_equal(full.best_genome, default.best_genome)
+    assert not np.array_equal(diagonal.best_genome, full.best_genome)
+    assert diagonal.evaluations != full.evaluations
+
+
 def test_per_gene_bounds():
     bounds = [(0.0, 1.0), (10.0, 11.0), (-3.0, -2.0)]
     result = gx.Cmaes(gx.Real(bounds), seed=2).run(lambda x: -np.sum(x), generations=5)
@@ -943,6 +965,9 @@ def test_a_wrong_type_is_an_error_that_names_the_setting():
         gx.Cmaes(gx.Real((0.0, 1.0), length=2), restarts="always").run(
             lambda x: 0.0, generations=1
         )
+    for covariance in ["sparse", "Diagonal", 1]:
+        with pytest.raises(ValueError, match=re.escape(f'covariance is "full" or "diagonal", not {covariance!r}')):
+            gx.Cmaes(gx.Real((0.0, 1.0), length=2), covariance=covariance).run(lambda x: 0.0, generations=1)
     real = gx.Real((0.0, 1.0), length=2)
     for settings, message in [
         ({"strategy": "rand2"}, 'strategy is "rand1", "best1"'),

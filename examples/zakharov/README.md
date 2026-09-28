@@ -50,8 +50,9 @@ The function is genoxide's `problems::Zakharov`, which brings its bounds and its
 
 ## Algorithm
 
-The same three algorithms as on the [sphere](../sphere/), each with a budget of 10,000 evaluations
-per dimension, 300,000 in all, and a target of 1e-8.
+The same algorithms as on the [sphere](../sphere/), CMA-ES with a full and with a diagonal
+covariance matrix, PSO and a GA, each with a budget of 10,000 evaluations per dimension, 300,000 in
+all, and a target of 1e-8.
 
 CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) samples a population
 of 14 from a normal distribution, and adapts its mean, its step size and its covariance matrix,
@@ -59,6 +60,10 @@ from a step size of 0.3 of each gene's range and a random start. It uses only th
 samples, not their values, so the eleven decades of the quartic don't matter to it, only the shape
 of the level sets. Its full covariance matrix can learn the oblique valley. There are no restarts,
 since there is only one minimum.
+
+sep-CMA-ES (Ros and Hansen, 2008, PPSN X: 296-305) is the same CMA-ES with a diagonal covariance
+matrix, `.covariance(cmaes::Covariance::Diagonal)` in Rust and `covariance="diagonal"` in Python.
+It learns a scale per gene but no correlations, so it can't line its steps up with the valley.
 
 Particle swarm optimization (Kennedy and Eberhart, 1995, Proceedings of ICNN'95: 1942-1948) moves
 40 particles, each pulled towards its own best position and the swarm's, with Clerc and Kennedy's
@@ -93,7 +98,6 @@ PSO reaches the target after 117,760 evaluations, about 9,400 per decade, almost
 as on the sphere. The genetic algorithm reaches an error of 1 after about 85,000 evaluations and
 ends at 0.025.
 
-A diagonal covariance matrix can't line up with the valley either. In Rust, sep-CMA-ES (Ros and
-Hansen, 2008, PPSN X: 296-305), `.covariance(cmaes::Covariance::Diagonal)`, takes 95,158
-evaluations with the same seed, about seven times as many as the full matrix. The Python package
-has no such option, so the example doesn't run it.
+sep-CMA-ES, whose diagonal matrix can't line up with the valley either, takes 95,158 evaluations,
+about seven times as many as the full matrix: 31,850 to reach an error of 1, and then about 7,900
+per decade, ten times as many. That is closer to PSO than to the full matrix.
