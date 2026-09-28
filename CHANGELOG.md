@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/tachsin/genoxide/compare/v0.8.0...v0.9.0) - 2026-09-28
+
+### <!-- 0 -->Added
+
+- *(benchmarks)* instruction counts for genoxide only, compared across its versions ([#267](https://github.com/tachsin/genoxide/pull/267))
+- *(python)* gx.Cmaes chooses the covariance, full or diagonal ([#268](https://github.com/tachsin/genoxide/pull/268))
+- batch 4 of the test problems, DTLZ5-7, the binary ZDT5 and WFG1-9, each with its example ([#270](https://github.com/tachsin/genoxide/pull/270))
+
+### <!-- 1 -->Fixed
+
+- *(site)* draw WFG2's true front in its six pieces ([#272](https://github.com/tachsin/genoxide/pull/272))
+- [**breaking**] a multi-objective front has each genome once, in Rust, Python and the CLI ([#273](https://github.com/tachsin/genoxide/pull/273))
+- *(benchmarks)* commit the published run, publish and rerun it with one command, and move radiate to 1.3.2 ([#275](https://github.com/tachsin/genoxide/pull/275))
+- [**breaking**] polynomial mutation reaches the bounds, without cancellation near them ([#276](https://github.com/tachsin/genoxide/pull/276))
+
+### <!-- 4 -->Documentation
+
+- install with cargo add, so the README never names an old version ([#265](https://github.com/tachsin/genoxide/pull/265))
+
 ## [0.8.0](https://github.com/tachsin/genoxide/compare/v0.7.1...v0.8.0) - 2026-09-28
 
 ### <!-- 0 -->Added
