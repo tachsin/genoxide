@@ -507,3 +507,98 @@ fn statistics_of_huge_finite_scores() {
     assert_eq!(record.mean, Some(1e308));
     assert_eq!(record.std_dev, Some(0.0));
 }
+
+#[test]
+fn control_runs_once_per_generation_after_the_observers() {
+    let order = std::cell::RefCell::new(Vec::new());
+    let outcome = Engine::new(ga(32, Scheme::default(), 1), one_max)
+        .stop_when(Stop::generations(5))
+        .on_generation(|snapshot| {
+            order
+                .borrow_mut()
+                .push(("observe", snapshot.progress().generation()))
+        })
+        .control(|_, progress| {
+            order.borrow_mut().push(("control", progress.generation()));
+            Ok(())
+        })
+        .run()
+        .unwrap();
+    assert_eq!(outcome.generations(), 5);
+    // the initial population and the last generation too
+    let expected: Vec<(&str, u64)> = (0..=5)
+        .flat_map(|generation| [("observe", generation), ("control", generation)])
+        .collect();
+    assert_eq!(order.into_inner(), expected);
+}
+
+#[test]
+fn control_matches_ask_tell_by_hand() {
+    // the mutation rate falls over the run: after generation g, the rate for generation g + 1
+    let rate = |generation: u64| 1.0 - generation as f64 / 40.0;
+    let mut engine = Engine::new(ga(64, Scheme::default(), 2), one_max)
+        .stop_when(Stop::generations(30))
+        .control(|ga, progress| ga.set_mutation_rate(rate(progress.generation())));
+    let outcome = engine.run().unwrap();
+
+    let mut by_hand = ga(64, Scheme::default(), 2);
+    loop {
+        let fitness: Vec<Fitness> = by_hand
+            .ask()
+            .iter()
+            .map(|genome| Fitness::new(one_max(genome)))
+            .collect();
+        by_hand.tell(&fitness).unwrap();
+        by_hand
+            .set_mutation_rate(rate(by_hand.generation()))
+            .unwrap();
+        if by_hand.generation() == 30 {
+            break;
+        }
+    }
+    assert_eq!(engine.algorithm().population(), by_hand.population());
+    assert_eq!(outcome.evaluations(), by_hand.evaluations());
+    assert_eq!(engine.algorithm().mutation_rate(), rate(30));
+}
+
+#[test]
+fn control_is_skipped_after_a_reevaluation() {
+    let generations = std::cell::RefCell::new(Vec::new());
+    let mut observed = 0;
+    let outcome = Engine::new(ga(32, Scheme::default(), 3), one_max)
+        .stop_when(Stop::generations(6))
+        .on_generation(|_| observed += 1)
+        .control(|ga, progress| {
+            generations.borrow_mut().push(progress.generation());
+            if progress.generation() == 3 {
+                ga.reevaluate()?;
+            }
+            Ok(())
+        })
+        .run()
+        .unwrap();
+    // once per generation: the re-evaluation's tell doesn't call it again, and stays generation 3
+    assert_eq!(generations.into_inner(), vec![0, 1, 2, 3, 4, 5, 6]);
+    assert_eq!(observed, 8);
+    assert_eq!(outcome.generations(), 6);
+}
+
+#[test]
+fn control_errors_stop_the_run() {
+    let result = Engine::new(ga(32, Scheme::default(), 4), one_max)
+        .stop_when(Stop::generations(10))
+        .control(|ga, progress| {
+            if progress.generation() == 2 {
+                ga.set_mutation_rate(2.0)?;
+            }
+            Ok(())
+        })
+        .run();
+    assert!(matches!(
+        result,
+        Err(Error::InvalidSetting {
+            setting: "mutation_rate",
+            ..
+        })
+    ));
+}

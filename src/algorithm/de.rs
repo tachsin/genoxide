@@ -1,6 +1,6 @@
 //! Differential evolution: new solutions from the differences between solutions.
 
-use super::{Algorithm, Candidates};
+use super::{Algorithm, Candidates, Reevaluate};
 use crate::genome::{Real, Reals, Representation};
 use crate::operator::check_size;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
@@ -208,8 +208,8 @@ pub struct De {
     start_best: Option<Fitness>,
     #[cfg_attr(feature = "serde", serde(default))]
     start_best_generation: u64,
-    // a restart for the next ask, and the positions of the migrants since the last tell, which
-    // it keeps
+    // a restart for the next ask, and the positions of the migrants since the last generation,
+    // which it keeps
     #[cfg_attr(feature = "serde", serde(default))]
     restart_due: bool,
     #[cfg_attr(feature = "serde", serde(default))]
@@ -218,6 +218,7 @@ pub struct De {
     // genomes no longer in use, whose memory the next trials reuse
     #[cfg_attr(feature = "serde", serde(skip))]
     spare: Spare,
+    // whether the population is evaluated: not before the first tell or after a re-evaluation
     started: bool,
     asked: bool,
     pending: Vec<usize>,
@@ -346,6 +347,85 @@ impl De {
     /// The number of restarts so far.
     pub fn restart_count(&self) -> u64 {
         self.restart_count
+    }
+
+    /// Changes where `F` and `CR` come from during a run (parameter control), e.g. a
+    /// [`Control::Fixed`] `CR` raised once the population is near the optimum, or a switch from
+    /// dither to SHADE. It applies from the next [`ask`](Algorithm::ask)'s trials.
+    ///
+    /// Adaptation goes on across changes to [`Control::Jade`]'s `c`, and to a [`Control::Shade`]
+    /// with the same memory size: the means or the memory stay. A switch to JADE or SHADE from
+    /// another control, or to another memory size, starts the adaptation over, as at the start of
+    /// a run: means, or every memory slot, at 0.5.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] as for [`DeBuilder::control`]: an `F`, `CR`, `c` or memory out
+    /// of range. The control doesn't change on errors.
+    pub fn set_control(&mut self, control: Control) -> Result<()> {
+        check_control(control)?;
+        match (self.control, control) {
+            (Control::Jade { .. }, Control::Jade { .. }) => {}
+            (Control::Shade { memory: old }, Control::Shade { memory }) if old == memory => {}
+            (_, Control::Jade { .. }) => self.means = (0.5, 0.5),
+            (_, Control::Shade { memory }) => {
+                self.memory = vec![(0.5, 0.5); memory];
+                self.memory_slot = 0;
+            }
+            _ => {}
+        }
+        self.control = control;
+        Ok(())
+    }
+
+    /// Changes how mutant vectors are built during a run, e.g. from [`Strategy::Rand1`] to the
+    /// greedier [`Strategy::CurrentToPBest`] once the population is near the optimum. It applies
+    /// from the next [`ask`](Algorithm::ask)'s trials. The archive keeps its members up to its
+    /// new size: when it's smaller, random members make room, as when it's full (without an
+    /// archive, none stay).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] as for [`DeBuilder::strategy`]: a `p`, `max_p` or archive size
+    /// out of range. The strategy doesn't change on errors.
+    pub fn set_strategy(&mut self, strategy: Strategy) -> Result<()> {
+        check_strategy(strategy)?;
+        self.strategy = strategy;
+        let archive_size =
+            (strategy.archive_rate() * self.population.len() as f64).round() as usize;
+        while self.archive.len() > archive_size {
+            let random = self.rng.below(self.archive.len());
+            self.spare.0.push(self.archive.swap_remove(random));
+        }
+        Ok(())
+    }
+
+    /// Marks the population as not evaluated, for a fitness function that changed during the
+    /// run: adaptive penalty weights, a retrained surrogate model, a moving optimum. The next
+    /// [`ask`](Algorithm::ask) gives the whole population instead of trials, and its
+    /// [`tell`](Algorithm::tell) sets their fitness without breeding.
+    ///
+    /// - It isn't a generation: [`generation`](Algorithm::generation) doesn't change. The
+    ///   evaluations are counted, also by the [linear reduction](DeBuilder::linear_reduction) of
+    ///   the population, which shrinks by evaluations.
+    /// - [`best`](Algorithm::best) is then the best of the re-evaluated population, found in the
+    ///   current generation: old and new values are never compared.
+    /// - With [`Restarts::OnStagnation`], the patience starts over from the new values, and a
+    ///   restart that was due for the next ask happens only if the re-evaluated population has
+    ///   converged too.
+    /// - The archive and the adaptation of `F` and `CR` don't change, and no random number is
+    ///   drawn: a seeded run that re-evaluates at the same points gives the same results.
+    /// - Before the first tell nothing is evaluated yet, and it changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ReevaluationOutOfTurn`] between an ask and its tell. Nothing changes on errors.
+    pub fn reevaluate(&mut self) -> Result<()> {
+        if self.asked {
+            return Err(Error::ReevaluationOutOfTurn);
+        }
+        self.started = false;
+        Ok(())
     }
 
     fn fitness(&self, index: usize) -> Fitness {
@@ -734,8 +814,8 @@ impl De {
             })
     }
 
-    // every individual but the best and the migrants since the last tell is replaced by a random
-    // one; the adaptation and the archive start over
+    // every individual but the best and the migrants since the last generation is replaced by a
+    // random one; the adaptation and the archive start over
     fn restart(&mut self) {
         let best = self.best_index();
         self.fresh.clear();
@@ -949,6 +1029,13 @@ impl super::Migrate for De {
     }
 }
 
+impl Reevaluate for De {
+    /// As [`De::reevaluate`]: the next ask gives the whole population.
+    fn reevaluate(&mut self) -> Result<()> {
+        De::reevaluate(self)
+    }
+}
+
 impl Algorithm for De {
     type Genome = Reals;
 
@@ -993,9 +1080,17 @@ impl Algorithm for De {
         }
         self.asked = false;
         self.evaluations += fitness.len() as u64;
-        self.immigrated.clear();
+        // a re-evaluation of the population, which keeps the migrants that a restart keeps
+        let reevaluation = !self.started && self.best.is_some();
+        if reevaluation {
+            // the old best is measured by another function
+            self.best = None;
+        } else {
+            self.immigrated.clear();
+        }
         let objective = self.objective;
-        // a generation of trials, or the evaluation of the initial population or of a restart
+        // a generation of trials, or the evaluation of the initial population, a restart or a
+        // re-evaluation
         let trials = self.started && self.fresh.is_empty();
         if trials {
             for (individual, &fitness) in self.trials.iter_mut().zip(fitness) {
@@ -1035,10 +1130,18 @@ impl Algorithm for De {
         if trials {
             self.select();
         } else {
-            // a restart's generation has no trials to discard
+            // a restart's generation has no trials to discard, and a re-evaluation none of its
+            // own: the last generation's were seen with it
             self.fresh.clear();
             self.spare.recycle_discarded(&mut self.discarded);
+            if reevaluation {
+                // the stagnation checks start over from the new values
+                self.start_best = None;
+            }
             self.track_start();
+            if reevaluation {
+                self.restart_due = self.stagnated();
+            }
         }
         self.started = true;
         Ok(())
@@ -1174,62 +1277,8 @@ impl DeBuilder {
         }
         check_size("population_size", size)?;
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
-        let p = match self.strategy {
-            Strategy::CurrentToPBest { p, .. } => Some(("p", p)),
-            Strategy::CurrentToPBestRandomP { max_p, .. } => Some(("max_p", max_p)),
-            Strategy::Rand1 | Strategy::Best1 => None,
-        };
-        if let Some((setting, p)) = p {
-            if !(p > 0.0 && p <= 1.0) {
-                return invalid(
-                    setting,
-                    format!("must be greater than 0 and at most 1, got {p}"),
-                );
-            }
-            let archive = self.strategy.archive_rate();
-            if !(archive >= 0.0 && archive.is_finite()) {
-                return invalid(
-                    "archive",
-                    format!("must be 0 or more and finite, got {archive}"),
-                );
-            }
-        }
-        let cr = match self.control {
-            Control::Fixed { f, cr } => {
-                if !(f > 0.0 && f <= 2.0) {
-                    return invalid(
-                        "f",
-                        format!("must be greater than 0 and at most 2, got {f}"),
-                    );
-                }
-                cr
-            }
-            Control::Dither { min_f, max_f, cr } => {
-                if !(min_f > 0.0 && min_f <= max_f && max_f <= 2.0) {
-                    return invalid(
-                        "f",
-                        format!("must be 0 < min_f <= max_f <= 2, got {min_f} and {max_f}"),
-                    );
-                }
-                cr
-            }
-            Control::Jade { c } => {
-                if !(c > 0.0 && c <= 1.0) {
-                    return invalid(
-                        "c",
-                        format!("must be greater than 0 and at most 1, got {c}"),
-                    );
-                }
-                0.5
-            }
-            Control::Shade { memory } => {
-                if memory == 0 {
-                    return invalid("memory", "must be at least 1".to_string());
-                }
-                check_size("memory", memory)?;
-                0.5
-            }
-        };
+        check_strategy(self.strategy)?;
+        check_control(self.control)?;
         if let Some((min_size, max_evaluations)) = self.reduction {
             if min_size < 4 || min_size > size || max_evaluations == 0 {
                 return invalid(
@@ -1239,9 +1288,6 @@ impl DeBuilder {
                     ),
                 );
             }
-        }
-        if !(0.0..=1.0).contains(&cr) {
-            return invalid("cr", format!("must be between 0 and 1, got {cr}"));
         }
         if let Restarts::OnStagnation {
             tolerance,
@@ -1314,6 +1360,75 @@ impl DeBuilder {
             best_generation: 0,
         })
     }
+}
+
+fn check_strategy(strategy: Strategy) -> Result<()> {
+    let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
+    let p = match strategy {
+        Strategy::CurrentToPBest { p, .. } => Some(("p", p)),
+        Strategy::CurrentToPBestRandomP { max_p, .. } => Some(("max_p", max_p)),
+        Strategy::Rand1 | Strategy::Best1 => None,
+    };
+    if let Some((setting, p)) = p {
+        if !(p > 0.0 && p <= 1.0) {
+            return invalid(
+                setting,
+                format!("must be greater than 0 and at most 1, got {p}"),
+            );
+        }
+        let archive = strategy.archive_rate();
+        if !(archive >= 0.0 && archive.is_finite()) {
+            return invalid(
+                "archive",
+                format!("must be 0 or more and finite, got {archive}"),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn check_control(control: Control) -> Result<()> {
+    let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
+    let cr = match control {
+        Control::Fixed { f, cr } => {
+            if !(f > 0.0 && f <= 2.0) {
+                return invalid(
+                    "f",
+                    format!("must be greater than 0 and at most 2, got {f}"),
+                );
+            }
+            cr
+        }
+        Control::Dither { min_f, max_f, cr } => {
+            if !(min_f > 0.0 && min_f <= max_f && max_f <= 2.0) {
+                return invalid(
+                    "f",
+                    format!("must be 0 < min_f <= max_f <= 2, got {min_f} and {max_f}"),
+                );
+            }
+            cr
+        }
+        Control::Jade { c } => {
+            if !(c > 0.0 && c <= 1.0) {
+                return invalid(
+                    "c",
+                    format!("must be greater than 0 and at most 1, got {c}"),
+                );
+            }
+            0.5
+        }
+        Control::Shade { memory } => {
+            if memory == 0 {
+                return invalid("memory", "must be at least 1".to_string());
+            }
+            check_size("memory", memory)?;
+            0.5
+        }
+    };
+    if !(0.0..=1.0).contains(&cr) {
+        return invalid("cr", format!("must be between 0 and 1, got {cr}"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -2018,6 +2133,410 @@ mod tests {
         };
         assert_eq!(run(3), run(3));
         assert_ne!(run(3), run(4));
+    }
+
+    // the sphere around 1 instead of 0
+    fn shifted(x: &Reals) -> f64 {
+        x.iter().map(|xi| (xi - 1.0) * (xi - 1.0)).sum()
+    }
+
+    fn genomes(de: &De) -> Vec<Reals> {
+        de.population().iter().map(|x| x.genome().clone()).collect()
+    }
+
+    #[test]
+    fn a_reevaluation_scores_the_population_again_without_breeding() {
+        let mut de = builder(
+            Strategy::CurrentToPBest {
+                p: 0.1,
+                archive: 1.0,
+            },
+            0,
+        )
+        .control(Control::Shade { memory: 6 })
+        .build()
+        .unwrap();
+        for _ in 0..5 {
+            step(&mut de);
+        }
+        let population = genomes(&de);
+        let (archive, adapted) = (de.archive().to_vec(), de.adapted());
+        let (generation, evaluations) = (de.generation(), de.evaluations());
+
+        de.reevaluate().unwrap();
+        let asked: Vec<Reals> = de.ask().iter().cloned().collect();
+        assert_eq!(asked, population);
+        let fitness: Vec<Fitness> = asked.iter().map(|x| Fitness::new(shifted(x))).collect();
+        de.tell(&fitness).unwrap();
+
+        assert_eq!(de.generation(), generation);
+        assert_eq!(de.evaluations(), evaluations + 20);
+        assert_eq!(genomes(&de), population);
+        assert_eq!((de.archive(), de.adapted()), (archive.as_slice(), adapted));
+        let lowest = population.iter().map(shifted).fold(f64::INFINITY, f64::min);
+        assert_eq!(de.best().unwrap().fitness(), Some(Fitness::new(lowest)));
+        assert_eq!(de.best_generation(), generation);
+        assert!(de.discarded().is_empty());
+        // and the next generation has trials again
+        assert_eq!(de.ask().len(), 20);
+        step(&mut de);
+        assert_eq!(de.generation(), generation + 1);
+    }
+
+    #[test]
+    fn a_reevaluation_waits_for_the_tell() {
+        use crate::algorithm::Migrate;
+        let mut de = builder(Strategy::Rand1, 1).build().unwrap();
+        // before anything is evaluated, it changes nothing
+        de.reevaluate().unwrap();
+        step(&mut de);
+        let mut other = builder(Strategy::Rand1, 1).build().unwrap();
+        step(&mut other);
+        assert_eq!(de.population(), other.population());
+
+        de.ask();
+        assert_eq!(de.reevaluate(), Err(Error::ReevaluationOutOfTurn));
+        // still the trials
+        assert_eq!(de.ask().len(), 20);
+        step(&mut de);
+        assert_eq!(de.generation(), 1);
+        // migrants wait for the re-evaluation, as for the initial population
+        de.reevaluate().unwrap();
+        let migrant = de.population()[0].clone();
+        assert_eq!(de.immigrate(vec![migrant]), Err(Error::MigrationOutOfTurn));
+    }
+
+    #[test]
+    fn a_reevaluation_with_the_same_function_changes_only_the_count() {
+        let run = |reevaluate: bool| {
+            let mut de = builder(
+                Strategy::CurrentToPBestRandomP {
+                    max_p: 0.2,
+                    archive: 1.0,
+                },
+                2,
+            )
+            .build()
+            .unwrap();
+            for generation in 0..20 {
+                if reevaluate && generation == 10 {
+                    de.reevaluate().unwrap();
+                    step(&mut de);
+                }
+                step(&mut de);
+            }
+            (
+                de.population().clone(),
+                de.archive().to_vec(),
+                de.adapted(),
+                de.best().unwrap().fitness(),
+                de.evaluations(),
+            )
+        };
+        let (population, archive, adapted, best, evaluations) = run(false);
+        assert_eq!(
+            run(true),
+            (population, archive, adapted, best, evaluations + 20)
+        );
+    }
+
+    #[test]
+    fn a_reevaluation_starts_the_stagnation_checks_over() {
+        let stalling = |reevaluate_at: Option<u64>| {
+            let mut de = builder(Strategy::Rand1, 4)
+                .restarts(Restarts::OnStagnation {
+                    tolerance: 0.0,
+                    patience: 5,
+                })
+                .build()
+                .unwrap();
+            // different scores, so not converged, and trials that are all worse: stalled
+            let ranked: Vec<Fitness> = (0..20).map(|i| Fitness::new(f64::from(i))).collect();
+            de.ask();
+            de.tell(&ranked).unwrap();
+            let mut due = Vec::new();
+            for generation in 1..=12 {
+                let fitness = vec![Fitness::new(100.0); de.ask().len()];
+                de.tell(&fitness).unwrap();
+                if reevaluate_at == Some(generation) {
+                    de.reevaluate().unwrap();
+                    let fitness: Vec<Fitness> = (0..de.ask().len())
+                        .map(|i| Fitness::new(i as f64))
+                        .collect();
+                    de.tell(&fitness).unwrap();
+                }
+                due.push(de.restart_due);
+            }
+            due
+        };
+        let due_at = |due: Vec<bool>| (1..=12).find(|&g| due[g - 1]);
+        assert_eq!(due_at(stalling(None)), Some(5));
+        // the patience starts over at generation 3, and at 5 when the restart was due
+        assert_eq!(due_at(stalling(Some(3))), Some(8));
+        assert_eq!(due_at(stalling(Some(5))), Some(10));
+
+        // a converged population is still due for a restart after a re-evaluation
+        let genome = Reals::from(vec![1.0; 8]);
+        let mut de = builder(Strategy::Rand1, 5)
+            .initial_genomes(vec![genome; 20])
+            .restarts(Restarts::OnStagnation {
+                tolerance: 1e-6,
+                patience: 1_000,
+            })
+            .build()
+            .unwrap();
+        for _ in 0..2 {
+            let fitness = vec![Fitness::new(1.0); de.ask().len()];
+            de.tell(&fitness).unwrap();
+        }
+        assert!(de.restart_due);
+        de.reevaluate().unwrap();
+        let fitness = vec![Fitness::new(2.0); de.ask().len()];
+        de.tell(&fitness).unwrap();
+        assert!(de.restart_due);
+        assert_eq!(de.restart_count(), 0);
+        de.ask();
+        assert_eq!(de.restart_count(), 1);
+    }
+
+    #[test]
+    fn reevaluations_repeat_with_a_seed() {
+        let run = || {
+            let mut de = builder(Strategy::Rand1, 3).build().unwrap();
+            for generation in 0..30 {
+                if generation == 10 {
+                    de.reevaluate().unwrap();
+                }
+                let f = if generation < 10 { sphere } else { shifted };
+                let fitness: Vec<Fitness> = de.ask().iter().map(|x| Fitness::new(f(x))).collect();
+                de.tell(&fitness).unwrap();
+            }
+            (de.population().clone(), de.best().cloned())
+        };
+        assert_eq!(run(), run());
+    }
+
+    #[test]
+    fn setters_validate_like_the_builder() {
+        let mut de = builder(Strategy::Rand1, 0).build().unwrap();
+        let control = de.control();
+        for (invalid, expected) in [
+            (Control::Fixed { f: 0.0, cr: 0.5 }, "f"),
+            (Control::Fixed { f: 0.5, cr: 1.5 }, "cr"),
+            (
+                Control::Dither {
+                    min_f: 0.8,
+                    max_f: 0.5,
+                    cr: 0.5,
+                },
+                "f",
+            ),
+            (Control::Jade { c: 0.0 }, "c"),
+            (Control::Shade { memory: 0 }, "memory"),
+        ] {
+            let error = de.set_control(invalid).unwrap_err();
+            assert!(
+                matches!(error, Error::InvalidSetting { setting, .. } if setting == expected),
+                "{error:?}"
+            );
+            assert_eq!(de.control(), control);
+        }
+        let strategy = de.strategy();
+        for (invalid, expected) in [
+            (
+                Strategy::CurrentToPBest {
+                    p: 0.0,
+                    archive: 1.0,
+                },
+                "p",
+            ),
+            (
+                Strategy::CurrentToPBestRandomP {
+                    max_p: 1.5,
+                    archive: 1.0,
+                },
+                "max_p",
+            ),
+            (
+                Strategy::CurrentToPBest {
+                    p: 0.1,
+                    archive: f64::NAN,
+                },
+                "archive",
+            ),
+        ] {
+            let error = de.set_strategy(invalid).unwrap_err();
+            assert!(
+                matches!(error, Error::InvalidSetting { setting, .. } if setting == expected),
+                "{error:?}"
+            );
+            assert_eq!(de.strategy(), strategy);
+        }
+    }
+
+    #[test]
+    fn a_setting_changed_before_breeding_gives_the_run_built_with_it() {
+        let run = |mut de: De, change: &dyn Fn(&mut De)| {
+            step(&mut de);
+            change(&mut de);
+            for _ in 0..20 {
+                step(&mut de);
+            }
+            (de.population().clone(), de.adapted())
+        };
+        let pbest = Strategy::CurrentToPBest {
+            p: 0.1,
+            archive: 1.0,
+        };
+        for (strategy, control) in [
+            (Strategy::Rand1, Control::Fixed { f: 0.8, cr: 0.3 }),
+            (pbest, Control::Shade { memory: 6 }),
+            (pbest, Control::Jade { c: 0.2 }),
+        ] {
+            let built = builder(strategy, 5).control(control).build().unwrap();
+            let expected = run(built, &|_| {});
+            let default = builder(Strategy::Best1, 5).build().unwrap();
+            let changed = run(default, &|de| {
+                de.set_strategy(strategy).unwrap();
+                de.set_control(control).unwrap();
+            });
+            assert_eq!(changed, expected, "{strategy:?} {control:?}");
+        }
+    }
+
+    #[test]
+    fn adaptation_goes_on_within_a_control_and_starts_over_across() {
+        let mut de = builder(
+            Strategy::CurrentToPBest {
+                p: 0.1,
+                archive: 1.0,
+            },
+            6,
+        )
+        .control(Control::Shade { memory: 6 })
+        .build()
+        .unwrap();
+        for _ in 0..20 {
+            step(&mut de);
+        }
+        let adapted = de.adapted();
+        assert_ne!(adapted, vec![(0.5, 0.5); 6]);
+        de.set_control(Control::Shade { memory: 6 }).unwrap();
+        assert_eq!(de.adapted(), adapted);
+        de.set_control(Control::Shade { memory: 3 }).unwrap();
+        assert_eq!(de.adapted(), vec![(0.5, 0.5); 3]);
+
+        de.set_control(Control::Jade { c: 0.1 }).unwrap();
+        for _ in 0..20 {
+            step(&mut de);
+        }
+        let means = de.adapted();
+        assert_ne!(means, [(0.5, 0.5)]);
+        de.set_control(Control::Jade { c: 0.5 }).unwrap();
+        assert_eq!(de.adapted(), means);
+        de.set_control(Control::default()).unwrap();
+        assert!(de.adapted().is_empty());
+        de.set_control(Control::Jade { c: 0.5 }).unwrap();
+        assert_eq!(de.adapted(), [(0.5, 0.5)]);
+    }
+
+    #[test]
+    fn a_smaller_archive_drops_random_members() {
+        let mut de = builder(
+            Strategy::CurrentToPBest {
+                p: 0.1,
+                archive: 2.0,
+            },
+            7,
+        )
+        .build()
+        .unwrap();
+        for _ in 0..30 {
+            step(&mut de);
+        }
+        assert!(de.archive().len() > 10);
+        let archive = de.archive().to_vec();
+        de.set_strategy(Strategy::CurrentToPBestRandomP {
+            max_p: 0.2,
+            archive: 0.5,
+        })
+        .unwrap();
+        assert_eq!(de.archive().len(), 10);
+        assert!(de.archive().iter().all(|x| archive.contains(x)));
+        de.set_strategy(Strategy::Rand1).unwrap();
+        assert!(de.archive().is_empty());
+        step(&mut de);
+        assert!(de.archive().is_empty());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn checkpoints_keep_changed_settings() {
+        use crate::checkpoint;
+        let mut de = builder(Strategy::Rand1, 8).build().unwrap();
+        step(&mut de);
+        let control = Control::Dither {
+            min_f: 0.4,
+            max_f: 0.9,
+            cr: 0.2,
+        };
+        let strategy = Strategy::CurrentToPBest {
+            p: 0.2,
+            archive: 1.5,
+        };
+        de.set_control(control).unwrap();
+        de.set_strategy(strategy).unwrap();
+        de.reevaluate().unwrap();
+        let mut bytes = Vec::new();
+        checkpoint::save(&de, &mut bytes).unwrap();
+        let mut loaded: De = checkpoint::load(bytes.as_slice()).unwrap();
+        assert_eq!((loaded.control(), loaded.strategy()), (control, strategy));
+        // the re-evaluation too
+        assert_eq!(loaded.ask().len(), 20);
+        for _ in 0..5 {
+            step(&mut de);
+            step(&mut loaded);
+        }
+        assert_eq!(loaded.population(), de.population());
+        assert_eq!(loaded.generation(), de.generation());
+    }
+
+    #[test]
+    fn an_engine_control_reevaluates_once() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        // the center of the sphere, moved from 0 to 1 after generation 20
+        let center = AtomicU64::new(0.0_f64.to_bits());
+        let moving = |x: &Reals| {
+            let center = f64::from_bits(center.load(Ordering::Relaxed));
+            x.iter()
+                .map(|xi| (xi - center) * (xi - center))
+                .sum::<f64>()
+        };
+        let de = builder(Strategy::Rand1, 9)
+            .restarts(Restarts::Never)
+            .build()
+            .unwrap();
+        let mut controls = 0;
+        let mut engine = Engine::new(de, &moving)
+            .stop_when(Stop::generations(100))
+            .control(|de: &mut De, progress| {
+                controls += 1;
+                if progress.generation() == 20 {
+                    center.store(1.0_f64.to_bits(), Ordering::Relaxed);
+                    de.reevaluate()?;
+                }
+                Ok(())
+            });
+        let outcome = engine.run().unwrap();
+        drop(engine);
+        // once per generation, not after the re-evaluation
+        assert_eq!(controls, 101);
+        assert_eq!(outcome.generations(), 100);
+        assert_eq!(outcome.evaluations(), 20 + 100 * 20 + 20);
+        // the best by the new function
+        let best = outcome.best_fitness().score().unwrap();
+        assert_eq!(best, shifted(outcome.best_genome()));
+        assert!(best < 0.1, "{best}");
     }
 
     fn any_fitness() -> impl proptest::strategy::Strategy<Value = Fitness> {

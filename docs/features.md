@@ -57,7 +57,8 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
   - batch: a whole generation in one call, for SIMD, GPUs or remote services
   - asynchronous: for slow fitness functions whose time varies
 - **Island model:** GA or DE islands, with ring, fully connected or random migration.
-- **A fitness function that changes during a run:** the GA can re-evaluate its population, e.g. after adapting penalty weights.
+- **Parameter control:** change an algorithm's rates, operators and coefficients between generations, e.g. an annealed mutation step or a decreasing inertia weight, from the engine's `control` hook; each island on a schedule of its own.
+- **A fitness function that changes during a run:** the algorithms re-evaluate what they keep, e.g. after adapting penalty weights, without comparing old and new values.
 - **Constraints:** Deb's feasibility rules (a fitness function returns a score and a constraint violation), and penalty functions.
 - **Cancellation**, and **checkpoints** to resume a run (`serde` feature).
 - **Observers:** statistics per generation, hall of fame, progress lines, `tracing`.

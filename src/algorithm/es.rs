@@ -1,6 +1,6 @@
 //! Evolution strategies: (μ/ρ +, λ)-ES with self-adapted step sizes.
 
-use super::{Algorithm, Candidates};
+use super::{Algorithm, Candidates, Reevaluate};
 use crate::genome::{Real, Reals, Representation};
 use crate::math::{exp, ln};
 use crate::operator::check_size;
@@ -109,6 +109,7 @@ pub struct Es {
     offspring: Vec<Individual<Reals>>,
     offspring_steps: Vec<Vec<f64>>,
     discarded: Vec<Individual<Reals>>,
+    // whether the parents are evaluated: not before the first tell or after a re-evaluation
     started: bool,
     asked: bool,
     pending: Vec<usize>,
@@ -155,6 +156,29 @@ impl Es {
     /// The seed of the random numbers: the given one, or a random one if none was given.
     pub fn seed(&self) -> u64 {
         self.seed
+    }
+
+    /// Marks the parents as not evaluated, for a fitness function that changed during the run.
+    /// The next [`ask`](Algorithm::ask) gives the parents instead of offspring, and its
+    /// [`tell`](Algorithm::tell) sets their fitness without breeding.
+    ///
+    /// - It isn't a generation: [`generation`](Algorithm::generation) doesn't change. The
+    ///   evaluations are counted.
+    /// - [`best`](Algorithm::best) is then the best of the re-evaluated parents, found in the
+    ///   current generation: old and new values are never compared.
+    /// - The step sizes don't change, and no random number is drawn: a seeded run that
+    ///   re-evaluates at the same points gives the same results.
+    /// - Before the first tell nothing is evaluated yet, and it changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ReevaluationOutOfTurn`] between an ask and its tell. Nothing changes on errors.
+    pub fn reevaluate(&mut self) -> Result<()> {
+        if self.asked {
+            return Err(Error::ReevaluationOutOfTurn);
+        }
+        self.started = false;
+        Ok(())
     }
 
     fn fitness(individual: &Individual<Reals>) -> Fitness {
@@ -292,6 +316,13 @@ impl Es {
     }
 }
 
+impl Reevaluate for Es {
+    /// As [`Es::reevaluate`]: the next ask gives the parents.
+    fn reevaluate(&mut self) -> Result<()> {
+        Es::reevaluate(self)
+    }
+}
+
 impl Algorithm for Es {
     type Genome = Reals;
 
@@ -334,6 +365,12 @@ impl Algorithm for Es {
             self.generation += 1;
         }
         let objective = self.objective;
+        if !self.started {
+            // the first evaluation, or a re-evaluation, after which the old best is measured by
+            // another function, and the last generation's discarded offspring have been seen
+            self.best = None;
+            self.discarded.clear();
+        }
         let individuals = if self.started {
             self.offspring.as_mut_slice()
         } else {
@@ -777,6 +814,138 @@ mod tests {
         };
         assert_eq!(run(3), run(3));
         assert_ne!(run(3), run(4));
+    }
+
+    // the sphere around 1 instead of 0
+    fn shifted(x: &Reals) -> f64 {
+        x.iter().map(|xi| (xi - 1.0) * (xi - 1.0)).sum()
+    }
+
+    #[test]
+    fn a_reevaluation_scores_the_parents_again_without_breeding() {
+        let mut es = builder(0).build().unwrap();
+        for _ in 0..5 {
+            step(&mut es, sphere);
+        }
+        let parents: Vec<Reals> = es.population().iter().map(|x| x.genome().clone()).collect();
+        let steps = es.step_sizes().to_vec();
+        let (generation, evaluations) = (es.generation(), es.evaluations());
+
+        es.reevaluate().unwrap();
+        let asked: Vec<Reals> = es.ask().iter().cloned().collect();
+        assert_eq!(asked, parents);
+        step(&mut es, shifted);
+
+        assert_eq!(es.generation(), generation);
+        assert_eq!(es.evaluations(), evaluations + 5);
+        assert_eq!(es.step_sizes(), steps);
+        let population: Vec<Reals> = es.population().iter().map(|x| x.genome().clone()).collect();
+        assert_eq!(population, parents);
+        let lowest = parents.iter().map(shifted).fold(f64::INFINITY, f64::min);
+        assert_eq!(es.best().unwrap().fitness(), Some(Fitness::new(lowest)));
+        assert_eq!(es.best_generation(), generation);
+        assert!(es.discarded().is_empty());
+        // and the next generation breeds again
+        assert_eq!(es.ask().len(), 35);
+        step(&mut es, shifted);
+        assert_eq!(es.generation(), generation + 1);
+    }
+
+    #[test]
+    fn a_reevaluation_waits_for_the_tell() {
+        let mut es = builder(1).build().unwrap();
+        // before anything is evaluated, it changes nothing
+        es.reevaluate().unwrap();
+        step(&mut es, sphere);
+        let mut other = builder(1).build().unwrap();
+        step(&mut other, sphere);
+        assert_eq!(es.population(), other.population());
+
+        es.ask();
+        assert_eq!(es.reevaluate(), Err(Error::ReevaluationOutOfTurn));
+        // still the offspring
+        assert_eq!(es.ask().len(), 35);
+        step(&mut es, sphere);
+        assert_eq!(es.generation(), 1);
+    }
+
+    #[test]
+    fn a_reevaluation_with_the_same_function_changes_only_the_count() {
+        let run = |reevaluate: bool, selection| {
+            let mut es = builder(2).selection(selection).build().unwrap();
+            for generation in 0..20 {
+                if reevaluate && generation == 10 {
+                    es.reevaluate().unwrap();
+                    step(&mut es, sphere);
+                }
+                step(&mut es, sphere);
+            }
+            // with comma selection, the best so far can be lost from the parents, and then a
+            // re-evaluation finds a worse best
+            let best = (selection == Selection::Plus).then(|| es.best().unwrap().fitness());
+            (
+                es.population().clone(),
+                es.step_sizes().to_vec(),
+                best,
+                es.evaluations(),
+            )
+        };
+        for selection in [Selection::Comma, Selection::Plus] {
+            let (population, steps, best, evaluations) = run(false, selection);
+            assert_eq!(
+                run(true, selection),
+                (population, steps, best, evaluations + 5)
+            );
+        }
+    }
+
+    #[test]
+    fn reevaluations_repeat_with_a_seed() {
+        let run = || {
+            let mut es = builder(3).build().unwrap();
+            for generation in 0..30 {
+                if generation == 10 {
+                    es.reevaluate().unwrap();
+                }
+                step(&mut es, if generation < 10 { sphere } else { shifted });
+            }
+            (es.population().clone(), es.best().cloned())
+        };
+        assert_eq!(run(), run());
+    }
+
+    #[test]
+    fn an_engine_control_reevaluates_once() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        // the center of the sphere, moved from 0 to 1 after generation 20
+        let center = AtomicU64::new(0.0_f64.to_bits());
+        let moving = |x: &Reals| {
+            let center = f64::from_bits(center.load(Ordering::Relaxed));
+            x.iter()
+                .map(|xi| (xi - center) * (xi - center))
+                .sum::<f64>()
+        };
+        let mut controls = 0;
+        let mut engine = Engine::new(builder(4).build().unwrap(), &moving)
+            .stop_when(Stop::generations(60))
+            .control(|es: &mut Es, progress| {
+                controls += 1;
+                if progress.generation() == 20 {
+                    center.store(1.0_f64.to_bits(), Ordering::Relaxed);
+                    es.reevaluate()?;
+                }
+                Ok(())
+            });
+        let outcome = engine.run().unwrap();
+        drop(engine);
+        // once per generation, not after the re-evaluation
+        assert_eq!(controls, 61);
+        assert_eq!(outcome.generations(), 60);
+        assert_eq!(outcome.evaluations(), 5 + 60 * 35 + 5);
+        // the best by the new function
+        let best = outcome.best_fitness().score().unwrap();
+        assert_eq!(best, shifted(outcome.best_genome()));
+        assert!(best < 0.1, "{best}");
     }
 
     proptest! {

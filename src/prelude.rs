@@ -9,7 +9,8 @@ pub use crate::algorithm::de::{self, De};
 pub use crate::algorithm::es::{self, Es};
 pub use crate::algorithm::pso::{self, Pso};
 pub use crate::algorithm::{
-    Acceptance, Algorithm, Ga, Incremental, Islands, LocalSearch, Migrate, Scheme, SteadyGa,
+    Acceptance, Algorithm, Ga, Incremental, Islands, LocalSearch, Migrate, Reevaluate, Scheme,
+    SteadyGa,
 };
 pub use crate::constraint::{self, Penalty};
 pub use crate::engine::{

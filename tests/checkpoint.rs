@@ -607,3 +607,35 @@ fn deserializing_validates() {
     let fitness: Fitness = serde_json::from_str(r#"{"score":-0.0,"violation":0.0}"#).unwrap();
     assert!(fitness.score().unwrap().is_sign_positive());
 }
+
+#[test]
+fn a_controlled_run_resumes() {
+    use genoxide::engine::Progress;
+    // the mutation rate falls over the run, and the population is scored again at generation 7:
+    // the generation the first part stops at, so the checkpoint holds a pending re-evaluation
+    fn control(ga: &mut OneMaxGa, progress: &Progress) -> genoxide::Result<()> {
+        ga.set_mutation_rate(1.0 - progress.generation() as f64 / 40.0)?;
+        if progress.generation() == 7 {
+            ga.reevaluate()?;
+        }
+        Ok(())
+    }
+    let mut whole = Engine::new(one_max_ga(1), one_max)
+        .stop_when(Stop::generations(20))
+        .control(control);
+    let expected = whole.run().unwrap();
+
+    let mut first = Engine::new(one_max_ga(1), one_max)
+        .stop_when(Stop::generations(7))
+        .control(control);
+    first.run().unwrap();
+    let resumed: OneMaxGa = checkpoint::load(bytes(first.algorithm()).as_slice()).unwrap();
+    let mut second = Engine::new(resumed, one_max)
+        .stop_when(Stop::generations(20))
+        .control(control);
+    let outcome = second.run().unwrap();
+
+    assert_eq!(outcome.best(), expected.best());
+    assert_eq!(outcome.evaluations(), expected.evaluations());
+    assert_eq!(bytes(second.algorithm()), bytes(whole.algorithm()));
+}

@@ -1,7 +1,7 @@
 //! Particle swarm optimization: particles that fly toward the best places they and their
 //! neighbors have found.
 
-use super::{Algorithm, Candidates};
+use super::{Algorithm, Candidates, Reevaluate};
 use crate::genome::{Real, Reals, Representation};
 use crate::operator::check_size;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
@@ -72,6 +72,10 @@ pub struct Pso {
     population: Population<Reals>,
     velocities: Vec<Vec<f64>>,
     personal_bests: Vec<Individual<Reals>>,
+    // a re-evaluation for the next ask, and the genomes it asks for: the positions, then the
+    // personal bests at other positions
+    reevaluating: bool,
+    rescored: Vec<Individual<Reals>>,
     started: bool,
     asked: bool,
     pending: Vec<usize>,
@@ -121,6 +125,135 @@ impl Pso {
     /// The seed of the random numbers: the given one, or a random one if none was given.
     pub fn seed(&self) -> u64 {
         self.seed
+    }
+
+    /// How much of its velocity a particle keeps, `w`.
+    pub fn inertia(&self) -> f64 {
+        self.inertia
+    }
+
+    /// How strongly a particle is pulled toward its personal best (`c1`, cognitive) and its
+    /// neighborhood best (`c2`, social).
+    pub fn acceleration(&self) -> (f64, f64) {
+        (self.cognitive, self.social)
+    }
+
+    /// Changes the inertia `w` during a run (parameter control), e.g. the classic inertia that
+    /// decreases linearly from 0.9 to 0.4 over the run (Shi and Eberhart, 1998): a swarm that
+    /// explores first and converges later. It applies from the next [`ask`](Algorithm::ask) that
+    /// moves the swarm.
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let pso = Pso::builder(Real::uniform(10, -5.0..=5.0)?)
+    ///     .population_size(30)
+    ///     .inertia(0.9)
+    ///     .acceleration(2.0, 2.0)
+    ///     .max_velocity(0.2)
+    ///     .minimize()
+    ///     .seed(1)
+    ///     .build()?;
+    /// let sphere = |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>();
+    /// let generations = 500;
+    /// let outcome = Engine::new(pso, sphere)
+    ///     .stop_when(Stop::generations(generations))
+    ///     // from 0.9 to 0.4 over the run
+    ///     .control(|pso, progress| {
+    ///         let done = progress.generation() as f64 / generations as f64;
+    ///         pso.set_inertia(0.9 - 0.5 * done)
+    ///     })
+    ///     .run()?;
+    /// assert!(outcome.best_fitness().score().unwrap() < 1e-6);
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] as for [`PsoBuilder::inertia`]: an inertia below 0 or not
+    /// finite. The inertia doesn't change on errors.
+    pub fn set_inertia(&mut self, inertia: f64) -> Result<()> {
+        check_inertia(inertia)?;
+        self.inertia = inertia;
+        Ok(())
+    }
+
+    /// Changes the accelerations toward the personal best (`c1`, cognitive) and the neighborhood
+    /// best (`c2`, social) during a run, e.g. from a large `c1` and a small `c2` to the reverse
+    /// (Ratnaweera, Halgamuge and Watson, 2004). As [`set_inertia`](Pso::set_inertia), it applies
+    /// from the next ask that moves the swarm.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] as for [`PsoBuilder::acceleration`]: an acceleration below 0 or
+    /// not finite. The accelerations don't change on errors.
+    pub fn set_acceleration(&mut self, cognitive: f64, social: f64) -> Result<()> {
+        check_acceleration(cognitive, social)?;
+        (self.cognitive, self.social) = (cognitive, social);
+        Ok(())
+    }
+
+    /// Marks the swarm for evaluation again, for a fitness function that changed during the run:
+    /// the next [`ask`](Algorithm::ask) gives the particles' positions, then the personal bests
+    /// at other positions (a personal best at its particle's position is asked once), and its
+    /// [`tell`](Algorithm::tell) sets their fitness without moving the swarm.
+    ///
+    /// - It isn't a generation: [`generation`](Algorithm::generation) doesn't change. The
+    ///   evaluations are counted.
+    /// - Each personal best is then the better of the two, the position on ties, as after a move,
+    ///   and the neighborhood bests follow from them. [`best`](Algorithm::best) is the best
+    ///   personal best, found in the current generation: old and new values are never compared.
+    /// - The velocities don't change, and no random number is drawn: a seeded run that
+    ///   re-evaluates at the same points gives the same results.
+    /// - Before the first tell nothing is evaluated yet, and it changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ReevaluationOutOfTurn`] between an ask and its tell. Nothing changes on errors.
+    pub fn reevaluate(&mut self) -> Result<()> {
+        if self.asked {
+            return Err(Error::ReevaluationOutOfTurn);
+        }
+        self.reevaluating = self.started;
+        Ok(())
+    }
+
+    // sets the fitness of the positions and the personal bests of a re-evaluation, in the order
+    // asked, and the best from them
+    fn rescore(&mut self, fitness: &[Fitness]) {
+        let objective = self.objective;
+        let size = self.population.len();
+        let mut elsewhere = fitness[size..].iter();
+        for (index, &at_position) in fitness[..size].iter().enumerate() {
+            let particle = &mut self.population[index];
+            particle.set_fitness(at_position);
+            let personal = &mut self.personal_bests[index];
+            if personal.genome() == particle.genome() {
+                personal.set_fitness(at_position);
+            } else {
+                let &value = elsewhere
+                    .next()
+                    .expect("asked for each personal best elsewhere");
+                personal.set_fitness(value);
+                if !objective.is_better(value, at_position) {
+                    *personal = particle.clone();
+                }
+            }
+        }
+        // the best of the new values, the first one on ties
+        self.best = None;
+        for index in 0..size {
+            let fitness = self.personal_best(index);
+            let better = self.best.as_ref().is_none_or(|best| {
+                objective.is_better(fitness, best.fitness().unwrap_or(Fitness::invalid()))
+            });
+            if better {
+                self.best = Some(self.personal_bests[index].clone());
+            }
+        }
+        self.best_generation = self.generation;
+        self.rescored.clear();
+        self.reevaluating = false;
     }
 
     fn personal_best(&self, index: usize) -> Fitness {
@@ -202,6 +335,13 @@ impl Pso {
     }
 }
 
+impl Reevaluate for Pso {
+    /// As [`Pso::reevaluate`]: the next ask gives the positions and the personal bests.
+    fn reevaluate(&mut self) -> Result<()> {
+        Pso::reevaluate(self)
+    }
+}
+
 impl Algorithm for Pso {
     type Genome = Reals;
 
@@ -211,14 +351,32 @@ impl Algorithm for Pso {
 
     fn ask(&mut self) -> Candidates<'_, Reals> {
         if !self.asked {
-            if self.started {
-                self.fly();
-            }
             self.pending.clear();
-            self.pending.extend(0..self.population.len());
+            if self.reevaluating {
+                let elsewhere = self
+                    .personal_bests
+                    .iter()
+                    .zip(self.population.iter())
+                    .filter(|(personal, particle)| personal.genome() != particle.genome())
+                    .map(|(personal, _)| personal);
+                self.rescored.clear();
+                self.rescored.extend(self.population.iter().cloned());
+                self.rescored.extend(elsewhere.cloned());
+                self.pending.extend(0..self.rescored.len());
+            } else {
+                if self.started {
+                    self.fly();
+                }
+                self.pending.extend(0..self.population.len());
+            }
             self.asked = true;
         }
-        Candidates::new(self.population.as_slice(), &self.pending)
+        let individuals = if self.reevaluating {
+            &self.rescored
+        } else {
+            self.population.as_slice()
+        };
+        Candidates::new(individuals, &self.pending)
     }
 
     fn tell(&mut self, fitness: &[Fitness]) -> Result<()> {
@@ -233,6 +391,10 @@ impl Algorithm for Pso {
         }
         self.asked = false;
         self.evaluations += fitness.len() as u64;
+        if self.reevaluating {
+            self.rescore(fitness);
+            return Ok(());
+        }
         if self.started {
             self.generation += 1;
         }
@@ -394,18 +556,8 @@ impl PsoBuilder {
             return invalid("topology", "a ring needs at least 1 neighbor".to_string());
         }
         let (cognitive, social) = self.acceleration;
-        if !(self.inertia >= 0.0 && self.inertia.is_finite()) {
-            return invalid(
-                "inertia",
-                format!("must be 0 or more and finite, got {}", self.inertia),
-            );
-        }
-        if !(cognitive >= 0.0 && cognitive.is_finite() && social >= 0.0 && social.is_finite()) {
-            return invalid(
-                "acceleration",
-                format!("must be 0 or more and finite, got {cognitive} and {social}"),
-            );
-        }
+        check_inertia(self.inertia)?;
+        check_acceleration(cognitive, social)?;
         if !(self.max_velocity > 0.0 && self.max_velocity.is_finite()) {
             return invalid(
                 "max_velocity",
@@ -463,6 +615,8 @@ impl PsoBuilder {
             population: Population::from_genomes(genomes),
             velocities,
             personal_bests: Vec::new(),
+            reevaluating: false,
+            rescored: Vec::new(),
             started: false,
             asked: false,
             pending: Vec::new(),
@@ -472,6 +626,26 @@ impl PsoBuilder {
             best_generation: 0,
         })
     }
+}
+
+fn check_inertia(inertia: f64) -> Result<()> {
+    if !(inertia >= 0.0 && inertia.is_finite()) {
+        return Err(Error::InvalidSetting {
+            setting: "inertia",
+            reason: format!("must be 0 or more and finite, got {inertia}"),
+        });
+    }
+    Ok(())
+}
+
+fn check_acceleration(cognitive: f64, social: f64) -> Result<()> {
+    if !(cognitive >= 0.0 && cognitive.is_finite() && social >= 0.0 && social.is_finite()) {
+        return Err(Error::InvalidSetting {
+            setting: "acceleration",
+            reason: format!("must be 0 or more and finite, got {cognitive} and {social}"),
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -643,6 +817,246 @@ mod tests {
         };
         assert_eq!(run(3), run(3));
         assert_ne!(run(3), run(4));
+    }
+
+    // the sphere around 1 instead of 0
+    fn shifted(x: &Reals) -> f64 {
+        x.iter().map(|xi| (xi - 1.0) * (xi - 1.0)).sum()
+    }
+
+    #[test]
+    fn a_reevaluation_scores_positions_and_personal_bests_again() {
+        let mut pso = builder(Topology::Ring { neighbors: 1 }, 0).build().unwrap();
+        for _ in 0..5 {
+            step(&mut pso);
+        }
+        let positions: Vec<Reals> = pso
+            .population()
+            .iter()
+            .map(|x| x.genome().clone())
+            .collect();
+        let personal: Vec<Reals> = pso
+            .personal_bests()
+            .iter()
+            .map(|x| x.genome().clone())
+            .collect();
+        let velocities = pso.velocities().to_vec();
+        let (generation, evaluations) = (pso.generation(), pso.evaluations());
+
+        pso.reevaluate().unwrap();
+        let asked: Vec<Reals> = pso.ask().iter().cloned().collect();
+        // the positions, then the personal bests elsewhere
+        let moved: Vec<Reals> = personal
+            .iter()
+            .zip(&positions)
+            .filter(|(personal, position)| personal != position)
+            .map(|(personal, _)| personal.clone())
+            .collect();
+        assert!(!moved.is_empty() && moved.len() < 20);
+        assert_eq!(asked, [positions.clone(), moved].concat());
+        let fitness: Vec<Fitness> = asked.iter().map(|x| Fitness::new(shifted(x))).collect();
+        pso.tell(&fitness).unwrap();
+
+        assert_eq!(pso.generation(), generation);
+        assert_eq!(pso.evaluations(), evaluations + asked.len() as u64);
+        assert_eq!(pso.velocities(), velocities);
+        for (index, particle) in pso.population().iter().enumerate() {
+            assert_eq!(particle.genome(), &positions[index]);
+            assert_eq!(
+                particle.fitness(),
+                Some(Fitness::new(shifted(&positions[index])))
+            );
+            // the better of the old personal best and the position, the position on ties
+            let (old, here) = (shifted(&personal[index]), shifted(&positions[index]));
+            let expected = if here <= old {
+                &positions[index]
+            } else {
+                &personal[index]
+            };
+            let best = &pso.personal_bests()[index];
+            assert_eq!(best.genome(), expected);
+            assert_eq!(best.fitness(), Some(Fitness::new(old.min(here))));
+        }
+        let lowest = pso
+            .personal_bests()
+            .iter()
+            .map(|x| shifted(x.genome()))
+            .fold(f64::INFINITY, f64::min);
+        assert_eq!(pso.best().unwrap().fitness(), Some(Fitness::new(lowest)));
+        assert_eq!(pso.best_generation(), generation);
+        // and the swarm moves on
+        assert_eq!(pso.ask().len(), 20);
+        step(&mut pso);
+        assert_eq!(pso.generation(), generation + 1);
+    }
+
+    #[test]
+    fn a_reevaluation_waits_for_the_tell() {
+        let mut pso = builder(Topology::Global, 1).build().unwrap();
+        // before anything is evaluated, it changes nothing
+        pso.reevaluate().unwrap();
+        step(&mut pso);
+        let mut other = builder(Topology::Global, 1).build().unwrap();
+        step(&mut other);
+        assert_eq!(pso.population(), other.population());
+        step(&mut pso);
+
+        pso.ask();
+        assert_eq!(pso.reevaluate(), Err(Error::ReevaluationOutOfTurn));
+        // still the moved swarm
+        assert_eq!(pso.ask().len(), 20);
+        step(&mut pso);
+        assert_eq!(pso.generation(), 2);
+    }
+
+    #[test]
+    fn a_reevaluation_with_the_same_function_changes_only_the_count() {
+        let run = |reevaluate: bool| {
+            let mut pso = builder(Topology::Global, 2).build().unwrap();
+            let mut extra = 0;
+            for generation in 0..20 {
+                if reevaluate && generation == 10 {
+                    pso.reevaluate().unwrap();
+                    extra = pso.ask().len() as u64;
+                    step(&mut pso);
+                }
+                step(&mut pso);
+            }
+            (
+                pso.population().clone(),
+                pso.personal_bests().to_vec(),
+                pso.velocities().to_vec(),
+                pso.best().unwrap().fitness(),
+                pso.evaluations() - extra,
+            )
+        };
+        assert_eq!(run(true), run(false));
+    }
+
+    #[test]
+    fn reevaluations_repeat_with_a_seed() {
+        let run = || {
+            let mut pso = builder(Topology::Ring { neighbors: 1 }, 3).build().unwrap();
+            for generation in 0..30 {
+                if generation == 10 {
+                    pso.reevaluate().unwrap();
+                }
+                let f = if generation < 10 { sphere } else { shifted };
+                let fitness: Vec<Fitness> = pso.ask().iter().map(|x| Fitness::new(f(x))).collect();
+                pso.tell(&fitness).unwrap();
+            }
+            (pso.population().clone(), pso.best().cloned())
+        };
+        assert_eq!(run(), run());
+    }
+
+    #[test]
+    fn setters_validate_like_the_builder() {
+        let mut pso = builder(Topology::Global, 0).build().unwrap();
+        for inertia in [-0.1, f64::INFINITY, f64::NAN] {
+            assert!(matches!(
+                pso.set_inertia(inertia),
+                Err(Error::InvalidSetting {
+                    setting: "inertia",
+                    ..
+                })
+            ));
+        }
+        for (cognitive, social) in [(-1.0, 1.0), (1.0, f64::NAN), (f64::INFINITY, 0.0)] {
+            assert!(matches!(
+                pso.set_acceleration(cognitive, social),
+                Err(Error::InvalidSetting {
+                    setting: "acceleration",
+                    ..
+                })
+            ));
+        }
+        // unchanged on errors
+        assert_eq!(pso.inertia(), 0.7298);
+        assert_eq!(pso.acceleration(), (1.49618, 1.49618));
+        pso.set_inertia(0.0).unwrap();
+        pso.set_acceleration(0.0, 0.0).unwrap();
+        assert_eq!((pso.inertia(), pso.acceleration()), (0.0, (0.0, 0.0)));
+    }
+
+    #[test]
+    fn a_setting_changed_before_a_move_gives_the_run_built_with_it() {
+        let run = |mut pso: Pso, change: fn(&mut Pso)| {
+            step(&mut pso);
+            change(&mut pso);
+            for _ in 0..20 {
+                step(&mut pso);
+            }
+            pso.population().clone()
+        };
+        let built = builder(Topology::Global, 4)
+            .inertia(0.4)
+            .acceleration(2.0, 1.0)
+            .build()
+            .unwrap();
+        let changed = |pso: &mut Pso| {
+            pso.set_inertia(0.4).unwrap();
+            pso.set_acceleration(2.0, 1.0).unwrap();
+        };
+        let expected = run(built, |_| {});
+        let default = || builder(Topology::Global, 4).build().unwrap();
+        assert_eq!(run(default(), changed), expected);
+        assert_ne!(run(default(), |_| {}), expected);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn checkpoints_keep_changed_settings_and_a_due_reevaluation() {
+        use crate::checkpoint;
+        let mut pso = builder(Topology::Global, 5).build().unwrap();
+        step(&mut pso);
+        pso.set_inertia(0.5).unwrap();
+        pso.set_acceleration(1.0, 2.0).unwrap();
+        pso.reevaluate().unwrap();
+        let mut bytes = Vec::new();
+        checkpoint::save(&pso, &mut bytes).unwrap();
+        let mut loaded: Pso = checkpoint::load(bytes.as_slice()).unwrap();
+        assert_eq!((loaded.inertia(), loaded.acceleration()), (0.5, (1.0, 2.0)));
+        for _ in 0..5 {
+            step(&mut pso);
+            step(&mut loaded);
+        }
+        assert_eq!(loaded.population(), pso.population());
+        assert_eq!(loaded.evaluations(), pso.evaluations());
+    }
+
+    #[test]
+    fn an_engine_control_reevaluates_once() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        // the center of the sphere, moved from 0 to 1 after generation 20
+        let center = AtomicU64::new(0.0_f64.to_bits());
+        let moving = |x: &Reals| {
+            let center = f64::from_bits(center.load(Ordering::Relaxed));
+            x.iter()
+                .map(|xi| (xi - center) * (xi - center))
+                .sum::<f64>()
+        };
+        let mut controls = 0;
+        let mut engine = Engine::new(builder(Topology::Global, 6).build().unwrap(), &moving)
+            .stop_when(Stop::generations(60))
+            .control(|pso: &mut Pso, progress| {
+                controls += 1;
+                if progress.generation() == 20 {
+                    center.store(1.0_f64.to_bits(), Ordering::Relaxed);
+                    pso.reevaluate()?;
+                }
+                Ok(())
+            });
+        let outcome = engine.run().unwrap();
+        drop(engine);
+        // once per generation, not after the re-evaluation
+        assert_eq!(controls, 61);
+        assert_eq!(outcome.generations(), 60);
+        assert!(outcome.evaluations() > 61 * 20);
+        // the best by the new function
+        let best = outcome.best_fitness().score().unwrap();
+        assert_eq!(best, shifted(outcome.best_genome()));
+        assert!(best < 0.1, "{best}");
     }
 
     proptest! {

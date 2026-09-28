@@ -104,6 +104,28 @@ pub trait Algorithm {
     fn best_generation(&self) -> u64;
 }
 
+/// An algorithm that can score again what it keeps, for a fitness function that changes during a
+/// run: adaptive penalty weights, a retrained surrogate model, a moving landscape.
+///
+/// After [`reevaluate`](Reevaluate::reevaluate), the next [`ask`](Algorithm::ask) gives the
+/// genomes the algorithm keeps (its population, and whatever else it compares with, such as a
+/// particle swarm's personal bests), and its [`tell`](Algorithm::tell) scores them again without
+/// starting a new generation. [`best`](Algorithm::best) is then the best of them, and
+/// [`best_generation`](Algorithm::best_generation) the current generation: old and new values are
+/// never compared. The evaluations count as usual, and no random number is drawn, so a seeded run
+/// that re-evaluates at the same generations is reproducible.
+///
+/// In an [`Engine`](crate::Engine), call it from [`control`](crate::Engine::control).
+pub trait Reevaluate: Algorithm {
+    /// Marks what the algorithm keeps for evaluation by the next [`ask`](Algorithm::ask).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ReevaluationOutOfTurn`](crate::Error::ReevaluationOutOfTurn) between an ask and
+    /// its tell. Nothing changes on errors.
+    fn reevaluate(&mut self) -> Result<()>;
+}
+
 /// The genomes an [`Algorithm`] asks to evaluate.
 ///
 /// It doesn't allocate, and it's `Copy` and `Sync`, so it can be shared between threads for

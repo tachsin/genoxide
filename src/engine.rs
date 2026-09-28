@@ -406,11 +406,15 @@ pub struct Engine<'o, A: Algorithm, F> {
     nan_policy: NanPolicy,
     parallel: bool,
     checkpoint: Option<Checkpoint<'o, A>>,
+    controls: Vec<Control<'o, A>>,
     results: Vec<Result<Fitness>>,
     scores: Vec<Fitness>,
     // the generations in a row in which the algorithm asked for no genome to evaluate
     idle: u64,
 }
+
+// a closure that changes the algorithm between generations
+type Control<'o, A> = Box<dyn FnMut(&mut A, &Progress) -> Result<()> + 'o>;
 
 // every how many generations to call a closure with the algorithm, and the closure
 pub(crate) type Checkpoint<'o, A> = (u64, Box<dyn FnMut(&A) -> Result<()> + 'o>);
@@ -462,6 +466,7 @@ where
             nan_policy: NanPolicy::default(),
             parallel: false,
             checkpoint: None,
+            controls: Vec::new(),
             results: Vec::new(),
             scores: Vec::new(),
             idle: 0,
@@ -519,6 +524,88 @@ where
         self.observe(FnObserver(callback))
     }
 
+    /// Adds a closure that gets the algorithm mutably after every generation, including the
+    /// initial population, to change it for the next one: parameter control, such as a mutation
+    /// step annealed over the run, a rate raised while the best stagnates, or a new operator; or
+    /// [`Reevaluate::reevaluate`](crate::algorithm::Reevaluate::reevaluate) after the fitness
+    /// function changed, e.g. a raised penalty weight.
+    ///
+    /// It runs once per generation: not after the tell of a re-evaluation, which scores the
+    /// population again without starting a new generation. It runs after the observers and the
+    /// stop conditions, and before a checkpoint, so a checkpoint holds the changed settings and a
+    /// resumed run follows the same schedule. It also runs after the last generation: the
+    /// algorithm the engine returns has the settings for the generation after it, as it would in
+    /// a longer run. Closures added by several calls run in their order. An error stops the run
+    /// with that error.
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let ga = Ga::builder(Real::uniform(10, -5.0..=5.0)?)
+    ///     .population_size(40)
+    ///     .select(Tournament::new(3)?)
+    ///     .crossover(UniformCrossover::new())
+    ///     .mutate(GaussianMutation::per_gene(0.2, 0.1)?)
+    ///     .minimize()
+    ///     .seed(1)
+    ///     .build()?;
+    /// let sphere = |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>();
+    /// let outcome = Engine::new(ga, sphere)
+    ///     .stop_when(Stop::generations(300))
+    ///     // the step shrinks from 10% to 0.1% of each gene's range over the run
+    ///     .control(|ga, progress| {
+    ///         let done = progress.generation() as f64 / 300.0;
+    ///         *ga.mutate_mut() = GaussianMutation::per_gene(0.2, 0.1 * 0.01_f64.powf(done))?;
+    ///         Ok(())
+    ///     })
+    ///     .run()?;
+    /// assert!(outcome.best_fitness().score().unwrap() < 1e-3);
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    ///
+    /// A fitness function that changes: a penalty weight shared with the fitness function, raised
+    /// while the best is infeasible, after which the population is scored again.
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    /// use std::sync::atomic::{AtomicU64, Ordering};
+    ///
+    /// // maximize the ones, with at most 10 of them allowed
+    /// let weight = AtomicU64::new(0.1_f64.to_bits());
+    /// let penalized = |bits: &Bits| {
+    ///     let ones = bits.count_ones() as f64;
+    ///     ones - f64::from_bits(weight.load(Ordering::Relaxed)) * (ones - 10.0).max(0.0)
+    /// };
+    /// let ga = Ga::builder(Binary::new(32)?)
+    ///     .population_size(30)
+    ///     .select(Tournament::new(3)?)
+    ///     .crossover(UniformCrossover::new())
+    ///     .mutate(BitFlip::per_gene(1.0 / 32.0)?)
+    ///     .seed(2)
+    ///     .build()?;
+    /// let outcome = Engine::new(ga, &penalized)
+    ///     .stop_when(Stop::generations(200))
+    ///     .control(|ga, progress| {
+    ///         let best = ga.best().expect("evaluated");
+    ///         if progress.generation() % 20 == 19 && best.genome().count_ones() > 10 {
+    ///             let raised = f64::from_bits(weight.load(Ordering::Relaxed)) * 4.0;
+    ///             weight.store(raised.to_bits(), Ordering::Relaxed);
+    ///             ga.reevaluate()?;
+    ///         }
+    ///         Ok(())
+    ///     })
+    ///     .run()?;
+    /// assert_eq!(outcome.best_genome().count_ones(), 10);
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    pub fn control<C>(mut self, control: C) -> Self
+    where
+        C: FnMut(&mut A, &Progress) -> Result<()> + 'o,
+    {
+        self.controls.push(Box::new(control));
+        self
+    }
+
     /// Calls `save` with the algorithm every `generations` generations (when the algorithm's
     /// generation is a multiple of it, so a resumed run keeps the schedule) and when the run
     /// stops, e.g. to write a checkpoint with `genoxide::checkpoint::save_file` (the `serde`
@@ -562,7 +649,8 @@ where
     /// - [`Error::InvalidFitness`] if the fitness function returns a negative constraint violation,
     ///   with any [`NanPolicy`]: that's a bug in the fitness function, not a result.
     /// - [`Error::FitnessCount`] if a [`Batch`] returns a different number of scores than genomes.
-    /// - The errors of the algorithm's [`tell`](Algorithm::tell) and of the checkpoint closure.
+    /// - The errors of the algorithm's [`tell`](Algorithm::tell), of the
+    ///   [`control`](Engine::control) closures and of the checkpoint closure.
     ///
     /// If the algorithm has run before and a stop condition is already met, it returns that
     /// outcome without another generation. A run whose stop conditions need new evaluations stops
@@ -616,8 +704,16 @@ where
         }
         let start = Instant::now();
         loop {
+            // the generation before this tell, once there is a best: a tell that doesn't advance
+            // it scores again what the algorithm keeps (a re-evaluation)
+            let before = self
+                .algorithm
+                .best()
+                .is_some()
+                .then(|| self.algorithm.generation());
             self.evaluate()?;
             self.algorithm.tell(&self.scores)?;
+            let reevaluated = before == Some(self.algorithm.generation());
             self.idle = if self.scores.is_empty() {
                 self.idle + 1
             } else {
@@ -659,21 +755,27 @@ where
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
             }
             .or_else(|| stalled(self.stop.as_ref(), self.idle));
+            let outcome = reason.map(|stop_reason| Outcome {
+                best: best.clone(),
+                generations: progress.generation,
+                evaluations: progress.evaluations,
+                elapsed: progress.elapsed,
+                stop_reason,
+            });
+            if !reevaluated {
+                for control in &mut self.controls {
+                    control(&mut self.algorithm, &progress)?;
+                }
+            }
             checkpoint(
                 &mut self.checkpoint,
                 &self.algorithm,
                 progress.generation,
                 reason.is_some(),
             )?;
-            if let Some(stop_reason) = reason {
-                trace::finished(&progress, stop_reason, None);
-                return Ok(Outcome {
-                    best: best.clone(),
-                    generations: progress.generation,
-                    evaluations: progress.evaluations,
-                    elapsed: progress.elapsed,
-                    stop_reason,
-                });
+            if let Some(outcome) = outcome {
+                trace::finished(&progress, outcome.stop_reason, None);
+                return Ok(outcome);
             }
         }
     }
@@ -789,6 +891,7 @@ impl<A: Algorithm + fmt::Debug, F> fmt::Debug for Engine<'_, A, F> {
             .field("abort", &self.abort)
             .field("nan_policy", &self.nan_policy)
             .field("parallel", &self.parallel)
+            .field("controls", &self.controls.len())
             .field(
                 "checkpoint_every",
                 &self.checkpoint.as_ref().map(|(every, _)| every),

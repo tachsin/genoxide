@@ -774,6 +774,19 @@ where
     }
 }
 
+impl<R, S, C, M> super::Reevaluate for Ga<R, S, C, M>
+where
+    R: Representation,
+    S: Select,
+    C: Crossover<R>,
+    M: Mutate<R>,
+{
+    /// As [`Ga::reevaluate`]: the next ask gives the whole population.
+    fn reevaluate(&mut self) -> Result<()> {
+        Ga::reevaluate(self)
+    }
+}
+
 impl<R, S, C, M> Algorithm for Ga<R, S, C, M>
 where
     R: Representation,
