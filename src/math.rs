@@ -261,8 +261,8 @@ from_libm! {
 
 /// `x` to the integer power `n`, the same on every platform.
 ///
-/// `f64::powi` doesn't promise the same result everywhere, and doesn't give it: with a negative
-/// exponent, Windows' differs from Linux's in the last bit. This is binary exponentiation, as
+/// `f64::powi` doesn't promise the same result everywhere, and doesn't give it: Windows' differs
+/// from Linux's, e.g. in the last bit of 7.6268145870115305^-3. This is binary exponentiation, as
 /// LLVM expands `powi` on Linux, written out so that the order of the rounded multiplications is
 /// fixed: exact for `n` in -1..=2, within a few ulps otherwise.
 #[inline]
@@ -453,8 +453,8 @@ mod tests {
         }
     }
 
-    /// Fixed bits on every platform, unlike `f64::powi`: with a negative exponent, Windows'
-    /// differs from Linux's in the last bit, e.g. for 7.6268145870115305^-3.
+    /// Fixed bits on every platform, unlike `f64::powi`: Windows' differs from Linux's, e.g. in
+    /// the last bit of 7.6268145870115305^-3, and by more for large exponents.
     #[test]
     fn powi_values() {
         let cases = [
@@ -473,8 +473,13 @@ mod tests {
         for _ in 0..20_000 {
             let x = (rng.unit_f64() - 0.5) * 20.0;
             for n in [-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 20, 31] {
-                let n = std::hint::black_box(n);
-                assert!(ulps(powi(x, n), x.powi(n)) <= 1, "powi({x}, {n})");
+                // accurate: within a few rounding errors of the portable powf
+                let (ours, accurate) = (powi(x, n), powf(x, f64::from(n)));
+                let error = ((ours - accurate) / accurate).abs();
+                assert!(
+                    error <= 16.0 * f64::EPSILON,
+                    "powi({x}, {n}) = {ours}, {accurate}"
+                );
             }
         }
         assert_eq!(powi(0.0, -1), f64::INFINITY);
