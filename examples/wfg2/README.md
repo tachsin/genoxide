@@ -7,6 +7,7 @@ reference_url: https://doi.org/10.1109/TEVC.2005.861417
 optimum: "six regions of the curve f₁ = 2 (1 − cos(x₁π/2)), f₂ = 4 (1 − x₁ cos²(5πx₁)); hypervolume 6.1511 (reference point (2.2, 4.4))"
 languages: [rust, python]
 order: 117
+family: WFG
 ---
 
 # WFG2

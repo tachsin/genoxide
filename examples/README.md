@@ -4,7 +4,11 @@ Each example is a folder with the same program in Rust (`main.rs`) and Python (`
 `README.md` that describes the problem, cites its source and gives the known optimum. The
 README's YAML front matter (`title`, `category`, `summary`, `reference`, `reference_url`,
 `optimum`, `languages`, `order`) is what the [docs site](https://tachsin.github.io/genoxide/)
-builds its example pages from. CI runs every example in both languages.
+builds its example pages from. CI runs every example in both languages. The problems of one paper
+(ZDT, DTLZ, WFG, CEC 2006...) share an optional `family`, all in one category: the
+[project page](https://tachsin.gr/projects/genoxide/examples) shows them as tabs of one another,
+labelled by the optional `tab` (the title when absent), and the docs site's navigation in a section
+of their own.
 
 Both versions use the same algorithm, settings and seed, and print the same output. The exception
 is a fitness function in numpy with functions such as cosine, whose last bit can differ from

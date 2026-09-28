@@ -7,6 +7,8 @@ reference_url: https://sop.tik.ee.ethz.ch/publicationListFiles/dtlz2001a.pdf
 optimum: "the curve f₁ = f₂ = cos θ / √2, f₃ = sin θ for θ in [0, π/2]; hypervolume 0.1349 (reference point (0.7778, 0.7778, 1.1))"
 languages: [rust, python]
 order: 129
+family: DTLZ
+tab: DTLZ5
 ---
 
 # DTLZ5 with 3 objectives

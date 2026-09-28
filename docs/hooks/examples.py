@@ -2,10 +2,13 @@
 
 Each folder has a README.md with YAML front matter (title, category, summary, reference,
 reference_url, optimum, languages, order) and a description, and the code in main.rs and main.py
-(or src/main.rs, for an example that is a crate of its own). The hook makes a page per example with
-the code in Rust and Python tabs, an index with a table of them, and their entries in the nav, in
-the order of their `order`. The build fails for a README without valid front matter, or an example
-missing from the table in examples/README.md.
+(or src/main.rs, for an example that is a crate of its own). Optionally, `family` groups the
+problems of one paper (ZDT, DTLZ, WFG, CEC 2006...), all in one category, and `tab` is an example's
+short label among them (the project page shows a family's problems as tabs; `trace_note` is for its
+player). The hook makes a page per example with the code in Rust and Python tabs, an index with a
+table of them, and their entries in the nav, in the order of their `order`, a family's in a section
+of its own where its first problem would be. The build fails for a README without valid front
+matter, or an example missing from the table in examples/README.md.
 """
 
 from __future__ import annotations
@@ -42,8 +45,9 @@ FIELDS = {
     "order",
 }
 # optional: trace_note, what the project page's player plays when it isn't the run of the code
-# (the docs site has no player)
-OPTIONAL_FIELDS = {"trace_note"}
+# (the docs site has no player); family, the group of problems from one paper, and tab, the
+# example's short label among them on the project page
+OPTIONAL_FIELDS = {"trace_note", "family", "tab"}
 # the project page of each example with a recorded run, which plays it back
 SITE = "https://tachsin.gr/projects/genoxide/examples"
 
@@ -108,7 +112,21 @@ def examples() -> list[Example]:
         for language in languages:
             if not (ROOT / example.source(language)).exists():
                 raise PluginError(f"{example.source(language)} doesn't exist")
+        for field in ("family", "tab"):
+            if field in meta and not (isinstance(meta[field], str) and meta[field].strip()):
+                raise PluginError(f"examples/{folder.name}: {field} is a non-empty string")
+        if "tab" in meta and "family" not in meta:
+            raise PluginError(f"examples/{folder.name}: a tab label needs a family")
         found.append(example)
+    families: dict[str, list[Example]] = {}
+    for example in found:
+        if "family" in example.meta:
+            families.setdefault(example.meta["family"], []).append(example)
+    for family, members in families.items():
+        if len(members) < 2:
+            raise PluginError(f"the family {family!r} has only examples/{members[0].name}")
+        if len({member.meta["category"] for member in members}) > 1:
+            raise PluginError(f"the examples of the family {family!r} have different categories")
     return sorted(found, key=lambda example: (example.meta["order"], example.name))
 
 
@@ -192,7 +210,17 @@ def on_config(config):
         if f"]({example.name}/)" not in table:
             raise PluginError(f"the table in examples/README.md lacks examples/{example.name}")
     pages = ["examples/index.md"]
-    pages += [{example.meta["title"]: f"examples/{example.name}.md"} for example in found]
+    sections = {}  # a family's section in the nav, where its first problem is
+    for example in found:
+        entry = {example.meta["title"]: f"examples/{example.name}.md"}
+        family = example.meta.get("family")
+        if family is None:
+            pages.append(entry)
+        elif family in sections:
+            sections[family].append(entry)
+        else:
+            sections[family] = [entry]
+            pages.append({family: sections[family]})
     for entry in config["nav"]:
         if isinstance(entry, dict) and "Examples" in entry:
             entry["Examples"] = pages

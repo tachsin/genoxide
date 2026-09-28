@@ -7,6 +7,7 @@ reference_url: ""
 optimum: "−12569.4866 in 30 dimensions (every gene 420.9687)"
 languages: [rust, python]
 order: 62
+family: Schwefel
 trace_note: "Recorded from another run: L-SHADE in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 

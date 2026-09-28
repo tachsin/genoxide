@@ -7,6 +7,7 @@ reference_url: https://doi.org/10.1109/TEVC.2005.861417
 optimum: "the quarter ellipse (f₁/2)² + (f₂/4)² = 1; hypervolume 3.3968 (reference point (2.2, 4.4))"
 languages: [rust, python]
 order: 123
+family: WFG
 ---
 
 # WFG8

@@ -7,6 +7,8 @@ reference_url: https://doi.org/10.1109/CEC.2002.1007032
 optimum: "the plane f₁ + f₂ + f₃ = 0.5; hypervolume 0.1455 (reference point (0.55, 0.55, 0.55))"
 languages: [rust, python]
 order: 125
+family: DTLZ
+tab: DTLZ1
 ---
 
 # DTLZ1 with 3 objectives

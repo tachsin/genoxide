@@ -7,6 +7,8 @@ reference_url: "https://github.com/P-N-Suganthan/CEC2006"
 optimum: "680.630057374402 (proven)"
 languages: [rust, python]
 order: 85
+family: "CEC 2006"
+tab: g09
 ---
 
 # CEC 2006 g09

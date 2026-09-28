@@ -19,8 +19,12 @@ import { GENOXIDE_PATH } from "./meta";
  * its Rust code is src/main.rs and it runs with --manifest-path.
  *
  * Front matter fields: title, category, summary, reference, reference_url,
- * optimum, languages, order. All optional: a missing one falls back to
- * something derived from the folder, so a half-written README still shows.
+ * optimum, languages, order, and for the problems of a paper that defines
+ * several (ZDT, DTLZ, WFG, CEC 2006...) family and tab: `family` names the
+ * group, whose pages show its members as tabs and which the sidebar lists
+ * together, and `tab` is the example's short label there (its title when
+ * absent). All optional: a missing one falls back to something derived from
+ * the folder, so a half-written README still shows.
  */
 
 const EXAMPLES_DIR = "examples";
@@ -43,6 +47,8 @@ export const EXAMPLES_PATH = `${GENOXIDE_PATH}/examples`;
  * @property {string | null} optimum
  * @property {CodeLanguage[]} languages  those with a file in the folder, Rust first
  * @property {number} order
+ * @property {string | null} family  the group of problems from one paper, e.g. "WFG"
+ * @property {string | null} tab     the short label among the family, e.g. "g07"
  * @property {boolean} isCrate      has its own Cargo.toml
  * @property {{ rust: string | null, python: string | null, output: string | null, trace: string | null }} files
  *   repository paths; `output` is output.txt, `trace` is trace.json
@@ -124,6 +130,8 @@ function toSummary(dir, data, files) {
     optimum: text(data.optimum),
     languages: languages.length ? languages : available,
     order: Number.isFinite(order) ? order : DEFAULT_ORDER,
+    family: text(data.family),
+    tab: text(data.tab),
     isCrate,
     files: { rust, python, output, trace },
   };
@@ -166,6 +174,70 @@ export const getExamples = cache(async () => {
 /** Categories in first-appearance order (the examples are already sorted). */
 export function exampleCategories(examples) {
   return [...new Set(examples.map((e) => e.category))];
+}
+
+/**
+ * @typedef {object} ExampleFamily
+ * @property {string} name
+ * @property {{ reference: string, referenceUrl: string | null }[]} sources
+ *   the distinct references of its members, usually one
+ * @property {{ slug: string, title: string, label: string }[]} members  in their order
+ */
+
+/**
+ * The family `name` of the (sorted) examples, or null when it has none.
+ * @param {ExampleSummary[]} examples
+ * @param {string | null} name
+ * @returns {ExampleFamily | null}
+ */
+export function exampleFamily(examples, name) {
+  if (!name) return null;
+  const members = examples.filter((e) => e.family === name);
+  if (!members.length) return null;
+  const sources = [];
+  for (const e of members) {
+    if (e.reference && !sources.some((s) => s.reference === e.reference)) {
+      sources.push({ reference: e.reference, referenceUrl: e.referenceUrl });
+    }
+  }
+  return {
+    name,
+    sources,
+    members: members.map((e) => ({ slug: e.slug, title: e.title, label: e.tab ?? e.title })),
+  };
+}
+
+/**
+ * @typedef {{ kind: "example", slug: string, title: string }
+ *   | { kind: "family", name: string, members: { slug: string, title: string, label: string }[] }} ExampleTreeEntry
+ */
+
+/**
+ * Every example for the sidebar: by category, in the order of exampleCategories,
+ * and a family as one entry where its first member is (in that member's
+ * category), with its members inside.
+ * @param {ExampleSummary[]} examples  sorted
+ * @returns {{ category: string, entries: ExampleTreeEntry[] }[]}
+ */
+export function exampleTree(examples) {
+  const groups = new Map(exampleCategories(examples).map((c) => [c, []]));
+  const families = new Map();
+  for (const e of examples) {
+    if (!e.family) {
+      groups.get(e.category).push({ kind: "example", slug: e.slug, title: e.title });
+      continue;
+    }
+    let family = families.get(e.family);
+    if (!family) {
+      family = { kind: "family", name: e.family, members: [] };
+      families.set(e.family, family);
+      groups.get(e.category).push(family);
+    }
+    family.members.push({ slug: e.slug, title: e.title, label: e.tab ?? e.title });
+  }
+  return [...groups]
+    .map(([category, entries]) => ({ category, entries }))
+    .filter((group) => group.entries.length);
 }
 
 /**
@@ -244,6 +316,8 @@ export const getExample = cache(async (slug) => {
     // view (raw.githubusercontent.com allows it: Access-Control-Allow-Origin *).
     traceUrl: example.files.trace ? rawUrl(example.files.trace) : null,
     folderUrl: `${TREE_BASE}${EXAMPLES_DIR}/${example.dir}`,
+    // its paper's other problems, for the tabs at the top of its page
+    familyGroup: exampleFamily(examples, example.family),
     previous: examples[index - 1] ?? null,
     next: examples[index + 1] ?? null,
   };

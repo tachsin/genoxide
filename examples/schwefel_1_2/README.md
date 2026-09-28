@@ -7,6 +7,7 @@ reference_url: ""
 optimum: "0 (at the origin)"
 languages: [rust, python]
 order: 53
+family: Schwefel
 trace_note: "Recorded from another run: CMA-ES in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 
