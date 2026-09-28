@@ -407,7 +407,9 @@ class G22(_WithTolerance):
     [100, 399.99], x₁₀ in [100.01, 300], x₁₁ in [100, 400], x₁₂ in [100, 600], x₁₃…x₁₅ in
     [0, 500], x₁₆ in [0.01, 300], x₁₇ in [0.01, 400], x₁₈…x₂₂ in [−4.7, 6.25]; best known
     236.430975504001, for the report's δ only (``optimum`` is None for another). ``tolerance`` is
-    δ, :data:`EQUALITY_TOLERANCE` if None.
+    δ, :data:`EQUALITY_TOLERANCE` if None. The report's value isn't the best there is: solving the
+    equalities for all but x₁, x₈ and x₉ gives 236.370313314566 at x₈ = 130, x₉ = 170, with every
+    equality met exactly (derived for genoxide, not in the report).
 
     The report's eqs. 45-46 (pp. 13-14), after Epperly (the report's reference 6).
     """

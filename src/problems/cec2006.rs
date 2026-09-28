@@ -1951,6 +1951,12 @@ impl Problem for G20 {
 /// x₇ ∈ [4.5, 6.25]; best known 193.724510070035 at the report's x*, where g₁ is active and the
 /// equalities are met within the tolerance δ only, each |hⱼ| at δ. Not proven optimal.
 ///
+/// The equalities leave x₄ free (derived for genoxide): h₃, h₄, h₅ give x₅, x₆, x₇, and h₁ and h₂
+/// factor as (x₄ − 300)(x₃ − 25(x₅ − x₆)) and (100 − x₄)(x₂ − 155.365 + 25x₇). With g₁ active, f
+/// is a function of x₄, least at x₄ = 100, where x₂ = 0 and x₃ = 25 ln 2 meet every equality
+/// exactly, at 35 (25 ln 2)^0.6 = 193.788; the tolerance takes the best known 0.064 lower. The
+/// other end, x₄ = 299.53 with x₂ at its bound 40, is a local minimum near 325.
+///
 /// The report's eqs. 43-44 (p. 13), after Epperly, T. *Global optimization test problems with
 /// solutions* (the report's reference 6).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2055,6 +2061,13 @@ impl Problem for G21 {
 /// x₁₃, x₁₄, x₁₅ ∈ [0, 500], x₁₆ ∈ [0.01, 300], x₁₇ ∈ [0.01, 400], x₁₈…x₂₂ ∈ [−4.7, 6.25]; best
 /// known 236.430975504001 at the report's x*, which meets the equalities within the tolerance δ
 /// only, and where g₁ is nearly active (−2.2·10⁻⁷). Not proven optimal.
+///
+/// The report's best known isn't the best there is (derived for genoxide, not in the report). The
+/// equalities leave x₁, x₈ and x₉ free: h₁…h₁₁ make x₅…x₇, x₁₀…x₁₂, x₁₆ and x₁₇ linear in x₈ and
+/// x₉ (x₁₀ = 430 − x₈, x₁₁ = 440 − x₉ + x₈), h₁₂…h₁₆ give x₁₈…x₂₂ as their logarithms,
+/// h₁₇…h₁₉ then x₁₃…x₁₅, and h₇…h₉ x₂…x₄. With g₁ active, f is a function of x₈ and x₉, and at
+/// x₈ = 130, x₉ = 170, where x₁₀ and x₁₁ reach their upper bounds, it is 236.370313314566, with
+/// every equality met exactly: 0.0607 below the report's value, which `optimum` keeps.
 ///
 /// The report's eqs. 45-46 (pp. 13-14), after Epperly (the report's reference 6).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2910,6 +2923,29 @@ mod tests {
             1e-12,
         );
         assert!(G21::with_tolerance(0.0).optimum().is_none());
+        // at x₄ = 100, x₂ = 0 and x₃ = 25 ln 2 meet every equality exactly, with g₁ active (x₁
+        // nudged up by 1e-9, above its rounding): f = 35 (25 ln 2)^0.6
+        let x3 = 25.0 * std::f64::consts::LN_2;
+        let x1 = 35.0 * math::powf(x3, 0.6) + 1e-9;
+        let point = reals(&[
+            x1,
+            0.0,
+            x3,
+            100.0,
+            math::ln(800.0),
+            math::ln(400.0),
+            math::ln(500.0),
+        ]);
+        let (value, violation) = problem.evaluate(&point);
+        assert_eq!(violation, 0.0);
+        assert_close(value - 1e-9, 193.788, 1e-5);
+        assert!(
+            problem
+                .constraints(&point)
+                .equalities()
+                .iter()
+                .all(|h| h.abs() < 1e-11)
+        );
     }
 
     #[test]
@@ -2944,6 +2980,34 @@ mod tests {
         assert_eq!(problem.evaluate(&low).0, 0.0);
         assert_eq!(problem.representation().bounds()[9], 100.01..=300.0);
         assert!(G22::with_tolerance(0.0).optimum().is_none());
+        // the equalities solved for all but x₁, x₈ and x₉, at x₈ = 130 and x₉ = 170: every one is
+        // met to rounding, g₁ is active (x₁ nudged up by 1e-9, above its rounding), and f is
+        // 0.0607 below the report's best known
+        let (x8, x9) = (130.0, 170.0);
+        let (x5, x6, x7) = (1e5 * x8 - 1e7, 1e5 * (x9 - x8), 5e7 - 1e5 * x9);
+        let (x10, x11, x12) = (430.0 - x8, 440.0 - x9 + x8, 160.0 + x9);
+        let (x16, x17) = (x11 - x8, x12 - x9);
+        let (x18, x19) = (math::ln(x10 - 100.0), math::ln(300.0 - x8));
+        let (x20, x21, x22) = (math::ln(x16), math::ln(400.0 - x9), math::ln(x17));
+        let (x13, x14) = (30.0 / (x18 - x19), 40.0 / (x20 - x21));
+        let x15 = 60.0 / (x22 - 4.605_17);
+        let (x2, x3, x4) = (x5 / (120.0 * x13), x6 / (80.0 * x14), x7 / (40.0 * x15));
+        let x1 = math::powf(x2, 0.6) + math::powf(x3, 0.6) + math::powf(x4, 0.6) + 1e-9;
+        let point = reals(&[
+            x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19,
+            x20, x21, x22,
+        ]);
+        problem
+            .representation()
+            .validate(&point)
+            .expect("in bounds");
+        let (value, violation) = problem.evaluate(&point);
+        assert_eq!(violation, 0.0);
+        assert_close(value - 1e-9, 236.370_313_314_566, 1e-14);
+        for h in problem.constraints(&point).equalities() {
+            assert!(h.abs() < 1e-8, "{h}");
+        }
+        assert!(value < problem.optimum().expect("known").value() - 0.06);
     }
 
     #[test]
