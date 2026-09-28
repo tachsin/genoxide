@@ -54,7 +54,7 @@ pub fn run<'py>(
         check_problem(problem, &run).map_err(PyValueError::new_err)?;
     }
     let context = Context {
-        shared: Shared::new(fitness, batch, on_generation),
+        shared: Shared::new(fitness, batch, parallel, on_generation),
         objectives: run
             .objectives
             .iter()
