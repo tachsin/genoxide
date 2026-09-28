@@ -8,7 +8,7 @@ The first prints one JSON line per solver per seed, see ../../README.md for the 
 prints the value of each solution with the fitness functions below.
 
 DEAP runs two matched scenarios, and prints nothing for any other problem, size or mode:
-- OneMax 1000: the GA of examples/ga/onemax.py with algorithms.eaSimple ("ga");
+- OneMax 1000: the GA of examples/ga/onemax_short.py with algorithms.eaSimple ("ga");
 - Rosenbrock 10: CMA-ES, deap.cma.Strategy with algorithms.eaGenerateUpdate ("cma_es").
 DEAP has no differential evolution (only examples/de/*.py, not the library), so it doesn't run
 Rastrigin 30. The settings, their sources and the differences from the definitions are on the
@@ -21,6 +21,7 @@ import os
 for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ[variable] = "1"
 
+import array  # noqa: E402
 import json  # noqa: E402
 import math  # noqa: E402
 import random  # noqa: E402
@@ -32,7 +33,9 @@ from deap import algorithms, base, cma, creator, tools  # noqa: E402
 
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
-creator.create("IndividualMax", list, fitness=creator.FitnessMax)
+# OneMax's individuals are arrays of bytes, as in examples/ga/onemax_short.py (below); the CMA-ES's
+# are lists, as in examples/es/cma_minfct.py
+creator.create("IndividualMax", array.array, typecode="b", fitness=creator.FitnessMax)
 creator.create("IndividualMin", list, fitness=creator.FitnessMin)
 
 REAL_TARGET = 0.01
@@ -115,7 +118,7 @@ class Budget:
 
 # -------------------------------------------------------------------------------------------------
 # Fitness functions, identical to benchmarks/problems.py, in plain Python as DEAP's examples write
-# them (examples/ga/onemax.py, deap/benchmarks). DEAP's fitness is a tuple.
+# them (examples/ga/onemax_short.py, deap/benchmarks). DEAP's fitness is a tuple.
 # -------------------------------------------------------------------------------------------------
 
 
@@ -186,9 +189,13 @@ def ea_simple(toolbox, population_size, cxpb, mutpb, budget, seed):
 
 
 def solve_onemax(size, budget, seed):
-    # examples/ga/onemax.py (docs: "One Max Problem"): 300 individuals, two-point crossover,
-    # tournament of 3, eaSimple with cxpb 0.5 and mutpb 0.2. The matched OneMax is defined from it:
-    # the only difference is the bit-flip probability 1 / n, about 0.2 bits per offspring.
+    # examples/ga/onemax_short.py (docs: "One Max Problem: Short Version"): examples/ga/onemax.py's
+    # GA with eaSimple, 300 individuals, two-point crossover, tournament of 3, cxpb 0.5 and mutpb
+    # 0.2, and its individuals an array.array of typecode "b" (creator.IndividualMax, above), which
+    # DEAP's docs prefer for speed (tutorials/advanced/numpy, "Performance"): varAnd's clone, a deep
+    # copy, copies an array at once instead of a list item by item. The operators and the random
+    # draws are onemax.py's, so the runs are the same. The matched OneMax is defined from it: the
+    # only difference is the bit-flip probability 1 / n, about 0.2 bits per offspring.
     toolbox = base.Toolbox()
     toolbox.register("attr_bool", random.randint, 0, 1)
     toolbox.register("individual", tools.initRepeat, creator.IndividualMax, toolbox.attr_bool, size)
