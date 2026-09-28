@@ -121,6 +121,41 @@ impl Shared {
         });
     }
 
+    /// Calls the control of a run through `call`, with the generation, the evaluations and the
+    /// seconds, after the progress callback of the same generation. Not after an error, which
+    /// stops the run. Returns false if the control raised an exception, which is kept.
+    pub fn control<C>(&self, progress: &Progress, call: C) -> bool
+    where
+        C: for<'py> FnOnce(Python<'py>, Vec<Bound<'py, PyAny>>) -> PyResult<()>,
+    {
+        if self.failed() {
+            return true;
+        }
+        Python::attach(|py| {
+            let called = (|| {
+                let arguments = vec![
+                    progress.generation().into_pyobject(py)?.into_any(),
+                    progress.evaluations().into_pyobject(py)?.into_any(),
+                    progress
+                        .elapsed()
+                        .as_secs_f64()
+                        .into_pyobject(py)?
+                        .into_any(),
+                ];
+                call(py, arguments)
+            })();
+            called.map_err(|error| self.fail(error)).is_ok()
+        })
+    }
+
+    // whether an error stops the run
+    fn failed(&self) -> bool {
+        self.error
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_some()
+    }
+
     // calls the function with `argument`, or keeps its error
     fn call<'py, T>(
         &self,

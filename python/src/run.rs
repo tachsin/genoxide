@@ -1,6 +1,10 @@
 //! Building the algorithm a run describes, and running it with a Python fitness function.
 
 use crate::config;
+use crate::control::{
+    CmaesSettings, DeSettings, GaSettings, LocalSearchSettings, PsoSettings, Running, Settings,
+    Slot,
+};
 use crate::errors::{genome_setting, setting};
 use crate::fitness::{Multi, Native, Shared, Single};
 use crate::genes::{self, Genes};
@@ -9,10 +13,10 @@ use crate::operators::{
     bit_flip, integer_mutation,
 };
 use crate::problems;
-use genoxide::algorithm::{GaBuilder, cmaes, pso};
+use genoxide::algorithm::{GaBuilder, Reevaluate, cmaes, pso};
+use genoxide::engine::Progress;
 use genoxide::genome::Representation;
 use genoxide::multi::{self, Decomposition, MultiObjectiveAlgorithm, MultiSnapshot, SmsEmoa};
-use genoxide::observer::Snapshot;
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
 use numpy::ndarray::Array2;
@@ -20,6 +24,7 @@ use numpy::{IntoPyArray, PyArray1, PyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::sync::Arc;
 use std::time::Duration;
 
 type Result<T> = std::result::Result<T, String>;
@@ -31,9 +36,13 @@ type Result<T> = std::result::Result<T, String>;
 /// `batch` aren't used.
 /// `on_generation` is called after every generation with the generation, the evaluations, the
 /// seconds and the best fitness (or the size of the front), and returns False to stop the run.
-/// Returns the result as a dict.
+/// `control`, for a single-objective algorithm, is called once per generation after it (after
+/// the last one too, and not after a re-evaluation), with a [`Running`] handle to the algorithm
+/// and the same arguments as `on_generation`, to change the algorithm's settings or re-evaluate
+/// it. Returns the result as a dict.
 #[pyfunction]
-#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None))]
+#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None, control = None))]
+#[allow(clippy::too_many_arguments)]
 pub fn run<'py>(
     py: Python<'py>,
     config: &str,
@@ -42,6 +51,7 @@ pub fn run<'py>(
     parallel: bool,
     on_generation: Option<Py<PyAny>>,
     problem: Option<&str>,
+    control: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     // the error names the setting, e.g. `stop.generations`
     let mut json = serde_json::Deserializer::from_str(config);
@@ -66,6 +76,7 @@ pub fn run<'py>(
         stop: run.stop,
         parallel,
         problem,
+        control,
     };
     let result = match run.genome {
         config::Genome::Binary { length } => with_operators(
@@ -218,6 +229,8 @@ struct Context {
     parallel: bool,
     // a test problem, evaluated in Rust instead of the Python function
     problem: Option<problems::Problem>,
+    // called with the running algorithm once per generation
+    control: Option<Py<PyAny>>,
 }
 
 impl Context {
@@ -270,7 +283,7 @@ impl Context {
     }
 }
 
-fn de_strategy(strategy: config::DeStrategy) -> de::Strategy {
+pub fn de_strategy(strategy: config::DeStrategy) -> de::Strategy {
     match strategy {
         config::DeStrategy::Named(config::DeStrategyName::Rand1) => de::Strategy::Rand1,
         config::DeStrategy::Named(config::DeStrategyName::Best1) => de::Strategy::Best1,
@@ -284,7 +297,7 @@ fn de_strategy(strategy: config::DeStrategy) -> de::Strategy {
     }
 }
 
-fn de_control(control: config::DeControl) -> de::Control {
+pub fn de_control(control: config::DeControl) -> de::Control {
     match control {
         config::DeControl::Fixed(config::Fixed { f, cr }) => de::Control::Fixed { f, cr },
         config::DeControl::Dither(config::Dither { min_f, max_f, cr }) => {
@@ -345,7 +358,7 @@ fn real_algorithm<'py>(
                 builder = builder.restarts(de_restarts(restarts));
             }
             let builder = builder.objective(context.single_objective()?);
-            generational(py, setting(builder.build())?, context)
+            generational(py, setting(builder.build())?, DeSettings, context)
         }
         config::Algorithm::Cmaes {
             population_size,
@@ -377,7 +390,7 @@ fn real_algorithm<'py>(
                     config::Covariance::Diagonal => cmaes::Covariance::Diagonal,
                 });
             }
-            generational(py, setting(builder.build())?, context)
+            generational(py, setting(builder.build())?, CmaesSettings, context)
         }
         config::Algorithm::Pso {
             population_size,
@@ -394,7 +407,7 @@ fn real_algorithm<'py>(
             if let Some(neighbors) = ring {
                 builder = builder.topology(pso::Topology::Ring { neighbors });
             }
-            generational(py, setting(builder.build())?, context)
+            generational(py, setting(builder.build())?, PsoSettings, context)
         }
         algorithm => with_operators(
             py,
@@ -413,20 +426,21 @@ fn with_operators<'py, R, C, M>(
     representation: Result<R>,
     algorithm: config::Algorithm,
     context: &Context,
-    crossover: impl Fn(config::Crossover) -> Result<C>,
-    mutate: impl Fn(config::Mutate) -> Result<M>,
+    crossover: fn(config::Crossover) -> Result<C>,
+    mutate: fn(config::Mutate) -> Result<M>,
 ) -> Returns<'py>
 where
-    R: Representation,
+    R: Representation + Send + 'static,
     R::Genome: Genes,
-    C: Crossover<R>,
-    M: Mutate<R>,
+    C: Crossover<R> + Send + 'static,
+    M: Mutate<R> + Send + 'static,
 {
     let representation = representation?;
     match algorithm {
         config::Algorithm::Ga(ga) => {
-            let builder = ga_builder(representation, &ga, context, &crossover, &mutate)?;
-            generational(py, setting(builder.build())?, context)
+            let builder = ga_builder(representation, &ga, context, crossover, mutate)?;
+            let settings = GaSettings { crossover, mutate };
+            generational(py, setting(builder.build())?, settings, context)
         }
         config::Algorithm::LocalSearch {
             seed,
@@ -461,7 +475,8 @@ where
             if let Some((patience, kicks)) = restart {
                 builder = builder.restart(patience, kicks);
             }
-            generational(py, setting(builder.build())?, context)
+            let settings = LocalSearchSettings { neighbor: mutate };
+            generational(py, setting(builder.build())?, settings, context)
         }
         config::Algorithm::Nsga2 { variation, .. }
         | config::Algorithm::Nsga3 { variation, .. }
@@ -492,8 +507,8 @@ fn ga_builder<R, C, M>(
     representation: R,
     ga: &config::Ga,
     context: &Context,
-    crossover: &impl Fn(config::Crossover) -> Result<C>,
-    mutate: &impl Fn(config::Mutate) -> Result<M>,
+    crossover: fn(config::Crossover) -> Result<C>,
+    mutate: fn(config::Mutate) -> Result<M>,
 ) -> Result<GaBuilder<R, AnySelect, C, M>>
 where
     R: Representation,
@@ -777,11 +792,18 @@ fn rows<const N: usize>(rows: Vec<Vec<f64>>, setting: &str) -> Result<Vec<[f64; 
 }
 
 // runs a single-objective algorithm, detached from Python so that other threads, and the fitness
-// function on rayon's threads, can run
-fn generational<'py, A>(py: Python<'py>, algorithm: A, context: &Context) -> Returns<'py>
+// function on rayon's threads, can run; with the control of the run, if any, which can change
+// `settings` of the algorithm
+fn generational<'py, A, S>(
+    py: Python<'py>,
+    algorithm: A,
+    settings: S,
+    context: &Context,
+) -> Returns<'py>
 where
-    A: Algorithm + Send,
+    A: Algorithm + Reevaluate + Clone + Send + 'static,
     A::Genome: Genes,
+    S: Settings<A>,
 {
     let stop = context.stop(true)?;
     let shared = &context.shared;
@@ -792,15 +814,61 @@ where
         _ => None,
     };
     let fitness = Single { shared, problem };
+    // the control, the handle it gets, and the slot that holds the algorithm during its call
+    let control = match &context.control {
+        Some(callback) => {
+            let slot = Arc::new(Slot::new(settings));
+            let handle = Py::new(py, Running::new(Arc::clone(&slot)))?;
+            // takes the algorithm's place in the engine during the call
+            let spare = algorithm.clone();
+            Some((callback, slot, handle, spare))
+        }
+        None => None,
+    };
     let outcome = py.detach(|| {
-        Engine::new(algorithm, fitness)
+        let mut engine = Engine::new(algorithm, fitness)
             .stop_when(stop)
             .abort_flag(shared.abort_flag())
             .parallel(parallel)
             .on_generation(|snapshot| {
-                shared.after_generation(snapshot.progress(), |py| single_state(py, snapshot));
-            })
-            .run()
+                shared.after_generation(snapshot.progress(), |py| {
+                    single_state(
+                        py,
+                        snapshot.population(),
+                        snapshot.best(),
+                        snapshot.progress(),
+                    )
+                });
+            });
+        if let Some((callback, slot, handle, spare)) = control {
+            let mut spare = Some(spare);
+            engine = engine.control(move |algorithm, progress| {
+                let called = shared.control(progress, |py, arguments| {
+                    let best = algorithm.best().expect("a best individual after a tell");
+                    let state = single_state(py, algorithm.population(), best, progress)?;
+                    // the algorithm moves to the slot for the call, and back
+                    let filler = spare.take().expect("the spare is back after each call");
+                    slot.fill(std::mem::replace(algorithm, filler));
+                    let mut all = vec![handle.bind(py).clone().into_any()];
+                    all.extend(arguments);
+                    all.extend(state);
+                    let result = callback.bind(py).call1(pyo3::types::PyTuple::new(py, all)?);
+                    let moved = slot.empty().expect("the algorithm stays in its slot");
+                    spare = Some(std::mem::replace(algorithm, moved));
+                    result.map(drop)
+                });
+                if called {
+                    Ok(())
+                } else {
+                    // the run raises the control's exception; this error only stops the engine
+                    Err(genoxide::Error::InvalidSetting {
+                        setting: "control",
+                        reason: "the control raised an exception".to_string(),
+                    })
+                }
+            });
+        }
+        engine.run()
     });
     if let Some(error) = shared.take_error() {
         return Err(error.into());
@@ -875,9 +943,10 @@ where
 // solution)
 fn single_state<'py, G: Genes>(
     py: Python<'py>,
-    snapshot: &Snapshot<'_, G>,
+    population: &Population<G>,
+    best: &Individual<G>,
+    progress: &Progress,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let population = snapshot.population();
     let genomes: Vec<&G> = population.iter().map(Individual::genome).collect();
     let (scores, violations): (Vec<f64>, Vec<f64>) = population
         .iter()
@@ -890,10 +959,10 @@ fn single_state<'py, G: Genes>(
             )
         })
         .unzip();
-    let best = snapshot.progress().best().and_then(Fitness::score);
+    let score = progress.best().and_then(Fitness::score);
     Ok(vec![
-        best.into_pyobject(py)?.into_any(),
-        genes::array(py, snapshot.best().genome()).into_any(),
+        score.into_pyobject(py)?.into_any(),
+        genes::array(py, best.genome()).into_any(),
         genes::matrix(py, &genomes)?.into_any(),
         PyArray1::from_vec(py, scores).into_any(),
         PyArray1::from_vec(py, violations).into_any(),

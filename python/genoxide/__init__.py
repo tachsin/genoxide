@@ -32,6 +32,10 @@ A run stops at the first of its stop conditions: ``generations``, ``evaluations`
 ``time`` (seconds) and ``stagnation`` (generations without improvement), or when its
 ``on_generation`` callback returns False.
 
+A single-objective run's ``control`` callback gets the running algorithm once per generation, to
+change its settings (parameter control, e.g. an annealed mutation step) or to re-evaluate it after
+the fitness function changed: see :class:`Running`.
+
 Settings are checked before a run: a count, a size or an integer bound is a whole number (an
 ``int`` or a numpy integer, not a ``bool`` or a ``float``), and a real setting is a finite number.
 A wrong one is a ``ValueError`` that names it.
@@ -115,6 +119,13 @@ __all__ = [
     "MultiResult",
     "Progress",
     "MultiProgress",
+    # parameter control
+    "Running",
+    "RunningGa",
+    "RunningDe",
+    "RunningCmaes",
+    "RunningPso",
+    "RunningLocalSearch",
     # submodules
     "problems",
     "indicators",
@@ -842,6 +853,236 @@ class MultiProgress:
     """Their constraint violations."""
 
 
+# --- parameter control ---------------------------------------------------------------------------
+
+
+class Running:
+    """The algorithm of a running single-objective run, for its ``control`` callback.
+
+    ``run(..., control=callback)`` calls ``callback(algorithm, progress)`` once per generation,
+    the initial population (generation 0) included, with this handle to the running algorithm and
+    a :class:`Progress`, after ``on_generation``. It's for parameter control, e.g. a mutation step
+    annealed over the run, and for re-evaluation after the fitness function changed. A change
+    applies from the next generation. The callback is also called after the last generation, so
+    the settings it makes there are never used; it isn't called again after a re-evaluation's
+    evaluations, which complete no generation. What it returns is ignored: return False from
+    ``on_generation`` to stop a run.
+
+    Each algorithm has a class of its own, with its settings as properties: :class:`RunningGa`,
+    :class:`RunningDe`, :class:`RunningCmaes`, :class:`RunningPso` and
+    :class:`RunningLocalSearch`. A new value is checked as in the algorithm's constructor: a
+    wrong one raises a ``ValueError`` and changes nothing. The handle works only during the
+    callback; afterwards it raises a ``RuntimeError``.
+
+    A control that changes nothing leaves the run as it is: with a seed, the same result as
+    without the control.
+    """
+
+    __slots__ = ("_native",)
+
+    def __init__(self, native: Any, algorithm: _SingleObjective) -> None:
+        self._native = native
+
+    def reevaluate(self) -> None:
+        """Scores again what the algorithm keeps, for a fitness function that changed during the
+        run: adaptive penalty weights, a retrained surrogate model, a moving optimum.
+
+        Instead of the next generation's children, the population is evaluated again (a particle
+        swarm's positions and personal bests, a local search's current and best solution),
+        without breeding and without a new generation: ``on_generation`` is then called again
+        with the same generation number, and ``control`` isn't. The best solution is then the
+        best of the new values, as old and new values aren't comparable. The evaluations count,
+        and no random numbers are drawn, so a seeded run that re-evaluates at the same
+        generations repeats.
+        """
+        self._native.reevaluate()
+
+    def _get(self, name: str) -> Any:
+        return json.loads(self._native.get(name))
+
+    def _set(self, name: str, value: Any) -> None:
+        self._native.set(name, json.dumps(value, default=_json_number, allow_nan=False))
+
+
+class RunningGa(Running):
+    """A running :class:`Ga`, for ``control``: its rates and operators.
+
+    ``select``, ``crossover`` and ``mutation`` take a new operator of any kind that fits the
+    genome, e.g. a :class:`GaussianMutation` with a smaller ``sigma``, or a
+    :class:`PolynomialMutation` instead of it. ``mutation_rate`` 0 needs a crossover that
+    recombines, with ``crossover_rate`` above 0, as in :class:`Ga`.
+    """
+
+    __slots__ = ("_select", "_crossover", "_mutation")
+
+    def __init__(self, native: Any, algorithm: _SingleObjective) -> None:
+        super().__init__(native, algorithm)
+        assert isinstance(algorithm, Ga)
+        self._select = algorithm.select
+        self._crossover = algorithm.crossover
+        self._mutation = algorithm.mutation
+
+    @property
+    def crossover_rate(self) -> float:
+        """The probability that a pair of parents is combined, 0 to 1."""
+        return float(self._get("crossover_rate"))
+
+    @crossover_rate.setter
+    def crossover_rate(self, rate: float) -> None:
+        self._set("crossover_rate", _number("crossover_rate", rate))
+
+    @property
+    def mutation_rate(self) -> float:
+        """The probability that a child is mutated, 0 to 1."""
+        return float(self._get("mutation_rate"))
+
+    @mutation_rate.setter
+    def mutation_rate(self, rate: float) -> None:
+        self._set("mutation_rate", _number("mutation_rate", rate))
+
+    @property
+    def select(self) -> Select:
+        """How parents are picked."""
+        return self._select
+
+    @select.setter
+    def select(self, select: Select) -> None:
+        self._set("select", _describe_setting("select", select, _SELECT))
+        self._select = select
+
+    @property
+    def crossover(self) -> Crossover:
+        """How pairs of parents are combined. It must fit the genome."""
+        return self._crossover
+
+    @crossover.setter
+    def crossover(self, crossover: Crossover) -> None:
+        self._set("crossover", _describe_setting("crossover", crossover, _CROSSOVER))
+        self._crossover = crossover
+
+    @property
+    def mutation(self) -> Mutation:
+        """How children are changed. It must fit the genome."""
+        return self._mutation
+
+    @mutation.setter
+    def mutation(self, mutation: Mutation) -> None:
+        self._set("mutation", _describe_setting("mutation", mutation, _MUTATION))
+        self._mutation = mutation
+
+
+class RunningDe(Running):
+    """A running :class:`De`, for ``control``: its ``strategy`` and its ``control`` of F and CR,
+    in the forms of :class:`De`'s settings.
+
+    Reading one gives the setting in use, the default included, e.g. ``{"memory": 100}``.
+    JADE's and SHADE's adaptation goes on across a change of JADE's ``c``, or to a SHADE control
+    with the same memory size; a switch to JADE or SHADE from another control, or to another
+    memory size, starts it over. A strategy with a smaller archive drops random members of it.
+    With ``l_shade``, the population goes on shrinking over the budget of evaluations.
+    """
+
+    __slots__ = ()
+
+    @property
+    def strategy(self) -> DeStrategy:
+        """How each mutant vector is built: ``"rand1"``, ``"best1"``, ``{"p": ..., "archive":
+        ...}`` or ``{"max_p": ..., "archive": ...}``."""
+        strategy: DeStrategy = self._get("strategy")
+        return strategy
+
+    @strategy.setter
+    def strategy(self, strategy: DeStrategy) -> None:
+        self._set("strategy", _de_running("strategy", strategy, _DE_STRATEGIES, _DE_STRATEGY))
+
+    @property
+    def control(self) -> DeControl:
+        """Where F and CR come from: ``{"f": ..., "cr": ...}``, ``{"min_f": ..., "max_f": ...,
+        "cr": ...}``, ``{"c": ...}`` or ``{"memory": ...}``."""
+        control: DeControl = self._get("control")
+        return control
+
+    @control.setter
+    def control(self, control: DeControl) -> None:
+        self._set("control", _de_running("control", control, _DE_CONTROLS, _DE_CONTROL))
+
+
+class RunningCmaes(Running):
+    """A running :class:`Cmaes`, for ``control``: CMA-ES adapts its own settings, and only
+    re-evaluates, keeping its distribution. The convergence criteria that compare values across
+    generations start over."""
+
+    __slots__ = ()
+
+
+class RunningPso(Running):
+    """A running :class:`Pso`, for ``control``: its inertia and accelerations, e.g. an inertia
+    falling from 0.9 to 0.4 over the run (Shi and Eberhart, 1998), or accelerations from a large
+    cognitive and a small social one to the reverse (Ratnaweera, Halgamuge and Watson, 2004).
+    They apply from the next move of the swarm."""
+
+    __slots__ = ()
+
+    @property
+    def inertia(self) -> float:
+        """The share of its velocity that a particle keeps, 0 or more: 0.7298 by default."""
+        return float(self._get("inertia"))
+
+    @inertia.setter
+    def inertia(self, inertia: float) -> None:
+        self._set("inertia", _number("inertia", inertia))
+
+    @property
+    def acceleration(self) -> tuple[float, float]:
+        """``(cognitive, social)``: how strongly a particle is pulled toward its personal best
+        and toward its neighborhood's best, each 0 or more: 1.49618 each by default."""
+        cognitive, social = self._get("acceleration")
+        return float(cognitive), float(social)
+
+    @acceleration.setter
+    def acceleration(self, acceleration: tuple[float, float]) -> None:
+        try:
+            cognitive, social = acceleration
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"acceleration is a pair (cognitive, social), not {acceleration!r}"
+            ) from None
+        pair = [_number("acceleration", cognitive), _number("acceleration", social)]
+        self._set("acceleration", pair)
+
+
+class RunningLocalSearch(Running):
+    """A running :class:`LocalSearch`, for ``control``: its neighbor operator and the neighbors
+    per step, e.g. smaller moves as the search settles. They apply from the next step, to the
+    kicks of a restart too."""
+
+    __slots__ = ("_neighbor",)
+
+    def __init__(self, native: Any, algorithm: _SingleObjective) -> None:
+        super().__init__(native, algorithm)
+        assert isinstance(algorithm, LocalSearch)
+        self._neighbor = algorithm.neighbor
+
+    @property
+    def neighbor(self) -> Mutation:
+        """Makes a neighbor from the current solution. It must fit the genome."""
+        return self._neighbor
+
+    @neighbor.setter
+    def neighbor(self, neighbor: Mutation) -> None:
+        self._set("neighbor", _describe_setting("neighbor", neighbor, _NEIGHBOR))
+        self._neighbor = neighbor
+
+    @property
+    def neighbors(self) -> int:
+        """The neighbors evaluated per step, 1 to 2^24."""
+        return int(self._get("neighbors"))
+
+    @neighbors.setter
+    def neighbors(self, neighbors: int) -> None:
+        self._set("neighbors", _whole("neighbors", neighbors))
+
+
 # --- running -------------------------------------------------------------------------------------
 
 
@@ -898,6 +1139,26 @@ def _on_generation(
     def call(*state: Any) -> bool:
         go_on = callback(progress(*state))
         return go_on is not False and go_on is not np.False_
+
+    return call
+
+
+def _control(
+    control: Callable[[Any, Progress], Any] | None, algorithm: _SingleObjective
+) -> Callable[..., None] | None:
+    """The control callback, called with the native handle of the running algorithm and the
+    arguments of ``on_generation``, as ``control(running, progress)``, with the same
+    :class:`Running` every generation."""
+    if control is None:
+        return None
+    _check_callable(control, "control")
+    running: Running | None = None
+
+    def call(native: Any, *state: Any) -> None:
+        nonlocal running
+        if running is None:
+            running = algorithm._running(native, algorithm)
+        control(running, Progress(*state))
 
     return call
 
@@ -987,6 +1248,7 @@ class _Algorithm:
         parallel: bool,
         on_generation: Callable[..., bool] | None,
         problem: str | None = None,
+        control: Callable[..., None] | None = None,
     ) -> dict[str, Any]:
         run = {
             "genome": _describe_setting("genome", self._genome, _GENOME),
@@ -997,12 +1259,14 @@ class _Algorithm:
         # NaN and infinity aren't JSON: the settings are finite, or an error names them
         description = json.dumps(run, default=_json_number, allow_nan=False)
         return _genoxide.run(
-            description, fitness, bool(batch), bool(parallel), on_generation, problem
+            description, fitness, bool(batch), bool(parallel), on_generation, problem, control
         )
 
 
 class _SingleObjective(_Algorithm):
     _objective: ObjectiveName
+    # the handle that its control gets
+    _running: type[Running]
 
     def _objectives(self) -> list[str]:
         if self._objective not in ("maximize", "minimize"):
@@ -1021,6 +1285,7 @@ class _SingleObjective(_Algorithm):
         batch: bool = False,
         parallel: bool = False,
         on_generation: Callable[[Progress], bool | None] | None = None,
+        control: Callable[[Any, Progress], Any] | None = None,
     ) -> Result:
         """Runs the algorithm until the first stop condition.
 
@@ -1065,6 +1330,13 @@ class _SingleObjective(_Algorithm):
             Called with a :class:`Progress` after every generation, the initial population
             (generation 0) included, on the thread that called ``run``. If it returns False, the
             run stops with the stop reason "aborted".
+        control : callable, optional
+            Called as ``control(algorithm, progress)`` once per generation, after
+            ``on_generation``, on the same thread, with the running algorithm (a
+            :class:`RunningGa`, :class:`RunningDe`, :class:`RunningCmaes`, :class:`RunningPso` or
+            :class:`RunningLocalSearch`) and a :class:`Progress`: to change the algorithm's
+            settings for the next generation, or to re-evaluate it after the fitness function
+            changed. See :class:`Running`.
 
         At least one of ``generations``, ``evaluations``, ``target``, ``time`` and
         ``stagnation`` is needed. None is no condition.
@@ -1084,12 +1356,13 @@ class _SingleObjective(_Algorithm):
             a wrong fitness result: a negative constraint violation, or a batch result with a
             length other than the number of genomes.
         TypeError
-            If ``fitness`` or ``on_generation`` isn't callable, or ``fitness`` returns something
-            that isn't a number. Another error converting a result, e.g. an ``OverflowError`` for
-            an int too large for a float, is raised as it is.
+            If ``fitness``, ``on_generation`` or ``control`` isn't callable, or ``fitness``
+            returns something that isn't a number. Another error converting a result, e.g. an
+            ``OverflowError`` for an int too large for a float, is raised as it is.
         Exception
-            An exception raised by ``fitness`` or ``on_generation`` stops the run, and ``run``
-            raises it. So does ``KeyboardInterrupt`` on Ctrl+C.
+            An exception raised by ``fitness``, ``on_generation`` or ``control`` stops the run,
+            and ``run`` raises it, e.g. the ``ValueError`` of a wrong setting in ``control``. So
+            does ``KeyboardInterrupt`` on Ctrl+C.
         """
         _check_callable(fitness)
         if isinstance(fitness, problems.MultiProblem):
@@ -1099,11 +1372,14 @@ class _SingleObjective(_Algorithm):
             )
         stop = _stop(generations, evaluations, target, time, stagnation)
         callback = _on_generation(on_generation, Progress)
+        controls = _control(control, self)
         if isinstance(fitness, problems.Problem):
             description = fitness._json()
-            return Result(**self._run(fitness, stop, False, parallel, callback, description))
+            return Result(
+                **self._run(fitness, stop, False, parallel, callback, description, controls)
+            )
         function = _batch_scores(fitness) if batch else fitness
-        return Result(**self._run(function, stop, batch, parallel, callback))
+        return Result(**self._run(function, stop, batch, parallel, callback, None, controls))
 
 
 class Ga(_SingleObjective):
@@ -1144,6 +1420,8 @@ class Ga(_SingleObjective):
         The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
         repeats the run.
     """
+
+    _running = RunningGa
 
     def __init__(
         self,
@@ -1258,6 +1536,8 @@ class De(_SingleObjective):
         repeats the run.
     """
 
+    _running = RunningDe
+
     def __init__(
         self,
         genome: Real,
@@ -1341,6 +1621,19 @@ def _de_setting(
     raise ValueError(f"{name} is {what}, not {value!r}")
 
 
+def _de_running(
+    name: str,
+    value: Any,
+    forms: tuple[tuple[str, ...], tuple[dict[str, _Read], ...]],
+    what: str,
+) -> str | dict[str, Any]:
+    """A new setting of a running De: as in its constructor, but not None."""
+    setting = None if value is None else _de_setting(name, value, forms, what)
+    if setting is None:
+        raise ValueError(f"{name} is {what}, not None")
+    return setting
+
+
 class Cmaes(_SingleObjective):
     """CMA-ES, the covariance matrix adaptation evolution strategy. Real genomes.
 
@@ -1373,6 +1666,8 @@ class Cmaes(_SingleObjective):
         The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
         repeats the run.
     """
+
+    _running = RunningCmaes
 
     def __init__(
         self,
@@ -1431,6 +1726,8 @@ class Pso(_SingleObjective):
         repeats the run.
     """
 
+    _running = RunningPso
+
     def __init__(
         self,
         genome: Real,
@@ -1482,6 +1779,8 @@ class LocalSearch(_SingleObjective):
         The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
         repeats the run.
     """
+
+    _running = RunningLocalSearch
 
     def __init__(
         self,
