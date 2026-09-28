@@ -26,7 +26,18 @@ PROBLEMS = [
     gx.problems.Branin,
     gx.problems.GoldsteinPrice,
     gx.problems.SixHumpCamel,
+    gx.problems.Hartmann3,
+    gx.problems.Hartmann6,
+    gx.problems.Shekel5,
+    gx.problems.Shekel7,
+    gx.problems.Shekel10,
+    gx.problems.Easom,
+    gx.problems.Eggholder,
+    gx.problems.SchafferF6,
 ]
+
+# the problems whose minimum is known numerically, not proven
+NUMERICAL = {"Hartmann3", "Hartmann6", "Shekel5", "Shekel7", "Shekel10", "Eggholder"}
 
 
 CONSTRAINED = [
@@ -128,7 +139,7 @@ def test_every_problem_describes_itself(cls):
     bounds = np.array(genome._describe()["bounds"])
     assert bounds.shape == (problem.dimensions, 2)
     optimum = problem.optimum
-    assert optimum.proven
+    assert optimum.proven == (problem.name not in NUMERICAL)
     assert optimum.solutions.shape[1] == problem.dimensions
     for solution in optimum.solutions:
         assert np.all(bounds[:, 0] <= solution) and np.all(solution <= bounds[:, 1])
@@ -158,6 +169,28 @@ def test_values_at_chosen_points():
     assert gx.problems.Branin().optimum.value == pytest.approx(5 / (4 * math.pi))
     assert len(gx.problems.Himmelblau().optimum.solutions) == 4
     assert gx.problems.Michalewicz(10).optimum.value == pytest.approx(-9.6601517, abs=1e-7)
+
+
+def test_values_of_the_functions_with_tables():
+    # the minima that Dixon and Szegö report, to their digits
+    assert round(gx.problems.Hartmann3().optimum.value, 5) == -3.86278
+    assert round(gx.problems.Hartmann6().optimum.value, 5) == -3.32237
+    assert round(gx.problems.Shekel5().optimum.value, 4) == -10.1532
+    assert round(gx.problems.Shekel7().optimum.value, 4) == -10.4029
+    assert round(gx.problems.Shekel10().optimum.value, 4) == -10.5364
+    # at (4, 4, 4, 4), the squared distances to a₁ … a₅ are 0, 36, 64, 16 and 20
+    expected = -(1 / 0.1 + 1 / 36.2 + 1 / 64.2 + 1 / 16.4 + 1 / 20.4)
+    assert gx.problems.Shekel5()([4, 4, 4, 4]) == pytest.approx(expected, rel=1e-12)
+    assert gx.problems.Easom()([math.pi, math.pi]) == -1
+    assert gx.problems.Easom()([-100, 100]) == 0
+    # −47 sin √47 at the origin
+    expected = -47 * math.sin(math.sqrt(47))
+    assert gx.problems.Eggholder()([0, 0]) == pytest.approx(expected, rel=1e-12)
+    assert gx.problems.Eggholder().optimum.solutions[0][0] == 512
+    assert gx.problems.SchafferF6()([0, 0]) == 0
+    assert gx.problems.SchafferF6()([3, 4]) == gx.problems.SchafferF6()([0, -5])
+    assert gx.problems.Hartmann6().genome == gx.Real((0.0, 1.0), length=6)
+    assert gx.problems.Shekel10().genome == gx.Real((0.0, 10.0), length=4)
 
 
 def test_sizes():

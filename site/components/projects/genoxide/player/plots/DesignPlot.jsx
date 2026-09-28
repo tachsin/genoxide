@@ -22,7 +22,10 @@ function status(g, signed) {
   return { label: "satisfied", tone: "good" };
 }
 
-/** Design variables `offset` onward on their ranges: the best design's value, and the trail before it. */
+/**
+ * Design variables `offset` onward on their ranges: the best design's value, the trail before
+ * it, and a variable's `optimum`, if the trace gives one, as a ring.
+ */
 function Variables({ variables, offset, best, trail, color }) {
   return (
     <PlotBox
@@ -59,6 +62,9 @@ function Variables({ variables, offset, best, trail, color }) {
                   <circle key={k} cx={clamp(f.state.best[offset + i])} cy={y} r={3} className="fill-base-content" opacity={0.06 + (0.2 * (k + 1)) / trail.length} />
                 ) : null,
               )}
+              {typeof v.optimum === "number" ? (
+                <circle cx={clamp(v.optimum)} cy={y} r={8} fill="none" className="stroke-base-content" strokeWidth={1.5} />
+              ) : null}
               {typeof value === "number" ? (
                 <circle cx={clamp(value)} cy={y} r={6} fill={color} stroke="var(--color-base-100)" strokeWidth={2} />
               ) : null}
@@ -73,7 +79,9 @@ function Variables({ variables, offset, best, trail, color }) {
 /**
  * `design`: each design variable on its range, the best design's value
  * marked (the last frames' values faint behind it), and every constraint's
- * state: violated, active (on its boundary) or satisfied.
+ * state: violated, active (on its boundary) or satisfied. A variable's
+ * optional `optimum` is marked with a ring, named in the legend by
+ * `problem.optimum_label` ("optimum" by default).
  */
 export default function DesignPlot({ trace, frame, index, dark }) {
   const variables = trace.problem?.variables ?? [];
@@ -81,6 +89,7 @@ export default function DesignPlot({ trace, frame, index, dark }) {
   const best = frame.state?.best ?? [];
   const violations = frame.state?.violations ?? [];
   const color = categorical(dark)[0];
+  const optimum = variables.some((v) => typeof v.optimum === "number");
   const trail = trace.frames.slice(Math.max(0, index - TRAIL), index);
   // `problem.signed` says so outright: a trace of equalities only, recorded as their excess over
   // the tolerance, has no negative value to tell
@@ -104,6 +113,7 @@ export default function DesignPlot({ trace, frame, index, dark }) {
         items={[
           { label: "best design", color, shape: "dot" },
           { label: `the ${TRAIL} frames before`, shape: "dot", className: "text-base-content/25" },
+          ...(optimum ? [{ label: trace.problem?.optimum_label ?? "optimum", shape: "ring", className: "text-base-content" }] : []),
         ]}
       />
       {/* many variables: two columns of them on wider screens */}

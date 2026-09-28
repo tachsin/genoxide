@@ -6,7 +6,7 @@ reference: "De Jong, K. A. (1975). An Analysis of the Behavior of a Class of Gen
 reference_url: "https://hdl.handle.net/2027.42/4507"
 optimum: "0 (at the origin)"
 languages: [rust, python]
-order: 51
+order: 41
 trace_note: "Recorded from another run: CMA-ES in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 

@@ -11,7 +11,10 @@ const LEVELS = [0.12, 0.24, 0.36, 0.48, 0.6, 0.72, 0.84];
 /**
  * `contour`: the population over the function's landscape (computed here),
  * darker where the function is higher, with iso-lines and the known minima.
- * `compact` (a panel of a grid) leaves the legend to the grid.
+ * `compact` (a panel of a grid) leaves the legend to the grid. Optionally,
+ * `problem.labels` names the axes and the field (`{ x, y, f }`: a function
+ * of more than 2 variables is drawn as a slice or a projection), and
+ * `problem.minima_label` the minima, when they aren't proven global.
  */
 export default function ContourPlot({ trace, frame, dark, compact = false }) {
   const [hover, setHover] = useState(null);
@@ -24,6 +27,7 @@ export default function ContourPlot({ trace, frame, dark, compact = false }) {
     [-5, 5],
   ];
   const minima = problem.minima ?? [];
+  const labels = { x: "x₁", y: "x₂", f: "f", ...problem.labels };
   const population = frame.state?.population ?? [];
   const best = frame.state?.best ?? null;
   const palette = categorical(dark);
@@ -59,7 +63,7 @@ export default function ContourPlot({ trace, frame, dark, compact = false }) {
 
   return (
     <div>
-      {compact ? null : <Legend className="mb-2" items={contourLegend({ best, minima: minima.length, palette })} />}
+      {compact ? null : <Legend className="mb-2" items={contourLegend({ best, minima: minima.length, palette, minimaLabel: problem.minima_label })} />}
       <PlotBox
         aspect={1}
         minHeight={compact ? 220 : 280}
@@ -70,8 +74,8 @@ export default function ContourPlot({ trace, frame, dark, compact = false }) {
             <Tooltip x={hover.px} y={hover.py} width={width}>
               <TipRows
                 rows={[
-                  ["x₁, x₂", `${formatValue(hover.p[0])}, ${formatValue(hover.p[1])}`],
-                  ...(f ? [["f", formatValue(Number(f(hover.p[0], hover.p[1]).toPrecision(6)))]] : []),
+                  [`${labels.x}, ${labels.y}`, `${formatValue(hover.p[0])}, ${formatValue(hover.p[1])}`],
+                  ...(f ? [[labels.f, formatValue(Number(f(hover.p[0], hover.p[1]).toPrecision(6)))]] : []),
                 ]}
               />
             </Tooltip>
@@ -100,8 +104,8 @@ export default function ContourPlot({ trace, frame, dark, compact = false }) {
                 area={area}
                 xTicks={ticks(bounds[0][0], bounds[0][1], 5)}
                 yTicks={ticks(bounds[1][0], bounds[1][1], 5)}
-                xLabel="x₁"
-                yLabel="x₂"
+                xLabel={labels.x}
+                yLabel={labels.y}
               />
               {image ? (
                 <image

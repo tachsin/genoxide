@@ -1,0 +1,103 @@
+---
+title: Shekel 5
+category: continuous
+summary: Minimize Shekel's function with 5 narrow wells in 4 dimensions with particle swarms from 30 seeds, where a swarm that gathers early often settles in the wrong well.
+reference: "Shekel, J. (1971). Test functions for multimodal search techniques. Proceedings of the 5th Annual Princeton Conference on Information Sciences and Systems, Princeton University. Constants as tabulated in Dixon, L. C. W. and Szegö, G. P. (1978). The global optimisation problem: an introduction. In Towards Global Optimisation 2, North-Holland: 1-15."
+reference_url: ""
+optimum: "−10.15320 near (4, 4, 4, 4) (best known)"
+languages: [rust, python]
+order: 60
+family: Shekel
+tab: Shekel 5
+---
+
+# Shekel 5
+
+## The problem
+
+Shekel's function puts a well at each of m points aᵢ, to minimize:
+
+```text
+f(x) = −Σᵢ₌₁ᵐ 1 / ((x − aᵢ)ᵀ(x − aᵢ) + cᵢ),   each xⱼ in [0, 10]
+```
+
+in 4 dimensions. Each term is −1/cᵢ at its center and falls off with the squared distance from it,
+so well i is 1/cᵢ deep and about √cᵢ wide. Here m = 5, with the first five rows of Dixon and Szegö's
+table (Shekel 7 and Shekel 10 take more of them):
+
+| i | aᵢ | cᵢ | depth 1/cᵢ |
+|---|---|---|---|
+| 1 | 4, 4, 4, 4 | 0.1 | 10 |
+| 2 | 1, 1, 1, 1 | 0.2 | 5 |
+| 3 | 8, 8, 8, 8 | 0.2 | 5 |
+| 4 | 6, 6, 6, 6 | 0.4 | 2.5 |
+| 5 | 3, 7, 3, 7 | 0.4 | 2.5 |
+
+The function is Shekel's (1971), with the constants that Dixon and Szegö (1978) tabulate; they call
+it SQRIN5. Neither is online: genoxide takes the constants from Yao, Liu and Lin's (1999,
+table XIV) reprint.
+
+The minimum is near a₁ = (4, 4, 4, 4), but not at it: the other wells pull it aside a little, and
+f(4, 4, 4, 4) = −10.153196, 4e-6 higher. genoxide's `problems::Shekel5` gives the minimum as
+−10.153199679058227 at (4.000037152819676, 4.00013327659156, 4.000037152819676, 4.00013327659156):
+the point where the gradient is 0, computed to 40 digits by Newton's method. Later papers quote
+−10.1532 from Dixon and Szegö. It's the best known minimum, not proven global. Jamil and Yang
+(2013) put the minimum at (4, 4, 4, 4), with a value that is neither the minimum nor the value
+there.
+
+## What makes it hard
+
+Each well is a local minimum, at nearly the value of its own term: −10.1532 at a₁, −5.1008 at a₃,
+−5.0552 at a₂, −2.6829 at a₄ and −2.6305 at a₅. The wells are narrow, and the rest of the box is a
+low plateau: at the center, (5, 5, 5, 5), f is −0.58, and in 0.1% of the box only is f below −1.
+The deepest well is also the narrowest (√0.1 = 0.32 against 0.45 to 0.63). Local searches from
+2,000 random points end in a₁'s well 41% of the time, in a₄'s 39%, and in the other three 20%.
+
+A method that learns where good points are from the points it has seen is misled by the first well
+it finds: a well of depth 2.5 or 5 is far better than the plateau, and pulls the search in before
+the deepest well has been sampled.
+
+## Representation
+
+A `Real` genome of 4 genes, each in [0, 10]: the point x itself. The fitness is f(x), to minimize.
+The function, its bounds and its best known minimum are genoxide's `problems::Shekel5`.
+
+## Algorithm
+
+Particle swarm optimization (Kennedy and Eberhart, 1995, Proceedings of ICNN'95: 1942-1948), with
+40 particles and Clerc and Kennedy's constriction coefficients (2002, IEEE Transactions on
+Evolutionary Computation 6(1): 58-73), genoxide's defaults. Each particle moves towards its own
+best point and a best point of the swarm. Two topologies, each from seeds 1 to 30:
+
+- global: every particle follows the best point of the whole swarm. As soon as one particle finds a
+  well, the whole swarm heads there;
+- ring: each particle follows the best of itself and its two neighbors on a ring. A good point
+  spreads one neighbor per step, so parts of the swarm keep exploring other wells for longer.
+
+Each run stops once its value is within 1e-6 of the best known minimum, or after 10,000
+evaluations. A run is counted in the well whose center is nearest its best point.
+
+## Output
+
+The first line gives the best known minimum, the seeds, the budget and the swarm's size. Then a row
+per well that some run ended in, with how many runs of each topology ended there; then how many runs
+came within 1e-6 of the best known minimum, and the median number of evaluations they needed. In
+Python, `run` evaluates the function in Rust, so both versions print the same table.
+
+The page's plot shows the 30 runs of the swarm with the global topology, each at its best point so
+far, and a curve of the best and the median run's distance above the best known minimum, on a
+logarithmic axis. The points are drawn at their (x₁, x₂), over the function on the plane x₃ = x₁,
+x₄ = x₂, which holds every center aᵢ of Shekel 5: a run in well i is drawn at its center.
+
+[The project page](https://tachsin.gr/projects/genoxide/examples/shekel5) plays this run back.
+
+## Good results
+
+A good result reaches −10.1532 in every run. With the global topology, 12 of the 30 runs do, after
+a median of 3,820 evaluations; the other 18 end in the other four wells, 9 of them in a₄'s at
+−2.68. With the ring topology, 29 end in the deepest well, and 28 of them come within 1e-6 of its
+minimum within the budget of 10,000 evaluations; one run ends in a₃'s. The ring is slower where
+both succeed, 5,840 evaluations against 3,820, since good points spread more slowly.
+
+Over seeds 1 to 1,000, 39% of the runs with the global topology reach the minimum, and 97% of those
+with the ring topology.

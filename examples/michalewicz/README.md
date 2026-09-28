@@ -6,7 +6,7 @@ reference: "Michalewicz, Z. (1992). Genetic Algorithms + Data Structures = Evolu
 reference_url: ""
 optimum: "−9.66015 in 10 dimensions (computed a gene at a time)"
 languages: [rust, python]
-order: 58
+order: 48
 trace_note: "Recorded from another run: L-SHADE in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 
