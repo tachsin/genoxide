@@ -16,7 +16,8 @@ the differences from the definitions are on the library's page, docs/benchmarks/
 pagmo's algorithms run in C++ and call the fitness of a Python user-defined problem (UDP),
 single-threaded (no islands or archipelagos). cmaes accepts a batch fitness evaluator: it gets
 pygmo's member_bfe, which evaluates a generation in one call of the UDP's batch_fitness, with
-numpy; de takes none and calls its fitness, one decision vector at a time. The UDP counts every
+numpy; de takes none and calls its fitness, one decision vector at a time, 300,000 calls a run, so
+that path does the least work it can: numpy on the one vector and plain floats. The UDP counts every
 decision vector evaluated (rule 3), the initial population included, keeps the best solution and
 the first evaluation that reaches the target, and counts the evaluated solutions outside the bounds
 (rule 2.4). How a run ends (rule 2): the counter raises Stop from inside the fitness at the first of
@@ -104,13 +105,26 @@ class Counter:
         now = time.perf_counter()
         before = self.evaluations
         self.evaluations += len(x)
-        best = int(np.argmin(values))
+        best = int(values.argmin())
         if values[best] < self.best:
             self.best = float(values[best])
             self.best_x = x[best].copy()
         if self.first_hit is None and self.best <= self.target:
             hit = int(np.flatnonzero(values <= self.target)[0])
             self.first_hit = {"evaluations": before + hit + 1, "time_s": round(now - self.start, 6)}
+        if self.first_hit is not None or self.evaluations >= self.max_evaluations or now >= self.deadline:
+            self.stopped = True
+            raise Stop()
+
+    def count_one(self, x, value):
+        """count, for one decision vector x with its value (a float), without the arrays."""
+        self.evaluations += 1
+        if value < self.best:
+            self.best = value
+            self.best_x = x.copy()
+        now = time.perf_counter()
+        if self.first_hit is None and value <= self.target:
+            self.first_hit = {"evaluations": self.evaluations, "time_s": round(now - self.start, 6)}
         if self.first_hit is not None or self.evaluations >= self.max_evaluations or now >= self.deadline:
             self.stopped = True
             raise Stop()
@@ -127,11 +141,12 @@ def last_generation(evaluations, per_generation):
 
 
 # -------------------------------------------------------------------------------------------------
-# Fitness functions, identical to problems.py. Each takes the decision vectors as the rows of a
-# numpy array (a whole generation with a batch fitness evaluator, one row otherwise) and returns
-# their values. pagmo passes decision vectors as numpy arrays, and its tutorials use numpy
-# arithmetic on them (tutorials/coding_udp_simple: "It is important to remember that x is a NumPy
-# array, so that the NumPy array arithmetic applies in the body of fitness()")
+# Fitness functions, identical to problems.py, each in two forms: of one decision vector, as
+# fitness gets it, and of the rows of a numpy array, a whole generation, as batch_fitness gets it.
+# The two give the same value to the bit (values() checks it). pagmo passes decision vectors as
+# numpy arrays, and its tutorials use numpy arithmetic on them (tutorials/coding_udp_simple: "It is
+# important to remember that x is a NumPy array, so that the NumPy array arithmetic applies in the
+# body of fitness()")
 # -------------------------------------------------------------------------------------------------
 
 
@@ -146,19 +161,31 @@ def shift(n, upper):
 
 
 def rastrigin(x):
+    n = len(x)
+    y = x - shift(n, 5.12)
+    return 10 * n + (y * y - 10 * np.cos(2 * np.pi * y)).sum()
+
+
+def rastrigin_rows(x):
     n = x.shape[1]
     y = x - shift(n, 5.12)
-    return 10 * n + np.sum(y * y - 10 * np.cos(2 * np.pi * y), axis=1)
+    return 10 * n + (y * y - 10 * np.cos(2 * np.pi * y)).sum(axis=1)
 
 
 def rosenbrock(x):
-    return np.sum(100 * (x[:, 1:] - x[:, :-1] * x[:, :-1]) ** 2 + (1 - x[:, :-1]) ** 2, axis=1)
+    a = x[:-1]
+    return (100 * (x[1:] - a * a) ** 2 + (1 - a) ** 2).sum()
 
 
-# the real-valued problems: fitness function and bounds
+def rosenbrock_rows(x):
+    a = x[:, :-1]
+    return (100 * (x[:, 1:] - a * a) ** 2 + (1 - a) ** 2).sum(axis=1)
+
+
+# the real-valued problems: fitness function of one vector, of rows, and bounds
 REAL_PROBLEMS = {
-    "rastrigin": (rastrigin, -5.12, 5.12),
-    "rosenbrock": (rosenbrock, -5.0, 10.0),
+    "rastrigin": (rastrigin, rastrigin_rows, -5.12, 5.12),
+    "rosenbrock": (rosenbrock, rosenbrock_rows, -5.0, 10.0),
 }
 
 
@@ -167,33 +194,38 @@ class Problem:
     fitness (tutorials/coding_udp_simple; pygmo.problem.batch_fitness: "the decision vectors ...
     are all concatenated in a single array")."""
 
-    def __init__(self, function, lower, upper):
-        self.function = function
-        self.lower = lower
-        self.upper = upper
-        self.low, self.high = np.array(lower, dtype=float), np.array(upper, dtype=float)
+    def __init__(self, problem, size):
+        self.one, self.rows, self.lower, self.upper = REAL_PROBLEMS[problem]
+        self.size = size
 
-    def evaluate(self, x):
-        """The fitness vectors of the rows of x, counted."""
-        # never past the budget: the counter stops the run there
-        x = x[:counter.left()]
-        # rule 2.4: x as pagmo proposed it, not clipped here
-        counter.outside += int(np.sum(np.any((x < self.low) | (x > self.high), axis=1)))
-        values = self.function(x)
-        counter.count(x, values)
-        return values[:, None]
+    def inside(self, x):
+        """Whether every gene of x is in the bounds, and a number (rule 2.4: x as pagmo proposed
+        it, not clipped here)."""
+        return self.lower <= x.min() and x.max() <= self.upper
 
     def fitness(self, x):
-        return self.evaluate(np.asarray(x, dtype=float)[None, :])[0]
+        """One decision vector, as de and pygmo.population evaluate them, counted."""
+        value = float(self.one(x))
+        if not self.inside(x):
+            counter.outside += 1
+        counter.count_one(x, value)
+        return [value]
 
     def batch_fitness(self, dvs):
-        return self.evaluate(np.asarray(dvs, dtype=float).reshape(-1, len(self.lower))).ravel()
+        """A generation, as cmaes evaluates it through member_bfe, counted."""
+        # never past the budget: the counter stops the run there
+        x = np.asarray(dvs, dtype=float).reshape(-1, self.size)[:counter.left()]
+        if not self.inside(x):
+            counter.outside += int(np.count_nonzero(~((x >= self.lower) & (x <= self.upper)).all(axis=1)))
+        values = self.rows(x)
+        counter.count(x, values)
+        return values
 
     def has_batch_fitness(self):
         return True
 
     def get_bounds(self):
-        return self.lower, self.upper
+        return [self.lower] * self.size, [self.upper] * self.size
 
 
 def budget_generations(evaluations_per_generation):
@@ -203,7 +235,7 @@ def budget_generations(evaluations_per_generation):
 
 
 # -------------------------------------------------------------------------------------------------
-# The methods: (solver, fitness function, population size, the run of one seed)
+# The methods: (solver, population size, the run of one seed)
 # -------------------------------------------------------------------------------------------------
 
 
@@ -244,15 +276,15 @@ def run_cma_es(problem, seed):
 
 
 def solvers_of(problem, size, mode):
-    """[(solver, fitness function, population size, run, target)] of a scenario: none outside the
+    """[(solver, population size, run, target)] of a scenario: none outside the
     matched suite. Rastrigin 30 has no target: its runs use the whole budget, measured by the time
     they take and the error at the end."""
     if mode != "matched":
         return []
     if problem == "rastrigin" and size == 30:
-        return [("de", rastrigin, DE_POPULATION, run_de, None)]
+        return [("de", DE_POPULATION, run_de, None)]
     if problem == "rosenbrock" and size == 10:
-        return [("cma_es", rosenbrock, CMAES_POPULATION, run_cma_es, TARGET)]
+        return [("cma_es", CMAES_POPULATION, run_cma_es, TARGET)]
     return []
 
 
@@ -260,15 +292,20 @@ def solvers_of(problem, size, mode):
 
 
 def values(problem, size):
-    """Evaluates the solutions on stdin with the adapter's fitness functions (rule 1.2)."""
+    """Evaluates the solutions on stdin with the adapter's fitness functions (rule 1.2), and checks
+    that its two forms, of one vector and of rows, give the same value."""
     if problem not in REAL_PROBLEMS:
         print(f"pygmo doesn't run {problem}", file=sys.stderr)
         sys.exit(2)
+    one, rows, _, _ = REAL_PROBLEMS[problem]
     for line in sys.stdin:
         if not line.strip():
             continue
-        x = np.array([json.loads(line)], dtype=float)
-        print(json.dumps(float(REAL_PROBLEMS[problem][0](x)[0])), flush=True)
+        x = np.array(json.loads(line), dtype=float)
+        value = float(one(x))
+        if float(rows(x[None, :])[0]) != value:
+            sys.exit(f"{problem}: the fitness of one vector and of rows differ at {x.tolist()}")
+        print(json.dumps(value), flush=True)
 
 
 def main():
@@ -284,9 +321,8 @@ def main():
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
 
     for seed in range(seed_from, seed_to + 1):
-        for solver, function, population_size, run, target in solvers_of(problem, size, mode):
-            _, low, high = REAL_PROBLEMS[problem]
-            problem_ = pg.problem(Problem(function, [low] * size, [high] * size))
+        for solver, population_size, run, target in solvers_of(problem, size, mode):
+            problem_ = pg.problem(Problem(problem, size))
             start = time.perf_counter()
             # without a target, the counter never stops at a value: only the budget and the time
             counter = Counter(max_evaluations, start, max_seconds, -math.inf if target is None else target)
