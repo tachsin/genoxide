@@ -1,21 +1,21 @@
-# radiate (Rust, 1.3.1)
+# radiate (Rust, 1.3.2)
 
-radiate is a Rust library for genetic algorithms, with Python bindings, genetic programming and neuroevolution. Its one search method is the `GeneticEngine`, a GA: each generation keeps `population_size × (1 − offspring_fraction)` survivors and breeds the rest. Its user guide is at [pkalivas.github.io/radiate](https://pkalivas.github.io/radiate/); the links below point to the guide's sources at the tag [v1.3.1](https://github.com/pkalivas/radiate/tree/v1.3.1).
+radiate is a Rust library for genetic algorithms, with Python bindings, genetic programming and neuroevolution. Its one search method is the `GeneticEngine`, a GA: each generation keeps `population_size × (1 − offspring_fraction)` survivors and breeds the rest. Its user guide is at [pkalivas.github.io/radiate](https://pkalivas.github.io/radiate/); the links below point to the guide's sources at the tag [v1.3.2](https://github.com/pkalivas/radiate/tree/v1.3.2).
 
 In the matched suite ([rule 6](../rules.md#6-the-methods)), radiate runs OneMax 1000 with its `GeneticEngine`, set to the GA of [rule 6.2](../rules.md#6-the-methods). It has no differential evolution and no CMA-ES, so it doesn't run Rastrigin or Rosenbrock.
 
-Adapter: [benchmarks/adapters/radiate/](../../../benchmarks/adapters/radiate/). The published results measured 1.3.1; the adapter now pins 1.3.2, which the next run measures.
+Adapter: [benchmarks/adapters/radiate/](../../../benchmarks/adapters/radiate/). The published results measure 1.3.2.
 Found a setting that brings radiate closer to the definition, or a difference this page misses? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
 
 ## How the adapter runs radiate
 
-- **Generation:** radiate evaluates only individuals whose genome changed ([engine/index.md, "Life of an epoch"](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/engine/index.md#L42-L63)).
+- **Generation:** radiate evaluates only individuals whose genome changed ([engine/index.md, "Life of an epoch"](https://github.com/pkalivas/radiate/blob/v1.3.2/docs/source/engine/index.md#L42-L63)).
 - **Evaluations:** the fitness wrapper counts every call and records the first hit ([`Budget::record`](../../../benchmarks/adapters/radiate/src/main.rs#L100-L114)).
-- **Stop and stalls (rule 2.2):** radiate has no stop criterion of its own ("an engine with no limit attached runs forever in Rust", [engine/index.md](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/engine/index.md#L88-L90)). The adapter's `until` ([`run_engine`](../../../benchmarks/adapters/radiate/src/main.rs#L187-L208)) ends the run after the generation that reaches the target, the budget or the time cap. After 10 generations in a row without an evaluation, it ends the attempt, and the engine starts again from a new random population with the next restart seed ([`run_single`](../../../benchmarks/adapters/radiate/src/main.rs#L248-L303)); the run prints `restarts`.
+- **Stop and stalls (rule 2.2):** radiate has no stop criterion of its own ("an engine with no limit attached runs forever in Rust", [engine/index.md](https://github.com/pkalivas/radiate/blob/v1.3.2/docs/source/engine/index.md#L88-L90)). The adapter's `until` ([`run_engine`](../../../benchmarks/adapters/radiate/src/main.rs#L187-L208)) ends the run after the generation that reaches the target, the budget or the time cap. After 10 generations in a row without an evaluation, it ends the attempt, and the engine starts again from a new random population with the next restart seed ([`run_single`](../../../benchmarks/adapters/radiate/src/main.rs#L248-L303)); the run prints `restarts`.
 - **Best solution:** `Generation::value`, radiate's best, recomputed after the clock. If it misses the target while an evaluated solution reached it, the run reports the first hit's solution.
-- **Fitness:** `raw_fitness_fn`, the documented way to skip decoding ([fitness.md](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/fitness.md#L81-L96)).
+- **Fitness:** `raw_fitness_fn`, the documented way to skip decoding ([fitness.md](https://github.com/pkalivas/radiate/blob/v1.3.2/docs/source/fitness.md#L81-L96)).
 - **One thread:** no `rayon` feature, default `Executor::Serial`.
-- **Seeds:** each run is inside `random_provider::scoped_seed(seed, ..)`, which reseeds radiate's thread-local generator ([random_provider.rs](https://github.com/pkalivas/radiate/blob/v1.3.1/crates/radiate-core/src/domain/random_provider.rs#L40-L58)). `random_provider::seed`, which the examples call, only seeds new threads.
+- **Seeds:** each run is inside `random_provider::scoped_seed(seed, ..)`, which reseeds radiate's thread-local generator ([random_provider.rs](https://github.com/pkalivas/radiate/blob/v1.3.2/crates/radiate-core/src/domain/random_provider.rs#L40-L64)). `random_provider::seed`, which the examples call, only seeds new threads.
 - **Separate tests:** 2026-09-28, radiate 1.3.2, seeds 0 to 4, the scenario's budget and cap.
 
 ## OneMax 1000: the GA
@@ -45,5 +45,5 @@ Found a setting that brings radiate closer to the definition, or a difference th
 ## Bugs found
 
 None in the GA run here. Found in methods no longer in the suite, not filed:
-- The guide recommends `ShuffleCrossover` for permutations ([alters/index.md, line 37](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/alters/index.md#L37)), but its children aren't permutations, and the engine replaces them with random individuals without a warning.
-- The guide describes `GaussianMutator` as producing "small, incremental changes" ([mutators.md](https://github.com/pkalivas/radiate/blob/v1.3.1/docs/source/alters/mutators.md#L45-L56)); its standard deviation is a quarter of the gene's initial range.
+- The guide recommends `ShuffleCrossover` for permutations ([alters/index.md, line 37](https://github.com/pkalivas/radiate/blob/v1.3.2/docs/source/alters/index.md#L37)), but its children aren't permutations, and the engine replaces them with random individuals without a warning.
+- The guide describes `GaussianMutator` as producing "small, incremental changes" ([mutators.md](https://github.com/pkalivas/radiate/blob/v1.3.2/docs/source/alters/mutators.md#L45-L56)); its standard deviation is a quarter of the gene's initial range.
