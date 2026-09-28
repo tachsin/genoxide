@@ -66,7 +66,7 @@ Any selection fits any representation; usually `Tournament` of size 2 to 5.
 
 `.memetic`: each of the best `parents` takes the best of `neighbors` mutated neighbors if not worse (Lamarckian). `.build()?` returns `Error::MissingSetting` or `Error::InvalidSetting`, naming the setting.
 
-During a run (parameter control, e.g. an annealed mutation step): `ga.set_crossover_rate(p)?`, `ga.set_mutation_rate(p)?` (validated as in the builder), and `ga.select_mut()`, `ga.crossover_mut()`, `ga.mutate_mut()` to replace an operator, e.g. `*ga.mutate_mut() = GaussianMutation::per_gene(0.5, sigma)?`. A change applies from the next generation's breeding. In an `Engine`, make it in `.control(|ga, progress| ...)`; with `Islands`, through `islands.islands_mut()`.
+During a run (parameter control, e.g. an annealed mutation step): `ga.set_crossover_rate(p)?`, `ga.set_mutation_rate(p)?` (validated as in the builder), and `ga.select_mut()`, `ga.crossover_mut()`, `ga.mutate_mut()` to replace an operator, e.g. `*ga.mutate_mut() = GaussianMutation::per_gene(0.5, sigma)?`. A change applies from the next generation's breeding. The others: `de.set_control(...)?`, `de.set_strategy(...)?`, `pso.set_inertia(w)?` (e.g. 0.9 falling to 0.4), `pso.set_acceleration(c1, c2)?`, `search.neighbor_mut()`, `search.set_neighbors(n)?`. In an `Engine`, make the change in `.control(|algorithm, progress| ...)`; with `Islands`, through `islands.islands_mut()`.
 
 ### Operators
 
@@ -639,7 +639,7 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
-When the fitness function changes during a run (adaptive penalty weights, a retrained surrogate), call `ga.reevaluate()?` between a tell and the next ask (in an `Engine`, from `.control`): the next ask gives the whole population, its tell scores it again without starting a generation, and `best()` is then the best by the new function. `Islands::reevaluate` re-evaluates every island; the `Reevaluate` trait covers the algorithms that can.
+When the fitness function changes during a run (adaptive penalty weights, a retrained surrogate), call `ga.reevaluate()?` between a tell and the next ask (in an `Engine`, from `.control`): the next ask gives the whole population, its tell scores it again without starting a generation, and `best()` is then the best by the new function. The single-objective algorithms other than `SteadyGa` have `reevaluate()` (the `Reevaluate` trait): DE, ES and CMA-ES score their population again, PSO its positions and personal bests, local search its current solution and best, and `Islands` every island.
 
 ### Without Rust: the `genoxide` program
 
