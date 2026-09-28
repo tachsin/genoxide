@@ -1,25 +1,22 @@
-"""Benchmark adapter for SciPy's optimizers (scipy.optimize).
+"""Benchmark adapter for SciPy's differential_evolution (scipy.optimize).
 
 Usage:
     python bench.py <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
     python bench.py values <problem> <size>
 
 The first prints one JSON line per solver per seed, see ../../README.md for the fields. The second
-reads one JSON solution per line and prints its value with this adapter's fitness functions.
+reads one JSON solution per line and prints its value with this adapter's fitness function.
 
-SciPy's optimizers minimize one objective of real numbers: this adapter runs rastrigin, rosenbrock
-and ackley, and prints nothing for the other problems. Which methods run and why, with the links to
-SciPy's docs, is on the page docs/benchmarks/libraries/scipy.md:
-- Rastrigin and Ackley (many local minima): differential_evolution, dual_annealing and direct, the
-  bounded global optimizers of the tutorial's "Global optimization" section;
-- Rosenbrock: minimize with L-BFGS-B (its default with bounds) and Nelder-Mead, the tutorial's
-  "Local minimization" section, and differential_evolution, whose docstring example is rosen.
+The matched suite (docs/benchmarks/rules.md): SciPy runs only matched Rastrigin 30, with its
+differential_evolution set to DE/rand/1/bin as the suite defines it, and prints nothing for any
+other problem, size or mode. The settings, their sources in SciPy's docs and the differences are on
+the page docs/benchmarks/libraries/scipy.md.
 
-Every run ends only at the target, the budget or the time cap (rules 2.1 and 2.2 of
-docs/benchmarks/rules.md): the Budget wrapper stops the solver there; each solver's limits that are
-only budgets are lifted, and its convergence criteria end an attempt and start it again, see the
-solver functions. Every solution evaluated lies in the bounds, by SciPy's own bound handling
-(rule 2.4); the wrapper counts those outside.
+Rastrigin 30 has no target: a run ends at its budget or the time cap, where the Budget wrapper
+stops the solver, or where SciPy's convergence test, which can't be turned off, ends it, with
+"ended_by" (rule 2.2). differential_evolution evaluates each generation in one call
+(vectorized=True, rule 3.4); the Budget counts every solution, and those outside the bounds
+(rule 2.4).
 """
 
 import os
@@ -28,27 +25,26 @@ import os
 for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ[variable] = "1"
 
-import functools
 import json
 import math
 import sys
 import time
 
 import numpy as np
-from scipy.optimize import differential_evolution, direct, dual_annealing, minimize
+from scipy.optimize import differential_evolution
 
 
 class Stop(Exception):
-    """Raised by Budget at the target, the budget or the time cap: it ends the run."""
+    """Raised by Budget at the budget or the time cap: it ends the run."""
 
 
 class Budget:
-    """Counts the evaluations itself (rule 3.2), every call of the fitness function on one solution,
-    whoever calls it: the solver, its restarts, its local searches, its polish and its finite
-    differences. Keeps the best solution and the first evaluation that reaches the target
-    (first_hit), and raises Stop right after it, and before an evaluation past the budget or the
-    time cap. Counts the evaluated solutions outside the bounds, as the solver gave them (rule
-    2.4)."""
+    """The objective function, vectorized as differential_evolution calls it with vectorized=True:
+    x has one solution per column. Counts the evaluations itself (rule 3.2), one per column, and
+    keeps the best solution. Rastrigin 30 has no target: raises Stop before a generation that
+    starts past the budget or the time cap; a generation that would go past the budget is evaluated
+    only up to it. Counts the evaluated solutions outside the bounds, as the solver gave them
+    (rule 2.4)."""
 
     def __init__(self, function, lower, upper, max_evaluations, start, max_seconds):
         self.function = function
@@ -64,190 +60,97 @@ class Budget:
         self.outside = 0
         self.best = math.inf
         self.best_x = None
-        self.first_hit = None
 
     def __call__(self, x):
         if self.evaluations >= self.max_evaluations or time.perf_counter() >= self.deadline:
             raise Stop
-        self.evaluations += 1
-        self.outside += bool(np.any(x < self.lower) or np.any(x > self.upper))
-        value = float(self.function(x))
-        if value < self.best:
-            self.best = value
-            self.best_x = np.array(x, dtype=float)
-            if value <= TARGET:
-                self.first_hit = {"evaluations": self.evaluations,
-                                  "time_s": round(time.perf_counter() - self.start, 6)}
-                raise Stop
-        return value
+        # never past the budget
+        columns = x[:, :self.max_evaluations - self.evaluations]
+        values = self.function(columns)
+        self.evaluations += columns.shape[1]
+        self.outside += int(np.sum(np.any((columns < self.lower) | (columns > self.upper), axis=0)))
+        best = int(np.argmin(values))
+        if values[best] < self.best:
+            self.best = float(values[best])
+            self.best_x = columns[:, best].copy()
+        if columns.shape[1] < x.shape[1]:
+            raise Stop
+        return values
 
     def next_generation(self, *args, **kwargs):
-        """The callback of differential_evolution and minimize, called after every generation or
-        iteration."""
+        """differential_evolution's callback, called after every generation."""
         self.generations += 1
         self.last = self.evaluations - self.generation_end
         self.generation_end = self.evaluations
 
-    def last_generation(self, stepwise):
+    def last_generation(self):
         """The evaluations since the start of the last generation (rule 2.3): of one cut short, or
-        of the last one that ended. `stepwise`: a solver without the callback, whose generation is
-        an evaluation."""
-        if stepwise:
-            return min(self.evaluations, 1)
+        of the last one that ended."""
         return self.evaluations - self.generation_end or self.last
 
 
 # -------------------------------------------------------------------------------------------------
-# Fitness functions, identical to benchmarks/problems.py (minimized). SciPy calls them with one
-# solution, a numpy array, and they're written with numpy like SciPy's own scipy.optimize.rosen.
+# The fitness function, identical to benchmarks/problems.py (minimized). It takes the solutions as
+# the columns of a numpy array, as differential_evolution passes them with vectorized=True, like
+# SciPy's own scipy.optimize.rosen.
 # -------------------------------------------------------------------------------------------------
 
+LOWER, UPPER = -5.12, 5.12
 
-@functools.cache
-def shift(n, upper):
-    """The optimum of rastrigin and ackley, away from the origin:
+
+def shift(n):
+    """The optimum of rastrigin, away from the origin:
     s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1), computed in this order."""
-    return np.array([0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1) for i in range(n)])
+    return np.array([0.8 * UPPER * (2 * ((37 * i + 11) % 101) / 101 - 1) for i in range(n)])
+
+
+SHIFT = shift(1000)
 
 
 def rastrigin(x):
-    """Shifted: 10 n + sum((x_i - s_i)^2 - 10 cos(2 pi (x_i - s_i)))."""
-    d = x - shift(len(x), 5.12)
-    return 10 * len(x) + np.sum(d * d - 10 * np.cos(2 * np.pi * d))
-
-
-def rosenbrock(x):
-    return np.sum(100 * (x[1:] - x[:-1] ** 2) ** 2 + (1 - x[:-1]) ** 2)
-
-
-def ackley(x):
-    """Shifted: Ackley of x - s."""
-    n = len(x)
-    d = x - shift(n, 32.768)
-    return (-20 * np.exp(-0.2 * np.sqrt(np.sum(d * d) / n))
-            - np.exp(np.sum(np.cos(2 * np.pi * d)) / n) + 20 + math.e)
-
-
-TARGET = 0.01
-
-# (fitness function, (lower, upper) of every variable)
-PROBLEMS = {
-    "rastrigin": (rastrigin, (-5.12, 5.12)),
-    "rosenbrock": (rosenbrock, (-5.0, 10.0)),
-    "ackley": (ackley, (-32.768, 32.768)),
-}
-UNSUPPORTED = {"onemax", "nqueens"}
+    """Shifted: 10 n + sum((x_i - s_i)^2 - 10 cos(2 pi (x_i - s_i))), of each column of x."""
+    n = x.shape[0]
+    d = x - SHIFT[:n, None]
+    return 10 * n + np.sum(d * d - 10 * np.cos(2 * np.pi * d), axis=0)
 
 
 # -------------------------------------------------------------------------------------------------
-# Solvers. Each runs until Budget raises Stop at the target, the budget or the time cap.
+# The method. It runs until Budget raises Stop at the budget or the time cap.
 # -------------------------------------------------------------------------------------------------
 
 
-def solve_de(size, lower, upper, seed, budget):
-    """differential_evolution with its defaults, as its docstring's examples call it (rosen, and
-    ackley): best1bin, popsize 15 so 15 n individuals, mutation (0.5, 1) with dithering,
-    recombination 0.7, Latin hypercube initialization, updating='immediate', and the final
-    L-BFGS-B polish, whose finite-difference evaluations count. Bounds (rule 2.4): the population
-    lives in the box (a mutant outside it is replaced by a random point), and the polish is bounded.
+def solve_de(size, seed, budget):
+    """DE/rand/1/bin, the matched suite's (docs/benchmarks/libraries/scipy.md): 100 individuals
+    drawn uniformly in the box, F 0.5 fixed, CR 0.9, one-to-one replacement when not worse,
+    generational ('deferred'), no polish, each generation evaluated in one call (vectorized=True).
+    Bounds (rule 2.4): SciPy redraws a trial gene outside the box uniformly in it.
 
-    Rule 2.2: maxiter (1000 generations by default), a limit that's only a budget, is lifted. Its
-    convergence test, the default tol 0.01 (std of the population's values <= 0.01 * |mean|),
-    ends an attempt: it polishes, and starts again (SciPy has no restart mechanism) with the seed
-    restart_seed(seed, restart)."""
-    bounds = [(lower, upper)] * size
-    restart = 0
-    while True:
-        differential_evolution(budget, bounds, rng=restart_seed(seed, restart),
-                               maxiter=budget.max_evaluations, callback=budget.next_generation)
-        restart += 1
-
-
-def restart_seed(seed, restart):
-    """The seed of attempt `restart` of a run (rule 2.2): the run's seed first, then
-    (seed + 1) * 1_000_000 + restart, so no two runs share a seed."""
-    return seed if restart == 0 else (seed + 1) * 1_000_000 + restart
-
-
-def solve_dual_annealing(size, lower, upper, seed, budget):
-    """dual_annealing with its defaults (its docstring's example is Rastrigin in 10 dimensions):
-    generalized simulated annealing with an L-BFGS-B local search, whose finite-difference
-    evaluations count. Bounds (rule 2.4): a visit outside the box is wrapped back into it (modulo
-    the range), and the local search is bounded.
-
-    Rule 2.2: it has no convergence criterion; it restarts by itself (re-annealing from a new random
-    point when the temperature falls to initial_temp * restart_temp_ratio). Its limits that are
-    only budgets, maxiter global iterations and maxfun evaluations, are lifted: maxfun is twice the
-    budget, so that the Budget wrapper, not dual_annealing's own count, ends the run."""
-    dual_annealing(budget, [(lower, upper)] * size, rng=seed, maxiter=budget.max_evaluations,
-                   maxfun=2 * budget.max_evaluations)
-    # it can't end before max_evaluations global iterations, each at least one evaluation
-    raise AssertionError("dual_annealing ended before the budget")
-
-
-def solve_direct(size, lower, upper, seed, budget):
-    """direct with locally_biased=False, which its docs recommend "for hard problems with many
-    local minima". DIRECT is deterministic: every seed gives the same run. Bounds (rule 2.4): it
-    samples the centres of hyperrectangles that divide the box.
-
-    vol_tol = 0: its docs say vol_tol, the volume of the best hyperrectangle, "decreases
-    exponentially with increasing dimensionality of the problem. Therefore vol_tol should be
-    decreased to avoid premature termination of the algorithm for higher dimensions"; with the
-    default 1e-16 it ended Rastrigin 10 after 1,965 evaluations, at 33.
-
-    Rule 2.2: its limits that are only budgets are lifted: maxiter, and maxfun, set to twice the
-    budget, because DIRECT ends before an iteration that could go past maxfun (with maxfun at the
-    budget it ended Rastrigin 30 after 1,886,939 of 2,000,000 evaluations); the Budget wrapper
-    ends it at the budget. Its convergence criterion, len_tol (default 1e-6), stays; DIRECT has no
-    random start and no restart mechanism, so a restart would repeat the same run. In the separate
-    tests it never converged before the target or the budget; if it did, the run would end there,
-    with a message on stderr."""
-    direct(budget, [(lower, upper)] * size, locally_biased=False, maxfun=2 * budget.max_evaluations,
-           maxiter=budget.max_evaluations, vol_tol=0.0)
-    print(f"direct converged (len_tol) after {budget.evaluations} evaluations", file=sys.stderr)
-
-
-def solve_minimize(method):
-    def solve(size, lower, upper, seed, budget):
-        """minimize with bounds from a random point, with the method's default tolerances.
-        L-BFGS-B is minimize's default when there are bounds; without a gradient it estimates one
-        by finite differences, whose evaluations count. Nelder-Mead is the tutorial's first
-        example, on the Rosenbrock function. Bounds (rule 2.4): both take them (bounds=): L-BFGS-B
-        projects onto the box, and its finite differences step inside it; Nelder-Mead clips its
-        points to the box.
-
-        Rule 2.2: the limits that are only budgets (maxiter, maxfun / maxfev) are lifted. Its
-        convergence tests (ftol, gtol; xatol, fatol) end an attempt, and it starts again from a new
-        random point, drawn with restart_seed(seed, restart) (SciPy has no restart mechanism)."""
-        limits = ({"maxiter": budget.max_evaluations, "maxfun": budget.max_evaluations}
-                  if method == "L-BFGS-B" else
-                  {"maxiter": budget.max_evaluations, "maxfev": budget.max_evaluations})
-        restart = 0
-        while True:
-            x0 = np.random.default_rng(restart_seed(seed, restart)).uniform(lower, upper, size)
-            minimize(budget, x0, method=method, bounds=[(lower, upper)] * size, options=limits,
-                     callback=budget.next_generation)
-            restart += 1
-    return solve
-
-
-# the solvers without a callback: a generation is an evaluation
-STEPWISE = {"dual_annealing", "direct"}
-
-
-def solvers(problem):
-    """(solver name, function) of the problem type, see the page."""
-    if problem == "rosenbrock":
-        return [
-            ("lbfgsb", solve_minimize("L-BFGS-B")),
-            ("nelder_mead", solve_minimize("Nelder-Mead")),
-            ("de", solve_de),
-        ]
-    return [
-        ("de", solve_de),
-        ("dual_annealing", solve_dual_annealing),
-        ("direct", solve_direct),
-    ]
+    Rule 2.2: maxiter, a limit that's only a budget, is lifted. The convergence test can't be
+    turned off: tol=0 and atol=0 end the run only when all 100 values are equal, when DE can no
+    longer move. The run ends there, before the budget; the function returns why, for
+    "ended_by"."""
+    # a generator seeded with the run's seed: it draws the initial population, then
+    # differential_evolution draws from it (rng=)
+    rng = np.random.default_rng(seed)
+    population = rng.uniform(LOWER, UPPER, (100, size))
+    differential_evolution(
+        budget,
+        [(LOWER, UPPER)] * size,
+        strategy="rand1bin",
+        mutation=0.5,
+        recombination=0.9,
+        init=population,
+        updating="deferred",
+        vectorized=True,
+        polish=False,
+        tol=0,
+        atol=0,
+        maxiter=budget.max_evaluations,
+        rng=rng,
+        callback=budget.next_generation,
+    )
+    # it returned by itself, not by Stop: its convergence test
+    return "convergence test (tol=0, atol=0): all 100 values equal"
 
 
 # -------------------------------------------------------------------------------------------------
@@ -255,10 +158,13 @@ def solvers(problem):
 
 def values(problem, size):
     """Prints the value of each solution read from stdin, one JSON list per line (rule 1.2)."""
-    function = PROBLEMS[problem][0]
+    if problem != "rastrigin":
+        print(f"unknown problem {problem}", file=sys.stderr)
+        sys.exit(2)
     for line in sys.stdin:
         if line.strip():
-            print(json.dumps(float(function(np.array(json.loads(line), dtype=float)))), flush=True)
+            x = np.array(json.loads(line), dtype=float)[:, None]
+            print(json.dumps(float(rastrigin(x)[0])), flush=True)
 
 
 def main():
@@ -272,44 +178,41 @@ def main():
     seed_from, seed_to = int(sys.argv[4]), int(sys.argv[5])
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
 
-    if problem in UNSUPPORTED:
+    # the matched suite: SciPy runs only matched Rastrigin 30
+    if (problem, size, mode) != ("rastrigin", 30, "matched"):
         return
-    if problem not in PROBLEMS:
-        print(f"unknown problem {problem}", file=sys.stderr)
-        sys.exit(2)
-    function, (lower, upper) = PROBLEMS[problem]
 
     for seed in range(seed_from, seed_to + 1):
-        for solver, solve in solvers(problem):
-            # the clock starts before the initial population (rule 4.1)
-            start = time.perf_counter()
-            budget = Budget(function, lower, upper, max_evaluations, start, max_seconds)
-            try:
-                solve(size, lower, upper, seed, budget)
-            except Stop:
-                pass
-            # the clock stops when the run ends (rule 4.1)
-            elapsed = time.perf_counter() - start
-            print(json.dumps({
-                "library": "scipy",
-                "solver": solver,
-                "problem": problem,
-                "size": size,
-                "mode": mode,
-                "seed": seed,
-                "time_s": round(elapsed, 6),
-                # generations of differential_evolution, iterations of minimize; dual_annealing and
-                # direct report their evaluations
-                "generations": budget.generations or budget.evaluations,
-                "evaluations": budget.evaluations,
-                "last_generation": budget.last_generation(solver in STEPWISE),
-                "outside": budget.outside,
-                "best": budget.best,
-                "target": TARGET,
-                "success": bool(budget.best <= TARGET),
-                "first_hit": budget.first_hit,
-                "solution": budget.best_x.tolist(),
-            }), flush=True)
+        # the clock starts before the initial population (rule 4.1)
+        start = time.perf_counter()
+        budget = Budget(rastrigin, LOWER, UPPER, max_evaluations, start, max_seconds)
+        ended_by = None
+        try:
+            ended_by = solve_de(size, seed, budget)
+        except Stop:
+            pass
+        # the clock stops when the run ends (rule 4.1)
+        elapsed = time.perf_counter() - start
+        print(json.dumps({
+            "library": "scipy",
+            "solver": "de",
+            "problem": problem,
+            "size": size,
+            "mode": mode,
+            "seed": seed,
+            "time_s": round(elapsed, 6),
+            "generations": budget.generations,
+            "evaluations": budget.evaluations,
+            "last_generation": budget.last_generation(),
+            "outside": budget.outside,
+            "best": budget.best,
+            # Rastrigin 30 has no target: a fixed budget, measured by its time and final error
+            "target": None,
+            "success": False,
+            "first_hit": None,
+            **({"ended_by": ended_by} if ended_by else {}),
+            "solution": budget.best_x.tolist(),
+        }), flush=True)
 
 
 if __name__ == "__main__":

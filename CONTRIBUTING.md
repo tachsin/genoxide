@@ -50,9 +50,10 @@ After a release to crates.io, the release workflow builds the wheels for Linux, 
 
 ## Benchmarks
 
-Every minor release (0.6.0, 0.7.0, …) is benchmarked before it's released, and [docs/benchmarks/](docs/benchmarks/) is updated from it. Patch releases aren't benchmarked again.
+Every minor release (0.6.0, 0.7.0, …) is benchmarked before it's released, and [docs/benchmarks/](docs/benchmarks/) is updated from it. Patch releases aren't benchmarked again. The suite is matched: three problems, one method each, run by every library with its own implementation ([rules](docs/benchmarks/rules.md#6-the-methods)).
 
 - **Partial rerun:** genoxide and its Python package are always rerun. Another library is rerun only when its pinned version changes. `python run.py outdated` and the "New releases of benchmarked libraries" issue list the libraries with a newer release, or whose pin the published results don't measure. `python run.py --update --libraries <the changed ones>` keeps the other libraries' results of the published run, and `python run.py publish` puts the new run in `docs/benchmarks/`.
-- **Full rerun** (about 4 to 5 hours): when the scenarios, the fitness functions, the budgets, the machine, its operating system or a toolchain (Rust, Python, Java, Julia) change. `benchmarks/rerun.sh <version>` runs and publishes it ([benchmarks/README.md](benchmarks/README.md#running)).
+- **Full rerun** (about an hour): when the problems, a method's definition, the fitness functions, the budgets, the machine, its operating system or a toolchain (Rust, Python, Java, Julia) change, or when the published run lacks a problem of the suite (the charts then show it as awaiting the next run). `benchmarks/rerun.sh <version>` runs and publishes it ([benchmarks/README.md](benchmarks/README.md#running)).
+- **A changed adapter** needs `python run.py check --libraries <name>` before its timed run, and its library page must still map its configuration to the definitions.
 - Nothing else may run on the machine during a timed run.
 - **Every release, patch releases too:** once it's on crates.io, `python run.py versions --genoxide <version>` in `benchmarks/` (Linux or WSL, with Valgrind) counts the CPU instructions of its runs and adds it to [genoxide-versions.json](docs/benchmarks/genoxide-versions.json) and the `genoxide_versions` chart. Commit the three files it changes in `docs/benchmarks/` ([benchmarks/README.md](benchmarks/README.md#genoxides-versions-instruction-counts)).

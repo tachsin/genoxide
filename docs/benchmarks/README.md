@@ -1,34 +1,32 @@
 # Benchmarks
 
-16 evolutionary computation libraries in 5 languages, genoxide included, and genoxide's Python package, on the same single-objective problems: OneMax, N-Queens, Rastrigin, Rosenbrock and Ackley. Multi-objective benchmarks are left out for now: they come back once genoxide solves these problems well. Every library gets the same fitness functions, evaluation budgets and time caps. Matched scenarios run the same algorithm in every library; idiomatic scenarios run what each library's own docs recommend. Every setting and every bug found is documented per library, and a better way to run one is [welcome](rules.md#9-open-documentation).
+A small, matched suite: three problems, one method each, and every library runs a problem only with its own implementation of that problem's method, set to the same written definition ([rule 6](rules.md#6-the-methods)). genoxide and its Python package run all three.
 
-[![Overall score: each library's speed to a solution over the 9 scenarios](overall.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
+| Problem | Method |
+|---|---|
+| OneMax 1000 | a GA: DEAP's `eaSimple`, 300 individuals, tournaments of 3, two-point crossover, bit flip, no elitism |
+| Rastrigin 30, shifted | DE/rand/1/bin: 100 individuals, F 0.5, CR 0.9, no adaptation or restarts; no target, a fixed budget of 300,000 evaluations, measured by the time for it and the error at the end |
+| Rosenbrock 10 | CMA-ES with Hansen's defaults, no restarts (pycma is the reference) |
 
-Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, evenly per order of magnitude of time in between; the overall score is the mean over the scenarios a library runs ([rule 8.5](rules.md#8-reporting)).
+**Why so small.** Comparing each library's fastest pick among many methods said little about any library: a library with a method that suits a problem beat one without it, and nothing checked whether either implementation was right. Running the same algorithm everywhere compares implementations: their speed, their evaluations to the target, and whether they do what the definition says. Where a library can't be set exactly to a definition, its page says how it differs, and a difference that changes the algorithm leaves it out of that problem. More problems, and multi-objective ones, come back after these.
 
-genoxide's own releases are compared on the same runs by the CPU instructions Callgrind counts: one seeded run of each method per scenario, exact whatever the machine's load ([rule 10](rules.md#10-instruction-counts-genoxides-versions), history in [genoxide-versions.json](genoxide-versions.json)).
+[![Expected time to target: a panel per problem, a bar per library](time_to_target.svg)](https://tachsin.gr/projects/genoxide/benchmarks)
+
+The published run predates the matched suite: its OneMax 1000 runs are the suite's GA and are shown; Rastrigin 30 and Rosenbrock 10 await the next run.
+
+genoxide's own releases are compared on the same runs by the CPU instructions Callgrind counts: one seeded run of each method per problem, exact whatever the machine's load ([rule 10](rules.md#10-instruction-counts-genoxides-versions), history in [genoxide-versions.json](genoxide-versions.json)).
 
 [![genoxide's versions: the CPU instructions of the same runs](genoxide_versions.svg)](https://tachsin.gr/projects/genoxide/benchmarks#genoxide-versions)
 
-**Interactive results, every chart and table: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).**
+**Interactive results, a card per problem: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).**
 
 | Page | What it has |
 |---|---|
-| [Methodology](../../benchmarks/README.md) | the libraries and solvers, the protocol, the scenarios, the matched settings, how to run it |
-| [Rules](rules.md) | the rules every adapter follows, and which `run.py check` tests |
-| [Notes](notes.md) | what each library can't run, the bugs found, and the rule-level choices |
-| [Results](results.md) | the charts and full numbers of the latest run, and its runs in [results.json.xz](results.json.xz), from which `run.py chart` redraws them |
+| [Methodology](../../benchmarks/README.md) | the libraries and which problems they run, the protocol, how to run it |
+| [Rules](rules.md) | the rules every adapter follows, the three methods' definitions, and which rules `run.py check` tests |
+| [Notes](notes.md) | what each library can't run, how each differs from the definitions, the bugs found |
+| [Results](results.md) | the charts and full numbers of the published run, and its runs in [results.json.xz](results.json.xz), from which `run.py chart` redraws them |
 
-Each library has its own page: its methods and where its docs recommend them, what it leaves out, its separate test runs and its bugs.
+Each library has its own page: its configuration against each definition, its differences, what it can't run, its separate test runs and its bugs.
 
-| Rust | Python | C++, Java, Julia |
-|---|---|---|
-| [genoxide](libraries/genoxide.md) 0.7.0 | [genoxide (Python)](libraries/genoxide_python.md) 0.7.0 | [openGA](libraries/openga.md) 1.0.5 |
-| [genetic_algorithm](libraries/genetic_algorithm.md) 0.27.3 | [DEAP](libraries/deap.md) 1.4.4 | [pygmo](libraries/pygmo.md) 2.19.8 (C++ via Python) |
-| [radiate](libraries/radiate.md) 1.3.1 | [pymoo](libraries/pymoo.md) 0.6.2 | [Jenetics](libraries/jenetics.md) 9.1.0 |
-| [moors](libraries/moors.md) 0.2.11 | [PyGAD](libraries/pygad.md) 3.7.0 | [jMetal](libraries/jmetal.md) 7.5 |
-| | [pycma](libraries/pycma.md) 4.5.0 | [Evolutionary.jl](libraries/evolutionary_jl.md) 0.12.0 |
-| | [Nevergrad](libraries/nevergrad.md) 1.0.12 | [Metaheuristics.jl](libraries/metaheuristics_jl.md) 3.5.0 |
-| | [SciPy](libraries/scipy.md) 1.18.1 | |
-
-The versions are the published results'. The adapters now pin genetic_algorithm 0.27.4, radiate 1.3.2 and Evolutionary.jl 0.12.1, which the next run measures.
+Libraries: [genoxide](libraries/genoxide.md) (Rust), [genoxide (Python)](libraries/genoxide_python.md) (Rust via Python), [DEAP](libraries/deap.md) (Python), [PyGAD](libraries/pygad.md) (Python), [radiate](libraries/radiate.md) (Rust), [pycma](libraries/pycma.md) (Python), [SciPy](libraries/scipy.md) (Python), [pygmo](libraries/pygmo.md) (C++ via Python), [pymoo](libraries/pymoo.md) (Python), [jMetal](libraries/jmetal.md) (Java), [Evolutionary.jl](libraries/evolutionary_jl.md) (Julia), [Metaheuristics.jl](libraries/metaheuristics_jl.md) (Julia).

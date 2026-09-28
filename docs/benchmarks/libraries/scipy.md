@@ -1,83 +1,67 @@
 # SciPy (Python, 1.18.1)
 
-SciPy's [`scipy.optimize`](https://docs.scipy.org/doc/scipy/reference/optimize.html) minimizes functions of real numbers, with local methods ([`minimize`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html)) and global ones ([`differential_evolution`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.differential_evolution.html), [`dual_annealing`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.dual_annealing.html), [`direct`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.direct.html), [`shgo`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.shgo.html), `basinhopping`). Its docs are the reference pages and the [optimization tutorial](https://docs.scipy.org/doc/scipy/tutorial/optimize.html).
+SciPy's [`scipy.optimize`](https://docs.scipy.org/doc/scipy/reference/optimize.html) minimizes functions of real numbers. Its [`differential_evolution`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.differential_evolution.html) is "due to Storn and Price", with a choice of strategies, `rand1bin` among them. Its docs are that reference page (the function's docstring) and the [optimization tutorial](https://docs.scipy.org/doc/scipy/tutorial/optimize.html). The source cited below is [`_differentialevolution.py`](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py) at tag v1.18.1.
 
 Adapter: [benchmarks/adapters/scipy/](../../../benchmarks/adapters/scipy/).
-Know a better way to solve one of these problems with SciPy? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
+Know a way to set SciPy closer to a definition? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
+
+## What it runs
+
+The matched suite: each problem with one method, defined the same for every library ([rules, section 6](../rules.md#6-the-methods)), and each library's own implementation of it.
+
+| Scenario | Method | SciPy |
+|---|---|---|
+| Rastrigin 30, matched: no target, a fixed budget of 300,000 evaluations | DE/rand/1/bin | `de`: `differential_evolution` with `strategy='rand1bin'` |
+| Rosenbrock 10, matched | CMA-ES | can't run: see [Can't run](#cant-run) |
+| OneMax 1000, matched | GA as DEAP's `eaSimple` | can't run: see [Can't run](#cant-run) |
+
+The adapter prints nothing for any other scenario ([`main`, lines 181-183](../../../benchmarks/adapters/scipy/bench.py#L181-L183)). The methods of the earlier suite (`dual_annealing`, `direct`, `minimize` with L-BFGS-B and Nelder-Mead, `differential_evolution` with its defaults) are gone with it.
 
 ## How the adapter runs SciPy
 
-- **Fitness functions:** numpy, like SciPy's `scipy.optimize.rosen`.
-- **Evaluations and stop:** the counter ([`Budget`](../../../benchmarks/adapters/scipy/bench.py#L45-L97)) counts every call, from the method, its restarts, local searches, polish and finite differences, keeps the best and records the first hit. It ends the run right after the evaluation that reaches 0.01, or before one past the budget or the time cap.
-- **Seeds:** `rng` for the stochastic methods; restarts as rule 2.2 ([`restart_seed`](../../../benchmarks/adapters/scipy/bench.py#L166-L169)).
-- **Separate tests:** 2026-09-25, SciPy 1.18.1, 5 seeds, the scenario's budget, 60 s cap, rule 5.3, with other tests on the machine (capped runs stopped after fewer evaluations than in a benchmark run). `outside` was 0 in every run.
+- **Fitness function:** numpy, taking a generation as the columns of an array, as `differential_evolution` passes them with `vectorized=True` and as SciPy's own `scipy.optimize.rosen` accepts them ([lines 92-114](../../../benchmarks/adapters/scipy/bench.py#L92-L114); `values`, [lines 159-167](../../../benchmarks/adapters/scipy/bench.py#L159-L167)).
+- **Evaluations and stop:** the objective function is the counter ([`Budget`, lines 41-89](../../../benchmarks/adapters/scipy/bench.py#L41-L89)): it counts every column, keeps the best and counts the solutions outside the bounds. Rastrigin 30 has no target: the run is measured by its time for the budget and its error at the end (the best value; the optimum is 0). The counter ends the run before a generation past the budget (a generation is cut at the budget) or the time cap. The line always has `"target": null`, `"success": false` and `"first_hit": null`.
+- **Batch evaluation (rule 3.4):** `vectorized=True`, SciPy's documented vectorized interface: each generation in one numpy call. It forces `updating='deferred'`, which the definition sets anyway, so it doesn't change the algorithm: a run gives the same evaluations and best value with it as without it (tested with seeds 0 and 1, 20,000 evaluations).
+- **Generations (rule 2.3):** counted by `differential_evolution`'s `callback`, called after every generation.
+- **Seeds (rule 5.2):** a `numpy.random.Generator`, `np.random.default_rng(seed)`, draws the initial population and is then passed as `rng`. The same seed repeats a run, and seed 1 gives the same alone as after seed 0 (tested).
+- **One thread (rule 4.3):** numpy's BLAS set to one thread before the import ([lines 24-26](../../../benchmarks/adapters/scipy/bench.py#L24-L26)); `workers` stays 1.
+- **Separate tests:** 2026-09-28, SciPy 1.18.1, numpy 2.5.3, Python 3.13.9, seeds 0 to 2, the scenario's budget of 300,000 evaluations, 60 s cap, on a shared machine. `outside` was 0 in every run.
 
-## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
+## Rastrigin 30: DE/rand/1/bin
 
-**Methods** ([`solvers`](../../../benchmarks/adapters/scipy/bench.py#L238-L250)): the tutorial's [Global optimization](https://docs.scipy.org/doc/scipy/tutorial/optimize.html#global-optimization) shows `shgo`, `dual_annealing` and `differential_evolution` on a function with many local minima, and its table gives `direct`, `dual_annealing`, `differential_evolution` and `shgo` for bounds ("If there are multiple candidates, try several"). Without `shgo` (below):
-- **`de`:** [`differential_evolution`](../../../benchmarks/adapters/scipy/bench.py#L147-L163) with its defaults, as its docstring examples call it (on `rosen` and Ackley): `best1bin`, 15 n individuals, mutation (0.5, 1) with dithering, recombination 0.7, Latin hypercube initialization, `updating='immediate'`, the final L-BFGS-B polish.
-- **`dual_annealing`:** [`dual_annealing`](../../../benchmarks/adapters/scipy/bench.py#L172-L185) with its defaults; its docstring example is "a 10-D problem, with many local minima ... called Rastrigin". Generalized simulated annealing with an L-BFGS-B local search.
-- **`direct`:** [`direct`](../../../benchmarks/adapters/scipy/bench.py#L188-L207) with `locally_biased=False` ("For hard problems with many local minima, `False` is recommended") and `vol_tol=0` ("`vol_tol` should be decreased to avoid premature termination of the algorithm for higher dimensions"; with the default 1e-16 it ended Rastrigin 10 after 1,965 evaluations, at 33). Deterministic: every seed gives the same run.
+**Method** ([`solve_de`, lines 122-153](../../../benchmarks/adapters/scipy/bench.py#L122-L153)): `differential_evolution(func, bounds, strategy='rand1bin', mutation=0.5, recombination=0.9, init=population, updating='deferred', vectorized=True, polish=False, tol=0, atol=0, maxiter=budget, rng=rng, callback=...)`, every keyword a documented parameter.
 
-**Bounds (rule 2.4):** `differential_evolution` replaces a mutant coordinate outside the box by a random one, and polishes within bounds; `dual_annealing` wraps a visit back into the box and bounds its local search; `direct` samples centres of hyperrectangles of the box.
+| Definition | SciPy | Source |
+|---|---|---|
+| NP = 100, uniform in the box | `init=` an array of 100 points drawn with `rng.uniform(lower, upper, (100, 30))`: "array specifying the initial population. The array should have shape (S, N), where S is the total population size". `popsize` can't give 100: it's a multiplier of N = 30, and it "is overridden if an initial population is supplied via the `init` keyword" | docs, `init` and `popsize`; [`init_population_array`, lines 1121-1154](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1121-L1154) |
+| r1, r2, r3 uniform, distinct, ≠ i | `_select_samples` shuffles the indices and takes the first ones other than the target's | [lines 1908-1915](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1908-L1915) |
+| v = x_r1 + F (x_r2 − x_r3), F = 0.5, no dither | `strategy='rand1bin'`: `population[r0] + scale * (population[r1] - population[r2])`; `mutation=0.5`, a float: "If specified as a tuple `(min, max)` dithering is employed", so a float isn't dithered | docs, `strategy` and `mutation`; [`_rand1`, lines 1867-1871](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1867-L1871), [lines 871-874](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L871-L874) |
+| binomial, CR = 0.9, one forced j_rand | `recombination=0.9`; gene j from the mutant if U(0, 1) < CR, and `fill_point`, uniform, always from the mutant: "A randomly selected parameter is always loaded from b'" | docs, Notes; [`_mutate_many`, lines 1785-1796](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1785-L1796) |
+| u replaces x_i if f(u) ≤ f(x_i) | `energy_trial <= energy_orig` | [`_accept_trial`, lines 1590-1591](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1590-L1591) |
+| generational | `updating='deferred'`: "To use the original Storn and Price behaviour, updating the best solution once per iteration, set `updating='deferred'`": all trials are built from the population, evaluated, then replace their targets | docs, Notes; [lines 1679-1722](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1679-L1722) |
+| bounds: a gene outside redrawn uniformly in the box | the reference itself: `_ensure_constraint` redraws every trial gene outside the box uniformly in it | [lines 1740-1744](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1740-L1744) |
+| no archive, adaptation or restarts | none; `polish=False` turns off the final L-BFGS-B polish, a local search the definition doesn't have | docs, `polish` |
+| no convergence criterion | `maxiter`, a budget, is set to the scenario's budget; the convergence test can't be turned off, `tol=0, atol=0` (below) | docs, `maxiter`, `tol`, `atol` |
 
-**Keeping going (rule 2.2):**
-- `differential_evolution`: `maxiter` (1,000 by default) is lifted. Its convergence test, `tol` 0.01 (the population's value spread at most 0.01 times their mean), counts: it ends the attempt, the polish runs, and it restarts; SciPy has no restart mechanism for it.
-- `dual_annealing`: no convergence criterion; it re-anneals by itself from a new random point when its temperature falls to `initial_temp * restart_temp_ratio`. `maxiter` and `maxfun` are lifted (`maxfun` twice the budget).
-- `direct`: `maxiter` and `maxfun` are lifted; `maxfun` is twice the budget, because DIRECT stops before an iteration that could pass it (at the budget, it ended Rastrigin 30 after 1,886,939 of 2,000,000). Its `len_tol` (1e-6) counts, but a restart of a deterministic method without a random start would repeat the run; it never converged in the tests, and if it did, the run would end there with a note on stderr.
+**Differences:**
+- **The convergence test (rule 2.2).** `solve` ends a run when `np.std(population_energies) <= atol + tol * np.abs(np.mean(population_energies))`, after every generation ([lines 1174-1183](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1174-L1183), [lines 1255-1257](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1255-L1257)); no setting turns it off. Its tightest documented setting, `tol=0` and `atol=0`, ends a run only when all 100 values are equal: the population has collapsed onto one point, and DE, with every difference vector zero, can no longer move. The run ends there, before its budget, and its line says so: `"ended_by": "convergence test (tol=0, atol=0): all 100 values equal"`. No restart (rule 2.2): the definition's DE would stay at that point until the budget, with the same error at the end. Within 300,000 evaluations it didn't happen in the separate tests; with 2,000,000, in an earlier test, 2 of 3 runs collapsed onto a local minimum, after 705,500 and 870,600 evaluations.
+- **Order:** after every generation SciPy swaps the best individual into position 0 (`_promote_lowest_energy`, [lines 1423-1441](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1423-L1441)). Every individual is still a target once per generation, and r1, r2, r3 are uniform among the others, so the algorithm is the same; only which random numbers go with which individual differs.
 
-**Left out:**
-- `shgo`: "appropriate for ... global optimality (low-dimensional problems)".
-- `basinhopping`: the tutorial's table gives it no bounds (rule 2.4).
-- `differential_evolution` with `vectorized=True`: it forces `updating='deferred'`, which changes the algorithm (rule 3.4).
-- `polish=False` and other strategies: the defaults run.
+**Keeping going:** `maxiter` is lifted; only the convergence test can end a run before the budget or the time cap, as above. DE evaluates every trial, so it never stalls.
 
-**Separate tests:**
+**Separate tests:** Rastrigin 30 (no target, budget 300,000, cap 60 s):
 
-| Scenario | Solver | Runs | Reached | First hit: median evaluations | Best value: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|---|
-| Rastrigin 10 (500k) | de | 5 | 5 | 87,692 | 0.0094 | 0.0089 | 0.0099 | 0 |
-| Rastrigin 10 (500k) | dual_annealing | 5 | 5 | 3,671 | 0.000026 | 4.8e-7 | 0.00066 | 0 |
-| Rastrigin 10 (500k) | direct | 5 | 0 | | 17.2 | 17.2 | 17.2 | 0 |
-| Rastrigin 30 (2M) | de | 3 | 0 | | 145 | 115 | 150 | 3 |
-| Rastrigin 30 (2M) | dual_annealing | 5 | 5 | 19,434 | 0.000046 | 1.2e-8 | 0.0043 | 0 |
-| Rastrigin 30 (2M) | direct | 3 | 0 | | 76.6 | 76.6 | 76.6 | 3 |
-| Ackley 30 (1M) | de | 5 | 5 | 114,213 | 0.0098 | 0.0090 | 0.0099 | 0 |
-| Ackley 30 (1M) | dual_annealing | 5 | 5 | 25,894 | 0.0059 | 0.0030 | 0.0097 | 0 |
-| Ackley 30 (1M) | direct | 5 | 5 | 652,801 | 0.0099 | 0.0099 | 0.0099 | 0 |
+| Solver | Runs | Time per run: median (s) | Error at the end: median | best | worst | Ended by the convergence test | Capped |
+|---|---|---|---|---|---|---|---|
+| de | 3 | 1.14 | 138.5 | 93.0 | 156.8 | 0 | 0 |
 
-On Rastrigin 30, `de` reached the cap after about 370,000 evaluations and `direct` after about 780,000.
-
-## Continuous, unimodal: Rosenbrock 10
-
-**Methods:** the tutorial's [local minimization](https://docs.scipy.org/doc/scipy/tutorial/optimize.html#local-minimization-of-multivariate-scalar-functions-minimize) section uses Rosenbrock as its example, and `differential_evolution`'s docstring example is `rosen`:
-- **`lbfgsb`:** [`minimize`](../../../benchmarks/adapters/scipy/bench.py#L210-L231) from a uniform random point with the box as `bounds`, so L-BFGS-B, its default then; the gradient is estimated by finite differences, counted. The tutorial says BFGS "typically requires fewer function calls than the simplex algorithm even when the gradient must be estimated"; L-BFGS-B is its bounded form.
-- **`nelder_mead`:** `method='Nelder-Mead'`, the tutorial's first Rosenbrock example, with `bounds` and the default tolerances (the example's `xatol: 1e-8` is left at 1e-4).
-- **`de`:** as above.
-
-**Bounds (rule 2.4):** L-BFGS-B projects onto the box and steps its finite differences inside it; Nelder-Mead clips its points.
-
-**Keeping going (rule 2.2):** `maxiter`, `maxfun` and `maxfev` are lifted. The convergence tests (`ftol`, `gtol`; `xatol`, `fatol`) end an attempt, and `minimize` restarts from a new random point.
-
-**Left out:**
-- Powell: "another optimization algorithm that needs only function calls", after Nelder-Mead in the tutorial.
-- BFGS, Newton-CG, trust-region methods: the tutorial gives them the gradient or the Hessian; BFGS takes no bounds.
-- `dual_annealing`, `direct`: presented for many local minima.
-- `shgo`: as above; its docstring example is `rosen` in 5 dimensions.
-
-**Separate tests:**
-
-| Scenario | Solver | Runs | Reached | First hit: median evaluations | Best value: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|---|
-| Rosenbrock 10 (500k) | lbfgsb | 5 | 5 | 562 | 0.0057 | 0.0044 | 0.0091 | 0 |
-| Rosenbrock 10 (500k) | nelder_mead | 5 | 5 | 12,838 | 0.0098 | 0.0077 | 0.0099 | 0 |
-| Rosenbrock 10 (500k) | de | 5 | 5 | 37,062 | 0.0087 | 0.0073 | 0.0092 | 0 |
+Every run used the whole budget: 1.14, 1.16 and 1.12 s (seeds 0, 1, 2), ending at 156.8, 93.0 and 138.5.
 
 ## Can't run
 
-- OneMax: `differential_evolution` has an `integrality` option, but SciPy presents no method for binary strings.
-- N-Queens: no permutation search.
+- **Rosenbrock 10, CMA-ES:** SciPy has no CMA-ES.
+- **OneMax 1000, the GA:** SciPy has no genetic algorithm and no method for binary strings (`differential_evolution`'s `integrality` rounds real genes; it isn't a GA).
 
 ## Bugs found
 
-None.
+None in `differential_evolution`. One docs inaccuracy: the Notes say "If the trial is better than the original candidate then it takes its place", but the code accepts an equal trial too (`<=`, [line 1591](https://github.com/scipy/scipy/blob/v1.18.1/scipy/optimize/_differentialevolution.py#L1591)), as the definition does. None were found in the methods no longer in the suite.

@@ -3,12 +3,12 @@
 import { ExternalLink, X } from "lucide-react";
 import { useState } from "react";
 import BarPanel from "./BarPanel";
-import { barNotes, pointsText, QUANTITY_NAMES, tickFormat } from "./format";
+import { barNotes, QUANTITY_NAMES } from "./format";
 import { useHighlight } from "./Highlight";
 
 /**
  * What every benchmark chart has around its panels: a switch between its
- * views (time or evaluations), the legend of its
+ * views (time, evaluations or distance to the optimum), the legend of its
  * libraries, which highlights one across every chart of the page, the panels,
  * their numbers as tables, and a link to the harness's own chart.
  *
@@ -81,10 +81,7 @@ export default function ChartShell({ views, libraries, limit, grid = "", name, r
         <summary className="cursor-pointer text-base-content/70 hover:text-primary">The numbers as tables</summary>
         <div className="mt-3 space-y-5">
           {chart.panels.map((panel) => (
-            <div key={`${view.key}/${panel.key}`} className="space-y-5">
-              <NumbersTable panel={panel} quantity={quantity} fallbackTitle={chart.title} />
-              <RatiosTable panel={panel} />
-            </div>
+            <NumbersTable key={`${view.key}/${panel.key}`} panel={panel} quantity={quantity} fallbackTitle={chart.title} />
           ))}
         </div>
       </details>
@@ -157,7 +154,10 @@ function LibraryLegend({ ids, libraries, name }) {
 function KeyNote({ panels }) {
   const bars = panels.flatMap((panel) => panel.bars);
   const parts = [
-    bars.some((bar) => bar.value === null) ? "×: too few runs reached the target for a value" : null,
+    bars.some((bar) => bar.value === null && typeof bar.reached === "number") ? "×: too few runs reached the target for a value" : null,
+    bars.some((bar) => bar.value === null && typeof bar.reached !== "number" && typeof bar.version !== "string")
+      ? "×: no run used the whole budget"
+      : null,
     bars.some((bar) => bar.note) ? "*: a note that doesn't fit beside the bar" : null,
     bars.some((bar) => bar.ended_on_cap) ? "cross-hatched, past a dotted line: the runs the time cap stopped" : null,
     bars.some((bar) => typeof bar.version === "string" && bar.reached === 0) ? "hollow: the run didn't reach the target within its budget" : null,
@@ -167,66 +167,6 @@ function KeyNote({ panels }) {
     <p className="mt-4 text-base-content/60 text-xs">
       {parts.join(" · ")}. Every bar's numbers and notes are in its tooltip and in the tables.
     </p>
-  );
-}
-
-const seconds = tickFormat("seconds");
-
-/**
- * The points behind an overall score (bars with `ratios`): a row per
- * library, a column per scenario of the panel's `scenarios`; nothing for
- * other panels.
- */
-function RatiosTable({ panel }) {
-  const scenarios = panel.scenarios ?? [];
-  const bars = panel.bars.filter((bar) => Array.isArray(bar.ratios));
-  if (!scenarios.length || !bars.length) return null;
-  return (
-    <div className="max-w-full overflow-x-auto">
-      <table className="w-full text-left text-xs">
-        <caption className="mb-1 text-left font-medium text-base-content/80">
-          Points per scenario
-          <span className="font-normal text-base-content/55"> · 100: the fastest · 0: unsolved within the time cap · –: can't run it</span>
-        </caption>
-        <thead className="text-base-content/55">
-          <tr>
-            <th scope="col" className="py-1 pr-3 font-normal">
-              Library
-            </th>
-            {scenarios.map((scenario) => (
-              <th key={scenario.key} scope="col" className="min-w-[4.5rem] py-1 pr-3 text-right align-bottom font-normal">
-                {scenario.title}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {bars.map((bar, k) => {
-            const ratios = Object.fromEntries(bar.ratios.map((ratio) => [ratio.scenario, ratio]));
-            return (
-              <tr key={`${bar.library}/${k}`} className="border-base-content/10 border-t">
-                <th scope="row" className="whitespace-nowrap py-1 pr-3 font-normal">
-                  {bar.label}
-                </th>
-                {scenarios.map((scenario) => {
-                  const ratio = ratios[scenario.key];
-                  return (
-                    <td
-                      key={scenario.key}
-                      title={ratio && !ratio.penalized ? `${ratio.method ?? ratio.solver}, ${seconds(ratio.time)}` : undefined}
-                      className={`whitespace-nowrap py-1 pr-3 text-right tabular-nums ${ratio?.penalized ? "text-base-content/50" : ""}`}
-                    >
-                      {ratio ? pointsText(ratio.points) : "–"}
-                      {ratio?.penalized ? <span className="block text-[10px]">unsolved</span> : null}
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
   );
 }
 

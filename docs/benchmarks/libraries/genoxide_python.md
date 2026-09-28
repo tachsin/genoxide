@@ -1,148 +1,52 @@
-# genoxide for Python (Rust via Python, 0.7.0)
+# genoxide for Python (Rust via Python)
 
 genoxide's Python package, from this repository's [python/](../../../python/) folder: genoxide's algorithms, in Rust, calling fitness functions in Python and numpy. Its docs are [python/README.md](../../../python/README.md) and the docstrings of [python/genoxide/\_\_init\_\_.py](../../../python/genoxide/__init__.py).
 
-The methods are those python/README.md recommends for each problem type ([Choosing an algorithm](../../../python/README.md#choosing-an-algorithm)), which follows the Rust library's [AGENTS.md](../../../AGENTS.md). They're the Rust adapter's ([genoxide.md](genoxide.md)), except the evolution strategy, which is only in Rust. [Rule 6.6](../rules.md#6-which-methods-run) applies: the methods run with their defaults, and standard literature values (cited below) where there's no default. Settings from the examples aren't used.
+The package runs the three problems of the matched suite with the same Rust implementations as the Rust library ([genoxide.md](genoxide.md)): `gx.Ga` on OneMax 1000, `gx.De` on Rastrigin 30 and `gx.Cmaes` on Rosenbrock 10, set to the definitions of [rule 6](../rules.md#6-the-methods). A seed gives the same run as in Rust; what differs is the cost of calling Python fitness functions. [Rule 6.6](../rules.md#6-the-methods) applies, as for the Rust library.
 
 Adapter: [benchmarks/adapters/genoxide_python/](../../../benchmarks/adapters/genoxide_python/).
-Know a better way to solve one of these problems with genoxide's Python package? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
+Found a setting that brings the package closer to a definition, or a difference this page misses? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
 
 ## How the adapter runs the package
 
-- **Fitness functions:** numpy, as python/README.md writes them ([bench.py, lines 60-169](../../../benchmarks/adapters/genoxide_python/bench.py#L60-L169)): a function per genome for OneMax and N-Queens, as its first example; `batch=True` (a generation per call, "one call per generation") for the real-valued problems, as its Rastrigin example. A batch doesn't change the algorithm ("The same seed repeats a run exactly: one genome at a time, in batches or in parallel"). The shifts of rule 1.4 are computed once per size. `bench.py --self-check` compares every function with problems.py.
-- **Evaluations:** each function counts its genomes, one per call or the rows of a batch ([`count`](../../../benchmarks/adapters/genoxide_python/bench.py#L75-L80)), and records the first hit. Any difference from `result.evaluations` is printed to stderr ([`solve`, lines 287-362](../../../benchmarks/adapters/genoxide_python/bench.py#L287-L362)).
-- **Stop:** `run(..., target=..., evaluations=...)` after every generation, and the time cap: `time=...` for CMA-ES, DE and local search, and an `on_generation` callback returning False for the GA.
-- **Keeping going (rule 2.2):** DE and CMA-ES (IPOP) restart by themselves. Local search redraws a neighbor that didn't change, so it can't stall. A child identical to a parent isn't evaluated, so a GA can run generations with nothing to evaluate. After 10 in a row, its `on_generation` callback ends the attempt, and the adapter restarts it with the seeds of rule 2.2 and prints `restarts`. It replaces the package's own "stalled", after 10,000 such generations. No test run stalled.
-- **Bounds (rule 2.4):** genoxide's: CMA-ES redraws a sample outside the bounds up to 100 times, then clips it; DE sets an outside trial gene halfway between the parent's gene and the bound; SBX and polynomial mutation are bounded.
+- **Fitness functions:** numpy, as python/README.md writes them ([bench.py, lines 62-141](../../../benchmarks/adapters/genoxide_python/bench.py#L62-L141)): a function per genome for OneMax, as its first example; `batch=True` (a generation per call) for Rastrigin and Rosenbrock, as its Rastrigin example. A batch doesn't change the algorithm ("The same seed repeats a run exactly: one genome at a time, in batches or in parallel"). `bench.py --self-check` compares every function with problems.py.
+- **Evaluations:** each function counts its genomes, one per call or the rows of a batch, and records the first hit. Any difference from `result.evaluations` is printed to stderr ([`solve`, lines 227-292](../../../benchmarks/adapters/genoxide_python/bench.py#L227-L292)).
+- **Stop:** `run(..., target=..., evaluations=...)` after every generation, and the time cap: `time=...` for DE and CMA-ES, an `on_generation` callback returning False for the GA. No method has a convergence criterion or restarts.
+- **Stalls (rule 2.2):** a GA child identical to a parent isn't evaluated, so a GA can run generations with nothing to evaluate. After 10 in a row, its `on_generation` callback ends the attempt, and the adapter starts it again with the seeds of rule 2.2 and prints `restarts`. DE and CMA-ES evaluate every trial and sample.
 - **Time:** from before the algorithm object is created to the return of `run`, which creates the initial population.
-- **One thread:** `parallel` off; numpy's BLAS (OpenMP, OpenBLAS, MKL) set to 1 thread before import ([lines 46-48](../../../benchmarks/adapters/genoxide_python/bench.py#L46-L48)).
+- **One thread:** `parallel` off; numpy's BLAS set to 1 thread before import.
 - **Seeds:** the algorithm's `seed`; a seed repeats a run exactly.
-- **Solutions:** `result.best_genome`.
-- **Separate tests:** 2026-09-25, the package 0.6.0 built from 03e237b, seeds 0 to 4, the scenario's budget, 60 s cap. The counts equalled `result.evaluations`, and `outside` was 0, in every run.
+- **Separate tests:** 2026-09-28, the package 0.9.1 built from this repository, seeds 0 to 2, the scenario's budget and cap. The runs were the Rust adapter's, evaluation for evaluation; the counts equalled `result.evaluations`, and `outside` was 0.
 
-**Settings from the literature**, for settings without a default ([lines 171-188](../../../benchmarks/adapters/genoxide_python/bench.py#L171-L188)):
-- a GA's population of 100, binary tournament (`Tournament(2)`), SBX η 20 and polynomial mutation η 20 at 1 / n per gene: Deb, Pratap, Agarwal and Meyarivan, "A fast and elitist multiobjective genetic algorithm: NSGA-II", IEEE Transactions on Evolutionary Computation 6(2), 2002;
-- bit-flip mutation at 1 / n per gene: Mühlenbein, "How genetic algorithms really work: mutation and hillclimbing", PPSN 1992;
-- swap mutation (`SwapMutation()`, one swap) for permutations.
+## OneMax 1000: the GA
 
-A GA's crossover is the first python/README.md names for the genome: `UniformCrossover()` (bits), `OrderCrossover()` (permutations), `SimulatedBinaryCrossover(eta)` (reals). The rates (crossover 0.9, mutation 1) and the scheme (generational, elitism 1) are the defaults.
+**Configuration** ([`onemax_ga`, lines 151-166](../../../benchmarks/adapters/genoxide_python/bench.py#L151-L166)), against [rule 6.2](../rules.md#6-the-methods): `gx.Ga(gx.Binary(1000), population_size=300, select=gx.Tournament(3), crossover=gx.PointCrossover(2), crossover_rate=0.5, mutation=gx.BitFlip(rate=1/1000), mutation_rate=0.2, scheme=gx.Generational(elitism=0))`, the Rust library's settings ([genoxide.md](genoxide.md#onemax-1000-the-ga)).
 
-## Binary: OneMax 100 and 1000
+**Differences:** as in Rust, a child identical to its parent isn't evaluated again.
 
-**Methods:**
-- **Matched:** the [README](../../../benchmarks/README.md)'s matched GA with the package's components: population 300, `Tournament(3)` (with replacement), `PointCrossover(2)` on each consecutive pair at 0.5, each child mutated at 0.2 by `BitFlip(rate=1 / n)`, `Generational(elitism=0)` ([lines 193-208](../../../benchmarks/adapters/genoxide_python/bench.py#L193-L208)). Difference from eaSimple: a child identical to a parent isn't evaluated, also one crossed or mutated back to it.
-- **Idiomatic (OneMax 100):** the GA, the one method python/README.md recommends for binary genomes: population 100, `Tournament(2)`, `UniformCrossover()`, `BitFlip(rate=1 / n)`, the default rates and scheme, a function per genome, `bits.sum()` ([lines 209-220](../../../benchmarks/adapters/genoxide_python/bench.py#L209-L220)).
+**Separate tests:** 3 of 3 reached the target, first hits at 52,465 to 58,170 evaluations (median 52,659), in about 0.14 s each.
 
-**Keeping going:** to the target or the budget.
+## Rastrigin 30: DE/rand/1/bin
 
-**Left out:** the settings of python/README.md's first example (tournament 3, `BitFlip(rate=0.01)`): example settings (rule 6.6).
+**Configuration** ([`rastrigin_de`, lines 169-183](../../../benchmarks/adapters/genoxide_python/bench.py#L169-L183)), against [rule 6.3](../rules.md#6-the-methods): `gx.De(gx.Real((-5.12, 5.12), length=30), population_size=100, strategy="rand1", control={"f": 0.5, "cr": 0.9}, restarts="never")`, the Rust library's `De` ([genoxide.md](genoxide.md#rastrigin-30-derand1bin)).
 
-**Separate tests:**
+**Difference:** as in Rust, a trial gene outside the box is set halfway between the target's gene and the bound, not drawn again uniformly.
 
-OneMax 100, matched (budget 200,000):
+**No target:** every run uses the fixed budget of 300,000 evaluations (rule 6.3); the adapter passes no target to `run` and prints `"target": null`.
 
-| Solver | Runs | Reached | First hit: median evaluations | Best: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| ga | 5 | 5 | 4,789 | 100 | 100 | 100 | 0 |
+**Separate tests:** seeds 0 and 1 took 0.19 and 0.18 s for the 300,000 evaluations and ended at errors of 154.7 and 123.1, the Rust adapter's runs.
 
-OneMax 1000, matched (budget 2,000,000):
+## Rosenbrock 10: CMA-ES
 
-| Solver | Runs | Reached | First hit: median evaluations | Best: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| ga | 5 | 5 | 53,597 | 1,000 | 1,000 | 1,000 | 0 |
+**Configuration** ([`rosenbrock_cmaes`, lines 186-193](../../../benchmarks/adapters/genoxide_python/bench.py#L186-L193)), against [rule 6.4](../rules.md#6-the-methods): `gx.Cmaes(gx.Real((-5.0, 10.0), length=10), restarts="never")` with its defaults: 10 samples, the best 5 with positive log weights, Hansen's 2016 learning rates, a uniform mean and a step of 0.3 of the range ([genoxide.md](genoxide.md#rosenbrock-10-cma-es)).
 
-OneMax 100, idiomatic (budget 200,000):
+**Differences:** as in Rust: a sample outside the box is drawn again, up to 100 times, then clipped; the search works in coordinates scaled to 0..=1, the same scaling for every gene here.
 
-| Solver | Runs | Reached | First hit: median evaluations | Best: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| ga | 5 | 5 | 3,418 | 100 | 100 | 100 | 0 |
-
-## Permutation: N-Queens 32 and 64
-
-**Methods** ([lines 223-245](../../../benchmarks/adapters/genoxide_python/bench.py#L223-L245)): python/README.md prefers local search on permutations ("often beats a GA on permutations"); the GA comes second.
-- **`local_search`:** hill climbing with its defaults (1 neighbor per step, `NotWorse()` acceptance), `SwapMutation()` neighbors.
-- **`ga`:** population 100, `Tournament(2)`, `OrderCrossover()`, `SwapMutation()`, the default rates and scheme.
-
-**Keeping going:** no convergence criterion.
-
-**Left out:**
-- The settings of [examples/n_queens](../../../examples/n_queens/main.py), a (20 + 20) GA without crossover: example settings (rule 6.6).
-- Tabu search (`acceptance=Tabu(tenure)`) and simulated annealing: options of local search, not recommended for this problem type; tenure and temperature have no default or standard value.
-
-**Separate tests:**
-
-N-Queens 32 (budget 500,000):
-
-| Solver | Runs | Reached | First hit: median evaluations | Best: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| local_search | 5 | 5 | 1,145 | 0 | 0 | 0 | 0 |
-| ga | 5 | 2 | 237,595 | 1 | 0 | 2 | 0 |
-
-N-Queens 64 (budget 1,000,000):
-
-| Solver | Runs | Reached | First hit: median evaluations | Best: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| local_search | 5 | 5 | 2,385 | 0 | 0 | 0 | 0 |
-| ga | 5 | 0 | - | 2 | 1 | 3 | 1 |
-
-## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
-
-**Methods** ([lines 248-272](../../../benchmarks/adapters/genoxide_python/bench.py#L248-L272)): python/README.md prefers CMA-ES ("the strongest general choice", with restarts "for multimodal functions") and DE ("often needs far fewer evaluations than a GA"); the third is the GA, which it names for reals.
-- **`cma_es`:** `gx.Cmaes(genome, restarts="ipop")`, with the defaults (4 + ⌊3 ln n⌋ samples, an initial step of 0.3 of each range).
-- **`de`:** `gx.De(genome)` with its defaults: SHADE's published settings (Tanabe and Fukunaga, IEEE CEC 2013: current-to-pbest/1 with an archive, SHADE's adaptation of F and CR, 100 individuals), and genoxide's own restarts when the population converges or stalls (#113).
-- **`ga`:** population 100, `Tournament(2)`, `SimulatedBinaryCrossover(20)` at the default 0.9, `PolynomialMutation(20, rate=1 / n)`, the default scheme.
-
-**Keeping going:** CMA-ES restarts with a doubled population, DE when its population converges or stalls; the GA runs to the budget.
-
-**Left out:**
-- L-SHADE (`gx.De(genome, l_shade=budget)`), which [examples/rastrigin](../../../examples/rastrigin/main.py) runs: a setting, not the default (rule 6.6).
-- BIPOP restarts: python/README.md names IPOP first.
-- PSO: python/README.md recommends CMA-ES, DE and the GA for reals, so it isn't among the first three (rules 6.2 and 6.4).
-
-**Separate tests** (the GA had none; the Rust adapter's GA, the same algorithm, is on [genoxide.md](genoxide.md)):
-
-Rastrigin 10 (budget 500,000):
-
-| Solver | Runs | Reached | First hit: median evaluations | Best: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| cma_es | 5 | 5 | 124,444 | 0.004704 | 0.003576 | 0.007748 | 0 |
-| de | 5 | 5 | 41,016 | 0.00921 | 0.00476 | 0.009991 | 0 |
-
-Rastrigin 30 (budget 2,000,000):
-
-| Solver | Runs | Reached | First hit: median evaluations | Best: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| cma_es | 5 | 5 | 551,188 | 0.009033 | 0.008715 | 0.009513 | 0 |
-| de | 5 | 5 | 101,455 | 0.00905 | 0.008015 | 0.00999 | 0 |
-
-Ackley 30 (budget 1,000,000):
-
-| Solver | Runs | Reached | First hit: median evaluations | Best: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| cma_es | 5 | 5 | 3,203 | 0.00943 | 0.008762 | 0.009948 | 0 |
-| de | 5 | 5 | 19,144 | 0.00973 | 0.008253 | 0.009884 | 0 |
-
-## Continuous, unimodal: Rosenbrock 10
-
-**Methods** ([lines 248-259](../../../benchmarks/adapters/genoxide_python/bench.py#L248-L259)): the first two python/README.md recommends for reals, as on the multimodal functions.
-- **`cma_es`:** `gx.Cmaes(genome, restarts="ipop")` with its defaults: IPOP restarts a converged CMA-ES (rule 2.2).
-- **`de`:** `gx.De(genome)` (above).
-
-**Keeping going:** CMA-ES and DE restart.
-
-**Left out:** the evolution strategy, which the Rust adapter runs third: it's only in Rust (python/README.md, "The Rust library").
-
-**Separate tests** (CMA-ES had none):
-
-Rosenbrock 10 (budget 500,000):
-
-| Solver | Runs | Reached | First hit: median evaluations | Best: median | best | worst | Capped |
-|---|---|---|---|---|---|---|---|
-| de | 5 | 5 | 38,077 | 0.008082 | 0.004516 | 0.008217 | 0 |
+**Separate tests:** 3 of 3 reached the target, first hits at 5,837 to 7,451 evaluations (median 5,844), in about 8 ms each.
 
 ## Can't run
 
-Nothing: the package runs all 9 scenarios.
+Nothing: the package has all three methods.
 
 ## Bugs found
 

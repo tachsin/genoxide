@@ -12,29 +12,15 @@ import VersionPanel from "./VersionPanel";
 
 // the panels side by side as the chart's width allows
 const PANELS = "@2xl:grid-cols-2 @5xl:grid-cols-3";
-// long panels, two at most, so their labels and notes fit
-const LONG_PANELS = "@2xl:grid-cols-2";
 
 /**
- * Each library's overall score (rule 8.5): one panel, a bar per library,
- * with room for its coverage beside it; a bar's tooltip and the tables have
- * its points, time and method in each scenario.
+ * One problem of the matched suite: its panel of each chart, a bar per
+ * library that runs the problem's method, switching between the time to
+ * target, the evaluations to target and the distance to the optimum at the
+ * end.
  */
-export function OverallChart({ views, libraries }) {
-  return <ChartShell views={views} libraries={libraries} grid="max-w-3xl" room={150} name="Overall score" />;
-}
-
-/** Each library's fastest method per scenario: a panel per scenario, its libraries by time to target. */
-export function SummaryChart({ views, libraries }) {
-  return <ChartShell views={views} libraries={libraries} grid={PANELS} name="Each library's fastest method" />;
-}
-
-/**
- * Every method's expected time, or evaluations, to target: a panel per
- * scenario, the first 12 methods until "show all".
- */
-export function ToTargetChart({ views, libraries }) {
-  return <ChartShell views={views} libraries={libraries} grid={LONG_PANELS} limit={12} name="To target" />;
+export function ProblemChart({ views, libraries }) {
+  return <ChartShell views={views} libraries={libraries} grid="max-w-3xl" name="Results" />;
 }
 
 /**

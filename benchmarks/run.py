@@ -1,12 +1,13 @@
-"""Benchmarks of evolutionary computation libraries on the same problems.
+"""Benchmarks of evolutionary computation libraries: the matched suite, three problems with one
+method each, the same method in every library (docs/benchmarks/rules.md, rule 6).
 
 Usage:
     python run.py setup                      # create .venv and install the Python libraries
     python run.py                            # all scenarios, 10 seeds
-    python run.py --quick                    # small scenarios, 3 seeds
+    python run.py --quick                    # all scenarios, 3 seeds
     python run.py --max-seconds 10           # one time cap for every scenario, instead of each one's
-    python run.py --seeds 5 --scenarios onemax-100-matched nqueens-32-idiomatic
-    python run.py --libraries deap genetic_algorithm
+    python run.py --seeds 5 --scenarios rosenbrock-10-matched
+    python run.py --libraries deap pycma
     python run.py check                      # test the adapters against the rules, before a run,
                                              # --jobs scenarios at a time
     python run.py chart                      # redraw the charts of the latest results: the published
@@ -57,7 +58,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 VENV = ROOT / ".venv"
 VENV_PYTHON = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-RUST_ADAPTER = ROOT / "adapters" / "genetic_algorithm"
 GENOXIDE_ADAPTER = ROOT / "adapters" / "genoxide"
 # genoxide's Python package, built with maturin in release mode and installed into .venv
 GENOXIDE_PYTHON = ROOT.parent / "python"
@@ -69,8 +69,6 @@ GENOXIDE_PYTHON_BUILD = (
     else [str(VENV_PYTHON), "-m", "pip", "install", "--quiet", "--force-reinstall", "--no-deps",
           str(GENOXIDE_PYTHON)]
 )
-# the builds of the adapters that aren't Rust or Python, outside the repository
-BUILDS = Path(os.environ.get("BENCH_BUILDS", Path.home() / "bench-targets"))
 # the published results: the tables, the charts and the run they're drawn from, which `run.py
 # publish` writes compressed (xz), so anyone can redraw them, and `chart` and `--update` read by default
 DOCS = ROOT.parent / "docs" / "benchmarks"
@@ -78,7 +76,7 @@ PUBLISHED_RESULTS = DOCS / "results.json.xz"
 # a run's file in results/: its timestamp
 RUN_FILE = re.compile(r"\d{8}-\d{6}\.json")
 
-# Each adapter prints one JSON line per solver per seed, with the same command line:
+# Each adapter prints one JSON line per seed of the scenario's method, with the same command line:
 #   <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
 # "release" is the registry where `run.py outdated` looks for the library's latest release
 # (outdated.py).
@@ -97,13 +95,6 @@ ADAPTERS = {
         # the package of this repository: its version and commit
         "version": ("python", "genoxide"),
         "language": "Rust via Python",
-    },
-    "genetic_algorithm": {
-        "build": ["cargo", "build", "--release", "--quiet", "--manifest-path", str(RUST_ADAPTER / "Cargo.toml")],
-        "command": [str(RUST_ADAPTER / "target" / "release" / "ga_bench_genetic_algorithm")],
-        "version": ("cargo", "genetic_algorithm", RUST_ADAPTER),
-        "language": "Rust",
-        "release": ("crates", "genetic_algorithm"),
     },
     "deap": {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "deap" / "bench.py")],
@@ -131,25 +122,11 @@ ADAPTERS = {
         "language": "Rust",
         "release": ("crates", "radiate"),
     },
-    "moors": {
-        "build": ["cargo", "build", "--release", "--quiet", "--manifest-path",
-                  str(ROOT / "adapters" / "moors" / "Cargo.toml")],
-        "command": [str(ROOT / "adapters" / "moors" / "target" / "release" / "ga_bench_moors")],
-        "version": ("cargo", "moors", ROOT / "adapters" / "moors"),
-        "language": "Rust",
-        "release": ("crates", "moors"),
-    },
     "pycma": {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "pycma" / "bench.py")],
         "version": ("python", "cma"),
         "language": "Python",
         "release": ("pypi", "cma"),
-    },
-    "nevergrad": {
-        "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "nevergrad" / "bench.py")],
-        "version": ("python", "nevergrad"),
-        "language": "Python",
-        "release": ("pypi", "nevergrad"),
     },
     "scipy": {
         "command": [str(VENV_PYTHON), str(ROOT / "adapters" / "scipy" / "bench.py")],
@@ -163,14 +140,6 @@ ADAPTERS = {
         "version": ("python", "pygmo"),
         "language": "C++ via Python",
         "release": ("pypi", "pygmo"),
-    },
-    "jenetics": {
-        # the JDK and the pinned jars are downloaded into ~/opt, and compiled into ~/bench-targets
-        "build": ["bash", str(ROOT / "adapters" / "jenetics" / "build.sh")],
-        "command": ["bash", str(ROOT / "adapters" / "jenetics" / "run.sh")],
-        "version": ("command", ["bash", str(ROOT / "adapters" / "jenetics" / "run.sh"), "--version"]),
-        "language": "Java",
-        "release": ("maven", "io.jenetics", "jenetics"),
     },
     "jmetal": {
         # the JDK and the pinned jars are downloaded into ~/opt, and compiled into ~/bench-targets
@@ -195,34 +164,25 @@ ADAPTERS = {
         "language": "Julia",
         "release": ("julia", "Metaheuristics"),
     },
-    "openga": {
-        # the header at a pinned commit, compiled with g++ -O3
-        "build": ["bash", str(ROOT / "adapters" / "openga" / "build.sh")],
-        "command": [str(BUILDS / "openga" / "ga_bench_openga")],
-        "version": ("command", [str(BUILDS / "openga" / "ga_bench_openga"), "--version"]),
-        "language": "C++",
-        "release": ("github", "Arash-codedev/openGA", "src/openGA.hpp"),
-    },
 }
 
 # (problem, size, mode, max_evaluations, max_seconds). A run stops at the target, at max_evaluations
-# or at max_seconds, its time cap, whichever comes first.
-#   matched:   configurations as equal as the libraries allow (framework cost)
-#   idiomatic: each library's own recommended configuration (what a user gets)
+# or at max_seconds, its time cap, whichever comes first. The suite is matched: each problem has
+# one method, defined in rule 6 of docs/benchmarks/rules.md, and every library that has its own
+# implementation of it runs it, set to that definition. The mode is "matched" in every scenario.
 SCENARIOS = [
-    ("onemax", 100, "matched", 200_000, 60),
     ("onemax", 1000, "matched", 2_000_000, 60),
-    ("onemax", 100, "idiomatic", 200_000, 60),
-    ("nqueens", 32, "idiomatic", 500_000, 60),
-    ("nqueens", 64, "idiomatic", 1_000_000, 60),
-    ("rastrigin", 10, "idiomatic", 500_000, 60),
-    ("rastrigin", 30, "idiomatic", 2_000_000, 60),
-    ("rosenbrock", 10, "idiomatic", 500_000, 60),
-    ("ackley", 30, "idiomatic", 1_000_000, 60),
+    # no target: every run uses this fixed budget (rule 6.3), measured by the time for it and the
+    # error at the end
+    ("rastrigin", 30, "matched", 300_000, 60),
+    ("rosenbrock", 10, "matched", 500_000, 60),
 ]
 BUDGETS = {f"{problem}-{size}-{mode}": budget for problem, size, mode, budget, _ in SCENARIOS}
 CAPS = {f"{problem}-{size}-{mode}": cap for problem, size, mode, _, cap in SCENARIOS}
-QUICK_SCENARIOS = {"onemax-100-matched", "onemax-100-idiomatic", "nqueens-32-idiomatic", "rastrigin-10-idiomatic"}
+# each scenario's method (rule 6), as the charts name it
+METHODS = {"onemax-1000-matched": "GA", "rastrigin-30-matched": "DE/rand/1/bin", "rosenbrock-10-matched": "CMA-ES"}
+# the scenarios without a target: a fixed budget, measured by the time for it and the error at the end
+FIXED_BUDGET = {"rastrigin-30-matched"}
 
 
 def scenario_name(problem, size, mode):
@@ -273,10 +233,9 @@ def library_version(kind, package, adapter=None, label=None):
 
 
 # A solver whose first EARLY_SEEDS runs all hit the time cap without reaching the target runs no
-# more seeds (rule 5.3): the others would take the whole cap each, for the same result. The
-# adapters whose solvers can hit the cap
-# (nevergrad, metaheuristics_jl and pygad) skip those seeds themselves; stop_early applies the same
-# rule to every adapter's runs.
+# more seeds (rule 5.3): the others would take the whole cap each, for the same result. Some
+# adapters (e.g. PyGAD's) skip those seeds themselves; stop_early applies the same rule to every
+# adapter's runs.
 EARLY_SEEDS = 3
 # a run that took this share of the cap was stopped by it
 CAPPED = 0.98
@@ -495,7 +454,8 @@ def measure_version(command, jobs=None):
                 if len(counted) != 1 or not same_run(counted[0], run):
                     raise SystemExit(f"{name}: {run['solver']} didn't make the same run under Callgrind as without it")
                 entry = {"instructions": instructions - startup, "evaluations": run["evaluations"],
-                         "reached": bool(run["success"]), "best": run["best"]}
+                         # a fixed budget has no target: null
+                         "reached": None if name in FIXED_BUDGET else bool(run["success"]), "best": run["best"]}
                 failures = check.check_run(run, problem, size, budget, VERSIONS_SECONDS)
                 if failures:
                     # recorded, not left out: the history shows what the version did
@@ -504,7 +464,8 @@ def measure_version(command, jobs=None):
                 methods[run["solver"]] = entry
                 print(f"{name}: {run['solver']}: {format_count(entry['instructions'])} instructions, "
                       f"{format_count(run['evaluations'])} evaluations"
-                      + (", target reached" if run["success"] else ", target not reached"), flush=True)
+                      + ("" if name in FIXED_BUDGET else ", target reached" if run["success"] else ", target not reached"),
+                      flush=True)
             measured[name] = {"startup": startup, "methods": methods}
     finally:
         pool.shutdown(cancel_futures=True)
@@ -668,11 +629,11 @@ def summarize(runs, caps, split=False):
     def evaluations_per_second(group):
         return sum(run["evaluations"] for run in group) / max(sum(run["time_s"] for run in group), 1e-9)
 
-    # reference for the throughput ratio: DEAP's GA in the same scenario, all its runs
+    # reference for the throughput ratio: DEAP's method in the same scenario, all its runs
     reference = {
         scenario: evaluations_per_second(group)
         for (scenario, library, solver), group in solver_groups(runs, caps, False).items()
-        if library == "deap" and solver == "ga"
+        if library == "deap"
     }
 
     rows = []
@@ -698,6 +659,12 @@ def summarize(runs, caps, split=False):
             "capped_share": budget_share(stopped),
             "ert_time": ert_time,
             "ert_evaluations": ert_evaluations,
+            "median_time": median([run["time_s"] for run in group]),
+            # a fixed budget's measures (FIXED_BUDGET): the median time of the runs that used the
+            # whole budget, and the runs a library ended before it (rules 2.2, 8.4)
+            "budget_time": median([run["time_s"] for run in group
+                                   if not run.get("ended_by") and run["evaluations"] >= BUDGETS.get(scenario, math.inf)]),
+            "ended_early": sum(1 for run in group if run.get("ended_by")),
             "median_evaluations": median([run["evaluations"] for run in group]),
             "median_best": median([run["best"] for run in group]),
             "median_gap": median(gaps),
@@ -710,63 +677,6 @@ def summarize(runs, caps, split=False):
     return rows
 
 
-# The overall score (rule 8.5). A library that runs a scenario without solving it counts
-# PENALTY times the scenario's time cap: PAR-2, the penalized average runtime of the SAT
-# competitions.
-PENALTY = 2
-
-
-def scenario_points(seconds, fastest, penalty):
-    """A library's points in a scenario (rule 8.5): 100 at the fastest library's time, 0 at the
-    penalty, linear in the logarithm of the time in between, clamped to [0, 100]. When no library
-    solved the scenario, the fastest time is the penalty, and every library gets 0."""
-    if seconds >= penalty or fastest >= penalty:
-        return 0.0
-    return min(100.0, max(0.0, 100 * (1 - math.log(seconds / fastest) / math.log(penalty / fastest))))
-
-
-def overall_scores(rows, caps):
-    """Each library's overall score, from the summaries (`summarize`). Per scenario, a library's
-    time is its fastest method's expected time to target; without one, PENALTY times the time
-    cap. Its ratio is the fastest library's time divided by its own. Its points are 100 for the
-    fastest time and 0 for PENALTY times the cap, linear in the logarithm of the time in between:
-    the same points per order of magnitude, on each scenario's own scale (scenario_points). Its
-    score is the mean of its points over the scenarios it runs. Best first; ties in ADAPTERS order."""
-    fastest = {}  # (scenario, library): (seconds, solver), solver None when penalized
-
-    def consider(scenario, library, solver, seconds):
-        current = fastest.get((scenario, library))
-        if seconds is None:
-            if current is None:
-                fastest[(scenario, library)] = (PENALTY * caps[scenario], None)
-        elif current is None or current[1] is None or seconds < current[0]:
-            fastest[(scenario, library)] = (seconds, solver)
-
-    for row in rows:
-        consider(row["scenario"], row["library"], row["solver"], row["ert_time"])
-
-    order = {scenario_name(*scenario[:3]): index for index, scenario in enumerate(SCENARIOS)}
-    scenarios = sorted({scenario for scenario, _ in fastest}, key=lambda s: (order.get(s, len(order)), s))
-    quickest = {scenario: min(seconds for (s, _), (seconds, _) in fastest.items() if s == scenario)
-                for scenario in scenarios}
-    libraries = list(ADAPTERS) + sorted({library for _, library in fastest} - set(ADAPTERS))
-    scores = []
-    for library in libraries:
-        ratios = [{"scenario": scenario, "ratio": quickest[scenario] / fastest[(scenario, library)][0],
-                   "points": scenario_points(fastest[(scenario, library)][0], quickest[scenario],
-                                             PENALTY * caps[scenario]),
-                   "time": fastest[(scenario, library)][0], "solver": fastest[(scenario, library)][1]}
-                  for scenario in scenarios if (scenario, library) in fastest]
-        if not ratios:
-            continue
-        score = sum(ratio["points"] for ratio in ratios) / len(ratios)
-        scores.append({"library": library, "score": score, "scenarios": len(ratios),
-                       "solved": sum(1 for ratio in ratios if ratio["solver"] is not None), "of": len(scenarios),
-                       "ratios": ratios})
-    scores.sort(key=lambda entry: -entry["score"])
-    return scenarios, scores
-
-
 def coverage_table(runs, libraries):
     """Which library ran which scenario: a library missing from a scenario can't run it (see
     docs/benchmarks/notes.md)."""
@@ -775,37 +685,42 @@ def coverage_table(runs, libraries):
 
     ran = {where(run) for run in valid(runs)}
     printed = {where(run) for run in runs}
-    scenarios = [scenario_name(*scenario[:3]) for scenario in SCENARIOS
-                 if any(scenario_name(*scenario[:3]) == name for _, name in printed)]
+    scenarios = [scenario_name(*scenario[:3]) for scenario in SCENARIOS]
     names = [name for name in list(ADAPTERS) + sorted(set(libraries) - set(ADAPTERS)) if name in libraries]
     lines = ["| Library | " + " | ".join(scenario_title(scenario) for scenario in scenarios) + " |",
              "|---|" + "---|" * len(scenarios)]
     for name in names:
-        # ✗: every run the library printed there was invalid
-        cells = ["✓" if (name, scenario) in ran else "✗" if (name, scenario) in printed else "–"
+        # ✗: every run the library printed there was invalid; blank: the scenario awaits the next run
+        cells = ["✓" if (name, scenario) in ran else "✗" if (name, scenario) in printed
+                 else "" if not any(where_ == scenario for _, where_ in printed) else "–"
                  for scenario in scenarios]
         lines.append(f"| {LIBRARY_NAMES.get(name, name)} | " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
 
 def markdown_table(rows):
-    """The single-objective results (rule 8.1). The time and evaluations to target are the expected
-    running time (ERT), as in the charts; the median evaluations and the distance to the optimum at
-    the end are of all runs."""
-    lines = [
-        "| Scenario | Library / solver | Reached the target | Stopped by the time cap | Expected time to target "
-        "| Expected evaluations to target | Median evaluations "
-        "| Distance to the optimum at the end: median (best to worst) | Evaluations/s | Throughput vs DEAP GA |",
-        "|---|---|---|---|---|---|---|---|---|---|",
-    ]
-    for row in rows:
+    """The results (rule 8.1): a table of the scenarios with a target, then one of those with a fixed
+    budget. The time and evaluations to target are the expected running time (ERT), as in the
+    charts; the median evaluations and the distance to the optimum at the end are of all runs."""
+    target_rows = [row for row in rows if row["scenario"] not in FIXED_BUDGET]
+    budget_rows = [row for row in rows if row["scenario"] in FIXED_BUDGET]
+    lines = []
+    if target_rows:
+        lines += [
+            "| Scenario | Library / method | Reached the target | Stopped by the time cap | Expected time to target "
+            "| Expected evaluations to target | Median evaluations "
+            "| Distance to the optimum at the end: median (best to worst) | Evaluations/s | Throughput vs DEAP |",
+            "|---|---|---|---|---|---|---|---|---|---|",
+        ]
+    for row in target_rows:
         ratio = row["throughput_vs_deap"]
         ratio = "-" if ratio is None else (f"{ratio:.1f}×" if ratio < 10 else f"{ratio:.0f}×")
         # no ERT from fewer than ERT_REACHED runs that reached the target: how many did instead
         too_few = f"{row['reached']}/{row['runs']} reached"
+        ended = f", {row['ended_early']} ended early" if row.get("ended_early") else ""
         lines.append(
             f"| {row['scenario']} | {row['library']} / {row['solver']} "
-            f"| {row['reached']} of {row['runs']} "
+            f"| {row['reached']} of {row['runs']}{ended} "
             f"| {format_capped(row)} "
             f"| {format_seconds(row['ert_time']) if row['ert_time'] is not None else too_few} "
             f"| {format_count(row['ert_evaluations']) if row['ert_evaluations'] is not None else too_few} "
@@ -813,6 +728,26 @@ def markdown_table(rows):
             f"| {format_gap(row, 'median_gap')} ({format_gap(row, 'best_gap')} to {format_gap(row, 'worst_gap')}) "
             f"| {format_count(row['evaluations_per_second'])} "
             f"| {ratio} |"
+        )
+    if target_rows and budget_rows:
+        lines.append("")
+    if budget_rows:
+        lines += [
+            "| Scenario (fixed budget) | Library / method | Runs | Ended early by the library "
+            "| Stopped by the time cap | Median time for the budget | Median evaluations "
+            "| Error at the end: median (best to worst) | Evaluations/s |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+    for row in budget_rows:
+        lines.append(
+            f"| {row['scenario']} | {row['library']} / {row['solver']} "
+            f"| {row['runs']} "
+            f"| {row.get('ended_early', 0)} "
+            f"| {format_capped(row)} "
+            f"| {format_seconds(row.get('budget_time'))} "
+            f"| {format_count(row['median_evaluations'])} "
+            f"| {format_gap(row, 'median_gap')} ({format_gap(row, 'best_gap')} to {format_gap(row, 'worst_gap')}) "
+            f"| {format_count(row['evaluations_per_second'])} |"
         )
     return "\n".join(lines)
 
@@ -847,25 +782,18 @@ def invalid_list(runs):
     return "\n".join(lines)
 
 
-LIBRARY_NAMES = {"genoxide": "genoxide", "genoxide_python": "genoxide (Python)", "genetic_algorithm": "genetic_algorithm", "deap": "DEAP",
-                 "pygad": "PyGAD", "pymoo": "pymoo", "radiate": "radiate", "moors": "moors", "pycma": "pycma",
-                 "nevergrad": "Nevergrad", "scipy": "SciPy", "pygmo": "pygmo", "openga": "openGA",
-                 "jenetics": "Jenetics", "jmetal": "jMetal", "evolutionary_jl": "Evolutionary.jl",
+LIBRARY_NAMES = {"genoxide": "genoxide", "genoxide_python": "genoxide (Python)", "deap": "DEAP", "pygad": "PyGAD",
+                 "pymoo": "pymoo", "radiate": "radiate", "pycma": "pycma", "scipy": "SciPy",
+                 "pygmo": "pygmo", "jmetal": "jMetal", "evolutionary_jl": "Evolutionary.jl",
                  "metaheuristics_jl": "Metaheuristics.jl"}
-SOLVER_NAMES = {"ga": "GA", "evolve": "GA", "hill_climb": "hill climbing", "local_search": "local search",
-                "cma_es": "CMA-ES", "de": "DE", "pso": "PSO", "es": "ES", "sade": "SaDE",
-                "ipop_cma_es": "IPOP-CMA-ES", "discrete_one_plus_one": "discrete (1+1)", "eca": "ECA",
-                "islands": "GA (islands)", "tabu_search": "tabu search", "l_shade": "L-SHADE",
-                "ga_uniform": "GA (uniform)", "ga_multipoint": "GA (multi-point)", "ga_pmx": "GA (PMX)",
-                "ga_blend": "GA (blend)", "ga_intermediate": "GA (intermediate)", "ga_assist": "GA (assist)",
-                "ihs": "IHS", "gaco": "GACO", "simulated_annealing": "simulated annealing", "xnes": "xNES",
-                "brkga": "BRKGA", "nelder_mead": "Nelder-Mead", "bipop_cma_es": "BIPOP-CMA-ES",
-                "lq_cma_es": "lq-CMA-ES", "ngiohtuned": "NgIohTuned", "one_plus_one": "(1+1)",
-                "portfolio_discrete_one_plus_one": "portfolio (1+1)", "rotated_two_points_de": "RotatedTwoPointsDE",
-                "genetic_de": "GeneticDE", "scr_hammersley": "Hammersley search", "lbfgsb": "L-BFGS-B",
-                "dual_annealing": "dual annealing", "direct": "DIRECT"}
-PROBLEM_NAMES = {"onemax": "OneMax", "nqueens": "N-Queens", "rastrigin": "Rastrigin", "rosenbrock": "Rosenbrock",
-                 "ackley": "Ackley"}
+SOLVER_NAMES = {"ga": "GA", "de": "DE", "cma_es": "CMA-ES"}
+PROBLEM_NAMES = {"onemax": "OneMax", "rastrigin": "Rastrigin", "rosenbrock": "Rosenbrock"}
+# a scenario of the suite that the results file has no runs of, e.g. one added since the run
+PENDING = "Awaiting the next run"
+# the width of its panel, in bars
+PENDING_BARS = 5
+# what "matched" means, in the charts' subtitles
+MATCHED = "matched: one method per problem, the same in every library, with its own implementation"
 GENOXIDE_COLOR = "#ce422b"
 # genoxide's Python package: a lighter red
 GENOXIDE_PYTHON_COLOR = "#ec8b78"
@@ -884,12 +812,16 @@ def library_colors(libraries):
 
 
 def label(library, solver):
-    return f"{LIBRARY_NAMES.get(library, library)} {SOLVER_NAMES.get(solver, solver)}"
+    """A bar's label: the library, since a scenario has one method (its name is in the panel's
+    title)."""
+    return LIBRARY_NAMES.get(library, library)
 
 
 def scenario_title(scenario):
+    """A scenario's title with its method, e.g. "Rastrigin 30: DE/rand/1/bin"."""
     problem, size, mode = scenario.split("-")
-    return f"{PROBLEM_NAMES.get(problem, problem)} {size} ({mode})"
+    title = f"{PROBLEM_NAMES.get(problem, problem)} {size}"
+    return f"{title}: {METHODS[scenario]}" if scenario in METHODS else f"{title} ({mode})"
 
 
 def short_number(value):
@@ -915,12 +847,12 @@ def significant(value, digits=6):
 
 
 def draw_charts(results, out_dir, formats=("svg",), history=VERSIONS_FILE):
-    """Bar charts of a results file: time and evaluations to target, the distance to the optimum,
-    and each library's overall score
-    (overall_scores); and, from the `history` file of genoxide's versions, the instructions of
-    their runs (draw_versions_chart). Their numbers go to charts.json beside them, for the
-    interactive charts of the project site: recorded as each chart draws them, so the file and the
-    charts can't disagree."""
+    """Bar charts of a results file: time and evaluations to target and the distance to the optimum,
+    a panel per scenario of SCENARIOS, a bar per library (a scenario without runs in the file is a
+    panel awaiting the next run); and, from the `history` file of genoxide's versions, the
+    instructions of their runs (draw_versions_chart). Their numbers go to charts.json beside them,
+    for the interactive charts of the project site: recorded as each chart draws them, so the file
+    and the charts can't disagree."""
     plt = pyplot()
     from matplotlib.patches import Patch
     from matplotlib.ticker import FuncFormatter, LogLocator
@@ -1087,13 +1019,17 @@ def draw_charts(results, out_dir, formats=("svg",), history=VERSIONS_FILE):
                 bar["text"] = text(v)
                 if note and note(row).strip():
                     bar["note"] = note(row).strip()
-            bar.update({key: row[key] for key in ("runs", "reached") if key in row})
+            # a fixed budget has no target, so nothing to reach
+            bar.update({key: row[key] for key in ("runs", "reached") if key in row
+                        and not (key == "reached" and row["scenario"] in FIXED_BUDGET)})
             if row.get("capped"):
                 bar["capped"] = row["capped"]
             if row.get("capped_share") is not None:
                 bar["capped_share"] = significant(row["capped_share"])
             if row.get("ended_on_cap"):
                 bar["ended_on_cap"] = True
+            if row.get("ended_early"):
+                bar["ended_early"] = row["ended_early"]
             record["bars"].append(bar)
         axis.set_xticks(positions, [label(row["library"], row["solver"]) for row in group], rotation=60,
                         ha="right", rotation_mode="anchor", fontsize=6.5)
@@ -1104,16 +1040,31 @@ def draw_charts(results, out_dir, formats=("svg",), history=VERSIONS_FILE):
         axis.tick_params(axis="y", labelsize=6.3, length=2, pad=1.5)
         axis.spines[["top", "right"]].set_visible(False)
 
+    def awaiting(axis, scenario):
+        """A panel of a scenario the results file has no runs of: awaiting the next run."""
+        axis.set_xlim(0, 1)
+        axis.set_ylim(0, 1)
+        axis.set_xticks([])
+        axis.set_yticks([])
+        axis.grid(False)
+        axis.spines[["top", "right"]].set_visible(False)
+        axis.text(0.5, 0.5, PENDING, transform=axis.transAxes, ha="center", va="center", fontsize=7.2,
+                  color="#666666", wrap=True)
+        records[axis].update({"log": True, "better": "lower", "bars": [], "pending": True, "note": PENDING})
+
     def panel_title(axis, scenario, detail):
         # the detail (e.g. the budget) on a second, lighter line, so narrow panels' titles fit
         axis.set_title(scenario_title(scenario), fontsize=8.2, loc="left", fontweight="bold", pad=11)
         axis.text(0, 1.015, detail, transform=axis.transAxes, fontsize=6.6, color="#666666", va="bottom")
         records[axis].update({"title": scenario_title(scenario), "detail": detail, "budget": budgets.get(scenario),
-                              "cap": caps.get(scenario)})
+                              "cap": caps.get(scenario),
+                              **({"fixed_budget": True} if scenario in FIXED_BUDGET else {})})
 
     def limits(scenario):
         """A panel's budget and time cap."""
-        parts = [f"budget {short_number(budgets[scenario])} evaluations"] if scenario in budgets else []
+        parts = (["no target"] if scenario in FIXED_BUDGET else []) + (
+            [f"{'fixed budget' if scenario in FIXED_BUDGET else 'budget'} {short_number(budgets[scenario])} evaluations"]
+            if scenario in budgets else [])
         parts += [f"cap {format_number(caps[scenario])} s"] if scenario in caps else []
         return " · ".join(parts)
 
@@ -1129,9 +1080,15 @@ def draw_charts(results, out_dir, formats=("svg",), history=VERSIONS_FILE):
     capped_legend = ("c capped at p%: c runs stopped by the scenario's time cap before the budget, after a median p% "
                      "of it, so limited by speed, not by the search")
 
-    # --- single objective: time and evaluations to target -------------------------------------
+    # --- time and evaluations to target ----------------------------------------------------------
     rows = summarize(runs, caps)
-    scenarios = sorted({row["scenario"] for row in rows}, key=lambda s: (order.get(s, len(order)), s))
+    # every scenario of the suite, those without runs awaiting the next run
+    scenarios = sorted({row["scenario"] for row in rows} | set(order), key=lambda s: (order.get(s, len(order)), s))
+    caps = {scenario: caps.get(scenario, CAPS.get(scenario)) for scenario in scenarios}
+
+    def bar_count(group):
+        """A panel's width in bars: its bars, or room for the note of a panel awaiting the next run."""
+        return len(group) or PENDING_BARS
 
     def reached(row):
         """How many runs reached the target, when not all did, and how many the time cap stopped."""
@@ -1145,224 +1102,87 @@ def draw_charts(results, out_dir, formats=("svg",), history=VERSIONS_FILE):
 
     ert = ("expected running time (ERT): what all runs spent, up to the first hit in those that reached the target, "
            f"divided by the runs that reached it; at least {ERT_REACHED} must have")
-    for name, title, value, text, ticks, quantity in (
-        ("time_to_target", "Expected time to target (lower is better)",
-         lambda row: row["ert_time"], format_seconds, time_ticks, "seconds"),
+    def budget_time(row):
+        """A fixed budget's measure of time: the median time of the runs that used the whole budget."""
+        return row["budget_time"]
+
+    def ended_note(row):
+        """How many runs the library ended before the budget (rules 2.2, 8.4), and how many the
+        time cap stopped: left out of the time for the budget, not of the error at the end."""
+        parts = [f"{row['ended_early']} of {row['runs']} ended early"] if row.get("ended_early") else []
+        parts += capped_note(row)
+        return "  " + ", ".join(parts) if parts else ""
+
+    def no_budget_time(row):
+        """The label of a method none of whose runs used the whole budget."""
+        return f"none of {row['runs']} used the budget" + ("," + ended_note(row)[1:] if ended_note(row) else "")
+
+    for name, title, value, text, ticks, quantity, fixed in (
+        ("time_to_target", "Expected time to target, or median time for a fixed budget (lower is better)",
+         lambda row: row["ert_time"], format_seconds, time_ticks, "seconds", True),
         ("evaluations_to_target",
          "Expected fitness evaluations to target (lower is better): search efficiency, whatever the language",
-         lambda row: row["ert_evaluations"], short_number, count_ticks, "evaluations"),
+         lambda row: row["ert_evaluations"], short_number, count_ticks, "evaluations", False),
     ):
-        if not scenarios:
-            break
+        # a scenario without a target has no evaluations to target: every run uses its budget
+        shown = [scenario for scenario in scenarios if fixed or scenario not in FIXED_BUDGET]
         figure, axes = chart(
-            name, title, context + f" · {ert} · k of n: reached in k of n runs · {capped_legend} · ×: fewer than "
-            f"{ERT_REACHED} runs reached the target, k/n: how many did · a missing library can't run the scenario: "
-            "see notes.md",
-            [(scenario, len([row for row in rows if row["scenario"] == scenario])) for scenario in scenarios],
-            {row["library"] for row in rows}, quantity)
-        for scenario in scenarios:
+            name, title, context + f" · {MATCHED} · {ert} · k of n: reached in k of n runs · {capped_legend} · ×: "
+            f"fewer than {ERT_REACHED} runs reached the target, k/n: how many did · "
+            + ("a problem without a target: the median time of the runs that used its whole fixed budget, those the library "
+                "ended early or the time cap stopped noted beside the bar · " if fixed else
+               "a problem without a target isn't shown: every run uses its budget · ")
+            + "a missing library can't run the scenario's method: see notes.md",
+            [(scenario, bar_count([row for row in rows if row["scenario"] == scenario])) for scenario in shown],
+            {row["library"] for row in rows if row["scenario"] in shown}, quantity)
+        for scenario in shown:
             axis = axes[scenario]
-            bars(axis, [row for row in rows if row["scenario"] == scenario], value, text, note=reached,
-                 missing_text=too_few)
+            group = [row for row in rows if row["scenario"] == scenario]
+            if not group:
+                awaiting(axis, scenario)
+            elif scenario in FIXED_BUDGET:
+                bars(axis, group, budget_time, text, note=ended_note, missing_text=no_budget_time)
+            else:
+                bars(axis, group, value, text, note=reached, missing_text=too_few)
             panel_title(axis, scenario, limits(scenario))
             if axis.get_yscale() == "log":
                 axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
                 axis.yaxis.set_major_formatter(ticks)
         save(figure, name)
 
-    # --- the summary: each library's fastest method in each scenario ------------------------------
-    best = {}
-    for row in rows:
-        key = (row["scenario"], row["library"])
-        if row["ert_time"] is not None and (key not in best or row["ert_time"] < best[key]["ert_time"]):
-            best[key] = row
-    if best:
-        columns, column_width, label_width, bar_height = 3, 3.93, 1.45, 0.17
-        rows_of_panels = [scenarios[i:i + columns] for i in range(0, len(scenarios), columns)]
-        tallest = [max(len([key for key in best if key[0] == scenario]) for scenario in row) for row in rows_of_panels]
-        subtitle = (f"{context} · the fastest method of each library, by expected running time (ERT): what all runs "
-                    f"spent, up to the first hit in those that reached the target, divided by the runs that reached "
-                    f"it · matched: the same algorithm in every library; idiomatic: each library's recommended "
-                    f"methods · every method, the budgets and the rules: docs/benchmarks")
-        summary_title = "Time to target: each library's fastest method (lower is better)"
-        # every library in the chart, with its version and language, as in the other charts
-        names = list(dict.fromkeys(name for name in list(ADAPTERS) + sorted(versions)
-                                   if any(key[1] == name for key in best)))
-        record = data["charts"]["summary"] = {"file": "summary.svg", "title": summary_title, "subtitle": subtitle,
-                                              "quantity": "seconds", "libraries": names, "panels": []}
-        subtitle = textwrap.fill(subtitle, 200)
-        legend_columns = 5
-        legend_rows = (len(names) + legend_columns - 1) // legend_columns
-        legend_top = 0.62 + subtitle.count("\n") * 0.14
-        header = legend_top + legend_rows * 0.19 + 0.3
-        panel_heights = [count * bar_height + 0.1 for count in tallest]
-        height = header + sum(h + 0.42 + 0.62 for h in panel_heights)
-        figure = plt.figure(figsize=(width, height))
-        figure.patch.set_facecolor("white")
-        figure.text(margin / width, 1 - 0.12 / height, summary_title, fontsize=12.5, fontweight="bold", va="top")
-        figure.text(margin / width, 1 - 0.40 / height, subtitle, fontsize=7.8, color="#555555", va="top",
-                    linespacing=1.3)
-        figure.legend(handles=[Patch(color=colors[name], label=f"{LIBRARY_NAMES.get(name, name)} "
-                                                               f"{versions.get(name, '').split('+')[0]} "
-                                                               f"({languages.get(name, '')})")
-                               for name in names],
-                      loc="upper left", bbox_to_anchor=(margin / width, 1 - legend_top / height),
-                      ncol=legend_columns, frameon=False, fontsize=7.5, handlelength=0.9, handleheight=0.9,
-                      columnspacing=1.6, borderaxespad=0.0, labelspacing=0.35)
-        y = height - header
-        for panel_row, panel_height_ in zip(rows_of_panels, panel_heights):
-            y -= 0.42 + panel_height_
-            for column, scenario in enumerate(panel_row):
-                left = margin + column * column_width + label_width
-                axis = figure.add_axes((left / width, y / height, (column_width - label_width - 0.25) / width,
-                                        panel_height_ / height))
-                group = sorted((row for key, row in best.items() if key[0] == scenario), key=lambda row: row["ert_time"])
-                positions = list(range(len(group)))[::-1]
-                values = [row["ert_time"] for row in group]
-                axis.barh(positions, values, height=0.72, color=[colors[row["library"]] for row in group], linewidth=0)
-                axis.set_xscale("log")
-                axis.set_xlim(min(values) / 2.5, max(values) * 40)
-                axis.set_ylim(-0.6, len(group) - 0.4)
-                for position, row in zip(positions, group):
-                    axis.text(row["ert_time"] * 1.12, position, format_seconds(row["ert_time"]), va="center",
-                              fontsize=6.3, color="#222222")
-                axis.set_yticks(positions, [label(row["library"], row["solver"]) for row in group], fontsize=6.6)
-                for tick_label, row in zip(axis.get_yticklabels(), group):
-                    if row["library"] in GENOXIDE_COLORS:
-                        tick_label.set_fontweight("bold")
-                axis.xaxis.set_major_locator(LogLocator(base=10, numticks=6))
-                axis.xaxis.set_major_formatter(time_ticks)
-                axis.tick_params(axis="y", length=0, pad=2)
-                axis.tick_params(axis="x", labelsize=6.3, length=2, pad=1.5)
-                axis.grid(axis="x", color="#e8e8e8", linewidth=0.5)
-                axis.grid(axis="y", visible=False)
-                axis.spines[["top", "right"]].set_visible(False)
-                axis.set_title(scenario_title(scenario), fontsize=8.2, loc="left", fontweight="bold", pad=4,
-                               x=-label_width / (column_width - label_width - 0.25))
-                ran = sorted({row["library"] for row in rows if row["scenario"] == scenario})
-                others = [LIBRARY_NAMES.get(name, name) for name in ran if (scenario, name) not in best]
-                record["panels"].append({
-                    "key": scenario, "title": scenario_title(scenario), "log": True, "better": "lower",
-                    "bars": [{"library": row["library"], "solver": row["solver"],
-                              "label": label(row["library"], row["solver"]), "value": significant(row["ert_time"]),
-                              "text": format_seconds(row["ert_time"]), "runs": row["runs"], "reached": row["reached"]}
-                             for row in group],
-                    **({"note": f"Fewer than {ERT_REACHED} of {results['seeds']} runs reached the target: "
-                                f"{', '.join(others)}"} if others else {}),
-                })
-                if others:
-                    # under the panel's time axis
-                    figure.text((margin + column * column_width) / width, (y - 0.27) / height,
-                                textwrap.fill(f"Fewer than {ERT_REACHED} of {results['seeds']} runs reached the "
-                                              f"target: {', '.join(others)}", 80),
-                                fontsize=6.2, color="#666666", va="top", linespacing=1.25)
-            y -= 0.62
-        save(figure, "summary")
-
     # --- how close every run got: the distance to the optimum at the end (rule 8.1) -----------------
     # the runs the time cap stopped apart from the others
     gap_rows = summarize(runs, caps, split=True)
-    if gap_rows:
-        figure, axes = chart(
-            "distance_to_optimum",
-            "Distance to the optimum at the end of the run, median of the runs (lower is better)",
-            context + " · a run ends at the target, its budget or its time cap · dashed: the target, 0.01 · "
-            f"cross-hatched, past the dotted line: the runs stopped by the time cap · {capped_legend}",
-            [(scenario, len([row for row in gap_rows if row["scenario"] == scenario])) for scenario in scenarios],
-            {row["library"] for row in gap_rows}, "distance")
-        for scenario in scenarios:
-            axis = axes[scenario]
-            # a log axis can't show 0: a distance of 0 is drawn at a tenth of the smallest other one
-            group = [row for row in gap_rows if row["scenario"] == scenario]
-            positive = [row["median_gap"] for row in group if row["median_gap"] > 0]
-            floor = min(positive) / 10 if positive else 1e-3
-            bars(axis, group, lambda row, floor=floor: max(row["median_gap"], floor),
-                 lambda v, floor=floor: "0" if v <= floor else short_number(v) if v >= 1000 else f"{v:.3g}",
-                 note=lambda row: "  " + ", ".join(capped_note(row)) if row.get("ended_on_cap") else "")
+    figure, axes = chart(
+        "distance_to_optimum",
+        "Distance to the optimum at the end of the run, median of the runs (lower is better)",
+        context + f" · {MATCHED} · a run ends at the target, its budget or its time cap · for a problem without a "
+        "target, the error the fixed budget ends at: the same algorithm, so the libraries should agree within the "
+        "seeds' spread · dashed: the target, 0.01 · "
+        f"cross-hatched, past the dotted line: the runs stopped by the time cap · {capped_legend}",
+        [(scenario, bar_count([row for row in gap_rows if row["scenario"] == scenario])) for scenario in scenarios],
+        {row["library"] for row in gap_rows}, "distance")
+    for scenario in scenarios:
+        axis = axes[scenario]
+        # a log axis can't show 0: a distance of 0 is drawn at a tenth of the smallest other one
+        group = [row for row in gap_rows if row["scenario"] == scenario]
+        if not group:
+            awaiting(axis, scenario)
             panel_title(axis, scenario, limits(scenario))
-            if scenario.split("-")[0] in ("rastrigin", "rosenbrock", "ackley"):
-                axis.axhline(0.01, color="#444444", linewidth=0.7, linestyle=(0, (4, 3)), zorder=0)
-                records[axis]["target"] = 0.01
-            if axis.get_yscale() == "log":
-                axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
-        save(figure, "distance_to_optimum")
-
-    # --- the overall score: a bar per library (rule 8.5) ------------------------------------------------
-    score_scenarios, scores = overall_scores(rows, caps)
-    if scores:
-        count = len(score_scenarios)
-
-        def score_text(score):
-            return f"{score:.1f}"
-
-        def coverage(entry):
-            return f"{entry['scenarios']}/{entry['of']} scenarios" + (
-                f", {entry['solved']} solved" if entry["solved"] < entry["scenarios"] else "")
-
-        overall_title = f"Overall score over {count} scenarios (higher is better)"
-        how = [
-            "Per scenario, 100 points for the fastest library and 0 for not solving it within the time cap, evenly per "
-            "order of magnitude of time in between; the score is the mean over the scenarios a library runs",
-            f"Time: its fastest method's expected time to target; if none, {PENALTY} × the time cap (unsolved)",
-        ]
-        names = [name for name in dict.fromkeys(list(ADAPTERS) + sorted(versions))
-                 if any(entry["library"] == name for entry in scores)]
-        data["charts"]["overall"] = {
-            "file": "overall.svg", "title": overall_title, "subtitle": " · ".join(how + [context]),
-            "quantity": "score", "libraries": names,
-            "panels": [{
-                "key": "overall", "title": None, "detail": None, "log": False, "better": "higher", "axis_to": 100,
-                "scenarios": [{"key": scenario, "title": scenario_title(scenario), "cap": caps.get(scenario)}
-                              for scenario in score_scenarios],
-                "bars": [{
-                    "library": entry["library"], "label": LIBRARY_NAMES.get(entry["library"], entry["library"]),
-                    "value": significant(entry["score"]), "text": score_text(entry["score"]), "note": coverage(entry),
-                    "scenarios": entry["scenarios"], "solved": entry["solved"], "of": entry["of"],
-                    "ratios": [{"scenario": ratio["scenario"], "ratio": significant(ratio["ratio"]),
-                                "points": round(ratio["points"], 1), "time": significant(ratio["time"]),
-                                **({"solver": ratio["solver"], "method": SOLVER_NAMES.get(ratio["solver"], ratio["solver"])}
-                                   if ratio["solver"] is not None else {"penalized": True})}
-                               for ratio in entry["ratios"]],
-                } for entry in scores],
-            }],
-        }
-        overall_width, label_width, value_room, bar_height = 8.6, 2.45, 1.75, 0.2
-        subtitle = "\n".join(textwrap.fill(line, 158) for line in how + [context])
-        header = 0.5 + (subtitle.count("\n") + 1) * 0.135 + 0.2
-        plot_height = len(scores) * bar_height + 0.1
-        height = header + plot_height + 0.35
-        figure = plt.figure(figsize=(overall_width, height))
-        figure.patch.set_facecolor("white")
-        figure.text(margin / overall_width, 1 - 0.12 / height, overall_title, fontsize=12.5, fontweight="bold",
-                    va="top")
-        figure.text(margin / overall_width, 1 - 0.40 / height, subtitle, fontsize=7.4, color="#555555", va="top",
-                    linespacing=1.3)
-        left = margin + label_width
-        axis = figure.add_axes((left / overall_width, 0.35 / height,
-                                (overall_width - left - value_room) / overall_width, plot_height / height))
-        positions = list(range(len(scores)))[::-1]
-        axis.barh(positions, [entry["score"] for entry in scores], height=0.72,
-                  color=[colors[entry["library"]] for entry in scores], linewidth=0)
-        axis.set_xlim(0, 100)
-        axis.set_ylim(-0.6, len(scores) - 0.4)
-        for position, entry in zip(positions, scores):
-            axis.text(entry["score"] + 1.2, position, f"{score_text(entry['score'])}   {coverage(entry)}",
-                      va="center", fontsize=6.8, color="#222222", clip_on=False)
-        axis.set_yticks(positions, [f"{LIBRARY_NAMES.get(entry['library'], entry['library'])} "
-                                    f"{versions.get(entry['library'], '').split('+')[0]} "
-                                    f"({languages.get(entry['library'], '')})" for entry in scores], fontsize=7.2)
-        for tick_label, entry in zip(axis.get_yticklabels(), scores):
-            if entry["library"] in GENOXIDE_COLORS:
-                tick_label.set_fontweight("bold")
-        axis.set_xticks(range(0, 101, 20))
-        axis.tick_params(axis="y", length=0, pad=3)
-        axis.tick_params(axis="x", labelsize=6.5, length=2, pad=1.5, color="#9a9a9a")
-        axis.grid(axis="x", color="#e8e8e8", linewidth=0.5)
-        axis.grid(axis="y", visible=False)
-        axis.spines[["top", "right"]].set_visible(False)
-        save(figure, "overall")
-        # first in charts.json, as on the site
-        data["charts"] = {"overall": data["charts"].pop("overall"), **data["charts"]}
+            continue
+        positive = [row["median_gap"] for row in group if row["median_gap"] > 0]
+        floor = min(positive) / 10 if positive else 1e-3
+        bars(axis, group, lambda row, floor=floor: max(row["median_gap"], floor),
+             lambda v, floor=floor: "0" if v <= floor else short_number(v) if v >= 1000 else f"{v:.3g}",
+             note=lambda row: (ended_note(row) if scenario in FIXED_BUDGET
+                               else "  " + ", ".join(capped_note(row)) if row.get("ended_on_cap") else ""))
+        panel_title(axis, scenario, limits(scenario))
+        if scenario.split("-")[0] == "rosenbrock":
+            axis.axhline(0.01, color="#444444", linewidth=0.7, linestyle=(0, (4, 3)), zorder=0)
+            records[axis]["target"] = 0.01
+        if axis.get_yscale() == "log":
+            axis.yaxis.set_major_locator(LogLocator(base=10, numticks=5))
+    save(figure, "distance_to_optimum")
 
     # --- genoxide's versions (rule 10), from their history file ---------------------------------------
     if history is not None and history.exists():
@@ -1481,7 +1301,8 @@ def run_details(results):
         cap = caps[scenario]
         problem, size, mode = scenario.split("-")
         if scenario not in details:
-            targets = [run["target"] for run in group if run.get("target") is not None]
+            targets = [] if scenario in FIXED_BUDGET else [run["target"] for run in group
+                                                            if run.get("target") is not None]
             details[scenario] = {
                 "format": 1,
                 "run": {"timestamp": results.get("timestamp", ""), "date": results_date(results),
@@ -1489,6 +1310,8 @@ def run_details(results):
                 "scenario": {
                     "key": scenario, "title": scenario_title(scenario), "problem": problem,
                     "problem_name": PROBLEM_NAMES.get(problem, problem), "size": int(size), "mode": mode,
+                    **({"method": METHODS[scenario]} if scenario in METHODS else {}),
+                    **({"fixed_budget": True} if scenario in FIXED_BUDGET else {}),
                     "budget": BUDGETS.get(scenario), "cap": cap,
                     **({"target": targets[0]} if targets else {}),
                     "seeds": sorted({run["seed"] for key, runs_ in groups.items() if key[0] == scenario
@@ -1518,6 +1341,8 @@ def run_details(results):
                 "reached": bool(first_hit(run, cap)),
                 "first_hit": run.get("first_hit"),
                 **({"capped": True} if capped(run, cap) else {}),
+                # a run the library ended itself (rules 2.2, 8.4): why
+                **({"ended_by": run["ended_by"]} if run.get("ended_by") else {}),
                 **({"invalid": run["invalid"]} if run.get("invalid") else {}),
                 "output": json.dumps({key: value for key, value in run.items()
                                       if key not in ADDED_FIELDS}, ensure_ascii=False),
@@ -1582,7 +1407,8 @@ def draw_versions_chart(history, out_dir, formats=("svg",)):
         f"each method of the benchmark, one run per scenario with seed {seed}, to its target or its evaluation budget, "
         "without a time cap",
         "counted by Callgrind, the adapter's startup subtracted: exact, whatever the machine's load",
-        "filled: the run reached the target; hollow: it didn't within the budget",
+        "filled: the run reached the target, or used the fixed budget of a problem without one; hollow: it didn't reach "
+        "the target within the budget",
         unique("rustc"), unique("valgrind"), unique("machine"),
         f"measured {unique('measured')}",
     ]
@@ -1593,7 +1419,7 @@ def draw_versions_chart(history, out_dir, formats=("svg",)):
                             "measured": row.get("measured")} for row in rows],
               "panels": []}
 
-    width, margin, columns = 12.0, 0.1, 5
+    width, margin, columns = 12.0, 0.1, 3
     left_room, gap, panel_height, title_height, ticks_height = 0.55, 0.32, 1.45, 0.42, 0.42
     panel_width = (width - 2 * margin - columns * left_room - (columns - 1) * gap) / columns
     lines = [""]
@@ -1614,8 +1440,10 @@ def draw_versions_chart(history, out_dir, formats=("svg",)):
                 linespacing=1.3)
     handles = [Line2D([], [], color=colors[solver], marker="o", markersize=4, linewidth=1.2,
                       label=SOLVER_NAMES.get(solver, solver)) for solver in solvers]
-    handles.append(Line2D([], [], color="#666666", marker="o", markersize=4, markerfacecolor="white", linewidth=0,
-                          label="target not reached"))
+    if any(entry.get("reached") is False for row in rows for scenario in row["scenarios"].values()
+           for entry in scenario.get("methods", {}).values()):
+        handles.append(Line2D([], [], color="#666666", marker="o", markersize=4, markerfacecolor="white", linewidth=0,
+                              label="target not reached"))
     figure.legend(handles=handles, loc="upper left", bbox_to_anchor=(margin / width, 1 - legend_top / height),
                   ncol=6, frameon=False, fontsize=7.5, handlelength=1.6, columnspacing=1.6, borderaxespad=0.0,
                   labelspacing=0.35)
@@ -1633,12 +1461,13 @@ def draw_versions_chart(history, out_dir, formats=("svg",)):
                     entry = row["scenarios"].get(scenario, {}).get("methods", {}).get(solver)
                     if entry is None:
                         continue
-                    points.append((index, entry["instructions"], entry.get("reached", True)))
+                    # filled unless the run missed its target (a fixed budget's "reached" is null)
+                    points.append((index, entry["instructions"], entry.get("reached") is not False))
                     bar = {"library": "genoxide", "solver": solver, "method": SOLVER_NAMES.get(solver, solver),
                            "version": row["version"], "label": f"{SOLVER_NAMES.get(solver, solver)} {row['version']}",
                            "color": colors[solver], "value": entry["instructions"],
                            "text": short_number(entry["instructions"]), "evaluations": entry["evaluations"], "runs": 1,
-                           "reached": int(entry.get("reached", False))}
+                           **({} if entry.get("reached") is None else {"reached": int(entry["reached"])})}
                     if entry.get("invalid"):
                         bar["invalid"] = True
                     bars.append(bar)
@@ -1667,7 +1496,8 @@ def draw_versions_chart(history, out_dir, formats=("svg",)):
             axis.tick_params(axis="y", labelsize=6.3, length=2, pad=1.5)
             axis.spines[["top", "right"]].set_visible(False)
             budget = BUDGETS.get(scenario)
-            detail = f"budget {short_number(budget)} evaluations" if budget else ""
+            detail = (f"{'no target · fixed budget' if scenario in FIXED_BUDGET else 'budget'} "
+                      f"{short_number(budget)} evaluations" if budget else "")
             axis.set_title(scenario_title(scenario), fontsize=8.2, loc="left", fontweight="bold", pad=11)
             axis.text(0, 1.015, detail, transform=axis.transAxes, fontsize=6.6, color="#666666", va="bottom")
             record["panels"].append({"key": scenario, "title": scenario_title(scenario), "detail": detail, "log": log,
@@ -1801,6 +1631,8 @@ def markdown_report(report):
     """results/latest.md, which becomes docs/benchmarks/results.md: the coverage, and the table of
     the results."""
     header = [f"# Results {report['timestamp']}", "",
+              "The matched suite: three problems, one method each, the same in every library, with its own "
+              "implementation ([rule 6](rules.md#6-the-methods)).", "",
               f"Seeds per scenario: {report['seeds']}, wall time cap per run: "
               f"{describe_caps(scenario_caps(report['max_seconds'], report['runs']))}",
               report["platform"], ""]
@@ -1808,15 +1640,23 @@ def markdown_report(report):
     # every timed run is validated (check.check_run): the ones that failed are listed, not kept
     header += [invalid_list(report["runs"]), ""]
     header += charts_section(report)
+    ran = {scenario_name(run["problem"], run["size"], run["mode"]) for run in report["runs"]}
+    pending = [scenario_title(scenario_name(*scenario[:3])) for scenario in SCENARIOS
+               if scenario_name(*scenario[:3]) not in ran]
+    if pending:
+        header += [f"{PENDING}: {', '.join(pending)}. This run has no runs of "
+                   + ("it" if len(pending) == 1 else "them") + ".", ""]
     header += ["## Coverage", "",
-               "✓ ran, ✗ every run invalid, – can't run the scenario: why, and the bugs found in the libraries, in "
-               "[notes.md](notes.md).", "", coverage_table(report["runs"], report["versions"]), "",
-               "## Single-objective", "",
+               "✓ ran, ✗ every run invalid, – can't run the scenario's method: why, and the bugs found in the "
+               "libraries, in [notes.md](notes.md).", "", coverage_table(report["runs"], report["versions"]), "",
+               "## Results", "",
                "Expected time and evaluations to target: the expected running time (ERT), what all runs spent, up "
                "to the first hit of the target in the runs that reached it, divided by the number of runs that "
                f"reached it; with fewer than {ERT_REACHED}, how many reached it. A first hit after the time cap "
                "counts as not reached. Stopped by the time cap: runs that ended at the cap, not at the target or "
-               "the budget, and the median share of the budget they used.",
+               "the budget, and the median share of the budget they used. A problem without a target (Rastrigin 30, "
+               "[rule 6.3](rules.md#6-the-methods)) has a table of its own: the median time of the runs that used "
+               "the whole fixed budget, the error at the end of every run, and the runs the library ended early.",
                ""]
     # a blank line between the list and the table, or the table becomes part of the list
     return "\n".join(header) + "\n" + markdown_table(report["summary"]) + "\n"
@@ -1824,14 +1664,11 @@ def markdown_report(report):
 
 def charts_section(report):
     """The lines of results.md that link the charts, which `run.py publish` puts beside it."""
-    scenarios = len({scenario_name(run["problem"], run["size"], run["mode"]) for run in report["runs"]})
     return ["## Charts", "",
-            "Interactive, with each bar's numbers: "
+            "Interactive, with each bar's numbers and runs: "
             "[tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).", "",
-            f"![Overall score: each library's speed to a solution over the {scenarios} scenarios](overall.svg)", "",
-            "- [Time to target: each library's fastest method](summary.svg)",
-            "- [Expected time to target](time_to_target.svg), every method",
-            "- [Expected evaluations to target](evaluations_to_target.svg), every method",
+            "![Expected time to target: a panel per problem, a bar per library](time_to_target.svg)", "",
+            "- [Expected evaluations to target](evaluations_to_target.svg)",
             "- [Distance to the optimum at the end](distance_to_optimum.svg)",
             "- [genoxide's versions](genoxide_versions.svg): the CPU instructions of the same runs in each release, "
             "genoxide only ([rule 10](rules.md#10-instruction-counts-genoxides-versions))", ""]
@@ -1901,9 +1738,9 @@ def publish(results_file, history=VERSIONS_FILE):
 
 
 # --update keeps the other libraries' times, so the machine must still measure what it measured
-# then: a fixed reference, DEAP's GA in matched OneMax 100 with seeds 0 to 2, must take the same
-# median time as in the results file, within DRIFT
-DRIFT_REFERENCE = ("deap", "ga", ("onemax", 100, "matched"), 3)
+# then: a fixed reference, DEAP's GA in OneMax 1000 with seeds 0 to 2, must take the same median
+# time as in the results file, within DRIFT
+DRIFT_REFERENCE = ("deap", "ga", ("onemax", 1000, "matched"), 3)
 DRIFT = 0.03
 
 
@@ -1975,8 +1812,8 @@ def main():
     parser.add_argument("--seeds", type=int, default=10)
     parser.add_argument("--max-seconds", type=float,
                         help="wall time cap per run, in every scenario (default: each scenario's own)")
-    parser.add_argument("--quick", action="store_true", help="small scenarios, 3 seeds")
-    parser.add_argument("--scenarios", nargs="*", help="scenario names, e.g. onemax-100-matched (default all)")
+    parser.add_argument("--quick", action="store_true", help="3 seeds")
+    parser.add_argument("--scenarios", nargs="*", help="scenario names, e.g. rastrigin-30-matched (default all)")
     parser.add_argument("--libraries", nargs="*", choices=list(ADAPTERS), help="default all")
     parser.add_argument("--results", type=Path,
                         help="results file to chart (default: the latest, the published "
@@ -2096,8 +1933,7 @@ def main():
     previous_scenarios = {scenario_name(r["problem"], r["size"], r["mode"]) for r in previous["runs"]} if previous else None
     scenarios = [
         scenario for scenario in SCENARIOS
-        if (not args.quick or scenario_name(*scenario[:3]) in QUICK_SCENARIOS)
-        and (not args.scenarios or scenario_name(*scenario[:3]) in args.scenarios)
+        if (not args.scenarios or scenario_name(*scenario[:3]) in args.scenarios)
         # an update reruns every scenario of its results file
         and (previous_scenarios is None or scenario_name(*scenario[:3]) in previous_scenarios)
     ]

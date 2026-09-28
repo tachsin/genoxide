@@ -1,121 +1,112 @@
-# Evolutionary.jl (Julia, 0.12.0)
+# Evolutionary.jl (Julia, 0.12.1)
 
-Evolutionary.jl is a Julia package of evolution strategies (ES), CMA-ES, genetic algorithms (GA), differential evolution (DE), NSGA-II and genetic programming, with mutation, crossover and selection operators. Its docs are at [docs.sciml.ai/Evolutionary](https://docs.sciml.ai/Evolutionary/stable/), from `docs/src` of [SciML/Evolutionary.jl](https://github.com/SciML/Evolutionary.jl); its tests (`test/*.jl`) are its other worked examples for these problem types.
+Evolutionary.jl is a Julia package of evolution strategies (ES), CMA-ES, genetic algorithms (GA), differential evolution (DE), NSGA-II and genetic programming, with mutation, crossover and selection operators. Its docs are at [docs.sciml.ai/Evolutionary](https://docs.sciml.ai/Evolutionary/stable/), from `docs/src` of [SciML/Evolutionary.jl](https://github.com/SciML/Evolutionary.jl). The sources cited below (`src/...`) are those of the pinned 0.12.1, as the package manager installs it: the repository has no tag for it.
 
-Adapter: [benchmarks/adapters/evolutionary_jl/](../../../benchmarks/adapters/evolutionary_jl/). The published results measured 0.12.0; the adapter now pins 0.12.1, which the next run measures.
-Know a better way to solve one of these problems with Evolutionary.jl? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
+Adapter: [benchmarks/adapters/evolutionary_jl/](../../../benchmarks/adapters/evolutionary_jl/).
+Know a way to set Evolutionary.jl closer to a definition? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
+
+## What it runs
+
+The matched suite: each problem with one method, defined the same for every library ([rule 6](../rules.md#6-the-methods)), and each library's own implementation of it.
+
+| Scenario | Method | Evolutionary.jl |
+|---|---|---|
+| OneMax 1000, matched | GA as DEAP's `eaSimple` ([6.2](../rules.md#6-the-methods)) | `ga`: `GA` |
+| Rastrigin 30, matched | DE/rand/1/bin ([6.3](../rules.md#6-the-methods)) | can't run: see [Can't run](#cant-run) |
+| Rosenbrock 10, matched | CMA-ES ([6.4](../rules.md#6-the-methods)) | `cma_es`: `CMAES`, with its bugs (rule 8.4) |
+
+The adapter prints nothing for any other scenario ([`SCENARIOS`, lines 220-224](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L220-L224)).
 
 ## How the adapter runs Evolutionary.jl
 
-- **Evaluations:** `counted` counts every call, including the one `EvolutionaryObjective` makes before each attempt to learn the value's type (`zero(f(x))`), and records the first hit ([bench.jl, lines 142-157](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L142-L157)).
-- **Stop:** the `callback` of [`Options`](https://docs.sciml.ai/Evolutionary/stable/tutorial/#General-options), after every generation.
-- **Keeping going (rule 2.2)** ([lines 168-199](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L168-L199)):
-  - the iteration limit (1,000; 1,500 for CMA-ES) is lifted;
-  - the library's convergence test counts: each method's default metric (`AbsDiff(1e-12)` for GA and CMA-ES, `AbsDiff(1e-10)` for DE and ES) within tolerance for more than `successive_f_tol` generations (`src/api/optimize.jl`): 10 by default, or the example's value (25 for DE on Rastrigin, 30 for the GA on N-Queens). It's part of each method's settings (`metrics`) and stays in effect with `iterations`, `time_limit` or a `callback`;
-  - CMA-ES also ends when the eigendecomposition fails (`update_state!` returns `true`, `src/cmaes.jl`);
-  - Evolutionary.jl has no restart mechanism, so an attempt restarts from a new random start with the seeds of rule 2.2. Runs print `restarts`;
-  - the matched scenarios have no convergence criterion (`successive_f_tol = typemax(Int)`).
-- **Bounds (rule 2.4):** `BoxConstraints` ([docs](https://docs.sciml.ai/Evolutionary/stable/constraints/#Box-Constrained-Optimization)): the initial population is drawn within the bounds (`src/api/utilities.jl`), and every new solution is clipped before it's evaluated (`apply!` → `clip!`, `src/api/constraints.jl`).
-- **Time:** from the run's `Budget`, before `optimize` creates the initial population. Warm-up as rule 4.2.
-- **One thread:** [run.sh](../../../benchmarks/adapters/evolutionary_jl/run.sh) runs Julia 1.13 with `--threads=1 --gcthreads=1,0` and BLAS with one thread.
-- **Seeds:** a `Xoshiro` passed as `rng` to `Options`, used by the operators and the initial populations.
-- **Choosing among the docs (rule 6.2):** first what the docs say a method is for; then examples, the published docs' own before the tests; then defaults. Where an example tries several settings as equals, the ones it varies take the library's default when it's among them, else the first listed.
-- **Separate tests:** 2026-09-25, Evolutionary.jl 0.12.0, seeds 0 to 4, the scenario's budget, 60 s cap. `outside` was 0 in every run.
+- **Fitness functions:** in Julia ([bench.jl, lines 32-49](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L32-L49)); Evolutionary.jl minimizes, so OneMax is the negative count of ones. `values` evaluates them for rule 1.2 ([lines 248-262](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L248-L262)).
+- **Evaluations:** `counted` counts every call, with the first hit and the solutions outside the bounds, including the one `EvolutionaryObjective` makes before the run to learn the value's type (`zero(f(x))`, `src/api/objective.jl`) ([`counted`, lines 94-112](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L94-L112)).
+- **Stop:** the `callback` of [`Options`](https://docs.sciml.ai/Evolutionary/stable/tutorial/#General-options), called after the initial population and after every generation, ends the run at the target, the budget or the time cap, and marks the generation's end for `last_generation` ([`options`, lines 123-136](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L123-L136)).
+- **No convergence criterion (rule 2.2):** `iterations = typemax(Int)` lifts the iteration limit (1,000 by default, 1,500 for CMA-ES), and `successive_f_tol = typemax(Int)` turns off the convergence test, which ends a run once the method's metric (`AbsDiff(1e-12)` for GA and CMA-ES) has held for more than `successive_f_tol` generations (`optimize`, `src/api/optimize.jl`, lines 123-127). Both are documented options.
+- **Ended by the library (rule 8.4):** the CMA-ES ends a run itself when its covariance matrix can't be decomposed (`update_state!` catches the error and returns `true`, `src/cmaes.jl`, lines 156-162). That isn't worked around, and the methods have no restarts: the run ends there, not reached, and its line says `"ended_by": "eigendecomposition failed"` ([`run_once`, lines 138-149](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L138-L149)). Both methods evaluate every child, so neither stalls.
+- **Time:** from the run's `Budget`, created just before `optimize` builds the initial population. Each method first makes the warm-up run of rule 4.2 ([line 289](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L289)).
+- **Seeds (rule 5.2):** a `Xoshiro(seed)` passed as the `rng` of `Options`, which the operators and the initial population use. The same seed repeats a run, and seed 1 gives the same alone as after seed 0 (tested for both methods).
+- **One thread:** [run.sh](../../../benchmarks/adapters/evolutionary_jl/run.sh) runs Julia with `--threads=1 --gcthreads=1,0` and BLAS with one thread.
+- **Version:** the published results measured 0.12.0; the adapter pins 0.12.1, whose sources differ from 0.12.0's only in `src/nsga2.jl`. Its OneMax runs repeat the published ones: seeds 0, 1 and 2 take 119,701, 117,301 and 111,601 evaluations, first hits 119,579, 117,156 and 111,530, as published.
+- **Separate tests:** 2026-09-28, Evolutionary.jl 0.12.1, seeds 0 to 2, the scenario's budget, 60 s cap. `outside` was 0 in every run.
 
-## Binary: OneMax 100 and 1000 (matched), OneMax 100 (idiomatic)
+## OneMax 1000: the GA
 
-**Methods** (`onemax_solvers`, [lines 205-239](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L205-L239)):
-- **Matched:** `GA` with its own operators: population 300, `tournament(3)`, `TPX` with `crossoverRate = 0.5`, `flip` with `mutationRate = 0.2`, `ɛ = 0`. Differences:
-  - `flip` flips exactly one random bit of a mutated child (the same mean as 1/n per bit);
-  - `tournament` draws without replacement from a shuffled population;
-  - every child is evaluated, changed or not;
-  - an uncrossed pair passes the parents themselves, not copies (see [Bugs found](#bugs-found)), included (rule 6.1).
-- **Idiomatic:** the [tutorial](https://docs.sciml.ai/Evolutionary/stable/tutorial/#General-options)'s GA, which counts the ones of a `BitVector`: `GA(selection = uniformranking(5), mutation = flip, crossover = SPX)` with the defaults (population 50, `crossoverRate` 0.8, `mutationRate` 0.1, `ɛ` 0). Its `Options(iterations = 10)` is lifted. The bits start random (the tutorial: zeros).
+**Method** ([`onemax_ga`, lines 155-176](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L155-L176)): the library's [`GA`](https://docs.sciml.ai/Evolutionary/stable/ga/) (`src/ga.jl`) with its own operators, unchanged from the published runs.
 
-**Keeping going:** matched: to the target or the budget. Idiomatic: the convergence test (the best unchanged for more than 10 generations) restarts it.
+| Definition | Evolutionary.jl | Source |
+|---|---|---|
+| population 300, uniform random bits | `populationSize = 300`; the initial individuals from `() -> bitrand(rng, 1000)` | `initial_population`, `src/api/utilities.jl` |
+| 300 tournaments of 3 | `selection = tournament(3)`: groups of 3 from a shuffled population, the best wins | `tournament`, `src/selections.jl`, lines 150-175 |
+| pairs crossed with probability 0.5, two-point crossover | `crossoverRate = 0.5`, `crossover = TPX` | `recombine!`, `src/ga.jl`, lines 124-140; `TPX`, `src/recombinations.jl`, lines 83-93 |
+| each child mutated with probability 0.2, bit flip | `mutationRate = 0.2`, `mutation = flip` | `mutate!`, `src/ga.jl`, lines 142-154; `flip`, `src/mutations.jl`, lines 130-138 |
+| generational, no elitism | the children replace the population; `ɛ = 0` elites | `update_state!`, `src/ga.jl`, lines 83-122 |
+| no convergence criterion | turned off (above) | |
 
-**Left out:** the tests' binary GAs, after the published example: `test/onemax.jl` (`tournament(3)`, `TPX`, `flip`, `crossoverRate` 0.85, `mutationRate` 0.05, population 100) and `test/knapsack.jl` (`roulette`, `swap2`, `SPX`; `tournament(3)`, `inversion`, `SPX`; both elitist).
+**Differences** (none changes the algorithm):
+- **Mutation:** `flip` flips exactly one random bit of a mutated child; the definition flips each bit with probability 1/1000, one bit on average. Evolutionary.jl has no per-bit flip for `GA`.
+- **Tournament:** `tournament` takes its contestants from a random permutation of the population, 3 at a time, and draws a new permutation when it runs out: without replacement within a permutation, where the definition draws with replacement. Each contestant is still uniform.
+- **Two-point crossover:** `TPX` draws two positions uniformly and swaps the genes from one to the other, both included; the definition's cut points lie between genes. The same operator, with slightly different segment lengths.
+- **Evaluations:** every child is evaluated, crossed or mutated or not, where the definition keeps an unchanged copy's fitness. Those evaluations are counted (about 40% of the children here: 0.5 × 0.8).
+- **Copies:** a pair that isn't crossed passes the parents themselves, not copies, and `mutate!` then changes them in place (a bug, see [Bugs found](#bugs-found)). It runs as users get it (rule 8.4).
 
-**Separate tests:**
+**Keeping going:** no convergence criterion; every child is evaluated, so it never stalls.
 
-| Scenario | Solver | Runs | Reached | Median first hit (evaluations) | Best value: median (best, worst) | Capped | Restarts (all runs) |
+**Separate tests:** OneMax 1000 (budget 2,000,000, cap 60 s):
+
+| Solver | Runs | Reached | Median first hit (evaluations) | Best value: median | best | worst | Capped |
 |---|---|---|---|---|---|---|---|
-| OneMax 100, matched | ga | 5 | 5 | 9,645 | 100 (100, 100) | 0 | 0 |
-| OneMax 1000, matched | ga | 5 | 5 | 117,036 | 1,000 (1,000, 1,000) | 0 | 0 |
-| OneMax 100, idiomatic | ga | 5 | 5 | 10,811 | 100 (100, 100) | 0 | 14 |
+| ga | 3 | 3 | 117,156 | 1,000 | 1,000 | 1,000 | 0 |
 
-## Permutation: N-Queens 32 and 64
+## Rosenbrock 10: CMA-ES
 
-**Methods** (`nqueens_solvers`, [lines 241-265](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L241-L265)), from the only permutation example, `test/n-queens.jl`:
-- **`ga`:** `GA(populationSize = 100, selection = tournament(5), crossover = PMX, crossoverRate = 0.89, mutation = inversion, mutationRate = 0.06)`, `successive_f_tol = 30`. The test tries 5 mutations × 5 crossovers; the defaults (`genop`, which does nothing) aren't among them, so the first of each list.
-- **`es`:** `ES(mutation = mutationwrapper(inversion), μ = 20, ρ = 1, λ = 100, selection = :plus)`: the first mutation of the test, and `:plus`, the default selection.
+**Method** ([`rosenbrock_cma_es`, lines 182-218](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L182-L218)): the library's [`CMAES`](https://docs.sciml.ai/Evolutionary/stable/cmaes/) (`src/cmaes.jl`), a (μ/μ_W, λ)-CMA-ES, set with its documented keyword arguments. It runs with its bugs (rule 8.4): they keep it from reaching the target (see [Bugs found](#bugs-found)).
 
-**Keeping going:** both converge and restart (see the table).
+| Definition | Evolutionary.jl | Source |
+|---|---|---|
+| λ = 10, μ = 5 | `lambda = 10`, `mu = 5` | constructor, `src/cmaes.jl`, lines 29-47 |
+| w_i ∝ ln((λ + 1) / 2) − ln i, positive, sum 1; no negative weights | `weights` passed: 0.4563, 0.2708, 0.1622, 0.0852, 0.0255, then 0 for the other five; μ_eff = 3.1673 | lines 87 and 109-114 |
+| Hansen's learning rates and damping | `c_1`, `c_c`, `c_mu`, `c_sigma` passed with the library's default formulas, which are Hansen's 2016: c_σ = 0.2844, c_c = 0.2950, c_1 = 0.01528, c_μ = 0.02015; d_σ = 1.2844, the library's (Hansen's) | lines 94-97, 125 |
+| CSA, rank-one and rank-μ updates, h_σ | all of them, with the bugs below | `update_state!`, lines 137-205 |
+| mean uniform in the box, σ₀ = 4.5, C₀ = I | `BoxConstraints(-5, 10, 10)`: the mean is the first of μ points drawn uniformly in the box; `sigma0 = 4.5`; C₀ = I | `optimize`, `src/api/optimize.jl`, lines 34-40; `initial_population`, `src/api/utilities.jl`, lines 103-128; `initial_state`, `src/cmaes.jl`, lines 81 and 133 |
+| no restarts, no convergence criterion | none: the convergence test is turned off (above); the library can still end a run when its covariance matrix breaks down (below) | |
 
-**Left out:** the test's other operator pairs and ES variants.
+**Differences:**
+- **Weights and learning rates:** the library's default weights (without `weights`) are active: the worst five get −0.0853, −0.2365, −0.3674, −0.4829 and −0.5862, which the definition doesn't allow. Passing `weights` is the only way to turn them off, and with weights given, the library takes other learning rates (c_c = c_σ = 1/√n, c_μ = μ_eff/n², c_1 = 2/n², lines 109-114). So the adapter passes the four learning rates too, with the formulas of the library's own defaults (lines 94-97); they are Hansen's 2016 formulas exactly (the library's c_μ, with α_cov = 2, is the tutorial's). The algorithm is the definition's, with the library's own default values.
+- **Bounds (rule 2.4):** every sample is clipped to the box before it's evaluated (`apply!` → `clip!`, `src/api/constraints.jl`, lines 135 and 281-291; line 167 of `src/cmaes.jl`); the reference is pycma's `BoundTransform`. The mean update uses the clipped samples, the evolution paths and the rank-μ update the unclipped z. It acts only on genes that leave the box.
+- **Initial mean:** the first of the μ = 5 uniform points of the initial population; the other four are neither used nor evaluated.
+- **One more evaluation:** `EvolutionaryObjective` evaluates the initial mean once, to learn the value's type (counted).
 
-**Separate tests:**
+**Keeping going:** no convergence criterion, no restarts. With the step-size bug, σ shrinks every generation: from 4.5 to 2.0 by generation 10, 0.08 by generation 50, 10⁻⁵ by 200 and 10⁻¹¹ by 500 (seed 0), while the best stops improving. After about 9,700 generations σ underflows (10⁻³⁰⁹) and the eigendecomposition fails: the library ends the run there (rule 8.4, `"ended_by": "eigendecomposition failed"`).
 
-| Scenario | Solver | Runs | Reached | Median first hit (evaluations) | Best value: median (best, worst) | Capped | Restarts (all runs) |
+**Separate tests:** Rosenbrock 10 (budget 500,000, cap 60 s):
+
+| Solver | Runs | Reached | Median first hit (evaluations) | Best value: median | best | worst | Capped |
 |---|---|---|---|---|---|---|---|
-| N-Queens 32 | ga | 5 | 2 | 262,084 | 1 (0, 1) | 0 | 377 |
-| N-Queens 32 | es | 5 | 1 | 377,775 | 1 (0, 1) | 0 | 774 |
-| N-Queens 64 | ga | 5 | 0 | - | 6 (5, 7) | 0 | 768 |
-| N-Queens 64 | es | 5 | 0 | - | 7 (6, 7) | 0 | 1,219 |
+| cma_es | 3 | 0 | - | 8.85 | 7.88 | 103.7 | 0 |
 
-## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
+Every run ended at the failed eigendecomposition, after 96,901 to 102,031 evaluations (0.12 to 0.14 s). Their best values hardly changed after the first 20,000 evaluations (by less than 0.01%).
 
-**Methods** (`real_solvers`, [lines 267-313](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L267-L313)): the [README](https://github.com/SciML/Evolutionary.jl#algorithms) and the [docs' index](https://docs.sciml.ai/Evolutionary/stable/) list four methods for real numbers (ES, CMA-ES, GA, DE). The docs say what two are for, so they come first; the third is the first method of the example `test/rastrigin.jl`:
-- **`cma_es`:** for "difficult (non-convex, ill-conditioned, multi-modal, rugged, noisy) optimization problems" ([CMA-ES page](https://docs.sciml.ai/Evolutionary/stable/cmaes/)). `CMAES(lambda = 100)` as in `test/rastrigin.jl`: a (50,100)-CMA-ES, σ0 0.5, from a random point.
-- **`de`:** "used for multidimensional real-valued functions" ([DE page](https://docs.sciml.ai/Evolutionary/stable/de/)). `test/rastrigin.jl`'s population 100, F = 0.9, `successive_f_tol = 25`, and the defaults for what it varies (`random`, `BINX(0.5)`, 1 difference): DE/rand/1/bin.
-- **`es`:** `test/rastrigin.jl`'s (15/15,100)-σ-SA-ES ([ES page](https://docs.sciml.ai/Evolutionary/stable/es/)): `AnisotropicStrategy`, `average` recombination, `gaussian` mutation, comma selection.
-
-**Keeping going:** all three converge and restart (see the table).
-
-**Left out:**
-- `GA`: presented as a general framework; its real-valued examples (getting-started on the Sphere, `test/rastrigin.jl`) put it after the ES and CMA-ES.
-- `TreeGP`: genetic programming.
-
-**Separate tests:**
-
-| Scenario | Solver | Runs | Reached | Median first hit (evaluations) | Best value: median (best, worst) | Capped | Restarts (all runs) |
-|---|---|---|---|---|---|---|---|
-| Rastrigin 10 | cma_es | 5 | 0 | - | 52.7 (37.8, 57.7) | 0 | 134 |
-| Rastrigin 10 | de | 5 | 5 | 137,414 | 0.00948 (0.00827, 0.00957) | 0 | 22 |
-| Rastrigin 10 | es | 5 | 2 | 257,606 | 0.995 (0.00528, 12.7) | 0 | 14 |
-| Rastrigin 30 | cma_es | 5 | 0 | - | 286.3 (192.2, 317.2) | 4 | 56 |
-| Rastrigin 30 | de | 5 | 0 | - | 142.1 (122.5, 149.7) | 0 | 741 |
-| Rastrigin 30 | es | 5 | 0 | - | 9.88 (3.98, 16) | 5 | 1 |
-| Ackley 30 | cma_es | 5 | 0 | - | 19.7 (19.4, 19.8) | 0 | 53 |
-| Ackley 30 | de | 5 | 0 | - | 2.8 (1.07, 3.43) | 0 | 157 |
-| Ackley 30 | es | 5 | 5 | 12,969 | 0.009 (0.0085, 0.0092) | 0 | 0 |
-
-## Continuous, unimodal: Rosenbrock 10
-
-**Methods** (`real_solvers`): CMA-ES and DE as above, and the GA, the docs' own example for a unimodal function, each with the docs' example settings:
-- **`cma_es`:** the [tutorial](https://docs.sciml.ai/Evolutionary/stable/tutorial/) on Rosenbrock: `CMAES()`, a (10,20)-CMA-ES, σ0 0.5, from a random point.
-- **`de`:** `DE(populationSize = 100)`, as in `test/rosenbrock.jl`: DE/rand/1/bin, F = 0.9, Cr = 0.5.
-- **`ga`:** the [getting-started example](https://docs.sciml.ai/Evolutionary/stable/#Getting-started) on the Sphere: `GA(populationSize = 100, selection = susinv, crossover = DC, mutation = PLM())`, default rates (0.8, 0.1).
-
-**Keeping going:** all three converge and restart.
-
-**Left out:** the ES: `test/rosenbrock.jl` starts with it, but the published docs' examples show CMA-ES and the GA.
-
-**Separate tests:**
-
-| Scenario | Solver | Runs | Reached | Median first hit (evaluations) | Best value: median (best, worst) | Capped | Restarts (all runs) |
-|---|---|---|---|---|---|---|---|
-| Rosenbrock 10 | cma_es | 5 | 0 | - | 1.19 (0.0312, 1.39) | 0 | 62 |
-| Rosenbrock 10 | de | 5 | 0 | - | 3.47 (0.118, 5.31) | 0 | 275 |
-| Rosenbrock 10 | ga | 5 | 0 | - | 8.18 (6.52, 9.02) | 0 | 75 |
+For the bug report only, not in the benchmark: the same runs with a copy of `update_state!` in which the three CMA-ES bugs below are fixed reached the target with seeds 0 to 4 in 4,859 to 6,527 evaluations. Fixing the step size and the overwritten matrix only: 4 of 5 (5,291 to 6,281 evaluations; seed 0 stayed at 3.99, Rosenbrock's local minimum). The library as it is: none, best values 7.44 to 103.7.
 
 ## Can't run
 
-Nothing: every scenario runs.
+- **Matched Rastrigin 30:** Evolutionary.jl's [`DE`](https://docs.sciml.ai/Evolutionary/stable/de/) (`src/de.jl`) isn't DE/rand/1/bin as Storn and Price define it. It recombines the mutant with the base vector instead of the target: `update_state!` (lines 59-76) calls `method.recombination(mutant, base)`, so the trial takes every gene from x_r1 or from v = x_r1 + F (x_r2 − x_r3), and nothing from x_i, which only competes with it. That's another variation operator (rule 6.1). Besides:
+  - `BINX(Cr)` (`src/recombinations.jl`, lines 143-157) swaps each gene with probability Cr, so the trial keeps the base's gene with probability Cr: `BINX(0.9)` takes 90% of the genes from the base, not from the mutant (measured: 0.90 of the genes of 10 trials equal the base's); and there is no forced index j_rand;
+  - the base is drawn with replacement (`random`, `src/selections.jl`, lines 182-183), independently of the target and of the two difference vectors (`randexcl` excludes only the target, line 68): r1 can be i, r2 or r3;
+  - the initial population is never evaluated: its fitness starts at `maxintfloat` (line 42), so every trial of the first generation replaces its target.
+  The rest would match: F fixed, generational replacement when f(u) ≤ f(x_i) (lines 78-94), clipping to the box.
 
 ## Bugs found
 
-None is worked around.
-- **CMA-ES doesn't converge in 30 dimensions.** On a 30-dimensional sphere centred at 3, from a random start in [−5.12, 5.12]³⁰ with those bounds, `CMAES()` ends at 95.8 after 60,000 evaluations and `CMAES(lambda = 100)` at 227 after 300,000; without bounds, from [0, 1]³⁰, at 17.6 and 19.8. pycma 4.5.0 with the same σ0, start and bounds reaches 1e-10 in 5,180 and 5,446 evaluations (seeds 1 and 2). In 10 dimensions it converges. The step-size update in `src/cmaes.jl` uses ‖s_σ‖/N where Hansen's tutorial form it follows has ‖s_σ‖²/N, but squaring alone doesn't fix the runs (they then diverge with bounds, and reach 0.25 and 2.1 without). Effect: no multimodal target reached, and occasional covariance breakdowns. Not reported upstream yet.
-- **GA offspring share their parents** (`recombine!`, `src/ga.jl`). An uncrossed pair gets the parents themselves, and `mutate!` mutates them in place: two offspring become one object, and with elitism (ε > 0) an elite can be mutated. With the N-Queens settings, a median of 1 individual per generation is the same object as another. Effect: every GA run here. Not reported upstream yet.
-- **The (μ+λ)-ES can lose a surviving parent** (`update_state!`, `src/es.jl`): it writes each surviving offspring into the slot of its rank, which can overwrite a surviving parent. A (15/3+100)-ES on a sphere, from 2,000 random starts, lost its best parent in 3 of 40,000 generations. Not reported upstream yet.
+| Bug | Effect here | Worked around | Reported |
+|---|---|---|---|
+| CMA-ES: `eigen!(Symmetric(state.C))` (`src/cmaes.jl`, line 157) overwrites the covariance matrix: LAPACK's `syevr` destroys its input, so the upper triangle holds the tridiagonal reduction's data, and the update of line 197 starts from that instead of C | the covariance matrix is wrong in every generation | no | not yet |
+| CMA-ES: the step size is updated with ‖p_σ‖/n instead of ‖p_σ‖/E‖N(0, I)‖ (or ‖p_σ‖²/n in the other form of Hansen's update): `exp(min(1, (c_σ / d_σ) * (norm(s_σ) / N - 1) / 2))` (line 199). ‖p_σ‖ ≈ √n under random selection, so σ shrinks unless the path is n/√n = √n times longer than random. The h_σ test (line 189) has the same missing square | σ shrinks by about 7% a generation until it underflows, after about 9,700 generations; then the run ends at a failed eigendecomposition (`"ended_by"`) | no | not yet |
+| CMA-ES: the rank-μ update (line 194) uses z_i z_iᵀ, the standard normal samples, instead of y_i y_iᵀ with y_i = B D z_i, the steps in the search space | the rank-μ update ignores the learned shape of C | no | not yet |
+| GA: an offspring pair that isn't crossed is the parents themselves, not copies (`recombine!`, `src/ga.jl`, line 135), and `mutate!` then changes them in place. Two offspring can be one object, and with elitism (ε > 0) an elite can be mutated | the OneMax runs, as users get them | no | not yet |
+
+Found in methods no longer in the suite:
+- DE: the crossover partner, `BINX`'s probability and the unevaluated initial population ([Can't run](#cant-run)), and `K` (the "recombination scale factor", default 0.5 (F + 1)), documented in the `DE` docstring but used nowhere (`src/de.jl`, line 18).
+- The (μ+λ)-ES can lose a surviving parent (`update_state!`, `src/es.jl`): it writes each surviving offspring into the slot of its rank, which can overwrite a surviving parent. A (15/3+100)-ES on a sphere, from 2,000 random starts, lost its best parent in 3 of 40,000 generations.
+- The earlier finding "CMA-ES doesn't converge in 30 dimensions" is explained by the three CMA-ES bugs above; it doesn't converge in 10 dimensions either with λ = 10.

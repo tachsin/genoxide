@@ -1,11 +1,11 @@
 name: Benchmark
-description: A better way to run a library in the benchmarks, or a mistake in them
+description: A setting that brings a library closer to a method's definition, or a mistake in the benchmarks
 labels: [benchmarks]
 body:
   - type: markdown
     attributes:
       value: |
-        The benchmarks follow [the rules](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md), and each library's page in [docs/benchmarks/libraries/](https://github.com/tachsin/genoxide/tree/main/docs/benchmarks/libraries) explains how it's run and why. A better way is tested under the same rules, and replaces the current one if it does better.
+        The benchmarks follow [the rules](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md): three problems, each with one method, [defined](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md#6-the-methods) the same for every library. Each library's page in [docs/benchmarks/libraries/](https://github.com/tachsin/genoxide/tree/main/docs/benchmarks/libraries) maps its configuration to the definitions and lists its differences. A correction is tested under the same rules, and the page records it.
   - type: input
     id: library
     attributes:
@@ -16,15 +16,15 @@ body:
   - type: input
     id: problem
     attributes:
-      label: Problem and mode
-      description: e.g. rastrigin-30, idiomatic
+      label: Problem
+      description: e.g. rastrigin-30-matched
     validations:
       required: true
   - type: textarea
     id: better
     attributes:
-      label: The better way
-      description: The method, function or settings, and where the library documents or recommends them (a link to its docs, an example or its README).
+      label: The correction
+      description: The setting or difference, and where the library documents it (a link to its docs, an example or its source).
     validations:
       required: true
   - type: textarea

@@ -17,7 +17,7 @@ import { projectsMetadata } from "@/lib/projects/metadata";
 const PATH = `${GENOXIDE_PATH}/benchmarks`;
 
 const DESCRIPTION =
-  "How genoxide and its Python package are benchmarked: the same problems, fitness functions, evaluation budgets and time cap for every library, under public rules.";
+  "How genoxide and its Python package are benchmarked: three problems, one method each, run by every library with its own implementation of that method, under public rules.";
 
 export const metadata = projectsMetadata({
   title: "Benchmarks",
@@ -42,13 +42,13 @@ const DOCS = [
   },
   {
     title: "Methodology",
-    body: "The libraries and solvers, the protocol, the scenarios, the matched settings and how to run it.",
+    body: "The libraries, the protocol, the three problems and their methods, and how to run it.",
     href: GENOXIDE_LINKS.benchmarkMethodology,
     Icon: FileText,
   },
   {
     title: "Notes",
-    body: "What each library can't run, the bugs found, and the rule-level choices.",
+    body: "What each library can't run, where it differs from a method's definition, and the bugs found.",
     href: GENOXIDE_LINKS.benchmarkNotes,
     Icon: FileText,
   },
@@ -78,13 +78,16 @@ export default async function BenchmarksPage() {
         <h1 className="mt-2 font-semibold text-4xl tracking-tight sm:text-5xl">Benchmarks</h1>
         <div className="proj-lead mt-5 space-y-3 text-lg">
           <p>
-            genoxide and its Python package run the same problems as 15 other evolutionary computation libraries in
-            Rust, C++, Python, Java and Julia, with the same fitness functions, evaluation budgets and time cap (60
-            seconds to a target).
+            Three problems, one method each: a genetic algorithm on OneMax, differential evolution on Rastrigin and
+            CMA-ES on Rosenbrock. genoxide, its Python package and the other libraries in Rust, Python, Java and Julia
+            run a problem only with their own implementation of its method, set to the same written definition, with
+            the same fitness functions, evaluation budgets and time cap (60 seconds to a target).
           </p>
           <p>
-            Matched scenarios run the same algorithm in every library to measure framework cost; idiomatic scenarios
-            run what each library's own documentation recommends, to measure what its users get.
+            The suite is small and matched on purpose: comparing each library's best pick among many methods says
+            little about any of them, while the same algorithm in every library compares the implementations, their
+            speed and whether they do what the definition says. More problems, and multi-objective ones, come back
+            after these.
           </p>
           <p>
             Every run is validated against a Python reference, each library is timed single-threaded on fixed
@@ -97,19 +100,27 @@ export default async function BenchmarksPage() {
         <h2 id="bench-problems" className="font-semibold text-xl tracking-tight">
           Problems
         </h2>
-        <div className="proj-card mt-4 p-5">
-          <p className="text-base-content/55 text-xs uppercase tracking-wide">Single-objective, to a target</p>
-          <ul className="mt-3 flex flex-wrap gap-1.5">
-            {BENCHMARK_PROBLEMS.map((p) => (
-              <li key={p} className="proj-tag">
-                {p}
-              </li>
-            ))}
-          </ul>
-          <p className="proj-lead mt-3 text-sm">
-            Multi-objective benchmarks are left out for now: they come back once genoxide solves these problems well.
-          </p>
-        </div>
+        <ul className="mt-4 grid gap-4 md:grid-cols-3">
+          {BENCHMARK_PROBLEMS.map((problem) => (
+            <li key={problem.scenario} className="proj-card p-5">
+              <p className="text-base-content/55 text-xs uppercase tracking-wide">{problem.name}</p>
+              <p className="mt-2 font-semibold">{problem.method}</p>
+              <p className="proj-lead mt-1 text-sm">{problem.settings}</p>
+            </li>
+          ))}
+        </ul>
+        <p className="proj-lead mt-3 text-sm">
+          Each method's exact definition, which every library's configuration is checked against, is in the{" "}
+          <a
+            href={`${GENOXIDE_LINKS.benchmarkRules}#6-the-methods`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-primary underline-offset-2 hover:underline"
+          >
+            rules
+          </a>
+          ; where a library can't be set exactly to it, its page says how it differs.
+        </p>
       </section>
 
       <section aria-labelledby="bench-charts" className="proj-rise-2 mt-12">
@@ -119,8 +130,9 @@ export default async function BenchmarksPage() {
         {data ? (
           <p className="proj-lead mt-2 mb-5 text-sm">
             The published run of {data.run.date}: {data.run.platform}, single-threaded, {data.run.seeds} seeds per
-            scenario. The overall score comes first, then each measure per scenario. Hover a bar, or focus a chart and
-            use the arrow keys, for its numbers; select a library to highlight it in every chart.
+            scenario. A card per problem, a bar per library: switch between the time and the evaluations to the
+            target and the distance to the optimum. Hover a bar, or focus a chart and use the arrow keys, for its
+            numbers; select a library to highlight it in every chart.
             {details
               ? " Click a method's bar, or press Enter on it, for its runs, what they printed and the adapter's code, with a link to suggest a better way to run it."
               : null}
@@ -175,8 +187,8 @@ export default async function BenchmarksPage() {
           One page per library
         </h2>
         <p className="proj-lead mt-2 text-sm">
-          Its methods and where its documentation recommends them, what it leaves out, its separate test runs and
-          its bugs.
+          How its own implementation of each method is set to the definition, where it differs, what it can't run,
+          its separate test runs and its bugs.
         </p>
         <ul className="mt-5 flex flex-wrap gap-2">
           {libraries.map((lib) => (

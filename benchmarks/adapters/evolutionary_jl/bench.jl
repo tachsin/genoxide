@@ -6,8 +6,13 @@
 #        julia --project=<this folder> bench.jl --version
 # Prints one JSON line per solver per seed, see ../../README.md for the fields.
 #
-# The methods, their settings and where Evolutionary.jl recommends them are explained in
-# docs/benchmarks/libraries/evolutionary_jl.md; each one is cited next to its code below.
+# The matched suite: one method per problem, set to the definition of docs/benchmarks/rules.md with
+# the library's own implementation. Evolutionary.jl runs two of the three:
+# - onemax 1000 matched: the GA ("ga");
+# - rosenbrock 10 matched: CMA-ES ("cma_es").
+# Not rastrigin 30: its DE recombines the mutant with the base vector, not the target. Every other
+# problem, size or mode prints nothing. The settings, their sources and the differences from the
+# definitions are on docs/benchmarks/libraries/evolutionary_jl.md.
 #
 # Every solver is warmed up (compiled) with an untimed, unprinted run of the same problem, with
 # the seed 999,999, 50,000 evaluations and the scenario's time cap, before the timed runs (rule
@@ -20,8 +25,8 @@ using Logging
 
 BLAS.set_num_threads(1)
 
-# CMAES stops when its covariance matrix degenerates (NaN) and logs the whole matrix with @error:
-# keep stderr readable (the run restarts there, see run_restarting)
+# CMAES ends the run when its covariance matrix can't be decomposed, and logs the whole matrix with
+# @error: keep stderr readable (the run prints "ended_by", see run_once)
 disable_logging(Logging.Error)
 
 # -------------------------------------------------------------------------------------------------
@@ -31,42 +36,6 @@ disable_logging(Logging.Error)
 # maximize the number of ones: minimize its negative
 onemax(x::AbstractVector{Bool}) = -count(x)
 
-# Diagonal conflicts: for each diagonal, its queens minus one. Julia permutations are 1-based:
-# queen i is in column p[i], the diagonal indices are shifted by one compared to problems.py.
-function nqueens(p::AbstractVector{<:Integer})
-    n = length(p)
-    left = zeros(Int, 2n - 1)
-    right = zeros(Int, 2n - 1)
-    @inbounds for i in 1:n
-        left[i + p[i] - 1] += 1
-        right[n - i + p[i]] += 1
-    end
-    conflicts = 0
-    @inbounds for i in 1:(2n - 1)
-        left[i] > 1 && (conflicts += left[i] - 1)
-        right[i] > 1 && (conflicts += right[i] - 1)
-    end
-    return conflicts
-end
-
-# The shift of Rastrigin and Ackley, so that the optimum isn't at the origin:
-# s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1) for the 0-based gene index i, with `upper`
-# the box's upper bound, computed in this order (problems.py). Computed once, before any run, for up
-# to MAX_GENES genes.
-shift(index::Integer, upper) = 0.8 * upper * (2 * ((37 * (index - 1) + 11) % 101) / 101 - 1)
-const MAX_GENES = 1024
-const RASTRIGIN_SHIFT = [shift(index, 5.12) for index in 1:MAX_GENES]
-const ACKLEY_SHIFT = [shift(index, 32.768) for index in 1:MAX_GENES]
-
-function rastrigin(x::AbstractVector{<:Real})
-    s = 10.0 * length(x)
-    for (v, offset) in zip(x, RASTRIGIN_SHIFT)
-        y = v - offset
-        s += y * y - 10.0 * cos(2π * y)
-    end
-    return s
-end
-
 function rosenbrock(x::AbstractVector{<:Real})
     s = 0.0
     for i in 1:(length(x) - 1)
@@ -75,24 +44,8 @@ function rosenbrock(x::AbstractVector{<:Real})
     return s
 end
 
-function ackley(x::AbstractVector{<:Real})
-    n = length(x)
-    squares = 0.0
-    cosines = 0.0
-    for (v, offset) in zip(x, ACKLEY_SHIFT)
-        y = v - offset
-        squares += y * y
-        cosines += cos(2π * y)
-    end
-    return -20.0 * exp(-0.2 * sqrt(squares / n)) - exp(cosines / n) + 20.0 + ℯ
-end
-
-# (function, lower bound, upper bound)
-const REAL_PROBLEMS = Dict(
-    "rastrigin" => (rastrigin, -5.12, 5.12),
-    "rosenbrock" => (rosenbrock, -5.0, 10.0),
-    "ackley" => (ackley, -32.768, 32.768),
-)
+const ROSENBROCK_LOWER = -5.0
+const ROSENBROCK_UPPER = 10.0
 const REAL_TARGET = 0.01
 
 # -------------------------------------------------------------------------------------------------
@@ -138,7 +91,9 @@ last_generation(budget::Budget) =
 
 outside(x, bounds) = bounds !== nothing && any(v -> v < bounds[1] || v > bounds[2], x)
 
-# `bounds`: (lower, upper) of every variable, to count the solutions outside them
+# `bounds`: (lower, upper) of every variable, to count the solutions outside them. Counts every
+# call, including the one EvolutionaryObjective makes before each attempt to learn the value's
+# type (`zero(f(x))`, src/api/objective.jl).
 function counted(f, budget::Budget; bounds = nothing)
     return function (x)
         budget.evaluations += 1
@@ -165,152 +120,108 @@ exhausted(budget::Budget) =
 first_hit(budget::Budget) = budget.first_hit_evaluations < 0 ? nothing :
     (evaluations = budget.first_hit_evaluations, time_s = round(budget.first_hit_seconds, digits = 6))
 
-# Rule 2.2. The iteration limit, only a budget, is lifted (typemax(Int); the library's default is
-# 1,000, 1,500 for CMAES). The convergence test is the library's: each method's default metric
-# (AbsDiff(1e-12) for GA and CMAES, AbsDiff(1e-10) for DE and ES) below its tolerance
-# for more than `successive_f_tol` generations (src/api/optimize.jl); `successive_f_tol` is the
-# default 10, or the value of the library's example for the problem type. It ends the attempt, and
-# run_restarting starts a new one. The callback of Options (docs/src/tutorial.md, "General
-# options") ends the run at the target, the budget or the time cap, after every generation.
-options(budget::Budget, rng; successive_f_tol = 10) = Evolutionary.Options(
+# The options of a run (docs/src/tutorial.md, "General options"). The matched methods have no
+# convergence criterion (rule 2.2): `iterations = typemax(Int)` lifts the iteration limit (the
+# library's default is 1,000, 1,500 for CMAES), and `successive_f_tol = typemax(Int)` turns off
+# the convergence test, which ends a run once the method's metric (AbsDiff(1e-12) for GA and
+# CMAES) has held for more than `successive_f_tol` generations (optimize, src/api/optimize.jl).
+# The callback ends the run at the target, the budget or the time cap.
+options(budget::Budget, rng) = Evolutionary.Options(
     iterations = typemax(Int),
-    successive_f_tol = successive_f_tol,
+    successive_f_tol = typemax(Int),
     # called after the initial population and after every generation (optimize, api/optimize.jl),
     # where it marks the generation's end too
     callback = record -> (end_generation!(budget); exhausted(budget)),
     rng = rng,
 )
 
-# An attempt that ends before the target, the budget or the cap has converged (the convergence
-# test above), or, for CMAES, its covariance matrix broke down (update_state! returns true when the
-# eigendecomposition fails, src/cmaes.jl). Evolutionary.jl has no restart mechanism, so the method
-# starts again from a new random start with the seed (seed + 1) * 1,000,000 + restart (rule 2.2).
-# The best solution and every evaluation are kept in `budget`. Returns (generations, restarts).
-function run_restarting(start, budget::Budget, seed)
-    generations = 0
-    restart = 0
-    while true
-        rng = Xoshiro(restart == 0 ? seed : (seed + 1) * 1_000_000 + restart)
-        result = start(rng)
-        generations += Evolutionary.iterations(result)
-        exhausted(budget) && return generations, restart
-        restart += 1
+# One run: `start(rng)` with the run's seed in the library's generator (Options' `rng`, used by the
+# operators and the initial population). It ends at the target, the budget or the cap, or when the
+# library ends it itself: CMAES when its covariance matrix breaks down (update_state! catches the
+# failed eigendecomposition and returns true, src/cmaes.jl), on Rosenbrock 10 once σ underflows,
+# after about 9,700 generations (its step-size bug, see the page's "Bugs found"). That isn't worked
+# around (rule 8.4) and the matched methods have no restarts: the run ends there and says why in
+# "ended_by". Both methods evaluate every child, changed or not, so they never stall (rule 2.2).
+# Returns (generations, ended_by).
+function run_once(start, budget::Budget, seed, ended_by)
+    result = start(Xoshiro(seed))
+    return Evolutionary.iterations(result), exhausted(budget) ? nothing : ended_by
+end
+
+# -------------------------------------------------------------------------------------------------
+# OneMax 1000, matched: the GA ("ga")
+# -------------------------------------------------------------------------------------------------
+
+# DEAP's eaSimple with the library's own GA and operators: population 300, tournament(3), two-point
+# crossover (TPX) with crossoverRate 0.5, `flip` with mutationRate 0.2, generational without elitism
+# (ɛ = 0), random initial bits. Differences: `flip` flips exactly one random bit of a mutated child
+# (the definition: each bit with probability 1 / size, the same mean); `tournament` draws its
+# contestants from a shuffled population, without replacement until it's used up; `TPX` swaps the
+# genes from one uniform position to another, both included; every child is evaluated, changed or
+# not. A pair that isn't crossed passes the parents themselves to the offspring, not copies (the
+# library's bug, see the page), as users get it.
+function onemax_ga(size)
+    method = () -> GA(
+        populationSize = 300,
+        selection = tournament(3),
+        crossover = TPX,
+        crossoverRate = 0.5,
+        mutation = flip,
+        mutationRate = 0.2,
+        ɛ = 0,
+    )
+    return (budget, seed) -> run_once(budget, seed, "optimize returned") do rng
+        Evolutionary.optimize(counted(onemax, budget), () -> bitrand(rng, size), method(), options(budget, rng))
     end
 end
 
 # -------------------------------------------------------------------------------------------------
-# Solvers: (name, run(budget, seed) -> (generations, restarts)) per problem
+# Rosenbrock 10, matched: CMA-ES ("cma_es")
 # -------------------------------------------------------------------------------------------------
 
-function onemax_solvers(size, mode)
-    if mode == "matched"
-        # as DEAP eaSimple, with the library's own GA and operators: population 300, tournament(3),
-        # two-point crossover (TPX) with crossoverRate 0.5, generational without elitism (ɛ = 0),
-        # `flip` with mutationRate 0.2. Differences: `flip` flips exactly one random bit of a
-        # mutated child (DEAP: each bit with probability 1 / size, the same mean); Evolutionary's
-        # tournament draws its contestants without replacement from a shuffled population (DEAP:
-        # with replacement); every child is evaluated, changed or not. A pair that isn't crossed
-        # passes the parents themselves to the offspring, not copies (the library's bug, see the
-        # page), as users get it. The matched configuration has no convergence criterion:
-        # successive_f_tol = typemax(Int) lifts the GA's.
-        method = () -> GA(
-            populationSize = 300,
-            selection = tournament(3),
-            crossover = TPX,
-            crossoverRate = 0.5,
-            mutation = flip,
-            mutationRate = 0.2,
-            ɛ = 0,
-        )
-    else
-        # the tutorial's GA (docs/src/tutorial.md, "General options", on -sum(x) of a
-        # BitVector): GA(selection = uniformranking(5), mutation = flip, crossover = SPX) with the
-        # defaults (population 50, crossoverRate 0.8, mutationRate 0.1, ɛ 0); its
-        # Options(iterations = 10) is a budget, lifted. The bits start random, as in every library
-        # (the tutorial starts its 30 bits from zeros).
-        method = () -> GA(selection = uniformranking(5), mutation = flip, crossover = SPX)
-    end
-    # the matched configuration has no convergence criterion: it runs to the target or the budget
-    tolerance = mode == "matched" ? typemax(Int) : 10
-    run = (budget, seed) -> run_restarting(budget, seed) do rng
-        Evolutionary.optimize(counted(onemax, budget), () -> bitrand(rng, size), method(), options(budget, rng; successive_f_tol = tolerance))
-    end
-    return [("ga", run)]
-end
-
-function nqueens_solvers(size)
-    # test/n-queens.jl of Evolutionary.jl, its only permutation example: GA with population 100,
-    # tournament(5), crossoverRate 0.89, mutationRate 0.06; the test tries 5 mutations × 5
-    # crossovers as equals, this is its first pair (PMX, inversion; the library's defaults, `genop`,
-    # aren't among them), with successive_f_tol = 30
-    ga = (budget, seed) -> run_restarting(budget, seed) do rng
-        method = GA(
-            populationSize = 100,
-            selection = tournament(5),
-            crossover = PMX,
-            crossoverRate = 0.89,
-            mutation = inversion,
-            mutationRate = 0.06,
-        )
-        Evolutionary.optimize(counted(nqueens, budget), () -> randperm(rng, size), method, options(budget, rng; successive_f_tol = 30))
-    end
-    # test/n-queens.jl: (20+100)-ES with a GA mutation (mutationwrapper), ρ = 1, default options;
-    # the test tries 5 mutations with :plus and :comma: the first mutation (inversion), and the
-    # library's default selection, :plus
-    es = (budget, seed) -> run_restarting(budget, seed) do rng
-        method = ES(mutation = mutationwrapper(inversion), μ = 20, ρ = 1, λ = 100, selection = :plus)
-        Evolutionary.optimize(counted(nqueens, budget), () -> randperm(rng, size), method, options(budget, rng))
-    end
-    return [("ga", ga), ("es", es)]
-end
-
-function real_solvers(problem, size)
-    f, lower, upper = REAL_PROBLEMS[problem]
-    # the bounds (docs/src/constraints.md, "Box Constrained Optimization"): a random initial
-    # population within them, and clipping of the offspring
-    solve(method; successive_f_tol = 10) = (budget, seed) -> run_restarting(budget, seed) do rng
+# CMAES (src/cmaes.jl, docs/src/cmaes.md) with Hansen's defaults: λ = 4 + ⌊3 ln n⌋ = 10, μ = 5,
+# positive weights ∝ ln((λ + 1) / 2) - ln i summing to 1 (μ_eff ≈ 3.17) and zero for the other
+# five: the library's default weights are active (negative for the worst five) and can only be
+# turned off by passing `weights`. Given weights, the library would take other learning rates
+# (c_c = c_σ = 1 / √n, c_μ = μ_eff / n², c_1 = 2 / n²), so c_1, c_c, c_mu and c_sigma are passed with
+# the formulas of its own defaults for them (initial_state, src/cmaes.jl, Hansen's 2016 tutorial);
+# d_σ is the library's (Hansen's). σ0 = 0.3 (upper - lower) = 4.5, C0 = I. BoxConstraints: the
+# mean starts at a uniform random point of the box (the first of the initial population,
+# src/api/utilities.jl), and every sample is clipped to the box before it's evaluated (apply!,
+# src/api/constraints.jl). The library's bugs in update_state! (the page, "Bugs found": the
+# covariance matrix overwritten by eigen!, the step size and the rank-μ update) aren't worked around.
+function rosenbrock_cma_es(size)
+    lower, upper = ROSENBROCK_LOWER, ROSENBROCK_UPPER
+    n = size
+    λ = 4 + floor(Int, 3 * log(n))
+    μ = λ ÷ 2
+    w = [log((λ + 1) / 2) - log(i) for i in 1:μ]
+    weights = [w ./ sum(w); zeros(λ - μ)]
+    μ_eff = 1 / sum(abs2, weights)
+    c_1 = 2 / ((n + 1.3)^2 + μ_eff)
+    method = () -> CMAES(
+        mu = μ,
+        lambda = λ,
+        weights = weights,
+        c_1 = c_1,
+        c_c = (4 + μ_eff / n) / (n + 4 + 2 * μ_eff / n),
+        c_mu = min(1 - c_1, 2 * (μ_eff - 2 + 1 / μ_eff) / ((n + 2)^2 + μ_eff)),
+        c_sigma = (μ_eff + 2) / (n + μ_eff + 5),
+        sigma0 = 0.3 * (upper - lower),
+    )
+    return (budget, seed) -> run_once(budget, seed, "eigendecomposition failed") do rng
         Evolutionary.optimize(
-            counted(f, budget; bounds = (lower, upper)), BoxConstraints(lower, upper, size), method(),
-            options(budget, rng; successive_f_tol),
+            counted(rosenbrock, budget; bounds = (lower, upper)), BoxConstraints(lower, upper, n), method(),
+            options(budget, rng),
         )
     end
-
-    # Rule 6.2: the documentation states what two methods are for: CMA-ES (docs/src/cmaes.md: for
-    # "difficult (non-convex, ill-conditioned, multi-modal, rugged, noisy) optimization problems in
-    # continuous search spaces") and DE (docs/src/de.md: "used for multidimensional real-valued
-    # functions"). The third is the library's example for the problem type: the ES of
-    # test/rastrigin.jl for the multimodal problems, the GA of the getting-started example on the
-    # Sphere function (docs/src/index.md) for the unimodal one. Their settings are those examples'.
-    if problem == "rosenbrock"
-        # docs/src/tutorial.md minimizes Rosenbrock with CMAES() and the default options: (10,20)-CMA-ES
-        # with σ0 = 0.5, from a random point of the domain
-        cma_es = solve(() -> CMAES())
-        # test/rosenbrock.jl: DE(populationSize = 100) with the default options, i.e. DE/rand/1/bin
-        # with F = 0.9, Cr = 0.5
-        de = solve(() -> DE(populationSize = 100))
-        # docs/src/index.md, "Getting started": GA(populationSize = 100, selection = susinv,
-        # crossover = DC, mutation = PLM()) on the Sphere function, with the default options and
-        # rates (crossover 0.8, mutation 0.1)
-        third = ("ga", solve(() -> GA(populationSize = 100, selection = susinv, crossover = DC, mutation = PLM())))
-    else
-        # test/rastrigin.jl: CMAES(lambda = 100) with the default options: (50,100)-CMA-ES with
-        # σ0 = 0.5, from a random point of the domain
-        cma_es = solve(() -> CMAES(lambda = 100))
-        # test/rastrigin.jl: DE with population 100 and F = 0.9, and successive_f_tol = 25; the
-        # test varies the selection, the recombination and n, which take the library's defaults
-        # (random, BINX(0.5), 1): DE/rand/1/bin
-        de = solve(() -> DE(populationSize = 100, F = 0.9); successive_f_tol = 25)
-        # test/rastrigin.jl, with iterations = 1000 (lifted): (15/15,100)-σ-SA-ES, anisotropic
-        # self-adaptive gaussian mutation
-        third = ("es", solve(() -> ES(
-            initStrategy = AnisotropicStrategy(size),
-            recombination = average, srecombination = average,
-            mutation = gaussian, smutation = gaussian,
-            μ = 15, λ = 100, selection = :comma,
-        )))
-    end
-    return [("cma_es", cma_es), ("de", de), third]
 end
+
+# (problem, size) => (solver, run(budget, seed) -> (generations, ended_by)), all matched
+const SCENARIOS = Dict(
+    ("onemax", 1000) => size -> ("ga", onemax_ga(size)),
+    ("rosenbrock", 10) => size -> ("cma_es", rosenbrock_cma_es(size)),
+)
 
 # the untimed warm-up run of every solver before the timed ones (rule 4.2), with the scenario's
 # time cap
@@ -343,10 +254,8 @@ function print_values(problem, size)
         x = [parse(Float64, strip(s)) for s in split(text, ',') if !isempty(strip(s))]
         if problem == "onemax"
             println(json_value(-onemax(x .!= 0)))
-        elseif problem == "nqueens"
-            println(json_value(nqueens(round.(Int, x) .+ 1)))
-        elseif haskey(REAL_PROBLEMS, problem)
-            println(json_value(REAL_PROBLEMS[problem][1](x)))
+        elseif problem == "rosenbrock"
+            println(json_value(rosenbrock(x)))
         end
     end
     return
@@ -358,9 +267,7 @@ function main(args)
         return
     end
     if length(args) == 3 && args[1] == "values"
-        size = parse(Int, args[3])
-        size <= MAX_GENES || error("at most $MAX_GENES genes")
-        print_values(args[2], size)
+        print_values(args[2], parse(Int, args[3]))
         return
     end
     if length(args) != 7
@@ -370,36 +277,24 @@ function main(args)
     problem, size, mode = args[1], parse(Int, args[2]), args[3]
     seed_from, seed_to = parse(Int, args[4]), parse(Int, args[5])
     max_evaluations, max_seconds = parse(Int, args[6]), parse(Float64, args[7])
-    size <= MAX_GENES || error("at most $MAX_GENES genes")
 
-    if problem == "onemax"
-        solvers = onemax_solvers(size, mode)
-        target = -size  # minimized
-    elseif problem == "nqueens"
-        solvers = nqueens_solvers(size)
-        target = 0
-    elseif haskey(REAL_PROBLEMS, problem)
-        solvers = real_solvers(problem, size)
-        target = REAL_TARGET
-    else
-        # unsupported problem: print nothing
-        println(stderr, "evolutionary_jl: unsupported problem $problem")
+    if mode != "matched" || !haskey(SCENARIOS, (problem, size))
+        # not in the suite: print nothing
+        println(stderr, "evolutionary_jl: not run: $problem $size $mode")
         return
     end
+    solver, run = SCENARIOS[(problem, size)](size)
+    target = problem == "onemax" ? -size : REAL_TARGET  # minimized
 
-    for (_, run) in solvers
-        run(Budget(WARM_UP_EVALUATIONS, max_seconds, target), WARM_UP_SEED)
-    end
+    run(Budget(WARM_UP_EVALUATIONS, max_seconds, target), WARM_UP_SEED)
 
-    for seed in seed_from:seed_to, (solver, run) in solvers
+    for seed in seed_from:seed_to
         Random.seed!(seed)
         budget = Budget(max_evaluations, max_seconds, target)  # the clock starts
-        generations, restarts = run(budget, seed)
+        generations, ended_by = run(budget, seed)
         elapsed = seconds(budget)
         if problem == "onemax"
             best, solution = -Int(budget.best), Int.(budget.solution)
-        elseif problem == "nqueens"
-            best, solution = Int(budget.best), budget.solution .- 1
         else
             best, solution = budget.best, budget.solution
         end
@@ -408,10 +303,11 @@ function main(args)
             "library" => "evolutionary_jl", "solver" => solver, "problem" => problem, "size" => size,
             "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
             "generations" => generations, "evaluations" => budget.evaluations,
-            "last_generation" => last_generation(budget), "restarts" => restarts,
-            (haskey(REAL_PROBLEMS, problem) ? ["outside" => budget.outside] : [])...,
+            "last_generation" => last_generation(budget),
+            (problem == "onemax" ? [] : ["outside" => budget.outside])...,
             "best" => best, "target" => problem == "onemax" ? size : target, "success" => success,
-            "first_hit" => first_hit(budget), "solution" => solution,
+            "first_hit" => first_hit(budget), (ended_by === nothing ? [] : ["ended_by" => ended_by])...,
+            "solution" => solution,
         ])
     end
     return

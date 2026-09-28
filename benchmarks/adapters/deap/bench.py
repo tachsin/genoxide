@@ -1,4 +1,4 @@
-"""Benchmark adapter for DEAP.
+"""Benchmark adapter for DEAP: the matched suite.
 
 Usage:
     python bench.py <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
@@ -7,9 +7,12 @@ Usage:
 The first prints one JSON line per solver per seed, see ../../README.md for the fields; the second
 prints the value of each solution with the fitness functions below.
 
-The methods, their settings, where DEAP's docs and examples show them, what was left out and the
-separate test runs are in docs/benchmarks/libraries/deap.md. Every setting below cites the DEAP
-example it comes from (DEAP 1.4.4: https://github.com/DEAP/deap/tree/1.4.4/examples).
+DEAP runs two matched scenarios, and prints nothing for any other problem, size or mode:
+- OneMax 1000: the GA of examples/ga/onemax.py with algorithms.eaSimple ("ga");
+- Rosenbrock 10: CMA-ES, deap.cma.Strategy with algorithms.eaGenerateUpdate ("cma_es").
+DEAP has no differential evolution (only examples/de/*.py, not the library), so it doesn't run
+Rastrigin 30. The settings, their sources and the differences from the definitions are on the
+library's page, docs/benchmarks/libraries/deap.md (DEAP 1.4.4).
 """
 
 import os
@@ -23,8 +26,6 @@ import math  # noqa: E402
 import random  # noqa: E402
 import sys  # noqa: E402
 import time  # noqa: E402
-from collections import deque  # noqa: E402
-from itertools import chain  # noqa: E402
 
 import numpy  # noqa: E402
 from deap import algorithms, base, cma, creator, tools  # noqa: E402
@@ -47,7 +48,7 @@ class Budget:
         self.max_evaluations = max_evaluations
         self.deadline = start + max_seconds
         self.maximize = problem == "onemax"
-        self.target = {"onemax": size, "nqueens": 0}.get(problem, REAL_TARGET)
+        self.target = size if self.maximize else REAL_TARGET
         self.best = -math.inf if self.maximize else math.inf
         self.solution = None
         # the first evaluation that reaches the target: (its number, seconds since the start)
@@ -62,6 +63,8 @@ class Budget:
         self.outside = 0
         # the attempts after the first, of a GA that stalled (rule 2.2)
         self.restarts = 0
+        # the library's error that ended the run, if any (rule 8.4)
+        self.ended_by = None
 
     def count(self, solution):
         """Counts one evaluation (rule 3), and whether the solution is outside the box (rule 2.4)."""
@@ -99,8 +102,8 @@ class Budget:
         return self.best >= self.target if self.maximize else self.best <= self.target
 
     def full(self):
-        """Whether the evaluation budget is spent: the solvers check it before each evaluation, so a
-        run never goes past it; the target and the time cap are checked between generations."""
+        """Whether the evaluation budget is spent: the GA checks it before each evaluation, so a run
+        never goes past it; the target and the time cap are checked between generations."""
         return self.evaluations >= self.max_evaluations
 
     def exhausted(self):
@@ -112,50 +115,12 @@ class Budget:
 
 # -------------------------------------------------------------------------------------------------
 # Fitness functions, identical to benchmarks/problems.py, in plain Python as DEAP's examples write
-# them (e.g. examples/ga/onemax.py, examples/ga/nqueens.py, deap/benchmarks). DEAP's fitness is a
-# tuple.
+# them (examples/ga/onemax.py, deap/benchmarks). DEAP's fitness is a tuple.
 # -------------------------------------------------------------------------------------------------
 
 
 def onemax(individual):
     return (sum(individual),)
-
-
-def nqueens(individual):
-    """Diagonal conflicts of the queens at (i, individual[i]): for each diagonal, its queens minus
-    one (O(n), like examples/ga/nqueens.py, which counts the conflicting pairs instead)."""
-    size = len(individual)
-    left_diagonal = [0] * (2 * size - 1)
-    right_diagonal = [0] * (2 * size - 1)
-    for i in range(size):
-        left_diagonal[i + individual[i]] += 1
-        right_diagonal[size - 1 - i + individual[i]] += 1
-    conflicts = 0
-    for i in range(2 * size - 1):
-        if left_diagonal[i] > 1:
-            conflicts += left_diagonal[i] - 1
-        if right_diagonal[i] > 1:
-            conflicts += right_diagonal[i] - 1
-    return (conflicts,)
-
-
-def shift(upper):
-    """Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that
-    drift towards 0: gene i is measured from s_i = 0.8 upper (2 ((37 i + 11) mod 101) / 101 - 1),
-    within 80% of the box, computed in this order, as problems.py."""
-    return [0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1) for i in range(1000)]
-
-
-RASTRIGIN_SHIFT = shift(5.12)
-ACKLEY_SHIFT = shift(32.768)
-
-
-def rastrigin(individual):
-    return (
-        10 * len(individual)
-        + sum((x - s) ** 2 - 10 * math.cos(2 * math.pi * (x - s))
-              for x, s in zip(individual, RASTRIGIN_SHIFT)),
-    )
 
 
 def rosenbrock(individual):
@@ -164,24 +129,14 @@ def rosenbrock(individual):
     )
 
 
-def ackley(individual):
-    n = len(individual)
-    squares = sum((x - s) ** 2 for x, s in zip(individual, ACKLEY_SHIFT)) / n
-    cosines = sum(math.cos(2 * math.pi * (x - s)) for x, s in zip(individual, ACKLEY_SHIFT)) / n
-    return (-20 * math.exp(-0.2 * math.sqrt(squares)) - math.exp(cosines) + 20 + math.e,)
-
-
 # the real-valued problems: fitness function and bounds
 REAL_PROBLEMS = {
-    "rastrigin": (rastrigin, -5.12, 5.12),
     "rosenbrock": (rosenbrock, -5.0, 10.0),
-    "ackley": (ackley, -32.768, 32.768),
 }
-MULTIMODAL = {"rastrigin", "ackley"}
 
 
 # -------------------------------------------------------------------------------------------------
-# Binary and permutation: DEAP's GA examples with algorithms.eaSimple
+# OneMax 1000, matched: DEAP's GA example with algorithms.eaSimple
 # -------------------------------------------------------------------------------------------------
 
 
@@ -230,48 +185,34 @@ def ea_simple(toolbox, population_size, cxpb, mutpb, budget, seed):
     return generations
 
 
-def solve_onemax(size, mode, budget, seed):
+def solve_onemax(size, budget, seed):
     # examples/ga/onemax.py (docs: "One Max Problem"): 300 individuals, two-point crossover,
-    # tournament of 3, eaSimple with cxpb 0.5 and mutpb 0.2. The matched scenarios are defined from
-    # it: the only difference is the bit-flip probability 1 / n, about 0.2 bits per offspring.
+    # tournament of 3, eaSimple with cxpb 0.5 and mutpb 0.2. The matched OneMax is defined from it:
+    # the only difference is the bit-flip probability 1 / n, about 0.2 bits per offspring.
     toolbox = base.Toolbox()
     toolbox.register("attr_bool", random.randint, 0, 1)
     toolbox.register("individual", tools.initRepeat, creator.IndividualMax, toolbox.attr_bool, size)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     toolbox.register("evaluate", budget.wrap(onemax))
     toolbox.register("mate", tools.cxTwoPoint)
-    indpb = 1.0 / size if mode == "matched" else 0.05
-    toolbox.register("mutate", tools.mutFlipBit, indpb=indpb)
-    toolbox.register("select", tools.selTournament, tournsize=3)
-    return ea_simple(toolbox, 300, 0.5, 0.2, budget, seed)
-
-
-def solve_nqueens(size, budget, seed):
-    # examples/ga/nqueens.py: permutations, partially matched crossover, shuffle-indexes mutation
-    # with indpb 2 / n, tournament of 3, 300 individuals, eaSimple with cxpb 0.5 and mutpb 0.2
-    toolbox = base.Toolbox()
-    toolbox.register("permutation", random.sample, range(size), size)
-    toolbox.register("individual", tools.initIterate, creator.IndividualMin, toolbox.permutation)
-    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-    toolbox.register("evaluate", budget.wrap(nqueens))
-    toolbox.register("mate", tools.cxPartialyMatched)
-    toolbox.register("mutate", tools.mutShuffleIndexes, indpb=2.0 / size)
+    toolbox.register("mutate", tools.mutFlipBit, indpb=1.0 / size)
     toolbox.register("select", tools.selTournament, tournsize=3)
     return ea_simple(toolbox, 300, 0.5, 0.2, budget, seed)
 
 
 # -------------------------------------------------------------------------------------------------
-# Real-valued: BIPOP-CMA-ES and DE
+# Rosenbrock 10, matched: CMA-ES, deap.cma.Strategy
 # -------------------------------------------------------------------------------------------------
 
 
 def bounded_evaluate(budget, function, low, high, size):
-    """The fitness function within the box bounds, as DEAP's examples/es/cma_mo.py does for a box
-    (its CMA-ES and DE are unbounded): tools.ClosestValidPenalty evaluates the closest point
-    within the bounds and adds 1e6 times the squared distance to it. So every solution the fitness
-    function evaluates is within the bounds (rule 2.4): a sample outside them is repaired by
-    clipping, and keeps the penalized value. The counter is around the fitness function itself,
-    inside DEAP's repair: it sees the repaired point, so `outside` is 0 by construction."""
+    """The fitness function within the box, with DEAP's documented constraint handling
+    (tutorials/advanced/constraints, "Constraint Handling"), as its box-bounded ES example
+    examples/es/cma_mo.py does (cma.Strategy has no bounds): tools.ClosestValidPenalty evaluates a
+    sample outside the box at its closest point inside (each gene clipped) and adds 1e6 times the
+    squared distance to it. A sample inside the box is evaluated as it is. The counter is around the
+    fitness function itself, inside DEAP's repair: it sees the evaluated point, so `outside` is 0 by
+    construction (rule 2.4)."""
     lower, upper = numpy.full(size, low), numpy.full(size, high)
 
     def valid(individual):
@@ -289,248 +230,30 @@ def bounded_evaluate(budget, function, low, high, size):
     return toolbox
 
 
-def solve_bipop_cmaes(problem, size, budget):
-    """BI-population CMA-ES, as examples/es/cma_bipop.py (docs: "Controlling the Stopping Criteria:
-    BI-POP CMA-ES"), line for line, with the budget and the target as extra stops.
-
-    The example's domain is [-5, 5]: it starts each run at a uniform random point of [-4, 4] and
-    with the large-population regime's sigma 2, "1/5th of the domain". Here that's the inner 80%
-    of the problem's bounds and a fifth of their width. Its 9 stop criteria end each CMA-ES run and
-    its BIPOP restarts start the next (rule 2.2: the library's restart mechanism); the adapter adds
-    one criterion: DEAP's Strategy raises numpy.linalg.LinAlgError when its covariance matrix
-    degenerates, and that ends the run too. The example ends after 10 runs (NRESTARTS, the first and
-    9 restarts), a limit that's only a budget, so it's lifted (rule 2.2): the restarts go on to the
-    budget with the example's rule for choosing the regime, less its clause that makes the tenth run
-    a large-population one."""
-    function, low, high = REAL_PROBLEMS[problem]
-    N = size
-    toolbox = bounded_evaluate(budget, function, low, high, N)
-    width = high - low
-    SIGMA0 = width / 5  # the example: 2.0, 1/5th of the domain [-5 5]
-
-    nsmallpopruns = 0
-    smallbudget = list()
-    largebudget = list()
-    lambda0 = 4 + int(3 * numpy.log(N))
-    regime = 1
-    i = 0
+def solve_cma_es(size, budget):
+    """CMA-ES as DEAP's docs run it (examples/es/cma_minfct.py, docs: "Covariance Matrix Adaptation
+    Evolution Strategy"): a cma.Strategy whose generate and update are registered in a toolbox, run
+    by algorithms.eaGenerateUpdate. Every Strategy parameter at its default: lambda_ int(4 + 3 ln n)
+    = 10, mu int(lambda_ / 2) = 5, weights "superlinear" (ln(mu + 0.5) - ln i), cmatrix the
+    identity, and cs, damps, ccum, ccov1, ccovmu from the Strategy's formulas. The centroid is drawn
+    uniformly in the box and sigma is 0.3 of its width, 4.5. Strategy has no stop criterion and no
+    restarts: eaGenerateUpdate runs one generation per call, until the target, the budget or the
+    time cap (a generation is evaluated whole: at most 9 evaluations past the budget, rule 2.3).
+    Strategy.update raises numpy.linalg.LinAlgError if its covariance matrix degenerates: that
+    error ends the run (rule 8.4)."""
+    function, low, high = REAL_PROBLEMS["rosenbrock"]
+    toolbox = bounded_evaluate(budget, function, low, high, size)
+    strategy = cma.Strategy(centroid=numpy.random.uniform(low, high, size), sigma=0.3 * (high - low))
+    toolbox.register("generate", strategy.generate, creator.IndividualMin)
+    toolbox.register("update", strategy.update)
     generations = 0
-
-    while not budget.done():
-        # The first regime is enforced on the first restart. The second regime is run if its
-        # allocated budget is smaller than the allocated large population regime budget
-        if i > 0 and sum(smallbudget) < sum(largebudget):
-            lambda_ = int(lambda0 * (0.5 * (2**(i - nsmallpopruns) * lambda0) / lambda0)**(numpy.random.rand()**2))
-            # the example: 2 * 10**(-2 * numpy.random.rand()), SIGMA0 times 10**(-2 U)
-            sigma = SIGMA0 * 10**(-2 * numpy.random.rand())
-            nsmallpopruns += 1
-            regime = 2
-            smallbudget += [0]
-        else:
-            lambda_ = 2**(i - nsmallpopruns) * lambda0
-            sigma = SIGMA0
-            regime = 1
-            largebudget += [0]
-
-        t = 0
-
-        # Set the termination criterion constants
-        if regime == 1:
-            MAXITER = 100 + 50 * (N + 3)**2 / numpy.sqrt(lambda_)
-        elif regime == 2:
-            MAXITER = 0.5 * largebudget[-1] / lambda_
-        TOLHISTFUN = 10**-12
-        TOLHISTFUN_ITER = 10 + int(numpy.ceil(30. * N / lambda_))
-        EQUALFUNVALS = 1. / 3.
-        EQUALFUNVALS_K = int(numpy.ceil(0.1 + lambda_ / 4.))
-        TOLX = 10**-12
-        TOLUPSIGMA = 10**20
-        STAGNATION_ITER = int(numpy.ceil(0.2 * t + 120 + 30. * N / lambda_))
-        NOEFFECTAXIS_INDEX = t % N
-
-        equalfunvalues = list()
-        bestvalues = list()
-        medianvalues = list()
-        mins = deque(maxlen=TOLHISTFUN_ITER)
-
-        # the example: a centroid in [-4, 4]**D
-        centroid = numpy.random.uniform(low + 0.1 * width, high - 0.1 * width, N)
-        strategy = cma.Strategy(centroid=centroid, sigma=sigma, lambda_=lambda_)
-
-        conditions = {"MaxIter": False, "TolHistFun": False, "EqualFunVals": False,
-                      "TolX": False, "TolUpSigma": False, "Stagnation": False,
-                      "ConditionCov": False, "NoEffectAxis": False, "NoEffectCoor": False,
-                      "Degenerate": False}
-
-        while not any(conditions.values()) and not budget.done():
+    try:
+        while not budget.done():
             generations += 1
             budget.new_generation()
-            # Generate a new population
-            population = strategy.generate(creator.IndividualMin)
-
-            # Evaluate the individuals
-            for ind in population:
-                if budget.full():
-                    break
-                ind.fitness.values = toolbox.evaluate(ind)
-            if budget.done():
-                break
-            minimum = min(ind.fitness.values[0] for ind in population)
-
-            # Update the strategy with the evaluated individuals
-            try:
-                strategy.update(population)
-            except numpy.linalg.LinAlgError:
-                conditions["Degenerate"] = True
-                break
-
-            # Count the number of times the k'th best solution is equal to the best solution
-            # At this point the population is sorted (method update)
-            if population[-1].fitness == population[-EQUALFUNVALS_K].fitness:
-                equalfunvalues.append(1)
-
-            # Log the best and median value of this population
-            bestvalues.append(population[-1].fitness.values)
-            medianvalues.append(population[int(round(len(population) / 2.))].fitness.values)
-
-            # First run does not count into the budget
-            if regime == 1 and i > 0:
-                largebudget[-1] += lambda_
-            elif regime == 2:
-                smallbudget[-1] += lambda_
-
-            t += 1
-            STAGNATION_ITER = int(numpy.ceil(0.2 * t + 120 + 30. * N / lambda_))
-            NOEFFECTAXIS_INDEX = t % N
-
-            if t >= MAXITER:
-                # The maximum number of iteration per CMA-ES ran
-                conditions["MaxIter"] = True
-
-            mins.append(minimum)
-            if (len(mins) == mins.maxlen) and max(mins) - min(mins) < TOLHISTFUN:
-                # The range of the best values is smaller than the threshold
-                conditions["TolHistFun"] = True
-
-            if t > N and sum(equalfunvalues[-N:]) / float(N) > EQUALFUNVALS:
-                # In 1/3rd of the last N iterations the best and k'th best solutions are equal
-                conditions["EqualFunVals"] = True
-
-            if all(strategy.pc < TOLX) and all(numpy.sqrt(numpy.diag(strategy.C)) < TOLX):
-                # All components of pc and sqrt(diag(C)) are smaller than the threshold
-                conditions["TolX"] = True
-
-            # Need to transfor strategy.diagD[-1]**2 from pyp/numpy.float64 to python
-            # float to avoid OverflowError
-            if strategy.sigma / sigma > float(strategy.diagD[-1]**2) * TOLUPSIGMA:
-                # The sigma ratio is bigger than a threshold
-                conditions["TolUpSigma"] = True
-
-            if len(bestvalues) > STAGNATION_ITER and len(medianvalues) > STAGNATION_ITER and \
-               numpy.median(bestvalues[-20:]) >= numpy.median(bestvalues[-STAGNATION_ITER:-STAGNATION_ITER + 20]) and \
-               numpy.median(medianvalues[-20:]) >= numpy.median(medianvalues[-STAGNATION_ITER:-STAGNATION_ITER + 20]):
-                # Stagnation occurred
-                conditions["Stagnation"] = True
-
-            if strategy.cond > 10**14:
-                # The condition number is bigger than a threshold
-                conditions["ConditionCov"] = True
-
-            if all(strategy.centroid == strategy.centroid + 0.1 * strategy.sigma * strategy.diagD[-NOEFFECTAXIS_INDEX] * strategy.B[-NOEFFECTAXIS_INDEX]):
-                # The coordinate axis std is too low
-                conditions["NoEffectAxis"] = True
-
-            if any(strategy.centroid == strategy.centroid + 0.2 * strategy.sigma * numpy.diag(strategy.C)):
-                # The main axis std has no effect
-                conditions["NoEffectCoor"] = True
-
-        i += 1
-    return generations
-
-
-def mut_de(y, a, b, c, f):
-    """examples/de/sphere.py, mutDE"""
-    for i in range(len(y)):
-        y[i] = a[i] + f * (b[i] - c[i])
-    return y
-
-
-def cx_exponential(x, y, cr):
-    """examples/de/sphere.py, cxExponential, as the example has it: it stops copying from the
-    mutant with probability cr after each gene, where exponential crossover continues with that
-    probability (see the library's page)"""
-    size = len(x)
-    index = random.randrange(size)
-    # Loop on the indices index -> end, then on 0 -> index
-    for i in chain(range(index, size), range(0, index)):
-        x[i] = y[i]
-        if random.random() < cr:
-            break
-    return x
-
-
-def solve_de(problem, size, budget):
-    """DE as DEAP's examples/de: examples/de/sphere.py for the multimodal problems (it minimizes
-    Griewank: DE/rand/1 with exponential crossover, F 0.8, CR 0.8, 10 n agents, a generation's
-    children replace their agents at its end), examples/de/basic.py for Rosenbrock (it minimizes
-    the sphere: DE/rand/1 with binomial crossover, F 1, CR 0.25, 300 agents, each child replaces
-    its agent at once). Both start uniformly within the bounds (the examples: [-3, 3]) and run to
-    the budget by themselves (the examples run NGEN generations)."""
-    function, low, high = REAL_PROBLEMS[problem]
-    toolbox = bounded_evaluate(budget, function, low, high, size)
-    toolbox.register("attr_float", random.uniform, low, high)
-    toolbox.register("individual", tools.initRepeat, creator.IndividualMin, toolbox.attr_float, size)
-    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-    toolbox.register("select", tools.selRandom, k=3)
-    multimodal = problem in MULTIMODAL
-    if multimodal:
-        toolbox.register("mutate", mut_de, f=0.8)
-        toolbox.register("mate", cx_exponential, cr=0.8)
-        mu = size * 10
-    else:
-        CR, F = 0.25, 1
-        mu = 300
-
-    pop = toolbox.population(n=mu)
-    budget.new_generation()
-    for ind in pop:
-        ind.fitness.values = toolbox.evaluate(ind)
-    generations = 0
-    while not budget.done():
-        generations += 1
-        budget.new_generation()
-        if multimodal:
-            # examples/de/sphere.py
-            children = []
-            for agent in pop:
-                # We must clone everything to ensure independence
-                a, b, c = [toolbox.clone(ind) for ind in toolbox.select(pop)]
-                x = toolbox.clone(agent)
-                y = toolbox.clone(agent)
-                y = toolbox.mutate(y, a, b, c)
-                z = toolbox.mate(x, y)
-                del z.fitness.values
-                children.append(z)
-            for i, ind in enumerate(children):
-                if budget.full():
-                    break
-                ind.fitness.values = toolbox.evaluate(ind)
-                if ind.fitness > pop[i].fitness:
-                    pop[i] = ind
-        else:
-            # examples/de/basic.py
-            for k, agent in enumerate(pop):
-                if budget.full():
-                    break
-                a, b, c = toolbox.select(pop)
-                y = toolbox.clone(agent)
-                index = random.randrange(size)
-                for i, value in enumerate(agent):
-                    if i == index or random.random() < CR:
-                        y[i] = a[i] + F * (b[i] - c[i])
-                y.fitness.values = toolbox.evaluate(y)
-                if y.fitness > agent.fitness:
-                    pop[k] = y
+            algorithms.eaGenerateUpdate(toolbox, ngen=1, verbose=False)
+    except numpy.linalg.LinAlgError as error:
+        budget.ended_by = f"LinAlgError: {error}"
     return generations
 
 
@@ -538,21 +261,23 @@ def solve_de(problem, size, budget):
 
 
 def solvers_of(problem, size, mode):
-    """(solver name, function of the budget and the seed returning the generations) of a
-    problem."""
-    if problem == "onemax":
-        return [("ga", lambda budget, seed: solve_onemax(size, mode, budget, seed))]
-    if problem == "nqueens":
-        return [("ga", lambda budget, seed: solve_nqueens(size, budget, seed))]
-    if problem in REAL_PROBLEMS:
-        return [("cma_es", lambda budget, seed: solve_bipop_cmaes(problem, size, budget)),
-                ("de", lambda budget, seed: solve_de(problem, size, budget))]
-    return None
+    """(solver name, function of the budget and the seed returning the generations) of a scenario:
+    none outside the matched suite."""
+    if mode != "matched":
+        return []
+    if problem == "onemax" and size == 1000:
+        return [("ga", lambda budget, seed: solve_onemax(size, budget, seed))]
+    if problem == "rosenbrock" and size == 10:
+        return [("cma_es", lambda budget, seed: solve_cma_es(size, budget))]
+    return []
 
 
 def values(problem, size):
     """Prints the value of each solution read from stdin."""
-    function = {"onemax": onemax, "nqueens": nqueens}.get(problem) or REAL_PROBLEMS[problem][0]
+    function = {"onemax": onemax, "rosenbrock": rosenbrock}.get(problem)
+    if function is None:
+        print(f"deap doesn't run {problem}", file=sys.stderr)
+        sys.exit(2)
     for line in sys.stdin:
         if line.strip():
             result = function(json.loads(line))
@@ -571,11 +296,7 @@ def main():
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
 
     for seed in range(seed_from, seed_to + 1):
-        solvers = solvers_of(problem, size, mode)
-        if solvers is None:
-            print(f"unknown problem {problem}", file=sys.stderr)
-            sys.exit(2)
-        for solver, solve in solvers:
+        for solver, solve in solvers_of(problem, size, mode):
             # DEAP draws from Python's random; its CMA-ES from numpy's
             random.seed(seed)
             numpy.random.seed(seed)
@@ -590,6 +311,8 @@ def main():
             }
             if budget.restarts:
                 result.update(restarts=budget.restarts)
+            if budget.ended_by:
+                result.update(ended_by=budget.ended_by)
             if problem in REAL_PROBLEMS:
                 result.update(outside=budget.outside, best=float(budget.best),
                               solution=[float(v) for v in budget.solution])

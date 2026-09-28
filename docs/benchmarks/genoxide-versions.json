@@ -11,162 +11,36 @@
    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
-    "onemax-100-matched": {
-     "startup": 404388,
-     "methods": {
-      "ga": {
-       "instructions": 15615842,
-       "evaluations": 4505,
-       "reached": true,
-       "best": 100.0
-      }
-     }
-    },
     "onemax-1000-matched": {
-     "startup": 404451,
+     "startup": 365292,
      "methods": {
       "ga": {
-       "instructions": 286537750,
+       "instructions": 287730274,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
       }
      }
     },
-    "onemax-100-idiomatic": {
-     "startup": 404430,
+    "rastrigin-30-matched": {
+     "startup": 365261,
      "methods": {
-      "ga": {
-       "instructions": 5610520,
-       "evaluations": 3664,
-       "reached": true,
-       "best": 100.0
-      }
-     }
-    },
-    "nqueens-32-idiomatic": {
-     "startup": 404449,
-     "methods": {
-      "local_search": {
-       "instructions": 4086496,
-       "evaluations": 1145,
-       "reached": true,
-       "best": 0.0
-      },
-      "ga": {
-       "instructions": 1471317340,
-       "evaluations": 276999,
-       "reached": true,
-       "best": 0.0
-      }
-     }
-    },
-    "nqueens-64-idiomatic": {
-     "startup": 404465,
-     "methods": {
-      "local_search": {
-       "instructions": 9673692,
-       "evaluations": 1920,
-       "reached": true,
-       "best": 0.0
-      },
-      "ga": {
-       "instructions": 7583889196,
-       "evaluations": 1000098,
-       "reached": false,
-       "best": 1.0
-      }
-     }
-    },
-    "rastrigin-10-idiomatic": {
-     "startup": 404519,
-     "methods": {
-      "cma_es": {
-       "instructions": 1434852924,
-       "evaluations": 131440,
-       "reached": true,
-       "best": 0.008683180275653513
-      },
       "de": {
-       "instructions": 21441307,
-       "evaluations": 4580,
-       "reached": true,
-       "best": 0.009978947459359233
-      },
-      "ga": {
-       "instructions": 402660086,
-       "evaluations": 83377,
-       "reached": true,
-       "best": 0.0065169538690526
+       "instructions": 2343699937,
+       "evaluations": 300000,
+       "reached": null,
+       "best": 154.65353066580684
       }
      }
     },
-    "rastrigin-30-idiomatic": {
-     "startup": 404549,
+    "rosenbrock-10-matched": {
+     "startup": 365260,
      "methods": {
       "cma_es": {
-       "instructions": 58305800413,
-       "evaluations": 927808,
-       "reached": true,
-       "best": 0.009790665496609563
-      },
-      "de": {
-       "instructions": 236290601,
-       "evaluations": 28880,
-       "reached": true,
-       "best": 0.008488793720061949
-      },
-      "ga": {
-       "instructions": 8373636527,
-       "evaluations": 782545,
-       "reached": true,
-       "best": 0.009987766364474737
-      }
-     }
-    },
-    "rosenbrock-10-idiomatic": {
-     "startup": 404516,
-     "methods": {
-      "cma_es": {
-       "instructions": 62435161,
+       "instructions": 62446932,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
-      },
-      "de": {
-       "instructions": 29882302,
-       "evaluations": 7520,
-       "reached": true,
-       "best": 0.008919447541636295
-      },
-      "es": {
-       "instructions": 15048123597,
-       "evaluations": 500015,
-       "reached": false,
-       "best": 0.01354479867788113
-      }
-     }
-    },
-    "ackley-30-idiomatic": {
-     "startup": 404532,
-     "methods": {
-      "cma_es": {
-       "instructions": 366457038,
-       "evaluations": 3094,
-       "reached": true,
-       "best": 0.009430338431226648
-      },
-      "de": {
-       "instructions": 80372509,
-       "evaluations": 9240,
-       "reached": true,
-       "best": 0.009147188377145898
-      },
-      "ga": {
-       "instructions": 10911121645,
-       "evaluations": 1000029,
-       "reached": false,
-       "best": 0.03297456138564714
       }
      }
     }
@@ -181,162 +55,36 @@
    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
-    "onemax-100-matched": {
-     "startup": 411400,
-     "methods": {
-      "ga": {
-       "instructions": 15607700,
-       "evaluations": 4505,
-       "reached": true,
-       "best": 100.0
-      }
-     }
-    },
     "onemax-1000-matched": {
-     "startup": 411454,
+     "startup": 363043,
      "methods": {
       "ga": {
-       "instructions": 286343013,
+       "instructions": 288181477,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
       }
      }
     },
-    "onemax-100-idiomatic": {
-     "startup": 411432,
+    "rastrigin-30-matched": {
+     "startup": 363021,
      "methods": {
-      "ga": {
-       "instructions": 5607388,
-       "evaluations": 3664,
-       "reached": true,
-       "best": 100.0
-      }
-     }
-    },
-    "nqueens-32-idiomatic": {
-     "startup": 411452,
-     "methods": {
-      "local_search": {
-       "instructions": 4092311,
-       "evaluations": 1145,
-       "reached": true,
-       "best": 0.0
-      },
-      "ga": {
-       "instructions": 1471910669,
-       "evaluations": 276999,
-       "reached": true,
-       "best": 0.0
-      }
-     }
-    },
-    "nqueens-64-idiomatic": {
-     "startup": 411477,
-     "methods": {
-      "local_search": {
-       "instructions": 9683386,
-       "evaluations": 1920,
-       "reached": true,
-       "best": 0.0
-      },
-      "ga": {
-       "instructions": 7586030921,
-       "evaluations": 1000098,
-       "reached": false,
-       "best": 1.0
-      }
-     }
-    },
-    "rastrigin-10-idiomatic": {
-     "startup": 411521,
-     "methods": {
-      "cma_es": {
-       "instructions": 1434876146,
-       "evaluations": 131440,
-       "reached": true,
-       "best": 0.008683180275653513
-      },
       "de": {
-       "instructions": 201007390,
-       "evaluations": 42000,
-       "reached": true,
-       "best": 0.009991326354992225
-      },
-      "ga": {
-       "instructions": 402664978,
-       "evaluations": 83377,
-       "reached": true,
-       "best": 0.0065169538690526
+       "instructions": 2345036361,
+       "evaluations": 300000,
+       "reached": null,
+       "best": 154.65353066580684
       }
      }
     },
-    "rastrigin-30-idiomatic": {
-     "startup": 411551,
+    "rosenbrock-10-matched": {
+     "startup": 363010,
      "methods": {
       "cma_es": {
-       "instructions": 58305852732,
-       "evaluations": 927808,
-       "reached": true,
-       "best": 0.009790665496609563
-      },
-      "de": {
-       "instructions": 852623781,
-       "evaluations": 101500,
-       "reached": true,
-       "best": 0.009989680382318511
-      },
-      "ga": {
-       "instructions": 8373681657,
-       "evaluations": 782545,
-       "reached": true,
-       "best": 0.009987766364474737
-      }
-     }
-    },
-    "rosenbrock-10-idiomatic": {
-     "startup": 411518,
-     "methods": {
-      "cma_es": {
-       "instructions": 62444533,
+       "instructions": 62458597,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
-      },
-      "de": {
-       "instructions": 152493628,
-       "evaluations": 38100,
-       "reached": true,
-       "best": 0.008217388637659341
-      },
-      "es": {
-       "instructions": 15047683585,
-       "evaluations": 500015,
-       "reached": false,
-       "best": 0.01354479867788113
-      }
-     }
-    },
-    "ackley-30-idiomatic": {
-     "startup": 411534,
-     "methods": {
-      "cma_es": {
-       "instructions": 366460478,
-       "evaluations": 3094,
-       "reached": true,
-       "best": 0.009430338431226648
-      },
-      "de": {
-       "instructions": 169401150,
-       "evaluations": 19500,
-       "reached": true,
-       "best": 0.009870227019743272
-      },
-      "ga": {
-       "instructions": 10911179748,
-       "evaluations": 1000029,
-       "reached": false,
-       "best": 0.03297456138564714
       }
      }
     }
@@ -351,162 +99,36 @@
    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
-    "onemax-100-matched": {
-     "startup": 411675,
-     "methods": {
-      "ga": {
-       "instructions": 15607695,
-       "evaluations": 4505,
-       "reached": true,
-       "best": 100.0
-      }
-     }
-    },
     "onemax-1000-matched": {
-     "startup": 411729,
+     "startup": 363207,
      "methods": {
       "ga": {
-       "instructions": 286343059,
+       "instructions": 288181479,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
       }
      }
     },
-    "onemax-100-idiomatic": {
-     "startup": 411707,
+    "rastrigin-30-matched": {
+     "startup": 363185,
      "methods": {
-      "ga": {
-       "instructions": 5607348,
-       "evaluations": 3664,
-       "reached": true,
-       "best": 100.0
-      }
-     }
-    },
-    "nqueens-32-idiomatic": {
-     "startup": 411727,
-     "methods": {
-      "local_search": {
-       "instructions": 4092228,
-       "evaluations": 1145,
-       "reached": true,
-       "best": 0.0
-      },
-      "ga": {
-       "instructions": 1471910672,
-       "evaluations": 276999,
-       "reached": true,
-       "best": 0.0
-      }
-     }
-    },
-    "nqueens-64-idiomatic": {
-     "startup": 411752,
-     "methods": {
-      "local_search": {
-       "instructions": 9683389,
-       "evaluations": 1920,
-       "reached": true,
-       "best": 0.0
-      },
-      "ga": {
-       "instructions": 7586030881,
-       "evaluations": 1000098,
-       "reached": false,
-       "best": 1.0
-      }
-     }
-    },
-    "rastrigin-10-idiomatic": {
-     "startup": 411796,
-     "methods": {
-      "cma_es": {
-       "instructions": 1434876149,
-       "evaluations": 131440,
-       "reached": true,
-       "best": 0.008683180275653513
-      },
       "de": {
-       "instructions": 143274852,
-       "evaluations": 42000,
-       "reached": true,
-       "best": 0.009991326354992225
-      },
-      "ga": {
-       "instructions": 402664895,
-       "evaluations": 83377,
-       "reached": true,
-       "best": 0.0065169538690526
+       "instructions": 1882107285,
+       "evaluations": 300000,
+       "reached": null,
+       "best": 154.65353066580684
       }
      }
     },
-    "rastrigin-30-idiomatic": {
-     "startup": 411826,
+    "rosenbrock-10-matched": {
+     "startup": 363174,
      "methods": {
       "cma_es": {
-       "instructions": 58305852735,
-       "evaluations": 927808,
-       "reached": true,
-       "best": 0.009790665496609563
-      },
-      "de": {
-       "instructions": 707233227,
-       "evaluations": 101500,
-       "reached": true,
-       "best": 0.009989680382318511
-      },
-      "ga": {
-       "instructions": 8373681703,
-       "evaluations": 782545,
-       "reached": true,
-       "best": 0.009987766364474737
-      }
-     }
-    },
-    "rosenbrock-10-idiomatic": {
-     "startup": 411793,
-     "methods": {
-      "cma_es": {
-       "instructions": 62444493,
+       "instructions": 62458607,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
-      },
-      "de": {
-       "instructions": 96925578,
-       "evaluations": 38100,
-       "reached": true,
-       "best": 0.008217388637659341
-      },
-      "es": {
-       "instructions": 15047683588,
-       "evaluations": 500015,
-       "reached": false,
-       "best": 0.01354479867788113
-      }
-     }
-    },
-    "ackley-30-idiomatic": {
-     "startup": 411809,
-     "methods": {
-      "cma_es": {
-       "instructions": 366460539,
-       "evaluations": 3094,
-       "reached": true,
-       "best": 0.009430338431226648
-      },
-      "de": {
-       "instructions": 139703497,
-       "evaluations": 19500,
-       "reached": true,
-       "best": 0.009870227019743272
-      },
-      "ga": {
-       "instructions": 10911179794,
-       "evaluations": 1000029,
-       "reached": false,
-       "best": 0.03297456138564714
       }
      }
     }
@@ -521,162 +143,124 @@
    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
-    "onemax-100-matched": {
-     "startup": 407368,
-     "methods": {
-      "ga": {
-       "instructions": 15607700,
-       "evaluations": 4505,
-       "reached": true,
-       "best": 100.0
-      }
-     }
-    },
     "onemax-1000-matched": {
-     "startup": 407422,
+     "startup": 363188,
      "methods": {
       "ga": {
-       "instructions": 286342963,
+       "instructions": 288181465,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
       }
      }
     },
-    "onemax-100-idiomatic": {
-     "startup": 407400,
+    "rastrigin-30-matched": {
+     "startup": 363166,
      "methods": {
-      "ga": {
-       "instructions": 5607471,
-       "evaluations": 3664,
-       "reached": true,
-       "best": 100.0
-      }
-     }
-    },
-    "nqueens-32-idiomatic": {
-     "startup": 407420,
-     "methods": {
-      "local_search": {
-       "instructions": 4092271,
-       "evaluations": 1145,
-       "reached": true,
-       "best": 0.0
-      },
-      "ga": {
-       "instructions": 1471910669,
-       "evaluations": 276999,
-       "reached": true,
-       "best": 0.0
-      }
-     }
-    },
-    "nqueens-64-idiomatic": {
-     "startup": 407445,
-     "methods": {
-      "local_search": {
-       "instructions": 9683389,
-       "evaluations": 1920,
-       "reached": true,
-       "best": 0.0
-      },
-      "ga": {
-       "instructions": 7586030929,
-       "evaluations": 1000098,
-       "reached": false,
-       "best": 1.0
-      }
-     }
-    },
-    "rastrigin-10-idiomatic": {
-     "startup": 407489,
-     "methods": {
-      "cma_es": {
-       "instructions": 1434876108,
-       "evaluations": 131440,
-       "reached": true,
-       "best": 0.008683180275653513
-      },
       "de": {
-       "instructions": 143275771,
-       "evaluations": 42000,
-       "reached": true,
-       "best": 0.009991326354992225
-      },
-      "ga": {
-       "instructions": 402664943,
-       "evaluations": 83377,
-       "reached": true,
-       "best": 0.0065169538690526
+       "instructions": 1882104925,
+       "evaluations": 300000,
+       "reached": null,
+       "best": 154.65353066580684
       }
      }
     },
-    "rastrigin-30-idiomatic": {
-     "startup": 407519,
+    "rosenbrock-10-matched": {
+     "startup": 363155,
      "methods": {
       "cma_es": {
-       "instructions": 58305852780,
-       "evaluations": 927808,
-       "reached": true,
-       "best": 0.009790665496609563
-      },
-      "de": {
-       "instructions": 707235941,
-       "evaluations": 101500,
-       "reached": true,
-       "best": 0.009989680382318511
-      },
-      "ga": {
-       "instructions": 8373681622,
-       "evaluations": 782545,
-       "reached": true,
-       "best": 0.009987766364474737
-      }
-     }
-    },
-    "rosenbrock-10-idiomatic": {
-     "startup": 407486,
-     "methods": {
-      "cma_es": {
-       "instructions": 62444580,
+       "instructions": 62458632,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
-      },
-      "de": {
-       "instructions": 96926727,
-       "evaluations": 38100,
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "0.9.0",
+   "source": "crates.io",
+   "released": "2026-09-28",
+   "measured": "2026-09-28",
+   "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
+   "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+   "valgrind": "valgrind-3.22.0",
+   "scenarios": {
+    "onemax-1000-matched": {
+     "startup": 363188,
+     "methods": {
+      "ga": {
+       "instructions": 288181422,
+       "evaluations": 58171,
        "reached": true,
-       "best": 0.008217388637659341
-      },
-      "es": {
-       "instructions": 15047683588,
-       "evaluations": 500015,
-       "reached": false,
-       "best": 0.01354479867788113
+       "best": 1000.0
       }
      }
     },
-    "ackley-30-idiomatic": {
-     "startup": 407502,
+    "rastrigin-30-matched": {
+     "startup": 363166,
+     "methods": {
+      "de": {
+       "instructions": 1882104882,
+       "evaluations": 300000,
+       "reached": null,
+       "best": 154.65353066580684
+      }
+     }
+    },
+    "rosenbrock-10-matched": {
+     "startup": 363155,
      "methods": {
       "cma_es": {
-       "instructions": 366460482,
-       "evaluations": 3094,
+       "instructions": 62458632,
+       "evaluations": 5840,
        "reached": true,
-       "best": 0.009430338431226648
-      },
-      "de": {
-       "instructions": 139704072,
-       "evaluations": 19500,
-       "reached": true,
-       "best": 0.009870227019743272
-      },
+       "best": 0.008563689681615302
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "0.9.1",
+   "source": "crates.io",
+   "released": "2026-09-28",
+   "measured": "2026-09-28",
+   "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
+   "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+   "valgrind": "valgrind-3.22.0",
+   "scenarios": {
+    "onemax-1000-matched": {
+     "startup": 363278,
+     "methods": {
       "ga": {
-       "instructions": 10911179799,
-       "evaluations": 1000029,
-       "reached": false,
-       "best": 0.03297456138564714
+       "instructions": 288181452,
+       "evaluations": 58171,
+       "reached": true,
+       "best": 1000.0
+      }
+     }
+    },
+    "rastrigin-30-matched": {
+     "startup": 363256,
+     "methods": {
+      "de": {
+       "instructions": 1882104861,
+       "evaluations": 300000,
+       "reached": null,
+       "best": 154.65353066580684
+      }
+     }
+    },
+    "rosenbrock-10-matched": {
+     "startup": 363245,
+     "methods": {
+      "cma_es": {
+       "instructions": 62458568,
+       "evaluations": 5840,
+       "reached": true,
+       "best": 0.008563689681615302
       }
      }
     }

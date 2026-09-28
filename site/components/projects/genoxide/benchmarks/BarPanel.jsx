@@ -3,20 +3,18 @@
 import { useId, useMemo, useState } from "react";
 import { linear, logarithmic, logTicks, ticks } from "../player/chart-kit";
 import { Axes, PlotBox, TipRows, Tooltip } from "../player/chart-parts";
-import { barNotes, exactValue, pointsText, QUANTITY_NAMES, tickFormat } from "./format";
+import { barNotes, exactValue, QUANTITY_NAMES, tickFormat } from "./format";
 import { sameRun, useHighlight } from "./Highlight";
 
 /**
- * One panel of a benchmark chart: a horizontal bar per library and method,
- * in the harness's order (best first; missing values, then the runs the time
- * cap stopped, last), on a log axis or, for the overall score, a linear one.
- * Every number comes from charts.json: a bar's label is its `text`, as in the
- * SVG chart.
+ * One panel of a benchmark chart: a horizontal bar per library (the
+ * scenario's one method), in the harness's order (best first; missing values,
+ * then the runs the time cap stopped, last), on a log axis, or a linear one
+ * when the panel says so. Every number comes from charts.json: a bar's label
+ * is its `text`, as in the SVG chart.
  *
- * Hover a bar, or focus the panel and use the arrow keys, for its numbers:
- * for an overall score, its points in each scenario too (`ratios`, the
- * scenarios' titles from the panel's `scenarios`). The highlighted library
- * (the legend's) dims the others.
+ * Hover a bar, or focus the panel and use the arrow keys, for its numbers.
+ * The highlighted library (the legend's) dims the others.
  *
  * A bar of a method in a scenario (a `solver`, in a panel whose `key` is the
  * scenario's) selects that run on a click, or on Enter when the arrow keys are
@@ -29,7 +27,6 @@ const TOP = 4;
 const BOTTOM = 24;
 const CHAR = 5.9; // average width of a character of the 11px labels
 const GENOXIDE = new Set(["genoxide", "genoxide_python"]);
-const seconds = tickFormat("seconds");
 
 function fit(text, room) {
   const chars = Math.max(3, Math.floor(room / CHAR));
@@ -61,15 +58,11 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
       const lo = 10 ** Math.floor(Math.log10(Math.min(...positive) / 2));
       return [lo, Math.max(...positive) * 1.05];
     }
-    // a fixed end, e.g. 100 for a score
+    // a fixed end, if the panel gives one
     if (typeof panel.axis_to === "number") return [0, panel.axis_to];
     const hi = values.length ? Math.max(...values) : 1;
     return [0, hi * 1.06 || 1];
   }, [all, panel.log, panel.axis_to]);
-  const titles = useMemo(
-    () => Object.fromEntries((panel.scenarios ?? []).map((scenario) => [scenario.key, scenario.title])),
-    [panel.scenarios],
-  );
 
   const format = tickFormat(quantity);
   const height = TOP + bars.length * ROW + BOTTOM;
@@ -82,7 +75,7 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
   const activeBar = active !== null ? bars.find((b) => b.index === active) : null;
   // the run a bar selects: its library and method in this panel's scenario
   const runOf = (bar) =>
-    details && bar?.solver && bar.library && panel.key && panel.key !== "overall"
+    details && bar?.solver && bar.library && panel.key
       ? { scenario: panel.key, library: bar.library, solver: bar.solver }
       : null;
   const selectable = all.some((bar) => runOf(bar));
@@ -127,12 +120,9 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
             const geometry = layout(width, box, domain, panel.log, room);
             const row = bars.indexOf(activeBar);
             const end = activeBar.value === null ? geometry.area.left : geometry.x(Math.max(activeBar.value, domain[0]));
-            const ratios = Array.isArray(activeBar.ratios) ? activeBar.ratios : null;
-            // a tooltip with a row per scenario starts higher, to stay beside the panel
             const y = TOP + row * ROW + ROW / 2;
-            const top = ratios ? Math.max(12, Math.min(y, box - (ratios.length + 6) * 15)) : y;
             return (
-              <Tooltip x={Math.min(end, width - 40)} y={top} width={width} wide={Boolean(ratios)}>
+              <Tooltip x={Math.min(end, width - 40)} y={y} width={width}>
                 <p className="mb-1 font-semibold">{activeBar.label}</p>
                 <TipRows
                   rows={[
@@ -148,24 +138,6 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
                     {note}
                   </p>
                 ))}
-                {ratios ? (
-                  <>
-                    <p className="mt-1.5 mb-0.5 text-base-content/60">Points per scenario (100: the fastest, 0: unsolved)</p>
-                    <dl className="grid grid-cols-[auto_auto_auto] gap-x-2.5 gap-y-px text-[11px]">
-                      {ratios.map((ratio) => (
-                        <div key={ratio.scenario} className="contents">
-                          <dt className="text-base-content/65">{titles[ratio.scenario] ?? ratio.scenario}</dt>
-                          <dd className={`text-right font-medium tabular-nums ${ratio.penalized ? "text-base-content/50" : ""}`}>
-                            {pointsText(ratio.points)}
-                          </dd>
-                          <dd className="text-base-content/55">
-                            {ratio.penalized ? "unsolved" : `${ratio.method ?? ratio.solver}, ${seconds(ratio.time)}`}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </>
-                ) : null}
               </Tooltip>
             );
           }}

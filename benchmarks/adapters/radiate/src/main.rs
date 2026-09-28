@@ -1,12 +1,16 @@
-//! Benchmark adapter for radiate (https://crates.io/crates/radiate), version 1.3.1.
+//! Benchmark adapter for radiate (https://crates.io/crates/radiate).
 //!
 //! Usage:
 //!   ga_bench_radiate <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
 //!   ga_bench_radiate values <problem> <size>
-//! The first prints one JSON line per solver per seed (see ../../README.md, "Adding a library"),
-//! the second reads one JSON solution per line and prints its value per line.
+//! The first prints one JSON line per seed (see ../../README.md, "Adding a library"), the second
+//! reads one JSON solution per line and prints its value per line.
 //!
-//! What runs where, and where radiate recommends it: docs/benchmarks/libraries/radiate.md.
+//! The suite is matched: each problem has one method, defined in docs/benchmarks/rules.md (rule
+//! 6), and every library runs it with its own implementation. radiate, a GA library, runs one: the
+//! GA of OneMax 1000 (onemax 1000 matched); any other problem, size or mode prints nothing, since
+//! radiate has no DE or CMA-ES. How each setting maps to the definition, and the differences:
+//! docs/benchmarks/libraries/radiate.md.
 //!
 //! radiate has one search method, its `GeneticEngine`: a GA whose generation keeps
 //! `population_size * (1 - offspring_fraction)` survivors (survivor selector) and breeds
@@ -23,11 +27,6 @@
 //! without evaluating anything; after 10 generations in a row without an evaluation, the `until`
 //! limit ends the attempt, and the engine starts again from a new random population, seeded
 //! `(seed + 1) * 1_000_000 + restart`, keeping the budget and the best.
-//! Bounds (rule 2.4): `FloatCodec::vector` draws the genes in the problem's range and sets it as
-//! their bounds, and radiate's float alterers write through `FloatGene::set_allele` or
-//! `safe_clamp`, which clamp to them. The fitness wrapper counts, without clipping, every
-//! evaluated solution outside the bounds and the run prints it as `outside`.
-//!
 //! Single-threaded: radiate is built without its `rayon` feature and no executor is set, so the
 //! engine uses its default `Executor::Serial` for the fitness, the species and the events.
 //! Seeded: every run is inside `random_provider::scoped_seed(seed, ..)`, which reseeds the
@@ -36,102 +35,24 @@
 //! the same thread; radiate-core-1.3.1/src/domain/random_provider.rs).
 //! Fitness: through `raw_fitness_fn`, radiate's documented way to evaluate the genotype without
 //! decoding it (docs/source/fitness.md, "Raw Fitness"). The values are computed in f64 like in the
-//! other adapters (radiate keeps them as an f32 `Score`). The fitness wrapper counts every call and
+//! other adapters (radiate keeps them as an f32 `Score`, exact for OneMax's counts). The fitness
+//! wrapper counts every call and
 //! records the first evaluation whose f64 value reaches the target (`first_hit`), which also ends
 //! the run after its generation. The run reports radiate's own best solution (`Generation::value`,
 //! the best of the run), with its value recomputed in f64 after the clock.
 
 use radiate::prelude::*;
-use std::cell::RefCell;
-use std::f64::consts::{E, PI};
 use std::io::BufRead;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, LazyLock, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------------------------
-// Fitness functions, the same as benchmarks/problems.py
+// The fitness function, the same as benchmarks/problems.py
 // ---------------------------------------------------------------------------------------------
 
 fn onemax(bits: impl Iterator<Item = bool>) -> f64 {
     bits.filter(|&bit| bit).count() as f64
-}
-
-/// Diagonal conflicts of queens at (i, columns[i]): for each diagonal, its queens minus one
-fn nqueens(columns: impl ExactSizeIterator<Item = usize>) -> f64 {
-    let size = columns.len();
-    let mut left = vec![0usize; 2 * size - 1];
-    let mut right = vec![0usize; 2 * size - 1];
-    for (i, column) in columns.enumerate() {
-        left[i + column] += 1;
-        right[size - 1 - i + column] += 1;
-    }
-    left.iter()
-        .chain(&right)
-        .map(|&count| count.saturating_sub(1))
-        .sum::<usize>() as f64
-}
-
-// Rastrigin and Ackley are shifted (rule 1.4): gene i is measured from
-// s_i = 0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1), upper the box's upper bound, in this
-// order. Computed once, before any run, for up to MAX_GENES genes.
-const MAX_GENES: usize = 1024;
-fn shifts(upper: f64) -> Vec<f64> {
-    (0..MAX_GENES)
-        .map(|i| 0.8 * upper * (2.0 * ((37 * i + 11) % 101) as f64 / 101.0 - 1.0))
-        .collect()
-}
-static RASTRIGIN_SHIFT: LazyLock<Vec<f64>> = LazyLock::new(|| shifts(5.12));
-static ACKLEY_SHIFT: LazyLock<Vec<f64>> = LazyLock::new(|| shifts(32.768));
-
-fn rastrigin(x: &[f64]) -> f64 {
-    10.0 * x.len() as f64
-        + x.iter()
-            .zip(RASTRIGIN_SHIFT.iter())
-            .map(|(v, s)| {
-                let v = v - s;
-                v * v - 10.0 * (2.0 * PI * v).cos()
-            })
-            .sum::<f64>()
-}
-
-fn rosenbrock(x: &[f64]) -> f64 {
-    x.windows(2)
-        .map(|w| 100.0 * (w[1] - w[0] * w[0]).powi(2) + (1.0 - w[0]).powi(2))
-        .sum()
-}
-
-fn ackley(x: &[f64]) -> f64 {
-    let n = x.len() as f64;
-    let shifted = || x.iter().zip(ACKLEY_SHIFT.iter()).map(|(v, s)| v - s);
-    let squares = shifted().map(|v| v * v).sum::<f64>() / n;
-    let cosines = shifted().map(|v| (2.0 * PI * v).cos()).sum::<f64>() / n;
-    -20.0 * (-0.2 * squares.sqrt()).exp() - cosines.exp() + 20.0 + E
-}
-
-type Function = fn(&[f64]) -> f64;
-
-fn real_problem(problem: &str) -> Option<(Function, std::ops::Range<f64>)> {
-    Some(match problem {
-        "rastrigin" => (rastrigin as Function, -5.12..5.12),
-        "rosenbrock" => (rosenbrock, -5.0..10.0),
-        "ackley" => (ackley, -32.768..32.768),
-        _ => return None,
-    })
-}
-
-/// `f` of the alleles of a genotype, in the fitness functions: radiate's genes aren't a slice of
-/// f64, so the alleles are copied into a buffer that every evaluation reuses, not a new allocation
-/// per call
-fn with_alleles<R>(genotype: &Genotype<FloatChromosome<f64>>, f: impl FnOnce(&[f64]) -> R) -> R {
-    thread_local! {
-        static ALLELES: RefCell<Vec<f64>> = const { RefCell::new(Vec::new()) };
-    }
-    ALLELES.with_borrow_mut(|x| {
-        x.clear();
-        x.extend(genotype[0].as_slice().iter().map(|gene| *gene.allele()));
-        f(x)
-    })
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -143,16 +64,12 @@ fn with_alleles<R>(genotype: &Genotype<FloatChromosome<f64>>, f: impl FnOnce(&[f
 struct Hit {
     evaluations: usize,
     time_s: f64,
-    value: f64,
     genes: Vec<f64>,
 }
 
 struct Budget {
     evaluations: AtomicUsize,
     first_hit: OnceLock<Hit>,
-    // evaluated solutions outside the problem's bounds, as radiate proposed them (rule 2.4)
-    outside: AtomicUsize,
-    minimize: bool,
     target: f64,
     max_evaluations: usize,
     start: Instant,
@@ -165,12 +82,10 @@ struct Budget {
 }
 
 impl Budget {
-    fn new(args: &Args, start: Instant, minimize: bool, target: f64) -> Arc<Self> {
+    fn new(args: &Args, start: Instant, target: f64) -> Arc<Self> {
         Arc::new(Self {
             evaluations: AtomicUsize::new(0),
             first_hit: OnceLock::new(),
-            outside: AtomicUsize::new(0),
-            minimize,
             target,
             max_evaluations: args.max_evaluations,
             start,
@@ -183,7 +98,7 @@ impl Budget {
 
     /// Counts one evaluation of `value`, and records it if it's the first to reach the target:
     /// its count, the clock and (once per run) a copy of its genes, reported if radiate's own best
-    /// doesn't reach the target (radiate compares f32 scores)
+    /// doesn't reach the target
     fn record(&self, value: f64, genes: impl FnOnce() -> Vec<f64>) -> f64 {
         let evaluations = self.evaluations.fetch_add(1, Ordering::Relaxed) + 1;
         if self.reaches(value) && self.first_hit.get().is_none() {
@@ -191,31 +106,15 @@ impl Budget {
             let _ = self.first_hit.set(Hit {
                 evaluations,
                 time_s,
-                value,
                 genes: genes(),
             });
         }
         value
     }
 
-    /// Whether `value` reaches the target (problems.reached)
+    /// Whether `value` reaches the target (problems.reached): OneMax is maximized
     fn reaches(&self, value: f64) -> bool {
-        if self.minimize {
-            value <= self.target
-        } else {
-            value >= self.target
-        }
-    }
-
-    /// Counts `x` if it's outside [lower, upper] in any variable (not clipped: as evaluated)
-    fn check_bounds(&self, x: &[f64], lower: f64, upper: f64) {
-        if x.iter().any(|v| !(lower..=upper).contains(v)) {
-            self.outside.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-
-    fn outside(&self) -> usize {
-        self.outside.load(Ordering::Relaxed)
+        value >= self.target
     }
 
     fn evaluations(&self) -> usize {
@@ -227,7 +126,8 @@ impl Budget {
     fn end_generation(&self) {
         let evaluations = self.evaluations();
         let end = self.generation_end.swap(evaluations, Ordering::Relaxed);
-        self.last_generation.store(evaluations - end, Ordering::Relaxed);
+        self.last_generation
+            .store(evaluations - end, Ordering::Relaxed);
         if evaluations == end {
             self.idle.fetch_add(1, Ordering::Relaxed);
         } else {
@@ -321,11 +221,6 @@ fn print_single(
     best: f64,
     solution: String,
 ) {
-    // rule 2.4: the continuous problems report the evaluated solutions outside the bounds
-    let outside = match real_problem(&args.problem) {
-        Some(_) => format!(",\"outside\":{}", budget.outside()),
-        None => String::new(),
-    };
     let first_hit = match budget.first_hit.get() {
         Some(hit) => format!(
             "{{\"evaluations\":{},\"time_s\":{:.6}}}",
@@ -339,7 +234,7 @@ fn print_single(
         String::new()
     };
     println!(
-        "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"last_generation\":{}{restarts},\"best\":{best:?},\"target\":{:?},\"success\":{},\"first_hit\":{first_hit},\"solution\":{solution}{outside}}}",
+        "{{\"library\":\"radiate\",\"solver\":\"{solver}\",\"problem\":\"{}\",\"size\":{},\"mode\":\"{}\",\"seed\":{seed},\"time_s\":{time_s:.6},\"generations\":{generations},\"evaluations\":{},\"last_generation\":{}{restarts},\"best\":{best:?},\"target\":{:?},\"success\":{},\"first_hit\":{first_hit},\"solution\":{solution}}}",
         args.problem,
         args.size,
         args.mode,
@@ -358,7 +253,6 @@ fn run_single<C, T>(
     args: &Args,
     seed: u64,
     solver: &str,
-    minimize: bool,
     target: f64,
     build: impl Fn(Arc<Budget>) -> GeneticEngine<C, T>,
     report: impl Fn(&T) -> (f64, String),
@@ -368,7 +262,7 @@ fn run_single<C, T>(
 {
     // the clock starts before the engine creates the initial population
     let start = Instant::now();
-    let budget = Budget::new(args, start, minimize, target);
+    let budget = Budget::new(args, start, target);
     let (mut bests, mut generations, mut restart) = (Vec::new(), 0, 0);
     loop {
         let generation = random_provider::scoped_seed(attempt_seed(seed, restart), || {
@@ -382,25 +276,30 @@ fn run_single<C, T>(
         restart += 1;
     }
     let time_s = start.elapsed().as_secs_f64();
-    let better = |a: f64, b: f64| if minimize { a < b } else { a > b };
     let (mut best, mut solution) = bests
         .iter()
         .map(report)
-        .reduce(|a, b| if better(b.0, a.0) { b } else { a })
+        .reduce(|a, b| if b.0 > a.0 { b } else { a })
         .expect("an attempt");
-    // radiate's best is chosen by its f32 score; if it doesn't reach the target in f64 while an
-    // evaluated solution did, that solution is the run's best
+    // if radiate's best doesn't reach the target while an evaluated solution did, that solution
+    // is the run's best
     if let Some(hit) = budget.first_hit.get() {
         if !budget.reaches(best) {
-            best = hit.value;
-            solution = if real_problem(&args.problem).is_some() {
-                json_row(&hit.genes)
-            } else {
-                json_integers(hit.genes.iter().map(|&v| v as usize))
-            };
+            best = budget.target;
+            solution = json_integers(hit.genes.iter().map(|&v| v as usize));
         }
     }
-    print_single(args, seed, solver, &budget, generations, restart, time_s, best, solution);
+    print_single(
+        args,
+        seed,
+        solver,
+        &budget,
+        generations,
+        restart,
+        time_s,
+        best,
+        solution,
+    );
 }
 
 /// A JSON array of integers
@@ -409,33 +308,8 @@ fn json_integers(values: impl Iterator<Item = usize>) -> String {
     format!("[{}]", values.join(","))
 }
 
-// The idiomatic methods; the page docs/benchmarks/libraries/radiate.md links each source.
-// Each problem type runs radiate's own example for it as it is (`ga`), and the recipe of radiate's
-// guide for its genome type, one solver per crossover the recipe names. The guide's "Best
-// Practices" (docs/source/alters/index.md, lines 30-38, in the v1.3.1 repository):
-//   "Start with conservative rates (0.01 for mutation, 0.5-0.8 for crossover)"
-//   "For continuous problems: Use Gaussian or Arithmetic mutators with Blend/Intermediate crossover"
-//   "For permutation problems: Use Swap/Scramble mutators with PMX or Shuffle crossover"
-//   "For binary problems: Use Uniform mutator with Multi-point or Uniform crossover"
-// Where the recipe leaves a choice, rule 6.2 decides: a preference the docs state, else radiate's
-// example for the problem type, else the default. So a recipe solver is the problem type's example
-// (its population and selectors) with the recipe's alterers:
-// - mutation rate 0.01, the stated starting rate;
-// - crossover rate: the stated range is 0.5-0.8; within it, the example's own crossover rate
-//   (knapsack, the engine default UniformCrossover(0.5), and Rastrigin 0.5, Rosenbrock 0.75); the
-//   TSP example's 0.4 is outside the range, so
-//   the permutation recipe takes the engine default crossover's 0.5 (engine/index.md, "Engine
-//   Defaults": UniformCrossover(0.5));
-// - the mutator, where the recipe names two: the one of the example (Swap in the TSP example,
-//   Arithmetic in the Rastrigin and Rosenbrock examples);
-// - MultiPointCrossover with 2 points (every radiate example of it), Blend and Intermediate with
-//   alpha 0.5 (the guide's snippets, docs/source/src/rust/alters/crossovers.rs, lines 6 and 11).
-const IDIOMATIC_BINARY: [&str; 3] = ["ga", "ga_uniform", "ga_multipoint"];
-const IDIOMATIC_PERMUTATION: [&str; 2] = ["ga", "ga_pmx"];
-const IDIOMATIC_REAL: [&str; 3] = ["ga", "ga_blend", "ga_intermediate"];
-
 // ---------------------------------------------------------------------------------------------
-// OneMax
+// OneMax 1000: the GA of rule 6.2 (DEAP's eaSimple) with radiate's own components
 // ---------------------------------------------------------------------------------------------
 
 fn run_onemax(args: &Args, seed: u64) {
@@ -444,208 +318,50 @@ fn run_onemax(args: &Args, seed: u64) {
         move |genotype: &Genotype<BitChromosome>| {
             let genes = genotype[0].as_slice();
             budget.record(onemax(genes.iter().map(|gene| *gene.allele())), || {
-                genes.iter().map(|gene| *gene.allele() as u8 as f64).collect()
+                genes
+                    .iter()
+                    .map(|gene| *gene.allele() as u8 as f64)
+                    .collect()
             })
         }
     };
-    if args.mode == "matched" {
-        // as DEAP's eaSimple: population 300, tournament of 3 (with replacement, like
-        // selTournament), two-point crossover 0.5, bit flip 1/size on 20% of the children,
-        // no elitism. All radiate's own selector and alterers. Differences:
-        // - offspring_fraction 1.0: every generation is 300 selected and altered copies,
-        //   no survivors, as eaSimple. max_age off: radiate by default replaces
-        //   individuals older than 20 generations with random ones, eaSimple doesn't.
-        // - crossover: radiate visits every child and with probability 0.5 crosses it
-        //   with a random other child (both change), DEAP crosses the disjoint pairs
-        //   (0,1), (2,3), ... with probability 0.5: the same expected 150 crossovers per
-        //   generation, but a child can be crossed more than once. radiate's cut points
-        //   are drawn from 0..size (a cut at 0 is a no-op), DEAP's from 1..size.
-        // - mutation: radiate has no per-individual mutation probability, so BitFlip
-        //   flips each bit with probability 0.2 / size: the same expected 0.2 flipped
-        //   bits per child, spread over more children (18% instead of 12.6% mutated).
-        // - evaluations: both evaluate only the changed children; DEAP also re-evaluates
-        //   a child it chose to mutate when no bit happened to flip.
-        let build = |budget: Arc<Budget>| {
-            GeneticEngine::builder()
-                .codec(BitCodec::vector(size))
-                .raw_fitness_fn(fitness(budget))
-                .population_size(300)
-                .offspring_fraction(1.0)
-                .max_age(usize::MAX)
-                .offspring_selector(TournamentSelector::new(3))
-                .alter(alters!(
-                    MultiPointCrossover::new(0.5, 2),
-                    BitFlipMutator::new(0.2 / size as f32)
-                ))
-                .build()
-        };
-        let report = |bits: &Vec<bool>| {
-            (
-                onemax(bits.iter().copied()),
-                json_integers(bits.iter().map(|&bit| bit as usize)),
-            )
-        };
-        run_single(args, seed, "ga", false, size as f64, build, report);
-        return;
-    }
-    for solver in IDIOMATIC_BINARY {
-        // radiate's binary example, the knapsack (examples/rust/knapsack, lines 11-18): a
-        // SubSetCodec, whose genome is a BitChromosome with one bit per item (here the items are
-        // the gene indices, and the fitness counts the bits), max_age 50, and the other engine
-        // defaults (population 100, roulette offspring selection, tournament of 3 for the
-        // survivors, offspring fraction 0.8)
-        let build = |budget: Arc<Budget>| {
-            let builder = GeneticEngine::builder()
-                .codec(SubSetCodec::new((0..size).collect::<Vec<usize>>()))
-                .raw_fitness_fn(fitness(budget))
-                .max_age(50);
-            match solver {
-                // the example as it is, with the default alterers UniformCrossover(0.5) and
-                // UniformMutator(0.1), which redraws each bit with probability 0.1 (flips it with
-                // 0.05)
-                "ga" => builder.build(),
-                // the binary recipe with Uniform crossover, at the example's 0.5
-                "ga_uniform" => builder
-                    .alter(alters!(UniformCrossover::new(0.5), UniformMutator::new(0.01)))
-                    .build(),
-                // the binary recipe with Multi-point crossover, 2 points, at the example's 0.5
-                _ => builder
-                    .alter(alters!(MultiPointCrossover::new(0.5, 2), UniformMutator::new(0.01)))
-                    .build(),
-            }
-        };
-        // the subset of items: the indices of the ones
-        let report = |items: &Vec<Arc<usize>>| {
-            let mut bits = vec![false; size];
-            for item in items {
-                bits[**item] = true;
-            }
-            (
-                onemax(bits.iter().copied()),
-                json_integers(bits.iter().map(|&bit| bit as usize)),
-            )
-        };
-        run_single(args, seed, solver, false, size as f64, build, report);
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// N-Queens
-// ---------------------------------------------------------------------------------------------
-
-fn run_nqueens(args: &Args, seed: u64) {
-    let size = args.size;
-    for solver in IDIOMATIC_PERMUTATION {
-        let build = |budget: Arc<Budget>| {
-            // radiate's permutation example (examples/rust/TSP, lines 13-19): PermutationCodec,
-            // population 250, minimizing, the other engine defaults (roulette offspring
-            // selection, tournament of 3 for the survivors). radiate's own N-Queens example
-            // (examples/rust/nqueens) evolves integers with row conflicts in the fitness, not a
-            // permutation, so it doesn't apply here.
-            let builder = GeneticEngine::builder()
-                .codec(PermutationCodec::new((0..size).collect()))
-                .raw_fitness_fn(move |genotype: &Genotype<PermutationChromosome<usize>>| {
-                    let genes = genotype[0].as_slice();
-                    budget.record(nqueens(genes.iter().map(|gene| *gene.allele())), || {
-                        genes.iter().map(|gene| *gene.allele() as f64).collect()
-                    })
-                })
-                .minimizing()
-                .population_size(250);
-            match solver {
-                // the example as it is: PMXCrossover(0.4) and SwapMutator(0.05)
-                "ga" => builder
-                    .alter(alters!(PMXCrossover::new(0.4), SwapMutator::new(0.05)))
-                    .build(),
-                // the permutation recipe: PMX at 0.5 and Swap (the example's mutator) at 0.01.
-                // Shuffle crossover is left out: it swaps genes between the parents position by
-                // position, so its children aren't permutations, and the engine replaces them
-                // with random ones (radiate-engines-1.3.1/src/steps/filter.rs)
-                _ => builder
-                    .alter(alters!(PMXCrossover::new(0.5), SwapMutator::new(0.01)))
-                    .build(),
-            }
-        };
-        let report = |order: &Vec<usize>| {
-            (nqueens(order.iter().copied()), json_integers(order.iter().copied()))
-        };
-        run_single(args, seed, solver, true, 0.0, build, report);
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Rastrigin, Rosenbrock and Ackley
-// ---------------------------------------------------------------------------------------------
-
-fn run_real(args: &Args, seed: u64) {
-    let size = args.size;
-    let (function, range) = real_problem(&args.problem).unwrap();
-    let unimodal = args.problem == "rosenbrock";
-    for solver in IDIOMATIC_REAL {
-        let range = range.clone();
-        let (lower, upper) = (range.start, range.end);
-        let build = |budget: Arc<Budget>| {
-            // the bounds: FloatCodec::vector draws the genes in the range and sets it as their
-            // bounds; every alterer writes through FloatGene::set_allele, which clamps to them
-            // (radiate-core-1.3.1/src/genome/chromosomes/float.rs, lines 82-85)
-            let builder = GeneticEngine::builder()
-                .codec(FloatCodec::vector(size, range.clone()))
-                .raw_fitness_fn(move |genotype: &Genotype<FloatChromosome<f64>>| {
-                    with_alleles(genotype, |x| {
-                        budget.check_bounds(x, lower, upper);
-                        budget.record(function(x), || x.to_vec())
-                    })
-                })
-                .minimizing();
-            let builder = if unimodal {
-                // radiate's Rosenbrock example (examples/rust/rosenbrock, lines 13-20): Boltzmann
-                // offspring selection with temperature 4, the other engine defaults (population
-                // 100, tournament of 3 for the survivors)
-                builder.offspring_selector(BoltzmannSelector::new(4.0))
-            } else {
-                // radiate's Rastrigin example (examples/rust/rastrigin, lines 10-17, also on the
-                // guide's examples page): population 500, the other engine defaults (roulette
-                // offspring selection, tournament of 3). radiate has no Ackley example; the
-                // Rastrigin example is its example of a multimodal real function, so Ackley uses
-                // it too.
-                builder.population_size(500)
-            };
-            // the crossover rate of the example: Rosenbrock's MeanCrossover(0.75), Rastrigin's
-            // UniformCrossover(0.5)
-            let rate = if unimodal { 0.75 } else { 0.5 };
-            match solver {
-                // the examples as they are: MeanCrossover(0.75) and ArithmeticMutator(0.1)
-                // (Rosenbrock), UniformCrossover(0.5) and ArithmeticMutator(0.01) (Rastrigin)
-                "ga" if unimodal => builder
-                    .alter(alters!(MeanCrossover::new(0.75), ArithmeticMutator::new(0.1)))
-                    .build(),
-                "ga" => builder
-                    .alter(alters!(UniformCrossover::new(0.5), ArithmeticMutator::new(0.01)))
-                    .build(),
-                // the continuous recipe with Blend crossover and Arithmetic mutation (the
-                // examples' mutator) at 0.01
-                "ga_blend" => builder
-                    .alter(alters!(BlendCrossover::new(rate, 0.5), ArithmeticMutator::new(0.01)))
-                    .build(),
-                // the continuous recipe with Intermediate crossover and Arithmetic mutation at
-                // 0.01
-                _ => builder
-                    .alter(alters!(
-                        IntermediateCrossover::new(rate, 0.5),
-                        ArithmeticMutator::new(0.01)
-                    ))
-                    .build(),
-            }
-        };
-        let report = |x: &Vec<f64>| (function(x), json_row(x));
-        run_single(args, seed, solver, true, 0.01, build, report);
-    }
-}
-
-/// A JSON array of numbers at full precision
-fn json_row(row: &[f64]) -> String {
-    let values: Vec<String> = row.iter().map(|v| format!("{v:?}")).collect();
-    format!("[{}]", values.join(","))
+    // as DEAP's eaSimple: population 300, tournament of 3 (with replacement, like selTournament),
+    // two-point crossover 0.5, bit flip 1/size on 20% of the children, no elitism. All radiate's
+    // own selector and alterers. Differences:
+    // - offspring_fraction 1.0: every generation is 300 selected and altered copies, no
+    //   survivors, as eaSimple. max_age off: radiate by default replaces individuals older than
+    //   20 generations with random ones, eaSimple doesn't.
+    // - crossover: radiate visits every child and with probability 0.5 crosses it with a random
+    //   other child (both change), DEAP crosses the disjoint pairs (0,1), (2,3), ... with
+    //   probability 0.5: the same expected 150 crossovers per generation, but a child can be
+    //   crossed more than once. radiate's cut points are drawn from 0..size (a cut at 0 is a
+    //   no-op), DEAP's from 1..size.
+    // - mutation: radiate has no per-individual mutation probability, so BitFlip flips each bit
+    //   with probability 0.2 / size: the same expected 0.2 flipped bits per child, spread over
+    //   more children (18% instead of 12.6% mutated).
+    // - evaluations: both evaluate only the changed children; DEAP also re-evaluates a child it
+    //   chose to mutate when no bit happened to flip.
+    let build = |budget: Arc<Budget>| {
+        GeneticEngine::builder()
+            .codec(BitCodec::vector(size))
+            .raw_fitness_fn(fitness(budget))
+            .population_size(300)
+            .offspring_fraction(1.0)
+            .max_age(usize::MAX)
+            .offspring_selector(TournamentSelector::new(3))
+            .alter(alters!(
+                MultiPointCrossover::new(0.5, 2),
+                BitFlipMutator::new(0.2 / size as f32)
+            ))
+            .build()
+    };
+    let report = |bits: &Vec<bool>| {
+        (
+            onemax(bits.iter().copied()),
+            json_integers(bits.iter().map(|&bit| bit as usize)),
+        )
+    };
+    run_single(args, seed, "ga", size as f64, build, report);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -668,25 +384,18 @@ fn parse_numbers(line: &str) -> Vec<f64> {
 }
 
 fn values(problem: &str, _size: usize) {
+    assert_eq!(problem, "onemax", "radiate runs OneMax only");
     for line in std::io::stdin().lock().lines() {
         let line = line.expect("stdin");
         if line.trim().is_empty() {
             continue;
         }
         let x = parse_numbers(&line);
-        let value = match problem {
-            "onemax" => onemax(x.iter().map(|&v| v != 0.0)),
-            "nqueens" => nqueens(x.iter().map(|&v| v as usize)),
-            other => real_problem(other).expect("a known problem").0(&x),
-        };
-        println!("{value:?}");
+        println!("{:?}", onemax(x.iter().map(|&v| v != 0.0)));
     }
 }
 
 fn main() {
-    // the shifts are computed before any run
-    LazyLock::force(&RASTRIGIN_SHIFT);
-    LazyLock::force(&ACKLEY_SHIFT);
     let raw: Vec<String> = std::env::args().skip(1).collect();
     if raw.len() == 3 && raw[0] == "values" {
         values(&raw[1], raw[2].parse().expect("size"));
@@ -707,17 +416,12 @@ fn main() {
         max_evaluations: raw[5].parse().expect("max_evaluations"),
         max_seconds: raw[6].parse().expect("max_seconds"),
     };
+    // the matched suite's OneMax 1000; anything else prints nothing
+    if (args.problem.as_str(), args.size, args.mode.as_str()) != ("onemax", 1000, "matched") {
+        return;
+    }
     for seed in args.seed_from..=args.seed_to {
-        match args.problem.as_str() {
-            "onemax" => run_onemax(&args, seed),
-            "nqueens" => run_nqueens(&args, seed),
-            "rastrigin" | "rosenbrock" | "ackley" => run_real(&args, seed),
-            // unsupported: print nothing
-            other => {
-                eprintln!("radiate adapter: unsupported problem {other}");
-                return;
-            }
-        }
+        run_onemax(&args, seed);
     }
 }
 
@@ -726,25 +430,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fitness_values() {
-        // 0 at the optimum, and the values of problems.py at fixed points
-        let x: Vec<f64> = (0..10).map(|i| 0.5 * (i % 7) as f64 - 1.5).collect();
-        assert!(rastrigin(&RASTRIGIN_SHIFT[..10]).abs() < 1e-12);
-        assert!(ackley(&ACKLEY_SHIFT[..10]).abs() < 1e-12);
-        assert_eq!(RASTRIGIN_SHIFT[0], -3.20380198019802);
-        assert_eq!(ACKLEY_SHIFT[4], 3.893227722772275);
-        assert!(rosenbrock(&[1.0; 10]).abs() < 1e-12);
-        assert!((rastrigin(&x) - 145.90969988928046).abs() < 1e-9);
-        assert!((ackley(&x) - 20.92235706225884).abs() < 1e-9);
+    fn fitness_value() {
         assert_eq!(onemax([true, false, true].into_iter()), 2.0);
-        // all 8 queens on one diagonal: 7 conflicts
-        assert_eq!(nqueens(0..8), 7.0);
     }
 
     #[test]
     fn parse_solutions() {
         assert_eq!(parse_numbers("[1, 0,true]"), vec![1.0, 0.0, 1.0]);
         assert_eq!(parse_numbers("[-0.5,1e-7]"), vec![-0.5, 1e-7]);
-        assert_eq!(json_row(&[0.1, -2.0]), "[0.1,-2.0]");
     }
 }
