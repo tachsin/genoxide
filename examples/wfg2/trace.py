@@ -12,9 +12,10 @@ import genoxide as gx
 class Trace:
     """Records the runs through ``on_generation`` when ``GENOXIDE_TRACE`` is set."""
 
-    def __init__(self, reference):
+    def __init__(self, reference, regions):
         self.path = os.environ.get("GENOXIDE_TRACE")
         self.reference = reference
+        self.regions = regions
         # per algorithm, after each generation: the evaluations, the front and its hypervolume
         self.series = {}
 
@@ -60,11 +61,19 @@ class Trace:
             "plot": "front-2d",
             "problem": {
                 "objectives": ["f1", "f2"],
-                "true_front": gx.problems.Wfg2(objectives=2).optimal_front(100).tolist(),
+                # the front in its six pieces, so the plot doesn't join them across the gaps
+                "true_front": pieces(
+                    gx.problems.Wfg2(objectives=2).optimal_front(100).tolist(), self.regions
+                ),
                 "series": list(self.series),
             },
         }
         write(self.path, settings, frames.to_list())
+
+
+def pieces(front, regions):
+    """The points of a front on each region (f1 within 0.01 of the region's range)."""
+    return [[p for p in front if low - 0.01 <= p[0] <= high + 0.01] for low, high in regions]
 
 
 # ---- the same in every example's trace ----------------------------------------------------------

@@ -42,7 +42,7 @@ REGIONS = [
 problem = gx.problems.Wfg2(objectives=2)
 optimal = problem.optimal_front(500)
 # with GENOXIDE_TRACE=<file>, a trace of the runs for the plot on the example's page
-trace = Trace(REFERENCE)
+trace = Trace(REFERENCE, REGIONS)
 
 
 def report(name, generations, front):

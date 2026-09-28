@@ -23,6 +23,14 @@ function frontPath(points, x, y) {
   return d;
 }
 
+/** One piece of a true front, sorted by its first objective, as a path. */
+function piecePath(points, x, y) {
+  return [...points]
+    .sort((a, b) => a[0] - b[0])
+    .map((p, i) => `${i ? "L" : "M"}${x(p[0]).toFixed(1)} ${y(p[1]).toFixed(1)}`)
+    .join("");
+}
+
 /**
  * `front-2d`: each algorithm's front in objective space over the true
  * front; infeasible points hollow. The axes follow the points with a short
@@ -38,7 +46,11 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
   const names = problem.series ?? Object.keys(fronts);
   const palette = categorical(dark);
   const objectives = problem.objectives ?? ["f1", "f2"];
-  const trueFront = Array.isArray(problem.true_front) ? problem.true_front : null;
+  // the true front: its points, or a disconnected front given in pieces (a list of point lists),
+  // each drawn on its own so no line crosses a gap
+  const truePieces =
+    Array.isArray(problem.true_front) && Array.isArray(problem.true_front[0]?.[0]) ? problem.true_front : null;
+  const trueFront = truePieces ? truePieces.flat() : Array.isArray(problem.true_front) ? problem.true_front : null;
   // a front of separate points (e.g. ZDT5's, on a binary genome) is drawn as rings, not a line
   const discrete = problem.true_front_kind === "points";
 
@@ -126,7 +138,14 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
                   ))
                 : null}
               {trueFront && !discrete ? (
-                <path d={frontPath(trueFront, x, y)} fill="none" className="stroke-base-content/45" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d={truePieces ? truePieces.map((piece) => piecePath(piece, x, y)).join("") : frontPath(trueFront, x, y)}
+                  fill="none"
+                  className="stroke-base-content/45"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               ) : null}
               {points.map((q, i) => (
                 <Marker
