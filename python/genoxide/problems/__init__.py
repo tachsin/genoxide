@@ -102,6 +102,14 @@ __all__ = [
     "Branin",
     "GoldsteinPrice",
     "SixHumpCamel",
+    "Hartmann3",
+    "Hartmann6",
+    "Shekel5",
+    "Shekel7",
+    "Shekel10",
+    "Easom",
+    "Eggholder",
+    "SchafferF6",
     # multi-objective
     "Zdt1",
     "Zdt2",
@@ -631,6 +639,182 @@ class SixHumpCamel(Problem):
     """
 
     _type: ClassVar[str] = "six_hump_camel"
+
+
+@dataclass(frozen=True)
+class Hartmann3(Problem):
+    """Hartmann's function in 3 dimensions, ``−Σᵢ₌₁⁴ cᵢ exp(−Σⱼ aᵢⱼ (xⱼ − pᵢⱼ)²)``: four
+    Gaussian wells of different widths and depths.
+
+    c = (1, 1.2, 3, 3.2); the rows of a are (3, 10, 30), (0.1, 10, 35), (3, 10, 30) and
+    (0.1, 10, 35), and those of p (0.3689, 0.1170, 0.2673), (0.4699, 0.4387, 0.7470),
+    (0.1091, 0.8732, 0.5547) and (0.03815, 0.5743, 0.8828).
+
+    Bounds [0, 1]³; minimum −3.862782147820755 at (0.11461433858967196, 0.5556488499718569,
+    0.8525469535208658), where the gradient is 0, computed by Newton's method; −3.86278 is the
+    value later papers quote from Dixon and Szegö. The best of the local minima that searches
+    from random points find, but not proven global (``optimum.proven`` is False).
+
+    The form is Hartman's: Hartman, J. K. (1972). Some Experiments in Global Optimization. Report
+    NPS-55HH72051A, Naval Postgraduate School, published in Naval Research Logistics Quarterly
+    20(3): 569-576 (1973), with random constants. These constants are those of Dixon, L. C. W.
+    and Szegö, G. P. (1978). The global optimisation problem: an introduction. In Towards Global
+    Optimisation 2, North-Holland: 1-15, as Yao, Liu and Lin (1999, table XII) reprint them.
+    """
+
+    _type: ClassVar[str] = "hartmann3"
+
+
+@dataclass(frozen=True)
+class Hartmann6(Problem):
+    """Hartmann's function in 6 dimensions, ``−Σᵢ₌₁⁴ cᵢ exp(−Σⱼ aᵢⱼ (xⱼ − pᵢⱼ)²)``: four
+    Gaussian wells of different widths and depths, in two basins of nearly the same depth.
+
+    c = (1, 1.2, 3, 3.2); the rows of a are (10, 3, 17, 3.5, 1.7, 8), (0.05, 10, 17, 0.1, 8, 14),
+    (3, 3.5, 1.7, 10, 17, 8) and (17, 8, 0.05, 10, 0.1, 14), and those of p
+    (0.1312, 0.1696, 0.5569, 0.0124, 0.8283, 0.5886),
+    (0.2329, 0.4135, 0.8307, 0.3736, 0.1004, 0.9991),
+    (0.2348, 0.1451, 0.3522, 0.2883, 0.3047, 0.6650) and
+    (0.4047, 0.8828, 0.8732, 0.5743, 0.1091, 0.0381).
+
+    Bounds [0, 1]⁶; minimum −3.3223680114155147 at (0.20168951100670543, 0.15001069182345797,
+    0.476873974221897, 0.2753324304940561, 0.31165161660011326, 0.6573005340656204), computed by
+    Newton's method; −3.32237 is the value later papers quote from Dixon and Szegö. The other
+    local minimum, −3.2031619, draws a third of local searches. Not proven global
+    (``optimum.proven`` is False).
+
+    The form is Hartman's (1972, 1973), the constants Dixon and Szegö's (1978), as Yao, Liu and
+    Lin (1999, table XIII) reprint them but for p₃₂, which they print as 0.1415.
+    """
+
+    _type: ClassVar[str] = "hartmann6"
+
+
+@dataclass(frozen=True)
+class Shekel5(Problem):
+    """Shekel's function with m = 5 wells, in 4 dimensions (SQRIN5).
+
+    Minimum −10.153199679058227 at (4.000037152819676, 4.00013327659156, 4.000037152819676,
+    4.00013327659156); later papers quote −10.1532 from Dixon and Szegö.
+
+    The function is ``−Σᵢ₌₁ᵐ 1 / ((x − aᵢ)ᵀ(x − aᵢ) + cᵢ)``, a well at each of the first m of
+    the points a = (4, 4, 4, 4), (1, 1, 1, 1), (8, 8, 8, 8), (6, 6, 6, 6), (3, 7, 3, 7),
+    (2, 9, 2, 9), (5, 5, 3, 3), (8, 1, 8, 1), (6, 2, 6, 2), (7, 3.6, 7, 3.6), with
+    c = (0.1, 0.2, 0.2, 0.4, 0.4, 0.6, 0.3, 0.7, 0.5, 0.5). Bounds [0, 10]⁴. The minimum is near
+    (4, 4, 4, 4) but not at it; computed by Newton's method, and not proven global
+    (``optimum.proven`` is False).
+
+    Shekel, J. (1971). Test functions for multimodal search techniques. Proceedings of the 5th
+    Annual Princeton Conference on Information Sciences and Systems, and Dixon, L. C. W. and
+    Szegö, G. P. (1978). The global optimisation problem: an introduction. In Towards Global
+    Optimisation 2, North-Holland: 1-15. Neither is online: the constants as Yao, Liu and Lin
+    (1999, table XIV) reprint them.
+    """
+
+    _type: ClassVar[str] = "shekel5"
+
+
+@dataclass(frozen=True)
+class Shekel7(Problem):
+    """Shekel's function with m = 7 wells, in 4 dimensions (SQRIN7).
+
+    Minimum −10.40294056681866 at (4.000572916185823, 4.000689366185305, 3.9994897088591506,
+    3.9996061588586316); later papers quote −10.4029 from Dixon and Szegö.
+
+    The function is ``−Σᵢ₌₁ᵐ 1 / ((x − aᵢ)ᵀ(x − aᵢ) + cᵢ)``, a well at each of the first m of
+    the points a = (4, 4, 4, 4), (1, 1, 1, 1), (8, 8, 8, 8), (6, 6, 6, 6), (3, 7, 3, 7),
+    (2, 9, 2, 9), (5, 5, 3, 3), (8, 1, 8, 1), (6, 2, 6, 2), (7, 3.6, 7, 3.6), with
+    c = (0.1, 0.2, 0.2, 0.4, 0.4, 0.6, 0.3, 0.7, 0.5, 0.5). Bounds [0, 10]⁴. The minimum is near
+    (4, 4, 4, 4) but not at it; computed by Newton's method, and not proven global
+    (``optimum.proven`` is False).
+
+    Shekel, J. (1971). Test functions for multimodal search techniques. Proceedings of the 5th
+    Annual Princeton Conference on Information Sciences and Systems, and Dixon, L. C. W. and
+    Szegö, G. P. (1978). The global optimisation problem: an introduction. In Towards Global
+    Optimisation 2, North-Holland: 1-15. Neither is online: the constants as Yao, Liu and Lin
+    (1999, table XIV) reprint them.
+    """
+
+    _type: ClassVar[str] = "shekel7"
+
+
+@dataclass(frozen=True)
+class Shekel10(Problem):
+    """Shekel's function with m = 10 wells, in 4 dimensions (SQRIN10).
+
+    Minimum −10.536409816692043 at (4.000746531592046, 4.000592934138532, 3.9996633980403224,
+    3.9995098005868077); later papers quote −10.5364 from Dixon and Szegö.
+
+    The function is ``−Σᵢ₌₁ᵐ 1 / ((x − aᵢ)ᵀ(x − aᵢ) + cᵢ)``, a well at each of the first m of
+    the points a = (4, 4, 4, 4), (1, 1, 1, 1), (8, 8, 8, 8), (6, 6, 6, 6), (3, 7, 3, 7),
+    (2, 9, 2, 9), (5, 5, 3, 3), (8, 1, 8, 1), (6, 2, 6, 2), (7, 3.6, 7, 3.6), with
+    c = (0.1, 0.2, 0.2, 0.4, 0.4, 0.6, 0.3, 0.7, 0.5, 0.5). Bounds [0, 10]⁴. The minimum is near
+    (4, 4, 4, 4) but not at it; computed by Newton's method, and not proven global
+    (``optimum.proven`` is False).
+
+    Shekel, J. (1971). Test functions for multimodal search techniques. Proceedings of the 5th
+    Annual Princeton Conference on Information Sciences and Systems, and Dixon, L. C. W. and
+    Szegö, G. P. (1978). The global optimisation problem: an introduction. In Towards Global
+    Optimisation 2, North-Holland: 1-15. Neither is online: the constants as Yao, Liu and Lin
+    (1999, table XIV) reprint them.
+    """
+
+    _type: ClassVar[str] = "shekel10"
+
+
+@dataclass(frozen=True)
+class Easom(Problem):
+    """Easom's function, ``−cos x₁ cos x₂ exp(−((x₁ − π)² + (x₂ − π)²))``: a single narrow well
+    in a flat plane.
+
+    Bounds [-100, 100]²; minimum −1 at (π, π), the global minimum: both factors are at most 1 in
+    absolute value, and the exponential is 1 only at (π, π). Farther than 4.8 from it, the value
+    is within 1e-10 of 0.
+
+    Easom, E. E. (1990). A Survey of Global Optimization Techniques. M.Eng. thesis, University of
+    Louisville. The thesis couldn't be read: definition and bounds as restated in Jamil and Yang
+    (2013, function 50); not yet checked against the original (#168).
+    """
+
+    _type: ClassVar[str] = "easom"
+
+
+@dataclass(frozen=True)
+class Eggholder(Problem):
+    """The eggholder function,
+    ``−(x₂ + 47) sin √|x₂ + x₁ / 2 + 47| − x₁ sin √|x₁ − (x₂ + 47)|``: deep local minima all
+    over, the deepest at the edge of the box.
+
+    Bounds [-512, 512]²; minimum −959.6406627208508 at (512, 404.2318051137578), on the bound,
+    computed by Newton's method; the next, −956.9182316, inside the box at (482.35331, 432.87900).
+    Not proven global (``optimum.proven`` is False).
+
+    Whitley, D., Mathias, K., Rana, S. and Dzubera, J. (1996). Evaluating evolutionary algorithms.
+    Artificial Intelligence 85(1-2): 245-276, section 4.2, where it is F101, on [−512, 511] (where
+    the minimum is −956.9182). The name and the bounds [−512, 512] are Mishra's (2006, MPRA paper
+    2718).
+    """
+
+    _type: ClassVar[str] = "eggholder"
+
+
+@dataclass(frozen=True)
+class SchafferF6(Problem):
+    """Schaffer's F6, ``0.5 + (sin² √(x₁² + x₂²) − 0.5) / (1 + 0.001 (x₁² + x₂²))²``: rings of
+    local minima around the global one.
+
+    Bounds [-100, 100]²; minimum 0 at the origin, the global minimum: the numerator is at least
+    −0.5 and the denominator at least 1. The first ring of local minima, at a distance of
+    3.1384848 from the origin, has 0.0097159.
+
+    Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control
+    parameters affecting online performance of genetic algorithms for function optimization.
+    Proceedings of the Third International Conference on Genetic Algorithms: 51-60. Definition
+    and bounds as Whitley, Mathias, Rana and Dzubera (1996, table 1, F9) and the CEC 2005 report
+    restate it; not yet checked against the original (#168).
+    """
+
+    _type: ClassVar[str] = "schaffer_f6"
 
 
 # ---- multi-objective problems -------------------------------------------------------------------
