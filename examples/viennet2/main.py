@@ -11,15 +11,18 @@ page, with trace.py.
     python examples/viennet2/main.py
 """
 
+import numpy as np
+
 import genoxide as gx
 
 from trace import Trace
 
-# the reference point of the hypervolume: the nadir point (4.2452, −16.4766, −12.0531) plus a
-# tenth of each objective's range on the front, whose ideal point is (3, −17, −13)
-REFERENCE = [4.3697, -16.4242, -11.9584]
-
 problem = gx.problems.Viennet2()
+# the reference point of the hypervolume: the nadir point (4.2452, −16.4766, −12.0531) plus
+# a tenth of each objective's range on the front, from the ideal point (3, −17, −13),
+# rounded to 4 decimals: (4.3697, −16.4242, −11.9584)
+ideal, nadir = problem.ideal_point, problem.nadir_point
+REFERENCE = (np.round((nadir + (nadir - ideal) / 10) * 1e4) / 1e4).tolist()
 nsga3 = gx.Nsga3(
     problem.genome,
     objectives=problem.objectives,

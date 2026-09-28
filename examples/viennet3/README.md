@@ -6,7 +6,7 @@ reference: "Viennet, R., Fonteix, C. and Marc, I. (1996). Multicriteria optimiza
 reference_url: https://doi.org/10.1080/00207729608929211
 optimum: "not known in closed form: two curves; hypervolume about 5.3255 (reference point (9.016, 17.2407, 0.2036))"
 languages: [rust, python]
-order: 108
+order: 111
 ---
 
 # Viennet 3
@@ -52,8 +52,10 @@ No optimal solution has r² between 1.50 and 4.19: a point of the outer curve be
 in all three objectives.
 
 The ideal point, the best value of each objective on the front, is (0, 15, −0.1). The nadir point,
-the worst, is (8.1964, 17.0370, 0.1760): f₁'s local maximum at r² = 14π/3, f₂ at the origin, and f₃
-at the start of the outer curve, r² = 4π/3. genoxide doesn't give them.
+the worst, is (8.1964, 17.0370, 0.1760): f₁'s local maximum at r² = 14π/3, 7π/3 + √3/2; f₂ at the
+origin, 460/27; and f₃ at the start of the outer curve, r² = 4π/3, where it's
+1/(1 + 4π/3) − 1.1 exp(−4π/3). genoxide's `ideal_point` and `nadir_point` give both, and the
+example computes its reference point from them.
 
 ## What makes it hard
 
@@ -104,9 +106,9 @@ the origin, with r² < 3, or farther out: on each of the two curves, or next to 
 
 The second gives the front's hypervolume: the volume that it dominates, up to a reference point.
 Larger is better. The reference point here is (9.016, 17.2407, 0.2036): the nadir point plus a tenth
-of each objective's range from the ideal point, so that the extreme solutions count too. For the
-whole front, the hypervolume is about 5.3255: 43,192 points of the two curves give 5.3254, and a
-4,001 × 4,001 grid of the variables gives 5.3255.
+of each objective's range from the ideal point, so that the extreme solutions count too, rounded to
+4 decimals. For the whole front, the hypervolume is about 5.3255: 43,192 points of the two curves
+give 5.3254, and a 4,001 × 4,001 grid of the variables gives 5.3255.
 
 The test problem calls the platform's sin and exp, whose last bit can differ between operating
 systems. The example prints 5 significant digits, and gives the same output on Windows and Linux.

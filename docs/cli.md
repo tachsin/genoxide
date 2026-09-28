@@ -117,7 +117,7 @@ Set exactly one of `command` and `builtin`.
 |---|---|---|---|
 | `"ga"` | any | `population_size`, `select`, `crossover`, `mutate` | `crossover_rate` (0.9), `mutation_rate` (1.0), `scheme` (generational, `elitism = 1`) |
 | `"steady-ga"` | any | as `"ga"` | as `"ga"`, without `scheme` |
-| `"de"` | real | | `population_size` (100), `l_shade` |
+| `"de"` | real | | `population_size` (100), `l_shade`, `strategy` (`{ max_p = 0.2, archive = 1.0 }`), `control` (`{ memory = 100 }`), `restarts` (`{ tolerance = 1e-12, patience = 200 }`) |
 | `"cmaes"` | real | | `population_size` (4 + ⌊3 ln n⌋), `restarts` (`"never"`), `initial_step` (0.3) |
 | `"pso"` | real | `population_size` | `ring` (off: the whole swarm) |
 | `"local-search"` | any | `neighbor` (a mutation) | `neighbors` (1), `acceptance` (`not-worse`), `restart` (off) |
@@ -128,6 +128,7 @@ Set exactly one of `command` and `builtin`.
 - `crossover_rate` and `mutation_rate`: 0 to 1, the probability for each pair of parents and each child. They can't both be 0. `mutation_rate` can't be 0 with the crossover `none`.
 - `nsga2`: 2 to 6 objectives. It has no `mutation_rate`: every child is mutated.
 - `l_shade = <evaluations>`: L-SHADE, for a run of that many evaluations, at least 1. The default population becomes max(18 × genes, 4), and shrinks linearly to 4 over the evaluations. `population_size` sets the initial size instead. The run doesn't stop at the budget by itself: set `stop.evaluations` to the same number.
+- `de`: SHADE's settings by default, with genoxide's restarts. `strategy` builds the mutant vectors: `"rand1"`, `"best1"`, `{ p, archive }` (current-to-pbest/1, `pbest` among the best `p` of the population, 0 < p ≤ 1, and an archive of `archive` times the population, 0 or more) or `{ max_p, archive }` (the same with a random `p` per trial up to `max_p`, as in SHADE). `control` gives F and CR: `{ f, cr }` (fixed, 0 < f ≤ 2, 0 ≤ cr ≤ 1), `{ min_f, max_f, cr }` (a random F per trial, 0 < min_f ≤ max_f ≤ 2), `{ c }` (JADE's adaptation, 0 < c ≤ 1) or `{ memory }` (SHADE's, 1 to 2^24). `restarts` is `"never"` or `{ tolerance, patience }`: all but the best are replaced when every gene's values are within `tolerance` of its range of each other and the scores within `tolerance` relative to the best (0 or more), or after `patience` generations without a better best (at least 1). With `l_shade`, they replace L-SHADE's settings, whose restarts are `"never"`.
 - `cmaes`: n is the number of genes whose bounds differ. `restarts` is `"never"`, `"ipop"` or `"bipop"`. `initial_step` is the initial step size as a fraction of each gene's range, greater than 0 and at most 1.
 - `ring = <neighbors>`: a ring topology, with that many neighbors on each side, at least 1.
 - `neighbors`: the neighbors evaluated per step, 1 to 2^24.

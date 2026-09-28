@@ -81,9 +81,9 @@ the curve rather than across it. With 25 seeds, CMA-ES met the target on 24 runs
 21,728 evaluations (at most 82,880). The other run converged 8.7e-8 above f*, still a success by the
 report's criterion; with IPOP restarts (Auger and Hansen, 2005, IEEE CEC 2005: 1769-1776), all 25
 met the target. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default
-differential evolution, met it on 1 of 25 runs. Its restarts replace every individual but the best
-once the scores agree within 1e-8 relative to the best, about 5e-5 here. The other runs ended with
-errors from 2.5e-7 to 7.5e-6, and one at 45. Without the restarts, an option of the Rust API, SHADE
+differential evolution, met it on 24 of 25 runs, after a median of 148,000 evaluations (at most
+246,100). The other run found a feasible solution 45 above f*, and then restarted every 200
+generations without finding a better one. Without restarts (`de::Restarts::Never`, or `restarts="never"` in Python), SHADE
 met the target on all 25, after a median of 150,600 evaluations.
 
 ## Output

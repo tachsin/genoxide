@@ -6,7 +6,7 @@ reference: "Viennet, R., Fonteix, C. and Marc, I. (1996). Multicriteria optimiza
 reference_url: https://doi.org/10.1080/00207729608929211
 optimum: "not known in closed form; hypervolume about 0.7744 (reference point (4.3697, −16.4242, −11.9584))"
 languages: [rust, python]
-order: 107
+order: 110
 ---
 
 # Viennet 2
@@ -43,8 +43,9 @@ Pareto front is its image, a curved triangle in the space of the objectives with
 table's rows. genoxide gives no closed form for it: `optimal_front` is `None`.
 
 The ideal point, the best value of each objective on the front, is (3, −17, −13). The nadir point,
-the worst, is (4.2452, −16.4766, −12.0531): f₁ and f₂ are worst at f₃'s minimum, and f₃ at f₁'s.
-The example derives both from the weighted sums; genoxide doesn't give them.
+the worst, is (883/208, −2109/128, −35858/2975) ≈ (4.2452, −16.4766, −12.0531): f₁ and f₂ are
+worst at f₃'s minimum, and f₃ at f₁'s. genoxide's `ideal_point` and `nadir_point` give both, and
+the example computes its reference point from them.
 
 ## What makes it hard
 
@@ -92,7 +93,7 @@ The front needs about 7 generations: then all 92 solutions are non-dominated, an
 One line: how many solutions are on the final front, and its hypervolume. The hypervolume is the
 volume that the front dominates, up to a reference point. Larger is better. The reference point
 here is (4.3697, −16.4242, −11.9584): the nadir point plus a tenth of each objective's range from
-the ideal point, so that the extreme solutions count too.
+the ideal point, so that the extreme solutions count too, rounded to 4 decimals.
 
 For the whole front, the hypervolume is about 0.7744: a 4,001 × 4,001 grid of the variables gives
 0.77436, and the minima of 80,601 weighted sums, from Das and Dennis's weights with 400 divisions,

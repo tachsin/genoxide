@@ -113,11 +113,10 @@ median, on a log scale, where f* is the best known value.
 ## Good results
 
 A gap of 0 to the best known value, −0.803619, is as good as anyone has found. The run gets within
-1e-8 of it after about 310,000 evaluations, and ends less than 1e-9 above it, at the report's
-solution to 3 decimals. g1 is active there, and g2 far from its limit: the sum of the variables is
-30, not 150.
+1e-8 of it after about 310,000 evaluations, and ends about 1e-15 above it, at the report's solution
+to 3 decimals. g1 is active there, and g2 far from its limit: the sum of the variables is 30, not
+150.
 
-After the population converges, genoxide restarts it; the median's curve jumps back up with each
-restart. The restarts search other valleys for the rest of the budget and find nothing better. A
-run can't prove that the best known value is the minimum, but none of the 20 SHADE runs above, nor
-the L-SHADE ones, beats it.
+The population doesn't restart: it goes on refining the best to the end of the budget, and its
+median's curve follows the best's down. A run can't prove that the best known value is the
+minimum, but none of the 20 SHADE runs above, nor the L-SHADE ones, beats it.

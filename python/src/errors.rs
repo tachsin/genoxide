@@ -72,6 +72,14 @@ fn python_name(setting: &str) -> &str {
         "topology" => "ring",
         // De's l_shade is genoxide's linear population size reduction
         "linear_reduction" => "l_shade",
+        // De's strategy and control: dicts with genoxide's names
+        "p" => "strategy.p",
+        "max_p" => "strategy.max_p",
+        "archive" => "strategy.archive",
+        "f" => "control.f",
+        "cr" => "control.cr",
+        "c" => "control.c",
+        "memory" => "control.memory",
         setting => setting,
     }
 }

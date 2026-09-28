@@ -10,15 +10,18 @@ page, with trace.py.
     python examples/poloni/main.py
 """
 
+import numpy as np
+
 import genoxide as gx
 
 from trace import Trace
 
-# the reference point of the hypervolume: about 10% of the front's range beyond its worst point
-# (16.77, 25)
-REFERENCE = [18.4, 27.5]
-
 problem = gx.problems.Poloni()
+# the reference point of the hypervolume: the nadir point, the front's worst point (16.77, 25),
+# plus a tenth of the front's range from the ideal point (1, 0), rounded up to a tenth:
+# (18.4, 27.5)
+ideal, nadir = problem.ideal_point, problem.nadir_point
+REFERENCE = (np.ceil((nadir + (nadir - ideal) / 10) * 10) / 10).tolist()
 # polynomial mutation at a rate of 1/2, one gene per child on average
 nsga2 = gx.Nsga2(
     problem.genome,

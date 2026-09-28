@@ -1,0 +1,3 @@
+92 solutions on the front, hypervolume 0.7414 (the whole front: 0.8074)
+IGD+ to the optimal front 0.02332
+the largest g on the front 0.01120

@@ -18,9 +18,14 @@ use genoxide::multi::indicator::hypervolume;
 use genoxide::multi::problems::{MultiProblem, Poloni};
 use genoxide::prelude::*;
 
-// the reference point of the hypervolume: about 10% of the front's range beyond its worst point
-// (16.77, 25)
-const REFERENCE: [f64; 2] = [18.4, 27.5];
+// the reference point of the hypervolume: the nadir point, the front's worst point (16.77, 25),
+// plus a tenth of the front's range from the ideal point (1, 0), rounded up to a tenth:
+// (18.4, 27.5)
+fn reference() -> [f64; 2] {
+    let (ideal, nadir) = (Poloni.ideal_point(), Poloni.nadir_point());
+    let (ideal, nadir) = (ideal.expect("known"), nadir.expect("known"));
+    std::array::from_fn(|j| ((nadir[j] + (nadir[j] - ideal[j]) / 10.0) * 10.0).ceil() / 10.0)
+}
 
 fn main() -> Result<()> {
     let problem = Poloni;
@@ -50,7 +55,7 @@ fn main() -> Result<()> {
 
     // the front isn't known: the non-dominated points of a 4001 × 4001 grid over the box give a
     // lower bound on its hypervolume
-    let volume = hypervolume(&front, &REFERENCE, &[Minimize; 2]);
+    let volume = hypervolume(&front, &reference(), &[Minimize; 2]);
     println!("hypervolume {volume:.2} (a fine grid: 444.57)");
     trace.write();
     Ok(())

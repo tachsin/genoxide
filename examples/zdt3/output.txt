@@ -1,0 +1,4 @@
+100 solutions on the front
+on the five pieces: 21, 26, 21, 18, 14
+IGD+ to the optimal front: 0.0020
+hypervolume 1.3274 (the whole front: 1.3318)

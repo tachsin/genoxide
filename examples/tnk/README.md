@@ -6,7 +6,7 @@ reference: "Tanaka, M., Watanabe, H., Furukawa, Y. and Tanino, T. (1995). GA-bas
 reference_url: https://doi.org/10.1109/ICSMC.1995.537993
 optimum: "a front in five pieces on the first constraint's boundary, from (0.0417, 1.0384) to (1.0384, 0.0417); hypervolume 0.6551 (reference point (1.2, 1.2))"
 languages: [rust, python]
-order: 98
+order: 102
 ---
 
 # TNK (Tanaka)

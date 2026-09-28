@@ -121,6 +121,10 @@ __all__ = [
 ]
 
 ObjectiveName = Literal["maximize", "minimize"]
+# De's settings, see De
+DeStrategy = Union[Literal["rand1", "best1"], dict[str, float]]
+DeControl = dict[str, float]
+DeRestarts = Union[Literal["never"], dict[str, float]]
 Bounds = Union[tuple[float, float], Sequence[tuple[float, float]]]
 
 
@@ -1183,13 +1187,14 @@ class De(_SingleObjective):
     a random p per trial between 2 / population and 0.2 and an archive of the population's size,
     SHADE's adaptation of F and CR with a memory of 100, and a population of 100. genoxide adds
     restarts, which aren't part of SHADE: every individual but the best is replaced when the
-    scores converge (within 1e-8, relative to the best) or the best doesn't improve for 200
-    generations.
+    population has converged, each gene's values within 1e-12 of its range of each other and the
+    scores within 1e-12 of the best, or when the best doesn't improve for 200 generations.
 
     With ``l_shade``, L-SHADE (Tanabe and Fukunaga, 2014) for a budget of that many evaluations:
     current-to-pbest/1 with p 0.11 and an archive of 2.6 times the population, SHADE's
     adaptation with a memory of 6, no restarts, and a population that shrinks linearly from its
     initial size to 4 over the budget. Stop the run at the same number of evaluations.
+    ``strategy``, ``control`` and ``restarts`` replace L-SHADE's.
 
     Parameters
     ----------
@@ -1200,6 +1205,42 @@ class De(_SingleObjective):
         18 times the number of genes (at least 4) by default.
     l_shade : int, optional
         L-SHADE's budget of evaluations, at least 1. None is SHADE.
+    strategy : str or dict, optional
+        How each mutant vector is built, for the individual x, from random other individuals r1,
+        r2 and r3 and the scale factor F:
+
+        - ``"rand1"``: ``r1 + F (r2 - r3)``, robust, explores well;
+        - ``"best1"``: ``best + F (r1 - r2)``, greedy: use it with a dither ``control``, or the
+          population can collapse onto one point;
+        - ``{"p": 0.1, "archive": 1.0}``: current-to-pbest/1 (JADE),
+          ``x + F (pbest - x) + F (r1 - r2)``, with ``pbest`` one of the best ``p`` fraction of
+          the population (0 < p <= 1) and ``r2`` also from an archive of replaced individuals,
+          ``archive`` times the population's size (0 or more, 0 for none);
+        - ``{"max_p": 0.2, "archive": 1.0}``: the same with a random p for every trial, between
+          2 / population and ``max_p`` (0 < max_p <= 1), as in SHADE.
+
+        None is SHADE's ``{"max_p": 0.2, "archive": 1.0}``.
+    control : dict, optional
+        Where F and CR (the probability that a gene comes from the mutant) come from:
+
+        - ``{"f": 0.5, "cr": 0.9}``: fixed, 0 < f <= 2 and 0 <= cr <= 1;
+        - ``{"min_f": 0.5, "max_f": 1.0, "cr": 0.9}``: dither, a random F between ``min_f`` and
+          ``max_f`` for every trial (0 < min_f <= max_f <= 2), and a fixed CR;
+        - ``{"c": 0.1}``: JADE's adaptation of their means, at the rate ``c`` (0 < c <= 1);
+        - ``{"memory": 100}``: SHADE's adaptation, with a memory of that many (F, CR) pairs, 1 to
+          2^24.
+
+        None is SHADE's ``{"memory": 100}``.
+    restarts : str or dict, optional
+        When the population starts over from new random individuals, all but the best:
+
+        - ``"never"``;
+        - ``{"tolerance": 1e-12, "patience": 200}``: when the population has converged, each
+          gene's values within ``tolerance`` times its range of each other and the scores
+          within ``tolerance`` of each other relative to the best (0 or more), or when the best
+          hasn't improved for ``patience`` generations (at least 1).
+
+        None is ``{"tolerance": 1e-12, "patience": 200}``, or ``"never"`` with ``l_shade``.
     objective : {"maximize", "minimize"}, default "maximize"
         Whether higher or lower scores are better.
     seed : int, optional
@@ -1213,6 +1254,9 @@ class De(_SingleObjective):
         *,
         population_size: int | None = None,
         l_shade: int | None = None,
+        strategy: DeStrategy | None = None,
+        control: DeControl | None = None,
+        restarts: DeRestarts | None = None,
         objective: ObjectiveName = "maximize",
         seed: int | None = None,
     ) -> None:
@@ -1220,6 +1264,9 @@ class De(_SingleObjective):
         self._objective = objective
         self.population_size = population_size
         self.l_shade = l_shade
+        self.strategy = strategy
+        self.control = control
+        self.restarts = restarts
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
@@ -1228,7 +1275,60 @@ class De(_SingleObjective):
             "population_size": _optional_whole("population_size", self.population_size),
             "seed": _optional_whole("seed", self.seed),
             "l_shade": _optional_whole("l_shade", self.l_shade),
+            "strategy": _de_setting("strategy", self.strategy, _DE_STRATEGIES, _DE_STRATEGY),
+            "control": _de_setting("control", self.control, _DE_CONTROLS, _DE_CONTROL),
+            "restarts": _de_setting("restarts", self.restarts, _DE_RESTARTS, _DE_RESTART),
         }
+
+
+# the forms of De's settings: the names without settings, and the keys of each dict with a
+# function that reads one value
+_Read = Callable[[str, Any], Any]
+_DE_STRATEGIES: tuple[tuple[str, ...], tuple[dict[str, _Read], ...]] = (
+    ("rand1", "best1"),
+    ({"p": _number, "archive": _number}, {"max_p": _number, "archive": _number}),
+)
+_DE_STRATEGY = (
+    '"rand1", "best1", {"p": ..., "archive": ...} or {"max_p": ..., "archive": ...}'
+)
+_DE_CONTROLS: tuple[tuple[str, ...], tuple[dict[str, _Read], ...]] = (
+    (),
+    (
+        {"f": _number, "cr": _number},
+        {"min_f": _number, "max_f": _number, "cr": _number},
+        {"c": _number},
+        {"memory": _whole},
+    ),
+)
+_DE_CONTROL = (
+    '{"f": ..., "cr": ...}, {"min_f": ..., "max_f": ..., "cr": ...}, {"c": ...} or '
+    '{"memory": ...}'
+)
+_DE_RESTARTS: tuple[tuple[str, ...], tuple[dict[str, _Read], ...]] = (
+    ("never",),
+    ({"tolerance": _number, "patience": _whole},),
+)
+_DE_RESTART = '"never" or {"tolerance": ..., "patience": ...}'
+
+
+def _de_setting(
+    name: str,
+    value: Any,
+    forms: tuple[tuple[str, ...], tuple[dict[str, _Read], ...]],
+    what: str,
+) -> str | dict[str, Any] | None:
+    """A setting of De: None for its default, one of the names, or a dict with exactly the keys
+    of one of the forms, each value read as ``name.key``; else a ValueError that names it."""
+    names, dicts = forms
+    if value is None:
+        return None
+    if isinstance(value, str) and value in names:
+        return value
+    if isinstance(value, dict):
+        for keys in dicts:
+            if set(value) == set(keys):
+                return {key: read(f"{name}.{key}", value[key]) for key, read in keys.items()}
+    raise ValueError(f"{name} is {what}, not {value!r}")
 
 
 class Cmaes(_SingleObjective):

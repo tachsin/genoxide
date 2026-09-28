@@ -130,10 +130,19 @@ pub enum Restarts {
     ///
     /// Restarts aren't part of JADE, SHADE or L-SHADE: they're genoxide's addition, so that a
     /// population that converged early goes on searching elsewhere instead of around one point.
+    ///
+    /// Converged means that the genomes are close, not only the scores: a population whose
+    /// scores agree but whose genes still differ goes on refining its best. Scores alone would
+    /// restart it too early where the scores are large, as around the minimum of CEC 2006's g04
+    /// (about −30665.5): there, scores within 1e-8 relative to the best still leave the best
+    /// about 1e-5 above the minimum.
     OnStagnation {
-        /// Converged: the scores of the population are within `tolerance` of each other,
-        /// relative to the best score (`max - min <= tolerance · (1 + |best|)`), e.g. 1e-8, and
-        /// so are their constraint violations (`max - min <= tolerance · (1 + min)`).
+        /// Converged: every gene's values in the population are within `tolerance` times the
+        /// gene's range of each other (`max - min <= tolerance · (upper - lower)`, like CMA-ES's
+        /// `TolX`), and so are the scores relative to the best score
+        /// (`max - min <= tolerance · (1 + |best|)`) and the constraint violations
+        /// (`max - min <= tolerance · (1 + min)`); e.g. 1e-12, 0 or more. A population with an
+        /// invalid individual hasn't converged.
         tolerance: f64,
         /// Stalled: the best score since the last restart hasn't improved for `patience`
         /// generations, at least 1, e.g. 200.
@@ -232,9 +241,9 @@ impl De {
     ///   V-A): [`Control::Shade`] `{ memory: 100 }`;
     /// - a population of 100 (section VI: "SHADE used a population size N = 100 and memory size
     ///   H = N = 100");
-    /// - restarts on stagnation, with a tolerance of 1e-8 and a patience of 200 generations:
-    ///   genoxide's choice, not part of SHADE, so that a run doesn't settle for good on the
-    ///   first point it converges to.
+    /// - restarts on stagnation, with a tolerance of 1e-12 and a patience of 200 generations
+    ///   ([`Restarts::OnStagnation`]): genoxide's choice, not part of SHADE, so that a run doesn't
+    ///   settle for good on the first point it converges to.
     ///
     /// genoxide's SHADE differs from the paper in the details that [`Control::Shade`] and
     /// [`De::l_shade`] describe: the `CR` memory can stay 0 (from L-SHADE), and a target
@@ -253,7 +262,7 @@ impl De {
             initial_genomes: Vec::new(),
             reduction: None,
             restarts: Restarts::OnStagnation {
-                tolerance: 1e-8,
+                tolerance: 1e-12,
                 patience: 200,
             },
         }
@@ -670,6 +679,12 @@ impl De {
         if self.generation - self.start_best_generation >= patience {
             return true;
         }
+        self.scores_converged(tolerance) && self.genes_converged(tolerance)
+    }
+
+    // whether the scores of the population are within `tolerance` of each other relative to the
+    // best, and so are the constraint violations relative to the smallest
+    fn scores_converged(&self, tolerance: f64) -> bool {
         let (mut min, mut max) = (f64::INFINITY, f64::NEG_INFINITY);
         let (mut min_violation, mut max_violation) = (f64::INFINITY, f64::NEG_INFINITY);
         for index in 0..self.population.len() {
@@ -689,6 +704,34 @@ impl De {
         };
         max - min <= tolerance * (1.0 + best.abs())
             && max_violation - min_violation <= tolerance * (1.0 + min_violation)
+    }
+
+    // whether the values of each gene in the population are within `tolerance` times the gene's
+    // range of each other
+    fn genes_converged(&self, tolerance: f64) -> bool {
+        let mut individuals = self.population.iter();
+        let Some(first) = individuals.next() else {
+            return true;
+        };
+        let (mut low, mut high) = (first.genome().to_vec(), first.genome().to_vec());
+        for individual in individuals {
+            let genes = low
+                .iter_mut()
+                .zip(&mut high)
+                .zip(individual.genome().iter());
+            for ((low, high), &x) in genes {
+                (*low, *high) = (low.min(x), high.max(x));
+            }
+        }
+        let ranges = self.real.bounds();
+        low.iter()
+            .zip(&high)
+            .zip(ranges)
+            .all(|((low, high), range)| {
+                let spread = high - low;
+                // equal values have converged, also with a tolerance of 0 or an infinite range
+                spread == 0.0 || spread <= tolerance * (range.end() - range.start())
+            })
     }
 
     // every individual but the best and the migrants since the last tell is replaced by a random
@@ -1031,7 +1074,7 @@ impl Algorithm for De {
 /// Defaults: SHADE's settings (Tanabe and Fukunaga, 2013, see [`De::builder`]), that is
 /// DE/current-to-pbest/1 with a random `p` per trial between `2 / NP` and 0.2 and an archive of
 /// the population's size, SHADE's adaptation with a memory of 100, and a population of 100; plus
-/// genoxide's restarts on stagnation (tolerance 1e-8, patience 200), maximize, a random initial
+/// genoxide's restarts on stagnation (tolerance 1e-12, patience 200), maximize, a random initial
 /// population and a random seed.
 #[derive(Clone, Debug)]
 pub struct DeBuilder {
@@ -1106,7 +1149,7 @@ impl DeBuilder {
     }
 
     /// When the population starts over from new random individuals. On stagnation by default,
-    /// with a tolerance of 1e-8 and a patience of 200 generations: genoxide's choice, as SHADE
+    /// with a tolerance of 1e-12 and a patience of 200 generations: genoxide's choice, as SHADE
     /// has no restarts.
     pub fn restarts(mut self, restarts: Restarts) -> Self {
         self.restarts = restarts;
@@ -1346,7 +1389,7 @@ mod tests {
         assert_eq!(
             de.restarts(),
             Restarts::OnStagnation {
-                tolerance: 1e-8,
+                tolerance: 1e-12,
                 patience: 200
             }
         );
@@ -1643,7 +1686,8 @@ mod tests {
         };
         let mut de = builder(shade, 3)
             .control(Control::Shade { memory: 6 })
-            // converged as soon as the scores are within 1 of each other
+            // converged as soon as the scores are within 1 of each other (and each gene within
+            // its range, as always)
             .restarts(Restarts::OnStagnation {
                 tolerance: 1.0,
                 patience: 1_000,
@@ -1682,6 +1726,69 @@ mod tests {
         assert!(!Objective::Minimize.is_better(before, now));
         // and the run goes on with trials again
         assert_eq!(de.ask().len(), 20);
+    }
+
+    #[test]
+    fn converged_means_close_genes_and_close_scores() {
+        let restarts = Restarts::OnStagnation {
+            tolerance: 1e-6,
+            patience: 1_000,
+        };
+        let constant = |de: &mut De| {
+            let fitness = vec![Fitness::new(1.0); de.ask().len()];
+            de.tell(&fitness).unwrap();
+        };
+        // equal scores, but genes that still differ: not converged
+        let mut de = builder(Strategy::Rand1, 5)
+            .restarts(restarts)
+            .build()
+            .unwrap();
+        for _ in 0..5 {
+            constant(&mut de);
+            assert!(!de.restart_due);
+        }
+        // equal genes and equal scores: converged
+        let genome = Reals::from(vec![1.0; 8]);
+        let mut de = builder(Strategy::Rand1, 5)
+            .initial_genomes(vec![genome.clone(); 20])
+            .restarts(restarts)
+            .build()
+            .unwrap();
+        constant(&mut de);
+        constant(&mut de);
+        assert!(de.restart_due);
+        // equal genes but scores that differ (a fitness that isn't deterministic): not converged
+        let mut de = builder(Strategy::Rand1, 5)
+            .initial_genomes(vec![genome.clone(); 20])
+            .restarts(restarts)
+            .build()
+            .unwrap();
+        for _ in 0..2 {
+            let fitness: Vec<Fitness> = (0..de.ask().len())
+                .map(|i| Fitness::new(i as f64))
+                .collect();
+            de.tell(&fitness).unwrap();
+        }
+        assert!(!de.restart_due);
+        // genes within the tolerance relative to each gene's range, not in absolute terms
+        let real = Real::new([0.0..=1.0, 0.0..=1e6]).unwrap();
+        let near = |a: f64, b: f64| Reals::from(vec![a, b]);
+        for (spread, converged) in [(0.5, true), (5.0, false)] {
+            let mut de = De::builder(real.clone())
+                .population_size(4)
+                .initial_genomes([
+                    near(0.5, 100.0),
+                    near(0.5, 100.0 + spread),
+                    near(0.5, 100.0),
+                    near(0.5, 100.0),
+                ])
+                .restarts(restarts)
+                .seed(0)
+                .build()
+                .unwrap();
+            constant(&mut de);
+            assert_eq!(de.genes_converged(1e-6), converged, "{spread}");
+        }
     }
 
     #[test]
@@ -1754,7 +1861,7 @@ mod tests {
                     })
                     .control(Control::Shade { memory: 6 })
                     .restarts(Restarts::OnStagnation {
-                        tolerance: 1e-8,
+                        tolerance: 1e-12,
                         patience: 200,
                     })
                     .minimize()

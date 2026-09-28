@@ -328,6 +328,16 @@ impl MultiProblem<2> for FonsecaFleming {
 /// [`optimal_front`](MultiProblem::optimal_front) is `None`. Deb et al. (2002) and Van Veldhuizen
 /// (1999) describe three regions, and plot the point apart from them.
 ///
+/// Its ends are known (derived from the definition): f₁ is smallest, −10(n − 1), only at x = 0,
+/// where f₂ = 0. f₂ is a sum of one term per variable, `|x|^0.8 + 5 sin(x³)`, whose minimum
+/// over [−5, 5] is h* = −3.8757622790462816, only at x* = −1.1527408475499261 (a root of its
+/// derivative, polished to 50 digits: its next best local minimum is 0.09 higher). So f₂ is
+/// smallest, n h*, only at x = (x*, …, x*), where f₁ = −10(n − 1) exp(−0.2 √2 |x*|). The
+/// [`ideal_point`](MultiProblem::ideal_point) is (−10(n − 1), n h*) and the
+/// [`nadir_point`](MultiProblem::nadir_point) (−10(n − 1) exp(−0.2 √2 |x*|), 0): for 3 variables,
+/// (−20, −11.627286837138845) and (−14.435463549038639, 0). The non-dominated points of a
+/// 401 × 401 × 401 grid over the box, with x*, reach both and stay between them.
+///
 /// Kursawe, F. (1991). A variant of evolution strategies for vector optimization. *Parallel
 /// Problem Solving from Nature*, LNCS 496: 193-197. The original (p. 196) prints f₁ summed to n
 /// and `f₂ = Σ (|xᵢ|^0.8 + 5 sin(xᵢ)³)`, with no bounds or number of variables; its figure 2
@@ -398,7 +408,24 @@ impl MultiProblem<2> for Kursawe {
     fn optimal_front(&self, _points: usize) -> Option<Vec<[f64; 2]>> {
         None
     }
+
+    // f₁'s minimum, at x = 0, and f₂'s, n times the least of its term
+    fn ideal_point(&self) -> Option<[f64; 2]> {
+        let n = self.variables as f64;
+        Some([-10.0 * (n - 1.0), n * KURSAWE_TERM])
+    }
+
+    // f₁ at f₂'s minimum, and f₂ at f₁'s
+    fn nadir_point(&self) -> Option<[f64; 2]> {
+        let n = self.variables as f64;
+        Some([-10.0 * (n - 1.0) * KURSAWE_DECAY, 0.0])
+    }
 }
+
+// the least of KUR's term of f₂, |x|^0.8 + 5 sin(x³), over [−5, 5], at x* = −1.1527408475499261
+const KURSAWE_TERM: f64 = -3.875_762_279_046_281_6;
+// exp(−0.2 √2 |x*|): a term of f₁, over −10, where every variable is x*
+const KURSAWE_DECAY: f64 = 0.721_773_177_451_931_9;
 
 // ---- Poloni --------------------------------------------------------------------------------------
 
@@ -409,6 +436,15 @@ impl MultiProblem<2> for Kursawe {
 ///
 /// Bounds [−π, π]². f₁ is 1 at (1, 2), where B = A. The front is disconnected and not known in
 /// closed form: [`optimal_front`](MultiProblem::optimal_front) is `None`.
+///
+/// Its ends are known (derived from the definition): f₂ is 0 only at (−3, −1), where
+/// f₁ = 16.772337779156782, and f₁ is 1 where B = A, which in the box is at (1, 2), where f₂ = 25,
+/// and at (2.0228, 0.7307), where f₂ = 28.2237: (1, 2) dominates it. The
+/// [`ideal_point`](MultiProblem::ideal_point) is (1, 0) and the
+/// [`nadir_point`](MultiProblem::nadir_point) (16.772337779156782, 25). Newton's method from each
+/// of the 2,696 points of a 2,001 × 2,001 grid over the box with f₁ < 1.01 finds only these two
+/// solutions of B = A, and the non-dominated points of a grid over the box, with the two ends,
+/// stay between the two points.
 ///
 /// Poloni, C., Giurgevich, A., Onesti, L. and Pediroda, V. (2000). Hybridization of a
 /// multi-objective genetic algorithm, a neural network and a classical optimizer for a complex
@@ -470,6 +506,16 @@ impl MultiProblem<2> for Poloni {
 
     fn optimal_front(&self, _points: usize) -> Option<Vec<[f64; 2]>> {
         None
+    }
+
+    // f₁'s minimum at (1, 2), and f₂'s at (−3, −1)
+    fn ideal_point(&self) -> Option<[f64; 2]> {
+        Some([1.0, 0.0])
+    }
+
+    // f₁ at (−3, −1), to 50 digits, and f₂ at (1, 2)
+    fn nadir_point(&self) -> Option<[f64; 2]> {
+        Some([16.772_337_779_156_782, 25.0])
     }
 }
 
@@ -556,6 +602,16 @@ impl MultiProblem<3> for Viennet1 {
 /// Bounds [−4, 4]². The front is not known in closed form:
 /// [`optimal_front`](MultiProblem::optimal_front) is `None`.
 ///
+/// Its ideal and nadir points are known (derived from the definition): the objectives are convex
+/// quadratics, so the optimal solutions are the minima of the weighted sums w₁f₁ + w₂f₂ + w₃f₃ with
+/// w ≥ 0, each the solution of a 2 × 2 linear system: a curved triangle whose corners are the
+/// objectives' minima, (2, −1), (2.5, 0.5) and (0.5, 0.25). The
+/// [`ideal_point`](MultiProblem::ideal_point) is (3, −17, −13), and the
+/// [`nadir_point`](MultiProblem::nadir_point) (883/208, −2109/128, −35858/2975) ≈ (4.2452,
+/// −16.4766, −12.0531): f₁ and f₂ are worst at f₃'s minimum, and f₃ at f₁'s. The minima of 80,601
+/// weighted sums, Das and Dennis's weights with 400 divisions, and the non-dominated points of a
+/// grid over the box stay between the two points.
+///
 /// Viennet, R., Fonteix, C. and Marc, I. (1996). Multicriteria optimization using a genetic
 /// algorithm for determining a Pareto set. *International Journal of Systems Science* 27(2):
 /// 255-260. Definition and bounds as restated in Van Veldhuizen (1999, PhD thesis, table B.1; its
@@ -594,6 +650,16 @@ impl MultiProblem<3> for Viennet2 {
     fn optimal_front(&self, _points: usize) -> Option<Vec<[f64; 3]>> {
         None
     }
+
+    // the minima, at (2, −1), (2.5, 0.5) and (0.5, 0.25)
+    fn ideal_point(&self) -> Option<[f64; 3]> {
+        Some([3.0, -17.0, -13.0])
+    }
+
+    // f₁ and f₂ at f₃'s minimum (0.5, 0.25), and f₃ at f₁'s (2, −1)
+    fn nadir_point(&self) -> Option<[f64; 3]> {
+        Some([883.0 / 208.0, -2109.0 / 128.0, -35858.0 / 2975.0])
+    }
 }
 
 /// Viennet's third problem (VNT3), with three objectives:
@@ -603,6 +669,18 @@ impl MultiProblem<3> for Viennet2 {
 ///
 /// Bounds [−3, 3]². The front is not known in closed form:
 /// [`optimal_front`](MultiProblem::optimal_front) is `None`.
+///
+/// Its ideal and nadir points are known (derived from the definition, and checked numerically): f₁
+/// and f₃ depend only on t = x₁² + x₂², so an optimal solution has the least f₂ on its circle, and
+/// the front is the image of one curve in t, two pieces of which are optimal: t from 0 to about
+/// 1.5, and from 4π/3, where f₁ has a local minimum, to about 17.16. The
+/// [`ideal_point`](MultiProblem::ideal_point) is (0, 15, −0.1): f₁ and f₃ are smallest at the
+/// origin, and f₂ at (−2, −1). The [`nadir_point`](MultiProblem::nadir_point) is (7π/3 + √3/2,
+/// 460/27, 1/(1 + 4π/3) − 1.1 exp(−4π/3)) ≈ (8.1964, 17.0370, 0.1760): f₁ is worst at its local
+/// maximum t = 14π/3, on the second piece; f₂ at the origin, where f₁ is 0; and f₃ at the second
+/// piece's start, since it falls from there on and stays below 0.155 on the first. Checked against
+/// 18,001 values of t, each with the least f₂ on its circle, and against the non-dominated points
+/// of a grid over the box.
 ///
 /// Viennet, R., Fonteix, C. and Marc, I. (1996). Multicriteria optimization using a genetic
 /// algorithm for determining a Pareto set. *International Journal of Systems Science* 27(2):
@@ -642,6 +720,16 @@ impl MultiProblem<3> for Viennet3 {
 
     fn optimal_front(&self, _points: usize) -> Option<Vec<[f64; 3]>> {
         None
+    }
+
+    // f₁ and f₃ at the origin, and f₂ at (−2, −1)
+    fn ideal_point(&self) -> Option<[f64; 3]> {
+        Some([0.0, 15.0, -0.1])
+    }
+
+    // f₁ at t = 14π/3, f₂ at the origin and f₃ at t = 4π/3, to 50 digits
+    fn nadir_point(&self) -> Option<[f64; 3]> {
+        Some([8.196_408_262_160_622, 460.0 / 27.0, 0.176_042_069_506_621_9])
     }
 }
 
@@ -1176,6 +1264,87 @@ mod tests {
         }
     }
 
+    // `steps + 1` evenly spaced values from `low` to `high`, and `extra`
+    fn axis(low: f64, high: f64, steps: usize, extra: &[f64]) -> Vec<f64> {
+        let mut values: Vec<f64> = (0..=steps)
+            .map(|i| low + (high - low) * i as f64 / steps as f64)
+            .collect();
+        values.extend_from_slice(extra);
+        values
+    }
+
+    // the non-dominated points among `points`, with any number of objectives: sorted by f₁,
+    // then each point against a staircase of the ones before it, in f₂ and the rest (for 3
+    // objectives, exact; a copy of an earlier point is dropped)
+    fn non_dominated_3(mut points: Vec<[f64; 3]>) -> Vec<[f64; 3]> {
+        use std::collections::BTreeMap;
+        // f64s in their total order, as integers
+        fn key(x: f64) -> i64 {
+            let bits = x.to_bits() as i64;
+            bits ^ (((bits >> 63) as u64) >> 1) as i64
+        }
+        points.sort_by(|a, b| {
+            (a[0].total_cmp(&b[0]))
+                .then(a[1].total_cmp(&b[1]))
+                .then(a[2].total_cmp(&b[2]))
+        });
+        // f₂ → f₃ of the non-dominated points so far, f₃ falling as f₂ rises
+        let mut staircase: BTreeMap<i64, f64> = BTreeMap::new();
+        let mut front = Vec::new();
+        for point in points {
+            let below = staircase.range(..=key(point[1])).next_back();
+            if below.is_some_and(|(_, &f3)| f3 <= point[2]) {
+                continue;
+            }
+            let covered: Vec<i64> = staircase
+                .range(key(point[1])..)
+                .take_while(|&(_, &f3)| f3 >= point[2])
+                .map(|(&k, _)| k)
+                .collect();
+            for k in covered {
+                staircase.remove(&k);
+            }
+            staircase.insert(key(point[1]), point[2]);
+            front.push(point);
+        }
+        front
+    }
+
+    // the non-dominated points of `sample` lie between the ideal and nadir points, to
+    // `tolerance` of each objective's range, and reach both to `reach`: the points hold for the
+    // front, not only the box
+    fn check_extremes<const M: usize>(
+        name: &str,
+        front: &[[f64; M]],
+        ideal: [f64; M],
+        nadir: [f64; M],
+        tolerance: f64,
+        reach: f64,
+    ) {
+        for j in 0..M {
+            let range = nadir[j] - ideal[j];
+            let values = front.iter().map(|point| point[j]);
+            let low = values.clone().fold(f64::INFINITY, f64::min);
+            let high = values.fold(f64::NEG_INFINITY, f64::max);
+            assert!(
+                low >= ideal[j] - tolerance * range,
+                "{name}: f{} {low}",
+                j + 1
+            );
+            assert!(
+                high <= nadir[j] + tolerance * range,
+                "{name}: f{} {high}",
+                j + 1
+            );
+            assert!(low <= ideal[j] + reach * range, "{name}: f{} {low}", j + 1);
+            assert!(
+                high >= nadir[j] - reach * range,
+                "{name}: f{} {high}",
+                j + 1
+            );
+        }
+    }
+
     // no feasible genome in the bounds dominates a point of the optimal front by more than
     // `tolerance` in both objectives: a check of the derived fronts against 200,000 random
     // genomes
@@ -1285,6 +1454,57 @@ mod tests {
         assert!(problem.optimal_front(10).is_none());
     }
 
+    // where KUR's term of f₂ is least, x*
+    const KURSAWE_X: f64 = -1.152_740_847_549_926_1;
+
+    #[test]
+    fn kursawe_extremes() {
+        // the term of f₂ is least at KURSAWE_X: its derivative is 0 there, and a grid of
+        // 1,000,001 values over [−5, 5] has nothing lower
+        let term = |x: f64| x.abs().powf(0.8) + 5.0 * (x * x * x).sin();
+        let slope = |x: f64| -0.8 * (-x).powf(-0.2) + 15.0 * x * x * (x * x * x).cos();
+        assert!(slope(KURSAWE_X).abs() < 1e-12);
+        assert!((term(KURSAWE_X) - KURSAWE_TERM).abs() < 1e-14);
+        let x = KURSAWE_X.abs();
+        assert!(((-0.2 * (2.0 * x * x).sqrt()).exp() - KURSAWE_DECAY).abs() < 1e-15);
+        let least = (0..=1_000_000)
+            .map(|i| term(-5.0 + i as f64 * 1e-5))
+            .fold(f64::INFINITY, f64::min);
+        assert!((KURSAWE_TERM..KURSAWE_TERM + 1e-9).contains(&least));
+        // the ends of the front, for 2 to 5 variables
+        for n in 2..=5 {
+            let problem = Kursawe::new(n);
+            let ideal = problem.ideal_point().expect("known");
+            let nadir = problem.nadir_point().expect("known");
+            assert_eq!(
+                problem.evaluate(&Reals::from(vec![0.0; n])),
+                [ideal[0], 0.0]
+            );
+            assert_eq!(nadir[1], 0.0);
+            let f = problem.evaluate(&Reals::from(vec![KURSAWE_X; n]));
+            assert_close(&f, &[nadir[0], ideal[1]]);
+        }
+        let problem = Kursawe::default();
+        let (ideal, nadir) = (
+            problem.ideal_point().unwrap(),
+            problem.nadir_point().unwrap(),
+        );
+        assert_eq!(ideal, [-20.0, -11.627_286_837_138_845]);
+        assert_eq!(nadir, [-14.435_463_549_038_639, 0.0]);
+        // the non-dominated points of a 101 × 101 × 101 grid over the box, with KURSAWE_X
+        let values = axis(-5.0, 5.0, 100, &[KURSAWE_X]);
+        let mut sample = Vec::new();
+        for &x1 in &values {
+            for &x2 in &values {
+                for &x3 in &values {
+                    sample.push(problem.evaluate(&at(&[x1, x2, x3])));
+                }
+            }
+        }
+        let front = non_dominated(sample);
+        check_extremes("KUR", &front, ideal, nadir, 1e-12, 1e-12);
+    }
+
     #[test]
     fn poloni() {
         // B = A at (1, 2): f₁ is 1, its minimum; f₂ = 4² + 3²
@@ -1296,6 +1516,25 @@ mod tests {
         let f1 = 1.0 + (a1 + 3.5).powi(2) + (a2 + 1.5).powi(2);
         assert_close(&Poloni.evaluate(&at(&[0.0, 0.0])), &[f1, 10.0]);
         assert_eq!(Poloni.representation().bounds()[1], -PI..=PI);
+        // the ends of the front: f₁ at (−3, −1), and f₂ at (1, 2)
+        let (ideal, nadir) = (Poloni.ideal_point().unwrap(), Poloni.nadir_point().unwrap());
+        assert_close(&Poloni.evaluate(&at(&[-3.0, -1.0])), &[nadir[0], ideal[1]]);
+        assert_close(&Poloni.evaluate(&at(&[1.0, 2.0])), &[ideal[0], nadir[1]]);
+        // the other solution of B = A has f₁ = 1 too, and a larger f₂: dominated
+        let other = Poloni.evaluate(&at(&[2.022_785_254_123_813, 0.730_709_903_108_889_5]));
+        assert!((other[0] - 1.0).abs() < 1e-14 && (other[1] - 28.223_728).abs() < 1e-6);
+        // the non-dominated points of a 1001 × 1001 grid over the box, with the two ends
+        let values = axis(-PI, PI, 1000, &[]);
+        let mut sample = vec![
+            Poloni.evaluate(&at(&[-3.0, -1.0])),
+            Poloni.evaluate(&at(&[1.0, 2.0])),
+        ];
+        for &x1 in &values {
+            for &x2 in &values {
+                sample.push(Poloni.evaluate(&at(&[x1, x2])));
+            }
+        }
+        check_extremes("POL", &non_dominated(sample), ideal, nadir, 1e-12, 1e-12);
     }
 
     #[test]
@@ -1335,6 +1574,96 @@ mod tests {
         assert_close(&Viennet3.evaluate(&at(&[0.0, 0.0])), &expected);
         assert_eq!(Viennet2.representation().bounds()[0], -4.0..=4.0);
         assert_eq!(Viennet3.representation().bounds()[0], -3.0..=3.0);
+    }
+
+    #[test]
+    fn viennet_2_extremes() {
+        let (ideal, nadir) = (
+            Viennet2.ideal_point().unwrap(),
+            Viennet2.nadir_point().unwrap(),
+        );
+        // the minima of the objectives, the corners of the optimal solutions
+        let [f1, f2, f3] =
+            [[2.0, -1.0], [2.5, 0.5], [0.5, 0.25]].map(|x| Viennet2.evaluate(&at(&x)));
+        assert_close(&[f1[0], f2[1], f3[2]], &ideal);
+        assert_close(&[f3[0], f3[1], f1[2]], &nadir);
+        // the minima of 80,601 weighted sums, Das and Dennis's weights with 400 divisions: each
+        // objective is (x − c)ᵀ A (x − c) / 2 plus a constant, with the Hessian A and minimum c
+        let hessians = [
+            [[1.0, 0.0], [0.0, 2.0 / 13.0]],
+            [
+                [2.0 / 36.0 + 2.0 / 8.0, 2.0 / 36.0 - 2.0 / 8.0],
+                [2.0 / 36.0 - 2.0 / 8.0, 2.0 / 36.0 + 2.0 / 8.0],
+            ],
+            [
+                [2.0 / 175.0 + 2.0 / 17.0, 4.0 / 175.0 - 4.0 / 17.0],
+                [4.0 / 175.0 - 4.0 / 17.0, 8.0 / 175.0 + 8.0 / 17.0],
+            ],
+        ];
+        let minima = [[2.0, -1.0], [2.5, 0.5], [0.5, 0.25]];
+        let front: Vec<[f64; 3]> = das_dennis::<3>(400)
+            .into_iter()
+            .map(|w| {
+                // Σ wᵢ Aᵢ x = Σ wᵢ Aᵢ cᵢ
+                let mut a = [[0.0; 2]; 2];
+                let mut b = [0.0; 2];
+                for i in 0..3 {
+                    for r in 0..2 {
+                        for c in 0..2 {
+                            a[r][c] += w[i] * hessians[i][r][c];
+                            b[r] += w[i] * hessians[i][r][c] * minima[i][c];
+                        }
+                    }
+                }
+                let det = a[0][0] * a[1][1] - a[0][1] * a[1][0];
+                let x1 = (b[0] * a[1][1] - a[0][1] * b[1]) / det;
+                let x2 = (a[0][0] * b[1] - a[1][0] * b[0]) / det;
+                Viennet2.evaluate(&at(&[x1, x2]))
+            })
+            .collect();
+        assert_eq!(front.len(), 80_601);
+        check_extremes("VNT2", &front, ideal, nadir, 1e-12, 1e-12);
+        // and the non-dominated points of a 801 × 801 grid over the box
+        let values = axis(-4.0, 4.0, 800, &[]);
+        let mut sample = Vec::new();
+        for &x1 in &values {
+            for &x2 in &values {
+                sample.push(Viennet2.evaluate(&at(&[x1, x2])));
+            }
+        }
+        check_extremes("VNT2", &non_dominated_3(sample), ideal, nadir, 1e-12, 1e-12);
+    }
+
+    #[test]
+    fn viennet_3_extremes() {
+        let (ideal, nadir) = (
+            Viennet3.ideal_point().unwrap(),
+            Viennet3.nadir_point().unwrap(),
+        );
+        // f₁ and f₃ at the origin, f₂ at (−2, −1)
+        let origin = Viennet3.evaluate(&at(&[0.0, 0.0]));
+        assert_close(&[origin[0], origin[2]], &[ideal[0], ideal[2]]);
+        assert_eq!(Viennet3.evaluate(&at(&[-2.0, -1.0]))[1], ideal[1]);
+        // f₁ at t = 14π/3, f₂ at the origin and f₃ at t = 4π/3, on circles of radius √t
+        let on_circle = |t: f64| Viennet3.evaluate(&at(&[t.sqrt(), 0.0]));
+        assert_close(
+            &[
+                on_circle(14.0 * PI / 3.0)[0],
+                origin[1],
+                on_circle(4.0 * PI / 3.0)[2],
+            ],
+            &nadir,
+        );
+        // the non-dominated points of a 1201 × 1201 grid over the box: next to t = 4π/3, a grid
+        // point that the grid doesn't dominate has f₃ up to 7e-4 of its range above the nadir
+        let values = axis(-3.0, 3.0, 1200, &[]);
+        let mut sample = Vec::new();
+        for &x1 in &values {
+            for &x2 in &values {
+                sample.push(Viennet3.evaluate(&at(&[x1, x2])));
+            }
+        }
+        check_extremes("VNT3", &non_dominated_3(sample), ideal, nadir, 1e-3, 1e-4);
     }
 
     #[test]

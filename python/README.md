@@ -118,7 +118,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 |---|---|---|
 | `Ga` | all | `population_size`, `select`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1), `scheme` |
 | `LocalSearch` | all | `neighbor` (a mutation), `neighbors` (1), `acceptance`, `restart=(patience, kicks)` |
-| `De` | real | `population_size` (100; with `l_shade`, 18 × genes, at least 4), `l_shade` (a budget of evaluations, for L-SHADE) |
+| `De` | real | `population_size` (100; with `l_shade`, 18 × genes, at least 4), `l_shade` (a budget of evaluations, for L-SHADE), `strategy` (`{"max_p": 0.2, "archive": 1.0}`; `"rand1"`, `"best1"`, `{"p", "archive"}`), `control` (`{"memory": 100}`; `{"f", "cr"}`, `{"min_f", "max_f", "cr"}`, `{"c"}`), `restarts` (`{"tolerance": 1e-12, "patience": 200}`; `"never"`) |
 | `Cmaes` | real | `population_size`, `restarts` (`"ipop"`, `"bipop"`), `initial_step` |
 | `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
 | `Nsga2` | all | `objectives`, `population_size`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1) |
@@ -265,7 +265,7 @@ The package covers a subset of the Rust library. These parts are only in Rust:
 - advanced settings:
   - CMA-ES: a diagonal covariance matrix (sep-CMA-ES) and the initial mean
   - PSO: the inertia, the acceleration and the maximum velocity
-  - DE: the strategy, the control of F and CR, the restarts, and population size reduction other than L-SHADE's
+  - DE: population size reduction other than L-SHADE's
   - the rate of `UniformCrossover` and the weight of `ArithmeticCrossover`
 
 Some names differ:
@@ -281,6 +281,9 @@ Some names differ:
 | `Cmaes(restarts="ipop")` | `.restarts(cmaes::Restarts::Ipop)` |
 | `Pso(ring=k)` | `.topology(pso::Topology::Ring { neighbors: k })` |
 | `De(l_shade=n)` | `De::l_shade(real, n)` |
+| `De(strategy="rand1")`, `De(strategy={"p": 0.1, "archive": 1.0})` | `.strategy(de::Strategy::Rand1)`, `.strategy(de::Strategy::CurrentToPBest { p: 0.1, archive: 1.0 })`, and `{"max_p", "archive"}` for `CurrentToPBestRandomP` |
+| `De(control={"f": 0.5, "cr": 0.9})` | `.control(de::Control::Fixed { f: 0.5, cr: 0.9 })`; `{"min_f", "max_f", "cr"}` for `Dither`, `{"c"}` for `Jade`, `{"memory"}` for `Shade` |
+| `De(restarts="never")`, `De(restarts={"tolerance": 1e-12, "patience": 200})` | `.restarts(de::Restarts::Never)`, `.restarts(de::Restarts::OnStagnation { tolerance: 1e-12, patience: 200 })` |
 | `Pbi(theta)` | `Decomposition::Pbi { theta }` |
 | `run(generations=..., time=..., ...)` | `Stop::generations(...).or(Stop::time(...))` |
 | `time` (seconds) | `Stop::time(Duration)` |

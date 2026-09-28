@@ -246,3 +246,26 @@ fn de_islands_with_restarts_keep_evaluated_populations() {
     assert!(restarts > 0);
     assert_eq!(islands.evaluations(), asked);
 }
+
+// #256: SHADE's default restarts let the best be refined far below the spread of the scores,
+// where the scores are large (g04's minimum is about -30665.5, g06's about -6961.8)
+#[test]
+fn de_default_restarts_let_shade_refine_large_scores() {
+    use genoxide::problems::cec2006::{G04, G06};
+    use genoxide::problems::{DynProblem, boxed};
+    let reaches = |problem: Box<dyn DynProblem>| {
+        let minimum = problem.optimum().expect("known").value();
+        let de = De::builder(problem.real())
+            .minimize()
+            .seed(1)
+            .build()
+            .unwrap();
+        Engine::new(de, |x: &Reals| problem.evaluate(x))
+            .stop_when(Stop::target(minimum + 1e-8).or(Stop::evaluations(500_000)))
+            .run()
+            .unwrap()
+            .stop_reason()
+    };
+    assert_eq!(reaches(boxed(G04)), StopReason::Target);
+    assert_eq!(reaches(boxed(G06)), StopReason::Target);
+}

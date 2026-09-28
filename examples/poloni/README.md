@@ -6,7 +6,7 @@ reference: "Poloni, C., Giurgevich, A., Onesti, L. and Pediroda, V. (2000). Hybr
 reference_url: https://doi.org/10.1016/S0045-7825(99)00394-1
 optimum: "not known in closed form; a fine grid gives hypervolume 444.57 (reference point (18.4, 27.5))"
 languages: [rust, python]
-order: 95
+order: 99
 ---
 
 # Poloni
@@ -87,11 +87,12 @@ on the first, the short one, f₂ > 12; on the second, the long one, f₂ < 12.
 
 The second gives the front's hypervolume (Zitzler and Thiele, 1999, IEEE Transactions on
 Evolutionary Computation 3(4): 257-271): the area it dominates, up to a reference point. Larger is
-better. The reference point is (18.4, 27.5), about 10% of the front's range beyond its worst point
-(16.77, 25). The front isn't known, so neither is its hypervolume. For comparison, the example
-prints that of the non-dominated points of a grid of 4001 × 4001 points over the box, 444.57. It
-is a lower bound: the whole front dominates at least as much. Finer grids give more, up to about
-444.59. The front isn't known, so there is no IGD+ either.
+better. The reference point is (18.4, 27.5): the nadir point, the front's worst point (16.77, 25),
+plus a tenth of the front's range from the ideal point, (1, 0), rounded up to a tenth. genoxide's
+`ideal_point` and `nadir_point` give both. The front isn't known, so neither is its hypervolume.
+For comparison, the example prints that of the non-dominated points of a grid of 4001 × 4001
+points over the box, 444.57. It is a lower bound: the whole front dominates at least as much.
+Finer grids give more, up to about 444.59. The front isn't known, so there is no IGD+ either.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/poloni) plays this run back.
 

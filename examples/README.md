@@ -32,7 +32,18 @@ python examples/tsp_berlin52/main.py
 | [N-Queens](n_queens/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/n-queens) |
 | [Travelling salesman (berlin52)](tsp_berlin52/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/tsp-berlin52) |
 | [Job shop scheduling (ft06)](jobshop_ft06/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/jobshop-ft06) |
+| [Sphere](sphere/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/sphere) |
+| [Axis-parallel ellipsoid](axis_parallel_ellipsoid/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/axis-parallel-ellipsoid) |
+| [Schwefel 1.2](schwefel_1_2/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schwefel-1-2) |
+| [Zakharov](zakharov/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zakharov) |
+| [Rosenbrock](rosenbrock/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rosenbrock) |
+| [Levy](levy/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/levy) |
+| [Styblinski-Tang](styblinski_tang/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/styblinski-tang) |
+| [Michalewicz](michalewicz/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/michalewicz) |
+| [Ackley](ackley/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/ackley) |
 | [Rastrigin function](rastrigin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rastrigin) |
+| [Griewank](griewank/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/griewank) |
+| [Schwefel 2.26](schwefel_2_26/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schwefel-2-26) |
 | [Function suite](function_suite/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/function-suite) |
 | [Himmelblau's function](himmelblau/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/himmelblau) |
 | [Branin](branin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/branin) |
@@ -53,6 +64,10 @@ python examples/tsp_berlin52/main.py
 | [CEC 2006 g06](cec2006_g06/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cec2006-g06) |
 | [Gear train design](gear_train/) | integer | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gear-train) |
 | [ZDT1](zdt1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zdt1) |
+| [ZDT2](zdt2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zdt2) |
+| [ZDT3](zdt3/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zdt3) |
+| [ZDT4](zdt4/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zdt4) |
+| [ZDT6](zdt6/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zdt6) |
 | [Schaffer 1](schaffer1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schaffer1) |
 | [Schaffer 2](schaffer2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schaffer2) |
 | [Fonseca-Fleming](fonseca_fleming/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/fonseca-fleming) |
@@ -63,7 +78,10 @@ python examples/tsp_berlin52/main.py
 | [TNK (Tanaka)](tnk/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/tnk) |
 | [OSY (Osyczka and Kundu)](osy/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/osy) |
 | [CONSTR](constr/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/constr) |
+| [DTLZ1 with 3 objectives](dtlz1_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dtlz1-3obj) |
 | [DTLZ2 with 3 objectives](dtlz2_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dtlz2-3obj) |
+| [DTLZ3 with 3 objectives](dtlz3_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dtlz3-3obj) |
+| [DTLZ4 with 3 objectives](dtlz4_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dtlz4-3obj) |
 | [Viennet 1](viennet1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/viennet1) |
 | [Viennet 2](viennet2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/viennet2) |
 | [Viennet 3](viennet3/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/viennet3) |

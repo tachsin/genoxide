@@ -1,4 +1,4 @@
-weight 2996.348167 (the best known: 2996.348165)
+weight 2996.348165 (the best known: 2996.348165)
 violation 0.000000
 face width 3.500000, module 0.700000, teeth 17
 shaft 1: length 7.300000, diameter 3.350215

@@ -33,6 +33,28 @@ function sphereArcs() {
 
 const ARCS = sphereArcs();
 
+/**
+ * The plane f1 + f2 + f3 = s in the positive octant (the true front of DTLZ1): its edges and
+ * the lines where one objective is a quarter, a half and three quarters of s.
+ */
+function simplexLines(s) {
+  const lines = [];
+  for (let axis = 0; axis < 3; axis++) {
+    const [a, b] = [0, 1, 2].filter((k) => k !== axis);
+    for (const level of [0, 0.25, 0.5, 0.75]) {
+      const c = level * s;
+      const from = [0, 0, 0];
+      const to = [0, 0, 0];
+      from[axis] = c;
+      to[axis] = c;
+      from[a] = s - c;
+      to[b] = s - c;
+      lines.push([from, to]);
+    }
+  }
+  return lines;
+}
+
 /** Orthographic projection: f1, f2 on the floor, f3 up; returns screen x, y (up) and depth (toward the viewer). */
 function projector(yaw, pitch) {
   const ct = Math.cos(yaw * DEG);
@@ -60,12 +82,16 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
   const color = categorical(dark)[0];
   const objectives = trace.problem?.objectives ?? ["f1", "f2", "f3"];
   const sphere = trace.problem?.true_front === "sphere";
+  // the plane f1 + f2 + f3 = simplex (DTLZ1's front, with simplex 0.5)
+  const simplex = trace.problem?.true_front === "simplex" ? Number(trace.problem?.simplex ?? 1) : null;
+  // a true front drawn from the origin: every axis from 0 to one maximum
+  const shared = sphere || simplex !== null;
   const front = frame.state?.front ?? [];
 
   // [lo1, lo2, lo3, hi1, hi2, hi3]
   const target = useMemo(() => {
-    if (sphere) {
-      let m = 1;
+    if (shared) {
+      let m = sphere ? 1 : simplex;
       for (const p of front) for (const c of p) if (c > m) m = c;
       return [0, 0, 0, m * 1.05, m * 1.05, m * 1.05];
     }
@@ -75,7 +101,7 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
     const span = [0, 1, 2].map((k) => hi[k] - lo[k] || Math.abs(hi[k]) || 1);
     // from each objective's least value, as the sphere's cube starts at 0, with room above
     return [...lo, ...hi.map((v, k) => v + span[k] * 0.05)];
-  }, [front, sphere]);
+  }, [front, sphere, shared, simplex]);
   const eased = useEased(target, reduced);
   const lo = eased.slice(0, 3);
   const hi = eased.slice(3);
@@ -93,6 +119,7 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
               : [
                   { label: "front", color, shape: "dot" },
                   ...(sphere ? [{ label: "true front (sphere)", shape: "line", className: "text-base-content/35" }] : []),
+                  ...(simplex !== null ? [{ label: `true front (f1 + f2 + f3 = ${simplex})`, shape: "line", className: "text-base-content/35" }] : []),
                 ]
           }
         />
@@ -150,6 +177,7 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
                 rows={[
                   ...objectives.map((o, k) => [o, formatValue(hover.p[k])]),
                   ...(sphere ? [["distance to origin", formatValue(Number(Math.hypot(...hover.p).toPrecision(4)))]] : []),
+                  ...(simplex !== null ? [["f1 + f2 + f3", formatValue(Number((hover.p[0] + hover.p[1] + hover.p[2]).toPrecision(4)))]] : []),
                 ]}
               />
             </Tooltip>
@@ -183,7 +211,13 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
                   })
                   .join(""),
               )
-            : [];
+            : simplex !== null
+              ? simplexLines(simplex).map(([from, to]) => {
+                  const a = at(from);
+                  const b = at(to);
+                  return `M${a.x.toFixed(1)} ${a.y.toFixed(1)}L${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+                })
+              : [];
           const points = front.map((p) => ({ p, ...at(p) }));
           points.sort((a, b) => a.depth - b.depth);
           const depths = points.map((q) => q.depth);
@@ -238,7 +272,7 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
         }}
       </PlotBox>
       <p className="mt-1 text-base-content/50 text-xs">
-        {sphere
+        {shared
           ? `Each axis runs from 0 to ${formatTick(Number(hi[0].toPrecision(2)))}.`
           : `${objectives.map((o, k) => `${o} ${formatTick(Number(lo[k].toPrecision(2)))} to ${formatTick(Number(hi[k].toPrecision(2)))}`).join(", ")}.`}{" "}
         {compact ? "Drag to rotate." : "Drag to rotate, or focus the plot and use the arrow keys."}

@@ -6,7 +6,7 @@ reference: "Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made f
 reference_url: "https://doi.org/10.1109/4235.771163"
 optimum: "an error of 0 on each function"
 languages: [rust, python]
-order: 62
+order: 63
 ---
 
 # Function suite
@@ -61,7 +61,8 @@ Three algorithms, each with genoxide's defaults:
   starts again from a random point with twice the population.
 - SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), a differential evolution that adapts its
   scale factor and crossover rate from successful trials, with its published population of 100.
-  genoxide adds restarts after 200 generations without progress.
+  genoxide adds restarts, once the population has converged or after 200 generations without
+  progress.
 - Particle swarm optimization (Kennedy and Eberhart, 1995, Proceedings of ICNN'95: 1942-1948) with
   40 particles, a global topology, and Clerc and Kennedy's constriction coefficients (2002, IEEE
   Transactions on Evolutionary Computation 6(1): 58-73). It has no restarts.
@@ -85,6 +86,6 @@ table in `output.txt`, which is the Linux output.
 ## Good results
 
 The best possible error is 0, and an error below 1e-8 counts as solved. All three solve the unimodal
-functions, except PSO on Rosenbrock. CMA-ES and SHADE solve most multimodal ones, and the rows where
-they don't are the hardest: CMA-ES stays far from the minimum of Schwefel 2.26, where SHADE comes
-within 1e-5. PSO, which has no restarts, solves only Ackley and Levy among the multimodal functions.
+functions, except PSO on Rosenbrock. SHADE solves all twelve. CMA-ES solves the multimodal ones
+except Michalewicz and Schwefel 2.26, where it stays far from the minimum. PSO, which has no
+restarts, solves only Ackley and Levy among the multimodal functions.

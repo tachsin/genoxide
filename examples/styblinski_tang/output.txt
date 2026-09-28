@@ -1,0 +1,4 @@
+Styblinski-Tang in 30 dimensions: minimum -1174.9850, 300000 evaluations at most
+CMA-ES: error 113.0938 after 300006 evaluations, 8 of 30 genes off by more than 0.01
+CMA-ES with IPOP: error 0.0000 after 121716 evaluations, 0 of 30 genes off by more than 0.01
+L-SHADE: error 0.0000 after 167556 evaluations, 0 of 30 genes off by more than 0.01

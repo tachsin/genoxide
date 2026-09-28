@@ -844,6 +844,15 @@ class Kursawe(_Sized):
     three curves. It isn't known in closed form: ``optimal_front`` is None. Deb et al. (2002) and
     Van Veldhuizen (1999) describe three regions, and plot the point apart from them.
 
+    Its ends are known (derived from the definition): f₁ is smallest, −10(n − 1), only at x = 0,
+    where f₂ = 0. f₂ is a sum of one term per variable, |x|^0.8 + 5 sin(x³), whose minimum over
+    [−5, 5] is h* = −3.8757622790462816, only at x* = −1.1527408475499261 (a root of its
+    derivative, polished to 50 digits: its next best local minimum is 0.09 higher). So f₂ is
+    smallest, n h*, only at x = (x*, …, x*), where f₁ = −10(n − 1) exp(−0.2 √2 |x*|).
+    ``ideal_point`` is (−10(n − 1), n h*) and ``nadir_point`` (−10(n − 1) exp(−0.2 √2 |x*|), 0):
+    for 3 variables, (−20, −11.627286837138845) and (−14.435463549038639, 0). The non-dominated
+    points of a 401 × 401 × 401 grid over the box, with x*, reach both and stay between them.
+
     Kursawe, F. (1991). A variant of evolution strategies for vector optimization. Parallel
     Problem Solving from Nature, LNCS 496: 193-197. The original (p. 196) prints f₁ summed to n
     and f₂ = Σ (|xᵢ|^0.8 + 5 sin(xᵢ)³), with no bounds or number of variables; its figure 2 looks
@@ -866,6 +875,14 @@ class Poloni(MultiProblem):
 
     Bounds [−π, π]². The front is disconnected and not known in closed form: ``optimal_front``
     is None.
+
+    Its ends are known (derived from the definition): f₂ is 0 only at (−3, −1), where
+    f₁ = 16.772337779156782, and f₁ is 1 where B = A, which in the box is at (1, 2), where
+    f₂ = 25, and at (2.0228, 0.7307), where f₂ = 28.2237: (1, 2) dominates it. ``ideal_point`` is
+    (1, 0) and ``nadir_point`` (16.772337779156782, 25). Newton's method from each of the 2,696
+    points of a 2,001 × 2,001 grid over the box with f₁ < 1.01 finds only these two solutions of
+    B = A, and the non-dominated points of a grid over the box, with the two ends, stay between
+    the two points.
 
     Poloni, C., Giurgevich, A., Onesti, L. and Pediroda, V. (2000). Hybridization of a
     multi-objective genetic algorithm, a neural network and a classical optimizer for a complex
@@ -908,6 +925,15 @@ class Viennet2(MultiProblem):
 
     Bounds [−4, 4]². The front is not known in closed form: ``optimal_front`` is None.
 
+    Its ideal and nadir points are known (derived from the definition): the objectives are convex
+    quadratics, so the optimal solutions are the minima of the weighted sums w₁f₁ + w₂f₂ + w₃f₃ with
+    w ≥ 0, each the solution of a 2 × 2 linear system: a curved triangle whose corners are the
+    objectives' minima, (2, −1), (2.5, 0.5) and (0.5, 0.25). ``ideal_point`` is (3, −17, −13), and
+    ``nadir_point`` (883/208, −2109/128, −35858/2975) ≈ (4.2452, −16.4766, −12.0531): f₁ and f₂ are
+    worst at f₃'s minimum, and f₃ at f₁'s. The minima of 80,601 weighted sums, Das and Dennis's
+    weights with 400 divisions, and the non-dominated points of a grid over the box stay between the
+    two points.
+
     Viennet, R., Fonteix, C. and Marc, I. (1996). Multicriteria optimization using a genetic
     algorithm for determining a Pareto set. International Journal of Systems Science 27(2): 255-260.
     Definition and bounds as restated in Van Veldhuizen (1999, PhD thesis, table B.1); not yet
@@ -925,6 +951,17 @@ class Viennet3(MultiProblem):
     ``f₃ = 1 / (x₁² + x₂² + 1) − 1.1 exp(−(x₁² + x₂²))``.
 
     Bounds [−3, 3]². The front is not known in closed form: ``optimal_front`` is None.
+
+    Its ideal and nadir points are known (derived from the definition, and checked numerically): f₁
+    and f₃ depend only on t = x₁² + x₂², so an optimal solution has the least f₂ on its circle, and
+    the front is the image of one curve in t, two pieces of which are optimal: t from 0 to about
+    1.5, and from 4π/3, where f₁ has a local minimum, to about 17.16. ``ideal_point`` is (0, 15,
+    −0.1): f₁ and f₃ are smallest at the origin, and f₂ at (−2, −1). ``nadir_point`` is (7π/3 +
+    √3/2, 460/27, 1/(1 + 4π/3) − 1.1 exp(−4π/3)) ≈ (8.1964, 17.0370, 0.1760): f₁ is worst at its
+    local maximum t = 14π/3, on the second piece; f₂ at the origin, where f₁ is 0; and f₃ at the
+    second piece's start, since it falls from there on and stays below 0.155 on the first. Checked
+    against 18,001 values of t, each with the least f₂ on its circle, and against the non-dominated
+    points of a grid over the box.
 
     Viennet, R., Fonteix, C. and Marc, I. (1996). Multicriteria optimization using a genetic
     algorithm for determining a Pareto set. International Journal of Systems Science 27(2): 255-260.

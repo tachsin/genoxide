@@ -18,6 +18,30 @@ export const FUNCTIONS = {
     (1 + (x + y + 1) ** 2 * (19 - 14 * x + 3 * x * x - 14 * y + 6 * x * y + 3 * y * y)) *
     (30 + (2 * x - 3 * y) ** 2 * (18 - 32 * x + 12 * x * x + 48 * y - 36 * x * y + 27 * y * y)),
   six_hump_camel: (x, y) => (4 - 2.1 * x * x + (x * x * x * x) / 3) * x * x + x * y + (-4 + 4 * y * y) * y * y,
+  // the scalable functions in 2 dimensions, as genoxide's problems define them
+  sphere: (x, y) => x * x + y * y,
+  axis_parallel_ellipsoid: (x, y) => x * x + 2 * y * y,
+  schwefel_1_2: (x, y) => x * x + (x + y) ** 2,
+  rosenbrock: (x, y) => 100 * (y - x * x) ** 2 + (x - 1) ** 2,
+  ackley: (x, y) =>
+    20 - 20 * Math.exp(-0.2 * Math.sqrt((x * x + y * y) / 2)) + Math.E - Math.exp((Math.cos(2 * Math.PI * x) + Math.cos(2 * Math.PI * y)) / 2),
+  griewank: (x, y) => 1 + (x * x + y * y) / 4000 - Math.cos(x) * Math.cos(y / Math.SQRT2),
+  schwefel_2_26: (x, y) => -(x * Math.sin(Math.sqrt(Math.abs(x))) + y * Math.sin(Math.sqrt(Math.abs(y)))),
+  levy: (x, y) => {
+    const w1 = 1 + (x - 1) / 4;
+    const w2 = 1 + (y - 1) / 4;
+    return (
+      Math.sin(Math.PI * w1) ** 2 +
+      (w1 - 1) ** 2 * (1 + 10 * Math.sin(Math.PI * w1 + 1) ** 2) +
+      (w2 - 1) ** 2 * (1 + Math.sin(2 * Math.PI * w2) ** 2)
+    );
+  },
+  zakharov: (x, y) => {
+    const weighted = 0.5 * x + y;
+    return x * x + y * y + weighted ** 2 + weighted ** 4;
+  },
+  styblinski_tang: (x, y) => 0.5 * (x ** 4 - 16 * x * x + 5 * x + y ** 4 - 16 * y * y + 5 * y),
+  michalewicz: (x, y) => -Math.sin(x) * Math.sin((x * x) / Math.PI) ** 20 - Math.sin(y) * Math.sin((2 * y * y) / Math.PI) ** 20,
 };
 
 /** The contour plot's legend items; a grid of contours shows them once, for all its panels. */

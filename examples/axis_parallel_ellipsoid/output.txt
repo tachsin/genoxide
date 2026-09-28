@@ -1,0 +1,6 @@
+Axis-parallel ellipsoid in 30 dimensions, 300000 evaluations at most
+Evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES         1932     3542     4550     5642     6622   8.6e-9
+PSO            5680     9640    13840    18160    21800   9.8e-9
+GA             9796    35897   186213        -        -   1.6e-5

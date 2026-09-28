@@ -264,9 +264,14 @@ class CarSideImpact(Problem):
     velocities and rib deflections and on the structure's velocities.
 
     Bounds x₁, x₃, x₄ in [0.5, 1.5], x₂ in [0.45, 1.35], x₅ in [0.875, 2.625], x₆, x₇ in
-    [0.4, 1.2]; the restatement gives no optimum. Best known 23.585658 at (0.5, 1.225732, 0.5,
-    1.207111, 0.875, 0.884329, 0.4), found by SLSQP from 300 starting points and by genoxide's
-    SHADE. Not proven optimal.
+    [0.4, 1.2]; the restatement gives no optimum. Best known 23.585657980780084 at (0.5,
+    1.225732, 0.5, 1.207111, 0.875, 0.884189, 0.4): x₁, x₃, x₅ and x₇ on their lower bounds, and
+    the lower rib deflection, the pubic force and the front door's velocity on their limits,
+    which give x₂, x₄ and x₆ in turn. Stored to the last bit: each of x₂, x₄ and x₆ is the
+    smallest float whose constraint holds when evaluated, so the violation is exactly 0. SLSQP
+    from 2,000 random starting points, and from the design of genoxide's L-SHADE, finds no other
+    minimum, and the seven active constraints' Lagrange multipliers there are positive: a strict
+    local minimum. The constraints aren't convex, so it isn't proven optimal.
 
     Gu, L., Yang, R. J., Tho, C. H., Makowski, M., Faruque, O. and Li, Y. (2001). Optimisation and
     robustness for crashworthiness of side impact. International Journal of Vehicle Design 26(4):

@@ -116,17 +116,17 @@ The plot shows each variable on its range, and each constraint's value g: satisf
 active (within 1e-6 of its limit) or violated. The best of the first 100 random designs exceeds g5,
 the stress in shaft 1; within 400 evaluations, the best design is feasible. Between about 11,000 and
 13,000 evaluations, g6, g8 and then g5 reach their limits. After about 15,000 evaluations, the
-design matches the best known one to the 6 digits that the plot shows. SHADE then restarts twice,
-after about 20,000 and 38,500 evaluations (the median weight jumps back up), and each time the
-population comes back to the same design.
+design matches the best known one to the 6 digits that the plot shows; the median weight has
+matched it since about 13,000. The population goes on refining the design to the end of the run,
+without a restart.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/speed-reducer) plays this run back.
 
 ## Good results
 
-The run finds a feasible design of weight 2996.348167, 2e-6 above the best known 2996.348165: the
-design b = 3.5, m = 0.7, z = 17, l₁ = 7.3, l₂ = 7.8, d₁ = 3.350215 and d₂ = 5.286683. The shaft
-stresses (g5, g6) and the least face width (g8) are at their limits. Setting d₁ and d₂ so that g5
-and g6 hold exactly gives 2996.348165, the best known value: that's the minimum at this vertex.
+The run finds a feasible design of weight 2996.348165, the best known value: the design b = 3.5,
+m = 0.7, z = 17, l₁ = 7.3, l₂ = 7.8, d₁ = 3.350215 and d₂ = 5.286683. The shaft stresses (g5, g6)
+and the least face width (g8) are at their limits, and d₁ and d₂ hold g5 and g6 exactly: that's
+the minimum at this vertex.
 
-Runs with seeds 2 to 5 end between 2996.348168 and 2996.348170, at the same design.
+Runs with seeds 2 to 5 end at the same design and weight.

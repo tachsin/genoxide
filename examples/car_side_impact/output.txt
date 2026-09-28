@@ -1,5 +1,5 @@
-weight 23.585657981 after 20002 evaluations (the best known: 23.585657984)
-violation 0.000000, a relative gap of -1.4e-10
+weight 23.585657981 after 20002 evaluations (the best known: 23.585657981)
+violation 0.000000, a relative gap of 1.7e-14
 thickness (mm)                    best  range
 B-pillar inner                0.500000  0.5 to 1.5
 B-pillar reinforcement        1.225732  0.45 to 1.35
