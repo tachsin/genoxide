@@ -27,7 +27,7 @@ The adapter prints nothing for any other scenario ([`SCENARIOS`, lines 220-224](
 - **Time:** from the run's `Budget`, created just before `optimize` builds the initial population. Each method first makes the warm-up run of rule 4.2 ([line 289](../../../benchmarks/adapters/evolutionary_jl/bench.jl#L289)).
 - **Seeds (rule 5.2):** a `Xoshiro(seed)` passed as the `rng` of `Options`, which the operators and the initial population use. The same seed repeats a run, and seed 1 gives the same alone as after seed 0 (tested for both methods).
 - **One thread:** [run.sh](../../../benchmarks/adapters/evolutionary_jl/run.sh) runs Julia with `--threads=1 --gcthreads=1,0` and BLAS with one thread.
-- **Version:** the published results measured 0.12.0; the adapter pins 0.12.1, whose sources differ from 0.12.0's only in `src/nsga2.jl`. Its OneMax runs repeat the published ones: seeds 0, 1 and 2 take 119,701, 117,301 and 111,601 evaluations, first hits 119,579, 117,156 and 111,530, as published.
+- **Version:** the published results measure 0.12.1, the version the adapter pins.
 - **Separate tests:** 2026-09-28, Evolutionary.jl 0.12.1, seeds 0 to 2, the scenario's budget, 60 s cap. `outside` was 0 in every run.
 
 ## OneMax 1000: the GA
