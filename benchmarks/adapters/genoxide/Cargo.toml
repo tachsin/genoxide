@@ -5,9 +5,10 @@ edition = "2024"
 publish = false
 
 [dependencies]
-# the genoxide of this repository
+# the genoxide of this repository, without the default `parallel` feature: rayon isn't compiled
+# in, so nothing can run on another thread (rule 4.3). With it, the runs and their instruction
+# counts are the same within 0.5%: the engines evaluate sequentially unless `.parallel(true)`.
 genoxide = { path = "../../..", default-features = false }
 
-[profile.release]
-codegen-units = 1
-lto = "thin"
+# no [profile.release]: cargo's default release profile, as a user builds a release binary
+# (`cargo build --release`), like the radiate adapter (rule 4.5)
