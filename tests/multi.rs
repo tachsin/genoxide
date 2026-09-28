@@ -346,6 +346,50 @@ fn moead_approximates_two_and_three_objective_fronts() {
 }
 
 #[test]
+fn a_front_has_each_genome_once() {
+    use genoxide::multi::problems::{MultiProblem, Zdt1};
+    use genoxide::multi::{Moead, MultiObjectiveAlgorithm, das_dennis, non_dominated_sort};
+    // MOEA/D's neighbouring subproblems often hold the same solution. python/tests has the same
+    // run, with the same front.
+    let problem = Zdt1::new(30);
+    let moead = Moead::builder(problem.representation(), [Minimize; 2], das_dennis::<2>(99))
+        .crossover(SimulatedBinaryCrossover::new(20.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0).unwrap())
+        .seed(1)
+        .build()
+        .unwrap();
+    let mut last = Vec::new();
+    let mut engine = MultiEngine::new(moead, problem)
+        .stop_when(Stop::generations(50))
+        .on_generation(|snapshot| last = snapshot.front().to_vec());
+    let outcome = engine.run().unwrap();
+    let population = engine.algorithm().population();
+    let scores: Vec<Scores<2>> = population.iter().map(|x| x.fitness().unwrap()).collect();
+    // 61 non-dominated members, copies of 40 genomes
+    let first = &non_dominated_sort(&scores, &[Minimize; 2])[0];
+    assert_eq!(first.len(), 61);
+    assert_eq!(outcome.front().len(), 40);
+    assert_eq!(outcome.front_values().len(), 40);
+    for (i, member) in outcome.front().iter().enumerate() {
+        let others = &outcome.front()[..i];
+        assert!(others.iter().all(|other| other.genome() != member.genome()));
+    }
+    // the first of each genome's copies, in the population's order
+    let mut expected: Vec<&Reals> = Vec::new();
+    for &i in first {
+        let genome = population[i].genome();
+        if !expected.contains(&genome) {
+            expected.push(genome);
+        }
+    }
+    let genomes: Vec<&Reals> = outcome.front().iter().map(|x| x.genome()).collect();
+    assert_eq!(genomes, expected);
+    drop(engine);
+    // the last generation's snapshot has the same front
+    assert_eq!(last, outcome.front());
+}
+
+#[test]
 fn sms_emoa_reaches_the_optimal_zdt1_hypervolume() {
     use genoxide::multi::SmsEmoa;
     use genoxide::multi::problems::{MultiProblem, Zdt1};

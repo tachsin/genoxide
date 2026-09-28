@@ -623,17 +623,45 @@ def test_on_generation_is_called_after_every_generation():
     assert [state.generation for state in progress] == list(range(11))
     assert progress[-1].evaluations == result.evaluations
     assert all(1 <= state.front_size <= 40 for state in progress)
-    # the result's front is without copies
-    assert progress[-1].front_size >= len(result.front_objectives)
+    # the last generation's front is the result's
+    assert progress[-1].front_size == len(result.front_objectives)
     for state in progress:
         assert state.objectives.shape == (len(state.population), 2)
         assert np.array_equal(state.objectives, zdt1(state.population))
         assert state.front_objectives.shape == (state.front_size, 2)
         assert len(state.violations) == len(state.population)
         assert len(state.front_violations) == state.front_size
-    assert {tuple(row) for row in progress[-1].front_objectives} == {
-        tuple(row) for row in result.front_objectives
-    }
+    assert np.array_equal(progress[-1].front_objectives, result.front_objectives)
+    assert np.array_equal(progress[-1].front_violations, result.front_violations)
+
+
+def test_a_front_has_each_genome_once():
+    # MOEA/D's neighbouring subproblems often hold the same solution; tests/multi.rs has the same
+    # run in Rust, with 61 non-dominated members, copies of 40 genomes
+    problem = gx.problems.Zdt1(30)
+    moead = gx.Moead(
+        problem.genome,
+        objectives=problem.objectives,
+        weights=gx.das_dennis(2, 99),
+        crossover=gx.SimulatedBinaryCrossover(20),
+        mutation=gx.PolynomialMutation(20, rate=1 / 30),
+        seed=1,
+    )
+    progress = []
+    result = moead.run(problem, generations=50, on_generation=progress.append)
+    assert len(result.front_genomes) == 40
+    assert len(np.unique(result.front_genomes, axis=0)) == 40
+    assert result.front_objectives.shape == (40, 2)
+    last = progress[-1]
+    assert last.generation == 50 and last.front_size == 40
+    assert np.array_equal(last.front_objectives, result.front_objectives)
+    # the population holds 61 non-dominated members
+    objectives = last.objectives
+    dominated = [
+        any(np.all(other <= row) and np.any(other < row) for other in objectives)
+        for row in objectives
+    ]
+    assert dominated.count(False) == 61
 
 
 def test_on_generation_returning_false_aborts():

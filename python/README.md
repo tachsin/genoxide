@@ -129,7 +129,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 
 Single-objective algorithms maximize, or minimize with `objective="minimize"`.
 
-The multi-objective algorithms take `objectives=["minimize", "maximize", ...]`, 2 to 6 of them. Their fitness function returns a sequence of objective values. Their result is the final non-dominated front: `front_genomes`, `front_objectives` and `front_violations`.
+The multi-objective algorithms take `objectives=["minimize", "maximize", ...]`, 2 to 6 of them. Their fitness function returns a sequence of objective values. Their result is the final non-dominated front: `front_genomes`, `front_objectives` and `front_violations`. A front has each genome once, the first of its copies (MOEA/D's subproblems can hold the same solution), in the result and in the progress alike; different genomes with the same objective values each have a row.
 
 A solution that couldn't be scored has NaN objective values and a NaN violation. A single-objective result without a valid solution has a NaN `violation`.
 
@@ -229,7 +229,7 @@ The result has the condition that stopped it, `stop_reason`, and the `generation
 
 `run(..., on_generation=callback)` calls `callback` after every generation, the initial population (generation 0) included. It runs on the thread that called `run`. It gets a read-only object:
 - `Progress`: the `generation`, `evaluations`, `seconds` and `best_fitness` so far (`None` before a valid solution), the `best_genome` so far, and the `population` (a genome per row) with its `scores` and `violations`
-- `MultiProgress`, for a multi-objective algorithm: the same, with `front_size` (the number of non-dominated individuals in the population) instead of `best_fitness` and the best genome, the population's `objectives` (a row per genome) instead of its scores, and the `front_objectives` and `front_violations` of its non-dominated individuals
+- `MultiProgress`, for a multi-objective algorithm: the same, with `front_size` (the number of non-dominated individuals in the population, each genome once) instead of `best_fitness` and the best genome, the population's `objectives` (a row per genome) instead of its scores, and the `front_objectives` and `front_violations` of its non-dominated individuals
 
 If `callback` returns `False`, the run stops with the stop reason `"aborted"`. If it raises an exception, the run stops and `run` raises it.
 

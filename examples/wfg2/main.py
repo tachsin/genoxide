@@ -13,8 +13,6 @@ page, with trace.py.
     python examples/wfg2/main.py
 """
 
-import numpy as np
-
 import genoxide as gx
 
 from trace import Trace
@@ -47,9 +45,8 @@ trace = Trace(REFERENCE, REGIONS)
 
 def report(name, generations, front):
     """Prints the size of a front, its solutions on each region (f₁ within 0.01 of the region's
-    range), its IGD+ to the optimal front and its hypervolume; copies of a point count once."""
-    # each point once: MOEA/D's subproblems can hold copies of a solution
-    front = np.unique(front, axis=0)
+    range), its IGD+ to the optimal front and its hypervolume. A front has each solution once,
+    though MOEA/D's subproblems can hold copies of one."""
     distance = gx.indicators.igd_plus(front, optimal)
     volume = gx.indicators.hypervolume(front, REFERENCE)
     counts = [

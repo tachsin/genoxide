@@ -99,8 +99,8 @@ Each runs for 1,000 generations, and the example reports its front after 250 and
 
 A line per algorithm and budget: the size of the front, how many of its solutions are on each of
 the six regions (with an f₁ within 0.01 of the region's range), its IGD+ and its hypervolume.
-Copies of a solution count once: MOEA/D's subproblems can hold the same solution. The last line
-gives the whole front's hypervolume.
+A front has each solution once, though MOEA/D's subproblems can hold the same solution. The last
+line gives the whole front's hypervolume.
 
 IGD+ (Ishibuchi et al., 2015, EMO 2015, LNCS 9019: 110-125) is measured to 500 points of the
 optimal front, evenly spread along it, region by region. It averages, over those 500 points, the

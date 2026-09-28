@@ -236,7 +236,7 @@ On stdout, as JSON:
 - `stop_reason`: see below
 - `generations`, `evaluations` and `seconds`
 - For one objective: `fitness`, `violation` and `genome`. `fitness` is `null` for a genome that can't be scored, and its violation is 0.
-- For several objectives: `front`, the trade-offs found, without copies of a genome. Each has its `objectives`, `violation` and `genome`. `objectives` is `null` for a genome that can't be scored, and its violation is 0.
+- For several objectives: `front`, the trade-offs found, each genome once (the first of its copies), as in Rust and Python. Each has its `objectives`, `violation` and `genome`. `objectives` is `null` for a genome that can't be scored, and its violation is 0.
 - Infinite values are the text `"inf"` or `"-inf"`, since JSON has no numbers for them.
 
 | `stop_reason` | The run stopped |

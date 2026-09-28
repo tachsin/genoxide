@@ -1,6 +1,6 @@
 //! MOEA/D: multi-objective optimization by decomposition into single-objective subproblems.
 
-use super::breed::{Variation, scores_of};
+use super::breed::{Variation, distinct, scores_of};
 use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
@@ -345,10 +345,8 @@ where
     fn update_front(&mut self) {
         let scores = scores_of(self.population.as_slice());
         let fronts = non_dominated_sort(&scores, &self.objectives);
-        let front: Vec<Individual<R::Genome, Scores<M>>> = fronts
-            .first()
-            .map(|first| first.iter().map(|&i| self.population[i].clone()).collect())
-            .unwrap_or_default();
+        let first = fronts.first().map(Vec::as_slice).unwrap_or_default();
+        let front = distinct(&self.population, first.iter().copied());
         if gains(
             &scores_of(&front),
             &scores_of(&self.front),

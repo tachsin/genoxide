@@ -852,18 +852,10 @@ where
         return Err(error.into());
     }
     let outcome = outcome.map_err(|error| error.to_string())?;
-    // the front, without copies of a genome
-    let mut members: Vec<&Individual<A::Genome, Scores<N>>> = Vec::new();
-    for individual in outcome.front() {
-        if members
-            .iter()
-            .all(|member| member.genome() != individual.genome())
-        {
-            members.push(individual);
-        }
-    }
-    let genomes: Vec<&A::Genome> = members.iter().map(|member| member.genome()).collect();
-    let (objectives, violations) = objective_rows(py, members)?;
+    // the front, each genome once, as in the last generation's progress
+    let front = outcome.front();
+    let genomes: Vec<&A::Genome> = front.iter().map(Individual::genome).collect();
+    let (objectives, violations) = objective_rows(py, front)?;
     let result = PyDict::new(py);
     result.set_item("front_genomes", genes::matrix(py, &genomes)?)?;
     result.set_item("front_objectives", objectives)?;

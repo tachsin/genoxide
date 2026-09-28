@@ -525,7 +525,7 @@ fn main() -> genoxide::Result<()> {
 
 ### Multi-objective optimization
 
-Fitness: `[f64; M]`, `(values, violation)` or `Option<[f64; M]>`. `MultiEngine` returns the Pareto front.
+Fitness: `[f64; M]`, `(values, violation)` or `Option<[f64; M]>`. `MultiEngine` returns the Pareto front: each genome once (the first of its copies), like every generation's `snapshot.front()`.
 
 ```rust
 use genoxide::Objective::Minimize;
