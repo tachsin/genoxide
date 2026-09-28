@@ -15,6 +15,8 @@ import {
 import Link from "next/link";
 import { SiDocsdotrs, SiGithub, SiPypi, SiPython } from "react-icons/si";
 import ExampleCard from "@/components/projects/genoxide/ExampleCard";
+import EvolvingTitle from "@/components/projects/genoxide/game/EvolvingTitle";
+import HeroSwarm from "@/components/projects/genoxide/game/HeroSwarm";
 import JsonLd from "@/components/projects/JsonLd";
 import LangCodeGroup from "@/components/projects/LangCodeGroup";
 import SourceUnavailable from "@/components/projects/SourceUnavailable";
@@ -156,7 +158,7 @@ export default async function GenoxidePage() {
       <JsonLd data={structuredData(versions)} />
 
       {/* ---------- Hero ---------- */}
-      <section className="proj-container pt-16 pb-20 text-center sm:pt-24">
+      <section className="proj-container relative isolate pt-16 pb-20 text-center sm:pt-24">
         <div className="proj-rise flex justify-center">
           {versionLabel ? (
             <a
@@ -174,9 +176,10 @@ export default async function GenoxidePage() {
           )}
         </div>
 
-        <h1 className="proj-rise proj-gradient-text mt-6 font-mono font-semibold text-6xl tracking-tighter sm:text-8xl">
-          genoxide
-        </h1>
+        <EvolvingTitle
+          text="genoxide"
+          className="proj-rise proj-gradient-text mt-6 font-mono font-semibold text-6xl tracking-tighter sm:text-8xl"
+        />
         <p className="proj-rise-1 mx-auto mt-5 max-w-2xl text-balance text-base-content/80 text-lg sm:text-xl">
           {GENOXIDE_TAGLINE}: genetic algorithms, evolution strategies, CMA-ES, differential evolution, particle
           swarms, local search and multi-objective optimization in one library.
@@ -217,6 +220,8 @@ export default async function GenoxidePage() {
             </li>
           ))}
         </ul>
+
+        <HeroSwarm />
       </section>
 
       {/* ---------- Highlights ---------- */}
