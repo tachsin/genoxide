@@ -46,7 +46,64 @@ pub use pso::{Pso, PsoBuilder, Topology};
 pub use steady::{Incremental, SteadyGa};
 
 use crate::genome::Genome;
-use crate::{Fitness, Individual, Objective, Population, Result};
+use crate::{Fitness, Individual, Objective, Population, Result, StreamRng};
+
+// The ids of the random streams that parallel breeding derives from an algorithm's generator, one
+// per algorithm: the streams of a generation are `rng.derive(id).derive(generation)`, and a
+// candidate's (a GA's pair of parents, a DE trial, an ES offspring) is `derive(position)` of
+// those. They must never change for the same major version: they decide the results of seeded
+// runs.
+pub(crate) mod breeding_streams {
+    // `GaBuilder::parallel_breeding`
+    pub(crate) const GA: u64 = 0;
+    // `DeBuilder::parallel_breeding`
+    pub(crate) const DE: u64 = 1;
+    // `EsBuilder::parallel_breeding`
+    pub(crate) const ES: u64 = 2;
+}
+
+// `make(position, input, rng)` for each of `inputs`, in order into `made` and `other`, each with
+// the stream `streams.derive(position)`: on rayon's threads, so the same results on any number of
+// threads
+#[cfg(feature = "parallel")]
+pub(crate) fn breed_in_parallel<I, T, U>(
+    inputs: Vec<I>,
+    streams: &StreamRng,
+    make: impl Fn(usize, I, &mut StreamRng) -> (T, U) + Sync,
+    made: &mut Vec<T>,
+    other: &mut Vec<U>,
+) where
+    I: Send,
+    T: Send,
+    U: Send,
+{
+    use rayon::prelude::*;
+    // unzipping an indexed parallel iterator keeps the order, whatever the thread count
+    inputs
+        .into_par_iter()
+        .enumerate()
+        .map(|(position, input)| make(position, input, &mut streams.derive(position as u64)))
+        .unzip_into_vecs(made, other);
+}
+
+// without the `parallel` feature (a checkpoint of a run with parallel breeding), the same results,
+// one after the other
+#[cfg(not(feature = "parallel"))]
+pub(crate) fn breed_in_parallel<I, T, U>(
+    inputs: Vec<I>,
+    streams: &StreamRng,
+    make: impl Fn(usize, I, &mut StreamRng) -> (T, U),
+    made: &mut Vec<T>,
+    other: &mut Vec<U>,
+) {
+    made.clear();
+    other.clear();
+    for (position, input) in inputs.into_iter().enumerate() {
+        let (a, b) = make(position, input, &mut streams.derive(position as u64));
+        made.push(a);
+        other.push(b);
+    }
+}
 
 /// An algorithm as an ask / tell state machine.
 ///

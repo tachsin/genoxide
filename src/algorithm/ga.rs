@@ -537,7 +537,7 @@ where
 // generation is `rng.derive(BREEDING_STREAMS).derive(generation)`, and a pair's stream is
 // `generation_stream.derive(pair)`. It must never change for the same major version: it decides
 // the results of seeded runs.
-const BREEDING_STREAMS: u64 = 0;
+const BREEDING_STREAMS: u64 = super::breeding_streams::GA;
 
 // what crossing over and mutating a pair of parents needs
 struct Breeding<'a, R: Representation, C, M> {

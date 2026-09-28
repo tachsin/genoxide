@@ -388,37 +388,93 @@ fn islands_run_in_parallel_with_the_same_results() {
 
 #[test]
 fn de_trials_change_a_gene_that_can_change() {
-    // 9 fixed genes and 1 free one: with CR 0, every trial changes the free gene
-    let bounds = (0..9).map(|_| 1.0..=1.0).chain(std::iter::once(-5.0..=5.0));
-    let de = De::builder(Real::new(bounds).unwrap())
-        .population_size(20)
-        .control(de::Control::Fixed { f: 0.5, cr: 0.0 })
-        .minimize()
-        .seed(0)
-        .build()
-        .unwrap();
-    let copies = std::sync::Mutex::new((0, 0));
-    let mut de = de;
-    // the initial population first
-    let fitness: Vec<Fitness> = de.ask().iter().map(|x| Fitness::new(x[9] * x[9])).collect();
-    de.tell(&fitness).unwrap();
-    for _ in 0..20 {
-        let population: Vec<Reals> = de.population().iter().map(|x| x.genome().clone()).collect();
-        let fitness: Vec<Fitness> = de
-            .ask()
-            .iter()
-            .map(|x| {
-                let mut counts = copies.lock().unwrap();
-                counts.0 += usize::from(population.contains(x));
-                counts.1 += 1;
-                Fitness::new(x[9] * x[9])
-            })
-            .collect();
+    // with parallel breeding too, where each trial chooses its gene on its own stream
+    #[cfg(feature = "parallel")]
+    let settings = [false, true];
+    #[cfg(not(feature = "parallel"))]
+    let settings = [false];
+    for parallel_breeding in settings {
+        // 9 fixed genes and 1 free one: with CR 0, every trial changes the free gene
+        let bounds = (0..9).map(|_| 1.0..=1.0).chain(std::iter::once(-5.0..=5.0));
+        let de = De::builder(Real::new(bounds).unwrap())
+            .population_size(20)
+            .control(de::Control::Fixed { f: 0.5, cr: 0.0 })
+            .minimize()
+            .seed(0);
+        #[cfg(feature = "parallel")]
+        let de = de.parallel_breeding(parallel_breeding);
+        let mut de = de.build().unwrap();
+        assert_eq!(de.parallel_breeding(), parallel_breeding);
+        let copies = std::sync::Mutex::new((0, 0));
+        // the initial population first
+        let fitness: Vec<Fitness> = de.ask().iter().map(|x| Fitness::new(x[9] * x[9])).collect();
         de.tell(&fitness).unwrap();
+        for _ in 0..20 {
+            let population: Vec<Reals> =
+                de.population().iter().map(|x| x.genome().clone()).collect();
+            let fitness: Vec<Fitness> = de
+                .ask()
+                .iter()
+                .map(|x| {
+                    let mut counts = copies.lock().unwrap();
+                    counts.0 += usize::from(population.contains(x));
+                    counts.1 += 1;
+                    Fitness::new(x[9] * x[9])
+                })
+                .collect();
+            de.tell(&fitness).unwrap();
+        }
+        let (copied, trials) = copies.into_inner().unwrap();
+        // before, about 9 in 10 were copies of their targets
+        assert_eq!(copied, 0, "{copied} of {trials} trials are copies");
     }
-    let (copied, trials) = copies.into_inner().unwrap();
-    // before, about 9 in 10 were copies of their targets
-    assert_eq!(copied, 0, "{copied} of {trials} trials are copies");
+}
+
+// islands of DEs that build their trials in parallel: the same results with parallel evaluation or
+// not, and on any number of threads
+#[cfg(feature = "parallel")]
+#[test]
+fn islands_with_parallel_breeding_are_the_same_on_any_number_of_threads() {
+    use genoxide::algorithm::islands::Topology;
+    fn run(islands: Vec<De>, parallel: bool) -> (Individual<Reals>, Population<Reals>) {
+        let islands = Islands::builder(islands)
+            .topology(Topology::Random)
+            .interval(3)
+            .seed(9)
+            .build()
+            .unwrap();
+        let mut engine = Engine::new(islands, rastrigin)
+            .parallel(parallel)
+            .stop_when(Stop::generations(20));
+        let outcome = engine.run().unwrap();
+        (outcome.into_best(), engine.algorithm().population().clone())
+    }
+    let des = || {
+        (0..4)
+            .map(|seed| {
+                De::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+                    .population_size(20)
+                    .parallel_breeding(true)
+                    .minimize()
+                    .seed(seed)
+                    .build()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>()
+    };
+    let on_threads =
+        |threads: usize, f: &(dyn Fn() -> (Individual<Reals>, Population<Reals>) + Sync)| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap()
+                .install(f)
+        };
+    let de = run(des(), false);
+    assert_eq!(run(des(), true), de);
+    for threads in [1, 2, 8] {
+        assert_eq!(on_threads(threads, &|| run(des(), true)), de);
+    }
 }
 
 #[test]

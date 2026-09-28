@@ -30,7 +30,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
   - permutations: swap, inversion (2-opt), insertion, scramble
 - **Schemes:** generational with elitism, steady-state, (μ+λ), (μ,λ), and memetic (Lamarckian local search on the best parents).
 - **Parameter control:** a GA's rates and operators can be changed between generations, e.g. to anneal the mutation step or raise it when the search stagnates.
-- **Parallel breeding:** crossover and mutation on all cores, each pair of parents on a random stream of its own, so a seeded run gives the same results on any number of threads. For large populations and operators that do real work per gene, when evaluation is fast.
+- **Parallel breeding:** crossover and mutation on all cores, each pair of parents on a random stream of its own, so a seeded run gives the same results on any number of threads. For large populations and operators that do real work per gene, when evaluation is fast. Differential evolution's trials and an evolution strategy's offspring can be made in parallel the same way.
 
 ## Other single-objective methods
 

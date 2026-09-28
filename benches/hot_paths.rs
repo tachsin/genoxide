@@ -197,35 +197,82 @@ fn repairing_ga(parallel_breeding: bool) -> RepairingGa {
 }
 
 // evaluates the sphere function in parallel, a fast fitness function
-fn tell_sphere(ga: &mut RepairingGa) {
+fn tell_sphere<A: Algorithm<Genome = Reals>>(algorithm: &mut A) {
     use rayon::prelude::*;
-    let genomes: Vec<&Reals> = ga.ask().iter().collect();
+    let genomes: Vec<&Reals> = algorithm.ask().iter().collect();
     let fitness: Vec<Fitness> = genomes
         .par_iter()
         .map(|x| Fitness::new(x.iter().map(|xi| xi * xi).sum::<f64>()))
         .collect();
-    ga.tell(&fitness).unwrap();
+    algorithm.tell(&fitness).unwrap();
 }
 
-// one generation of a population of 2000 with 50 real genes and a mutation that works per gene,
-// evaluated in parallel: sequential against parallel breeding
+// SHADE (the defaults) with 200 genes and a population of 1000
+fn de(parallel_breeding: bool) -> De {
+    De::builder(Real::uniform(200, -5.0..=5.0).unwrap())
+        .population_size(1_000)
+        .parallel_breeding(parallel_breeding)
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap()
+}
+
+// a (15/15_I, 100)-ES with a step size per gene, with 100 genes
+fn es(parallel_breeding: bool) -> Es {
+    Es::builder(Real::uniform(100, -5.0..=5.0).unwrap())
+        .parents(15)
+        .offspring(100)
+        .parallel_breeding(parallel_breeding)
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap()
+}
+
+// one generation of `make`'s algorithm, after its first
+fn bench_generation<A: Algorithm<Genome = Reals>>(
+    group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
+    name: &str,
+    make: impl Fn() -> A,
+) {
+    group.bench_function(name, |b| {
+        b.iter_batched(
+            || {
+                let mut algorithm = make();
+                tell_sphere(&mut algorithm);
+                algorithm
+            },
+            |mut algorithm| {
+                tell_sphere(&mut algorithm);
+                algorithm
+            },
+            BatchSize::LargeInput,
+        )
+    });
+}
+
+// one generation, evaluated in parallel, sequential against parallel breeding: a GA with a
+// population of 2000 with 50 real genes and a mutation that works per gene, SHADE with 1000
+// individuals of 200 genes, and a (15/15_I, 100)-ES with 100 genes
 fn breeding(c: &mut Criterion) {
     let mut group = c.benchmark_group("breeding");
     for (name, parallel_breeding) in [("sequential", false), ("parallel", true)] {
-        group.bench_function(format!("generation_real_50_population_2000_{name}"), |b| {
-            b.iter_batched(
-                || {
-                    let mut ga = repairing_ga(parallel_breeding);
-                    tell_sphere(&mut ga);
-                    ga
-                },
-                |mut ga| {
-                    tell_sphere(&mut ga);
-                    ga
-                },
-                BatchSize::LargeInput,
-            )
-        });
+        bench_generation(
+            &mut group,
+            &format!("generation_real_50_population_2000_{name}"),
+            || repairing_ga(parallel_breeding),
+        );
+        bench_generation(
+            &mut group,
+            &format!("de_generation_real_200_population_1000_{name}"),
+            || de(parallel_breeding),
+        );
+        bench_generation(
+            &mut group,
+            &format!("es_generation_real_100_15_100_{name}"),
+            || es(parallel_breeding),
+        );
     }
     group.finish();
 }

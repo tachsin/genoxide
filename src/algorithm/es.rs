@@ -1,6 +1,6 @@
 //! Evolution strategies: (μ/ρ +, λ)-ES with self-adapted step sizes.
 
-use super::{Algorithm, Candidates, Reevaluate};
+use super::{Algorithm, Candidates, Reevaluate, breed_in_parallel, breeding_streams};
 use crate::genome::{Real, Reals, Representation};
 use crate::math::{exp, ln};
 use crate::operator::check_size;
@@ -103,6 +103,8 @@ pub struct Es {
     objective: Objective,
     seed: u64,
     rng: StreamRng,
+    // each offspring made on a random stream of its own, in parallel with the `parallel` feature
+    parallel_breeding: bool,
     // the parents, and the step sizes of each: one, or one per variable gene
     population: Population<Reals>,
     steps: Vec<Vec<f64>>,
@@ -133,6 +135,7 @@ impl Es {
             objective: Objective::default(),
             seed: None,
             initial_genomes: Vec::new(),
+            parallel_breeding: false,
         }
     }
 
@@ -156,6 +159,12 @@ impl Es {
     /// The seed of the random numbers: the given one, or a random one if none was given.
     pub fn seed(&self) -> u64 {
         self.seed
+    }
+
+    /// Whether each offspring is made on a random stream of its own, in parallel: see
+    /// [`EsBuilder::parallel_breeding`].
+    pub fn parallel_breeding(&self) -> bool {
+        self.parallel_breeding
     }
 
     /// Marks the parents as not evaluated, for a fitness function that changed during the run.
@@ -185,92 +194,40 @@ impl Es {
         individual.fitness().unwrap_or(Fitness::invalid())
     }
 
-    // a recombined and mutated offspring, and its step sizes
-    fn offspring(&mut self) -> (Reals, Vec<f64>) {
-        let variable = self.real.variable_genes();
-        let n = variable.len();
-        let (rho, dominant) = match self.recombination {
-            Recombination::Intermediate { rho } => (rho, false),
-            Recombination::Dominant { rho } => (rho, true),
-        };
-        let parents = self.rng.sample_distinct(rho, self.mu);
-        let mut genes = self.population[parents[0]].genome().clone();
-        let mut steps = self.steps[parents[0]].clone();
-        if rho > 1 && dominant {
-            for (index, &gene) in variable.iter().enumerate() {
-                let parent = parents[self.rng.below(rho)];
-                genes[gene] = self.population[parent].genome()[gene];
-                if self.step_sizes == StepSizes::PerGene {
-                    steps[index] = self.steps[parent][index];
-                }
-            }
-            if self.step_sizes == StepSizes::One {
-                steps = self.steps[parents[self.rng.below(rho)]].clone();
-            }
-        } else if rho > 1 {
-            let weight = 1.0 / rho as f64;
-            for &gene in variable {
-                genes[gene] = parents
-                    .iter()
-                    .map(|&parent| weight * self.population[parent].genome()[gene])
-                    .sum();
-            }
-            // the geometric mean of the step sizes, which mutate log-normally
-            for (index, step) in steps.iter_mut().enumerate() {
-                let log_mean: f64 = parents
-                    .iter()
-                    .map(|&parent| weight * ln(self.steps[parent][index]))
-                    .sum();
-                *step = exp(log_mean);
-            }
-        }
-        // the log-normal mutation of the step sizes
-        let dimensions = n as f64;
-        match self.step_sizes {
-            StepSizes::One => {
-                let tau = 1.0 / dimensions.sqrt();
-                steps[0] = (steps[0] * exp(tau * self.rng.normal())).clamp(MIN_STEP, MAX_STEP);
-            }
-            StepSizes::PerGene => {
-                let global = self.rng.normal() / (2.0 * dimensions).sqrt();
-                let tau = 1.0 / (2.0 * dimensions.sqrt()).sqrt();
-                for step in &mut steps {
-                    *step =
-                        (*step * exp(global + tau * self.rng.normal())).clamp(MIN_STEP, MAX_STEP);
-                }
-            }
-        }
-        // the Gaussian mutation of the genes, reflected into the bounds
-        let bounds = self.real.bounds();
-        for (index, &gene) in variable.iter().enumerate() {
-            let range = &bounds[gene];
-            let step = steps[if self.step_sizes == StepSizes::One {
-                0
-            } else {
-                index
-            }];
-            let current = genes[gene];
-            let value = reflect(
-                current + step * (range.end() - range.start()) * self.rng.normal(),
-                range,
-            );
-            genes[gene] = if range.contains(&value) {
-                value
-            } else {
-                // not computable with such huge bounds (NaN): a uniform value instead
-                crate::genome::real::random_other_in(range, current, &mut self.rng)
-            };
-        }
-        (genes, steps)
-    }
-
     fn breed(&mut self) {
-        self.offspring.clear();
-        self.offspring_steps.clear();
-        for _ in 0..self.lambda {
-            let (genes, steps) = self.offspring();
-            self.offspring.push(Individual::new(genes));
-            self.offspring_steps.push(steps);
+        let parents = Parents {
+            real: &self.real,
+            mu: self.mu,
+            recombination: self.recombination,
+            step_sizes: self.step_sizes,
+            population: &self.population,
+            steps: &self.steps,
+        };
+        if self.parallel_breeding {
+            // a stream per offspring, from the seed, the generation and the offspring's position:
+            // the same offspring on any number of threads
+            let streams = self
+                .rng
+                .derive(breeding_streams::ES)
+                .derive(self.generation);
+            breed_in_parallel(
+                vec![(); self.lambda],
+                &streams,
+                |_, (), rng| {
+                    let (genes, steps) = parents.offspring(rng);
+                    (Individual::new(genes), steps)
+                },
+                &mut self.offspring,
+                &mut self.offspring_steps,
+            );
+        } else {
+            self.offspring.clear();
+            self.offspring_steps.clear();
+            for _ in 0..self.lambda {
+                let (genes, steps) = parents.offspring(&mut self.rng);
+                self.offspring.push(Individual::new(genes));
+                self.offspring_steps.push(steps);
+            }
         }
     }
 
@@ -313,6 +270,98 @@ impl Es {
             }
         }
         self.population = Population::new(parents);
+    }
+}
+
+// what making the offspring of a generation needs
+struct Parents<'a> {
+    real: &'a Real,
+    mu: usize,
+    recombination: Recombination,
+    step_sizes: StepSizes,
+    population: &'a Population<Reals>,
+    // the step sizes of each parent
+    steps: &'a [Vec<f64>],
+}
+
+impl Parents<'_> {
+    // a recombined and mutated offspring, and its step sizes
+    #[inline]
+    fn offspring(&self, rng: &mut StreamRng) -> (Reals, Vec<f64>) {
+        let variable = self.real.variable_genes();
+        let n = variable.len();
+        let (rho, dominant) = match self.recombination {
+            Recombination::Intermediate { rho } => (rho, false),
+            Recombination::Dominant { rho } => (rho, true),
+        };
+        let parents = rng.sample_distinct(rho, self.mu);
+        let mut genes = self.population[parents[0]].genome().clone();
+        let mut steps = self.steps[parents[0]].clone();
+        if rho > 1 && dominant {
+            for (index, &gene) in variable.iter().enumerate() {
+                let parent = parents[rng.below(rho)];
+                genes[gene] = self.population[parent].genome()[gene];
+                if self.step_sizes == StepSizes::PerGene {
+                    steps[index] = self.steps[parent][index];
+                }
+            }
+            if self.step_sizes == StepSizes::One {
+                steps = self.steps[parents[rng.below(rho)]].clone();
+            }
+        } else if rho > 1 {
+            let weight = 1.0 / rho as f64;
+            for &gene in variable {
+                genes[gene] = parents
+                    .iter()
+                    .map(|&parent| weight * self.population[parent].genome()[gene])
+                    .sum();
+            }
+            // the geometric mean of the step sizes, which mutate log-normally
+            for (index, step) in steps.iter_mut().enumerate() {
+                let log_mean: f64 = parents
+                    .iter()
+                    .map(|&parent| weight * ln(self.steps[parent][index]))
+                    .sum();
+                *step = exp(log_mean);
+            }
+        }
+        // the log-normal mutation of the step sizes
+        let dimensions = n as f64;
+        match self.step_sizes {
+            StepSizes::One => {
+                let tau = 1.0 / dimensions.sqrt();
+                steps[0] = (steps[0] * exp(tau * rng.normal())).clamp(MIN_STEP, MAX_STEP);
+            }
+            StepSizes::PerGene => {
+                let global = rng.normal() / (2.0 * dimensions).sqrt();
+                let tau = 1.0 / (2.0 * dimensions.sqrt()).sqrt();
+                for step in &mut steps {
+                    *step = (*step * exp(global + tau * rng.normal())).clamp(MIN_STEP, MAX_STEP);
+                }
+            }
+        }
+        // the Gaussian mutation of the genes, reflected into the bounds
+        let bounds = self.real.bounds();
+        for (index, &gene) in variable.iter().enumerate() {
+            let range = &bounds[gene];
+            let step = steps[if self.step_sizes == StepSizes::One {
+                0
+            } else {
+                index
+            }];
+            let current = genes[gene];
+            let value = reflect(
+                current + step * (range.end() - range.start()) * rng.normal(),
+                range,
+            );
+            genes[gene] = if range.contains(&value) {
+                value
+            } else {
+                // not computable with such huge bounds (NaN): a uniform value instead
+                crate::genome::real::random_other_in(range, current, rng)
+            };
+        }
+        (genes, steps)
     }
 }
 
@@ -434,7 +483,7 @@ impl Algorithm for Es {
 ///
 /// The numbers of parents and offspring are required. Defaults: intermediate recombination of
 /// all parents, comma selection, a step size per gene starting at 0.3 of each range, maximize,
-/// random initial parents and a random seed.
+/// random initial parents, a random seed, and sequential breeding.
 #[derive(Clone, Debug)]
 pub struct EsBuilder {
     real: Real,
@@ -447,6 +496,7 @@ pub struct EsBuilder {
     objective: Objective,
     seed: Option<u64>,
     initial_genomes: Vec<Reals>,
+    parallel_breeding: bool,
 }
 
 impl EsBuilder {
@@ -514,6 +564,50 @@ impl EsBuilder {
     /// is random.
     pub fn initial_genomes<I: IntoIterator<Item = Reals>>(mut self, genomes: I) -> Self {
         self.initial_genomes = genomes.into_iter().collect();
+        self
+    }
+
+    /// Makes the offspring in parallel with rayon: the recombination of each offspring's parents
+    /// and the mutation of its step sizes and genes, on a thread pool. Off by default.
+    ///
+    /// - **Stays sequential,** on the run's random numbers: the selection of the next parents.
+    /// - **Random numbers:** each offspring draws from a stream of its own, derived from the seed,
+    ///   the generation and the offspring's position ([`StreamRng::derive`]), also for choosing
+    ///   its parents. A seeded run gives the same results on any number of threads, but not the
+    ///   results it gives without parallel breeding.
+    /// - **When it pays off:** when making the offspring is a large part of a generation, which
+    ///   it often is with a fast fitness function: an offspring draws a normal random number and
+    ///   takes an exponential per gene, and intermediate recombination a logarithm of each
+    ///   parent's step sizes. Measured with parallel evaluation of the sphere function on 20
+    ///   threads, a generation of a (15/15_I, 100)-ES took 3× less time with parallel breeding
+    ///   with 50 genes and 9× less with 1000; a (100/100_I, 700)-ES with 50 genes 12× less; about
+    ///   3.4× on 4 threads. With a slow fitness function breeding takes little of the time.
+    ///
+    /// Checkpoints keep the setting. A run with it resumes identically, also without the
+    /// `parallel` feature, then making the same offspring on one thread.
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let es = Es::builder(Real::uniform(100, -5.0..=5.0)?)
+    ///     .parents(15)
+    ///     .offspring(100)
+    ///     .parallel_breeding(true)
+    ///     .minimize()
+    ///     .seed(1)
+    ///     .build()?;
+    /// let sphere = |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>();
+    /// let outcome = Engine::new(es, sphere)
+    ///     .parallel(true)
+    ///     .stop_when(Stop::generations(20))
+    ///     .run()?;
+    /// // from about 700 for the best of the initial parents
+    /// assert!(outcome.best_fitness().score().unwrap() < 400.0);
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    #[cfg(feature = "parallel")]
+    pub fn parallel_breeding(mut self, parallel: bool) -> Self {
+        self.parallel_breeding = parallel;
         self
     }
 
@@ -607,6 +701,7 @@ impl EsBuilder {
             objective: self.objective,
             seed,
             rng,
+            parallel_breeding: self.parallel_breeding,
             population: Population::from_genomes(genomes),
             steps: vec![vec![self.initial_step; steps_per_parent]; mu],
             offspring: Vec::new(),
@@ -948,6 +1043,184 @@ mod tests {
         assert!(best < 0.1, "{best}");
     }
 
+    // the Rosenbrock function with only +, − and ×, which is the same on every platform
+    fn rosenbrock(x: &Reals) -> f64 {
+        x.windows(2)
+            .map(|w| {
+                let (a, b) = (w[1] - w[0] * w[0], 1.0 - w[0]);
+                100.0 * a * a + b * b
+            })
+            .sum()
+    }
+
+    // what a run leaves behind: the parents, their step sizes, the best and the evaluations
+    type Run = (
+        Population<Reals>,
+        Vec<Vec<f64>>,
+        Option<Individual<Reals>>,
+        u64,
+    );
+
+    // `generations` generations of the Rosenbrock function, with a re-evaluation at generation 5
+    // if `reevaluate`
+    fn run_rosenbrock(mut es: Es, generations: u64, reevaluate: bool) -> Run {
+        while es.generation() < generations {
+            step(&mut es, rosenbrock);
+            if reevaluate && es.generation() == 5 {
+                es.reevaluate().unwrap();
+                step(&mut es, rosenbrock);
+            }
+        }
+        (
+            es.population().clone(),
+            es.step_sizes().to_vec(),
+            es.best().cloned(),
+            es.evaluations(),
+        )
+    }
+
+    // every recombination, selection and kind of step sizes, and a re-evaluation
+    fn parallel_runs() -> Vec<(EsBuilder, bool)> {
+        let real =
+            || Real::new([-5.0..=5.0, 2.0..=2.0, -5.0..=5.0, 0.0..=3.0, -1.0..=1.0]).unwrap();
+        let es = |recombination, selection, step_sizes| {
+            Es::builder(real())
+                .parents(4)
+                .offspring(13)
+                .recombination(recombination)
+                .selection(selection)
+                .step_sizes(step_sizes)
+                .minimize()
+        };
+        vec![
+            (
+                es(
+                    Recombination::Intermediate { rho: 4 },
+                    Selection::Comma,
+                    StepSizes::PerGene,
+                ),
+                false,
+            ),
+            (
+                es(
+                    Recombination::Intermediate { rho: 2 },
+                    Selection::Plus,
+                    StepSizes::One,
+                ),
+                false,
+            ),
+            (
+                es(
+                    Recombination::Dominant { rho: 3 },
+                    Selection::Comma,
+                    StepSizes::PerGene,
+                ),
+                false,
+            ),
+            (
+                es(
+                    Recombination::Dominant { rho: 2 },
+                    Selection::Plus,
+                    StepSizes::One,
+                ),
+                false,
+            ),
+            (
+                es(
+                    Recombination::Dominant { rho: 1 },
+                    Selection::Plus,
+                    StepSizes::PerGene,
+                ),
+                true,
+            ),
+        ]
+    }
+
+    // parallel breeding is set directly, so that these tests run without the `parallel` feature
+    // too, where the offspring are made one after the other with the same results
+    fn with_breeding(builder: &EsBuilder, seed: u64, parallel_breeding: bool) -> Es {
+        let mut es = builder.clone().seed(seed).build().unwrap();
+        es.parallel_breeding = parallel_breeding;
+        es
+    }
+
+    #[test]
+    fn parallel_breeding_is_reproducible_but_not_sequential_breeding() {
+        for (index, (builder, reevaluate)) in parallel_runs().into_iter().enumerate() {
+            let run = |seed, parallel_breeding| {
+                run_rosenbrock(
+                    with_breeding(&builder, seed, parallel_breeding),
+                    20,
+                    reevaluate,
+                )
+            };
+            let parallel = run(1, true);
+            assert_eq!(run(1, true), parallel, "{index}");
+            assert_ne!(run(2, true), parallel, "{index}");
+            assert_ne!(run(1, false), parallel, "{index}");
+        }
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn parallel_breeding_is_the_same_on_any_number_of_threads() {
+        for (index, (builder, reevaluate)) in parallel_runs().into_iter().enumerate() {
+            let on_threads = |threads| {
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .unwrap()
+                    .install(|| run_rosenbrock(with_breeding(&builder, 3, true), 20, reevaluate))
+            };
+            let one = on_threads(1);
+            assert_eq!(on_threads(2), one, "{index}");
+            assert_eq!(on_threads(8), one, "{index}");
+        }
+    }
+
+    /// Fixed values: these must never change for the same major version, on any platform. They
+    /// pin the streams of parallel breeding, from the seed, the generation and the offspring's
+    /// position, with or without the `parallel` feature.
+    #[test]
+    fn parallel_breeding_values_are_portable() {
+        let builder = Es::builder(Real::uniform(4, -5.0..=5.0).unwrap())
+            .parents(3)
+            .offspring(12)
+            .minimize();
+        let (_, _, best, evaluations) = run_rosenbrock(with_breeding(&builder, 1, true), 30, false);
+        assert_eq!(evaluations, 363);
+        assert_eq!(
+            best.unwrap().genome().to_vec(),
+            [
+                0.28587409304684175,
+                0.08156901116029955,
+                0.024978291881076517,
+                -0.024446335113580152
+            ]
+        );
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn parallel_breeding_is_a_setting_of_the_builder() {
+        let make = || builder(0);
+        assert!(
+            make()
+                .parallel_breeding(true)
+                .build()
+                .unwrap()
+                .parallel_breeding()
+        );
+        assert!(!make().build().unwrap().parallel_breeding());
+        assert!(
+            !make()
+                .parallel_breeding(false)
+                .build()
+                .unwrap()
+                .parallel_breeding()
+        );
+    }
+
     proptest! {
         #[test]
         fn offspring_stay_in_bounds_and_plus_selection_keeps_the_best(
@@ -959,6 +1232,7 @@ mod tests {
             plus: bool,
             one: bool,
             initial_step in 1e-6..=10.0f64,
+            parallel_breeding: bool,
         ) {
             // one fixed gene, bounds of different widths, and huge bounds
             let real = Real::new([3.0..=3.0, -1.0..=1.0, 0.0..=100.0, -1e-3..=1e-3, -8e307..=8e307])
@@ -979,6 +1253,7 @@ mod tests {
                 .seed(seed)
                 .build()
                 .unwrap();
+            es.parallel_breeding = parallel_breeding;
             // finite despite the huge bounds
             let f = |x: &Reals| x[..4].iter().map(|xi| xi * xi).sum::<f64>() + (x[4] / 1e307).abs();
             step(&mut es, f);
