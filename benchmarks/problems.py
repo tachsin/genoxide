@@ -160,13 +160,33 @@ def value(problem, size, solution):
 # ------------------------------------------------------------------------------------------------
 
 
+def nqueens_solution(size):
+    """A board of `size` queens without conflicts, for any size but 2 and 3: the explicit
+    construction (Hoffman, Loessi and Moore, 1969; Bernhardsson, 1991) that puts the queens of rows
+    0, 1, ... in the even columns 2, 4, ... and then the odd columns 1, 3, ... (counting from 1),
+    with the swaps the sizes 6k + 2 and 6k + 3 need."""
+    evens = list(range(2, size + 1, 2))
+    odds = list(range(1, size + 1, 2))
+    if size % 6 == 2:
+        # 3 and 1 swap, 5 goes last
+        odds = [3, 1] + [c for c in odds if c not in (1, 3, 5)] + [5]
+    elif size % 6 == 3:
+        # 2 goes last among the evens, 1 and 3 last among the odds
+        evens = evens[1:] + [2]
+        odds = [c for c in odds if c not in (1, 3)] + [1, 3]
+    order = [c - 1 for c in evens + odds]
+    assert sorted(order) == list(range(size)) and nqueens(order) == 0, f"no solution for {size}"
+    return order
+
+
 def check_points(problem, size, count=20):
     """Solutions of the problem, the same every time."""
     rng = random.Random(f"{problem}-{size}")
     if problem == "onemax":
         return [[1] * size, [0] * size] + [[rng.randint(0, 1) for _ in range(size)] for _ in range(count)]
     if problem == "nqueens":
-        points = [list(range(size))]
+        # a solution, the target (0 conflicts), and the identity: every queen on one diagonal
+        points = [nqueens_solution(size), list(range(size))]
         for _ in range(count):
             order = list(range(size))
             rng.shuffle(order)
