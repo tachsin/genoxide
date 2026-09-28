@@ -6,7 +6,7 @@ reference: "Schaffer, J. D. (1985). Multiple objective optimization with vector 
 reference_url: ""
 optimum: "the front f₂ = (f₁ − 3)² for f₁ in [−1, 0) and f₂ = (f₁ − 1)² for f₁ in [0, 1]; hypervolume 26.053 (reference point (1.2, 17.6))"
 languages: [rust, python]
-order: 96
+order: 97
 ---
 
 # Schaffer 2
