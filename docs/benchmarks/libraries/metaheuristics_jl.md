@@ -70,4 +70,4 @@ Each run used the whole budget: 3,000 generations of 100.
 
 | Bug | Effect here | Worked around | Reported |
 |---|---|---|---|
-| The `DE` docstring gives F = 1.0 as the default; the code's is F = 0.7 ([DE.jl, lines 18-26 and 58-61](https://github.com/jmejia8/Metaheuristics.jl/blob/v3.5.0/src/algorithms/singleobjective/DE/DE.jl#L18-L61)) | none: the adapter sets F | no | not yet |
+| The `DE` docstring gives F = 1.0 as the default; the code's is F = 0.7 ([DE.jl, lines 18-26 and 58-61](https://github.com/jmejia8/Metaheuristics.jl/blob/v3.5.0/src/algorithms/singleobjective/DE/DE.jl#L18-L61)) | none: the adapter sets F | no | [jmejia8/Metaheuristics.jl#130](https://github.com/jmejia8/Metaheuristics.jl/issues/130), fix proposed in [jmejia8/Metaheuristics.jl#131](https://github.com/jmejia8/Metaheuristics.jl/pull/131) |
