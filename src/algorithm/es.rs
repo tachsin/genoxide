@@ -108,6 +108,11 @@ pub struct Es {
     // the parents, and the step sizes of each: one, or one per variable gene
     population: Population<Reals>,
     steps: Vec<Vec<f64>>,
+    // for intermediate recombination, the logarithms of the parents' step sizes weighted by 1/ρ,
+    // step size by step size (`[index * μ + parent]`): taken once per generation, not once per
+    // offspring. Derived from `steps` before each breeding, so not saved
+    #[cfg_attr(feature = "serde", serde(skip))]
+    weighted_log_steps: Vec<f64>,
     offspring: Vec<Individual<Reals>>,
     offspring_steps: Vec<Vec<f64>>,
     discarded: Vec<Individual<Reals>>,
@@ -195,6 +200,16 @@ impl Es {
     }
 
     fn breed(&mut self) {
+        self.weighted_log_steps.clear();
+        if let Recombination::Intermediate { rho: rho @ 2.. } = self.recombination {
+            let weight = 1.0 / rho as f64;
+            let per_parent = self.steps.first().map_or(0, Vec::len);
+            self.weighted_log_steps.extend(
+                (0..per_parent)
+                    .flat_map(|index| self.steps.iter().map(move |steps| steps[index]))
+                    .map(|step| weight * ln(step)),
+            );
+        }
         let parents = Parents {
             real: &self.real,
             mu: self.mu,
@@ -202,6 +217,7 @@ impl Es {
             step_sizes: self.step_sizes,
             population: &self.population,
             steps: &self.steps,
+            weighted_log_steps: &self.weighted_log_steps,
         };
         if self.parallel_breeding {
             // a stream per offspring, from the seed, the generation and the offspring's position:
@@ -282,6 +298,8 @@ struct Parents<'a> {
     population: &'a Population<Reals>,
     // the step sizes of each parent
     steps: &'a [Vec<f64>],
+    // with intermediate recombination, `Es::weighted_log_steps`
+    weighted_log_steps: &'a [f64],
 }
 
 impl Parents<'_> {
@@ -317,11 +335,11 @@ impl Parents<'_> {
                     .sum();
             }
             // the geometric mean of the step sizes, which mutate log-normally
-            for (index, step) in steps.iter_mut().enumerate() {
-                let log_mean: f64 = parents
-                    .iter()
-                    .map(|&parent| weight * ln(self.steps[parent][index]))
-                    .sum();
+            for (step, logs) in steps
+                .iter_mut()
+                .zip(self.weighted_log_steps.chunks_exact(self.mu))
+            {
+                let log_mean: f64 = parents.iter().map(|&parent| logs[parent]).sum();
                 *step = exp(log_mean);
             }
         }
@@ -577,11 +595,11 @@ impl EsBuilder {
     ///   results it gives without parallel breeding.
     /// - **When it pays off:** when making the offspring is a large part of a generation, which
     ///   it often is with a fast fitness function: an offspring draws a normal random number and
-    ///   takes an exponential per gene, and intermediate recombination a logarithm of each
-    ///   parent's step sizes. Measured with parallel evaluation of the sphere function on 20
-    ///   threads, a generation of a (15/15_I, 100)-ES took 3× less time with parallel breeding
-    ///   with 50 genes and 9× less with 1000; a (100/100_I, 700)-ES with 50 genes 12× less; about
-    ///   3.4× on 4 threads. With a slow fitness function breeding takes little of the time.
+    ///   takes an exponential per gene, and intermediate recombination averages the genes and
+    ///   step sizes of ρ parents. Measured with parallel evaluation of the sphere function on 20
+    ///   threads, a generation of a (15/15_I, 100)-ES with 100 genes took 0.80 ms with sequential
+    ///   breeding and 0.13 ms with parallel breeding, about 6× less; more with longer genomes or
+    ///   more offspring. With a slow fitness function breeding takes little of the time.
     ///
     /// Checkpoints keep the setting. A run with it resumes identically, also without the
     /// `parallel` feature, then making the same offspring on one thread.
@@ -704,6 +722,7 @@ impl EsBuilder {
             parallel_breeding: self.parallel_breeding,
             population: Population::from_genomes(genomes),
             steps: vec![vec![self.initial_step; steps_per_parent]; mu],
+            weighted_log_steps: Vec::new(),
             offspring: Vec::new(),
             offspring_steps: Vec::new(),
             discarded: Vec::new(),
