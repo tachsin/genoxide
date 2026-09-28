@@ -1,0 +1,8 @@
+Eggholder: best known minimum -959.6407 at (512, 404.2318), 30 seeds, 20000 evaluations at most per run
+runs ending near        best value  CMA-ES, IPOP  PSO, global  PSO, ring
+(512.0, 404.2)           -959.6407             6           22         28
+(482.9, 433.7)           -955.3193            12            0          0
+(439.5, 454.0)           -935.3380             7            0          1
+(-465.7, 385.7)          -894.5789             5            5          1
+(347.3, 499.4)           -888.9491             0            3          0
+error below 1e-6                               1           22         28

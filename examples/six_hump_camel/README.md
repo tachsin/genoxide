@@ -6,7 +6,7 @@ reference: "Dixon, L. C. W. and Szegö, G. P. (eds.) (1978). Towards Global Opti
 reference_url: ""
 optimum: "−1.0316285 (at two points)"
 languages: [rust, python]
-order: 67
+order: 57
 ---
 
 # Six-hump camel

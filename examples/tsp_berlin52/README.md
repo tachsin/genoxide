@@ -6,7 +6,7 @@ reference: "Reinelt, G. (1991). TSPLIB: a traveling salesman problem library. OR
 reference_url: https://doi.org/10.1287/ijoc.3.4.376
 optimum: "7542 (tour length)"
 languages: [rust, python]
-order: 40
+order: 35
 ---
 
 # Travelling salesman (berlin52)
