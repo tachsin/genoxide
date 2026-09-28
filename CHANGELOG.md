@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/tachsin/genoxide/compare/v0.7.1...v0.8.0) - 2026-09-28
+
+### <!-- 0 -->Added
+
+- [**breaking**] add the test problem library: 16 classic functions and 13 classic multi-objective problems ([#177](https://github.com/tachsin/genoxide/pull/177))
+- add the engineering design problems and CEC 2006's g01-g06 ([#191](https://github.com/tachsin/genoxide/pull/191))
+- record the examples' output and a trace of each run, with the population in python's progress ([#194](https://github.com/tachsin/genoxide/pull/194))
+- *(site)* draw the berlin52 tour on a map of Berlin's districts ([#242](https://github.com/tachsin/genoxide/pull/242))
+- add genoxide's logo, wordmark and banner, and use them in the READMEs, on docs.rs and on the docs site ([#247](https://github.com/tachsin/genoxide/pull/247))
+- change a GA's rates and operators between generations ([#248](https://github.com/tachsin/genoxide/pull/248))
+- re-evaluate a GA's population when the fitness function changes ([#249](https://github.com/tachsin/genoxide/pull/249))
+- add examples for the 20 problems of batches 1-3 that had none, with a grid plot on the project pages ([#252](https://github.com/tachsin/genoxide/pull/252))
+- an example of its own for each of the 25 problems of batches 1-3 that had none ([#253](https://github.com/tachsin/genoxide/pull/253))
+- an overall benchmark score, and the interactive results linked from the README ([#255](https://github.com/tachsin/genoxide/pull/255))
+- [**breaking**] genoxide::math, the same to the bit on every platform, and the test problems use it ([#263](https://github.com/tachsin/genoxide/pull/263))
+
+### <!-- 1 -->Fixed
+
+- *(python)* reject NoCrossover with a mutation rate of 0, as documented ([#231](https://github.com/tachsin/genoxide/pull/231))
+- *(python)* reject maximizing a test problem, read a batch's objectives from a tuple of columns, and correct the indicator docs ([#233](https://github.com/tachsin/genoxide/pull/233))
+- skip points with NaN values in IGD+, check MOEA/D's size, and match multi-objective sizes and docs to their promises ([#234](https://github.com/tachsin/genoxide/pull/234))
+- [**breaking**] truncation selects from exactly its fraction, and the engineering optima are feasible and the best known ([#235](https://github.com/tachsin/genoxide/pull/235))
+- [**breaking**] count BIPOP's first run as a small one, find a relative fitness program on Unix, and name the setting in common mistakes ([#238](https://github.com/tachsin/genoxide/pull/238))
+- *(site)* say which run the player plays, keep the player's focus, show the published benchmark charts, and don't publish a page without its README ([#239](https://github.com/tachsin/genoxide/pull/239))
+- name the operator in a CLI error from its table, and check the test problems against their sources ([#241](https://github.com/tachsin/genoxide/pull/241))
+- [**breaking**] an example for every problem, and SHADE's restarts, gx.De's options, CarSideImpact's best known value and four problems' ideal and nadir points ([#261](https://github.com/tachsin/genoxide/pull/261))
+
+### <!-- 4 -->Documentation
+
+- explain each example's problem, representation, algorithm and output ([#193](https://github.com/tachsin/genoxide/pull/193))
+- check the examples' sources against the originals, count Kursawe's four pieces, and show the output on the docs site ([#198](https://github.com/tachsin/genoxide/pull/198))
+- make 0.8 the test problem release in the roadmap, and describe only what exists ([#230](https://github.com/tachsin/genoxide/pull/230))
+- describe multi-objective stagnation as it works, qualify reproducibility across platforms, and correct the example READMEs and the problems plan ([#236](https://github.com/tachsin/genoxide/pull/236))
+- link every example to its interactive page on tachsin.gr ([#250](https://github.com/tachsin/genoxide/pull/250))
+
 ## [0.7.1](https://github.com/tachsin/genoxide/compare/v0.7.0...v0.7.1) - 2026-09-26
 
 ### <!-- 2 -->Performance
