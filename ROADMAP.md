@@ -199,7 +199,7 @@ On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)
 - [x] Isolated islands, without migration ([#293](https://github.com/tachsin/genoxide/pull/293))
 - [x] Faster: the Python package on bit genomes ([#291](https://github.com/tachsin/genoxide/pull/291)), the ES ([#298](https://github.com/tachsin/genoxide/pull/298))
 - [x] Benchmarks: a matched suite of three problems, one method each ([#284](https://github.com/tachsin/genoxide/pull/284)), with every library bug it found reported upstream ([notes](docs/benchmarks/notes.md#bugs-found))
-- [ ] What a fitness function computes besides the fitness, kept with the individuals ([#246](https://github.com/tachsin/genoxide/issues/246))
+- [x] What a fitness function computes besides the fitness, kept by the engine for the individuals it holds ([#246](https://github.com/tachsin/genoxide/issues/246))
 
 ### 0.10: Genetic programming and neuroevolution
 - [ ] Tree GP, strongly typed

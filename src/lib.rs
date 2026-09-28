@@ -95,7 +95,7 @@ pub mod rng;
 mod serde_arrays;
 
 pub use algorithm::{Algorithm, Ga};
-pub use engine::{Engine, Outcome, Stop, StopReason};
+pub use engine::{Engine, Evaluated, Outcome, Stop, StopReason};
 
 pub use error::{Error, Result};
 pub use fitness::{Fitness, Objective};

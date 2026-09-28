@@ -14,7 +14,7 @@ pub use crate::algorithm::{
 };
 pub use crate::constraint::{self, Penalty};
 pub use crate::engine::{
-    AsyncEngine, Batch, Engine, FitnessFunction, NanPolicy, Outcome, Stop, StopReason,
+    AsyncEngine, Batch, Engine, Evaluated, FitnessFunction, NanPolicy, Outcome, Stop, StopReason,
 };
 pub use crate::genome::{
     AdaptiveReal, AdaptiveReals, Binary, Bits, Genome, Integer, Integers, Order, Permutation, Real,

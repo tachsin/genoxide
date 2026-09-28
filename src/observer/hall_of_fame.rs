@@ -1,14 +1,21 @@
 //! The best distinct solutions of a run.
 
 use super::{Observer, Snapshot};
+use crate::engine::InfoStore;
 use crate::genome::Genome;
 use crate::{Error, Individual, Objective, Result};
+use std::any::Any;
 
 /// The best `capacity` individuals with distinct genomes seen during a run, best first.
 ///
 /// After every generation, it's offered the population and the individuals evaluated but not
 /// kept (e.g. the offspring rejected by (μ,λ) selection), so it sees every evaluated individual.
 /// On ties, the individual seen first comes first.
+///
+/// As an observer, it keeps the info of its members that the fitness function returned in an
+/// [`Evaluated`](crate::engine::Evaluated), see [`info`](HallOfFame::info). Two halls of fame are
+/// equal when their capacities and individuals are: the info isn't compared. With the `serde`
+/// feature, the info isn't serialized.
 ///
 /// ```
 /// use genoxide::prelude::*;
@@ -28,12 +35,23 @@ use crate::{Error, Individual, Objective, Result};
 /// assert_eq!(hall_of_fame.individuals().len(), 5);
 /// # Ok::<(), genoxide::Error>(())
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct HallOfFame<G: Genome> {
     capacity: usize,
     individuals: Vec<Individual<G>>,
+    // the info of its members, from the snapshots that offered them
+    #[cfg_attr(feature = "serde", serde(skip, default = "InfoStore::default"))]
+    infos: InfoStore<G>,
 }
+
+impl<G: Genome> PartialEq for HallOfFame<G> {
+    fn eq(&self, other: &Self) -> bool {
+        self.capacity == other.capacity && self.individuals == other.individuals
+    }
+}
+
+impl<G: Genome> Eq for HallOfFame<G> {}
 
 impl<G: Genome> HallOfFame<G> {
     /// An empty hall of fame for up to `capacity` individuals, at least 1.
@@ -52,6 +70,7 @@ impl<G: Genome> HallOfFame<G> {
         Ok(Self {
             capacity,
             individuals: Vec::new(),
+            infos: InfoStore::default(),
         })
     }
 
@@ -70,11 +89,56 @@ impl<G: Genome> HallOfFame<G> {
         self.individuals.first()
     }
 
+    /// The info the fitness function returned with the fitness of the member with `genome`, in an
+    /// [`Evaluated`](crate::engine::Evaluated), as a `T`. `None` for another type, a genome that
+    /// isn't a member, or a member without info: offered by hand with
+    /// [`offer`](HallOfFame::offer), evaluated without info, or evaluated before resuming from a
+    /// checkpoint.
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let ga = Ga::builder(Binary::new(16)?)
+    ///     .population_size(20)
+    ///     .select(Tournament::new(2)?)
+    ///     .crossover(UniformCrossover::new())
+    ///     .mutate(BitFlip::count(1)?)
+    ///     .seed(3)
+    ///     .build()?;
+    /// // the fitness, and the longest run of ones
+    /// let fitness = |bits: &Bits| {
+    ///     let (mut longest, mut run) = (0, 0);
+    ///     for bit in bits.iter() {
+    ///         run = if bit { run + 1 } else { 0 };
+    ///         longest = longest.max(run);
+    ///     }
+    ///     Evaluated::new(bits.count_ones() as f64, longest)
+    /// };
+    /// let mut hall_of_fame = HallOfFame::new(5)?;
+    /// Engine::new(ga, fitness)
+    ///     .stop_when(Stop::generations(10))
+    ///     .observe(&mut hall_of_fame)
+    ///     .run()?;
+    /// for individual in hall_of_fame.individuals() {
+    ///     let longest = hall_of_fame.info::<i32>(individual.genome()).expect("evaluated with info");
+    ///     println!("{} {:?}, longest run {longest}", individual.genome(), individual.fitness());
+    /// }
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    pub fn info<T: Any>(&self, genome: &G) -> Option<&T> {
+        self.infos.info(genome)
+    }
+
     /// Offers an individual: it enters if it's evaluated, its genome is new and it's better than
     /// the worst individual (or there's room).
     pub fn offer(&mut self, candidate: &Individual<G>, objective: Objective) {
+        self.enter(candidate, objective);
+    }
+
+    // offers an individual, returning whether it entered
+    fn enter(&mut self, candidate: &Individual<G>, objective: Objective) -> bool {
         let Some(fitness) = candidate.fitness() else {
-            return;
+            return false;
         };
         // every individual in the hall of fame is evaluated
         let fitness_of = |individual: &Individual<G>| individual.fitness().unwrap_or(fitness);
@@ -84,14 +148,14 @@ impl<G: Genome> HallOfFame<G> {
                 .last()
                 .is_some_and(|worst| !objective.is_better(fitness, fitness_of(worst)))
         {
-            return;
+            return false;
         }
         if self
             .individuals
             .iter()
             .any(|individual| individual.genome() == candidate.genome())
         {
-            return;
+            return false;
         }
         let position = self
             .individuals
@@ -99,7 +163,15 @@ impl<G: Genome> HallOfFame<G> {
             .position(|individual| objective.is_better(fitness, fitness_of(individual)))
             .unwrap_or(self.individuals.len());
         self.individuals.insert(position, candidate.clone());
-        self.individuals.truncate(self.capacity);
+        if self.individuals.len() > self.capacity {
+            // the worst leaves, with its info
+            let worst = self
+                .individuals
+                .pop()
+                .expect("more individuals than the capacity");
+            self.infos.remove(worst.genome());
+        }
+        true
     }
 }
 
@@ -107,7 +179,11 @@ impl<G: Genome> Observer<G> for HallOfFame<G> {
     fn observe(&mut self, snapshot: &Snapshot<'_, G>) {
         let objective = snapshot.progress().objective();
         for individual in snapshot.population().iter().chain(snapshot.discarded()) {
-            self.offer(individual, objective);
+            if self.enter(individual, objective) {
+                if let Some(info) = snapshot.infos.get(individual.genome()) {
+                    self.infos.insert(individual.genome().clone(), info.clone());
+                }
+            }
         }
     }
 }
@@ -145,6 +221,46 @@ mod tests {
             .map(|i| i.genome().to_string())
             .collect();
         assert_eq!(genomes, ["01000000", "11000000"]);
+    }
+
+    #[test]
+    fn keeps_the_info_of_its_members() {
+        use crate::engine::{Info, InfoStore, Progress};
+        let population: crate::Population<Bits> = (1..=4)
+            .map(|genome| individual(genome, Some(f64::from(genome))))
+            .collect();
+        let mut infos = InfoStore::default();
+        let mut evaluated = population
+            .iter()
+            .map(|individual| {
+                (
+                    individual.genome().clone(),
+                    Info::new(individual.genome().to_string()),
+                )
+            })
+            .collect();
+        infos.update(&mut evaluated, population.iter().map(Individual::genome));
+        let progress = Progress::for_test(0, Objective::Maximize);
+        let mut hall = HallOfFame::new(2).unwrap();
+        // one at a time: each better one pushes the worst out, with its info
+        for individual in population.iter() {
+            let one = std::slice::from_ref(individual);
+            hall.observe(&Snapshot::new(
+                &crate::Population::default(),
+                one,
+                individual,
+                &progress,
+                &infos,
+            ));
+        }
+        assert_eq!(hall.infos.len(), 2);
+        for member in hall.individuals() {
+            assert_eq!(
+                hall.info::<String>(member.genome()),
+                Some(&member.genome().to_string())
+            );
+        }
+        assert!(hall.info::<String>(population[0].genome()).is_none());
     }
 
     proptest! {

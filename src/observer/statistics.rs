@@ -155,7 +155,7 @@ impl<G: Genome> Observer<G> for Statistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::Progress;
+    use crate::engine::{InfoStore, Progress};
     use crate::genome::Bits;
     use crate::{Individual, Objective, Population};
 
@@ -177,7 +177,14 @@ mod tests {
         population[4].set_fitness(Fitness::constrained(9.0, 0.5));
         let progress = Progress::for_test(4, Objective::Minimize);
         let mut statistics = Statistics::new();
-        statistics.observe(&Snapshot::new(&population, &[], &population[0], &progress));
+        let infos = InfoStore::default();
+        statistics.observe(&Snapshot::new(
+            &population,
+            &[],
+            &population[0],
+            &progress,
+            &infos,
+        ));
         let record = statistics.last().unwrap();
         assert_eq!(record.generation, 4);
         assert_eq!(record.best, Some(Fitness::new(1.0)));

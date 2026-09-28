@@ -13,16 +13,22 @@
 //! gets the whole generation in one call, e.g. for a GPU or a remote service.
 
 pub mod asynchronous;
+mod info;
 pub mod stop;
 pub(crate) mod trace;
 
 pub use asynchronous::AsyncEngine;
+pub use info::Evaluated;
+#[doc(hidden)]
+pub use info::Info;
+pub(crate) use info::InfoStore;
 pub use stop::{STALL_GENERATIONS, Stop, StopReason};
 
 use crate::algorithm::{Algorithm, Candidates};
 use crate::genome::Genome;
 use crate::observer::{Observer, Snapshot};
 use crate::{Error, Fitness, Individual, Objective, Result};
+use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,8 +38,9 @@ use std::time::{Duration, Instant};
 ///
 /// Closures `|genome: &G| -> T` are fitness functions, where `T` is `f64`, [`Fitness`],
 /// `Option<f64>` (`None` for an invalid solution) or `(f64, f64)` (a score and a constraint
-/// violation, see [`Fitness::constrained`]), see [`IntoFitness`]. Fitness functions must be
-/// deterministic: the same genome always gets the same fitness.
+/// violation, see [`Fitness::constrained`]), see [`IntoFitness`], or an [`Evaluated`] of one of
+/// them with extras the engine keeps alongside. Fitness functions must be deterministic: the same
+/// genome always gets the same fitness.
 ///
 /// Implement it for a fitness function with data of its own:
 ///
@@ -184,6 +191,16 @@ pub trait IntoFitness {
     /// [`Error::NanFitness`] for NaN, and [`Error::InvalidFitness`] for a negative constraint
     /// violation.
     fn into_fitness(self) -> Result<Fitness>;
+
+    /// The fitness, and the info of an [`Evaluated`] result (`None` by default).
+    #[doc(hidden)]
+    #[inline]
+    fn into_evaluation(self) -> (Result<Fitness>, Option<Info>)
+    where
+        Self: Sized,
+    {
+        (self.into_fitness(), None)
+    }
 }
 
 impl IntoFitness for Fitness {
@@ -308,7 +325,12 @@ impl Progress {
 }
 
 /// The result of a run.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// Two outcomes are equal when their best individuals, counts, durations and stop reasons are:
+/// the [info](Outcome::best_info) isn't compared, as a deterministic fitness function gives the
+/// same info for the same genome. With the `serde` feature, the info isn't serialized: a
+/// deserialized outcome has none.
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Outcome<G: Genome> {
     best: Individual<G>,
@@ -316,9 +338,30 @@ pub struct Outcome<G: Genome> {
     evaluations: u64,
     elapsed: Duration,
     stop_reason: StopReason,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    best_info: Option<Info>,
 }
 
+impl<G: Genome> PartialEq for Outcome<G> {
+    fn eq(&self, other: &Self) -> bool {
+        self.best == other.best
+            && self.generations == other.generations
+            && self.evaluations == other.evaluations
+            && self.elapsed == other.elapsed
+            && self.stop_reason == other.stop_reason
+    }
+}
+
+impl<G: Genome> Eq for Outcome<G> {}
+
 impl<G: Genome> Outcome<G> {
+    /// The info the fitness function returned with the best individual's fitness in an
+    /// [`Evaluated`], as a `T`: `None` if it returned none or another type, or if the best was
+    /// evaluated by another engine, e.g. before the run resumed from a checkpoint.
+    pub fn best_info<T: Any>(&self) -> Option<&T> {
+        self.best_info.as_ref()?.downcast_ref()
+    }
+
     /// The best individual found.
     pub fn best(&self) -> &Individual<G> {
         &self.best
@@ -409,6 +452,10 @@ pub struct Engine<'o, A: Algorithm, F> {
     controls: Vec<Control<'o, A>>,
     results: Vec<Result<Fitness>>,
     scores: Vec<Fitness>,
+    // the info returned with the last evaluations, with their genomes
+    evaluated_infos: Vec<(A::Genome, Info)>,
+    // the info of the population, the discarded individuals and the best
+    infos: InfoStore<A::Genome>,
     // the generations in a row in which the algorithm asked for no genome to evaluate
     idle: u64,
 }
@@ -469,6 +516,8 @@ where
             controls: Vec::new(),
             results: Vec::new(),
             scores: Vec::new(),
+            evaluated_infos: Vec::new(),
+            infos: InfoStore::default(),
             idle: 0,
         }
     }
@@ -699,6 +748,7 @@ where
                     evaluations: progress.evaluations,
                     elapsed: Duration::ZERO,
                     stop_reason,
+                    best_info: self.infos.get(best.genome()).cloned(),
                 });
             }
         }
@@ -719,6 +769,15 @@ where
             } else {
                 0
             };
+            if !self.evaluated_infos.is_empty() || !self.infos.is_empty() {
+                let algorithm = &self.algorithm;
+                let kept = algorithm.population().iter().chain(algorithm.discarded());
+                let best = algorithm.best().map(Individual::genome);
+                self.infos.update(
+                    &mut self.evaluated_infos,
+                    kept.map(Individual::genome).chain(best),
+                );
+            }
 
             let best = self
                 .algorithm
@@ -739,6 +798,7 @@ where
                     self.algorithm.discarded(),
                     best,
                     &progress,
+                    &self.infos,
                 );
                 for observer in &mut self.observers {
                     observer.observe(&snapshot);
@@ -761,6 +821,7 @@ where
                 evaluations: progress.evaluations,
                 elapsed: progress.elapsed,
                 stop_reason,
+                best_info: self.infos.get(best.genome()).cloned(),
             });
             if !reevaluated {
                 for control in &mut self.controls {
@@ -789,14 +850,16 @@ where
                 candidates,
                 |genomes| fitness.evaluate_batch(genomes),
                 &mut self.results,
-                IntoFitness::into_fitness,
+                &mut self.evaluated_infos,
+                IntoFitness::into_evaluation,
             )?;
         } else {
             evaluate_all(
                 candidates,
                 self.parallel,
-                &|genome: &A::Genome| fitness.evaluate(genome).into_fitness(),
+                &|genome: &A::Genome| fitness.evaluate(genome).into_evaluation(),
                 &mut self.results,
+                &mut self.evaluated_infos,
             );
         }
         self.scores.clear();
@@ -811,16 +874,19 @@ where
     }
 }
 
-// evaluates every candidate with one call of a batch function into `results`, in order
+// evaluates every candidate with one call of a batch function into `results`, in order, and the
+// info returned into `infos`, with a copy of its genome
 pub(crate) fn evaluate_batch<G, X, T, R>(
     candidates: Candidates<'_, G, X>,
     batch: impl FnOnce(&[&G]) -> Vec<T>,
     results: &mut Vec<R>,
-    convert: impl Fn(T) -> R,
+    infos: &mut Vec<(G, Info)>,
+    convert: impl Fn(T) -> (R, Option<Info>),
 ) -> Result<()>
 where
     G: Genome,
 {
+    infos.clear();
     let genomes: Vec<&G> = candidates.iter().collect();
     let values = batch(&genomes);
     if values.len() != genomes.len() {
@@ -830,29 +896,59 @@ where
         });
     }
     results.clear();
-    results.extend(values.into_iter().map(convert));
+    results.extend(values.into_iter().zip(&genomes).map(|(value, genome)| {
+        let (result, info) = convert(value);
+        if let Some(info) = info {
+            infos.push(((*genome).clone(), info));
+        }
+        result
+    }));
     Ok(())
 }
 
-// evaluates every candidate into `results`, in order, in parallel if asked; the results are the
-// same either way
+// evaluates every candidate into `results`, in order, in parallel if asked, and the info returned
+// into `infos`, with a copy of its genome; the results are the same either way
 pub(crate) fn evaluate_all<G, F, T, E>(
     candidates: Candidates<'_, G, F>,
     parallel: bool,
     evaluate: &E,
     results: &mut Vec<T>,
+    infos: &mut Vec<(G, Info)>,
 ) where
     G: Genome,
     F: Sync,
     T: Send,
-    E: Fn(&G) -> T + Sync,
+    E: Fn(&G) -> (T, Option<Info>) + Sync,
 {
     results.clear();
+    infos.clear();
     if parallel {
-        evaluate_parallel(candidates, evaluate, results);
+        evaluate_parallel(candidates, evaluate, results, infos);
     } else {
-        results.extend(candidates.iter().map(evaluate));
+        evaluate_sequential(candidates, evaluate, results, infos);
     }
+}
+
+// evaluates every candidate into `results` one after the other. Without info (the default
+// `into_evaluation`), `info` is always `None` and this compiles to the evaluations alone. Kept out
+// of the engine's loop: inlined there, it compiles to a few more instructions per evaluation.
+#[inline(never)]
+fn evaluate_sequential<G, F, T, E>(
+    candidates: Candidates<'_, G, F>,
+    evaluate: &E,
+    results: &mut Vec<T>,
+    infos: &mut Vec<(G, Info)>,
+) where
+    G: Genome,
+    E: Fn(&G) -> (T, Option<Info>),
+{
+    results.extend(candidates.iter().map(|genome| {
+        let (result, info) = evaluate(genome);
+        if let Some(info) = info {
+            infos.push((genome.clone(), info));
+        }
+        result
+    }));
 }
 
 #[cfg(feature = "parallel")]
@@ -860,23 +956,34 @@ fn evaluate_parallel<G, F, T, E>(
     candidates: Candidates<'_, G, F>,
     evaluate: &E,
     results: &mut Vec<T>,
+    infos: &mut Vec<(G, Info)>,
 ) where
     G: Genome,
     F: Sync,
     T: Send,
-    E: Fn(&G) -> T + Sync,
+    E: Fn(&G) -> (T, Option<Info>) + Sync,
 {
     use rayon::prelude::*;
-    // collecting an indexed parallel iterator keeps the order, whatever the thread count
+    let mut found = Vec::new();
+    // unzipping an indexed parallel iterator keeps the order, whatever the thread count
     (0..candidates.len())
         .into_par_iter()
         .map(|position| evaluate(candidates.get(position).expect("position in bounds")))
-        .collect_into_vec(results);
+        .unzip_into_vecs(results, &mut found);
+    for (genome, info) in candidates.iter().zip(found) {
+        if let Some(info) = info {
+            infos.push((genome.clone(), info));
+        }
+    }
 }
 
 #[cfg(not(feature = "parallel"))]
-fn evaluate_parallel<G, F, T, E>(_: Candidates<'_, G, F>, _: &E, _: &mut Vec<T>)
-where
+fn evaluate_parallel<G, F, T, E>(
+    _: Candidates<'_, G, F>,
+    _: &E,
+    _: &mut Vec<T>,
+    _: &mut Vec<(G, Info)>,
+) where
     G: Genome,
 {
     unreachable!("parallel evaluation can't be enabled without the `parallel` feature")
@@ -905,5 +1012,69 @@ struct FnObserver<C>(C);
 impl<G: Genome, C: FnMut(&Snapshot<'_, G>)> Observer<G> for FnObserver<C> {
     fn observe(&mut self, snapshot: &Snapshot<'_, G>) {
         (self.0)(snapshot)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::algorithm::Scheme;
+    use crate::genome::{Binary, Bits};
+    use crate::operator::{BitFlip, Tournament, UniformCrossover};
+
+    fn ga(scheme: Scheme) -> crate::Ga<Binary, Tournament, UniformCrossover, BitFlip> {
+        crate::Ga::builder(Binary::new(30).unwrap())
+            .population_size(20)
+            .select(Tournament::new(3).unwrap())
+            .crossover(UniformCrossover::new())
+            .mutate(BitFlip::per_gene(0.05).unwrap())
+            .scheme(scheme)
+            .seed(1)
+            .build()
+            .unwrap()
+    }
+
+    fn one_max(genome: &Bits) -> f64 {
+        genome.count_ones() as f64
+    }
+
+    #[test]
+    fn no_info_no_store() {
+        let mut engine =
+            Engine::new(ga(Scheme::default()), one_max).stop_when(Stop::generations(20));
+        engine.run().unwrap();
+        assert!(engine.infos.is_empty());
+        assert!(!engine.infos.is_allocated());
+        assert_eq!(engine.evaluated_infos.capacity(), 0);
+    }
+
+    #[test]
+    fn the_store_keeps_the_population_the_discarded_and_the_best() {
+        for scheme in [
+            Scheme::Generational { elitism: 1 },
+            Scheme::MuPlusLambda { lambda: 30 },
+            Scheme::MuCommaLambda { lambda: 30 },
+        ] {
+            let fitness = |genome: &Bits| Evaluated::new(one_max(genome), genome.to_string());
+            let mut engine = Engine::new(ga(scheme), fitness);
+            // one generation at a time, over a long run
+            for generation in 0..500 {
+                engine.stop = Some(Stop::generations(generation));
+                engine.run().unwrap();
+                let algorithm = &engine.algorithm;
+                let kept = algorithm.population().iter().chain(algorithm.discarded());
+                let kept: std::collections::HashSet<&Bits> = kept
+                    .chain(algorithm.best())
+                    .map(Individual::genome)
+                    .collect();
+                assert_eq!(engine.infos.len(), kept.len(), "{scheme:?}");
+                for genome in kept {
+                    assert_eq!(
+                        engine.infos.info::<String>(genome),
+                        Some(&genome.to_string())
+                    );
+                }
+            }
+        }
     }
 }

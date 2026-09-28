@@ -2,11 +2,12 @@
 
 use super::{MultiObjectiveAlgorithm, Scores};
 use crate::engine::{
-    Batch, Checkpoint, NanPolicy, Progress, checkpoint, evaluate_all, evaluate_batch, stalled,
-    trace, validate_checkpoint,
+    Batch, Checkpoint, Info, InfoStore, NanPolicy, Progress, checkpoint, evaluate_all,
+    evaluate_batch, stalled, trace, validate_checkpoint,
 };
 use crate::genome::Genome;
 use crate::{Error, Individual, Population, Result, Stop, StopReason};
+use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,7 +16,8 @@ use std::time::{Duration, Instant};
 /// A multi-objective fitness function: scores a genome on `M` objectives.
 ///
 /// Implemented for every `Fn(&G) -> T + Sync` closure returning a type that converts into
-/// [`Scores`], see [`IntoScores`]. Implement it for your own type to keep state, such as a
+/// [`Scores`], see [`IntoScores`], or an [`Evaluated`](crate::engine::Evaluated) of one with
+/// extras the engine keeps alongside. Implement it for your own type to keep state, such as a
 /// simulator.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a fitness function with {M} objectives for `{G}`",
@@ -90,6 +92,7 @@ where
 /// - `([f64; M], f64)`: the objective values and a constraint violation.
 /// - `Option<[f64; M]>`: `None` for a solution that can't be scored.
 /// - [`Scores<M>`].
+/// - An [`Evaluated`](crate::engine::Evaluated) of one of them, with info the engine keeps.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a result with {M} objective values",
     label = "a multi-objective fitness function must return `[f64; {M}]`, `([f64; {M}], f64)`, `Option<[f64; {M}]>` or `Scores<{M}>`"
@@ -101,6 +104,17 @@ pub trait IntoScores<const M: usize> {
     ///
     /// [`Error::NanFitness`] and [`Error::InvalidFitness`].
     fn into_scores(self) -> Result<Scores<M>>;
+
+    /// The scores, and the info of an [`Evaluated`](crate::engine::Evaluated) result (`None` by
+    /// default).
+    #[doc(hidden)]
+    #[inline]
+    fn into_evaluation(self) -> (Result<Scores<M>>, Option<Info>)
+    where
+        Self: Sized,
+    {
+        (self.into_scores(), None)
+    }
 }
 
 impl<const M: usize> IntoScores<M> for Scores<M> {
@@ -135,6 +149,7 @@ pub struct MultiSnapshot<'a, G: Genome, const M: usize> {
     front: &'a [Individual<G, Scores<M>>],
     discarded: &'a [Individual<G, Scores<M>>],
     progress: &'a Progress,
+    infos: &'a InfoStore<G>,
 }
 
 impl<'a, G: Genome, const M: usize> MultiSnapshot<'a, G, M> {
@@ -158,10 +173,24 @@ impl<'a, G: Genome, const M: usize> MultiSnapshot<'a, G, M> {
     pub fn progress(&self) -> &'a Progress {
         self.progress
     }
+
+    /// The info the fitness function returned with the scores of `genome` in an
+    /// [`Evaluated`](crate::engine::Evaluated), as a `T`, for a genome of the population or of the
+    /// discarded individuals. `None` for another type, or a genome without info: the fitness
+    /// function returned none, or it was evaluated by another engine (e.g. before resuming from a
+    /// checkpoint). A copy of a parent and a survivor have the info of their genome.
+    pub fn info<T: Any>(&self, genome: &G) -> Option<&'a T> {
+        self.infos.info(genome)
+    }
 }
 
 /// The result of a multi-objective run.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// Two outcomes are equal when their fronts, counts, durations and stop reasons are: the
+/// [info](MultiOutcome::info) isn't compared, as a deterministic fitness function gives the same
+/// info for the same genome. With the `serde` feature, the info isn't serialized: a deserialized
+/// outcome has none.
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MultiOutcome<G: Genome, const M: usize> {
     front: Vec<Individual<G, Scores<M>>>,
@@ -169,9 +198,55 @@ pub struct MultiOutcome<G: Genome, const M: usize> {
     evaluations: u64,
     elapsed: Duration,
     stop_reason: StopReason,
+    // the info of the front
+    #[cfg_attr(feature = "serde", serde(skip, default = "InfoStore::default"))]
+    infos: InfoStore<G>,
 }
 
+impl<G: Genome, const M: usize> PartialEq for MultiOutcome<G, M> {
+    fn eq(&self, other: &Self) -> bool {
+        self.front == other.front
+            && self.generations == other.generations
+            && self.evaluations == other.evaluations
+            && self.elapsed == other.elapsed
+            && self.stop_reason == other.stop_reason
+    }
+}
+
+impl<G: Genome, const M: usize> Eq for MultiOutcome<G, M> {}
+
 impl<G: Genome, const M: usize> MultiOutcome<G, M> {
+    /// The info the fitness function returned with the scores of `genome`, a genome of the
+    /// front, in an [`Evaluated`](crate::engine::Evaluated), as a `T`. `None` for another type, a
+    /// genome outside the front, or a genome without info: the fitness function returned none,
+    /// or it was evaluated by another engine (e.g. before resuming from a checkpoint).
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    /// use genoxide::Objective::Minimize;
+    ///
+    /// // Schaffer's problem, with the distance from the middle of the front kept as info
+    /// let schaffer = |x: &Reals| {
+    ///     let objectives = [x[0] * x[0], (x[0] - 2.0) * (x[0] - 2.0)];
+    ///     Evaluated::new(objectives, (x[0] - 1.0).abs())
+    /// };
+    /// let nsga2 = Nsga2::builder(Real::uniform(1, -10.0..=10.0)?, [Minimize, Minimize])
+    ///     .population_size(20)
+    ///     .crossover(SimulatedBinaryCrossover::new(15.0)?)
+    ///     .mutate(PolynomialMutation::per_gene(1.0, 20.0)?)
+    ///     .seed(1)
+    ///     .build()?;
+    /// let outcome = MultiEngine::new(nsga2, schaffer).stop_when(Stop::generations(50)).run()?;
+    /// for individual in outcome.front() {
+    ///     let distance = outcome.info::<f64>(individual.genome()).expect("evaluated with info");
+    ///     assert!(*distance <= 1.01);
+    /// }
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    pub fn info<T: Any>(&self, genome: &G) -> Option<&T> {
+        self.infos.info(genome)
+    }
+
     /// The non-dominated individuals of the final population: the best trade-offs found, each
     /// genome once (see [`MultiObjectiveAlgorithm::front`]). It's the last generation's
     /// [`MultiSnapshot::front`].
@@ -262,6 +337,10 @@ where
     checkpoint: Option<Checkpoint<'o, A>>,
     results: Vec<Result<Scores<M>>>,
     scores: Vec<Scores<M>>,
+    // the info returned with the last evaluations, with their genomes
+    evaluated_infos: Vec<(A::Genome, Info)>,
+    // the info of the population, the discarded individuals and the front
+    infos: InfoStore<A::Genome>,
     // the generations in a row in which the algorithm asked for no genome to evaluate
     idle: u64,
 }
@@ -284,6 +363,8 @@ where
             checkpoint: None,
             results: Vec::new(),
             scores: Vec::new(),
+            evaluated_infos: Vec::new(),
+            infos: InfoStore::default(),
             idle: 0,
         }
     }
@@ -414,6 +495,7 @@ where
                     evaluations: progress.evaluations(),
                     elapsed: Duration::ZERO,
                     stop_reason,
+                    infos: self.front_infos(),
                 });
             }
         }
@@ -426,6 +508,14 @@ where
             } else {
                 0
             };
+            if !self.evaluated_infos.is_empty() || !self.infos.is_empty() {
+                let algorithm = &self.algorithm;
+                let kept = (algorithm.population().iter())
+                    .chain(algorithm.discarded())
+                    .chain(algorithm.front());
+                self.infos
+                    .update(&mut self.evaluated_infos, kept.map(Individual::genome));
+            }
             let progress = Progress::multi_objective(
                 self.algorithm.generation(),
                 self.algorithm.evaluations(),
@@ -439,6 +529,7 @@ where
                     front: self.algorithm.front(),
                     discarded: self.algorithm.discarded(),
                     progress: &progress,
+                    infos: &self.infos,
                 };
                 for callback in &mut self.callbacks {
                     callback(&snapshot);
@@ -468,9 +559,23 @@ where
                     evaluations: progress.evaluations(),
                     elapsed: progress.elapsed(),
                     stop_reason,
+                    infos: self.front_infos(),
                 });
             }
         }
+    }
+
+    // the info of the front
+    fn front_infos(&self) -> InfoStore<A::Genome> {
+        let mut infos = InfoStore::default();
+        if !self.infos.is_empty() {
+            for individual in self.algorithm.front() {
+                if let Some(info) = self.infos.get(individual.genome()) {
+                    infos.insert(individual.genome().clone(), info.clone());
+                }
+            }
+        }
+        infos
     }
 
     // evaluates the asked genomes into `self.scores`
@@ -482,14 +587,16 @@ where
                 candidates,
                 |genomes| fitness.evaluate_batch(genomes),
                 &mut self.results,
-                IntoScores::into_scores,
+                &mut self.evaluated_infos,
+                IntoScores::into_evaluation,
             )?;
         } else {
             evaluate_all(
                 candidates,
                 self.parallel,
-                &|genome: &A::Genome| fitness.evaluate(genome).into_scores(),
+                &|genome: &A::Genome| fitness.evaluate(genome).into_evaluation(),
                 &mut self.results,
+                &mut self.evaluated_infos,
             );
         }
         self.scores.clear();
