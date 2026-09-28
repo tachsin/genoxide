@@ -59,6 +59,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - **Island model:** GA or DE islands, with ring, fully connected or random migration, or isolated islands that never migrate (e.g. different settings side by side, or independent starts) run as one algorithm.
 - **Parameter control:** change an algorithm's rates, operators and coefficients between generations, e.g. an annealed mutation step or a decreasing inertia weight, from the engine's `control` hook (in Python, `run(..., control=...)`); each island on a schedule of its own.
 - **A fitness function that changes during a run:** the algorithms re-evaluate what they keep, e.g. after adapting penalty weights, without comparing old and new values, in Rust and Python.
+- **Extras with the fitness:** a fitness function returns what it computed along with the fitness (`Evaluated`), e.g. the terms of a penalty or a secondary measure; the engines keep it for the population and the best, for observers, the hall of fame and the outcome, without evaluating again and without changing the search.
 - **Constraints:** Deb's feasibility rules (a fitness function returns a score and a constraint violation), and penalty functions.
 - **Cancellation**, and **checkpoints** to resume a run (`serde` feature).
 - **Observers:** statistics per generation, hall of fame, progress lines, `tracing`.

@@ -1,8 +1,8 @@
 //! Asynchronous evaluation: every worker gets a new genome as soon as it's done.
 
 use super::{
-    Checkpoint, FitnessFunction, IntoFitness, NanPolicy, Outcome, Progress, Stop, StopReason,
-    checkpoint, trace, validate_checkpoint,
+    Checkpoint, FitnessFunction, Info, InfoStore, IntoFitness, NanPolicy, Outcome, Progress, Stop,
+    StopReason, checkpoint, trace, validate_checkpoint,
 };
 use crate::algorithm::Incremental;
 use crate::observer::{Observer, Snapshot};
@@ -43,6 +43,10 @@ pub const MAX_WORKERS: usize = 4096;
 /// With one worker, a seed gives the same run every time. With more, the order of the results
 /// depends on how long each evaluation takes, so runs differ.
 ///
+/// The info of an [`Evaluated`](super::Evaluated) result is kept as with an
+/// [`Engine`](super::Engine): for the population, the individuals discarded since the last
+/// generation and the best.
+///
 /// ```
 /// use genoxide::prelude::*;
 ///
@@ -69,10 +73,16 @@ pub struct AsyncEngine<'o, A: Incremental, F> {
     nan_policy: NanPolicy,
     workers: usize,
     checkpoint: Option<Checkpoint<'o, A>>,
+    // the info of the population, the discarded individuals and the best
+    infos: InfoStore<A::Genome>,
 }
 
-// a finished evaluation: the genome and its fitness, or the panic of the fitness function
-type Done<G> = (G, std::result::Result<Result<Fitness>, Box<dyn Any + Send>>);
+// a finished evaluation: the genome and its fitness with its info, or the panic of the fitness
+// function
+type Done<G> = (
+    G,
+    std::result::Result<(Result<Fitness>, Option<Info>), Box<dyn Any + Send>>,
+);
 
 impl<'o, A, F> AsyncEngine<'o, A, F>
 where
@@ -91,6 +101,7 @@ where
             nan_policy: NanPolicy::default(),
             workers: thread::available_parallelism().map_or(1, NonZeroUsize::get),
             checkpoint: None,
+            infos: InfoStore::default(),
         }
     }
 
@@ -206,6 +217,7 @@ where
             nan_policy,
             workers,
             checkpoint: save,
+            infos,
         } = self;
         let workers = *workers;
         let fitness = &*fitness;
@@ -220,6 +232,7 @@ where
             start: Instant::now(),
             notified: None,
             discarded: Vec::new(),
+            infos,
         };
         // a run that continues: its stop condition may already be met, or its budget of
         // evaluations spent before the initial population was complete
@@ -244,6 +257,7 @@ where
                     evaluations: progress.evaluations,
                     elapsed: Duration::ZERO,
                     stop_reason,
+                    best_info: driver.infos.get(best.genome()).cloned(),
                 });
             }
         }
@@ -267,16 +281,19 @@ where
                         let Ok(genome) = job else { return };
                         let evaluated = panic::catch_unwind(AssertUnwindSafe(|| {
                             if !fitness.is_batch() {
-                                return fitness.evaluate(&genome).into_fitness();
+                                return fitness.evaluate(&genome).into_evaluation();
                             }
                             // a batch of one, which must give one score
                             let mut scores = fitness.evaluate_batch(&[&genome]);
                             match (scores.pop(), scores.len()) {
-                                (Some(score), 0) => score.into_fitness(),
-                                (score, rest) => Err(Error::FitnessCount {
-                                    expected: 1,
-                                    got: rest + usize::from(score.is_some()),
-                                }),
+                                (Some(score), 0) => score.into_evaluation(),
+                                (score, rest) => {
+                                    let count = Error::FitnessCount {
+                                        expected: 1,
+                                        got: rest + usize::from(score.is_some()),
+                                    };
+                                    (Err(count), None)
+                                }
                             }
                         }));
                         if done.send((genome, evaluated)).is_err() {
@@ -312,14 +329,14 @@ where
                 if panicked.is_some() || failure.is_some() {
                     continue;
                 }
-                let fitness = match evaluated {
-                    Ok(fitness) => fitness,
+                let (fitness, info) = match evaluated {
+                    Ok(evaluation) => evaluation,
                     Err(payload) => {
                         panicked = Some(payload);
                         continue;
                     }
                 };
-                if let Err(error) = driver.accept(genome, fitness) {
+                if let Err(error) = driver.accept(genome, fitness, info) {
                     failure = Some(error);
                     continue;
                 }
@@ -370,6 +387,9 @@ struct Driver<'a, 'o, A: Incremental> {
     notified: Option<u64>,
     // the individuals that left the population or didn't enter it, since the last notification
     discarded: Vec<Individual<A::Genome>>,
+    // the info of the population, the discarded individuals, the best and the results since the
+    // last notification
+    infos: &'a mut InfoStore<A::Genome>,
 }
 
 impl<A: Incremental> Driver<'_, '_, A> {
@@ -387,17 +407,26 @@ impl<A: Incremental> Driver<'_, '_, A> {
         }
     }
 
-    // gives a result to the algorithm, after the NaN policy
-    fn accept(&mut self, genome: A::Genome, fitness: Result<Fitness>) -> Result<()> {
+    // gives a result to the algorithm, after the NaN policy, and keeps its info
+    fn accept(
+        &mut self,
+        genome: A::Genome,
+        fitness: Result<Fitness>,
+        info: Option<Info>,
+    ) -> Result<()> {
         let fitness = match fitness {
             Ok(fitness) => fitness,
             Err(Error::NanFitness) if self.nan_policy == NanPolicy::Invalid => Fitness::invalid(),
             Err(error) => return Err(error),
         };
+        let info = info.map(|info| (genome.clone(), info));
         if let Some(individual) = self.algorithm.receive(genome, fitness)? {
             if !self.observers.is_empty() {
                 self.discarded.push(individual);
             }
+        }
+        if let Some((genome, info)) = info {
+            self.infos.insert(genome, info);
         }
         Ok(())
     }
@@ -429,26 +458,39 @@ impl<A: Incremental> Driver<'_, '_, A> {
         }
         checkpoint(self.save, &*self.algorithm, progress.generation, true)?;
         trace::finished(&progress, stop_reason, None);
+        let best = self
+            .algorithm
+            .best()
+            .expect("an algorithm has a best individual after a result");
         Ok(Outcome {
-            best: self
-                .algorithm
-                .best()
-                .expect("an algorithm has a best individual after a result")
-                .clone(),
+            best: best.clone(),
             generations: progress.generation,
             evaluations: progress.evaluations,
             elapsed: progress.elapsed,
             stop_reason,
+            best_info: self.infos.get(best.genome()).cloned(),
         })
     }
 
-    // notifies the observers
+    // notifies the observers, after keeping only the info of the population, the discarded
+    // individuals and the best
     fn notify(&mut self, progress: &Progress) {
         self.notified = Some(progress.evaluations);
+        let algorithm = &*self.algorithm;
+        let kept = algorithm.population().iter().chain(&self.discarded);
+        let best = algorithm.best().map(Individual::genome);
+        self.infos
+            .update(&mut Vec::new(), kept.map(Individual::genome).chain(best));
         let Some(best) = self.algorithm.best() else {
             return;
         };
-        let snapshot = Snapshot::new(self.algorithm.population(), &self.discarded, best, progress);
+        let snapshot = Snapshot::new(
+            self.algorithm.population(),
+            &self.discarded,
+            best,
+            progress,
+            self.infos,
+        );
         for observer in self.observers.iter_mut() {
             observer.observe(&snapshot);
         }

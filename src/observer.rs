@@ -11,9 +11,10 @@ pub use hall_of_fame::HallOfFame;
 pub use report::Report;
 pub use statistics::{GenerationStatistics, Statistics};
 
-use crate::engine::Progress;
+use crate::engine::{InfoStore, Progress};
 use crate::genome::Genome;
 use crate::{Individual, Population};
+use std::any::Any;
 
 /// Notified by the [`Engine`](crate::Engine) after every generation, including the initial
 /// population.
@@ -69,6 +70,7 @@ pub struct Snapshot<'a, G: Genome> {
     discarded: &'a [Individual<G>],
     best: &'a Individual<G>,
     progress: &'a Progress,
+    infos: &'a InfoStore<G>,
 }
 
 impl<'a, G: Genome> Snapshot<'a, G> {
@@ -77,12 +79,14 @@ impl<'a, G: Genome> Snapshot<'a, G> {
         discarded: &'a [Individual<G>],
         best: &'a Individual<G>,
         progress: &'a Progress,
+        infos: &'a InfoStore<G>,
     ) -> Self {
         Self {
             population,
             discarded,
             best,
             progress,
+            infos,
         }
     }
 
@@ -105,5 +109,22 @@ impl<'a, G: Genome> Snapshot<'a, G> {
     /// The generation, evaluations, time and best fitness so far.
     pub fn progress(&self) -> &'a Progress {
         self.progress
+    }
+
+    /// The info the fitness function returned with the fitness of `genome` in an
+    /// [`Evaluated`](crate::engine::Evaluated), as a `T`, for a genome of the population, of the
+    /// discarded individuals or of the best. `None` for another type, or a genome without info:
+    /// the fitness function returned none, or it was evaluated by another engine (e.g. before
+    /// resuming from a checkpoint).
+    ///
+    /// A copy of a parent and a survivor have the info of their genome: the fitness function is
+    /// deterministic. See [`Evaluated`](crate::engine::Evaluated) for an example.
+    pub fn info<T: Any>(&self, genome: &G) -> Option<&'a T> {
+        self.infos.info(genome)
+    }
+
+    /// The info of the best individual found so far, see [`info`](Snapshot::info).
+    pub fn best_info<T: Any>(&self) -> Option<&'a T> {
+        self.info(self.best.genome())
     }
 }
