@@ -13,14 +13,14 @@ app pins a commit that has it (`pnpm sync:genoxide --update` pins main's latest)
 
 | Folder | In the app |
 | --- | --- |
-| `app/projects/genoxide/` | the routes: overview, `/examples`, `/examples/[slug]` and their layout (the sidebar of every example), `/benchmarks`, the sub-navigation layout and the Open Graph image |
+| `app/projects/genoxide/` | the routes: overview, `/examples`, `/examples/[slug]` and their layout (the sidebar of every example), `/benchmarks` and `/benchmarks/run` (a route handler: one method's runs in one scenario, as JSON, for the benchmark page's details panel), the sub-navigation layout and the Open Graph image |
 | `lib/projects/genoxide/` | the data: static facts (`meta.js`), and the examples, benchmarks and versions read from GitHub, crates.io and PyPI |
 
-The examples (and the benchmark page's file list and chart data, `docs/benchmarks/charts.json`) are read from GitHub at the pinned commit, not
+The examples (and the benchmark page's file list, its chart data, `docs/benchmarks/charts.json`, and its run details, `docs/benchmarks/runs/<scenario>.json` with the adapters' files they point to) are read from GitHub at the pinned commit, not
 at `main`: the pages always get the files they were written for, and pinning a new commit is new
 URLs, so nothing the app cached from an older commit is served for it. An example added to `main`
 shows once the app pins a commit that has it. Links for readers ("view on GitHub") go to `main`.
-| `components/projects/genoxide/` | the components only these pages use; `ExamplesSidebar` lists every example (a column on wide screens, a drawer below), `ExampleFamilyTabs` shows the problems of an example's paper (its `family` in the front matter) as tabs, `player/` plays an example's recorded run (its `trace.json`), `benchmarks/` draws the benchmark page's interactive charts from `charts.json` |
+| `components/projects/genoxide/` | the components only these pages use; `ExamplesSidebar` lists every example (a column on wide screens, a drawer below), `ExampleFamilyTabs` shows the problems of an example's paper (its `family` in the front matter) as tabs, `player/` plays an example's recorded run (its `trace.json`), `benchmarks/` draws the benchmark page's interactive charts from `charts.json`, and `RunDetails` shows the runs, output and code of the bar selected in them (`#run=<scenario>/<library>/<solver>` in the URL), from `/benchmarks/run` |
 
 Nothing else in `site/` is copied: `scripts/berlin_districts.py` regenerates the Berlin map of the berlin52 example's tour plot (`player/plots/berlin.js`). Imports use the app's `@/` alias, which is the app's root.
 
@@ -35,13 +35,14 @@ The contract between the two repositories: these have to exist in the app, with 
 | --- | --- |
 | `@/genoxide-site.json` | `commit`: the pinned commit, the one these pages were synced from |
 | `@/components/projects/Breadcrumbs` | default |
+| `@/components/projects/CopyButton` | default (copies the code of its `[data-copy-root]`) |
 | `@/components/projects/JsonLd` | default |
 | `@/components/projects/LangCodeGroup` | default (the Rust/Python code tabs) |
 | `@/components/projects/ProjectSubNav` | default |
 | `@/components/projects/SourceUnavailable` | default |
 | `@/components/projects/code-lang` | `CODE_LANG_LABELS` |
 | `@/lib/projects/fetch-cached` | `fetchCached` |
-| `@/lib/projects/highlight` | `renderMarkdown` |
+| `@/lib/projects/highlight` | `renderMarkdown`, `highlightCode` (the benchmark run details: the adapters' code, in Rust, Python, Java, Julia or C++, plain where the app's highlighter has no grammar for it, and the runs' output) |
 | `@/lib/projects/json-ld` | `WEBSITE_ID`, `breadcrumbList`, `website` |
 | `@/lib/projects/metadata` | `projectsMetadata` |
 | `@/lib/projects/og-image` | `OG_CONTENT_TYPE`, `OG_SIZE`, `projectsOgImage` |

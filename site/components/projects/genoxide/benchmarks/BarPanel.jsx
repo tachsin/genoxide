@@ -4,7 +4,7 @@ import { useId, useMemo, useState } from "react";
 import { linear, logarithmic, logTicks, ticks } from "../player/chart-kit";
 import { Axes, PlotBox, TipRows, Tooltip } from "../player/chart-parts";
 import { barNotes, exactValue, pointsText, QUANTITY_NAMES, tickFormat } from "./format";
-import { useHighlight } from "./Highlight";
+import { sameRun, useHighlight } from "./Highlight";
 
 /**
  * One panel of a benchmark chart: a horizontal bar per library and method,
@@ -17,6 +17,10 @@ import { useHighlight } from "./Highlight";
  * for an overall score, its points in each scenario too (`ratios`, the
  * scenarios' titles from the panel's `scenarios`). The highlighted library
  * (the legend's) dims the others.
+ *
+ * A bar of a method in a scenario (a `solver`, in a panel whose `key` is the
+ * scenario's) selects that run on a click, or on Enter when the arrow keys are
+ * on it: the details panel below the charts shows its runs, output and code.
  */
 
 const ROW = 18;
@@ -33,7 +37,7 @@ function fit(text, room) {
 }
 
 export default function BarPanel({ panel, quantity, libraries, limit = Infinity, label, room }) {
-  const { focus } = useHighlight();
+  const { focus, details, run, select } = useHighlight();
   const [expanded, setExpanded] = useState(false);
   const [active, setActive] = useState(null);
   const patterns = useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -78,6 +82,12 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
     .join(", ")}${all.length > 3 ? ", …" : ""}`;
 
   const activeBar = active !== null ? bars.find((b) => b.index === active) : null;
+  // the run a bar selects: its library and method in this panel's scenario
+  const runOf = (bar) =>
+    details && bar?.solver && bar.library && panel.key && panel.key !== "overall"
+      ? { scenario: panel.key, library: bar.library, solver: bar.solver }
+      : null;
+  const selectable = all.some((bar) => runOf(bar));
   const move = (step) => {
     const at = bars.findIndex((b) => b.index === active);
     const next = at === -1 ? (step > 0 ? 0 : bars.length - 1) : Math.min(bars.length - 1, Math.max(0, at + step));
@@ -90,7 +100,9 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
         // biome-ignore lint/a11y/noNoninteractiveTabindex: the arrow keys read the bars one by one
         tabIndex={0}
         role="group"
-        aria-label={`${panel.title ?? label}: use the up and down arrow keys to read each bar`}
+        aria-label={`${panel.title ?? label}: use the up and down arrow keys to read each bar${
+          selectable ? ", and Enter to show its runs, output and code below the charts" : ""
+        }`}
         className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -101,6 +113,9 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
             setActive(bars[event.key === "Home" ? 0 : bars.length - 1]?.index ?? null);
           } else if (event.key === "Escape") {
             setActive(null);
+          } else if ((event.key === "Enter" || event.key === " ") && runOf(activeBar)) {
+            event.preventDefault();
+            select(runOf(activeBar));
           }
         }}
         onBlur={() => setActive(null)}
@@ -195,6 +210,8 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
                     const color = libraries[bar.library]?.color ?? "#888888";
                     const dim = focus && focus !== bar.library;
                     const isActive = activeBar === bar;
+                    const barRun = runOf(bar);
+                    const isSelected = sameRun(barRun, run);
                     const labelText = fit(bar.label, area.left - 10);
                     const labelClass = `${GENOXIDE.has(bar.library) ? "font-semibold fill-base-content" : "fill-base-content/75"} text-[11px]`;
                     let mark;
@@ -225,6 +242,9 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
                     return (
                       <g key={`${bar.library}/${bar.solver}/${bar.index}`} opacity={dim ? 0.2 : 1} className="transition-opacity duration-150 motion-reduce:transition-none">
                         {isActive ? <rect x={0} y={y} width={width} height={ROW} rx={3} className="fill-base-content/[0.07]" /> : null}
+                        {isSelected ? (
+                          <rect x={0.75} y={y + 0.75} width={width - 1.5} height={ROW - 1.5} rx={3} fill="none" className="stroke-primary" strokeWidth={1.5} />
+                        ) : null}
                         <text x={area.left - 6} y={y + ROW / 2} dy="0.34em" textAnchor="end" className={labelClass}>
                           {labelText}
                         </text>
@@ -239,6 +259,8 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
                           width={width}
                           height={ROW}
                           fill="transparent"
+                          className={barRun ? "cursor-pointer" : undefined}
+                          onClick={barRun ? () => select(barRun) : undefined}
                           onPointerEnter={() => setActive(bar.index)}
                           onPointerLeave={() => setActive((current) => (current === bar.index ? null : current))}
                         />
@@ -256,6 +278,7 @@ export default function BarPanel({ panel, quantity, libraries, limit = Infinity,
           ? [
               `${activeBar.label}: ${activeBar.value === null ? "no value" : `${QUANTITY_NAMES[quantity] ?? quantity} ${exactValue(activeBar.value, quantity)}`}`,
               ...barNotes(activeBar),
+              ...(sameRun(runOf(activeBar), run) ? ["its runs are shown below the charts"] : []),
             ].join(". ")
           : ""}
       </p>
