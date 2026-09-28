@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.2](https://github.com/tachsin/genoxide/compare/v0.9.1...v0.9.2) - 2026-09-28
+
+### <!-- 0 -->Added
+
+- *(python)* parallel_breeding for De ([#296](https://github.com/tachsin/genoxide/pull/296))
+- *(site)* example families as tabs, and a sidebar of every example ([#279](https://github.com/tachsin/genoxide/pull/279))
+- *(benchmarks)* single-objective scenarios only, for now (the benchmark harness's commands changed; the library's API didn't) ([#283](https://github.com/tachsin/genoxide/pull/283))
+- *(benchmarks)* a matched suite of three problems, one method each (a new harness command set, as above) ([#284](https://github.com/tachsin/genoxide/pull/284))
+- breed a GA's offspring in parallel with GaBuilder::parallel_breeding ([#289](https://github.com/tachsin/genoxide/pull/289))
+- parameter control with Engine::control, and re-evaluation in the single-objective algorithms ([#292](https://github.com/tachsin/genoxide/pull/292))
+- isolated islands that never migrate, with Topology::Isolated ([#293](https://github.com/tachsin/genoxide/pull/293))
+- *(python)* parameter control and re-evaluation with run(control=...) ([#294](https://github.com/tachsin/genoxide/pull/294))
+- build DE trials and ES offspring in parallel with parallel_breeding ([#295](https://github.com/tachsin/genoxide/pull/295))
+- keep what a fitness function computed alongside the fitness ([#301](https://github.com/tachsin/genoxide/pull/301))
+
+### <!-- 2 -->Performance
+
+- push each child straight into the offspring when breeding serially ([#290](https://github.com/tachsin/genoxide/pull/290))
+- *(python)* twice as fast on bit genomes, one GIL attach per generation ([#291](https://github.com/tachsin/genoxide/pull/291))
+- take an ES's step-size logarithms once per generation ([#298](https://github.com/tachsin/genoxide/pull/298))
+
+### <!-- 4 -->Documentation
+
+- the roadmap as released: this release's control and parallel breeding, genetic programming in 0.10 ([#299](https://github.com/tachsin/genoxide/pull/299))
+
 ## [0.9.1](https://github.com/tachsin/genoxide/compare/v0.9.0...v0.9.1) - 2026-09-28
 
 ### <!-- 0 -->Added
