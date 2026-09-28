@@ -133,6 +133,8 @@ pub struct Ga {
     pub crossover_rate: Option<f64>,
     pub mutation_rate: Option<f64>,
     pub scheme: Option<Scheme>,
+    /// Crossover and mutation of each pair of parents on its own random stream, in parallel.
+    pub parallel_breeding: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

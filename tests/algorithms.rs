@@ -290,8 +290,19 @@ fn portable_runs() {
                 .build()
                 .unwrap(),
         ),
+        portable_run(
+            Ga::builder(real())
+                .population_size(20)
+                .select(Tournament::new(3).unwrap())
+                .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
+                .mutate(PolynomialMutation::per_gene(0.25, 20.0).unwrap())
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
     ];
-    let expected: [[f64; 4]; 5] = [
+    let expected: [[f64; 4]; 6] = [
         // L-SHADE
         [
             1.06352535213699,
@@ -326,6 +337,13 @@ fn portable_runs() {
             0.27231802269909716,
             0.07182313884499765,
             -0.001476731001038885,
+        ],
+        // GA, SBX and polynomial mutation, sequential breeding
+        [
+            0.481469094537807,
+            0.24876448694741246,
+            0.04545026095464834,
+            -0.016979733128666127,
         ],
     ];
     for (run, expected) in runs.iter().zip(expected) {

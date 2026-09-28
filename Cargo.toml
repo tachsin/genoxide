@@ -66,9 +66,11 @@ required-features = ["parallel"]
 name = "genoxide"
 required-features = ["cli"]
 
+# parallel breeding and evaluation
 [[bench]]
 name = "hot_paths"
 harness = false
+required-features = ["parallel"]
 
 [[bench]]
 name = "instructions"

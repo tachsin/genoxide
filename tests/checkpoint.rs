@@ -144,6 +144,41 @@ fn genetic_algorithms_resume_exactly() {
     resumes(memetic, tour, 5, 15);
 }
 
+#[cfg(feature = "parallel")]
+#[test]
+fn genetic_algorithms_with_parallel_breeding_resume_exactly() {
+    let parallel = |scheme, seed| {
+        let ga = Ga::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+            .population_size(21)
+            .select(Tournament::new(3).unwrap())
+            .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
+            .mutate(PolynomialMutation::per_gene(0.1, 20.0).unwrap())
+            .scheme(scheme)
+            .parallel_breeding(true)
+            .minimize()
+            .seed(seed)
+            .build()
+            .unwrap();
+        assert!(ga.parallel_breeding());
+        ga
+    };
+    for scheme in [
+        Scheme::Generational { elitism: 1 },
+        Scheme::SteadyState { replacements: 5 },
+        Scheme::MuPlusLambda { lambda: 21 },
+        Scheme::MuCommaLambda { lambda: 41 },
+    ] {
+        resumes(|| parallel(scheme, 2), rastrigin, 9, 25);
+    }
+    // the setting is saved: without it, the resumed run would breed differently
+    let mut engine =
+        Engine::new(parallel(Scheme::default(), 3), rastrigin).stop_when(Stop::generations(5));
+    engine.run().unwrap();
+    let resumed: Ga<Real, Tournament, SimulatedBinaryCrossover, PolynomialMutation> =
+        checkpoint::load(bytes(engine.algorithm()).as_slice()).unwrap();
+    assert!(resumed.parallel_breeding());
+}
+
 #[test]
 fn other_algorithms_resume_exactly() {
     resumes(|| de(4), rastrigin, 10, 40);
