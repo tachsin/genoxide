@@ -24,6 +24,8 @@
 | [Evolutionary.jl](../docs/benchmarks/libraries/evolutionary_jl.md) | Julia | 0.12.0 | GA, ES, CMA-ES, DE; NSGA-II |
 | [Metaheuristics.jl](../docs/benchmarks/libraries/metaheuristics_jl.md) | Julia | 3.5.0 | GA, BRKGA, ECA, DE, PSO; NSGA-II/III, SPEA2, SMS-EMOA |
 
+The versions are the ones the published results measured. Since then, the adapters' pins moved to genetic_algorithm 0.27.4, radiate 1.3.2 and Evolutionary.jl 0.12.1: the next run measures them, and `python run.py outdated` lists them as "not rerun" until then.
+
 Each library's page gives its methods, their sources, what it leaves out, its separate test runs and its bugs. [notes.md](../docs/benchmarks/notes.md) indexes what each library can't run and the bugs found.
 
 ## Methodology
@@ -101,24 +103,36 @@ python run.py --quick    # small scenarios, 3 seeds
 python run.py            # all scenarios, 10 seeds
 python run.py --scenarios nqueens-64-idiomatic --seeds 20 --libraries genetic_algorithm deap
 python run.py chart      # redraw the charts of the latest results (--png also draws PNG previews)
+python run.py publish    # the latest run into docs/benchmarks (below)
 python run.py versions --genoxide 0.8.0  # count the instructions of genoxide 0.8.0's runs (below)
 ```
 
 `--allow-unpinned` skips the pinning check, for runs whose times don't count.
 
-Each run writes the raw runs to `results/<timestamp>.json`, tables to `results/latest.md` (published as [docs/benchmarks/results.md](../docs/benchmarks/results.md)), and charts to `results/charts/`: an SVG per chart, and `charts.json`, the numbers, labels and notes of every chart with the run's date, machine and versions, written from the same summaries as the SVGs. Published, the SVGs and `charts.json` go to [docs/benchmarks/](../docs/benchmarks/); the project site's [benchmarks page](https://tachsin.gr/projects/genoxide/benchmarks) draws its interactive charts from `charts.json`. `python run.py chart --results <file> --charts <folder>` redraws both from a results file.
+Each run writes the raw runs to `results/<timestamp>.json`, tables to `results/latest.md`, and charts to `results/charts/`: an SVG per chart, and `charts.json`, the numbers, labels and notes of every chart with the run's date, machine and versions, written from the same summaries as the SVGs. The project site's [benchmarks page](https://tachsin.gr/projects/genoxide/benchmarks) draws its interactive charts from `charts.json`.
 
-**Rerunning some libraries.** `--update` reruns only the libraries of `--libraries`, on every scenario of the file with its seeds and time caps, and keeps the others' results:
+**Publishing a run.** `python run.py publish` (`--results <file>` for another run than the latest) writes the latest run of `results/` into [docs/benchmarks/](../docs/benchmarks/): the tables, [results.md](../docs/benchmarks/results.md), summarized from its runs; the SVGs and `charts.json`; and the run itself, [results.json.xz](../docs/benchmarks/results.json.xz), compressed with xz, which Python reads without a package (`lzma`). The published copy leaves out the solutions of the multi-objective runs' fronts, 97% of the file: each run keeps its hypervolume, computed from them when it ran, and its seed gives the same run again where the library can be seeded ([rule 5.2](../docs/benchmarks/rules.md#5-seeds-and-repeated-runs)). Commit the files it changes.
+
+The published run is the default of `chart` and `--update`, so anyone can redraw the published charts: `python run.py chart` draws the charts of the published run, or of a newer run in `results/`, into `results/charts/`; `python run.py chart --results <file> --charts <folder>` draws a given results file, the run's JSON or the published `.json.xz`.
+
+**The full rerun.** On the machine of the published results, [rerun.sh](rerun.sh) runs every step in turn, in WSL, and stops at the first that fails: `run.py setup`, `run.py check`, the timed run (every library, 10 seeds), `run.py versions --genoxide <version>` and `run.py publish`. It logs everything to `results/rerun-<timestamp>.log`. The version is genoxide's release on crates.io, or `path` for the repository's genoxide before the release. It takes about 6 hours; nothing else may run meanwhile.
 
 ```sh
-python run.py --update results/<timestamp>.json --libraries genoxide genoxide_python
+benchmarks/rerun.sh 0.9.0
+```
+
+**Rerunning some libraries.** `--update` reruns only the libraries of `--libraries`, on every scenario of the published run (or of `--update <file>`) with its seeds and time caps, and keeps the others' results. Then publish it:
+
+```sh
+python run.py --update --libraries genoxide genoxide_python
+python run.py publish
 ```
 
 - It can't be combined with `--scenarios` or `--quick`. To add a scenario, rerun every library.
 - It first reruns DEAP's GA in matched OneMax 100, seeds 0 to 2. It refuses to go on if the median time differs from the file's by more than 3%, or if the evaluations differ. `--allow-drift` reruns anyway.
 - If the platform differs from the file's, the new file records both.
 
-**New releases.** `python run.py outdated` lists each library's pinned version, the version in the published results and its latest release, and marks the newer ones. To benchmark a newer release, update the library's pin, run `python run.py check --libraries <name>`, then rerun it alone with `--update`. A weekly workflow keeps an issue, "New releases of benchmarked libraries", open while any library has a newer release.
+**New releases.** `python run.py outdated` lists each library's pinned version, the version in the published results and its latest release. It marks a newer release "newer", and a pin that differs from the published results "not rerun". To benchmark a newer release, update the library's pin, run `python run.py check --libraries <name>`, then rerun it alone with `--update` and publish it. A weekly workflow keeps an issue, "New releases of benchmarked libraries", open while any library has a newer release or isn't rerun at its pin.
 
 **The version measured.** `--version-label genoxide=0.7.0` records genoxide and its Python package as 0.7.0, still followed by the commit, for a release benchmarked before `Cargo.toml` is bumped. It works for any library of `--libraries`.
 

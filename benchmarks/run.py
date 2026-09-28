@@ -9,13 +9,17 @@ Usage:
     python run.py --libraries deap genetic_algorithm
     python run.py check                      # test the adapters against the rules, before a run,
                                              # --jobs scenarios at a time
-    python run.py chart                      # redraw the charts of the latest results
+    python run.py chart                      # redraw the charts of the latest results: the published
+                                             # docs/benchmarks/results.json.xz, or a newer run
+    python run.py publish                    # the latest run into docs/benchmarks: results.md, the
+                                             # charts, charts.json and results.json.xz
     python run.py versions --genoxide 0.8.0  # count the CPU instructions of genoxide 0.8.0's runs
                                              # with Callgrind into docs/benchmarks/genoxide-versions.json
                                              # (--genoxide path: this repository's genoxide), --jobs
                                              # at a time; unpinned is fine
-    python run.py --libraries genoxide --update results/<file>.json
-                                             # rerun one library, keep the others' results, if a
+    python run.py --libraries genoxide --update
+                                             # rerun one library, keep the others' results of the
+                                             # published run (or of --update <file>), if a
                                              # reference run still takes the file's time
                                              # (--allow-drift: even if not)
     python run.py --version-label genoxide=0.7.0
@@ -27,9 +31,9 @@ Usage:
 
 Results are written to results/<timestamp>.json (all runs), results/latest.md (table) and
 results/charts/ (charts: *.svg, and charts.json, their numbers for the project site's interactive
-charts). `python run.py versions` compares genoxide's versions by the CPU instructions of the same
-runs, counted with Callgrind (Linux, Valgrind), in docs/benchmarks/genoxide-versions.json and the
-genoxide_versions chart.
+charts); `python run.py publish` puts them in docs/benchmarks. `python run.py versions` compares
+genoxide's versions by the CPU instructions of the same runs, counted with Callgrind (Linux,
+Valgrind), in docs/benchmarks/genoxide-versions.json and the genoxide_versions chart.
 """
 
 import argparse
@@ -68,6 +72,17 @@ GENOXIDE_PYTHON_BUILD = (
 )
 # the builds of the adapters that aren't Rust or Python, outside the repository
 BUILDS = Path(os.environ.get("BENCH_BUILDS", Path.home() / "bench-targets"))
+# the published results: the tables, the charts and the run they're drawn from, which `run.py
+# publish` writes compressed (xz), so anyone can redraw them, and `chart` and `--update` read by default
+DOCS = ROOT.parent / "docs" / "benchmarks"
+PUBLISHED_RESULTS = DOCS / "results.json.xz"
+# a run's file in results/: its timestamp
+RUN_FILE = re.compile(r"\d{8}-\d{6}\.json")
+# Left out of the published copy: the solutions of the multi-objective runs' fronts, 97% of a
+# results file (21 MB compressed in the run of 2026-09-26). Each run keeps its hypervolume, which
+# run_adapter computes from them, and its seed gives the same run again where the library can be
+# seeded (rule 5.2).
+UNPUBLISHED_FIELDS = ("solutions",)
 
 # Each adapter prints one JSON line per solver per seed, with the same command line:
 #   <problem> <size> <mode> <seed_from> <seed_to> <max_evaluations> <max_seconds>
@@ -1851,9 +1866,7 @@ def draw_charts_of(results_file, out_dir, png=False, history=VERSIONS_FILE):
             check=True,
         )
         return
-    results = json.loads(Path(results_file).read_text(encoding="utf-8"))
-    results.setdefault("timestamp", Path(results_file).stem)
-    draw_charts(results, out_dir, formats=("svg", "png") if png else ("svg",), history=history)
+    draw_charts(read_results(results_file), out_dir, formats=("svg", "png") if png else ("svg",), history=history)
 
 
 def draw_versions_of(history, out_dir, png=False):
@@ -1878,6 +1891,7 @@ def markdown_report(report):
     header += [f"- {name} {version}" for name, version in report["versions"].items()] + [""]
     # every timed run is validated (check.check_run): the ones that failed are listed, not kept
     header += [invalid_list(report["runs"]), ""]
+    header += charts_section(report)
     header += ["## Coverage", "",
                "✓ ran, ✗ every run invalid, – can't run the scenario: why, and the bugs found in the libraries, in "
                "[notes.md](notes.md).", "", coverage_table(report["runs"], report["versions"]), "",
@@ -1895,6 +1909,23 @@ def markdown_report(report):
     return "\n".join(header) + "\n" + table + "\n"
 
 
+def charts_section(report):
+    """The lines of results.md that link the charts, which `run.py publish` puts beside it."""
+    scenarios = len({scenario_name(run["problem"], run["size"], run["mode"]) for run in report["runs"]})
+    return ["## Charts", "",
+            "Interactive, with each bar's numbers: "
+            "[tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).", "",
+            f"![Overall score: each library's speed to a solution over the {scenarios} scenarios](overall.svg)", "",
+            "- [Time to target: each library's fastest method](summary.svg)",
+            "- [Expected time to target](time_to_target.svg), every method",
+            "- [Expected evaluations to target](evaluations_to_target.svg), every method",
+            "- [Distance to the optimum at the end](distance_to_optimum.svg)",
+            "- [Hypervolume of the multi-objective fronts](hypervolume.svg)",
+            "- [Time of the multi-objective runs](front_time.svg)",
+            "- [genoxide's versions](genoxide_versions.svg): the CPU instructions of the same runs in each release, "
+            "genoxide only ([rule 10](rules.md#10-instruction-counts-genoxides-versions))", ""]
+
+
 def describe_caps(caps):
     """The time caps of a results file's scenarios, e.g. "60 s with a target, 600 s multi-objective"."""
     def seconds(values):
@@ -1907,11 +1938,64 @@ def describe_caps(caps):
     return f"{seconds(single)} with a target, {seconds(front)} multi-objective"
 
 
+def read_results(path):
+    """A results file: a run's JSON in results/, or compressed with xz or gzip, like the published
+    one (PUBLISHED_RESULTS)."""
+    path = Path(path)
+    if path.suffix == ".xz":
+        import lzma
+        text = lzma.decompress(path.read_bytes()).decode("utf-8")
+    elif path.suffix == ".gz":
+        import gzip
+        text = gzip.decompress(path.read_bytes()).decode("utf-8")
+    else:
+        text = path.read_text(encoding="utf-8")
+    results = json.loads(text)
+    # the files from before the timestamp was stored are named after it
+    results.setdefault("timestamp", path.name.split(".")[0])
+    return results
+
+
+def write_published_results(results, path=PUBLISHED_RESULTS):
+    """The published copy of a results file, compressed with xz, without UNPUBLISHED_FIELDS."""
+    import lzma
+    published = dict(results, runs=[{key: value for key, value in run.items() if key not in UNPUBLISHED_FIELDS}
+                                    for run in results["runs"]])
+    text = json.dumps(published, indent=1, ensure_ascii=False) + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(lzma.compress(text.encode("utf-8"), preset=9 | lzma.PRESET_EXTREME))
+
+
+def local_runs():
+    """The runs' results files in results/, oldest first."""
+    return sorted(path for path in (ROOT / "results").glob("*.json") if RUN_FILE.fullmatch(path.name))
+
+
 def latest_results():
-    files = sorted((ROOT / "results").glob("*.json"))
-    if not files:
+    """The newest results: a run in results/ newer than the published one, or the published one."""
+    local = local_runs()
+    if PUBLISHED_RESULTS.is_file():
+        published = read_results(PUBLISHED_RESULTS)["timestamp"]
+        if not local or local[-1].name.split(".")[0] <= published:
+            return PUBLISHED_RESULTS
+    if not local:
         raise SystemExit("no results yet: run `python run.py` first")
-    return files[-1]
+    return local[-1]
+
+
+def publish(results_file, history=VERSIONS_FILE):
+    """Publishes a run into DOCS: its tables (results.md), its charts and charts.json, and the
+    run itself, compressed (PUBLISHED_RESULTS). The tables are summarized from the runs again, as
+    the charts are, so they agree with them whichever version of run.py wrote the file."""
+    results = read_results(results_file)
+    caps = scenario_caps(results.get("max_seconds", 60.0), results["runs"])
+    report = dict(results, summary=summarize(results["runs"], caps),
+                  front_summary=summarize_fronts(results["runs"], caps))
+    (DOCS / "results.md").write_text(markdown_report(report), encoding="utf-8", newline="\n")
+    write_published_results(results)
+    draw_charts_of(results_file, DOCS, history=history)
+    print(f"{Path(results_file).name} published in {DOCS}: results.md, the charts, charts.json and "
+          f"{PUBLISHED_RESULTS.name}", flush=True)
 
 
 # --update keeps the other libraries' times, so the machine must still measure what it measured
@@ -1984,15 +2068,18 @@ def build(libraries, labels):
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", nargs="?", choices=["run", "setup", "check", "chart", "versions", "outdated"],
-                        default="run")
+    parser.add_argument("command", nargs="?",
+                        choices=["run", "setup", "check", "chart", "publish", "versions", "outdated"], default="run")
     parser.add_argument("--seeds", type=int, default=10)
     parser.add_argument("--max-seconds", type=float,
                         help="wall time cap per run, in every scenario (default: each scenario's own)")
     parser.add_argument("--quick", action="store_true", help="small scenarios, 3 seeds")
     parser.add_argument("--scenarios", nargs="*", help="scenario names, e.g. onemax-100-matched (default all)")
     parser.add_argument("--libraries", nargs="*", choices=list(ADAPTERS), help="default all")
-    parser.add_argument("--results", type=Path, help="results file to chart (default: the latest)")
+    parser.add_argument("--results", type=Path,
+                        help="results file to chart (default: the latest, the published "
+                             f"{PUBLISHED_RESULTS.relative_to(ROOT.parent).as_posix()} or a newer run in results/), "
+                             "or to publish (default: the latest run in results/)")
     parser.add_argument("--charts", type=Path,
                         help="folder for the charts (default: results/charts; for versions, docs/benchmarks, where "
                              "the history file is)")
@@ -2005,8 +2092,9 @@ def main():
     parser.add_argument("--jobs", type=int, default=os.cpu_count(),
                         help="Callgrind runs, or check scenarios, at a time (default: the number of cores)")
     parser.add_argument("--png", action="store_true", help="also draw the charts as PNG, e.g. to preview them")
-    parser.add_argument("--update", type=Path,
-                        help="rerun only --libraries, with the seeds and every scenario of this results file, "
+    parser.add_argument("--update", type=Path, nargs="?", const=PUBLISHED_RESULTS, metavar="RESULTS",
+                        help="rerun only --libraries, with the seeds and every scenario of this results file "
+                             f"(default: the published {PUBLISHED_RESULTS.relative_to(ROOT.parent).as_posix()}), "
                              "and keep its results of the other libraries")
     parser.add_argument("--allow-drift", action="store_true",
                         help="with --update, rerun even if the reference run's time differs from the results "
@@ -2067,6 +2155,12 @@ def main():
         draw_charts_of(results_file, args.charts, png=args.png, history=args.history)
         print(f"charts of {results_file.name} in {args.charts}")
         return
+    if args.command == "publish":
+        runs = local_runs()
+        if not args.results and not runs:
+            raise SystemExit("no run in results/ to publish: run `python run.py` first, or pass --results")
+        publish(args.results or runs[-1], history=args.history)
+        return
     if not VENV_PYTHON.exists():
         raise SystemExit("run `python run.py setup` first")
     import check
@@ -2092,7 +2186,7 @@ def main():
             # version, and a library new to the file would seem unable to run them
             raise SystemExit("--update reruns the libraries on every scenario of the results file, so it can't "
                              "be combined with --scenarios or --quick. To add a scenario, rerun every library.")
-        previous = json.loads(args.update.read_text(encoding="utf-8"))
+        previous = read_results(args.update)
     seeds = previous["seeds"] if previous else 3 if args.quick and args.seeds == 10 else args.seeds
     # each scenario's time cap: an update keeps the results file's
     caps = (scenario_caps(previous.get("max_seconds", 60.0), previous["runs"]) if previous
@@ -2150,6 +2244,7 @@ def main():
     print()
     print(markdown)
     draw_charts_of(results_file, args.charts, history=args.history)
+    print(f"{results_file.name}: publish it into docs/benchmarks with `python run.py publish`", flush=True)
 
 
 if __name__ == "__main__":

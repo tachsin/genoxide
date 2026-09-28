@@ -2,7 +2,7 @@
 
 radiate is a Rust library for genetic algorithms, with Python bindings, genetic programming and neuroevolution. Its one search method is the `GeneticEngine`, a GA: each generation keeps `population_size × (1 − offspring_fraction)` survivors and breeds the rest. Multi-objective problems use the same engine with the NSGA-II or NSGA-III selectors. Its user guide is at [pkalivas.github.io/radiate](https://pkalivas.github.io/radiate/); the links below point to the guide's sources and examples at the tag [v1.3.1](https://github.com/pkalivas/radiate/tree/v1.3.1) (579a943).
 
-Adapter: [benchmarks/adapters/radiate/](../../../benchmarks/adapters/radiate/).
+Adapter: [benchmarks/adapters/radiate/](../../../benchmarks/adapters/radiate/). The published results measured 1.3.1; the adapter now pins 1.3.2, which the next run measures.
 Know a better way to solve one of these problems with radiate? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
 
 ## How the adapter runs radiate

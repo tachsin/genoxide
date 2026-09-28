@@ -1,8 +1,8 @@
-# genetic_algorithm (Rust, 0.27.4)
+# genetic_algorithm (Rust, 0.27.3)
 
 A Rust genetic algorithm library with three strategies: Evolve (a GA), HillClimb (local search, Stochastic or SteepestAscent) and Permutate (exhaustive search). The fitness is an `isize`, so real values are scaled by a precision. Its docs are the [README](https://docs.rs/crate/genetic_algorithm/0.27.3/source/README.md), [AGENTS.md](https://docs.rs/crate/genetic_algorithm/0.27.3/source/AGENTS.md) (decision matrices and recommended settings), [AGENTS_TEMPLATES.md](https://docs.rs/crate/genetic_algorithm/0.27.3/source/AGENTS_TEMPLATES.md), the [examples](https://docs.rs/crate/genetic_algorithm/0.27.3/source/examples/) and [docs.rs](https://docs.rs/genetic_algorithm/0.27.3/genetic_algorithm/).
 
-Adapter: [benchmarks/adapters/genetic_algorithm/](../../../benchmarks/adapters/genetic_algorithm/).
+Adapter: [benchmarks/adapters/genetic_algorithm/](../../../benchmarks/adapters/genetic_algorithm/). The published results measured 0.27.3; the adapter now pins 0.27.4, which the next run measures.
 Know a better way to solve one of these problems with genetic_algorithm? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
 
 ## How the adapter runs genetic_algorithm
