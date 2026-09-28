@@ -261,9 +261,10 @@ from_libm! {
 
 /// `x` to the integer power `n`, the same on every platform.
 ///
-/// `f64::powi` doesn't promise the same result everywhere. This is its usual algorithm, binary
-/// exponentiation (LLVM's and compiler-rt's), written out so that the order of the rounded
-/// multiplications is fixed: exact for `n` in -1..=2, within a few ulps otherwise.
+/// `f64::powi` doesn't promise the same result everywhere, and doesn't give it: with a negative
+/// exponent, Windows' differs from Linux's in the last bit. This is binary exponentiation, as
+/// LLVM expands `powi` on Linux, written out so that the order of the rounded multiplications is
+/// fixed: exact for `n` in -1..=2, within a few ulps otherwise.
 #[inline]
 #[must_use]
 pub fn powi(x: f64, n: i32) -> f64 {
@@ -452,20 +453,32 @@ mod tests {
         }
     }
 
-    /// The same bits as `f64::powi`'s usual algorithm, whatever the compiler does with it.
+    /// Fixed bits on every platform, unlike `f64::powi`: with a negative exponent, Windows'
+    /// differs from Linux's in the last bit, e.g. for 7.6268145870115305^-3.
     #[test]
-    fn powi_is_binary_exponentiation() {
+    fn powi_values() {
+        let cases = [
+            (1.1, 3, 4608673110276677044),                 // 1.3310000000000004
+            (7.6268145870115305, -3, 4567343990406518369), // 0.002254085754944055
+            (0.3, -2, 4622444617537217422),                // 11.11111111111111
+            (2.5, 7, 4648579924938981376),                 // 610.3515625
+            (-1.7, 5, 13847554739229683444),               // -14.198569999999997
+            (3.3, 20, 4761950407933306278),                // 23457341881.036766
+            (0.9, -31, 4628070934801639606),               // 26.21091652880633
+        ];
+        for (x, n, bits) in cases {
+            assert_eq!(powi(x, n).to_bits(), bits, "powi({x}, {n})");
+        }
         let mut rng = StreamRng::seed_from_u64(2);
         for _ in 0..20_000 {
             let x = (rng.unit_f64() - 0.5) * 20.0;
             for n in [-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 20, 31] {
                 let n = std::hint::black_box(n);
-                assert_eq!(powi(x, n).to_bits(), x.powi(n).to_bits(), "powi({x}, {n})");
+                assert!(ulps(powi(x, n), x.powi(n)) <= 1, "powi({x}, {n})");
             }
         }
         assert_eq!(powi(0.0, -1), f64::INFINITY);
         assert!(powi(f64::NAN, 2).is_nan());
         assert_eq!(powi(f64::NAN, 0), 1.0);
-        assert_eq!(powi(1.1, 3).to_bits(), 4608673110276677044); // 1.3310000000000004
     }
 }
