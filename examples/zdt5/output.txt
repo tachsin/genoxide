@@ -1,0 +1,4 @@
+uniform, 100     g = 18      0 of the 31 optimal points, IGD+ 0.6717, hypervolume 297.33
+two-point, 100   g = 15      0 of the 31 optimal points, IGD+ 0.4491, hypervolume 306.68
+two-point, 1000  g = 10     31 of the 31 optimal points, IGD+ 0.0000, hypervolume 323.15
+the whole front: g = 10, 31 points, hypervolume 323.15
