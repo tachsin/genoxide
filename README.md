@@ -13,10 +13,11 @@
 
 ## Install
 
-```toml
-[dependencies]
-genoxide = "0.7"
+```sh
+cargo add genoxide
 ```
+
+It adds the latest release to your `Cargo.toml` (the version is on the crates.io badge above). The Python package: `pip install genoxide`.
 
 ```rust
 use genoxide::prelude::*;
