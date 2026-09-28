@@ -1,0 +1,9 @@
+NSGA-II after 250 generations: 100 solutions, IGD+ 0.0178, hypervolume 3.2691
+  distance 0.00711 to 0.02211; genes at the global minimum 365, the next 639, further 996
+NSGA-II after 1000 generations: 100 solutions, IGD+ 0.0121, hypervolume 3.3144
+  distance 0.00304 to 0.01840; genes at the global minimum 510, the next 828, further 662
+SMS-EMOA after 250 generations: 100 solutions, IGD+ 0.0102, hypervolume 3.3030
+  distance 0.00187 to 0.01667; genes at the global minimum 593, the next 894, further 513
+SMS-EMOA after 1000 generations: 100 solutions, IGD+ 0.0055, hypervolume 3.3563
+  distance 0.00069 to 0.00210; genes at the global minimum 939, the next 960, further 101
+the whole front: hypervolume 3.3968
