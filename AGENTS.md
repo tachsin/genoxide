@@ -66,7 +66,7 @@ Any selection fits any representation; usually `Tournament` of size 2 to 5.
 
 `.memetic`: each of the best `parents` takes the best of `neighbors` mutated neighbors if not worse (Lamarckian). `.build()?` returns `Error::MissingSetting` or `Error::InvalidSetting`, naming the setting.
 
-During a run (parameter control, e.g. an annealed mutation step): `ga.set_crossover_rate(p)?`, `ga.set_mutation_rate(p)?` (validated as in the builder), and `ga.select_mut()`, `ga.crossover_mut()`, `ga.mutate_mut()` to replace an operator, e.g. `*ga.mutate_mut() = GaussianMutation::per_gene(0.5, sigma)?`. A change applies from the next generation's breeding. The `Engine` has no hook for it yet: drive the run with ask / tell (below).
+During a run (parameter control, e.g. an annealed mutation step): `ga.set_crossover_rate(p)?`, `ga.set_mutation_rate(p)?` (validated as in the builder), and `ga.select_mut()`, `ga.crossover_mut()`, `ga.mutate_mut()` to replace an operator, e.g. `*ga.mutate_mut() = GaussianMutation::per_gene(0.5, sigma)?`. A change applies from the next generation's breeding. In an `Engine`, make it in `.control(|ga, progress| ...)`; with `Islands`, through `islands.islands_mut()`.
 
 ### Operators
 
@@ -97,6 +97,7 @@ During a run (parameter control, e.g. an annealed mutation step): `ga.set_crosso
 | `.stop_when(stop)` | required without an abort flag; calls combine with "or" |
 | `.observe(observer)` | `&mut observer` to read it afterwards |
 | `.on_generation(\|snapshot\| ...)` | after every generation |
+| `.control(\|algorithm, progress\| ...)` | `&mut` the algorithm once per generation, after the observers and stops, before a checkpoint: parameter control, or `algorithm.reevaluate()?`; returns `Result<()>` |
 | `.parallel(true)` | rayon, same results; for expensive fitness functions; no effect on a `Batch` |
 | `.abort_flag(Arc<AtomicBool>)` | stops after the current generation once set |
 | `.nan_policy(NanPolicy::Error)` | NaN is an error, not invalid (`NanPolicy::Invalid`, default) |
@@ -638,7 +639,7 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
-When the fitness function changes during a run (adaptive penalty weights, a retrained surrogate), call `ga.reevaluate()?` between a tell and the next ask: the next ask gives the whole population, its tell scores it again without breeding, and `best()` is then the best by the new function.
+When the fitness function changes during a run (adaptive penalty weights, a retrained surrogate), call `ga.reevaluate()?` between a tell and the next ask (in an `Engine`, from `.control`): the next ask gives the whole population, its tell scores it again without starting a generation, and `best()` is then the best by the new function. `Islands::reevaluate` re-evaluates every island; the `Reevaluate` trait covers the algorithms that can.
 
 ### Without Rust: the `genoxide` program
 
