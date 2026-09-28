@@ -8,6 +8,7 @@ import {
   getBenchmarkChartData,
   getBenchmarkImages,
   getBenchmarkLibraryPages,
+  hasBenchmarkRuns,
 } from "@/lib/projects/genoxide/benchmarks";
 import { GENOXIDE_LINKS, GENOXIDE_OG_IMAGE, GENOXIDE_PATH } from "@/lib/projects/genoxide/meta";
 import { breadcrumbList } from "@/lib/projects/json-ld";
@@ -60,10 +61,11 @@ const DOCS = [
 ];
 
 export default async function BenchmarksPage() {
-  const [libraries, data, images] = await Promise.all([
+  const [libraries, data, images, details] = await Promise.all([
     getBenchmarkLibraryPages(),
     getBenchmarkChartData(),
     getBenchmarkImages(),
+    hasBenchmarkRuns(),
   ]);
 
   return (
@@ -127,6 +129,9 @@ export default async function BenchmarksPage() {
             The published run of {data.run.date}: {data.run.platform}, single-threaded, {data.run.seeds} seeds per
             scenario. The overall score comes first, then each measure per scenario. Hover a bar, or focus a chart and
             use the arrow keys, for its numbers; select a library to highlight it in every chart.
+            {details
+              ? " Click a method's bar, or press Enter on it, for its runs, what they printed and the adapter's code, with a link to suggest a better way to run it."
+              : null}
           </p>
         ) : (
           <p className="proj-lead mt-2 mb-5 text-sm">
@@ -147,6 +152,7 @@ export default async function BenchmarksPage() {
           images={images}
           data={data}
           resultsUrl={GENOXIDE_LINKS.benchmarkResults}
+          details={details}
         />
       </section>
 

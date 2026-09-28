@@ -12,7 +12,7 @@ Usage:
     python run.py chart                      # redraw the charts of the latest results: the published
                                              # docs/benchmarks/results.json.xz, or a newer run
     python run.py publish                    # the latest run into docs/benchmarks: results.md, the
-                                             # charts, charts.json and results.json.xz
+                                             # charts, charts.json, runs/ and results.json.xz
     python run.py versions --genoxide 0.8.0  # count the CPU instructions of genoxide 0.8.0's runs
                                              # with Callgrind into docs/benchmarks/genoxide-versions.json
                                              # (--genoxide path: this repository's genoxide), --jobs
@@ -31,7 +31,8 @@ Usage:
 
 Results are written to results/<timestamp>.json (all runs), results/latest.md (table) and
 results/charts/ (charts: *.svg, and charts.json, their numbers for the project site's interactive
-charts); `python run.py publish` puts them in docs/benchmarks. `python run.py versions` compares
+charts, and runs/<scenario>.json, each method's runs, output and adapter code, for the site's
+details of a bar); `python run.py publish` puts them in docs/benchmarks. `python run.py versions` compares
 genoxide's versions by the CPU instructions of the same runs, counted with Callgrind (Linux,
 Valgrind), in docs/benchmarks/genoxide-versions.json and the genoxide_versions chart.
 """
@@ -1579,6 +1580,7 @@ def draw_charts(results, out_dir, formats=("svg",), history=VERSIONS_FILE):
             data["charts"]["genoxide_versions"] = record
 
     write_charts_json(data, out_dir)
+    write_run_details(results, out_dir)
 
 
 def pyplot():
@@ -1622,6 +1624,143 @@ def write_charts_json(data, out_dir):
     head = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     (out_dir / "charts.json").write_text(f'{head[:-1]},"charts":{{\n' + ",\n".join(lines) + "\n}}\n",
                                          encoding="utf-8", newline="\n")
+
+
+# The run details beside charts.json, for the project site's benchmark page: clicking a bar shows
+# that method's runs in its scenario, what they printed, and the adapter's code that set it up.
+# One file per scenario, runs/<scenario>.json, so the page reads only the one it shows.
+RUN_DETAILS = "runs"
+# what a run's record has that its adapter didn't print (run_adapter adds them), and what the
+# details leave out of the printed line: the solutions of a multi-objective front (and the front,
+# which run_adapter drops), too big and not shown
+ADDED_FIELDS = ("invalid", "hypervolume")
+UNSHOWN_FIELDS = ("solutions", "front")
+SCENARIO_FILE = re.compile(r"[a-z0-9]+-\d+-[a-z]+\.json")
+
+
+def git_state(paths):
+    """The commit of the repository, and which of `paths` (relative to it) differ from it: their
+    lines at the commit aren't the ones read now. (None, set()) without git."""
+    repository = ROOT.parent
+    try:
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True,
+                                cwd=repository).stdout.strip()
+        status = subprocess.run(["git", "status", "--porcelain", "--", *paths], capture_output=True, text=True,
+                                check=True, cwd=repository).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None, set()
+    return commit or None, {line[3:].strip().strip('"') for line in status.splitlines() if len(line) > 3}
+
+
+def run_details(results):
+    """The details of each scenario of a results file: the scenario and its settings, and per
+    library and method its summary (as the charts' bars), every run (seed, time, evaluations, how
+    it ended, and the JSON line its adapter printed, without a front's solutions) and the blocks of
+    its adapter's code that set the method up (method_code.METHOD_CODE), with the commit whose file
+    has those lines if the file is unchanged from it. Invalid runs are there too, with why."""
+    import method_code
+
+    runs = results["runs"]
+    caps = scenario_caps(results.get("max_seconds", 60.0), runs)
+    versions = results.get("versions", {})
+    languages = results.get("languages") or {name: ADAPTERS.get(name, {}).get("language", "") for name in versions}
+    summaries = {(row["scenario"], row["library"], row["solver"]): row
+                 for row in summarize(runs, caps) + summarize_fronts(runs, caps)}
+    parts = {}
+    for row in summarize(runs, caps, split=True) + summarize_fronts(runs, caps, split=True):
+        parts.setdefault((row["scenario"], row["library"], row["solver"]), []).append(row)
+    order = {scenario_name(*scenario[:3]): index for index, scenario in enumerate(SCENARIOS)}
+    libraries = {name: index for index, name in enumerate(ADAPTERS)}
+
+    def numbers(row):
+        return {key: significant(value) if isinstance(value, float) else value for key, value in row.items()
+                if key not in ("scenario", "library", "solver") and value is not None}
+
+    groups = {}
+    for run in runs:
+        key = (scenario_name(run["problem"], run["size"], run["mode"]), run["library"], run["solver"])
+        groups.setdefault(key, []).append(run)
+    code = {}
+    for scenario, library, solver in groups:
+        problem, _, mode = scenario.split("-")
+        code[(scenario, library, solver)] = method_code.method_code(library, solver, problem, mode)
+    commit, changed = git_state(sorted({block["path"] for blocks in code.values() for block in blocks}))
+
+    details = {}
+    for (scenario, library, solver), group in sorted(
+            groups.items(), key=lambda item: (order.get(item[0][0], len(order)), item[0][0],
+                                              libraries.get(item[0][1], len(libraries)), item[0][1], item[0][2])):
+        cap = caps[scenario]
+        problem, size, mode = scenario.split("-")
+        if scenario not in details:
+            targets = [run["target"] for run in group if run.get("target") is not None]
+            details[scenario] = {
+                "format": 1,
+                "run": {"timestamp": results.get("timestamp", ""), "date": results_date(results),
+                        "platform": results.get("platform", "")},
+                "scenario": {
+                    "key": scenario, "title": scenario_title(scenario), "problem": problem,
+                    "problem_name": PROBLEM_NAMES.get(problem, problem), "size": int(size), "mode": mode,
+                    "objectives": "multi" if is_front(problem) else "single",
+                    "budget": BUDGETS.get(scenario), "cap": cap,
+                    **({"target": targets[0]} if targets else {}),
+                    **({"reference_point": list(FRONT_PROBLEMS[problem])} if is_front(problem) else {}),
+                    "seeds": sorted({run["seed"] for key, runs_ in groups.items() if key[0] == scenario
+                                     for run in runs_ if isinstance(run.get("seed"), int)}),
+                },
+                "methods": [],
+            }
+        entry = method_code.METHOD_CODE.get(library)
+        details[scenario]["methods"].append({
+            "library": library, "solver": solver, "label": label(library, solver),
+            "name": LIBRARY_NAMES.get(library, library), "method": SOLVER_NAMES.get(solver, solver),
+            "version": versions.get(library, ""), "language": languages.get(library, ""),
+            "page": f"docs/benchmarks/libraries/{library}.md"
+            if (DOCS / "libraries" / f"{library}.md").is_file() else None,
+            "adapter": f"benchmarks/adapters/{entry['file']}" if entry else None,
+            # as the charts summarize it: every valid run, and apart, with "ended_on_cap", the runs
+            # the time cap stopped and the others, when there are both
+            "summary": numbers(summaries[(scenario, library, solver)])
+            if (scenario, library, solver) in summaries else None,
+            "parts": [numbers(row) for row in parts.get((scenario, library, solver), [])]
+            if len(parts.get((scenario, library, solver), [])) > 1 else [],
+            "runs": [{
+                "seed": run.get("seed"),
+                "time_s": run.get("time_s"),
+                "evaluations": run.get("evaluations"),
+                **({"best": run["best"]} if "best" in run else {}),
+                **({"reached": bool(first_hit(run, cap)), "first_hit": run.get("first_hit")}
+                   if "success" in run else {}),
+                **({"hypervolume": run["hypervolume"]} if "hypervolume" in run else {}),
+                **({"capped": True} if capped(run, cap) else {}),
+                **({"error": run["error"]} if run.get("error") else {}),
+                **({"invalid": run["invalid"]} if run.get("invalid") else {}),
+                "output": json.dumps({key: value for key, value in run.items()
+                                      if key not in ADDED_FIELDS + UNSHOWN_FIELDS}, ensure_ascii=False),
+            } for run in sorted(group, key=lambda run: (run.get("seed") is None, run.get("seed")))],
+            "code": [dict(block, commit=commit if commit and block["path"] not in changed else None)
+                     for block in code[(scenario, library, solver)]],
+        })
+    return details
+
+
+def write_run_details(results, out_dir):
+    """runs/<scenario>.json in `out_dir`, the details of each scenario (run_details): the file's
+    first line the scenario, then one method per line, compact. Scenario files of an older run
+    that this one doesn't have are removed."""
+    folder = out_dir / RUN_DETAILS
+    folder.mkdir(parents=True, exist_ok=True)
+    details = run_details(results)
+    for path in folder.glob("*.json"):
+        if SCENARIO_FILE.fullmatch(path.name) and path.stem not in details:
+            path.unlink()
+    for scenario, data in details.items():
+        data = dict(data)
+        methods = data.pop("methods")
+        head = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        lines = [json.dumps(method, ensure_ascii=False, separators=(",", ":")) for method in methods]
+        (folder / f"{scenario}.json").write_text(f'{head[:-1]},"methods":[\n' + ",\n".join(lines) + "\n]}\n",
+                                                 encoding="utf-8", newline="\n")
 
 
 # the methods of genoxide's versions chart, a color each, in the harness's palette
@@ -1984,9 +2123,10 @@ def latest_results():
 
 
 def publish(results_file, history=VERSIONS_FILE):
-    """Publishes a run into DOCS: its tables (results.md), its charts and charts.json, and the
-    run itself, compressed (PUBLISHED_RESULTS). The tables are summarized from the runs again, as
-    the charts are, so they agree with them whichever version of run.py wrote the file."""
+    """Publishes a run into DOCS: its tables (results.md), its charts, charts.json and the run
+    details (runs/), and the run itself, compressed (PUBLISHED_RESULTS). The tables are summarized
+    from the runs again, as the charts are, so they agree with them whichever version of run.py
+    wrote the file."""
     results = read_results(results_file)
     caps = scenario_caps(results.get("max_seconds", 60.0), results["runs"])
     report = dict(results, summary=summarize(results["runs"], caps),
@@ -1994,8 +2134,8 @@ def publish(results_file, history=VERSIONS_FILE):
     (DOCS / "results.md").write_text(markdown_report(report), encoding="utf-8", newline="\n")
     write_published_results(results)
     draw_charts_of(results_file, DOCS, history=history)
-    print(f"{Path(results_file).name} published in {DOCS}: results.md, the charts, charts.json and "
-          f"{PUBLISHED_RESULTS.name}", flush=True)
+    print(f"{Path(results_file).name} published in {DOCS}: results.md, the charts, charts.json, "
+          f"{RUN_DETAILS}/ and {PUBLISHED_RESULTS.name}", flush=True)
 
 
 # --update keeps the other libraries' times, so the machine must still measure what it measured

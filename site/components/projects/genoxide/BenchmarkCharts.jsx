@@ -7,7 +7,10 @@ import {
   ToTargetChart,
   VersionsChart,
 } from "@/components/projects/genoxide/benchmarks/charts";
+import RunDetails from "@/components/projects/genoxide/benchmarks/RunDetails";
+import { BENCHMARK_RUN_ENDPOINT } from "@/lib/projects/genoxide/benchmarks";
 import { BLOB_BASE, RAW_BASE } from "@/lib/projects/genoxide/github";
+import { GENOXIDE_COMMIT, GENOXIDE_LINKS } from "@/lib/projects/genoxide/meta";
 
 const KINDS = {
   overall: OverallChart,
@@ -31,8 +34,10 @@ const path = (file) => file.split("/").map(encodeURIComponent).join("/");
  * @param {{ id: string, title: string, caption: string, file: string, wide?: boolean }[]} props.images
  * @param {{ run: object, libraries: object[], charts: Record<string, object> } | null} props.data  charts.json, or null
  * @param {string} props.resultsUrl  the tables of the published run
+ * @param {boolean} [props.details]  whether the pinned commit has the run details (docs/benchmarks/runs/):
+ *   then a bar of a method selects its runs, shown below the charts
  */
-export default function BenchmarkCharts({ charts, images, data, resultsUrl }) {
+export default function BenchmarkCharts({ charts, images, data, resultsUrl, details = false }) {
   const tables = (
     <a
       href={resultsUrl}
@@ -57,7 +62,7 @@ export default function BenchmarkCharts({ charts, images, data, resultsUrl }) {
       }))
       .filter((chart) => chart.Kind && chart.views.length);
     return (
-      <HighlightProvider>
+      <HighlightProvider details={details}>
         <div className="grid gap-4">
           {cards.map(({ id, title, caption, Kind, views }) => {
             // only the libraries these charts show go to the browser
@@ -77,6 +82,14 @@ export default function BenchmarkCharts({ charts, images, data, resultsUrl }) {
             );
           })}
           <p className="text-base-content/70 text-sm">The same numbers, with every method's range and throughput, are in the {tables}.</p>
+          {/* the runs of the bar selected in any chart above; the answers name the commit, so a new pin is new URLs */}
+          {details ? (
+            <RunDetails
+              endpoint={`${BENCHMARK_RUN_ENDPOINT}?commit=${encodeURIComponent(GENOXIDE_COMMIT ?? "")}`}
+              issuesUrl={`${GENOXIDE_LINKS.github}/issues/new`}
+              methodologyUrl={GENOXIDE_LINKS.benchmarkMethodology}
+            />
+          ) : null}
         </div>
       </HighlightProvider>
     );
