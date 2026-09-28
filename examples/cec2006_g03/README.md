@@ -91,7 +91,7 @@ With the same budget, in five runs each, with seeds 1 to 5:
 | CMA-ES | −1.0005001 in every run, after 16,170 to 26,110 evaluations (20 runs) |
 | GA, SBX, Gaussian mutation, (μ + λ) | −1.00041 to −0.99972 |
 | GA, arithmetic crossover, polynomial mutation | −1.00014 to −0.99866 |
-| GA, SBX, polynomial mutation, (μ + λ) | −0.9976 to −0.402 |
+| GA, SBX, polynomial mutation, (μ + λ) | −0.9990 to −0.532 |
 | GA, SBX, polynomial mutation | −0.986 to −0.959 |
 | Particle swarm optimization, 40 particles | −1.00048 to −0.767 |
 | SHADE | −0.909 to −0.691 |

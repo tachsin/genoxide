@@ -170,7 +170,7 @@ mean distance below 0.05, or stays at 0.095:
 |---|---|---|
 | NSGA-II | 3 of 10 | 0.0186 to 0.1279 |
 | SMS-EMOA | 4 of 10 | 0.0164 to 0.1263 |
-| SPEA2 | 0 of 10 | 0.1262 to 0.1272 |
+| SPEA2 | 0 of 10 | 0.1263 to 0.1272 |
 | MOEA/D, Tchebycheff | 7 of 10 | 0.0196 to 0.1268 |
 | MOEA/D, PBI | 9 of 10 | 0.0354 to 0.0819 |
 
@@ -182,4 +182,4 @@ more precise. Changing NSGA-II's operators on seeds 1 to 3 doesn't help: polynom
 η = 5 or at a rate of 4/24, and simulated binary crossover with η = 5, stay in the trap on all
 three seeds, and blend crossover (α = 0.5) leaves it on one. Arithmetic crossover, which moves
 every gene of a child towards the other parent at once, leaves it on all three but stops at mean
-distances of 0.034 to 0.044.
+distances of 0.034 to 0.042.

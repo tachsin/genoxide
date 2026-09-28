@@ -131,10 +131,10 @@ region, and stays there.
 MOEA/D spreads its solutions less evenly. After 1,000 generations, it has 77 distinct solutions,
 and 39 of them are on the fifth region: the weight vectors that point at the gap or at the last
 region find their best solutions on the fifth region, and share them out along it. Its IGD+ is
-0.0869 and its hypervolume 5.9123, close to NSGA-II's.
+0.0870 and its hypervolume 5.9118, close to NSGA-II's.
 
 On seeds 1 to 5, after 1,000 generations, NSGA-II has an IGD+ of 0.0840 to 0.0869, and MOEA/D
-0.0853 to 0.0880. SMS-EMOA and SPEA2, with NSGA-II's settings, have 0.0829 to 0.0863. None of these
+0.0858 to 0.0882. SMS-EMOA and SPEA2, with NSGA-II's settings, have 0.0829 to 0.0863. None of these
 20 runs reaches the last region, nor does any after 2,500 generations. Huband et al. count WFG2
 among the problems their NSGA-II solved easily (section IX), with other settings (SBX η = 10,
 mutation η = 50); with those settings, NSGA-II misses the last region here too, on seeds 1 to 5.

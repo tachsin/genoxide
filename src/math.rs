@@ -453,6 +453,56 @@ mod tests {
         }
     }
 
+    /// `ln_1p` and `exp_m1`, which polynomial mutation uses: fixed bits on every platform, and
+    /// accurate near 0, where `ln(1 + x)` and `exp(x) - 1` cancel. `ln_1p` is within 1 ulp of std,
+    /// `exp_m1` within 2: std's is off by more than 1 ulp at times on Windows, e.g. by 1.63 ulps
+    /// for `exp_m1(-0.6858221764202648)`, which libm's rounds correctly.
+    #[test]
+    fn ln_1p_and_exp_m1_values() {
+        let values = [
+            ln_1p(1e-10),
+            ln_1p(-0.5),
+            ln_1p(-1e-3),
+            ln_1p(2.5),
+            exp_m1(1e-10),
+            exp_m1(-0.021),
+            exp_m1(-1.0),
+            exp_m1(0.7),
+        ];
+        assert_eq!(
+            values.map(f64::to_bits),
+            [
+                4457293557087196819,  // 9.999999999500001e-11
+                13827790571168217583, // -0.6931471805599453
+                13785628853153536879, // -0.0010005003335835335
+                4608320762010746208,  // 1.252762968495368
+                4457293557087970531,  // 1.00000000005e-10
+                13805018983922166456, // -0.020781035430540412
+                13827240892226439268, // -0.6321205588285577
+                4607244355488256781,  // 1.0137527074704764
+            ],
+            "the portable math changed, which breaks reproducibility"
+        );
+        let mut rng = StreamRng::seed_from_u64(3);
+        for _ in 0..20_000 {
+            // (-1, 1], and down to 10⁻³⁰⁰ from 0
+            let x = 1.0 - 2.0 * rng.unit_f64();
+            let tiny = -10f64.powf(-300.0 * rng.unit_f64());
+            for x in [x, tiny, -tiny] {
+                assert!(ulps(ln_1p(x), x.ln_1p()) <= 1, "ln_1p({x:e})");
+                assert!(ulps(exp_m1(x), x.exp_m1()) <= 2, "exp_m1({x:e})");
+            }
+            let y = (rng.unit_f64() - 0.5) * 1400.0;
+            assert!(ulps(exp_m1(y), y.exp_m1()) <= 2, "exp_m1({y:e})");
+        }
+        // the limits that polynomial mutation relies on
+        assert_eq!(ln_1p(-1.0), f64::NEG_INFINITY);
+        assert_eq!(exp_m1(f64::NEG_INFINITY), -1.0);
+        assert_eq!(ln_1p(-0.0).to_bits(), (-0.0f64).to_bits());
+        assert_eq!(ln_1p(5e-324), 5e-324);
+        assert_eq!(exp_m1(-5e-324), -5e-324);
+    }
+
     /// Fixed bits on every platform, unlike `f64::powi`: Windows' differs from Linux's, e.g. in
     /// the last bit of 7.6268145870115305^-3, and by more for large exponents.
     #[test]

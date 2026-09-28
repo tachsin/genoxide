@@ -1,7 +1,7 @@
 """DTLZ6 with 3 objectives: minimize three conflicting objectives over 12 variables in [0, 1], whose
 Pareto front is DTLZ5's curve, behind a distance function that is hard to bring to 0.
 
-Three runs of 400 generations, with a population of 92 and polynomial mutation: NSGA-III and
+Three runs of 1,000 generations, with a population of 92 and polynomial mutation: NSGA-III and
 NSGA-II with simulated binary crossover, as for DTLZ5, and NSGA-II with uniform crossover. Prints,
 for each, the size of its front, its IGD+ to 1,000 points of the curve, its hypervolume, the
 largest gap between its solutions along the curve and the median distance of its solutions from
@@ -21,7 +21,7 @@ from trace import Trace
 
 VARIABLES = 12
 
-GENERATIONS = 400
+GENERATIONS = 1000
 
 # the reference point of the hypervolume: 1.1 times the nadir point (1/√2, 1/√2, 1)
 REFERENCE = [1.1 * np.sqrt(0.5), 1.1 * np.sqrt(0.5), 1.1]
@@ -32,7 +32,7 @@ optimal = problem.optimal_front(1000)
 
 
 def run(name, algorithm, on_generation=None):
-    """Runs ``algorithm`` for 400 generations, and reports its front."""
+    """Runs ``algorithm`` for 1,000 generations, and reports its front."""
     result = algorithm.run(problem, generations=GENERATIONS, on_generation=on_generation)
     front = result.front_objectives
     distance = gx.indicators.igd_plus(front, optimal)

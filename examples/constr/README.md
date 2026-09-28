@@ -107,8 +107,8 @@ A good front is all feasible, and has an IGD+ near 0 and a hypervolume near 5.33
 the optimal front, spread evenly along it, give a hypervolume of 5.3072 and an IGD+ of 0.0025.
 
 The run's population is all feasible from generation 1, and its front has 100 solutions by
-generation 12. The hypervolume reaches 5.2921 at generation 32 and ends at 5.3024, 99.4% of the
-whole front's, with an IGD+ of 0.0035. The final front puts 73 solutions on the first piece and 27
+generation 12. The hypervolume reaches 5.2921 at generation 32 and ends at 5.3039, 99.5% of the
+whole front's, with an IGD+ of 0.0033. The final front puts 70 solutions on the first piece and 30
 on the second. Points spread evenly along the front in its own units would put 93 on the first
 piece, where f₂ falls by 7.5. NSGA-II measures crowding with each objective scaled to its range
 instead, and there the second piece, which spans more than half of f₁'s range, weighs more.

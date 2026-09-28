@@ -75,15 +75,15 @@ The settings are Deb and Jain's for DTLZ3 with 3 objectives:
   gene, one gene per child on average;
 - 1,000 generations, 92,092 evaluations: 2.5 times DTLZ1's 400, for the harder convergence.
 
-The run shows the trap. By generation 370, the front has reached a local front with g ≈ 1.07; at
-generation 450, every solution on it has x₄ near 0.4 and the other distance variables near 0.5.
-The population stays there for about 100 generations. The hypervolume is 0 all this time: on a
-sphere of radius 2, no point has all three objectives below the reference point's 1.1. Between
-generations 464 and 480, a child lands across the ridge, the best g falls from 1.03 to 0.05, and
-the population follows. By generation 512, the median g is 0.025 and the hypervolume 0.61. By
-generation 625, the front covers the whole eighth of the sphere, with a hypervolume of 0.72. The
-last 375 generations refine it: the largest g on the front falls to 0.006, and the hypervolume
-reaches 0.737.
+The run shows the trap. By generation 350, the front has reached a local front with g ≈ 1.07; at
+generation 400, every solution on it has x₄ near 0.4 and the other distance variables near 0.5.
+The population stays there for over 60 generations. The hypervolume is 0 all this time: on a
+sphere of radius 2, no point has all three objectives below the reference point's 1.1. At
+generation 415, a child lands across the ridge, the best g falls from 1.01 to 0.03, and the
+population follows. By generation 440, the median g is 0.023 and the hypervolume 0.59. By
+generation 500, the front covers the whole eighth of the sphere, with a hypervolume of 0.72. The
+last 500 generations refine it: the largest g on the front falls to 0.0009, and the hypervolume
+reaches 0.743.
 
 ## Output
 
@@ -110,7 +110,7 @@ No finite set of solutions reaches 0.8074. NSGA-III aims at one solution per ref
 The 91 points where the directions meet the sphere have a hypervolume of 0.7449 and an IGD+ of
 0.0221.
 
-The run's front has 92 solutions, a hypervolume of about 0.7373 and an IGD+ of about 0.0256. Every
-solution has g below 0.0062: on the true front, not a local one, but not yet as close to it as on
-DTLZ1. Over seeds 1 to 20, every run escapes the local fronts, between generations 250 and 550, and
-ends with a hypervolume from 0.7284 to 0.7432, 0.7363 in the median.
+The run's front has 92 solutions, a hypervolume of about 0.7435 and an IGD+ of about 0.0227. Every
+solution has g below 0.00094: on the true front, not a local one, and as close to it as on DTLZ1.
+Over seeds 1 to 20, every run escapes the local fronts, between generations 230 and 580, and ends
+with a hypervolume from 0.7171 to 0.7435, 0.7396 in the median.

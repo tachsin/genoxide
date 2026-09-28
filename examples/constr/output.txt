@@ -1,4 +1,4 @@
 100 solutions on the front, 100 feasible
-along the boundary x2 = 6 - 9 x1: 73, along x2 = 0: 27
-IGD+ to the optimal front: 0.003525
-hypervolume 5.3024 (the whole front: 5.3327)
+along the boundary x2 = 6 - 9 x1: 70, along x2 = 0: 30
+IGD+ to the optimal front: 0.003309
+hypervolume 5.3039 (the whole front: 5.3327)

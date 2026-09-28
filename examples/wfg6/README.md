@@ -137,7 +137,7 @@ SMS-EMOA's 2,000 shifted values are all between 0.4159 and 0.4205, and its front
 
 On seeds 1 to 5, after 1,000 generations, NSGA-II has an IGD+ of 0.0436 to 0.0704 and SMS-EMOA
 0.0450 to 0.0620. Where a run stalls depends on where its parameters first agree. After 4,000
-generations, the ranges are 0.0411 to 0.0685 and 0.0443 to 0.0611, and no run of NSGA-II,
+generations, the ranges are 0.0411 to 0.0691 and 0.0443 to 0.0611, and no run of NSGA-II,
 SMS-EMOA, SPEA2 or MOEA/D (100 weight vectors, the same operators) has any point of its front
 closer than 0.030 to the optimal one. The operators matter more than the selection: with blend
 crossover (BLX-α, α = 0.5) in place of SBX, NSGA-II ends seeds 1 to 3 with an IGD+ of 0.0275 to

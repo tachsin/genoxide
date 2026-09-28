@@ -137,7 +137,7 @@ distance.
 On seeds 1 to 5, NSGA-II has an IGD+ of 0.0178 to 0.0226 after 250 generations, and 0.0093 to
 0.0121 after 1,000; SMS-EMOA 0.0090 to 0.0118, and 0.0053 to 0.0057. After 4,000 generations,
 SMS-EMOA's hypervolume, 3.3637 to 3.3651, passes that of the 100 points of `optimal_front(100)`,
-with an IGD+ of 0.0049 to 0.0050, while NSGA-II is at 0.0080 to 0.0088. With the same settings,
+with an IGD+ of 0.0049 to 0.0050, while NSGA-II is at 0.0080 to 0.0094. With the same settings,
 SPEA2 is between the two, with 0.0080 to 0.0110 after 1,000 generations. MOEA/D (100 weight
 vectors, the same operators) gets closest to the front, its whole front within 0.0011 of it after
 4,000 generations, but spreads its points less evenly: an IGD+ of 0.0061 to 0.0064.

@@ -1,7 +1,7 @@
 //! DTLZ6 with 3 objectives: minimize three conflicting objectives over 12 variables in [0, 1],
 //! whose Pareto front is DTLZ5's curve, behind a distance function that is hard to bring to 0.
 //!
-//! Three runs of 400 generations, with a population of 92 and polynomial mutation: NSGA-III and
+//! Three runs of 1,000 generations, with a population of 92 and polynomial mutation: NSGA-III and
 //! NSGA-II with simulated binary crossover, as for DTLZ5, and NSGA-II with uniform crossover.
 //! Prints, for each, the size of its front, its IGD+ to 1,000 points of the curve, its
 //! hypervolume, the largest gap between its solutions along the curve and the median distance of
@@ -25,7 +25,7 @@ use genoxide::prelude::*;
 
 const VARIABLES: usize = 12;
 
-const GENERATIONS: u64 = 400;
+const GENERATIONS: u64 = 1000;
 
 // the reference point of the hypervolume: 1.1 times the nadir point (1/√2, 1/√2, 1)
 const REFERENCE: [f64; 3] = [
@@ -75,7 +75,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// runs `algorithm` for 400 generations, and reports its front
+// runs `algorithm` for 1,000 generations, and reports its front
 fn run<A>(name: &str, algorithm: A, record: impl FnMut(&MultiSnapshot<'_, Reals, 3>)) -> Result<()>
 where
     A: MultiObjectiveAlgorithm<3, Genome = Reals>,

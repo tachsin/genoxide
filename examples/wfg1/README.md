@@ -127,24 +127,24 @@ solutions spread along it, would have an IGD+ near 0.0868 and a hypervolume near
 
 Neither algorithm gets near it in this run. The first front, of 15 solutions, lies at f₁ from 2.81
 to 2.93 and f₂ near 1: near the end (2, 0) of the front, and 0.9 above it. After 250 generations,
-NSGA-II's front still has f₁ ≥ 1.78, an IGD+ of 1.2140 and a hypervolume of 1.2022; SMS-EMOA's
-has 50 solutions and 0.5789. The fronts then move towards the front and spread along it in jumps:
-NSGA-II's hypervolume goes from 2.04 to 2.81 between generations 512 and 576, and from 3.38 to
-3.72 between 1,280 and 1,344. After 2,500 generations, NSGA-II has an IGD+ of 0.3906 and a
-hypervolume of 4.7759, SMS-EMOA 0.4506 and 4.4470. Neither front reaches f₁ below 0.42, the part
-of the front that needs the smallest position values, and neither has an f₂ below 0.30, where the
-front goes down to 0.
+NSGA-II's front still has f₁ ≥ 1.88, an IGD+ of 1.2545 and a hypervolume of 0.9557; SMS-EMOA's
+has 44 solutions and 0.5557. The fronts then move towards the front and spread along it, fast at
+first and then with pauses: NSGA-II's hypervolume reaches 2.11 at generation 512 and 3.01 at 768,
+then gains only 0.08 up to 960, and 0.10 between 1,344 and 1,728. After 2,500 generations, NSGA-II
+has an IGD+ of 0.3793 and a hypervolume of 4.7459, SMS-EMOA 0.4514 and 4.3713. Neither front
+reaches f₁ below 0.70, the part of the front that needs the smallest position values, and neither
+has an f₂ below 0.19, where the front goes down to 0.
 
 The runs slow down as they go. At generation 1,000, NSGA-II's three solutions with the smallest f₂
-have nearly the same distance parameters: 3 of the 20 exact, the others off by 10⁻¹⁷ to 10⁻⁶ of
+have nearly the same distance parameters: 8 of the 20 exact, the others off by 10⁻¹⁷ to 10⁻⁶ of
 their range. Crossover between nearly equal values changes little, and polynomial mutation
 rarely lands on a value to the last bit.
 
 The selection isn't what holds them back. On seeds 1 to 5, after 2,500 generations, NSGA-II ends
-with an IGD+ of 0.23 to 0.43 and a hypervolume of 4.54 to 5.56, SMS-EMOA 0.26 to 0.45 and 4.45 to
-5.36. SPEA2, with the same settings, ends with 0.21 to 0.33, and MOEA/D (100 weight vectors, SBX
-η = 20) with 0.25 to 0.58. The variation matters more. With the ZDT settings, NSGA-II has an IGD+
-of 0.22 to 0.30 after 5,000 generations on seeds 1 to 5, and on seed 1 it hardly improves in the
-next 5,000. With SBX η = 5 instead of 15, which puts children further from their parents, it has
-0.095 to 0.165 after 5,000, and a hypervolume of 5.88 to 6.24: on seeds 3 and 5, within 0.01 of
-the closest front's IGD+.
+with an IGD+ of 0.33 to 0.44 and a hypervolume of 4.49 to 5.00, SMS-EMOA 0.45 to 0.59 and 3.75 to
+4.37. SPEA2, with the same settings, ends with 0.32 to 0.44, and MOEA/D (100 weight vectors, SBX
+η = 20) with 0.57 to 0.69. The variation matters more. With the ZDT settings, NSGA-II has an IGD+
+of 0.20 to 0.29 after 5,000 generations on seeds 1 to 5, and 0.16 to 0.25 after 10,000. With SBX
+η = 5 instead of 15, which puts children further from their parents, it has 0.14 to 0.25 after
+5,000, better on every seed, and a hypervolume of 5.42 to 5.94: still well short of the closest
+front.
