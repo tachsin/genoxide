@@ -1,6 +1,6 @@
 //! The island model: several populations that evolve apart and exchange their best individuals.
 
-use super::{Algorithm, Candidates};
+use super::{Algorithm, Candidates, Reevaluate};
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
 use std::collections::HashMap;
@@ -107,6 +107,9 @@ pub struct Islands<A: Migrate> {
     replaced: Vec<Individual<A::Genome>>,
     asked: bool,
     started: bool,
+    // the next tell re-evaluates the islands: no new generation, no migration
+    #[cfg_attr(feature = "serde", serde(default))]
+    reevaluating: bool,
     generation: u64,
     evaluations: u64,
     best: Option<Individual<A::Genome>>,
@@ -128,6 +131,53 @@ impl<A: Migrate> Islands<A> {
     /// The islands.
     pub fn islands(&self) -> &[A] {
         &self.islands
+    }
+
+    /// Mutable access to the islands, to change their settings between generations (parameter
+    /// control), e.g. a schedule of its own for each island, from
+    /// [`Engine::control`](crate::Engine::control). A change applies from the next generation.
+    ///
+    /// The islands run in step: don't ask, tell, re-evaluate or migrate an island directly. To
+    /// re-evaluate after the fitness function changed, re-evaluate the islands together with
+    /// [`Islands::reevaluate`].
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let islands = (0..4)
+    ///     .map(|seed| {
+    ///         Ga::builder(Real::uniform(5, -5.0..=5.0)?)
+    ///             .population_size(20)
+    ///             .select(Tournament::new(3)?)
+    ///             .crossover(UniformCrossover::new())
+    ///             .mutate(GaussianMutation::per_gene(0.2, 0.1)?)
+    ///             .minimize()
+    ///             .seed(seed)
+    ///             .build()
+    ///     })
+    ///     .collect::<genoxide::Result<Vec<_>>>()?;
+    /// let islands = Islands::builder(islands).seed(1).build()?;
+    /// let sphere = |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>();
+    /// let outcome = Engine::new(islands, sphere)
+    ///     .stop_when(Stop::generations(200))
+    ///     // island i's step shrinks from 10% of the range to 10% / 4^i over the run
+    ///     .control(|islands, progress| {
+    ///         let done = progress.generation() as f64 / 200.0;
+    ///         for (i, island) in islands.islands_mut().iter_mut().enumerate() {
+    ///             let sigma = 0.1 * 0.25_f64.powi(i as i32).powf(done);
+    ///             *island.mutate_mut() = GaussianMutation::per_gene(0.2, sigma)?;
+    ///         }
+    ///         Ok(())
+    ///     })
+    ///     .run()?;
+    /// assert!(outcome.best_fitness().score().unwrap() < 0.01);
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    pub fn islands_mut(&mut self) -> &mut [A] {
+        // the combined population is built again from the islands when asked for
+        self.population = OnceLock::new();
+        self.discarded = OnceLock::new();
+        &mut self.islands
     }
 
     /// Where the migrants go.
@@ -276,7 +326,11 @@ impl<A: Migrate> Algorithm for Islands<A> {
         }
         // the copies are told: drop them
         self.candidates.clear();
-        if self.started {
+        if self.reevaluating {
+            // the best is measured by another function now: it comes from the islands again
+            self.reevaluating = false;
+            self.best = None;
+        } else if self.started {
             self.generation += 1;
             if self.generation % self.interval == 0 {
                 self.migrate()?;
@@ -324,6 +378,40 @@ impl<A: Migrate> Algorithm for Islands<A> {
 
     fn best_generation(&self) -> u64 {
         self.best_generation
+    }
+}
+
+impl<A: Migrate + Reevaluate> Islands<A> {
+    /// Re-evaluates every island, for a fitness function that changed during the run (see
+    /// [`Reevaluate`]): the next [`ask`](Algorithm::ask) gives what each island keeps, and its
+    /// [`tell`](Algorithm::tell) completes no generation and migrates nothing. The best is then
+    /// the best of the islands' re-evaluated individuals.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ReevaluationOutOfTurn`] between an ask and its tell, and the error of an island
+    /// that can't re-evaluate. Nothing changes on errors, unless an island was asked or told
+    /// directly.
+    pub fn reevaluate(&mut self) -> Result<()> {
+        if self.asked {
+            return Err(Error::ReevaluationOutOfTurn);
+        }
+        for island in &mut self.islands {
+            island.reevaluate()?;
+        }
+        self.reevaluating = true;
+        // observers have seen the last generation's discarded individuals
+        self.replaced.clear();
+        self.population = OnceLock::new();
+        self.discarded = OnceLock::new();
+        Ok(())
+    }
+}
+
+impl<A: Migrate + Reevaluate> Reevaluate for Islands<A> {
+    /// As [`Islands::reevaluate`]: every island.
+    fn reevaluate(&mut self) -> Result<()> {
+        Islands::reevaluate(self)
     }
 }
 
@@ -427,6 +515,7 @@ impl<A: Migrate> IslandsBuilder<A> {
             replaced: Vec::new(),
             asked: false,
             started: false,
+            reevaluating: false,
             generation: 0,
             evaluations: 0,
             best: None,
@@ -709,5 +798,63 @@ mod tests {
         };
         assert_eq!(run(5), run(5));
         assert_ne!(run(5), run(6));
+    }
+
+    #[test]
+    fn reevaluation_scores_every_island_again() {
+        let mut islands = Islands::builder(vec![ga(0), ga(1), ga(2)])
+            .interval(1)
+            .build()
+            .unwrap();
+        for _ in 0..4 {
+            step(&mut islands);
+        }
+        islands.ask();
+        assert_eq!(islands.reevaluate(), Err(Error::ReevaluationOutOfTurn));
+        let fitness: Vec<Fitness> = islands.ask().iter().map(ones).collect();
+        islands.tell(&fitness).unwrap();
+        let (generation, evaluations) = (islands.generation(), islands.evaluations());
+        let populations: Vec<_> = islands
+            .islands()
+            .iter()
+            .map(|island| island.population().clone())
+            .collect();
+
+        // the zeros count now: every island's population is asked again, and nothing migrates
+        islands.reevaluate().unwrap();
+        assert_eq!(islands.ask().len(), 30);
+        let zeros = |genome: &Bits| Fitness::new(32.0 - genome.count_ones() as f64);
+        let fitness: Vec<Fitness> = islands.ask().iter().map(zeros).collect();
+        islands.tell(&fitness).unwrap();
+        assert_eq!(islands.generation(), generation);
+        assert_eq!(islands.evaluations(), evaluations + 30);
+        assert_eq!(islands.best_generation(), generation);
+        for (island, before) in islands.islands().iter().zip(&populations) {
+            let genomes = |population: &Population<Bits>| {
+                population
+                    .iter()
+                    .map(|x| x.genome().clone())
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(genomes(island.population()), genomes(before));
+        }
+        // the best by the new measure, from all the islands
+        let best = islands
+            .population()
+            .iter()
+            .map(|x| x.fitness().unwrap().score().unwrap())
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert_eq!(
+            islands.best().unwrap().fitness().unwrap().score(),
+            Some(best)
+        );
+        assert_eq!(
+            islands.best().unwrap().genome().count_ones() as f64,
+            32.0 - best
+        );
+        // the next tell is a generation again
+        let fitness: Vec<Fitness> = islands.ask().iter().map(zeros).collect();
+        islands.tell(&fitness).unwrap();
+        assert_eq!(islands.generation(), generation + 1);
     }
 }
