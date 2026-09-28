@@ -436,16 +436,9 @@ where
             // a stream per pair, from the seed, the generation and the pair's position: the same
             // children on any number of threads
             let streams = self.rng.derive(BREEDING_STREAMS).derive(self.generation);
-            let children = breed_pairs(&breeding, &parents, count, &streams);
-            self.offspring
-                .extend(children.into_iter().flatten().flatten());
+            breed_pairs(&breeding, &parents, count, &streams, &mut self.offspring);
         } else {
-            let offspring = &mut self.offspring;
-            for (index, pair) in parents.chunks_exact(2).enumerate() {
-                breeding.pair(pair, count - 2 * index, &mut self.rng, |child| {
-                    offspring.push(child)
-                });
-            }
+            breeding.pairs(&parents, count, &mut self.rng, &mut self.offspring);
         }
 
         // memetic: neighbors of the best parents, evaluated with the offspring
@@ -549,91 +542,83 @@ struct Breeding<'a, R: Representation, C, M> {
     population: &'a Population<R::Genome>,
 }
 
-// the children of a pair, one or two
-type Children<G> = [Option<Individual<G>>; 2];
-
 impl<R, C, M> Breeding<'_, R, C, M>
 where
     R: Representation,
     C: Crossover<R>,
     M: Mutate<R>,
 {
-    // the first `wanted` (1 or more; at most 2 are made) children of the parents at the positions
-    // `pair`, drawing from `rng`, each passed to `push`: recombined with the crossover rate, each
-    // mutated with the mutation rate, and a copy of a parent with the parent's fitness
-    #[inline]
-    fn pair(
+    // the children of the pairs of parents at the positions `parents`, one pair after the other,
+    // pushed to `offspring` until `wanted` are made (at most two per pair), drawing from `rng`:
+    // recombined with the crossover rate, each mutated with the mutation rate, and a copy of a
+    // parent with the parent's fitness. The only code that breeds a GA's children, sequentially
+    // and in parallel: out of line, so that each operator has this one caller and is inlined
+    // here, as it was before parallel breeding.
+    #[inline(never)]
+    fn pairs(
         &self,
-        pair: &[usize],
+        parents: &[usize],
         wanted: usize,
         rng: &mut StreamRng,
-        mut push: impl FnMut(Individual<R::Genome>),
+        offspring: &mut Vec<Individual<R::Genome>>,
     ) {
-        let parents = [&self.population[pair[0]], &self.population[pair[1]]];
-        let mut a = parents[0].genome().clone();
-        let mut b = parents[1].genome().clone();
-        if rng.chance(self.crossover_chance) {
-            self.crossover
-                .crossover(self.representation, &mut a, &mut b, rng);
-        }
-        for mut genome in [a, b].into_iter().take(wanted) {
-            if rng.chance(self.mutation_chance) {
-                self.mutate.mutate(self.representation, &mut genome, rng);
+        let end = offspring.len() + wanted;
+        for pair in parents.chunks_exact(2) {
+            let parents = [&self.population[pair[0]], &self.population[pair[1]]];
+            let mut a = parents[0].genome().clone();
+            let mut b = parents[1].genome().clone();
+            if rng.chance(self.crossover_chance) {
+                self.crossover
+                    .crossover(self.representation, &mut a, &mut b, rng);
             }
-            let inherited = parents
-                .iter()
-                .find(|parent| parent.genome() == &genome)
-                .and_then(|parent| parent.fitness());
-            let mut child = Individual::new(genome);
-            if let Some(fitness) = inherited {
-                child.set_fitness(fitness);
+            for mut genome in [a, b] {
+                if offspring.len() == end {
+                    break;
+                }
+                if rng.chance(self.mutation_chance) {
+                    self.mutate.mutate(self.representation, &mut genome, rng);
+                }
+                let inherited = parents
+                    .iter()
+                    .find(|parent| parent.genome() == &genome)
+                    .and_then(|parent| parent.fitness());
+                let mut child = Individual::new(genome);
+                if let Some(fitness) = inherited {
+                    child.set_fitness(fitness);
+                }
+                offspring.push(child);
             }
-            push(child);
         }
-    }
-
-    // `pair`'s children as a value, for breeding on other threads
-    fn pair_children(
-        &self,
-        pair: &[usize],
-        wanted: usize,
-        rng: &mut StreamRng,
-    ) -> Children<R::Genome> {
-        let mut children = [None, None];
-        let mut slots = children.iter_mut();
-        self.pair(pair, wanted, rng, |child| {
-            *slots.next().expect("at most two children") = Some(child);
-        });
-        children
     }
 }
 
-// the `count` children of the selected `parents`, each pair bred on its stream, derived from
-// `streams` with the pair's position, in parallel
+// the `count` children of the selected `parents` into `offspring`, each pair bred on its stream,
+// derived from `streams` with the pair's position, in parallel
 #[cfg(feature = "parallel")]
 fn breed_pairs<R, C, M>(
     breeding: &Breeding<'_, R, C, M>,
     parents: &[usize],
     count: usize,
     streams: &StreamRng,
-) -> Vec<Children<R::Genome>>
-where
+    offspring: &mut Vec<Individual<R::Genome>>,
+) where
     R: Representation,
     C: Crossover<R>,
     M: Mutate<R>,
 {
     use rayon::prelude::*;
-    // collecting an indexed parallel iterator keeps the order, whatever the thread count
-    let mut children = Vec::new();
-    parents
+    // the children of consecutive pairs, in order: collecting keeps the order of the folds,
+    // whatever the thread count
+    let children: Vec<Vec<Individual<R::Genome>>> = parents
         .par_chunks_exact(2)
         .enumerate()
-        .map(|(index, pair)| {
+        .fold(Vec::new, |mut children, (index, pair)| {
             let mut rng = streams.derive(index as u64);
-            breeding.pair_children(pair, count - 2 * index, &mut rng)
+            breeding.pairs(pair, count - 2 * index, &mut rng, &mut children);
+            children
         })
-        .collect_into_vec(&mut children);
-    children
+        .collect();
+    offspring.extend(children.into_iter().flatten());
 }
 
 // without the `parallel` feature (a checkpoint of a run with parallel breeding), the same
@@ -644,20 +629,16 @@ fn breed_pairs<R, C, M>(
     parents: &[usize],
     count: usize,
     streams: &StreamRng,
-) -> Vec<Children<R::Genome>>
-where
+    offspring: &mut Vec<Individual<R::Genome>>,
+) where
     R: Representation,
     C: Crossover<R>,
     M: Mutate<R>,
 {
-    parents
-        .chunks_exact(2)
-        .enumerate()
-        .map(|(index, pair)| {
-            let mut rng = streams.derive(index as u64);
-            breeding.pair_children(pair, count - 2 * index, &mut rng)
-        })
-        .collect()
+    for (index, pair) in parents.chunks_exact(2).enumerate() {
+        let mut rng = streams.derive(index as u64);
+        breeding.pairs(pair, count - 2 * index, &mut rng, offspring);
+    }
 }
 
 // the neighbors of a memetic refinement that weren't taken, and copies of the ones that were

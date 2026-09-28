@@ -1,6 +1,6 @@
 //! Differential evolution: new solutions from the differences between solutions.
 
-use super::{Algorithm, Candidates, Reevaluate, breed_in_parallel, breeding_streams};
+use super::{Algorithm, Candidates, Reevaluate, breeding_streams};
 use crate::genome::{Real, Reals, Representation};
 use crate::operator::check_size;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
@@ -572,6 +572,8 @@ impl De {
             archive: &self.archive,
             order: &order,
         };
+        self.trials.clear();
+        self.parameters.clear();
         if self.parallel_breeding {
             // a stream per trial, from the seed, the generation and the target's position: the
             // same trials on any number of threads
@@ -580,27 +582,21 @@ impl De {
                 .derive(breeding_streams::DE)
                 .derive(self.generation);
             let genomes: Vec<Option<Reals>> = (0..size).map(|_| self.spare.0.pop()).collect();
-            breed_in_parallel(
+            build_in_parallel(
+                &trials,
                 genomes,
                 &streams,
-                |target, genome, rng| {
-                    let (f, cr) = trials.parameters(rng);
-                    let trial = trials.trial(target, f, cr, genome, rng);
-                    (Individual::new(trial), (f, cr))
-                },
                 &mut self.trials,
                 &mut self.parameters,
             );
         } else {
-            self.trials.clear();
-            self.parameters.clear();
-            for target in 0..size {
-                let (f, cr) = trials.parameters(&mut self.rng);
-                let genome = self.spare.0.pop();
-                let trial = trials.trial(target, f, cr, genome, &mut self.rng);
-                self.trials.push(Individual::new(trial));
-                self.parameters.push((f, cr));
-            }
+            trials.build(
+                0..size,
+                &mut self.rng,
+                &mut self.spare.0,
+                &mut self.trials,
+                &mut self.parameters,
+            );
         }
     }
 
@@ -795,6 +791,28 @@ struct Trials<'a> {
 }
 
 impl Trials<'_> {
+    // the trials of the targets `targets`, with their `F` and `CR`, pushed to `trials` and
+    // `parameters`, in the memory of the genomes popped from `spare`, drawing from `rng`. The only
+    // code that builds trials, sequentially and in parallel: out of line, so that building a trial
+    // has this one caller and is inlined here, as it was before parallel breeding.
+    #[inline(never)]
+    fn build(
+        &self,
+        targets: std::ops::Range<usize>,
+        rng: &mut StreamRng,
+        spare: &mut Vec<Reals>,
+        trials: &mut Vec<Individual<Reals>>,
+        parameters: &mut Vec<(f64, f64)>,
+    ) {
+        for target in targets {
+            let (f, cr) = self.parameters(rng);
+            let genome = spare.pop();
+            let trial = self.trial(target, f, cr, genome, rng);
+            trials.push(Individual::new(trial));
+            parameters.push((f, cr));
+        }
+    }
+
     // the scale factor and crossover rate of a trial
     #[inline]
     fn parameters(&self, rng: &mut StreamRng) -> (f64, f64) {
@@ -890,6 +908,63 @@ impl Trials<'_> {
                 x + f * (pbest - x) + f * (a - b)
             }),
         }
+    }
+}
+
+// the trials of every target into `trials` and `parameters`, each built on its stream, derived
+// from `streams` with the target's position, in the memory of its genome in `genomes`, in parallel
+#[cfg(feature = "parallel")]
+fn build_in_parallel(
+    builder: &Trials<'_>,
+    genomes: Vec<Option<Reals>>,
+    streams: &StreamRng,
+    trials: &mut Vec<Individual<Reals>>,
+    parameters: &mut Vec<(f64, f64)>,
+) {
+    use rayon::prelude::*;
+    // the trials of consecutive targets, in order: collecting keeps the order of the folds,
+    // whatever the thread count
+    type Built = (Vec<Reals>, Vec<Individual<Reals>>, Vec<(f64, f64)>);
+    let built: Vec<Built> = genomes
+        .into_par_iter()
+        .enumerate()
+        .fold(
+            || (Vec::new(), Vec::new(), Vec::new()),
+            |(mut spare, mut trials, mut parameters): Built, (target, genome)| {
+                spare.extend(genome);
+                let mut rng = streams.derive(target as u64);
+                builder.build(
+                    target..target + 1,
+                    &mut rng,
+                    &mut spare,
+                    &mut trials,
+                    &mut parameters,
+                );
+                (spare, trials, parameters)
+            },
+        )
+        .collect();
+    for (_, built_trials, built_parameters) in built {
+        trials.extend(built_trials);
+        parameters.extend(built_parameters);
+    }
+}
+
+// without the `parallel` feature (a checkpoint of a run with parallel breeding), the same trials,
+// one after the other
+#[cfg(not(feature = "parallel"))]
+fn build_in_parallel(
+    builder: &Trials<'_>,
+    genomes: Vec<Option<Reals>>,
+    streams: &StreamRng,
+    trials: &mut Vec<Individual<Reals>>,
+    parameters: &mut Vec<(f64, f64)>,
+) {
+    let mut spare = Vec::new();
+    for (target, genome) in genomes.into_iter().enumerate() {
+        spare.extend(genome);
+        let mut rng = streams.derive(target as u64);
+        builder.build(target..target + 1, &mut rng, &mut spare, trials, parameters);
     }
 }
 
