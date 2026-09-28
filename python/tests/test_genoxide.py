@@ -278,6 +278,29 @@ def test_schemes_and_acceptances():
         assert result.best_fitness > 16
 
 
+def test_parallel_breeding_is_reproducible():
+    def run(**settings):
+        result = gx.Ga(
+            gx.Real((-5.0, 5.0), length=10),
+            population_size=101,
+            select=gx.Tournament(3),
+            crossover=gx.SimulatedBinaryCrossover(15.0),
+            mutation=gx.PolynomialMutation(20.0, rate=0.1),
+            objective="minimize",
+            seed=3,
+            **settings,
+        ).run(lambda x: float(np.sum(x * x)), generations=20, parallel=True)
+        return result.best_fitness, result.best_genome.tolist()
+
+    parallel = run(parallel_breeding=True)
+    assert run(parallel_breeding=True) == parallel
+    assert run(parallel_breeding=False) == run()
+    assert run() != parallel
+    assert parallel[0] < 50
+    with pytest.raises(ValueError, match="parallel_breeding is True or False"):
+        run(parallel_breeding=1)
+
+
 def test_every_selection():
     for select in (
         gx.Tournament(2),

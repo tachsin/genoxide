@@ -1133,6 +1133,11 @@ class Ga(_SingleObjective):
         and a crossover other than :class:`NoCrossover`: otherwise every child is a copy.
     scheme : Generational, SteadyState, MuPlusLambda or MuCommaLambda, default Generational(1)
         Who survives each generation.
+    parallel_breeding : bool, default False
+        Whether each pair of parents is crossed over and mutated on all cores, each pair with
+        random numbers of its own: a seed gives other results than without it, but the same on
+        any number of cores. It pays off with thousands of children per generation and a fast
+        or batch fitness function.
     objective : {"maximize", "minimize"}, default "maximize"
         Whether higher or lower scores are better.
     seed : int, optional
@@ -1151,6 +1156,7 @@ class Ga(_SingleObjective):
         crossover_rate: float | None = None,
         mutation_rate: float | None = None,
         scheme: Scheme | None = None,
+        parallel_breeding: bool | None = None,
         objective: ObjectiveName = "maximize",
         seed: int | None = None,
     ) -> None:
@@ -1163,6 +1169,7 @@ class Ga(_SingleObjective):
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate
         self.scheme = scheme
+        self.parallel_breeding = parallel_breeding
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
@@ -1178,6 +1185,7 @@ class Ga(_SingleObjective):
             "scheme": (
                 None if self.scheme is None else _describe_setting("scheme", self.scheme, _SCHEME)
             ),
+            "parallel_breeding": _flag("parallel_breeding", self.parallel_breeding),
         }
 
 

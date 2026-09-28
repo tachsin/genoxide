@@ -513,6 +513,9 @@ where
     if let Some(rate) = ga.mutation_rate {
         builder = builder.mutation_rate(rate);
     }
+    if let Some(parallel_breeding) = ga.parallel_breeding {
+        builder = builder.parallel_breeding(parallel_breeding);
+    }
     if let Some(scheme) = ga.scheme {
         builder = builder.scheme(match scheme {
             config::Scheme::Generational { elitism } => Scheme::Generational { elitism },
