@@ -103,6 +103,7 @@ impl StreamRng {
     ///
     /// Marsaglia's polar method: only `ln` and `sqrt`, no trigonometry, so the same on every
     /// platform.
+    #[inline]
     pub(crate) fn normal(&mut self) -> f64 {
         loop {
             let u = 2.0 * self.unit_f64() - 1.0;

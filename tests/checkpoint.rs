@@ -179,6 +179,66 @@ fn genetic_algorithms_with_parallel_breeding_resume_exactly() {
     assert!(resumed.parallel_breeding());
 }
 
+#[cfg(feature = "parallel")]
+#[test]
+fn de_and_es_with_parallel_breeding_resume_exactly() {
+    let de = |seed| {
+        let de = De::l_shade(Real::uniform(10, -5.12..=5.12).unwrap(), 3_000)
+            .parallel_breeding(true)
+            .minimize()
+            .seed(seed)
+            .build()
+            .unwrap();
+        assert!(de.parallel_breeding());
+        de
+    };
+    resumes(|| de(4), rastrigin, 10, 40);
+    // SHADE, with restarts
+    let restarting = || {
+        De::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+            .population_size(20)
+            .restarts(de::Restarts::OnStagnation {
+                tolerance: 1e-3,
+                patience: 3,
+            })
+            .parallel_breeding(true)
+            .minimize()
+            .seed(5)
+            .build()
+            .unwrap()
+    };
+    resumes(restarting, rastrigin, 12, 40);
+    let es = |seed| {
+        Es::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+            .parents(5)
+            .offspring(35)
+            .parallel_breeding(true)
+            .minimize()
+            .seed(seed)
+            .build()
+            .unwrap()
+    };
+    resumes(|| es(6), rastrigin, 10, 30);
+    // islands of DEs with parallel breeding
+    let islands = || {
+        Islands::builder((0..3).map(de).collect())
+            .interval(5)
+            .seed(12)
+            .build()
+            .unwrap()
+    };
+    resumes(islands, rastrigin, 7, 20);
+    // the setting is saved: without it, the resumed run would breed differently
+    let mut engine = Engine::new(de(3), rastrigin).stop_when(Stop::generations(5));
+    engine.run().unwrap();
+    let resumed: De = checkpoint::load(bytes(engine.algorithm()).as_slice()).unwrap();
+    assert!(resumed.parallel_breeding());
+    let mut engine = Engine::new(es(3), rastrigin).stop_when(Stop::generations(5));
+    engine.run().unwrap();
+    let resumed: Es = checkpoint::load(bytes(engine.algorithm()).as_slice()).unwrap();
+    assert!(resumed.parallel_breeding());
+}
+
 #[test]
 fn other_algorithms_resume_exactly() {
     resumes(|| de(4), rastrigin, 10, 40);

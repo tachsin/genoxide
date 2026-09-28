@@ -1,6 +1,6 @@
 //! Differential evolution: new solutions from the differences between solutions.
 
-use super::{Algorithm, Candidates, Reevaluate};
+use super::{Algorithm, Candidates, Reevaluate, breed_in_parallel, breeding_streams};
 use crate::genome::{Real, Reals, Representation};
 use crate::operator::check_size;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
@@ -51,6 +51,20 @@ impl Strategy {
         match self {
             Strategy::CurrentToPBest { archive, .. }
             | Strategy::CurrentToPBestRandomP { archive, .. } => archive,
+            Strategy::Rand1 | Strategy::Best1 => 0.0,
+        }
+    }
+
+    // the fraction of the population of `size` that the `pbest` of a trial is chosen from
+    fn pbest_fraction(self, size: usize, rng: &mut StreamRng) -> f64 {
+        match self {
+            Strategy::CurrentToPBest { p, .. } => p,
+            // uniform between 2 / NP and max_p, or 2 / NP when that's larger
+            Strategy::CurrentToPBestRandomP { max_p, .. } => {
+                let min_p = 2.0 / size as f64;
+                min_p + (max_p - min_p).max(0.0) * rng.unit_f64()
+            }
+            // no pbest
             Strategy::Rand1 | Strategy::Best1 => 0.0,
         }
     }
@@ -184,6 +198,8 @@ pub struct De {
     objective: Objective,
     seed: u64,
     rng: StreamRng,
+    // each trial built on a random stream of its own, in parallel with the `parallel` feature
+    parallel_breeding: bool,
     population: Population<Reals>,
     trials: Vec<Individual<Reals>>,
     // the scale factor and crossover rate of each trial
@@ -266,6 +282,7 @@ impl De {
                 tolerance: 1e-12,
                 patience: 200,
             },
+            parallel_breeding: false,
         }
     }
 
@@ -347,6 +364,12 @@ impl De {
     /// The number of restarts so far.
     pub fn restart_count(&self) -> u64 {
         self.restart_count
+    }
+
+    /// Whether each trial is built on a random stream of its own, in parallel: see
+    /// [`DeBuilder::parallel_breeding`].
+    pub fn parallel_breeding(&self) -> bool {
+        self.parallel_breeding
     }
 
     /// Changes where `F` and `CR` come from during a run (parameter control), e.g. a
@@ -434,46 +457,6 @@ impl De {
             .unwrap_or(Fitness::invalid())
     }
 
-    // the scale factor and crossover rate of the next trial
-    fn next_parameters(&mut self) -> (f64, f64) {
-        match self.control {
-            Control::Fixed { f, cr } => (f, cr),
-            Control::Dither { min_f, max_f, cr } => {
-                (min_f + (max_f - min_f) * self.rng.unit_f64(), cr)
-            }
-            Control::Jade { .. } => {
-                let (mean_f, mean_cr) = self.means;
-                (self.adaptive_f(mean_f), self.adaptive_cr(mean_cr))
-            }
-            Control::Shade { .. } => {
-                let (mean_f, mean_cr) = self.memory[self.rng.below(self.memory.len())];
-                let f = self.adaptive_f(mean_f);
-                // a CR that stays 0
-                let cr = if mean_cr.is_nan() {
-                    0.0
-                } else {
-                    self.adaptive_cr(mean_cr)
-                };
-                (f, cr)
-            }
-        }
-    }
-
-    // F from a Cauchy distribution around `mean`, scale 0.1, redrawn until positive, at most 1
-    fn adaptive_f(&mut self, mean: f64) -> f64 {
-        loop {
-            let f = cauchy(&mut self.rng, mean, 0.1);
-            if f > 0.0 {
-                return f.min(1.0);
-            }
-        }
-    }
-
-    // CR from a normal distribution around `mean`, standard deviation 0.1, clamped to 0..=1
-    fn adaptive_cr(&mut self, mean: f64) -> f64 {
-        (mean + 0.1 * self.rng.normal()).clamp(0.0, 1.0)
-    }
-
     // adapts JADE's means or SHADE's memory to the successful (F, CR, improvement) of a generation
     fn adapt(&mut self, successes: &[(f64, f64, f64)]) {
         if successes.is_empty() {
@@ -540,30 +523,6 @@ impl De {
         }
     }
 
-    // a random index in `0..n` that isn't in `excluded`; `n` is larger than `excluded`
-    fn other_than(&mut self, n: usize, excluded: &[usize]) -> usize {
-        loop {
-            let index = self.rng.below(n);
-            if !excluded.contains(&index) {
-                return index;
-            }
-        }
-    }
-
-    // the fraction of the population of `size` that the `pbest` of the next trial is chosen from
-    fn pbest_fraction(&mut self, size: usize) -> f64 {
-        match self.strategy {
-            Strategy::CurrentToPBest { p, .. } => p,
-            // uniform between 2 / NP and max_p, or 2 / NP when that's larger
-            Strategy::CurrentToPBestRandomP { max_p, .. } => {
-                let min_p = 2.0 / size as f64;
-                min_p + (max_p - min_p).max(0.0) * self.rng.unit_f64()
-            }
-            // no pbest
-            Strategy::Rand1 | Strategy::Best1 => 0.0,
-        }
-    }
-
     // how many of the best individuals, best first, the trials of a generation of `size` can pick
     // from: `pbest` is one of at most the best `top` (at least 1, at most `size`), with the `p`
     // of `pbest_fraction` at most `min_p + (max_p - min_p).max(0)`, and DE/best/1 takes the best
@@ -577,74 +536,6 @@ impl De {
                 let min_p = 2.0 / size as f64;
                 // one more, in case of a rounding in the bound
                 (top(min_p + (max_p - min_p).max(0.0)) + 1).min(size)
-            }
-        }
-    }
-
-    // the trial vector for individual `target`; `order` starts with the best `ranked` individuals,
-    // best first
-    fn trial(&mut self, target: usize, f: f64, cr: f64, order: &[usize]) -> Reals {
-        let size = self.population.len();
-        // the random individuals, then the gene that comes from the mutant for sure
-        let (mutant, donors) = match self.strategy {
-            Strategy::Rand1 => {
-                let r1 = self.other_than(size, &[target]);
-                let r2 = self.other_than(size, &[target, r1]);
-                let r3 = self.other_than(size, &[target, r1, r2]);
-                (Mutant::Difference, [r1, r2, r3])
-            }
-            Strategy::Best1 => {
-                let best = order[0];
-                let r1 = self.other_than(size, &[target, best]);
-                let r2 = self.other_than(size, &[target, best, r1]);
-                (Mutant::Difference, [best, r1, r2])
-            }
-            Strategy::CurrentToPBest { .. } | Strategy::CurrentToPBestRandomP { .. } => {
-                let p = self.pbest_fraction(size);
-                let top = ((p * size as f64).round() as usize).clamp(1, size);
-                debug_assert!(top <= order.len(), "pbest from the ranked individuals");
-                let pbest = order[self.rng.below(top)];
-                let r1 = self.other_than(size, &[target]);
-                // r2 from the population and the archive
-                let r2 = self.other_than(size + self.archive.len(), &[target, r1]);
-                (Mutant::CurrentToPBest, [pbest, r1, r2])
-            }
-        };
-        // one of the genes that can change: a fixed one would leave the trial a copy
-        let variable = self.real.variable_genes();
-        let forced = match variable.len() {
-            0 => usize::MAX,
-            len => variable[self.rng.below(len)],
-        };
-        // by position in the population, and past it in the archive
-        let genes = |index: usize| -> &[f64] {
-            if index < size {
-                self.population[index].genome()
-            } else {
-                &self.archive[index - size]
-            }
-        };
-        let crossover = Crossover {
-            x: genes(target),
-            bounds: self.real.bounds(),
-            forced,
-            cr,
-        };
-        let genome = self.spare.0.pop();
-        let donors = genes(donors[0])
-            .iter()
-            .zip(genes(donors[1]))
-            .zip(genes(donors[2]))
-            .map(|((&d0, &d1), &d2)| [d0, d1, d2]);
-        // the mutant's genes, from the target's and the donors'
-        match mutant {
-            Mutant::Difference => crossover.trial(&mut self.rng, genome, donors, |_, [a, b, c]| {
-                a + f * (b - c)
-            }),
-            Mutant::CurrentToPBest => {
-                crossover.trial(&mut self.rng, genome, donors, |x, [pbest, a, b]| {
-                    x + f * (pbest - x) + f * (a - b)
-                })
             }
         }
     }
@@ -671,13 +562,45 @@ impl De {
             keys.sort_unstable();
             order.extend(keys.iter().map(|&(_, _, index)| index));
         }
-        self.trials.clear();
-        self.parameters.clear();
-        for target in 0..size {
-            let (f, cr) = self.next_parameters();
-            let trial = self.trial(target, f, cr, &order);
-            self.trials.push(Individual::new(trial));
-            self.parameters.push((f, cr));
+        let trials = Trials {
+            real: &self.real,
+            strategy: self.strategy,
+            control: self.control,
+            means: self.means,
+            memory: &self.memory,
+            population: &self.population,
+            archive: &self.archive,
+            order: &order,
+        };
+        if self.parallel_breeding {
+            // a stream per trial, from the seed, the generation and the target's position: the
+            // same trials on any number of threads
+            let streams = self
+                .rng
+                .derive(breeding_streams::DE)
+                .derive(self.generation);
+            let genomes: Vec<Option<Reals>> = (0..size).map(|_| self.spare.0.pop()).collect();
+            breed_in_parallel(
+                genomes,
+                &streams,
+                |target, genome, rng| {
+                    let (f, cr) = trials.parameters(rng);
+                    let trial = trials.trial(target, f, cr, genome, rng);
+                    (Individual::new(trial), (f, cr))
+                },
+                &mut self.trials,
+                &mut self.parameters,
+            );
+        } else {
+            self.trials.clear();
+            self.parameters.clear();
+            for target in 0..size {
+                let (f, cr) = trials.parameters(&mut self.rng);
+                let genome = self.spare.0.pop();
+                let trial = trials.trial(target, f, cr, genome, &mut self.rng);
+                self.trials.push(Individual::new(trial));
+                self.parameters.push((f, cr));
+            }
         }
     }
 
@@ -856,6 +779,143 @@ fn rank_key(objective: Objective, fitness: Fitness) -> (u64, u64) {
     };
     // a violation is 0 or more (not -0 or NaN), so its bits are in its order, all below u64::MAX
     (fitness.violation().to_bits(), score)
+}
+
+// what building the trials of a generation needs
+struct Trials<'a> {
+    real: &'a Real,
+    strategy: Strategy,
+    control: Control,
+    means: (f64, f64),
+    memory: &'a [(f64, f64)],
+    population: &'a Population<Reals>,
+    archive: &'a [Reals],
+    // the positions of the best `ranked` individuals, best first
+    order: &'a [usize],
+}
+
+impl Trials<'_> {
+    // the scale factor and crossover rate of a trial
+    #[inline]
+    fn parameters(&self, rng: &mut StreamRng) -> (f64, f64) {
+        match self.control {
+            Control::Fixed { f, cr } => (f, cr),
+            Control::Dither { min_f, max_f, cr } => (min_f + (max_f - min_f) * rng.unit_f64(), cr),
+            Control::Jade { .. } => {
+                let (mean_f, mean_cr) = self.means;
+                (adaptive_f(rng, mean_f), adaptive_cr(rng, mean_cr))
+            }
+            Control::Shade { .. } => {
+                let (mean_f, mean_cr) = self.memory[rng.below(self.memory.len())];
+                let f = adaptive_f(rng, mean_f);
+                // a CR that stays 0
+                let cr = if mean_cr.is_nan() {
+                    0.0
+                } else {
+                    adaptive_cr(rng, mean_cr)
+                };
+                (f, cr)
+            }
+        }
+    }
+
+    // the trial vector for individual `target`, in the memory of `genome` if it has the length
+    #[inline]
+    fn trial(
+        &self,
+        target: usize,
+        f: f64,
+        cr: f64,
+        genome: Option<Reals>,
+        rng: &mut StreamRng,
+    ) -> Reals {
+        let size = self.population.len();
+        let order = self.order;
+        // the random individuals, then the gene that comes from the mutant for sure
+        let (mutant, donors) = match self.strategy {
+            Strategy::Rand1 => {
+                let r1 = other_than(rng, size, &[target]);
+                let r2 = other_than(rng, size, &[target, r1]);
+                let r3 = other_than(rng, size, &[target, r1, r2]);
+                (Mutant::Difference, [r1, r2, r3])
+            }
+            Strategy::Best1 => {
+                let best = order[0];
+                let r1 = other_than(rng, size, &[target, best]);
+                let r2 = other_than(rng, size, &[target, best, r1]);
+                (Mutant::Difference, [best, r1, r2])
+            }
+            Strategy::CurrentToPBest { .. } | Strategy::CurrentToPBestRandomP { .. } => {
+                let p = self.strategy.pbest_fraction(size, rng);
+                let top = ((p * size as f64).round() as usize).clamp(1, size);
+                debug_assert!(top <= order.len(), "pbest from the ranked individuals");
+                let pbest = order[rng.below(top)];
+                let r1 = other_than(rng, size, &[target]);
+                // r2 from the population and the archive
+                let r2 = other_than(rng, size + self.archive.len(), &[target, r1]);
+                (Mutant::CurrentToPBest, [pbest, r1, r2])
+            }
+        };
+        // one of the genes that can change: a fixed one would leave the trial a copy
+        let variable = self.real.variable_genes();
+        let forced = match variable.len() {
+            0 => usize::MAX,
+            len => variable[rng.below(len)],
+        };
+        // by position in the population, and past it in the archive
+        let genes = |index: usize| -> &[f64] {
+            if index < size {
+                self.population[index].genome()
+            } else {
+                &self.archive[index - size]
+            }
+        };
+        let crossover = Crossover {
+            x: genes(target),
+            bounds: self.real.bounds(),
+            forced,
+            cr,
+        };
+        let donors = genes(donors[0])
+            .iter()
+            .zip(genes(donors[1]))
+            .zip(genes(donors[2]))
+            .map(|((&d0, &d1), &d2)| [d0, d1, d2]);
+        // the mutant's genes, from the target's and the donors'
+        match mutant {
+            Mutant::Difference => {
+                crossover.trial(rng, genome, donors, |_, [a, b, c]| a + f * (b - c))
+            }
+            Mutant::CurrentToPBest => crossover.trial(rng, genome, donors, |x, [pbest, a, b]| {
+                x + f * (pbest - x) + f * (a - b)
+            }),
+        }
+    }
+}
+
+// a random index in `0..n` that isn't in `excluded`; `n` is larger than `excluded`
+fn other_than(rng: &mut StreamRng, n: usize, excluded: &[usize]) -> usize {
+    loop {
+        let index = rng.below(n);
+        if !excluded.contains(&index) {
+            return index;
+        }
+    }
+}
+
+// F from a Cauchy distribution around `mean`, scale 0.1, redrawn until positive, at most 1
+fn adaptive_f(rng: &mut StreamRng, mean: f64) -> f64 {
+    loop {
+        let f = cauchy(rng, mean, 0.1);
+        if f > 0.0 {
+            return f.min(1.0);
+        }
+    }
+}
+
+// CR from a normal distribution around `mean`, standard deviation 0.1, clamped to 0..=1
+fn adaptive_cr(rng: &mut StreamRng, mean: f64) -> f64 {
+    (mean + 0.1 * rng.normal()).clamp(0.0, 1.0)
 }
 
 // how a mutant vector comes from the target `x` and three donors
@@ -1178,7 +1238,7 @@ impl Algorithm for De {
 /// DE/current-to-pbest/1 with a random `p` per trial between `2 / NP` and 0.2 and an archive of
 /// the population's size, SHADE's adaptation with a memory of 100, and a population of 100; plus
 /// genoxide's restarts on stagnation (tolerance 1e-12, patience 200), maximize, a random initial
-/// population and a random seed.
+/// population, a random seed, and sequential breeding.
 #[derive(Clone, Debug)]
 pub struct DeBuilder {
     real: Real,
@@ -1190,6 +1250,7 @@ pub struct DeBuilder {
     initial_genomes: Vec<Reals>,
     reduction: Option<(usize, u64)>,
     restarts: Restarts,
+    parallel_breeding: bool,
 }
 
 impl DeBuilder {
@@ -1256,6 +1317,54 @@ impl DeBuilder {
     /// has no restarts.
     pub fn restarts(mut self, restarts: Restarts) -> Self {
         self.restarts = restarts;
+        self
+    }
+
+    /// Builds the trials in parallel with rayon: the trial of each individual, its `F` and `CR`,
+    /// its random individuals and its crossover, on a thread pool. Off by default.
+    ///
+    /// - **Stays sequential,** on the run's random numbers: the ranking of the best individuals
+    ///   for `pbest`, the selection of the trials that survive, the adaptation of `F` and `CR`
+    ///   ([`Control::Jade`], [`Control::Shade`]) from their successes, in order, the archive, the
+    ///   [linear reduction](DeBuilder::linear_reduction) of the population and the
+    ///   [restarts](DeBuilder::restarts).
+    /// - **Random numbers:** each trial draws from a stream of its own, derived from the seed, the
+    ///   generation and the target's position ([`StreamRng::derive`]), also for its `F` and `CR`.
+    ///   A seeded run gives the same results on any number of threads, but not the results it
+    ///   gives without parallel breeding.
+    /// - **When it pays off:** when building the trials is a large part of a generation, with
+    ///   parallel or batch evaluation of a fast fitness function and hundreds of individuals or
+    ///   genes: a trial draws a random number per gene. Measured with SHADE and parallel
+    ///   evaluation of the sphere function on 20 threads, a generation of 1000 individuals with
+    ///   200 genes took 0.89 ms, and 0.23 ms with parallel breeding (3.8×); 6× with 100
+    ///   individuals of 1000 genes, 7× with 1000 of 1000; 2.3× to 3.4× on 4 threads. With 100
+    ///   individuals of 50 genes it gains little, and with a slow fitness function breeding takes
+    ///   little of the time.
+    ///
+    /// Checkpoints keep the setting. A run with it resumes identically, also without the
+    /// `parallel` feature, then building the same trials on one thread.
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let de = De::builder(Real::uniform(200, -5.0..=5.0)?)
+    ///     .population_size(500)
+    ///     .parallel_breeding(true)
+    ///     .minimize()
+    ///     .seed(1)
+    ///     .build()?;
+    /// let sphere = |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>();
+    /// let outcome = Engine::new(de, sphere)
+    ///     .parallel(true)
+    ///     .stop_when(Stop::generations(20))
+    ///     .run()?;
+    /// // from about 1400 for the best of the initial population
+    /// assert!(outcome.best_fitness().score().unwrap() < 1000.0);
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    #[cfg(feature = "parallel")]
+    pub fn parallel_breeding(mut self, parallel: bool) -> Self {
+        self.parallel_breeding = parallel;
         self
     }
 
@@ -1329,6 +1438,7 @@ impl DeBuilder {
             objective: self.objective,
             seed,
             rng,
+            parallel_breeding: self.parallel_breeding,
             population: Population::from_genomes(genomes),
             trials: Vec::new(),
             parameters: Vec::new(),
@@ -2016,7 +2126,7 @@ mod tests {
             let min_p = 2.0 / size as f64;
             let (mut lowest, mut highest) = (f64::INFINITY, f64::NEG_INFINITY);
             for _ in 0..10_000 {
-                let p = de.pbest_fraction(size);
+                let p = de.strategy.pbest_fraction(size, &mut de.rng);
                 lowest = lowest.min(p);
                 highest = highest.max(p);
                 // pbest comes from at least the best two
@@ -2045,7 +2155,7 @@ mod tests {
         )
         .build()
         .unwrap();
-        assert_eq!(de.pbest_fraction(20), 0.1);
+        assert_eq!(de.strategy.pbest_fraction(20, &mut de.rng), 0.1);
     }
 
     #[test]
@@ -2111,7 +2221,7 @@ mod tests {
         }
         assert_eq!(de.population().len(), 4);
         assert!(de.archive().len() <= 4);
-        assert_eq!(de.pbest_fraction(4), 0.5);
+        assert_eq!(de.strategy.pbest_fraction(4, &mut de.rng), 0.5);
     }
 
     #[test]
@@ -2539,6 +2649,221 @@ mod tests {
         assert!(best < 0.1, "{best}");
     }
 
+    // the Rosenbrock function with only +, − and ×, which is the same on every platform
+    fn rosenbrock(x: &Reals) -> f64 {
+        x.windows(2)
+            .map(|w| {
+                let (a, b) = (w[1] - w[0] * w[0], 1.0 - w[0]);
+                100.0 * a * a + b * b
+            })
+            .sum()
+    }
+
+    // what a run leaves behind: the population, the best, the evaluations, the archive, the bits
+    // of the adapted `F` and `CR` (NaN for a `CR` that stays 0), and the restarts
+    type Run = (
+        Population<Reals>,
+        Option<Individual<Reals>>,
+        u64,
+        Vec<Reals>,
+        Vec<(u64, u64)>,
+        u64,
+    );
+
+    // `generations` generations of the Rosenbrock function, with `control` called after each
+    fn run_rosenbrock(mut de: De, generations: u64, control: impl Fn(&mut De)) -> Run {
+        while de.generation() < generations {
+            let before = de.generation();
+            let fitness: Vec<Fitness> = de
+                .ask()
+                .iter()
+                .map(|x| Fitness::new(rosenbrock(x)))
+                .collect();
+            de.tell(&fitness).unwrap();
+            if de.generation() > before {
+                control(&mut de);
+            }
+        }
+        let adapted = de
+            .adapted()
+            .iter()
+            .map(|(f, cr)| (f.to_bits(), cr.to_bits()))
+            .collect();
+        (
+            de.population().clone(),
+            de.best().cloned(),
+            de.evaluations(),
+            de.archive().to_vec(),
+            adapted,
+            de.restart_count(),
+        )
+    }
+
+    // what a run changes after a generation
+    type Changes = fn(&mut De);
+
+    // every strategy and control, restarts, L-SHADE's reduction, and settings changed during the
+    // run with a re-evaluation
+    fn parallel_runs() -> Vec<(DeBuilder, Changes)> {
+        let real =
+            || Real::new([-5.0..=5.0, 2.0..=2.0, -5.0..=5.0, 0.0..=3.0, -1.0..=1.0]).unwrap();
+        let de = |strategy, control| {
+            De::builder(real())
+                .population_size(13)
+                .strategy(strategy)
+                .control(control)
+                .restarts(Restarts::Never)
+                .minimize()
+        };
+        let nothing: Changes = |_| {};
+        vec![
+            (
+                de(Strategy::Rand1, Control::Fixed { f: 0.5, cr: 0.9 }),
+                nothing,
+            ),
+            (
+                de(
+                    Strategy::Best1,
+                    Control::Dither {
+                        min_f: 0.5,
+                        max_f: 1.0,
+                        cr: 0.3,
+                    },
+                ),
+                nothing,
+            ),
+            (
+                de(
+                    Strategy::CurrentToPBest {
+                        p: 0.2,
+                        archive: 1.5,
+                    },
+                    Control::Jade { c: 0.1 },
+                ),
+                nothing,
+            ),
+            // SHADE, with restarts that happen within the run
+            (
+                De::builder(real())
+                    .population_size(13)
+                    .restarts(Restarts::OnStagnation {
+                        tolerance: 1e-3,
+                        patience: 2,
+                    })
+                    .minimize(),
+                nothing,
+            ),
+            (De::l_shade(real(), 800).minimize(), nothing),
+            (
+                De::builder(real()).population_size(13).minimize(),
+                |de: &mut De| match de.generation() {
+                    5 => de.reevaluate().unwrap(),
+                    8 => de.set_strategy(Strategy::Rand1).unwrap(),
+                    11 => de.set_control(Control::Jade { c: 0.2 }).unwrap(),
+                    14 => de
+                        .set_strategy(Strategy::CurrentToPBest {
+                            p: 0.3,
+                            archive: 0.5,
+                        })
+                        .unwrap(),
+                    _ => {}
+                },
+            ),
+        ]
+    }
+
+    // parallel breeding is set directly, so that these tests run without the `parallel` feature
+    // too, where the trials are built one after the other with the same results
+    fn with_breeding(builder: &DeBuilder, seed: u64, parallel_breeding: bool) -> De {
+        let mut de = builder.clone().seed(seed).build().unwrap();
+        de.parallel_breeding = parallel_breeding;
+        de
+    }
+
+    #[test]
+    fn parallel_breeding_is_reproducible_but_not_sequential_breeding() {
+        for (index, (builder, control)) in parallel_runs().into_iter().enumerate() {
+            let run = |seed, parallel_breeding| {
+                run_rosenbrock(
+                    with_breeding(&builder, seed, parallel_breeding),
+                    30,
+                    control,
+                )
+            };
+            let parallel = run(1, true);
+            assert_eq!(run(1, true), parallel, "{index}");
+            assert_ne!(run(2, true), parallel, "{index}");
+            assert_ne!(run(1, false), parallel, "{index}");
+            // the restarts and the reduction happen with parallel breeding too
+            if index == 3 {
+                assert!(parallel.5 > 0, "{}", parallel.5);
+            }
+            if index == 4 {
+                assert!(parallel.0.len() < 18 * 5);
+            }
+        }
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn parallel_breeding_is_the_same_on_any_number_of_threads() {
+        for (index, (builder, control)) in parallel_runs().into_iter().enumerate() {
+            let on_threads = |threads| {
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .unwrap()
+                    .install(|| run_rosenbrock(with_breeding(&builder, 3, true), 20, control))
+            };
+            let one = on_threads(1);
+            assert_eq!(on_threads(2), one, "{index}");
+            assert_eq!(on_threads(8), one, "{index}");
+        }
+    }
+
+    /// Fixed values: these must never change for the same major version, on any platform. They
+    /// pin the streams of parallel breeding, from the seed, the generation and the target's
+    /// position, with or without the `parallel` feature.
+    #[test]
+    fn parallel_breeding_values_are_portable() {
+        let builder = De::builder(Real::uniform(4, -5.0..=5.0).unwrap())
+            .population_size(12)
+            .minimize();
+        let (_, best, evaluations, ..) =
+            run_rosenbrock(with_breeding(&builder, 1, true), 30, |_| {});
+        assert_eq!(evaluations, 372);
+        assert_eq!(
+            best.unwrap().genome().to_vec(),
+            [
+                -0.9678466578199153,
+                1.0602446466392965,
+                1.0897958657309945,
+                1.059740495757288
+            ]
+        );
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn parallel_breeding_is_a_setting_of_the_builder() {
+        let make = || builder(Strategy::Rand1, 0);
+        assert!(
+            make()
+                .parallel_breeding(true)
+                .build()
+                .unwrap()
+                .parallel_breeding()
+        );
+        assert!(!make().build().unwrap().parallel_breeding());
+        assert!(
+            !make()
+                .parallel_breeding(false)
+                .build()
+                .unwrap()
+                .parallel_breeding()
+        );
+    }
+
     fn any_fitness() -> impl proptest::strategy::Strategy<Value = Fitness> {
         use proptest::strategy::Strategy as _;
         prop_oneof![
@@ -2584,6 +2909,7 @@ mod tests {
             cr in 0.0..=1.0f64,
             kind in 0usize..4,
             seed: u64,
+            parallel_breeding: bool,
         ) {
             // one fixed gene, bounds of different widths, and bounds near the largest numbers
             let real =
@@ -2601,6 +2927,7 @@ mod tests {
                 .seed(seed)
                 .build()
                 .unwrap();
+            de.parallel_breeding = parallel_breeding;
             step(&mut de);
             for _ in 0..10 {
                 let before: Vec<Fitness> = de.population().iter().map(|x| x.fitness().unwrap()).collect();

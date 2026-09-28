@@ -307,12 +307,13 @@ fn main() -> genoxide::Result<()> {
 | `.recombination(...)` | `es::Recombination::Intermediate { rho }` (default, ρ = μ), `es::Recombination::Dominant { rho }`; ρ = 1 for none |
 | `.selection(...)` | `es::Selection::Comma` (default; best for self-adaptation), `es::Selection::Plus` (elitist) |
 | `.step_sizes(...)` | `es::StepSizes::PerGene` (default), `es::StepSizes::One` (genes scaled alike) |
+| `.parallel_breeding(true)` | Off by default; `parallel` feature. Each offspring made on rayon, on its own random stream: seeded results differ from off, not between thread counts. Making offspring (a normal number and an `exp` per gene, a `ln` per parent and gene with intermediate recombination) is most of a generation with a fast fitness function |
 
 A GA can run an ES too: `AdaptiveReal`, `SelfAdaptiveMutation`, `NoCrossover`, `Scheme::MuCommaLambda`. For hard problems (rotated, badly conditioned or multimodal), CMA-ES is stronger.
 
 ### Differential evolution
 
-For continuous problems on `Real` genomes, differential evolution often needs far fewer evaluations than a GA. Defaults from SHADE (Tanabe and Fukunaga, CEC 2013): current-to-pbest/1 with a random `p` in [2 / size, 0.2], an archive of population size, `F` / `CR` memory of 100, 100 individuals; plus genoxide's restarts, `de::Restarts::OnStagnation { tolerance: 1e-12, patience: 200 }`: all but the best replaced once every gene's spread is within 1e-12 of its range (and the scores' within 1e-12 of the best), or after 200 generations without a better best. Options: `.population_size(n)`, `.control(de::Control::Fixed { f, cr })` (`CR` 0.1 for separable, 0.9 for rotated functions), `.restarts(de::Restarts::Never)`.
+For continuous problems on `Real` genomes, differential evolution often needs far fewer evaluations than a GA. Defaults from SHADE (Tanabe and Fukunaga, CEC 2013): current-to-pbest/1 with a random `p` in [2 / size, 0.2], an archive of population size, `F` / `CR` memory of 100, 100 individuals; plus genoxide's restarts, `de::Restarts::OnStagnation { tolerance: 1e-12, patience: 200 }`: all but the best replaced once every gene's spread is within 1e-12 of its range (and the scores' within 1e-12 of the best), or after 200 generations without a better best. Options: `.population_size(n)`, `.control(de::Control::Fixed { f, cr })` (`CR` 0.1 for separable, 0.9 for rotated functions), `.restarts(de::Restarts::Never)`, `.parallel_breeding(true)` (`parallel` feature: each trial built on rayon, on its own random stream, as a GA's breeding; for hundreds of individuals or genes and a fast fitness function evaluated in parallel).
 
 ```rust
 use genoxide::prelude::*;
@@ -696,7 +697,7 @@ every = 50
 | Real-valued GA stuck in a local minimum | `PolynomialMutation` with eta 20, or a larger `GaussianMutation` sigma |
 | `StopReason::Stalled`: 10 000 generations of copies only (e.g. `mutation_rate(0.0)`) | A mutation rate above 0, or add `Stop::generations(n)` or `Stop::stagnation(n)` |
 | Early stagnation (too little diversity) | A larger population, smaller tournament or higher mutation rate; or `Stop::stagnation` and restart |
-| Slow with a cheap fitness function | `--release`; `.parallel(true)` only for expensive fitness; `.parallel_breeding(true)` when breeding takes much of a generation |
+| Slow with a cheap fitness function | `--release`; `.parallel(true)` only for expensive fitness; `.parallel_breeding(true)` (`Ga`, `De`, `Es`) when breeding takes much of a generation |
 
 ## Guarantees to rely on
 

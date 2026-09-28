@@ -45,6 +45,43 @@ fn evaluated_ga(len: usize) -> OneMaxGa {
     ga
 }
 
+fn sphere(x: &Reals) -> f64 {
+    x.iter().map(|xi| xi * xi).sum::<f64>()
+}
+
+fn tell_sphere<A: Algorithm<Genome = Reals>>(algorithm: &mut A) {
+    let fitness: Vec<Fitness> = algorithm
+        .ask()
+        .iter()
+        .map(|x| Fitness::new(sphere(x)))
+        .collect();
+    algorithm.tell(&fitness).unwrap();
+}
+
+// SHADE (the defaults) on 30 genes, with its initial population evaluated
+fn evaluated_de(len: usize) -> De {
+    let mut de = De::builder(Real::uniform(len, -5.0..=5.0).unwrap())
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    tell_sphere(&mut de);
+    de
+}
+
+// a (5/5_I, 35)-ES with a step size per gene, with its initial parents evaluated
+fn evaluated_es(len: usize) -> Es {
+    let mut es = Es::builder(Real::uniform(len, -5.0..=5.0).unwrap())
+        .parents(5)
+        .offspring(35)
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap();
+    tell_sphere(&mut es);
+    es
+}
+
 fn two_genomes(len: usize) -> (Binary, Bits, Bits, StreamRng) {
     let binary = Binary::new(len).unwrap();
     let mut rng = StreamRng::seed_from_u64(0);
@@ -114,6 +151,22 @@ fn generation(mut ga: OneMaxGa) -> OneMaxGa {
     black_box(ga)
 }
 
+// one generation of differential evolution: trials, evaluation and selection
+#[library_benchmark]
+#[bench::sphere_30(setup = evaluated_de, args = (30))]
+fn de_generation(mut de: De) -> De {
+    tell_sphere(&mut de);
+    black_box(de)
+}
+
+// one generation of an evolution strategy: offspring, evaluation and selection
+#[library_benchmark]
+#[bench::sphere_30(setup = evaluated_es, args = (30))]
+fn es_generation(mut es: Es) -> Es {
+    tell_sphere(&mut es);
+    black_box(es)
+}
+
 #[library_benchmark]
 #[bench::one_max_100_50_generations(100)]
 fn run(len: usize) -> Outcome<Bits> {
@@ -134,6 +187,8 @@ library_benchmark_group!(
         bit_flip,
         tournament,
         generation,
+        de_generation,
+        es_generation,
         run
     ]
 );
