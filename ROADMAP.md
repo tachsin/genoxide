@@ -162,7 +162,7 @@ Done means implemented, documented, tested (property tests for operators) and be
 - [x] Python fitness functions and vectorized numpy batch fitness
 - [x] Pythonic builders
 - [x] Examples matching the DEAP / pymoo tutorials
-- Zero-copy numpy genomes: moved to 0.11.
+- Zero-copy numpy genomes: moved to 0.10.
 
 ### 0.7: Correctness ✅
 Fixes from the review of 0.6.0 ([#116](https://github.com/tachsin/genoxide/issues/116)). Some change seeded results.
@@ -189,10 +189,10 @@ The test problem library of [docs/problems-plan.md](docs/problems-plan.md), batc
 - [x] Batch 4: DTLZ5-7, the binary ZDT5 and WFG1-9 ([#270](https://github.com/tachsin/genoxide/pull/270)); batch 5 in 0.9.1: CEC 2006's g07-g18 ([#277](https://github.com/tachsin/genoxide/pull/277)); each with its example
 - [x] A multi-objective front has each genome once, and polynomial mutation reaches the bounds: breaking fixes ([#273](https://github.com/tachsin/genoxide/pull/273), [#276](https://github.com/tachsin/genoxide/pull/276))
 - [x] Benchmarks: genoxide's releases compared by instruction counts ([#267](https://github.com/tachsin/genoxide/pull/267))
-- Genetic programming and neuroevolution, first planned for 0.9: moved to 0.11.
+- Genetic programming and neuroevolution, first planned for 0.9: moved to 0.10.
 
-### 0.10: Control and parallel breeding
-On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)).
+### 0.9.2: Control and parallel breeding
+On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)). New features, compatible with 0.9.1's API, so a patch release; the breaking changes of #283 and #284 are the benchmark harness's, not the library's.
 - [x] Parameter control: `Engine::control`, setters for DE, PSO and local search, `Islands::islands_mut` ([#292](https://github.com/tachsin/genoxide/pull/292)); in Python, `run(control=...)` ([#294](https://github.com/tachsin/genoxide/pull/294))
 - [x] Re-evaluation in every single-objective algorithm but the steady-state GA, for a fitness function that changes during a run ([#292](https://github.com/tachsin/genoxide/pull/292))
 - [x] Parallel breeding for the GA, DE and ES, the same results on any number of threads ([#289](https://github.com/tachsin/genoxide/pull/289), [#295](https://github.com/tachsin/genoxide/pull/295)), also in Python ([#296](https://github.com/tachsin/genoxide/pull/296))
@@ -201,7 +201,7 @@ On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)
 - [x] Benchmarks: a matched suite of three problems, one method each ([#284](https://github.com/tachsin/genoxide/pull/284)), with every library bug it found reported upstream ([notes](docs/benchmarks/notes.md#bugs-found))
 - [ ] What a fitness function computes besides the fitness, kept with the individuals ([#246](https://github.com/tachsin/genoxide/issues/246))
 
-### 0.11: Genetic programming and neuroevolution
+### 0.10: Genetic programming and neuroevolution
 - [ ] Tree GP, strongly typed
 - [ ] Subtree crossover; point, subtree and hoist mutation; bloat control
 - [ ] Symbolic regression examples
@@ -209,7 +209,7 @@ On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)
 - [ ] Neuroevolution with evolution strategies
 - [ ] Python: zero-copy numpy genomes, the ES, islands and checkpoints
 
-### 0.12: Frontier
+### 0.11: Frontier
 - [ ] Quality-diversity: MAP-Elites, CMA-ME, novelty search
 - [ ] LLM-guided evolution (async operators calling a language model)
 - [ ] Adaptive operator selection and automatic parameter tuning
