@@ -98,12 +98,11 @@ its scale factor and crossover rate from successful trials. Its population start
 number of genes, 126, and shrinks linearly to 4 over the budget of 20,000 evaluations. genoxide's
 `De::l_shade` takes L-SHADE's settings, so the example only gives it the budget.
 
-L-SHADE has no restarts, and that matters here. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013:
-71-78) with genoxide's defaults, as in the welded beam example, restarts every time its
-population's weights agree to about 1e-8, and throws away the converged population. With seeds 1 to
-8 and 30,000 evaluations, it ends 5e-10 to 3e-9 above the best known weight, relative to it.
-Without restarts (`de::Restarts::Never`, in Rust), with seeds 1 to 5, it ends 7e-12 to 6e-11 above
-it. L-SHADE gets within 1e-12 after 18,500 to 19,400 evaluations, with the same seeds.
+Its shrinking population gets to the best known weight sooner than SHADE (Tanabe and Fukunaga,
+2013, IEEE CEC 2013: 71-78) with genoxide's defaults, as in the welded beam example, whose
+population stays at 100. With seeds 1 to 5, L-SHADE comes within 1e-12 of the best known weight,
+relative to it, after 18,500 to 19,400 evaluations, and SHADE after SHADE_RANGE; SHADE doesn't
+restart on the way.
 
 CMA-ES, which solves the cantilever beam example, puts the other six thicknesses on their bounds and
 limits, but leaves x₆ where it happens to be: between 0.89 and 1.10 with seeds 1 to 5. After 30,000

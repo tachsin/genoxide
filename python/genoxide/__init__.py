@@ -1183,8 +1183,8 @@ class De(_SingleObjective):
     a random p per trial between 2 / population and 0.2 and an archive of the population's size,
     SHADE's adaptation of F and CR with a memory of 100, and a population of 100. genoxide adds
     restarts, which aren't part of SHADE: every individual but the best is replaced when the
-    scores converge (within 1e-8, relative to the best) or the best doesn't improve for 200
-    generations.
+    population has converged, each gene's values within 1e-12 of its range of each other and the
+    scores within 1e-12 of the best, or when the best doesn't improve for 200 generations.
 
     With ``l_shade``, L-SHADE (Tanabe and Fukunaga, 2014) for a budget of that many evaluations:
     current-to-pbest/1 with p 0.11 and an archive of 2.6 times the population, SHADE's

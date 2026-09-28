@@ -94,16 +94,16 @@ active (within 1e-6 of its limit) or violated. The best design is feasible from 
 on: the best of the 100 random designs of the first population is feasible. The weight falls to
 0.0127 after about 9,000 evaluations and to 0.012666 after about 17,000. From about 21,000
 evaluations, g1 and g2 come within 1e-6 of their limits, first in turn and from about 28,000 on
-together; g3 and g4 keep their slack throughout. After about 45,000 evaluations, the population has
-gathered at the minimum, and SHADE restarts it: the median weight jumps back up while the best
-design stays.
+together; g3 and g4 keep their slack throughout. From about 32,000 evaluations, the median weight
+matches the best to the 6 digits that the plot shows, and the population stays at the minimum to
+the end of the run, without a restart.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/tension-compression-spring) plays this run back.
 
 ## Good results
 
 The best known weight is 0.012665, rounded. The run finds a feasible spring of weight 0.0126652
-(0.01266523 to 7 significant digits), at d = 0.051689, D = 0.356718 and N = 11.288925, close to
+(0.01266523 to 7 significant digits), at d = 0.051689, D = 0.356717 and N = 11.288996, close to
 the published design. It's above 0.012665 only because that value is rounded. The published
 design weighs 0.0126651, a little less, but it exceeds g2 by 2e-5: it's slightly infeasible.
 

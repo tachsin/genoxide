@@ -76,10 +76,8 @@ error of at most 1e-4; the example asks for more.
 Why CMA-ES: it adapts its step size and learns the correlations between the variables, so its
 samples narrow down on the corner at a steady rate. With 25 seeds, CMA-ES met the target on every
 run, after a median of 4,264 evaluations (at most 6,064). SHADE (Tanabe and Fukunaga, 2013, IEEE
-CEC 2013: 71-78), genoxide's default differential evolution, met it on none of 25 runs. Its
-restarts replace every individual but the best once the scores agree within 1e-8 relative to the
-best, about 3e-4 here, and the runs ended with errors from 3e-8 to 2e-5. Without the restarts, an
-option of the Rust API, SHADE met the target on all 25, after a median of 44,700 evaluations.
+CEC 2013: 71-78), genoxide's default differential evolution, met it on all 25 too, but after a
+median of 44,700 evaluations (at most 46,000), ten times as many.
 
 ## Output
 

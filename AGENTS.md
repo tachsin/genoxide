@@ -310,7 +310,7 @@ A GA can run an ES too: `AdaptiveReal`, `SelfAdaptiveMutation`, `NoCrossover`, `
 
 ### Differential evolution
 
-For continuous problems on `Real` genomes, differential evolution often needs far fewer evaluations than a GA. Defaults from SHADE (Tanabe and Fukunaga, CEC 2013): current-to-pbest/1 with a random `p` in [2 / size, 0.2], an archive of population size, `F` / `CR` memory of 100, 100 individuals; plus genoxide's restarts (tolerance 1e-8, patience 200). Options: `.population_size(n)`, `.control(de::Control::Fixed { f, cr })` (`CR` 0.1 for separable, 0.9 for rotated functions), `.restarts(de::Restarts::Never)`.
+For continuous problems on `Real` genomes, differential evolution often needs far fewer evaluations than a GA. Defaults from SHADE (Tanabe and Fukunaga, CEC 2013): current-to-pbest/1 with a random `p` in [2 / size, 0.2], an archive of population size, `F` / `CR` memory of 100, 100 individuals; plus genoxide's restarts, `de::Restarts::OnStagnation { tolerance: 1e-12, patience: 200 }`: all but the best replaced once every gene's spread is within 1e-12 of its range (and the scores' within 1e-12 of the best), or after 200 generations without a better best. Options: `.population_size(n)`, `.control(de::Control::Fixed { f, cr })` (`CR` 0.1 for separable, 0.9 for rotated functions), `.restarts(de::Restarts::Never)`.
 
 ```rust
 use genoxide::prelude::*;
