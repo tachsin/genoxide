@@ -164,5 +164,73 @@ fn algorithm(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, genomes, crossover, mutation, selection, algorithm);
+// A mutation that does real work per gene, as a repair against constraints would: several random
+// numbers and a clamp for each gene.
+#[derive(Clone, Debug)]
+struct Repairing;
+
+impl Mutate<Real> for Repairing {
+    fn mutate(&self, representation: &Real, genome: &mut Reals, rng: &mut StreamRng) {
+        use rand::RngExt;
+        for (gene, bounds) in genome.iter_mut().zip(representation.bounds()) {
+            let (low, high) = (*bounds.start(), *bounds.end());
+            let step: f64 = (0..4).map(|_| rng.random::<f64>() - 0.5).sum();
+            let pull: f64 = rng.random();
+            *gene = (*gene + 0.1 * (high - low) * step * pull).clamp(low, high);
+        }
+    }
+}
+
+type RepairingGa = Ga<Real, Tournament, SimulatedBinaryCrossover, Repairing>;
+
+fn repairing_ga(parallel_breeding: bool) -> RepairingGa {
+    Ga::builder(Real::uniform(50, -5.0..=5.0).unwrap())
+        .population_size(2_000)
+        .select(Tournament::new(3).unwrap())
+        .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
+        .mutate(Repairing)
+        .parallel_breeding(parallel_breeding)
+        .minimize()
+        .seed(0)
+        .build()
+        .unwrap()
+}
+
+// evaluates the sphere function in parallel, a fast fitness function
+fn tell_sphere(ga: &mut RepairingGa) {
+    use rayon::prelude::*;
+    let genomes: Vec<&Reals> = ga.ask().iter().collect();
+    let fitness: Vec<Fitness> = genomes
+        .par_iter()
+        .map(|x| Fitness::new(x.iter().map(|xi| xi * xi).sum::<f64>()))
+        .collect();
+    ga.tell(&fitness).unwrap();
+}
+
+// one generation of a population of 2000 with 50 real genes and a mutation that works per gene,
+// evaluated in parallel: sequential against parallel breeding
+fn breeding(c: &mut Criterion) {
+    let mut group = c.benchmark_group("breeding");
+    for (name, parallel_breeding) in [("sequential", false), ("parallel", true)] {
+        group.bench_function(format!("generation_real_50_population_2000_{name}"), |b| {
+            b.iter_batched(
+                || {
+                    let mut ga = repairing_ga(parallel_breeding);
+                    tell_sphere(&mut ga);
+                    ga
+                },
+                |mut ga| {
+                    tell_sphere(&mut ga);
+                    ga
+                },
+                BatchSize::LargeInput,
+            )
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(
+    benches, genomes, crossover, mutation, selection, algorithm, breeding
+);
 criterion_main!(benches);

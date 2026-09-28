@@ -9,7 +9,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 | **Checked settings** | Invalid settings are errors from `build()`, before anything runs. An operator that doesn't fit the genome is a compile error. |
 | **Reproducible** | The same seed gives the same result, on any number of threads, on 32- or 64-bit machines and on every operating system (with `genoxide::math` in place of `f64::sin` and the like in a fitness function). |
 | **Safe** | `#![forbid(unsafe_code)]`: memory safety from the compiler, and parallel code without data races. |
-| **Fast** | Compiled Rust, bit-packed binary genomes, and parallel or batch evaluation. |
+| **Fast** | Compiled Rust, bit-packed binary genomes, parallel or batch evaluation, and parallel breeding. |
 
 ## Genomes
 
@@ -30,6 +30,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
   - permutations: swap, inversion (2-opt), insertion, scramble
 - **Schemes:** generational with elitism, steady-state, (μ+λ), (μ,λ), and memetic (Lamarckian local search on the best parents).
 - **Parameter control:** a GA's rates and operators can be changed between generations, e.g. to anneal the mutation step or raise it when the search stagnates.
+- **Parallel breeding:** crossover and mutation on all cores, each pair of parents on a random stream of its own, so a seeded run gives the same results on any number of threads. For large populations and operators that do real work per gene, when evaluation is fast.
 
 ## Other single-objective methods
 

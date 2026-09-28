@@ -161,6 +161,8 @@ pub struct Ga<R: Representation, S, C, M> {
     scheme: Scheme,
     seed: u64,
     rng: StreamRng,
+    // each pair of parents bred on a stream of its own, in parallel with the `parallel` feature
+    parallel_breeding: bool,
     population: Population<R::Genome>,
     offspring: Vec<Individual<R::Genome>>,
     // offspring evaluated in the last generation that didn't survive
@@ -203,6 +205,7 @@ impl<R: Representation> Ga<R, Unset, Unset, Unset> {
             seed: None,
             initial_genomes: Vec::new(),
             memetic: None,
+            parallel_breeding: false,
         }
     }
 }
@@ -258,6 +261,12 @@ impl<R: Representation, S, C, M> Ga<R, S, C, M> {
     /// number of neighbors each tries. `None` without.
     pub fn memetic(&self) -> Option<(usize, usize)> {
         self.memetic
+    }
+
+    /// Whether each pair of parents is bred on a random stream of its own, in parallel: see
+    /// [`GaBuilder::parallel_breeding`].
+    pub fn parallel_breeding(&self) -> bool {
+        self.parallel_breeding
     }
 
     /// Marks the population as not evaluated, for a fitness function that changed during the
@@ -415,31 +424,25 @@ where
             &mut self.rng,
         );
         self.offspring.clear();
-        for pair in parents.chunks_exact(2) {
-            let parents = [&self.population[pair[0]], &self.population[pair[1]]];
-            let mut a = parents[0].genome().clone();
-            let mut b = parents[1].genome().clone();
-            if self.rng.chance(self.crossover_chance) {
-                self.crossover
-                    .crossover(&self.representation, &mut a, &mut b, &mut self.rng);
-            }
-            for mut genome in [a, b] {
-                if self.offspring.len() == count {
-                    break;
-                }
-                if self.rng.chance(self.mutation_chance) {
-                    self.mutate
-                        .mutate(&self.representation, &mut genome, &mut self.rng);
-                }
-                let inherited = parents
-                    .iter()
-                    .find(|parent| parent.genome() == &genome)
-                    .and_then(|parent| parent.fitness());
-                let mut child = Individual::new(genome);
-                if let Some(fitness) = inherited {
-                    child.set_fitness(fitness);
-                }
-                self.offspring.push(child);
+        let breeding = Breeding {
+            representation: &self.representation,
+            crossover: &self.crossover,
+            mutate: &self.mutate,
+            crossover_chance: self.crossover_chance,
+            mutation_chance: self.mutation_chance,
+            population: &self.population,
+        };
+        if self.parallel_breeding {
+            // a stream per pair, from the seed, the generation and the pair's position: the same
+            // children on any number of threads
+            let streams = self.rng.derive(BREEDING_STREAMS).derive(self.generation);
+            let children = breed_pairs(&breeding, &parents, count, &streams);
+            self.offspring
+                .extend(children.into_iter().flatten().flatten());
+        } else {
+            for (index, pair) in parents.chunks_exact(2).enumerate() {
+                let children = breeding.pair(pair, count - 2 * index, &mut self.rng);
+                self.offspring.extend(children.into_iter().flatten());
             }
         }
 
@@ -526,6 +529,113 @@ where
             .for_each(Individual::increment_age);
         self.population.extend(self.offspring.drain(..));
     }
+}
+
+// The id of the streams derived from a GA's generator for parallel breeding: its stream for a
+// generation is `rng.derive(BREEDING_STREAMS).derive(generation)`, and a pair's stream is
+// `generation_stream.derive(pair)`. It must never change for the same major version: it decides
+// the results of seeded runs.
+const BREEDING_STREAMS: u64 = 0;
+
+// what crossing over and mutating a pair of parents needs
+struct Breeding<'a, R: Representation, C, M> {
+    representation: &'a R,
+    crossover: &'a C,
+    mutate: &'a M,
+    crossover_chance: Chance,
+    mutation_chance: Chance,
+    population: &'a Population<R::Genome>,
+}
+
+// the children of a pair, one or two
+type Children<G> = [Option<Individual<G>>; 2];
+
+impl<R, C, M> Breeding<'_, R, C, M>
+where
+    R: Representation,
+    C: Crossover<R>,
+    M: Mutate<R>,
+{
+    // the first `wanted` (1 or more; at most 2 are made) children of the parents at the positions
+    // `pair`, drawing from `rng`: recombined with the crossover rate, each mutated with the
+    // mutation rate, and a copy of a parent with the parent's fitness
+    fn pair(&self, pair: &[usize], wanted: usize, rng: &mut StreamRng) -> Children<R::Genome> {
+        let parents = [&self.population[pair[0]], &self.population[pair[1]]];
+        let mut a = parents[0].genome().clone();
+        let mut b = parents[1].genome().clone();
+        if rng.chance(self.crossover_chance) {
+            self.crossover
+                .crossover(self.representation, &mut a, &mut b, rng);
+        }
+        let mut children = [None, None];
+        for (slot, mut genome) in children.iter_mut().zip([a, b]).take(wanted) {
+            if rng.chance(self.mutation_chance) {
+                self.mutate.mutate(self.representation, &mut genome, rng);
+            }
+            let inherited = parents
+                .iter()
+                .find(|parent| parent.genome() == &genome)
+                .and_then(|parent| parent.fitness());
+            let mut child = Individual::new(genome);
+            if let Some(fitness) = inherited {
+                child.set_fitness(fitness);
+            }
+            *slot = Some(child);
+        }
+        children
+    }
+}
+
+// the `count` children of the selected `parents`, each pair bred on its stream, derived from
+// `streams` with the pair's position, in parallel
+#[cfg(feature = "parallel")]
+fn breed_pairs<R, C, M>(
+    breeding: &Breeding<'_, R, C, M>,
+    parents: &[usize],
+    count: usize,
+    streams: &StreamRng,
+) -> Vec<Children<R::Genome>>
+where
+    R: Representation,
+    C: Crossover<R>,
+    M: Mutate<R>,
+{
+    use rayon::prelude::*;
+    // collecting an indexed parallel iterator keeps the order, whatever the thread count
+    let mut children = Vec::new();
+    parents
+        .par_chunks_exact(2)
+        .enumerate()
+        .map(|(index, pair)| {
+            let mut rng = streams.derive(index as u64);
+            breeding.pair(pair, count - 2 * index, &mut rng)
+        })
+        .collect_into_vec(&mut children);
+    children
+}
+
+// without the `parallel` feature (a checkpoint of a run with parallel breeding), the same
+// children, one pair after the other
+#[cfg(not(feature = "parallel"))]
+fn breed_pairs<R, C, M>(
+    breeding: &Breeding<'_, R, C, M>,
+    parents: &[usize],
+    count: usize,
+    streams: &StreamRng,
+) -> Vec<Children<R::Genome>>
+where
+    R: Representation,
+    C: Crossover<R>,
+    M: Mutate<R>,
+{
+    parents
+        .chunks_exact(2)
+        .enumerate()
+        .map(|(index, pair)| {
+            let mut rng = streams.derive(index as u64);
+            breeding.pair(pair, count - 2 * index, &mut rng)
+        })
+        .collect()
 }
 
 // the neighbors of a memetic refinement that weren't taken, and copies of the ones that were
@@ -769,7 +879,7 @@ pub struct Unset;
 /// values are errors from [`build`](GaBuilder::build).
 ///
 /// Defaults: maximize, `crossover_rate` 0.9, `mutation_rate` 1.0, the generational scheme with an
-/// elitism of 1, and a random seed.
+/// elitism of 1, a random seed, and sequential breeding.
 #[derive(Clone, Debug)]
 pub struct GaBuilder<R: Representation, S = Unset, C = Unset, M = Unset> {
     representation: R,
@@ -784,6 +894,7 @@ pub struct GaBuilder<R: Representation, S = Unset, C = Unset, M = Unset> {
     seed: Option<u64>,
     initial_genomes: Vec<R::Genome>,
     memetic: Option<(usize, usize)>,
+    parallel_breeding: bool,
 }
 
 impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
@@ -802,6 +913,7 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
             seed: self.seed,
             initial_genomes: self.initial_genomes,
             memetic: self.memetic,
+            parallel_breeding: self.parallel_breeding,
         }
     }
 
@@ -820,6 +932,7 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
             seed: self.seed,
             initial_genomes: self.initial_genomes,
             memetic: self.memetic,
+            parallel_breeding: self.parallel_breeding,
         }
     }
 
@@ -838,6 +951,7 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
             seed: self.seed,
             initial_genomes: self.initial_genomes,
             memetic: self.memetic,
+            parallel_breeding: self.parallel_breeding,
         }
     }
 
@@ -902,6 +1016,51 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
     /// work with [`Scheme::MuCommaLambda`], where no parent survives.
     pub fn memetic(mut self, parents: usize, neighbors: usize) -> Self {
         self.memetic = Some((parents, neighbors));
+        self
+    }
+
+    /// Breeds the offspring in parallel with rayon: each pair of selected parents is crossed over
+    /// and mutated on a thread pool. Off by default.
+    ///
+    /// - **Selection** stays sequential, on the run's random numbers, and so does the
+    ///   [`memetic`](GaBuilder::memetic) search. Copies of a parent still inherit its fitness,
+    ///   and every [`Scheme`] works as without it.
+    /// - **Random numbers:** each pair draws from a stream of its own, derived from the seed, the
+    ///   generation and the pair's position ([`StreamRng::derive`]). A seeded run gives the same
+    ///   results on any number of threads, but not the results it gives without parallel
+    ///   breeding.
+    /// - **When it pays off:** when breeding is a large part of a generation. That happens with
+    ///   parallel or batch evaluation of a fast fitness function, operators that do real work per
+    ///   gene (a mutation that draws several numbers and repairs each gene, long genomes), and
+    ///   thousands of children per generation. With a slow fitness function, breeding takes
+    ///   little of the time; with small populations and short genomes, the threads can cost
+    ///   more than they save.
+    ///
+    /// Checkpoints keep the setting. A run with it resumes identically, also without the
+    /// `parallel` feature, then breeding the same children on one thread.
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let ga = Ga::builder(Real::uniform(50, -5.0..=5.0)?)
+    ///     .population_size(1000)
+    ///     .select(Tournament::new(3)?)
+    ///     .crossover(SimulatedBinaryCrossover::new(15.0)?)
+    ///     .mutate(PolynomialMutation::per_gene(0.1, 20.0)?)
+    ///     .parallel_breeding(true)
+    ///     .minimize()
+    ///     .seed(1)
+    ///     .build()?;
+    /// let outcome = Engine::new(ga, |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>())
+    ///     .parallel(true)
+    ///     .stop_when(Stop::generations(20))
+    ///     .run()?;
+    /// assert!(outcome.best_fitness().score().unwrap() < 100.0);
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    #[cfg(feature = "parallel")]
+    pub fn parallel_breeding(mut self, parallel: bool) -> Self {
+        self.parallel_breeding = parallel;
         self
     }
 
@@ -980,6 +1139,7 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
             scheme: self.scheme,
             seed,
             rng,
+            parallel_breeding: self.parallel_breeding,
             population: Population::from_genomes(genomes),
             offspring: Vec::new(),
             discarded: Vec::new(),
@@ -997,13 +1157,13 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
 
     /// Validates the settings and creates a [`SteadyGa`] for asynchronous evaluation with an
     /// [`AsyncEngine`](crate::engine::AsyncEngine): it proposes one child at a time, and each
-    /// result replaces the worst individual when it's not worse. The scheme and memetic settings
-    /// don't apply to it.
+    /// result replaces the worst individual when it's not worse. The scheme, memetic and parallel
+    /// breeding settings don't apply to it.
     ///
     /// # Errors
     ///
     /// As [`build`](GaBuilder::build), except for the scheme, and [`Error::InvalidSetting`] for
-    /// a scheme other than the default one, or memetic search.
+    /// a scheme other than the default one, memetic search, or parallel breeding.
     pub fn build_steady(self) -> Result<SteadyGa<R, S, C, M>>
     where
         S: Select,
@@ -1021,6 +1181,13 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
             return Err(Error::InvalidSetting {
                 setting: "memetic",
                 reason: "a steady-state GA for asynchronous evaluation has no memetic search"
+                    .to_string(),
+            });
+        }
+        if self.parallel_breeding {
+            return Err(Error::InvalidSetting {
+                setting: "parallel_breeding",
+                reason: "a steady-state GA for asynchronous evaluation breeds one child at a time"
                     .to_string(),
             });
         }
@@ -1079,8 +1246,11 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::genome::{Binary, Bits};
-    use crate::operator::{BitFlip, NoCrossover, Tournament, UniformCrossover};
+    use crate::genome::{Binary, Bits, Real, Reals};
+    use crate::operator::{
+        BitFlip, NoCrossover, PolynomialMutation, SimulatedBinaryCrossover, Tournament,
+        UniformCrossover,
+    };
     use proptest::prelude::*;
 
     type OneMaxGa = Ga<Binary, Tournament, UniformCrossover, BitFlip>;
@@ -1371,18 +1541,146 @@ mod tests {
 
     #[test]
     fn copies_of_a_parent_inherit_its_fitness() {
-        // identical parents: every child of a crossover without mutation is a copy
-        let mut ga = builder(8)
-            .initial_genomes(vec![Bits::ones(8); 10])
-            .crossover_rate(1.0)
-            .mutation_rate(0.0)
+        for parallel_breeding in [false, true] {
+            // identical parents: every child of a crossover without mutation is a copy
+            let mut ga = builder(8)
+                .initial_genomes(vec![Bits::ones(8); 10])
+                .crossover_rate(1.0)
+                .mutation_rate(0.0)
+                .build()
+                .unwrap();
+            ga.parallel_breeding = parallel_breeding;
+            step(&mut ga);
+            assert!(ga.ask().is_empty());
+            ga.tell(&[]).unwrap();
+            assert_eq!((ga.generation(), ga.evaluations()), (1, 10));
+            assert!(ga.population().iter().all(Individual::is_evaluated));
+        }
+    }
+
+    type RealGa = Ga<Real, Tournament, SimulatedBinaryCrossover, PolynomialMutation>;
+
+    // parallel breeding is set directly, so that these tests run without the `parallel` feature
+    // too, where the pairs are bred one after the other with the same results
+    fn real_ga(seed: u64, scheme: Scheme, parallel_breeding: bool) -> RealGa {
+        let mut ga = Ga::builder(Real::uniform(8, -5.0..=5.0).unwrap())
+            .population_size(21)
+            .select(Tournament::new(3).unwrap())
+            .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
+            .mutate(PolynomialMutation::per_gene(0.2, 20.0).unwrap())
+            .scheme(scheme)
+            .minimize()
+            .seed(seed)
             .build()
             .unwrap();
-        step(&mut ga);
-        assert!(ga.ask().is_empty());
-        ga.tell(&[]).unwrap();
-        assert_eq!((ga.generation(), ga.evaluations()), (1, 10));
-        assert!(ga.population().iter().all(Individual::is_evaluated));
+        ga.parallel_breeding = parallel_breeding;
+        ga
+    }
+
+    // the population, the best and the evaluations after `generations` generations of a
+    // Rosenbrock function with only +, − and ×, which is the same on every platform
+    fn run_real(
+        mut ga: RealGa,
+        generations: u64,
+    ) -> (Population<Reals>, Option<Individual<Reals>>, u64) {
+        let rosenbrock = |x: &Reals| {
+            x.windows(2)
+                .map(|w| {
+                    let (a, b) = (w[1] - w[0] * w[0], 1.0 - w[0]);
+                    100.0 * a * a + b * b
+                })
+                .sum::<f64>()
+        };
+        while ga.generation() < generations {
+            let fitness: Vec<Fitness> = ga
+                .ask()
+                .iter()
+                .map(|x| Fitness::new(rosenbrock(x)))
+                .collect();
+            ga.tell(&fitness).unwrap();
+        }
+        (
+            ga.population().clone(),
+            ga.best().cloned(),
+            ga.evaluations(),
+        )
+    }
+
+    // an odd number of offspring (21), so the last pair has one child, and every scheme
+    const SCHEMES: [Scheme; 5] = [
+        Scheme::Generational { elitism: 0 },
+        Scheme::Generational { elitism: 2 },
+        Scheme::SteadyState { replacements: 5 },
+        Scheme::MuPlusLambda { lambda: 21 },
+        Scheme::MuCommaLambda { lambda: 42 },
+    ];
+
+    #[test]
+    fn parallel_breeding_is_reproducible_but_not_sequential_breeding() {
+        for scheme in SCHEMES {
+            let run =
+                |seed, parallel_breeding| run_real(real_ga(seed, scheme, parallel_breeding), 15);
+            let parallel = run(1, true);
+            assert_eq!(run(1, true), parallel, "{scheme:?}");
+            assert_ne!(run(2, true), parallel, "{scheme:?}");
+            let sequential = run(1, false);
+            assert_ne!(sequential, parallel, "{scheme:?}");
+        }
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn parallel_breeding_is_the_same_on_any_number_of_threads() {
+        for scheme in SCHEMES {
+            let on_threads = |threads| {
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .unwrap()
+                    .install(|| run_real(real_ga(3, scheme, true), 15))
+            };
+            let one = on_threads(1);
+            assert_eq!(on_threads(2), one, "{scheme:?}");
+            assert_eq!(on_threads(8), one, "{scheme:?}");
+        }
+    }
+
+    /// Fixed values: these must never change for the same major version, on any platform. They
+    /// pin the streams of parallel breeding, from the seed, the generation and the pair's
+    /// position, with or without the `parallel` feature.
+    #[test]
+    fn parallel_breeding_values_are_portable() {
+        let (_, best, evaluations) =
+            run_real(real_ga(1, Scheme::Generational { elitism: 1 }, true), 20);
+        assert_eq!(evaluations, 406);
+        assert_eq!(
+            best.unwrap().genome().to_vec(),
+            [
+                1.004984224607953,
+                0.8873809759635563,
+                0.5652053572814714,
+                0.27580207032382986,
+                0.15310959905804483,
+                0.00601326684447917,
+                -0.7981794150630991,
+                0.4801327414809142
+            ]
+        );
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn parallel_breeding_is_a_setting_of_the_builder_and_not_of_a_steady_ga() {
+        let ga = builder(8).parallel_breeding(true).build().unwrap();
+        assert!(ga.parallel_breeding());
+        assert!(!builder(8).build().unwrap().parallel_breeding());
+        assert!(matches!(
+            builder(8).parallel_breeding(true).build_steady(),
+            Err(Error::InvalidSetting {
+                setting: "parallel_breeding",
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -1516,22 +1814,25 @@ mod tests {
             (Scheme::SteadyState { replacements: 5 }, 3),
             (Scheme::MuPlusLambda { lambda: 20 }, 10),
         ] {
-            let mut ga = builder(64)
-                .scheme(scheme)
-                .memetic(parents, 1)
-                .build()
-                .unwrap();
-            step(&mut ga);
-            for _ in 0..20 {
-                let asked: Vec<Bits> = ga.ask().iter().cloned().collect();
-                step_with(&mut ga, &asked);
-                for genome in &asked {
-                    let seen = ga
-                        .population()
-                        .iter()
-                        .chain(ga.discarded())
-                        .any(|individual| individual.genome() == genome);
-                    assert!(seen, "{scheme:?}");
+            for parallel_breeding in [false, true] {
+                let mut ga = builder(64)
+                    .scheme(scheme)
+                    .memetic(parents, 1)
+                    .build()
+                    .unwrap();
+                ga.parallel_breeding = parallel_breeding;
+                step(&mut ga);
+                for _ in 0..20 {
+                    let asked: Vec<Bits> = ga.ask().iter().cloned().collect();
+                    step_with(&mut ga, &asked);
+                    for genome in &asked {
+                        let seen = ga
+                            .population()
+                            .iter()
+                            .chain(ga.discarded())
+                            .any(|individual| individual.genome() == genome);
+                        assert!(seen, "{scheme:?}");
+                    }
                 }
             }
         }
@@ -1606,8 +1907,9 @@ mod tests {
 
     proptest! {
         #[test]
-        fn schemes(scheme in any_scheme(), seed: u64) {
+        fn schemes(scheme in any_scheme(), seed: u64, parallel_breeding: bool) {
             let mut ga = builder(16).scheme(scheme).seed(seed).build().unwrap();
+            ga.parallel_breeding = parallel_breeding;
             step(&mut ga);
             let objective = Objective::Maximize;
             let mut best_so_far = ga.best().unwrap().fitness().unwrap();

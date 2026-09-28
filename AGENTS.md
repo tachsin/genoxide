@@ -62,6 +62,7 @@ Any selection fits any representation; usually `Tournament` of size 2 to 5.
 | `.seed(u64)` | random | |
 | `.initial_genomes(iter)` | | at most the size, each valid |
 | `.memetic(parents, neighbors)` | off | neighbors ≥ 1; 1 ≤ parents ≤ surviving parents: the elitism, size − replacements, the size (μ+λ), none (μ,λ) |
+| `.parallel_breeding(true)` | off | `parallel` feature; crossover and mutation of each pair on rayon, on its own random stream: seeded results differ from off, not between thread counts; for thousands of children, operators with real work per gene, fast parallel evaluation |
 
 `.memetic`: each of the best `parents` takes the best of `neighbors` mutated neighbors if not worse (Lamarckian). `.build()?` returns `Error::MissingSetting` or `Error::InvalidSetting`, naming the setting.
 
@@ -678,7 +679,7 @@ every = 50
 | ``error[E0277]: `BitFlip` is not a mutation for `Integer` `` | See [Choosing the pieces](#choosing-the-pieces) |
 | ``error[E0277]: `usize` is not a fitness value`` (then "the method `stop_when` exists … but its trait bounds were not satisfied") | Return `f64` (`... as f64`), `Fitness` or `Option<f64>` |
 | ``error[E0277]: `[f64; 3]` is not a result with 2 objective values`` | Return one value per objective, e.g. `[f1, f2]` for `[Minimize, Minimize]` |
-| `no method named parallel` | Enable the default `parallel` feature, or drop `.parallel(true)` |
+| `no method named parallel` (or `parallel_breeding`) | Enable the default `parallel` feature, or drop `.parallel(true)` |
 | `Error::MissingSetting { setting: "population_size" }` | `.population_size(n)` |
 | `Error::MissingSetting { setting: "stop_when" }` | `.stop_when(Stop::generations(n))`, or an abort flag |
 | `Error::InvalidSetting { setting, reason }` | Read `reason`; see [Settings](#settings) |
@@ -694,7 +695,7 @@ every = 50
 | Real-valued GA stuck in a local minimum | `PolynomialMutation` with eta 20, or a larger `GaussianMutation` sigma |
 | `StopReason::Stalled`: 10 000 generations of copies only (e.g. `mutation_rate(0.0)`) | A mutation rate above 0, or add `Stop::generations(n)` or `Stop::stagnation(n)` |
 | Early stagnation (too little diversity) | A larger population, smaller tournament or higher mutation rate; or `Stop::stagnation` and restart |
-| Slow with a cheap fitness function | `--release`; `.parallel(true)` only for expensive fitness |
+| Slow with a cheap fitness function | `--release`; `.parallel(true)` only for expensive fitness; `.parallel_breeding(true)` when breeding takes much of a generation |
 
 ## Guarantees to rely on
 
