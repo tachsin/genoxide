@@ -86,6 +86,8 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
   const simplex = trace.problem?.true_front === "simplex" ? Number(trace.problem?.simplex ?? 1) : null;
   // a true front drawn from the origin: every axis from 0 to one maximum
   const shared = sphere || simplex !== null;
+  // any other true front: sampled points, drawn faint (a curve, disconnected regions, WFG's shapes)
+  const sampled = Array.isArray(trace.problem?.true_front) ? trace.problem.true_front : null;
   const front = frame.state?.front ?? [];
 
   // [lo1, lo2, lo3, hi1, hi2, hi3]
@@ -95,13 +97,15 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
       for (const p of front) for (const c of p) if (c > m) m = c;
       return [0, 0, 0, m * 1.05, m * 1.05, m * 1.05];
     }
-    if (!front.length) return [0, 0, 0, 1, 1, 1];
-    const lo = [0, 1, 2].map((k) => Math.min(...front.map((p) => p[k])));
-    const hi = [0, 1, 2].map((k) => Math.max(...front.map((p) => p[k])));
+    // the axes span the front and, when it's given as points, the true front too
+    const all = sampled ? [...front, ...sampled] : front;
+    if (!all.length) return [0, 0, 0, 1, 1, 1];
+    const lo = [0, 1, 2].map((k) => Math.min(...all.map((p) => p[k])));
+    const hi = [0, 1, 2].map((k) => Math.max(...all.map((p) => p[k])));
     const span = [0, 1, 2].map((k) => hi[k] - lo[k] || Math.abs(hi[k]) || 1);
     // from each objective's least value, as the sphere's cube starts at 0, with room above
     return [...lo, ...hi.map((v, k) => v + span[k] * 0.05)];
-  }, [front, sphere, shared, simplex]);
+  }, [front, sphere, shared, simplex, sampled]);
   const eased = useEased(target, reduced);
   const lo = eased.slice(0, 3);
   const hi = eased.slice(3);
@@ -120,6 +124,7 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
                   { label: "front", color, shape: "dot" },
                   ...(sphere ? [{ label: "true front (sphere)", shape: "line", className: "text-base-content/35" }] : []),
                   ...(simplex !== null ? [{ label: `true front (f1 + f2 + f3 = ${simplex})`, shape: "line", className: "text-base-content/35" }] : []),
+                  ...(sampled ? [{ label: "true front", shape: "dot", className: "text-base-content/30" }] : []),
                 ]
           }
         />
@@ -238,6 +243,12 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
               {arcs.map((d, i) => (
                 <path key={i} d={d} fill="none" className="stroke-base-content/25" strokeWidth={1} />
               ))}
+              {sampled
+                ? sampled.map((p, i) => {
+                    const s = at(p);
+                    return <circle key={`t${i}`} cx={s.x} cy={s.y} r={1.6} className="fill-base-content/25" />;
+                  })
+                : null}
               {points.map((q, i) => {
                 const t = dMax > dMin ? (q.depth - dMin) / (dMax - dMin) : 1;
                 return (
