@@ -136,7 +136,7 @@ The charts show the capped runs apart from the runs that ended at the target or 
 
 8.2. A scenario a library can't run is shown as such, with the reason.
 
-8.3. Library versions are pinned and recorded with each result.
+8.3. Library versions are pinned and recorded with each result. The runs of the published results are committed beside them, in `results.json.xz`, so their tables and charts can be checked and drawn again.
 
 8.4. Library bugs aren't worked around, except where the library's page says so and shows both results. A crash isn't convergence: catching one and restarting is a workaround, labelled so. The [notes](notes.md) list every bug found.
 

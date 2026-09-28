@@ -17,16 +17,18 @@ genoxide's own releases are compared on the same runs by the CPU instructions Ca
 | [Methodology](../../benchmarks/README.md) | the libraries and solvers, the protocol, the scenarios, the matched settings, how to run it |
 | [Rules](rules.md) | the rules every adapter follows, and which `run.py check` tests |
 | [Notes](notes.md) | what each library can't run, the bugs found, and the rule-level choices |
-| [Results](results.md) | the charts and full numbers of the latest run |
+| [Results](results.md) | the charts and full numbers of the latest run, and its runs in [results.json.xz](results.json.xz), from which `run.py chart` redraws them |
 
 Each library has its own page: its methods and where its docs recommend them, what it leaves out, its separate test runs and its bugs.
 
 | Rust | Python | C++, Java, Julia |
 |---|---|---|
 | [genoxide](libraries/genoxide.md) 0.7.0 | [genoxide (Python)](libraries/genoxide_python.md) 0.7.0 | [openGA](libraries/openga.md) 1.0.5 |
-| [genetic_algorithm](libraries/genetic_algorithm.md) 0.27.4 | [DEAP](libraries/deap.md) 1.4.4 | [pygmo](libraries/pygmo.md) 2.19.8 (C++ via Python) |
+| [genetic_algorithm](libraries/genetic_algorithm.md) 0.27.3 | [DEAP](libraries/deap.md) 1.4.4 | [pygmo](libraries/pygmo.md) 2.19.8 (C++ via Python) |
 | [radiate](libraries/radiate.md) 1.3.1 | [pymoo](libraries/pymoo.md) 0.6.2 | [Jenetics](libraries/jenetics.md) 9.1.0 |
 | [moors](libraries/moors.md) 0.2.11 | [PyGAD](libraries/pygad.md) 3.7.0 | [jMetal](libraries/jmetal.md) 7.5 |
-| | [pycma](libraries/pycma.md) 4.5.0 | [Evolutionary.jl](libraries/evolutionary_jl.md) 0.12.1 |
+| | [pycma](libraries/pycma.md) 4.5.0 | [Evolutionary.jl](libraries/evolutionary_jl.md) 0.12.0 |
 | | [Nevergrad](libraries/nevergrad.md) 1.0.12 | [Metaheuristics.jl](libraries/metaheuristics_jl.md) 3.5.0 |
 | | [SciPy](libraries/scipy.md) 1.18.1 | |
+
+The versions are the published results'. The adapters now pin genetic_algorithm 0.27.4, radiate 1.3.2 and Evolutionary.jl 0.12.1, which the next run measures.

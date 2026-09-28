@@ -1,8 +1,8 @@
-# Evolutionary.jl (Julia, 0.12.1)
+# Evolutionary.jl (Julia, 0.12.0)
 
 Evolutionary.jl is a Julia package of evolution strategies (ES), CMA-ES, genetic algorithms (GA), differential evolution (DE), NSGA-II and genetic programming, with mutation, crossover and selection operators. Its docs are at [docs.sciml.ai/Evolutionary](https://docs.sciml.ai/Evolutionary/stable/), from `docs/src` of [SciML/Evolutionary.jl](https://github.com/SciML/Evolutionary.jl); its tests (`test/*.jl`) are its other worked examples for these problem types.
 
-Adapter: [benchmarks/adapters/evolutionary_jl/](../../../benchmarks/adapters/evolutionary_jl/).
+Adapter: [benchmarks/adapters/evolutionary_jl/](../../../benchmarks/adapters/evolutionary_jl/). The published results measured 0.12.0; the adapter now pins 0.12.1, which the next run measures.
 Know a better way to solve one of these problems with Evolutionary.jl? [Open a benchmark issue](https://github.com/tachsin/genoxide/issues/new?template=benchmark.yml).
 
 ## How the adapter runs Evolutionary.jl

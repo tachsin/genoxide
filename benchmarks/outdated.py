@@ -1,6 +1,7 @@
 """`run.py outdated`: the version of each library the benchmarks pin, the one in the published
 results (docs/benchmarks/results.md) and the latest release in its registry, to know which library
-to rerun with `run.py --update`.
+to rerun with `run.py --update`: one with a newer release ("newer"), or whose pin moved since the
+published results ("not rerun").
 
 Each adapter of run.ADAPTERS with a "release" is checked, with the standard library only:
 - ("pypi", package): pinned in requirements.txt, released on PyPI;
@@ -11,9 +12,10 @@ Each adapter of run.ADAPTERS with a "release" is checked, with the standard libr
 - ("github", repository, header): pinned to a commit in the adapter's build.sh (COMMIT=, VERSION=);
   newer when the repository has a newer tag, or when its default branch changed the header.
 
-`--issue` keeps one open GitHub issue, ISSUE_TITLE, listing the newer releases, with `gh`: it
-creates it, updates its body when the list changes, and closes it when no library is newer. It
-doesn't touch the issue when a check failed. `--dry-run` prints what it would do instead.
+`--issue` keeps one open GitHub issue, ISSUE_TITLE, listing the newer releases and the pins not
+rerun, with `gh`: it creates it, updates its body when the list changes, and closes it when no
+library is newer and the published results measure every pin. It doesn't touch the issue when a
+check failed. `--dry-run` prints what it would do instead.
 """
 
 import concurrent.futures
@@ -176,11 +178,18 @@ def is_newer(pinned, latest):
     return bool(commit) and commit != pinned.partition("+")[2]
 
 
+def same_version(a, b):
+    """Whether two versions are the same release, and the same commit after it if either has one:
+    7.5 is 7.5.0, 1.0.5+f9b15e7 isn't 1.0.5+0c2d1e4."""
+    return version_key(a) == version_key(b) and a.partition("+")[2] == b.partition("+")[2]
+
+
 def check_library(name):
     """A row of the table: pinned, published and latest versions, whether the latest is newer, and
     the error that kept it from being checked, if any."""
     release = run.ADAPTERS[name]["release"]
-    row = {"library": name, "pinned": None, "latest": None, "newer": False, "error": None, "pinned_in": []}
+    row = {"library": name, "pinned": None, "latest": None, "newer": False, "not_rerun": False, "error": None,
+           "pinned_in": []}
     try:
         row["pinned"] = pinned_version(name, release)
         row["pinned_in"] = pinned_in(name, release, row["pinned"])
@@ -198,50 +207,76 @@ def check_library(name):
 
 
 def check(libraries):
-    """The rows of the libraries with a "release", in the order of ADAPTERS, checked in parallel."""
+    """The rows of the libraries with a "release", in the order of ADAPTERS, checked in parallel. A
+    library is "not_rerun" when its pin differs from the version in the published results."""
     names = [name for name in libraries if run.ADAPTERS[name].get("release")]
     published = published_versions()
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         rows = list(pool.map(check_library, names))
     for row in rows:
         row["published"] = published.get(row["library"])
+        row["not_rerun"] = bool(row["pinned"] and row["published"]
+                                and not same_version(row["pinned"], row["published"]))
     return rows
+
+
+def status(row):
+    """What the table says about a row: its error, or whether it's newer and not rerun."""
+    if row["error"]:
+        return f"error: {row['error']}"
+    return ", ".join(word for word, flag in (("newer", row["newer"]), ("not rerun", row["not_rerun"])) if flag)
 
 
 def table(rows):
     """The rows as aligned text columns."""
     lines = [("library", "pinned", "published", "latest", "")]
     for row in rows:
-        status = f"error: {row['error']}" if row["error"] else "newer" if row["newer"] else ""
-        lines.append((row["library"], row["pinned"] or "-", row["published"] or "-", row["latest"] or "-", status))
+        lines.append((row["library"], row["pinned"] or "-", row["published"] or "-", row["latest"] or "-", status(row)))
     widths = [max(len(line[column]) for line in lines) for column in range(4)]
     return "\n".join("  ".join(cell.ljust(width) for cell, width in zip(line, widths)).rstrip() + (
         "  " + line[4] if line[4] else "") for line in lines)
 
 
+def rerun_command(names):
+    """The commands that rerun `names` into the published results."""
+    return [f"python run.py check --libraries {names}", f"python run.py --update --libraries {names}",
+            "python run.py publish"]
+
+
 def issue_body(rows):
-    """The body of the issue: the libraries with a newer release, and how to rerun them."""
+    """The body of the issue: the libraries with a newer release, those whose pin the published
+    results don't measure, and how to rerun them."""
     newer = [row for row in rows if row["newer"]]
-    lines = ["Libraries with a release newer than the version the benchmarks pin:", "",
-             "| Library | Pinned | Latest | Pinned in |", "|---|---|---|---|"]
-    for row in newer:
-        files = ", ".join(f"`{file}`" for file in row["pinned_in"])
-        lines.append(f"| {run.LIBRARY_NAMES.get(row['library'], row['library'])} | {row['pinned']} "
-                     f"| {row['latest']} | {files} |")
-    names = " ".join(row["library"] for row in newer)
-    lines += ["", "To rerun them after updating their pins, in `benchmarks/` "
+    not_rerun = [row for row in rows if row["not_rerun"]]
+    lines = []
+    if newer:
+        lines += ["Libraries with a release newer than the version the benchmarks pin:", "",
+                  "| Library | Pinned | Latest | Pinned in |", "|---|---|---|---|"]
+        for row in newer:
+            files = ", ".join(f"`{file}`" for file in row["pinned_in"])
+            lines.append(f"| {run.LIBRARY_NAMES.get(row['library'], row['library'])} | {row['pinned']} "
+                         f"| {row['latest']} | {files} |")
+        lines.append("")
+    if not_rerun:
+        lines += ["Libraries whose pin moved since the published results, not rerun yet:", "",
+                  "| Library | Pinned | Published |", "|---|---|---|"]
+        for row in not_rerun:
+            lines.append(f"| {run.LIBRARY_NAMES.get(row['library'], row['library'])} | {row['pinned']} "
+                         f"| {row['published']} |")
+        lines.append("")
+    names = " ".join(row["library"] for row in rows if row["newer"] or row["not_rerun"])
+    lines += ["To rerun them" + (", after updating the pins of the newer ones" if newer else "") + ", in `benchmarks/` "
               "([README](https://github.com/tachsin/genoxide/blob/main/benchmarks/README.md#running)):", "", "```sh",
-              f"python run.py check --libraries {names}",
-              f"python run.py --update results/<the last results>.json --libraries {names}", "```", "",
+              *rerun_command(names), "```", "",
               "The library-releases workflow updates this issue every week, and closes it when no library is "
-              "newer."]
+              "newer and the published results measure every pin."]
     return "\n".join(lines) + "\n"
 
 
 def issue_action(rows, issue):
     """What to do with the issue, from the rows and the open issue ({"number", "body"} or None):
     ("create", body), ("edit", body), ("close", None) or ("none", None)."""
-    if any(row["newer"] for row in rows):
+    if any(row["newer"] or row["not_rerun"] for row in rows):
         body = issue_body(rows)
         if issue is None:
             return "create", body
@@ -284,10 +319,10 @@ def update_issue(rows, dry_run):
         print(f"issue: updated #{issue['number']}")
     elif action == "close":
         gh("issue", "close", str(issue["number"]), "--comment",
-           "Every benchmarked library is at its latest release.")
+           "Every benchmarked library is at its latest release, and the published results measure it.")
         print(f"issue: closed #{issue['number']}")
     else:
-        print(f"issue: {where} is up to date" if issue else "issue: no library is newer")
+        print(f"issue: {where} is up to date" if issue else "issue: no library is newer or not rerun")
 
 
 def outdated(libraries, issue=False, dry_run=False):
@@ -295,8 +330,13 @@ def outdated(libraries, issue=False, dry_run=False):
     rows = check(libraries)
     print(table(rows))
     newer = [row["library"] for row in rows if row["newer"]]
+    not_rerun = [row["library"] for row in rows if row["not_rerun"]]
     if newer:
-        print(f"\nnewer releases: {', '.join(newer)}. Update the pins, then rerun them with "
-              f"`python run.py --update results/<the last results>.json --libraries {' '.join(newer)}`.")
+        print(f"\nnewer releases: {', '.join(newer)}. Update their pins.")
+    if not_rerun:
+        print(f"\npinned but not rerun: {', '.join(not_rerun)}. The published results measure other versions.")
+    if newer or not_rerun:
+        names = " ".join(row["library"] for row in rows if row["newer"] or row["not_rerun"])
+        print("\nTo rerun them: " + "; ".join(f"`{command}`" for command in rerun_command(names)) + ".")
     if issue:
         update_issue(rows, dry_run)
