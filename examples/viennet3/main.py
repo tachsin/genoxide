@@ -17,11 +17,12 @@ import genoxide as gx
 
 from trace import Trace
 
-# the reference point of the hypervolume: the nadir point (8.1964, 17.0370, 0.1760) plus a tenth
-# of each objective's range on the front, whose ideal point is (0, 15, −0.1)
-REFERENCE = [9.0160, 17.2407, 0.2036]
-
 problem = gx.problems.Viennet3()
+# the reference point of the hypervolume: the nadir point (8.1964, 17.0370, 0.1760) plus
+# a tenth of each objective's range on the front, from the ideal point (0, 15, −0.1),
+# rounded to 4 decimals: (9.0160, 17.2407, 0.2036)
+ideal, nadir = problem.ideal_point, problem.nadir_point
+REFERENCE = (np.round((nadir + (nadir - ideal) / 10) * 1e4) / 1e4).tolist()
 nsga3 = gx.Nsga3(
     problem.genome,
     objectives=problem.objectives,

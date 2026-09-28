@@ -19,9 +19,14 @@ use genoxide::multi::indicator::hypervolume;
 use genoxide::multi::problems::{MultiProblem, Viennet3};
 use genoxide::prelude::*;
 
-// the reference point of the hypervolume: the nadir point (8.1964, 17.0370, 0.1760) plus a
-// tenth of each objective's range on the front, whose ideal point is (0, 15, −0.1)
-const REFERENCE: [f64; 3] = [9.0160, 17.2407, 0.2036];
+// the reference point of the hypervolume: the nadir point (8.1964, 17.0370, 0.1760) plus
+// a tenth of each objective's range on the front, from the ideal point (0, 15, −0.1),
+// rounded to 4 decimals: (9.0160, 17.2407, 0.2036)
+fn reference() -> [f64; 3] {
+    let (ideal, nadir) = (Viennet3.ideal_point(), Viennet3.nadir_point());
+    let (ideal, nadir) = (ideal.expect("known"), nadir.expect("known"));
+    std::array::from_fn(|j| ((nadir[j] + (nadir[j] - ideal[j]) / 10.0) * 1e4).round() / 1e4)
+}
 
 fn main() -> Result<()> {
     let problem = Viennet3;
@@ -54,7 +59,7 @@ fn main() -> Result<()> {
         front.len() - inner
     );
     // the hypervolume of the front; the whole front's is about 5.3255
-    let volume = hypervolume(&front, &REFERENCE, &[Minimize; 3]);
+    let volume = hypervolume(&front, &reference(), &[Minimize; 3]);
     println!("hypervolume {volume:.4} (the whole front: 5.3255)");
     trace.write();
     Ok(())

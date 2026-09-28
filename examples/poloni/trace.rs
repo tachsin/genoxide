@@ -2,7 +2,7 @@
 //! `GENOXIDE_TRACE` names: the front and its hypervolume, in at most 100 generations. The Python
 //! example writes the same file.
 
-use crate::REFERENCE;
+use crate::reference;
 use genoxide::Objective::Minimize;
 use genoxide::multi::MultiSnapshot;
 use genoxide::multi::indicator::hypervolume;
@@ -33,7 +33,7 @@ impl Trace {
             .iter()
             .filter_map(|x| x.fitness()?.values());
         let front: Vec<[f64; 2]> = front.collect();
-        let volume = hypervolume(&front, &REFERENCE, &[Minimize; 2]);
+        let volume = hypervolume(&front, &reference(), &[Minimize; 2]);
         let state = json!({ "fronts": { "NSGA-II": front }, "hypervolume": { "NSGA-II": volume } });
         self.frames.push(frame(snapshot, state));
     }

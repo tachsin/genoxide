@@ -370,7 +370,10 @@ def test_every_multi_objective_problem_describes_itself(cls):
     assert problem.constraints(genome).shape == (problem.constraint_count,)
     front = problem.optimal_front(20)
     if front is None:
-        assert problem.ideal_point is None and problem.nadir_point is None
+        # KUR, POL, VNT2 and VNT3 have ideal and nadir points without a known front
+        assert (problem.ideal_point is None) == (problem.nadir_point is None)
+        if problem.ideal_point is not None:
+            assert np.all(problem.ideal_point < problem.nadir_point)
     else:
         count = len(problem.objectives)
         assert front.shape[1] == count and len(front) >= 20
@@ -415,6 +418,49 @@ def test_multi_objective_values_at_chosen_points():
     assert np.allclose((front**2).sum(axis=1), 1)
     assert gx.problems.Kursawe().optimal_front(10) is None
     assert gx.problems.Constr().ideal_point == pytest.approx([7 / 18, 1])
+
+
+def _non_dominated_2d(values):
+    """The non-dominated rows of an (n, 2) array."""
+    values = values[np.lexsort((values[:, 1], values[:, 0]))]
+    best = np.minimum.accumulate(values[:, 1])
+    keep = np.r_[True, values[1:, 1] < best[:-1]]
+    return values[keep]
+
+
+def test_ideal_and_nadir_points_without_a_known_front():
+    # POL: the ends of the front, at (−3, −1) and (1, 2)
+    pol = gx.problems.Poloni()
+    assert list(pol.ideal_point) == [1.0, 0.0]
+    assert pol([-3.0, -1.0]) == pytest.approx([pol.nadir_point[0], 0.0], rel=1e-14, abs=1e-14)
+    assert pol([1.0, 2.0]) == pytest.approx([1.0, pol.nadir_point[1]], rel=1e-14)
+    # VNT2: the objectives' minima, and the other objectives there
+    vnt2 = gx.problems.Viennet2()
+    assert list(vnt2.ideal_point) == [3.0, -17.0, -13.0]
+    assert list(vnt2.nadir_point) == [883 / 208, -2109 / 128, -35858 / 2975]
+    assert vnt2([0.5, 0.25])[:2] == pytest.approx(vnt2.nadir_point[:2], rel=1e-15)
+    # VNT3: f₁ at t = 14π/3, f₂ at the origin, f₃ at t = 4π/3
+    vnt3 = gx.problems.Viennet3()
+    assert list(vnt3.ideal_point) == [0.0, 15.0, -0.1]
+    t = 14 * math.pi / 3
+    u = 4 * math.pi / 3
+    expected = [t / 2 + math.sin(t), 460 / 27, 1 / (u + 1) - 1.1 * math.exp(-u)]
+    assert list(vnt3.nadir_point) == pytest.approx(expected, rel=1e-14)
+    # KUR: at x = 0 and at f₂'s minimum; a random sample's non-dominated points stay between them
+    for n in (2, 3, 5):
+        kur = gx.problems.Kursawe(n)
+        ideal, nadir = kur.ideal_point, kur.nadir_point
+        assert list(kur(np.zeros(n))) == [ideal[0], nadir[1]]
+        f = kur(np.full(n, -1.1527408475499261))
+        assert f == pytest.approx([nadir[0], ideal[1]], rel=1e-14)
+    rng = np.random.default_rng(1)
+    kur_ends = [[0.0] * 3, [-1.1527408475499261] * 3]
+    for problem, ends in [(gx.problems.Kursawe(), kur_ends), (pol, [[-3.0, -1.0], [1.0, 2.0]])]:
+        bounds = np.array(problem.genome._describe()["bounds"])
+        genomes = rng.uniform(bounds[:, 0], bounds[:, 1], size=(200_000, len(bounds)))
+        front = _non_dominated_2d(problem.evaluate(np.vstack([genomes, ends])))
+        assert np.all(front >= problem.ideal_point - 1e-12)
+        assert np.all(front <= problem.nadir_point + 1e-12)
 
 
 def test_multi_objective_sizes():
