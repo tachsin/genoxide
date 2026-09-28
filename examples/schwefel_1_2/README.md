@@ -55,8 +55,9 @@ minimum.
 
 ## Algorithm
 
-The same three algorithms as on the [sphere](../sphere/), each with a budget of 10,000 evaluations
-per dimension, 300,000 in all, and a target of 1e-8.
+The same algorithms as on the [sphere](../sphere/), CMA-ES with a full and with a diagonal
+covariance matrix, PSO and a GA, each with a budget of 10,000 evaluations per dimension, 300,000 in
+all, and a target of 1e-8.
 
 CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) samples a population
 of 14 from a normal distribution, and adapts its mean, its step size and its covariance matrix,
@@ -64,6 +65,11 @@ from a step size of 0.3 of each gene's range and a random start. Its full covari
 the correlations between the genes. CMA-ES behaves the same on a function and on any rotation of
 it, once the matrix has adapted, so the rotation costs it only the time to learn it. There are no
 restarts, since there is only one minimum.
+
+sep-CMA-ES (Ros and Hansen, 2008, PPSN X: 296-305) is the same CMA-ES with a diagonal covariance
+matrix, `.covariance(cmaes::Covariance::Diagonal)` in Rust and `covariance="diagonal"` in Python.
+It learns a scale per gene but no correlations, so it can't follow the rotation: like PSO, it
+steps along the axes.
 
 Particle swarm optimization (Kennedy and Eberhart, 1995, Proceedings of ICNN'95: 1942-1948) moves
 40 particles, each pulled towards its own best position and the swarm's, with Clerc and Kennedy's
@@ -99,7 +105,7 @@ PSO reaches the target too, after 171,560 evaluations: about 14,000 per decade, 
 as on the sphere and on the axis-parallel ellipsoid. The genetic algorithm never reaches an error
 of 1, and ends at 14.
 
-A diagonal covariance matrix can't follow the rotation. In Rust, sep-CMA-ES (Ros and Hansen, 2008,
-PPSN X: 296-305), `.covariance(cmaes::Covariance::Diagonal)`, takes 61,810 evaluations with the
-same seed, almost five times as many as the full matrix. On the axis-parallel ellipsoid it was the
-faster of the two. The Python package has no such option, so the example doesn't run it.
+sep-CMA-ES, whose diagonal matrix can't follow the rotation, takes 61,810 evaluations, almost five
+times as many as the full matrix: 19,796 to reach an error of 1, and then about 5,300 per decade,
+seven times as many. On the [axis-parallel ellipsoid](../axis_parallel_ellipsoid/) it was the
+faster of the two. It still beats PSO, which also steps along the axes, by almost three times.

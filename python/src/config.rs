@@ -50,6 +50,7 @@ pub enum Algorithm {
         restarts: Option<Restarts>,
         /// The initial step size, as a fraction of each gene's range.
         initial_step: Option<f64>,
+        covariance: Option<Covariance>,
     },
     Pso {
         population_size: Option<usize>,
@@ -205,6 +206,14 @@ pub enum Restarts {
     Never,
     Ipop,
     Bipop,
+}
+
+/// CMA-ES's covariance matrix: full, or diagonal (sep-CMA-ES).
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Covariance {
+    Full,
+    Diagonal,
 }
 
 /// How differential evolution builds its mutant vectors: `"rand1"`, `"best1"`, `{p, archive}`

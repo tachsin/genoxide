@@ -52,14 +52,20 @@ its minimum.
 
 ## Algorithm
 
-The same three algorithms as on the [sphere](../sphere/), each with a budget of 10,000 evaluations
-per dimension, 300,000 in all, and a target of 1e-8.
+The same algorithms as on the [sphere](../sphere/), CMA-ES with a full and with a diagonal
+covariance matrix, PSO and a GA, each with a budget of 10,000 evaluations per dimension, 300,000 in
+all, and a target of 1e-8.
 
 CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) samples a population
 of 14 from a normal distribution, and adapts its mean, its step size and its covariance matrix,
 from a step size of 0.3 of each gene's range and a random start. The covariance matrix learns a
 scale per gene, and would learn correlations between genes if there were any. There are no
 restarts, since there is only one minimum.
+
+sep-CMA-ES (Ros and Hansen, 2008, PPSN X: 296-305) is the same CMA-ES with a diagonal covariance
+matrix, `.covariance(cmaes::Covariance::Diagonal)` in Rust and `covariance="diagonal"` in Python:
+it learns only a scale per gene, which is all this function has, with learning rates (n + 2) / 3,
+about 11, times as large.
 
 Particle swarm optimization (Kennedy and Eberhart, 1995, Proceedings of ICNN'95: 1942-1948) moves
 40 particles, each pulled towards its own best position and the swarm's, with Clerc and Kennedy's
@@ -95,8 +101,8 @@ PSO reaches 1e-8 after 21,800 evaluations, about 2,000 per decade, as on the sph
 doesn't slow it. The genetic algorithm reaches 1e-4 after about 186,000 evaluations and ends at
 1.6e-5, short of the target, as its steps don't shrink.
 
-Here a diagonal covariance matrix is all the problem needs, and learns faster. In Rust, sep-CMA-ES
-(Ros and Hansen, 2008, PPSN X: 296-305), `.covariance(cmaes::Covariance::Diagonal)`, reaches 1e-8
-after 4,018 evaluations with the same seed, fewer than the full matrix. The Python package has no
-such option, so the example doesn't run it. On [Schwefel's problem 1.2](../schwefel_1_2/), where
-the axes are rotated, the diagonal matrix is far slower.
+Here a diagonal covariance matrix is all the problem needs, and it learns faster. sep-CMA-ES
+reaches 1e-8 after 4,018 evaluations, 40% fewer than the full matrix: from an error of 1 on, about
+340 evaluations per decade, as on the sphere, so the scaling costs it nothing once it has learned
+the scales. On [Schwefel's problem 1.2](../schwefel_1_2/), where the axes are rotated, the diagonal
+matrix is far slower.

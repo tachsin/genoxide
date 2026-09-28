@@ -1334,8 +1334,8 @@ def _de_setting(
 class Cmaes(_SingleObjective):
     """CMA-ES, the covariance matrix adaptation evolution strategy. Real genomes.
 
-    It adapts a full covariance matrix, from a random initial mean. At least one gene needs
-    ``low < high``; genes with ``low == high`` are fixed.
+    It adapts a full or a diagonal covariance matrix, from a random initial mean. At least one
+    gene needs ``low < high``; genes with ``low == high`` are fixed.
 
     Parameters
     ----------
@@ -1351,6 +1351,12 @@ class Cmaes(_SingleObjective):
         and step size. Restarts suit multimodal functions.
     initial_step : float, default 0.3
         The initial step size as a fraction of each gene's range, greater than 0 and at most 1.
+    covariance : {"full", "diagonal"}, default "full"
+        "full" learns the correlations between genes; each sample costs O(n^2) and each
+        eigendecomposition O(n^3), for n genes: best up to a few hundred genes. "diagonal" is
+        sep-CMA-ES (Ros and Hansen, 2008): only each gene's variance is learned, with larger
+        learning rates, and each sample costs O(n). It suits separable problems and hundreds to
+        thousands of genes, but can't learn correlations between genes.
     objective : {"maximize", "minimize"}, default "maximize"
         Whether higher or lower scores are better.
     seed : int, optional
@@ -1365,6 +1371,7 @@ class Cmaes(_SingleObjective):
         population_size: int | None = None,
         restarts: Literal["never", "ipop", "bipop"] | None = None,
         initial_step: float | None = None,
+        covariance: Literal["full", "diagonal"] | None = None,
         objective: ObjectiveName = "maximize",
         seed: int | None = None,
     ) -> None:
@@ -1373,17 +1380,21 @@ class Cmaes(_SingleObjective):
         self.population_size = population_size
         self.restarts = restarts
         self.initial_step = initial_step
+        self.covariance = covariance
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
         if self.restarts not in (None, "never", "ipop", "bipop"):
             raise ValueError(f'restarts is "never", "ipop" or "bipop", not {self.restarts!r}')
+        if self.covariance not in (None, "full", "diagonal"):
+            raise ValueError(f'covariance is "full" or "diagonal", not {self.covariance!r}')
         return {
             "type": "cmaes",
             "population_size": _optional_whole("population_size", self.population_size),
             "seed": _optional_whole("seed", self.seed),
             "restarts": self.restarts,
             "initial_step": _optional_number("initial_step", self.initial_step),
+            "covariance": self.covariance,
         }
 
 

@@ -1,7 +1,7 @@
 ---
 title: Sphere
 category: continuous
-summary: Minimize the sum of the squares of 30 genes, and compare how fast CMA-ES, PSO and a GA close in on the minimum.
+summary: Minimize the sum of the squares of 30 genes, and compare how fast CMA-ES, with a full and a diagonal covariance matrix, PSO and a GA close in on the minimum.
 reference: "De Jong, K. A. (1975). An Analysis of the Behavior of a Class of Genetic Adaptive Systems. PhD thesis, University of Michigan."
 reference_url: "https://hdl.handle.net/2027.42/4507"
 optimum: "0 (at the origin)"
@@ -50,14 +50,20 @@ minimize. The function is genoxide's `problems::Sphere`, which brings its bounds
 
 ## Algorithm
 
-Three algorithms, each with a budget of 10,000 evaluations per dimension, 300,000 in all, and a
-target of 1e-8, as in the [function suite](../function_suite/).
+Three algorithms, one of them in two variants, each with a budget of 10,000 evaluations per
+dimension, 300,000 in all, and a target of 1e-8, as in the [function suite](../function_suite/).
 
 CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) samples a population
 from a normal distribution, and adapts its mean, its step size and its covariance matrix. It uses
 genoxide's defaults: a population of 4 + ⌊3 ln 30⌋ = 14, a step size of 0.3 of each gene's range,
 and a random start. There are no restarts, since there is only one minimum. As the samples close
 in, the step size shrinks with them.
+
+sep-CMA-ES (Ros and Hansen, 2008, PPSN X: 296-305) is the same CMA-ES with a diagonal covariance
+matrix, `.covariance(cmaes::Covariance::Diagonal)` in Rust and `covariance="diagonal"` in Python.
+It learns a variance per gene but no correlations between genes, and each sample costs O(n)
+instead of O(n²). With fewer entries to learn, its learning rates are (n + 2) / 3 times as large,
+about 11 times here. It has the same population, initial step size and seed.
 
 Particle swarm optimization (Kennedy and Eberhart, 1995, Proceedings of ICNN'95: 1942-1948) moves
 40 particles, each pulled towards its own best position and the swarm's. It uses Clerc and
@@ -76,7 +82,7 @@ The first two lines give the dimension and the budget. Then a row per algorithm:
 had used when its best error first reached 1, 1e-2, 1e-4, 1e-6 and 1e-8, and the best error it
 found, to two significant digits. The error is the best value, since the minimum is 0. A dash is an
 error not reached. The counts are taken after each generation, so they are multiples of the
-population size for CMA-ES and PSO. The function has no `sin`, `cos` or `exp`, so the runs, and
+population size for CMA-ES, sep-CMA-ES and PSO. The function has no `sin`, `cos` or `exp`, so the runs, and
 their counts, are the same on every platform. In Python, `run` evaluates the function in Rust, so
 both versions print the same.
 
@@ -97,7 +103,6 @@ range, 200 wide here, and selection alone narrows the population only slowly. On
 [axis-parallel ellipsoid](../axis_parallel_ellipsoid/), whose genes span 10.24, the same GA gets to
 1.6e-5: about the same precision relative to the range.
 
-A diagonal covariance matrix (sep-CMA-ES, Ros and Hansen, 2008, PPSN X: 296-305) is enough here: in
-Rust, `.covariance(cmaes::Covariance::Diagonal)` reaches 1e-8 after 4,564 evaluations with the same
-seed. The Python package has no such option, so the example doesn't run it. The other unimodal
-examples show where the full matrix matters.
+A diagonal covariance matrix is enough here: the sphere has no correlations to learn. sep-CMA-ES
+reaches 1e-8 after 4,564 evaluations, 7% fewer than the full matrix: it gets to an error of 1
+sooner, and then needs about 360 evaluations per decade, against 370. The other unimodal examples show where the full matrix matters.

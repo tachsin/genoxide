@@ -158,6 +158,7 @@ generations = 1000
             "strategy = { max_p = 0.2, archive = 0.0 }\ncontrol = { memory = 6 }",
         ),
         ("pso", "population_size = 30\nring = 1"),
+        ("cmaes", "covariance = \"diagonal\"\nrestarts = \"ipop\""),
     ] {
         let text = format!(
             "report = \"off\"\n[genome]\ntype = \"real\"\nlength = 4\nbounds = [-5.0, 5.0]\n[fitness]\nbuiltin = \"sphere\"\nobjectives = [\"minimize\"]\n[algorithm]\ntype = \"{algorithm}\"\nseed = 5\n{extra}\n[stop]\ntarget = 1e-4\ngenerations = 2000\n"
@@ -204,6 +205,21 @@ fn a_seed_gives_the_same_result() {
     first["seconds"] = Value::Null;
     second["seconds"] = Value::Null;
     assert_eq!(first, second);
+    // "full" is the default; a diagonal covariance matrix is another run
+    let full = CMAES.replace(
+        "type = \"cmaes\"",
+        "type = \"cmaes\"\ncovariance = \"full\"",
+    );
+    let mut full = run(&directory, "full.toml", &full, &[]).unwrap();
+    full["seconds"] = Value::Null;
+    assert_eq!(full, first);
+    let diagonal = CMAES.replace(
+        "type = \"cmaes\"",
+        "type = \"cmaes\"\ncovariance = \"diagonal\"",
+    );
+    let diagonal = run(&directory, "diagonal.toml", &diagonal, &[]).unwrap();
+    assert_eq!(diagonal["stop_reason"], "target");
+    assert_ne!(diagonal["genome"], first["genome"]);
     std::fs::remove_dir_all(&directory).unwrap();
 }
 
@@ -283,6 +299,13 @@ fn run_files_are_checked() {
     expect(
         &CMAES.replace("type = \"cmaes\"", "type = \"cmaes\"\ncolor = 1"),
         "unknown field `color`",
+    );
+    expect(
+        &CMAES.replace(
+            "type = \"cmaes\"",
+            "type = \"cmaes\"\ncovariance = \"sparse\"",
+        ),
+        "unknown variant `sparse`, expected `full` or `diagonal`",
     );
     expect(
         &CMAES.replace("type = \"cmaes\"", "type = \"pso\""),

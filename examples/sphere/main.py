@@ -1,8 +1,9 @@
 """Sphere: minimize the sum of the squares of 30 genes, the simplest unimodal function.
 
-Compares how fast CMA-ES, particle swarm optimization and a real-coded genetic algorithm close in
-on the minimum, 0 at the origin: the evaluations each takes until its error is at most 1, 1e-2,
-1e-4, 1e-6 and 1e-8. The function is genoxide's problems.Sphere, which run evaluates in Rust.
+Compares how fast CMA-ES, with a full and with a diagonal covariance matrix (sep-CMA-ES), particle
+swarm optimization and a real-coded genetic algorithm close in on the minimum, 0 at the origin: the
+evaluations each takes until its error is at most 1, 1e-2, 1e-4, 1e-6 and 1e-8. The function is
+genoxide's problems.Sphere, which run evaluates in Rust.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of a run for the plot on the example's
 page, with trace.py.
@@ -49,6 +50,7 @@ print("Evaluations until the error is at most")
 print(f"{'algorithm':<10}" + "".join(f"{column:>9}" for column in COLUMNS) + f"{'best':>9}")
 for name, algorithm in (
     ("CMA-ES", gx.Cmaes(problem.genome, objective="minimize", seed=1)),
+    ("sep-CMA-ES", gx.Cmaes(problem.genome, covariance="diagonal", objective="minimize", seed=1)),
     ("PSO", gx.Pso(problem.genome, population_size=40, objective="minimize", seed=1)),
     (
         "GA",
