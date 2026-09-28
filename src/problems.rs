@@ -43,11 +43,19 @@
 //! | [`Branin`] | 2 | [−5, 10] × [0, 15] | 5/(4π) at three points |
 //! | [`GoldsteinPrice`] | 2 | [−2, 2] | 3 at (0, −1) |
 //! | [`SixHumpCamel`] | 2 | [−5, 5] | −1.03163 at two points |
+//! | [`Hartmann3`] | 3 | [0, 1] | −3.86278 at (0.11461, 0.55565, 0.85255), best known |
+//! | [`Hartmann6`] | 6 | [0, 1] | −3.32237 at (0.2017, 0.1500, 0.4769, 0.2753, 0.3117, 0.6573), best known |
+//! | [`Shekel5`] | 4 | [0, 10] | −10.15320 near (4, 4, 4, 4), best known |
+//! | [`Shekel7`] | 4 | [0, 10] | −10.40294 near (4, 4, 4, 4), best known |
+//! | [`Shekel10`] | 4 | [0, 10] | −10.53641 near (4, 4, 4, 4), best known |
+//! | [`Easom`] | 2 | [−100, 100] | −1 at (π, π) |
+//! | [`Eggholder`] | 2 | [−512, 512] | −959.64066 at (512, 404.23181), best known |
+//! | [`SchafferF6`] | 2 | [−100, 100] | 0 at the origin |
 //!
 //! Two submodules hold constrained problems, whose fitness is `(score, violation)`:
 //!
-//! - [`cec2006`]: the CEC 2006 constrained problems g01 to g18
-//!   ([`G01`](cec2006::G01) … [`G18`](cec2006::G18)), with 2 to 20 dimensions, inequality and
+//! - [`cec2006`]: the CEC 2006 constrained problems g01 to g24
+//!   ([`G01`](cec2006::G01) … [`G24`](cec2006::G24)), with 2 to 24 dimensions, inequality and
 //!   equality constraints, and the optimum or best known solution of their report;
 //! - [`engineering`]: engineering design problems, the welded beam in two forms, the pressure
 //!   vessel, the tension/compression spring, the speed reducer, the gear train (on
@@ -90,6 +98,7 @@ pub use classic::{
     Rastrigin, Rosenbrock, Schwefel1_2, Schwefel2_26, SixHumpCamel, Sphere, StyblinskiTang,
     Zakharov,
 };
+pub use classic::{Easom, Eggholder, Hartmann3, Hartmann6, SchafferF6, Shekel5, Shekel7, Shekel10};
 
 use crate::constraint::{at_most, equal};
 use crate::engine::{FitnessFunction, IntoFitness};
@@ -370,6 +379,14 @@ pub fn all() -> Vec<Box<dyn DynProblem>> {
         boxed(Branin),
         boxed(GoldsteinPrice),
         boxed(SixHumpCamel),
+        boxed(Hartmann3),
+        boxed(Hartmann6),
+        boxed(Shekel5),
+        boxed(Shekel7),
+        boxed(Shekel10),
+        boxed(Easom),
+        boxed(Eggholder),
+        boxed(SchafferF6),
         boxed(cec2006::G01),
         boxed(cec2006::G02),
         boxed(cec2006::G03::default()),
@@ -388,6 +405,12 @@ pub fn all() -> Vec<Box<dyn DynProblem>> {
         boxed(cec2006::G16),
         boxed(cec2006::G17::default()),
         boxed(cec2006::G18),
+        boxed(cec2006::G19),
+        boxed(cec2006::G20::default()),
+        boxed(cec2006::G21::default()),
+        boxed(cec2006::G22::default()),
+        boxed(cec2006::G23::default()),
+        boxed(cec2006::G24),
         boxed(engineering::WeldedBeam),
         boxed(engineering::WeldedBeamRagsdell),
         boxed(engineering::PressureVessel),
@@ -408,7 +431,7 @@ mod tests {
     #[test]
     fn the_registry_describes_every_problem() {
         let problems = all();
-        assert_eq!(problems.len(), 42);
+        assert_eq!(problems.len(), 56);
         let names: HashSet<_> = problems.iter().map(|problem| problem.name()).collect();
         assert_eq!(names.len(), problems.len(), "names are unique");
         let mut rng = StreamRng::seed_from_u64(0);
@@ -427,8 +450,21 @@ mod tests {
                 continue;
             };
             assert!(!optimum.solutions().is_empty(), "{}", problem.name());
-            // the unconstrained optima are all proven
-            assert!(constrained || optimum.is_proven(), "{}", problem.name());
+            // the unconstrained optima are proven, but for those found numerically
+            let numerical = [
+                "Hartmann3",
+                "Hartmann6",
+                "Shekel5",
+                "Shekel7",
+                "Shekel10",
+                "Eggholder",
+            ];
+            let numerically = numerical.contains(&problem.name());
+            assert!(
+                constrained || optimum.is_proven() || numerically,
+                "{}",
+                problem.name()
+            );
             for solution in optimum.solutions() {
                 assert!(real.validate(solution).is_ok(), "{}", problem.name());
                 let fitness = problem.evaluate(solution);
@@ -439,10 +475,10 @@ mod tests {
                 let scale = optimum.value().abs().max(1.0);
                 assert!(error <= tolerance * scale, "{}", problem.name());
                 // a proven optimum is feasible: under Deb's rules, any feasible point beats an
-                // infeasible one, however far worse; the report's x* of g07 and g09 are rounded,
-                // and exceed a constraint by 6e-14 and 4e-16
+                // infeasible one, however far worse; the report's x* of g07, g09 and g24 are
+                // rounded, and exceed a constraint by 6e-14, 4e-16 and 2e-13
                 if optimum.is_proven() {
-                    let rounded = ["G07", "G09"].contains(&problem.name());
+                    let rounded = ["G07", "G09", "G24"].contains(&problem.name());
                     let slack = if rounded { 1e-12 } else { 0.0 };
                     assert!(
                         fitness.violation() <= slack,
@@ -474,11 +510,11 @@ mod tests {
                 }
             }
             // the corners of the box; the three-bar truss's stresses and g08's value are undefined
-            // at x₁ = 0
+            // at x₁ = 0, and g20's equalities at the origin
             let low: Reals = real.bounds().iter().map(|range| *range.start()).collect();
             let high: Reals = real.bounds().iter().map(|range| *range.end()).collect();
             for corner in [low, high] {
-                if ["ThreeBarTruss", "G08"].contains(&problem.name()) && corner[0] == 0.0 {
+                if ["ThreeBarTruss", "G08", "G20"].contains(&problem.name()) && corner[0] == 0.0 {
                     continue;
                 }
                 let fitness = problem.evaluate(&corner);

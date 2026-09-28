@@ -1,0 +1,5 @@
+Easom: minimum -1 at (pi, pi), 30 seeds, 10000 evaluations at most per run
+runs              at -1  elsewhere  evaluations: median  largest
+CMA-ES               19         11                  474      984
+CMA-ES with IPOP     30          0                 1314     2340
+evaluations: of the runs that reach the minimum, to within 1e-8

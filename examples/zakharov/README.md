@@ -6,7 +6,7 @@ reference: "Laguna, M. and Martí, R. (2005). Experimental testing of advanced s
 reference_url: "https://doi.org/10.1007/s10898-004-1936-z"
 optimum: "0 (at the origin)"
 languages: [rust, python]
-order: 54
+order: 44
 trace_note: "Recorded from another run: CMA-ES in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 

@@ -65,6 +65,14 @@ pub enum Config {
     Branin {},
     GoldsteinPrice {},
     SixHumpCamel {},
+    Hartmann3 {},
+    Hartmann6 {},
+    Shekel5 {},
+    Shekel7 {},
+    Shekel10 {},
+    Easom {},
+    Eggholder {},
+    SchafferF6 {},
     G01 {},
     G02 {},
     G03 {
@@ -97,6 +105,20 @@ pub enum Config {
         tolerance: Option<f64>,
     },
     G18 {},
+    G19 {},
+    G20 {
+        tolerance: Option<f64>,
+    },
+    G21 {
+        tolerance: Option<f64>,
+    },
+    G22 {
+        tolerance: Option<f64>,
+    },
+    G23 {
+        tolerance: Option<f64>,
+    },
+    G24 {},
     WeldedBeam {},
     WeldedBeamRagsdell {},
     PressureVessel {},
@@ -778,6 +800,14 @@ fn build(config: Config) -> Result<Problem, String> {
         Config::Branin {} => problems::boxed(problems::Branin),
         Config::GoldsteinPrice {} => problems::boxed(problems::GoldsteinPrice),
         Config::SixHumpCamel {} => problems::boxed(problems::SixHumpCamel),
+        Config::Hartmann3 {} => problems::boxed(problems::Hartmann3),
+        Config::Hartmann6 {} => problems::boxed(problems::Hartmann6),
+        Config::Shekel5 {} => problems::boxed(problems::Shekel5),
+        Config::Shekel7 {} => problems::boxed(problems::Shekel7),
+        Config::Shekel10 {} => problems::boxed(problems::Shekel10),
+        Config::Easom {} => problems::boxed(problems::Easom),
+        Config::Eggholder {} => problems::boxed(problems::Eggholder),
+        Config::SchafferF6 {} => problems::boxed(problems::SchafferF6),
         Config::G01 {} => problems::boxed(cec2006::G01),
         Config::G02 {} => problems::boxed(cec2006::G02),
         Config::G03 { tolerance } => {
@@ -810,6 +840,20 @@ fn build(config: Config) -> Result<Problem, String> {
             problems::boxed(cec2006::G17::with_tolerance(equality_tolerance(tolerance)?))
         }
         Config::G18 {} => problems::boxed(cec2006::G18),
+        Config::G19 {} => problems::boxed(cec2006::G19),
+        Config::G20 { tolerance } => {
+            problems::boxed(cec2006::G20::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G21 { tolerance } => {
+            problems::boxed(cec2006::G21::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G22 { tolerance } => {
+            problems::boxed(cec2006::G22::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G23 { tolerance } => {
+            problems::boxed(cec2006::G23::with_tolerance(equality_tolerance(tolerance)?))
+        }
+        Config::G24 {} => problems::boxed(cec2006::G24),
         Config::WeldedBeam {} => problems::boxed(engineering::WeldedBeam),
         Config::WeldedBeamRagsdell {} => problems::boxed(engineering::WeldedBeamRagsdell),
         Config::PressureVessel {} => problems::boxed(engineering::PressureVessel),

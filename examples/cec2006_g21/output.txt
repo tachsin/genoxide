@@ -1,0 +1,6 @@
+SHADE, a population of 50, with Deb's feasibility rules on g21, seed 1
+stopped by the target after 44200 evaluations: f(x) - f* < 1e-8, feasible
+first feasible after 19450 evaluations, f(x) - f* <= 1e-4 after 34200
+f(x) 193.725, f* 193.725 (best known)
+x1 193.725, x2 2.0e-17, x3 17.3192, x4 100.048, x5 6.68445, x6 5.99168, x7 6.21452
+g1 active, h1 active, h2 active, h3 active, h4 active, h5 active

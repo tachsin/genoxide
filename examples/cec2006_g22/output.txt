@@ -1,0 +1,6 @@
+L-SHADE with Deb's feasibility rules on g22, seed 1
+stopped after 500003 evaluations: infeasible, violation 53.53
+no feasible solution found
+f(x) 19926.5, f* 236.431 (best known)
+x1 19926.5, x2 13837.7, x3 5723.53, x4 61044.4, x5 13203667, x6 4000001, x7 22796332, x8 232.037, x9 272.037, x10 197.963, x11 400.000, x12 432.037, x13 7.95148, x14 8.73587, x15 9.33596, x16 167.963, x17 160.000, x18 6.20012, x19 2.42725, x20 5.98504, x21 1.40623, x22 6.25000
+g1 -18698, h1 active, h2 active, h3 active, h4 active, h5 active, h6 active, h7 active, h8 active, h9 active, h10 active, h11 active, h12 1.615, h13 1.792, h14 0.8612, h15 3.445, h16 1.175, h17 active, h18 active, h19 44.64

@@ -26,7 +26,18 @@ PROBLEMS = [
     gx.problems.Branin,
     gx.problems.GoldsteinPrice,
     gx.problems.SixHumpCamel,
+    gx.problems.Hartmann3,
+    gx.problems.Hartmann6,
+    gx.problems.Shekel5,
+    gx.problems.Shekel7,
+    gx.problems.Shekel10,
+    gx.problems.Easom,
+    gx.problems.Eggholder,
+    gx.problems.SchafferF6,
 ]
+
+# the problems whose minimum is known numerically, not proven
+NUMERICAL = {"Hartmann3", "Hartmann6", "Shekel5", "Shekel7", "Shekel10", "Eggholder"}
 
 
 CONSTRAINED = [
@@ -48,6 +59,12 @@ CONSTRAINED = [
     gx.problems.cec2006.G16,
     gx.problems.cec2006.G17,
     gx.problems.cec2006.G18,
+    gx.problems.cec2006.G19,
+    gx.problems.cec2006.G20,
+    gx.problems.cec2006.G21,
+    gx.problems.cec2006.G22,
+    gx.problems.cec2006.G23,
+    gx.problems.cec2006.G24,
     gx.problems.engineering.WeldedBeam,
     gx.problems.engineering.WeldedBeamRagsdell,
     gx.problems.engineering.PressureVessel,
@@ -128,7 +145,7 @@ def test_every_problem_describes_itself(cls):
     bounds = np.array(genome._describe()["bounds"])
     assert bounds.shape == (problem.dimensions, 2)
     optimum = problem.optimum
-    assert optimum.proven
+    assert optimum.proven == (problem.name not in NUMERICAL)
     assert optimum.solutions.shape[1] == problem.dimensions
     for solution in optimum.solutions:
         assert np.all(bounds[:, 0] <= solution) and np.all(solution <= bounds[:, 1])
@@ -158,6 +175,28 @@ def test_values_at_chosen_points():
     assert gx.problems.Branin().optimum.value == pytest.approx(5 / (4 * math.pi))
     assert len(gx.problems.Himmelblau().optimum.solutions) == 4
     assert gx.problems.Michalewicz(10).optimum.value == pytest.approx(-9.6601517, abs=1e-7)
+
+
+def test_values_of_the_functions_with_tables():
+    # the minima that Dixon and Szegö report, to their digits
+    assert round(gx.problems.Hartmann3().optimum.value, 5) == -3.86278
+    assert round(gx.problems.Hartmann6().optimum.value, 5) == -3.32237
+    assert round(gx.problems.Shekel5().optimum.value, 4) == -10.1532
+    assert round(gx.problems.Shekel7().optimum.value, 4) == -10.4029
+    assert round(gx.problems.Shekel10().optimum.value, 4) == -10.5364
+    # at (4, 4, 4, 4), the squared distances to a₁ … a₅ are 0, 36, 64, 16 and 20
+    expected = -(1 / 0.1 + 1 / 36.2 + 1 / 64.2 + 1 / 16.4 + 1 / 20.4)
+    assert gx.problems.Shekel5()([4, 4, 4, 4]) == pytest.approx(expected, rel=1e-12)
+    assert gx.problems.Easom()([math.pi, math.pi]) == -1
+    assert gx.problems.Easom()([-100, 100]) == 0
+    # −47 sin √47 at the origin
+    expected = -47 * math.sin(math.sqrt(47))
+    assert gx.problems.Eggholder()([0, 0]) == pytest.approx(expected, rel=1e-12)
+    assert gx.problems.Eggholder().optimum.solutions[0][0] == 512
+    assert gx.problems.SchafferF6()([0, 0]) == 0
+    assert gx.problems.SchafferF6()([3, 4]) == gx.problems.SchafferF6()([0, -5])
+    assert gx.problems.Hartmann6().genome == gx.Real((0.0, 1.0), length=6)
+    assert gx.problems.Shekel10().genome == gx.Real((0.0, 10.0), length=4)
 
 
 def test_sizes():
@@ -357,6 +396,36 @@ def test_cec2006_g07_to_g18_at_chosen_points():
         assert cls(tolerance=1e-6).optimum is None
     # g18's best known is −√3/2 to its digits
     assert cec2006.G18().optimum.value == pytest.approx(-math.sqrt(3) / 2, rel=1e-15)
+
+
+def test_cec2006_g19_to_g24_at_chosen_points():
+    cec2006 = gx.problems.cec2006
+    # g19 at the origin: f = 0, and gⱼ = −eⱼ, violated by 15 + 27 + 36 + 18 + 12
+    assert cec2006.G19()(np.zeros(15)) == (0.0, 108.0)
+    # x₁₁…x₁₅ = 1 alone: f = Σ cᵢⱼ + 2 Σ dⱼ = 50 + 60, and only g₃ = 44 − 30 + 36 is violated
+    x = np.zeros(15)
+    x[10:] = 1
+    assert cec2006.G19()(x) == (110.0, 50.0)
+    # g20: the report's x* is infeasible, g₁ = (x₁ + x₁₃)/(Σ x + 0.1) = 0.1438
+    problem = cec2006.G20()
+    value, violation = problem(problem.optimum.solutions[0])
+    assert value == pytest.approx(0.2049794002, rel=1e-9)
+    assert violation == pytest.approx(0.14375, abs=1e-4)
+    assert not problem.optimum.proven and problem.constraint_count == 20
+    # g21 at x₄ = 100, x₅ = ln 800, x₆ = ln 400, x₇ = ln 500: only h₁ = 5000 ln 2 is violated
+    value, violation = cec2006.G21()([50, 0, 0, 100, math.log(800), math.log(400), math.log(500)])
+    assert value == 50 and violation == pytest.approx(5000 * math.log(2) - 1e-4, rel=1e-12)
+    assert cec2006.G22().constraint_count == 20
+    assert cec2006.G22().optimum.value == pytest.approx(236.430975504001, rel=1e-15)
+    # g23: x₂ = x₄ = x₇ = 100, x₈ = 200, x₉ = 0.01 meets every constraint exactly, at −400
+    assert cec2006.G23()([0, 100, 0, 100, 0, 0, 100, 200, 0.01]) == (-400.0, 0.0)
+    assert cec2006.G23().optimum.solutions[0][7] == 200
+    # g24: the two parts of the feasible region meet at (1, 0)
+    assert cec2006.G24()([1.0, 0.0]) == (-1.0, 0.0)
+    assert cec2006.G24()([1.0, 0.5]) == (-1.5, 0.5)
+    assert cec2006.G24().optimum.proven
+    for cls in (cec2006.G20, cec2006.G21, cec2006.G22, cec2006.G23):
+        assert cls(tolerance=1e-6).optimum is None
 
 
 def test_invalid_tolerances_are_errors():

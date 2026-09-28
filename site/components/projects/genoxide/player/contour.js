@@ -42,14 +42,86 @@ export const FUNCTIONS = {
   },
   styblinski_tang: (x, y) => 0.5 * (x ** 4 - 16 * x * x + 5 * x + y ** 4 - 16 * y * y + 5 * y),
   michalewicz: (x, y) => -Math.sin(x) * Math.sin((x * x) / Math.PI) ** 20 - Math.sin(y) * Math.sin((2 * y * y) / Math.PI) ** 20,
+  // the functions of batch 6: the two-dimensional ones as they are; Hartmann's in 3 dimensions
+  // as its lowest value over x₃, and Shekel's in 4 on the plane x₃ = x₁, x₄ = x₂, which holds
+  // all its wells but a₇ = (5, 5, 3, 3)
+  easom: (x, y) => -Math.cos(x) * Math.cos(y) * Math.exp(-((x - Math.PI) ** 2 + (y - Math.PI) ** 2)),
+  eggholder: (x, y) => -(y + 47) * Math.sin(Math.sqrt(Math.abs(y + x / 2 + 47))) - x * Math.sin(Math.sqrt(Math.abs(x - (y + 47)))),
+  schaffer_f6: (x, y) => {
+    const r2 = x * x + y * y;
+    return 0.5 + (Math.sin(Math.sqrt(r2)) ** 2 - 0.5) / (1 + 0.001 * r2) ** 2;
+  },
+  hartmann3: (x, y) => {
+    let lowest = Number.POSITIVE_INFINITY;
+    for (let k = 0; k <= HARTMANN_STEPS; k++) lowest = Math.min(lowest, hartmann3([x, y, k / HARTMANN_STEPS]));
+    return lowest;
+  },
+  shekel5: (x, y) => shekel(5, [x, y, x, y]),
+  shekel7: (x, y) => shekel(7, [x, y, x, y]),
+  shekel10: (x, y) => shekel(10, [x, y, x, y]),
 };
 
-/** The contour plot's legend items; a grid of contours shows them once, for all its panels. */
-export function contourLegend({ best, minima, palette }) {
+// Hartmann's function in 3 dimensions (Hartman 1973, with Dixon and Szegö's constants), and the
+// points of x₃ in [0, 1] over which the contour takes its lowest value
+const HARTMANN_STEPS = 40;
+const HARTMANN_C = [1, 1.2, 3, 3.2];
+const HARTMANN_3_A = [
+  [3, 10, 30],
+  [0.1, 10, 35],
+  [3, 10, 30],
+  [0.1, 10, 35],
+];
+const HARTMANN_3_P = [
+  [0.3689, 0.117, 0.2673],
+  [0.4699, 0.4387, 0.747],
+  [0.1091, 0.8732, 0.5547],
+  [0.03815, 0.5743, 0.8828],
+];
+
+function hartmann3(x) {
+  let sum = 0;
+  for (let i = 0; i < 4; i++) {
+    let distance = 0;
+    for (let j = 0; j < 3; j++) distance += HARTMANN_3_A[i][j] * (x[j] - HARTMANN_3_P[i][j]) ** 2;
+    sum += HARTMANN_C[i] * Math.exp(-distance);
+  }
+  return -sum;
+}
+
+// Shekel's function with its first m wells (Shekel 1971, with Dixon and Szegö's constants)
+const SHEKEL_A = [
+  [4, 4, 4, 4],
+  [1, 1, 1, 1],
+  [8, 8, 8, 8],
+  [6, 6, 6, 6],
+  [3, 7, 3, 7],
+  [2, 9, 2, 9],
+  [5, 5, 3, 3],
+  [8, 1, 8, 1],
+  [6, 2, 6, 2],
+  [7, 3.6, 7, 3.6],
+];
+const SHEKEL_C = [0.1, 0.2, 0.2, 0.4, 0.4, 0.6, 0.3, 0.7, 0.5, 0.5];
+
+function shekel(m, x) {
+  let sum = 0;
+  for (let i = 0; i < m; i++) {
+    let distance = SHEKEL_C[i];
+    for (let j = 0; j < 4; j++) distance += (x[j] - SHEKEL_A[i][j]) ** 2;
+    sum += 1 / distance;
+  }
+  return -sum;
+}
+
+/**
+ * The contour plot's legend items; a grid of contours shows them once, for all its panels.
+ * `minimaLabel` names the marked minima when they aren't proven global ("best known minimum").
+ */
+export function contourLegend({ best, minima, palette, minimaLabel }) {
   return [
     { label: "population", color: palette[1], shape: "dot" },
     ...(best ? [{ label: "best", color: palette[0], shape: "diamond" }] : []),
-    ...(minima ? [{ label: minima > 1 ? "global minima" : "global minimum", shape: "ring", className: "text-base-content" }] : []),
+    ...(minima ? [{ label: minimaLabel ?? (minima > 1 ? "global minima" : "global minimum"), shape: "ring", className: "text-base-content" }] : []),
     { label: "shading: higher f (log)", shape: "square", className: "text-base-content/30" },
   ];
 }

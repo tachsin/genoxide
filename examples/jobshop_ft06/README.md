@@ -6,7 +6,7 @@ reference: "Fisher, H. and Thompson, G. L. (1963). Probabilistic learning combin
 reference_url: http://people.brunel.ac.uk/~mastjjb/jeb/orlib/jobshopinfo.html
 optimum: "55 (makespan)"
 languages: [rust, python]
-order: 50
+order: 40
 ---
 
 # Job shop scheduling (ft06)

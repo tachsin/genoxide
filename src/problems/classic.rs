@@ -1060,6 +1060,540 @@ impl Problem for SixHumpCamel {
     }
 }
 
+// ---- the functions with tables: Hartmann and Shekel ---------------------------------------------
+
+// the paper that defines Hartmann's function, and the one whose constants these are
+const HARTMANN_REFERENCE: &str = "Hartman, J. K. (1973). Some experiments in global \
+    optimization. Naval Research Logistics Quarterly 20(3): 569-576. Constants as tabulated in \
+    Dixon, L. C. W. and Szegö, G. P. (1978). The global optimisation problem: an introduction. In \
+    Towards Global Optimisation 2, North-Holland: 1-15.";
+
+// Hartmann's weights cᵢ, the same in 3 and 6 dimensions
+const HARTMANN_C: [f64; 4] = [1.0, 1.2, 3.0, 3.2];
+
+// Hartmann's function in 3 dimensions: the widths aᵢⱼ and the centers pᵢⱼ
+const HARTMANN_3_A: [[f64; 3]; 4] = [
+    [3.0, 10.0, 30.0],
+    [0.1, 10.0, 35.0],
+    [3.0, 10.0, 30.0],
+    [0.1, 10.0, 35.0],
+];
+const HARTMANN_3_P: [[f64; 3]; 4] = [
+    [0.3689, 0.1170, 0.2673],
+    [0.4699, 0.4387, 0.7470],
+    [0.1091, 0.8732, 0.5547],
+    [0.03815, 0.5743, 0.8828],
+];
+
+// Hartmann's function in 6 dimensions: the widths aᵢⱼ and the centers pᵢⱼ
+const HARTMANN_6_A: [[f64; 6]; 4] = [
+    [10.0, 3.0, 17.0, 3.5, 1.7, 8.0],
+    [0.05, 10.0, 17.0, 0.1, 8.0, 14.0],
+    [3.0, 3.5, 1.7, 10.0, 17.0, 8.0],
+    [17.0, 8.0, 0.05, 10.0, 0.1, 14.0],
+];
+const HARTMANN_6_P: [[f64; 6]; 4] = [
+    [0.1312, 0.1696, 0.5569, 0.0124, 0.8283, 0.5886],
+    [0.2329, 0.4135, 0.8307, 0.3736, 0.1004, 0.9991],
+    [0.2348, 0.1451, 0.3522, 0.2883, 0.3047, 0.6650],
+    [0.4047, 0.8828, 0.8732, 0.5743, 0.1091, 0.0381],
+];
+
+// −Σᵢ cᵢ exp(−Σⱼ aᵢⱼ (xⱼ − pᵢⱼ)²)
+fn hartmann<const N: usize>(a: &[[f64; N]; 4], p: &[[f64; N]; 4], x: &Reals) -> f64 {
+    let x = &x[..N];
+    -(0..4)
+        .map(|i| {
+            let distance: f64 = (0..N)
+                .map(|j| a[i][j] * math::powi(x[j] - p[i][j], 2))
+                .sum();
+            HARTMANN_C[i] * math::exp(-distance)
+        })
+        .sum::<f64>()
+}
+
+/// Hartmann's function in 3 dimensions, `−Σᵢ₌₁⁴ cᵢ exp(−Σⱼ₌₁³ aᵢⱼ (xⱼ − pᵢⱼ)²)`: four
+/// Gaussian wells of different widths and depths, the deepest near (0.11, 0.56, 0.85).
+///
+/// With c = (1, 1.2, 3, 3.2), and a and p the rows
+///
+/// | i | aᵢ₁, aᵢ₂, aᵢ₃ | pᵢ₁, pᵢ₂, pᵢ₃ |
+/// |---|---|---|
+/// | 1 | 3, 10, 30 | 0.3689, 0.1170, 0.2673 |
+/// | 2 | 0.1, 10, 35 | 0.4699, 0.4387, 0.7470 |
+/// | 3 | 3, 10, 30 | 0.1091, 0.8732, 0.5547 |
+/// | 4 | 0.1, 10, 35 | 0.03815, 0.5743, 0.8828 |
+///
+/// Bounds [0, 1]³; minimum −3.862782147820755 at (0.11461433858967196, 0.5556488499718569,
+/// 0.8525469535208658), where the gradient is 0, computed to 40 digits by Newton's method and
+/// rounded; −3.86278 is the value later papers quote from Dixon and Szegö. It's the best of the
+/// local minima that local searches from 2,000 random points find, with −3.0897641630922505 at
+/// (0.10934, 0.86052, 0.56412) and −1.0008168635629282 at (0.36872, 0.11756, 0.26757); not
+/// proven global.
+///
+/// The form is Hartman's: Hartman, J. K. (1972). *Some Experiments in Global Optimization.*
+/// Report NPS-55HH72051A, Naval Postgraduate School (p. 10), published in *Naval Research
+/// Logistics Quarterly* 20(3): 569-576 (1973). The report draws its constants at random, prints
+/// none, and has no problem in 3 or 6 dimensions: these constants are those of Dixon, L. C. W.
+/// and Szegö, G. P. (1978). The global optimisation problem: an introduction. In *Towards Global
+/// Optimisation 2*, North-Holland: 1-15, which isn't online, as Yao, Liu and Lin (1999, f19,
+/// table XII) reprint them (p₄₁ printed as 0.038150). Jamil and Yang (2013, function 62) print
+/// p₂₂ = 0.4837 for 0.4387.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Hartmann3;
+
+impl FitnessFunction<Reals> for Hartmann3 {
+    type Output = f64;
+
+    /// The value at `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than 3 genes.
+    fn evaluate(&self, x: &Reals) -> f64 {
+        hartmann(&HARTMANN_3_A, &HARTMANN_3_P, x)
+    }
+}
+
+impl Problem for Hartmann3 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Hartmann3"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(3, 0.0, 1.0)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::best_known(
+            -3.862_782_147_820_755,
+            vec![reals(&[
+                0.114_614_338_589_671_96,
+                0.555_648_849_971_856_9,
+                0.852_546_953_520_865_8,
+            ])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        HARTMANN_REFERENCE
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some("https://doi.org/10.1002/nav.3800200316")
+    }
+}
+
+/// Hartmann's function in 6 dimensions, `−Σᵢ₌₁⁴ cᵢ exp(−Σⱼ₌₁⁶ aᵢⱼ (xⱼ − pᵢⱼ)²)`: four
+/// Gaussian wells of different widths and depths, in two basins of nearly the same depth.
+///
+/// With c = (1, 1.2, 3, 3.2), and a and p the rows
+///
+/// | i | aᵢ₁ … aᵢ₆ | pᵢ₁ … pᵢ₆ |
+/// |---|---|---|
+/// | 1 | 10, 3, 17, 3.5, 1.7, 8 | 0.1312, 0.1696, 0.5569, 0.0124, 0.8283, 0.5886 |
+/// | 2 | 0.05, 10, 17, 0.1, 8, 14 | 0.2329, 0.4135, 0.8307, 0.3736, 0.1004, 0.9991 |
+/// | 3 | 3, 3.5, 1.7, 10, 17, 8 | 0.2348, 0.1451, 0.3522, 0.2883, 0.3047, 0.6650 |
+/// | 4 | 17, 8, 0.05, 10, 0.1, 14 | 0.4047, 0.8828, 0.8732, 0.5743, 0.1091, 0.0381 |
+///
+/// Bounds [0, 1]⁶; minimum −3.3223680114155147 at (0.20168951100670543, 0.15001069182345797,
+/// 0.476873974221897, 0.2753324304940561, 0.31165161660011326, 0.6573005340656204), where the
+/// gradient is 0, computed to 40 digits by Newton's method and rounded; −3.32237 is the value
+/// later papers quote from Dixon and Szegö. It's the best of the local minima that local
+/// searches from 2,000 random points find; the other, −3.203161918396231 at (0.40465, 0.88244,
+/// 0.84610, 0.57399, 0.13893, 0.03850), drew a third of them. Not proven global.
+///
+/// The form is Hartman's: Hartman, J. K. (1972). *Some Experiments in Global Optimization.*
+/// Report NPS-55HH72051A, Naval Postgraduate School (p. 10), published in *Naval Research
+/// Logistics Quarterly* 20(3): 569-576 (1973), whose constants are random and not printed. These
+/// are those of Dixon, L. C. W. and Szegö, G. P. (1978). The global optimisation problem: an
+/// introduction. In *Towards Global Optimisation 2*, North-Holland: 1-15, which isn't online, as
+/// Yao, Liu and Lin (1999, f20, table XIII) reprint them, but for p₃₂: they print 0.1415, with
+/// which the minimum is −3.3219952 at (0.2017, 0.1468, …), not their own minimizer; 0.1451 gives
+/// the minimum that later papers quote, and Jamil and Yang (2013, function 63) print it, with
+/// p₁₆ = 0.5586 for 0.5886.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Hartmann6;
+
+impl FitnessFunction<Reals> for Hartmann6 {
+    type Output = f64;
+
+    /// The value at `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than 6 genes.
+    fn evaluate(&self, x: &Reals) -> f64 {
+        hartmann(&HARTMANN_6_A, &HARTMANN_6_P, x)
+    }
+}
+
+impl Problem for Hartmann6 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Hartmann6"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(6, 0.0, 1.0)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::best_known(
+            -3.322_368_011_415_514_7,
+            vec![reals(&[
+                0.201_689_511_006_705_43,
+                0.150_010_691_823_457_97,
+                0.476_873_974_221_897,
+                0.275_332_430_494_056_1,
+                0.311_651_616_600_113_26,
+                0.657_300_534_065_620_4,
+            ])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        HARTMANN_REFERENCE
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some("https://doi.org/10.1002/nav.3800200316")
+    }
+}
+
+// Shekel's centers aᵢ and widths cᵢ, of which Shekel m uses the first m
+const SHEKEL_A: [[f64; 4]; 10] = [
+    [4.0, 4.0, 4.0, 4.0],
+    [1.0, 1.0, 1.0, 1.0],
+    [8.0, 8.0, 8.0, 8.0],
+    [6.0, 6.0, 6.0, 6.0],
+    [3.0, 7.0, 3.0, 7.0],
+    [2.0, 9.0, 2.0, 9.0],
+    [5.0, 5.0, 3.0, 3.0],
+    [8.0, 1.0, 8.0, 1.0],
+    [6.0, 2.0, 6.0, 2.0],
+    [7.0, 3.6, 7.0, 3.6],
+];
+const SHEKEL_C: [f64; 10] = [0.1, 0.2, 0.2, 0.4, 0.4, 0.6, 0.3, 0.7, 0.5, 0.5];
+
+// −Σᵢ₌₁ᵐ 1 / ((x − aᵢ)ᵀ(x − aᵢ) + cᵢ)
+fn shekel(m: usize, x: &Reals) -> f64 {
+    let x = &x[..4];
+    -(0..m)
+        .map(|i| {
+            let distance: f64 = (0..4).map(|j| math::powi(x[j] - SHEKEL_A[i][j], 2)).sum();
+            1.0 / (distance + SHEKEL_C[i])
+        })
+        .sum::<f64>()
+}
+
+// the docs of the three Shekel functions, which differ in m, the minimum and its solution
+macro_rules! shekel {
+    ($(#[$doc:meta])* $name:ident, $m:literal, $value:literal, $solution:expr) => {
+        $(#[$doc])*
+        ///
+        /// The function is `−Σᵢ₌₁ᵐ 1 / ((x − aᵢ)ᵀ(x − aᵢ) + cᵢ)`, a well at each of m points aᵢ, as
+        /// deep as 1 / cᵢ, with the first m rows of
+        ///
+        /// | i | aᵢ | cᵢ |
+        /// |---|---|---|
+        /// | 1 | 4, 4, 4, 4 | 0.1 |
+        /// | 2 | 1, 1, 1, 1 | 0.2 |
+        /// | 3 | 8, 8, 8, 8 | 0.2 |
+        /// | 4 | 6, 6, 6, 6 | 0.4 |
+        /// | 5 | 3, 7, 3, 7 | 0.4 |
+        /// | 6 | 2, 9, 2, 9 | 0.6 |
+        /// | 7 | 5, 5, 3, 3 | 0.3 |
+        /// | 8 | 8, 1, 8, 1 | 0.7 |
+        /// | 9 | 6, 2, 6, 2 | 0.5 |
+        /// | 10 | 7, 3.6, 7, 3.6 | 0.5 |
+        ///
+        /// Bounds [0, 10]⁴. The minimum is near a₁ = (4, 4, 4, 4), but not at it: the other wells
+        /// pull it aside, and the value at (4, 4, 4, 4) is a little higher. The minimum and its
+        /// solution are where the gradient is 0, computed to 40 digits by Newton's method and
+        /// rounded; the best of the local minima that local searches from 2,000 random points
+        /// find, one per well, but not proven global. Jamil and Yang (2013, functions 130-132)
+        /// put the minima at (4, 4, 4, 4), with −10.1499, −10.3999 and −10.5319: neither the
+        /// minima nor the values there.
+        ///
+        /// Shekel, J. (1971). Test functions for multimodal search techniques. *Proceedings of
+        /// the 5th Annual Princeton Conference on Information Sciences and Systems*, Princeton
+        /// University, and Dixon, L. C. W. and Szegö, G. P. (1978). The global optimisation
+        /// problem: an introduction. In *Towards Global Optimisation 2*, North-Holland: 1-15, who
+        /// call these functions SQRIN5, SQRIN7 and SQRIN10. Neither is online: the constants and
+        /// the bounds as Yao, Liu and Lin (1999, f21-f23, table XIV) reprint them, whose appendix
+        /// gives the wells' values as 1/cᵢ, without the minus sign.
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+        pub struct $name;
+
+        impl FitnessFunction<Reals> for $name {
+            type Output = f64;
+
+            /// The value at `x`.
+            ///
+            /// # Panics
+            ///
+            /// If `x` has fewer than 4 genes.
+            fn evaluate(&self, x: &Reals) -> f64 {
+                shekel($m, x)
+            }
+        }
+
+        impl Problem for $name {
+            type Representation = Real;
+
+            fn name(&self) -> &'static str {
+                stringify!($name)
+            }
+
+            fn representation(&self) -> Real {
+                uniform(4, 0.0, 10.0)
+            }
+
+            fn optimum(&self) -> Option<Optimum<Reals>> {
+                Some(Optimum::best_known($value, vec![reals(&$solution)]))
+            }
+
+            fn reference(&self) -> &'static str {
+                "Shekel, J. (1971). Test functions for multimodal search techniques. Proceedings \
+                 of the 5th Annual Princeton Conference on Information Sciences and Systems, \
+                 Princeton University. Constants as tabulated in Dixon, L. C. W. and Szegö, G. P. \
+                 (1978). The global optimisation problem: an introduction. In Towards Global \
+                 Optimisation 2, North-Holland: 1-15."
+            }
+        }
+    };
+}
+
+shekel!(
+    /// Shekel's function with m = 5 wells, in 4 dimensions (Dixon and Szegö's SQRIN5).
+    ///
+    /// Minimum −10.153199679058227 at (4.000037152819676, 4.00013327659156, 4.000037152819676,
+    /// 4.00013327659156); later papers quote −10.1532 from
+    /// Dixon and Szegö.
+    Shekel5,
+    5,
+    -10.153_199_679_058_227,
+    [
+        4.000_037_152_819_676,
+        4.000_133_276_591_56,
+        4.000_037_152_819_676,
+        4.000_133_276_591_56
+    ]
+);
+
+shekel!(
+    /// Shekel's function with m = 7 wells, in 4 dimensions (Dixon and Szegö's SQRIN7).
+    ///
+    /// Minimum −10.40294056681866 at (4.000572916185823, 4.000689366185305, 3.9994897088591506,
+    /// 3.9996061588586316); later papers quote −10.4029 from
+    /// Dixon and Szegö.
+    Shekel7,
+    7,
+    -10.402_940_566_818_66,
+    [
+        4.000_572_916_185_823,
+        4.000_689_366_185_305,
+        3.999_489_708_859_150_6,
+        3.999_606_158_858_631_6
+    ]
+);
+
+shekel!(
+    /// Shekel's function with m = 10 wells, in 4 dimensions (Dixon and Szegö's SQRIN10).
+    ///
+    /// Minimum −10.536409816692043 at (4.000746531592046, 4.000592934138532, 3.9996633980403224,
+    /// 3.9995098005868077); later papers quote −10.5364 from
+    /// Dixon and Szegö.
+    Shekel10,
+    10,
+    -10.536_409_816_692_043,
+    [
+        4.000_746_531_592_046,
+        4.000_592_934_138_532,
+        3.999_663_398_040_322_4,
+        3.999_509_800_586_807_7
+    ]
+);
+
+// ---- more two-dimensional functions -------------------------------------------------------------
+
+/// Easom's function, `−cos x₁ cos x₂ exp(−((x₁ − π)² + (x₂ − π)²))`: a single narrow well in a
+/// flat plane.
+///
+/// Bounds [−100, 100]²; minimum −1 at (π, π). It's the global minimum: both factors are at most 1
+/// in absolute value, and the exponential is 1 only at (π, π). Away from it, the function is
+/// nearly 0: below 1e-10 in absolute value farther than 4.8 from (π, π), which is all of the box
+/// but 0.2%.
+///
+/// Easom, E. E. (1990). *A Survey of Global Optimization Techniques.* M.Eng. thesis, University of
+/// Louisville; probably first in a journal in Stuckman, B. E. and Easom, E. E. (1992). A
+/// comparison of Bayesian/sampling global optimization techniques. *IEEE Transactions on Systems,
+/// Man, and Cybernetics* 22(5): 1024-1032. Neither could be read: the definition and the bounds
+/// as restated in Jamil and Yang (2013, function 50); not yet checked against the original
+/// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Easom;
+
+impl FitnessFunction<Reals> for Easom {
+    type Output = f64;
+
+    /// The value at `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than 2 genes.
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let (x1, x2) = (x[0], x[1]);
+        let distance = math::powi(x1 - PI, 2) + math::powi(x2 - PI, 2);
+        -math::cos(x1) * math::cos(x2) * math::exp(-distance)
+    }
+}
+
+impl Problem for Easom {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Easom"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(2, -100.0, 100.0)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::proven(-1.0, vec![reals(&[PI, PI])]))
+    }
+
+    fn reference(&self) -> &'static str {
+        "Easom, E. E. (1990). A Survey of Global Optimization Techniques. M.Eng. thesis, \
+         University of Louisville."
+    }
+}
+
+/// The eggholder function, `−(x₂ + 47) sin √|x₂ + x₁ / 2 + 47| − x₁ sin √|x₁ − (x₂ + 47)|`:
+/// deep local minima all over, the deepest at the edge of the box.
+///
+/// Bounds [−512, 512]²; minimum −959.6406627208508 at (512, 404.2318051137578), on the bound
+/// x₁ = 512, where the derivative in x₂ is 0, computed to 40 digits by Newton's method and
+/// rounded. The best of the local minima that local searches from the 40 lowest points of a
+/// 4097 × 4097 grid reach, the next −956.9182316246655 at (482.3533104647884,
+/// 432.87899894548343); not proven global.
+///
+/// Whitley, D., Mathias, K., Rana, S. and Dzubera, J. (1996). Evaluating evolutionary
+/// algorithms. *Artificial Intelligence* 85(1-2): 245-276, section 4.2 (read in the authors'
+/// copy), where it is F101, this formula on [−512, 511] with 10 bits per variable, with no
+/// minimum given in 2 dimensions: on [−512, 511]², x₁ = 512 is outside the box, and the minimum
+/// is the next one above. The name and the bounds [−512, 512] are those of Mishra, S. K. (2006).
+/// Some new test functions for global optimization and performance of repulsive particle swarm
+/// method. MPRA paper 2718, who gives the minimum as 959.64 at (512, 404.2319): the sign is
+/// lost, and x₂ is 404.2318 to 4 decimals; Jamil and Yang (2013, function 66) repeat both.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Eggholder;
+
+impl FitnessFunction<Reals> for Eggholder {
+    type Output = f64;
+
+    /// The value at `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than 2 genes.
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let (x1, x2) = (x[0], x[1]);
+        -(x2 + 47.0) * math::sin((x2 + x1 / 2.0 + 47.0).abs().sqrt())
+            - x1 * math::sin((x1 - (x2 + 47.0)).abs().sqrt())
+    }
+}
+
+impl Problem for Eggholder {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Eggholder"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(2, -512.0, 512.0)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::best_known(
+            -959.640_662_720_850_8,
+            vec![reals(&[512.0, 404.231_805_113_757_8])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        "Whitley, D., Mathias, K., Rana, S. and Dzubera, J. (1996). Evaluating evolutionary \
+         algorithms. Artificial Intelligence 85(1-2): 245-276."
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some("https://doi.org/10.1016/0004-3702(95)00124-7")
+    }
+}
+
+/// Schaffer's F6, `0.5 + (sin² √(x₁² + x₂²) − 0.5) / (1 + 0.001 (x₁² + x₂²))²`: rings of local
+/// minima around the global one.
+///
+/// Bounds [−100, 100]²; minimum 0 at the origin. It's the global minimum: the numerator is at
+/// least −0.5 and the denominator at least 1, so the value is at least 0, and 0 only where the
+/// denominator is 1. The function depends on the distance r from the origin only: its local
+/// minima are rings near r = kπ, the first at r = 3.1384848 with 0.0097159.
+///
+/// Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control
+/// parameters affecting online performance of genetic algorithms for function optimization.
+/// *Proceedings of the Third International Conference on Genetic Algorithms*, Morgan Kaufmann:
+/// 51-60, which couldn't be read. Definition and bounds as Whitley, Mathias, Rana and Dzubera
+/// (1996, table 1, F9, "the sine envelope sine wave") restate it, crediting Schaffer et al.; the
+/// CEC 2005 report (Suganthan et al. 2005, section 2.3.2) has the same function, and expands it
+/// to n dimensions as its function 14. Not yet checked against the original
+/// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct SchafferF6;
+
+impl FitnessFunction<Reals> for SchafferF6 {
+    type Output = f64;
+
+    /// The value at `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than 2 genes.
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let squared = x[0] * x[0] + x[1] * x[1];
+        let numerator = math::powi(math::sin(squared.sqrt()), 2) - 0.5;
+        0.5 + numerator / math::powi(1.0 + 0.001 * squared, 2)
+    }
+}
+
+impl Problem for SchafferF6 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "SchafferF6"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(2, -100.0, 100.0)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::proven(0.0, vec![reals(&[0.0, 0.0])]))
+    }
+
+    fn reference(&self) -> &'static str {
+        "Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control \
+         parameters affecting online performance of genetic algorithms for function \
+         optimization. Proceedings of the Third International Conference on Genetic Algorithms, \
+         Morgan Kaufmann: 51-60."
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1343,6 +1877,231 @@ mod tests {
             let dx2 = x1 - 8.0 * x2 + 16.0 * math::powi(x2, 3);
             assert!(dx1.abs() < 1e-14 && dx2.abs() < 1e-14);
         }
+    }
+
+    // the gradient at `x` by central differences, with steps of `h`
+    fn gradient(f: impl Fn(&Reals) -> f64, x: &[f64], h: f64) -> Vec<f64> {
+        (0..x.len())
+            .map(|i| {
+                let (mut up, mut down) = (x.to_vec(), x.to_vec());
+                up[i] += h;
+                down[i] -= h;
+                (f(&at(&up)) - f(&at(&down))) / (2.0 * h)
+            })
+            .collect()
+    }
+
+    // `value` rounded to `decimals` decimals
+    fn rounded(value: f64, decimals: i32) -> f64 {
+        let scale = 10f64.powi(decimals);
+        (value * scale).round() / scale
+    }
+
+    #[test]
+    fn hartmann_3() {
+        check_optimum(&Hartmann3);
+        let optimum = Hartmann3.optimum().expect("known");
+        assert!(!optimum.is_proven());
+        // the minimum that later papers quote from Dixon and Szegö, −3.86278, and the point that
+        // they quote, (0.114614, 0.555649, 0.852547), to their digits
+        assert_eq!(rounded(optimum.value(), 5), -3.86278);
+        let solution = &optimum.solutions()[0];
+        for (x, reported) in solution.iter().zip([0.114_614, 0.555_649, 0.852_547]) {
+            assert_eq!(rounded(*x, 6), reported);
+        }
+        // with p₄₁ = 0.0381, the minimum would be −3.8627798 at x₁ = 0.11459: not those digits
+        let mut p = HARTMANN_3_P;
+        p[3][0] = 0.0381;
+        let shifted = hartmann(&HARTMANN_3_A, &p, &at(&[0.114_588_9, 0.555_649, 0.852_547]));
+        assert!(rounded(shifted, 6) != rounded(optimum.value(), 6));
+        // the gradient is 0 there, and at the other local minima, which are worse
+        let f = |x: &Reals| Hartmann3.evaluate(x);
+        let others = [
+            (
+                [
+                    0.109_337_500_835_031_16,
+                    0.860_524_221_769_077_3,
+                    0.564_123_171_053_538,
+                ],
+                -3.089_764_163_092_250_5,
+            ),
+            (
+                [
+                    0.368_722_727_070_440_8,
+                    0.117_561_628_825_735_62,
+                    0.267_573_743_016_828_9,
+                ],
+                -1.000_816_863_562_928_2,
+            ),
+        ];
+        for x in [solution.to_vec()]
+            .into_iter()
+            .chain(others.iter().map(|(x, _)| x.to_vec()))
+        {
+            assert!(gradient(f, &x, 1e-6).iter().all(|g| g.abs() < 1e-7));
+        }
+        for (x, value) in others {
+            assert_close(f(&at(&x)), value, 1e-12);
+        }
+        // each term is positive and at most cᵢ: the value is between −Σ cᵢ = −8.4 and 0, and at
+        // a center pᵢ, at most −cᵢ
+        for (p, c) in HARTMANN_3_P.iter().zip(HARTMANN_C) {
+            let value = f(&at(p));
+            assert!(value <= -c && value > -8.4);
+        }
+        assert_eq!(Hartmann3.representation().bounds(), vec![0.0..=1.0; 3]);
+    }
+
+    #[test]
+    fn hartmann_6() {
+        check_optimum(&Hartmann6);
+        let optimum = Hartmann6.optimum().expect("known");
+        assert!(!optimum.is_proven());
+        // the minimum that later papers quote from Dixon and Szegö, −3.32237, and the point that
+        // Jamil and Yang give, (0.201690, 0.150011, 0.476874, 0.275332, 0.311652, 0.657301), to
+        // their digits
+        assert_eq!(rounded(optimum.value(), 5), -3.32237);
+        let solution = &optimum.solutions()[0];
+        let reported = [
+            0.201_690, 0.150_011, 0.476_874, 0.275_332, 0.311_652, 0.657_301,
+        ];
+        for (x, reported) in solution.iter().zip(reported) {
+            assert_eq!(rounded(*x, 6), reported);
+        }
+        // Yao, Liu and Lin's p₃₂ = 0.1415 moves the minimizer's x₂ to 0.1468, away from theirs
+        let mut p = HARTMANN_6_P;
+        p[2][1] = 0.1415;
+        let misprint = |x: &Reals| hartmann(&HARTMANN_6_A, &p, x);
+        let moved = at(&[
+            0.201_708, 0.146_781, 0.476_745, 0.275_342, 0.311_652, 0.657_275,
+        ]);
+        assert!(
+            gradient(misprint, &moved, 1e-6)
+                .iter()
+                .all(|g| g.abs() < 1e-4)
+        );
+        assert!(misprint(&moved) > optimum.value() + 3e-4);
+        // the gradient is 0 there, and at the other local minimum, which is worse
+        let f = |x: &Reals| Hartmann6.evaluate(x);
+        let other = [
+            0.404_653_127_706_171_3,
+            0.882_444_923_972_383_2,
+            0.846_101_570_478_180_8,
+            0.573_989_692_430_365_8,
+            0.138_926_603_667_243_88,
+            0.038_495_892_478_237_27,
+        ];
+        assert_close(f(&at(&other)), -3.203_161_918_396_231, 1e-12);
+        for x in [&solution[..], &other] {
+            assert!(gradient(f, x, 1e-6).iter().all(|g| g.abs() < 1e-7));
+        }
+        for (p, c) in HARTMANN_6_P.iter().zip(HARTMANN_C) {
+            let value = f(&at(p));
+            assert!(value <= -c && value > -8.4);
+        }
+    }
+
+    #[test]
+    fn shekel_5_7_and_10() {
+        check_optimum(&Shekel5);
+        check_optimum(&Shekel7);
+        check_optimum(&Shekel10);
+        // at (4, 4, 4, 4), the squared distances to a₁ … a₁₀: 0, 4 · 9, 4 · 16, 4 · 4,
+        // 1 + 9 + 1 + 9, 4 + 25 + 4 + 25, 1 + 1 + 1 + 1, 9 + 16 + 9 + 16, 4 · 4 and
+        // 9 + 0.16 + 9 + 0.16
+        let distances = [0.0, 36.0, 64.0, 16.0, 20.0, 58.0, 4.0, 50.0, 16.0, 18.32];
+        let center = at(&[4.0; 4]);
+        let values = [
+            (5, Shekel5.evaluate(&center), Shekel5.optimum(), -10.1532),
+            (7, Shekel7.evaluate(&center), Shekel7.optimum(), -10.4029),
+            (10, Shekel10.evaluate(&center), Shekel10.optimum(), -10.5364),
+        ];
+        for (m, value, optimum, reported) in values {
+            let expected: f64 = -(0..m)
+                .map(|i| 1.0 / (distances[i] + SHEKEL_C[i]))
+                .sum::<f64>();
+            assert_close(value, expected, 1e-12);
+            let optimum = optimum.expect("known");
+            assert!(!optimum.is_proven());
+            // the minimum is near (4, 4, 4, 4), and below the value there
+            assert!(optimum.value() < value - 1e-6);
+            let solution = &optimum.solutions()[0];
+            assert!(solution.iter().all(|x| (x - 4.0).abs() < 1e-3));
+            // the value that later papers quote from Dixon and Szegö, to its digits, and not the
+            // values that Jamil and Yang give at (4, 4, 4, 4)
+            assert!(![-10.1499, -10.3999, -10.5319].contains(&rounded(value, 4)));
+            assert_eq!(rounded(optimum.value(), 4), reported);
+            // the gradient is 0 there
+            let f = |x: &Reals| shekel(m, x);
+            assert!(gradient(f, solution, 1e-6).iter().all(|g| g.abs() < 1e-7));
+        }
+        // the wells at a₂ and a₃ are local minima, near −1/0.2 = −5
+        assert!((Shekel5.evaluate(&at(&[1.0; 4])) + 5.0).abs() < 0.1);
+        assert!((Shekel10.evaluate(&at(&[8.0; 4])) + 5.0).abs() < 0.2);
+        assert_eq!(Shekel7.representation().bounds(), vec![0.0..=10.0; 4]);
+    }
+
+    #[test]
+    fn easom() {
+        check_optimum(&Easom);
+        assert_eq!(Easom.evaluate(&at(&[PI, PI])), -1.0);
+        // at the origin: −cos 0 cos 0 exp(−2π²)
+        let origin = Easom.evaluate(&at(&[0.0, 0.0]));
+        assert_close(origin, -math::exp(-2.0 * PI * PI), 1e-12);
+        // at (π, 3π/2), cos x₂ is 0 (to rounding)
+        assert!(Easom.evaluate(&at(&[PI, 1.5 * PI])).abs() < 1e-15);
+        // far away, exp underflows to 0: the plane is flat
+        assert_eq!(Easom.evaluate(&at(&[-100.0, 100.0])), 0.0);
+        // 4.8 from (π, π), the value is below 1e-10
+        assert!(Easom.evaluate(&at(&[PI + 4.8, PI])).abs() < 1e-10);
+        assert_eq!(Easom.representation().bounds(), vec![-100.0..=100.0; 2]);
+    }
+
+    #[test]
+    fn eggholder() {
+        check_optimum(&Eggholder);
+        let optimum = Eggholder.optimum().expect("known");
+        assert!(!optimum.is_proven());
+        // the value that Jamil and Yang give, with its sign corrected, to its digits; their x₂,
+        // 404.2319, is 404.2318 to 4 decimals
+        assert_eq!(rounded(optimum.value(), 4), -959.6407);
+        let solution = &optimum.solutions()[0];
+        assert_eq!(solution[0], 512.0);
+        assert_eq!(rounded(solution[1], 4), 404.2318);
+        // on the bound: the derivative in x₂ is 0, and the one in x₁ is negative (the value would
+        // go on falling beyond x₁ = 512)
+        let f = |x: &Reals| Eggholder.evaluate(x);
+        let slope = gradient(f, solution, 1e-6);
+        assert!(slope[1].abs() < 1e-6 && slope[0] < -1.0);
+        // the next local minimum, inside the box
+        let next = at(&[482.353_310_464_788_4, 432.878_998_945_483_43]);
+        assert_close(f(&next), -956.918_231_624_665_5, 1e-12);
+        assert!(gradient(f, &next, 1e-6).iter().all(|g| g.abs() < 1e-5));
+        // at the origin: −47 sin √47 − 0
+        let origin = f(&at(&[0.0, 0.0]));
+        assert_close(origin, -47.0 * math::sin(47f64.sqrt()), 1e-12);
+    }
+
+    #[test]
+    fn schaffer_f6() {
+        check_optimum(&SchafferF6);
+        assert_eq!(SchafferF6.evaluate(&at(&[0.0, 0.0])), 0.0);
+        // at a distance of π/2, sin² = 1: 0.5 + 0.5 / (1 + 0.001 π² / 4)²
+        let r = PI / 2.0;
+        let expected = 0.5 + 0.5 / math::powi(1.0 + 0.001 * r * r, 2);
+        assert_close(SchafferF6.evaluate(&at(&[r, 0.0])), expected, 1e-12);
+        // it depends on the distance only: (3, 4) and (0, −5) have the same x₁² + x₂²
+        assert_eq!(
+            SchafferF6.evaluate(&at(&[3.0, 4.0])),
+            SchafferF6.evaluate(&at(&[0.0, -5.0]))
+        );
+        // the first ring of local minima, at r = 3.1384848, is 0.0097159 above the minimum
+        let ring = SchafferF6.evaluate(&at(&[3.138_484_821_601_593, 0.0]));
+        assert_close(ring, 0.009_715_909_877_514_548, 1e-12);
+        assert_eq!(
+            SchafferF6.representation().bounds(),
+            vec![-100.0..=100.0; 2]
+        );
     }
 
     // sign changes and permutations of the genes don't change the functions that are symmetric

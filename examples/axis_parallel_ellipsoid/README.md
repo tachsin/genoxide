@@ -6,7 +6,7 @@ reference: "Molga, M. and Smutnicki, C. (2005). Test functions for optimization 
 reference_url: ""
 optimum: "0 (at the origin)"
 languages: [rust, python]
-order: 52
+order: 42
 trace_note: "Recorded from another run: CMA-ES in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 

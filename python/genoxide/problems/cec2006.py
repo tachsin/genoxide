@@ -1,4 +1,4 @@
-"""The constrained problems of the CEC 2006 special session, g01 to g18, evaluated in Rust.
+"""The constrained problems of the CEC 2006 special session, g01 to g24, evaluated in Rust.
 
 Liang, J. J., Runarsson, T. P., Mezura-Montes, E., Clerc, M., Suganthan, P. N., Coello Coello,
 C. A. and Deb, K. (2006). Problem Definitions and Evaluation Criteria for the CEC 2006 Special
@@ -48,6 +48,12 @@ __all__ = [
     "G16",
     "G17",
     "G18",
+    "G19",
+    "G20",
+    "G21",
+    "G22",
+    "G23",
+    "G24",
 ]
 
 EQUALITY_TOLERANCE = 0.0001
@@ -339,3 +345,108 @@ class G18(Problem):
     """
 
     _type: ClassVar[str] = "g18"
+
+
+@dataclass(frozen=True)
+class G19(Problem):
+    """g19: ``Σⱼ Σᵢ cᵢⱼ x₁₀₊ᵢ x₁₀₊ⱼ + 2 Σⱼ dⱼ x₁₀₊ⱼ³ − Σᵢ bᵢ xᵢ``, a cubic in 15 dimensions with 5
+    nonlinear inequalities ``−2 Σᵢ cᵢⱼ x₁₀₊ᵢ − 3dⱼ x₁₀₊ⱼ² − eⱼ + Σᵢ aᵢⱼ xᵢ <= 0``, with the data of
+    the report's table 1.
+
+    Bounds [0, 10]¹⁵; best known 32.6555929502463, where all five constraints are active (the
+    report's table 3 counts none).
+
+    The report's eqs. 39-40 and table 1 (pp. 11-12), after Himmelblau (1972).
+    """
+
+    _type: ClassVar[str] = "g19"
+
+
+@dataclass(frozen=True)
+class G20(_WithTolerance):
+    """g20: ``Σ aᵢxᵢ``, linear in 24 dimensions, with 6 nonlinear inequalities, 12 nonlinear and 2
+    linear equalities, with the data of the report's table 2, and no feasible solution.
+
+    Bounds [0, 10]²⁴. The report finds no feasible solution, and there is none (derived for
+    genoxide, not in the report): the inequalities hold only where 12 of the variables are 0, and
+    the equalities then ask for Σ xᵢ >= 1.26 where h₁₃ asks for 1. The best known value is the
+    report's 0.2049794002 (its table 4), at an infeasible x*, for the report's δ only (``optimum``
+    is None for another). The equalities are undefined, and the fitness invalid, where x₁…x₁₂ or
+    x₁₃…x₂₄ are all 0. ``tolerance`` is δ, :data:`EQUALITY_TOLERANCE` if None.
+
+    The report's eqs. 41-42 and table 2 (pp. 12-13), after Himmelblau (1972).
+    """
+
+    tolerance: float | None = None
+    _type: ClassVar[str] = "g20"
+
+
+@dataclass(frozen=True)
+class G21(_WithTolerance):
+    """g21: ``x₁``, linear in 7 dimensions, with 1 nonlinear inequality and 5 nonlinear
+    equalities.
+
+    Bounds x₁ in [0, 1000], x₂, x₃ in [0, 40], x₄ in [100, 300], x₅ in [6.3, 6.7], x₆ in
+    [5.9, 6.4], x₇ in [4.5, 6.25]; best known 193.724510070035, for the report's δ only
+    (``optimum`` is None for another). ``tolerance`` is δ, :data:`EQUALITY_TOLERANCE` if None.
+
+    The report's eqs. 43-44 (p. 13), after Epperly, T. Global optimization test problems with
+    solutions (the report's reference 6).
+    """
+
+    tolerance: float | None = None
+    _type: ClassVar[str] = "g21"
+
+
+@dataclass(frozen=True)
+class G22(_WithTolerance):
+    """g22: ``x₁``, linear in 22 dimensions, with 1 nonlinear inequality, 8 linear and 11
+    nonlinear equalities.
+
+    Bounds x₁ in [0, 20000], x₂…x₄ in [0, 10⁶], x₅…x₇ in [0, 4·10⁷], x₈ in [100, 299.99], x₉ in
+    [100, 399.99], x₁₀ in [100.01, 300], x₁₁ in [100, 400], x₁₂ in [100, 600], x₁₃…x₁₅ in
+    [0, 500], x₁₆ in [0.01, 300], x₁₇ in [0.01, 400], x₁₈…x₂₂ in [−4.7, 6.25]; best known
+    236.430975504001, for the report's δ only (``optimum`` is None for another). ``tolerance`` is
+    δ, :data:`EQUALITY_TOLERANCE` if None. The report's value isn't the best there is: solving the
+    equalities for all but x₁, x₈ and x₉ gives 236.370313314566 at x₈ = 130, x₉ = 170, with every
+    equality met exactly (derived for genoxide, not in the report).
+
+    The report's eqs. 45-46 (pp. 13-14), after Epperly (the report's reference 6).
+    """
+
+    tolerance: float | None = None
+    _type: ClassVar[str] = "g22"
+
+
+@dataclass(frozen=True)
+class G23(_WithTolerance):
+    """g23: ``−9x₅ − 15x₈ + 6x₁ + 16x₂ + 10(x₆ + x₇)``, linear in 9 dimensions, with 2 nonlinear
+    inequalities, 3 linear equalities and 1 nonlinear equality.
+
+    Bounds x₁, x₂, x₆ in [0, 300], x₃, x₅, x₇ in [0, 100], x₄, x₈ in [0, 200], x₉ in
+    [0.01, 0.03]; best known −400.055099999999584, for the report's δ only (``optimum`` is None
+    for another). The report prints x* with a comma missing: x₈ = 200 and
+    x₉ = 0.0100000100000100008. ``tolerance`` is δ, :data:`EQUALITY_TOLERANCE` if None.
+
+    The report's eqs. 47-48 (pp. 14-15), after Xia, Q. Global optimization test problems (the
+    report's reference 10).
+    """
+
+    tolerance: float | None = None
+    _type: ClassVar[str] = "g23"
+
+
+@dataclass(frozen=True)
+class G24(Problem):
+    """g24: ``−x₁ − x₂`` in 2 dimensions, subject to ``x₂ <= 2x₁⁴ − 8x₁³ + 8x₁² + 2`` and
+    ``x₂ <= 4x₁⁴ − 32x₁³ + 88x₁² − 96x₁ + 36``.
+
+    Bounds x₁ in [0, 3], x₂ in [0, 4]; minimum −5.50801327159536 at (2.32952019747762,
+    3.17849307411774), where both constraints are active (the report prints x* with a comma
+    missing). The feasible region's two parts meet at (1, 0).
+
+    The report's eqs. 49-50 (p. 15), after Floudas, C. A. et al. (1999). Handbook of Test Problems
+    in Local and Global Optimization. Kluwer.
+    """
+
+    _type: ClassVar[str] = "g24"

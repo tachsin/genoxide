@@ -90,8 +90,8 @@ docs of each function say where its bounds come from when the original has none.
 | Weierstrass (a = 0.5, b = 3, k_max = 20) | CEC05 F11 (Weierstrass 1872 as a function) | [−0.5, 0.5] | 0 (+ bias) | VO(CEC05); BBOB f16 differs |
 | Katsuura | BBOB f23; Katsuura, H. (1991). Continuous nowhere-differentiable functions. *Amer. Math. Monthly* 98(5): 411-416 | [−5, 5] | f_opt | BBOB form VO; 1991 details U |
 | HappyCat, HGBat | Beyer, H.-G. and Finck, S. (2012). HappyCat: a simple function class where well-known direct search algorithms do fail. PPSN XII, LNCS 7491: 367-376. doi:10.1007/978-3-642-32937-1_37 | — | 0 at (−1, …, −1) | U (α = 1/8 vs CEC 2014's 1/4) |
-| Eggholder | Whitley, D., Mathias, K., Rana, S. and Dzubera, J. (1996). Evaluating evolutionary algorithms. *Artificial Intelligence* 85(1-2): 245-276. doi:10.1016/0004-3702(95)00124-7 | [−512, 512] (original possibly [−512, 511]) | 2-D: −959.6407 at (512, 404.2319) | VS(Jamil-Yang, whose f* has the wrong sign); original bounds U |
-| Schaffer F6 and F7 | Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control parameters affecting online performance of genetic algorithms for function optimization. Proc. 3rd ICGA: 51-60 | [−100, 100] | 0 at 0 | F6 VS(CEC05 F14); F7 U |
+| Eggholder | Whitley, D., Mathias, K., Rana, S. and Dzubera, J. (1996). Evaluating evolutionary algorithms. *Artificial Intelligence* 85(1-2): 245-276. doi:10.1016/0004-3702(95)00124-7 | [−512, 512] (Mishra 2006); the original's is [−512, 511] | 2-D: −959.6406627 at (512, 404.2318051) on [−512, 512]; −956.9182316 at (482.35331, 432.87900) on [−512, 511] | **VO** (batch 6: the authors' copy, section 4.2, F101, [−512, 511] with 10 bits, no 2-D minimum); name, [−512, 512] and (512, 404.2319) from Mishra, S. K. (2006), MPRA paper 2718, read, whose sign is lost and whose x₂ is 404.2318 to 4 decimals |
+| Schaffer F6 and F7 | Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control parameters affecting online performance of genetic algorithms for function optimization. Proc. 3rd ICGA: 51-60 | [−100, 100] | 0 at 0 | F6 VS(Whitley et al. 1996, table 1, F9, crediting Schaffer et al.; CEC05 section 2.3.2), batch 6; the original unread; F7 U |
 | Büche-Rastrigin; BBOB Rastrigin (f3) | BBOB f4, f3 | [−5, 5] | f_opt | VO (BBOB) |
 | Shifted, shifted-rotated Rastrigin | CEC05 F9, F10 (shift vectors and matrices in the report's data files) | [−5, 5] | bias −330 | VO(CEC05) |
 | Non-continuous Rastrigin | Liang, J. J., Qin, A. K., Suganthan, P. N. and Baskar, S. (2006). Comprehensive learning particle swarm optimizer. *IEEE TEVC* 10(3): 281-295. doi:10.1109/TEVC.2005.857610 | [−5.12, 5.12] | 0 | U |
@@ -108,11 +108,11 @@ docs of each function say where its bounds come from when the original has none.
 | Booth | 2 | U | [−10, 10] | 0 at (1, 3) | VS(Jamil-Yang) |
 | Matyas | 2 | U (credited to Matyas, 1965) | [−10, 10] | 0 at 0 | VS(Jamil-Yang) |
 | Himmelblau | 2 | Himmelblau, D. M. (1972). *Applied Nonlinear Programming.* McGraw-Hill | [−5, 5] | 0 at (3, 2), (−2.805118, 3.131312), (−3.779310, −3.283186), (3.584428, −1.848126) | (3, 2) VC; the other three U |
-| Easom | 2 | Easom, E. E. (1990). *A Survey of Global Optimization Techniques.* M.Eng. thesis, University of Louisville | [−100, 100] | −1 at (π, π) | VS(Jamil-Yang) |
+| Easom | 2 | Easom, E. E. (1990). *A Survey of Global Optimization Techniques.* M.Eng. thesis, University of Louisville; probably first in a journal in Stuckman, B. E. and Easom, E. E. (1992), *IEEE Trans. SMC* 22(5): 1024-1032, doi:10.1109/21.179841 | [−100, 100] | −1 at (π, π) (proven from the formula) | VS(Jamil-Yang) only: neither the thesis nor the 1992 paper could be read (batch 6); bounds U |
 | Bohachevsky 1, 2, 3 | 2 | Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized simulated annealing for function optimization. *Technometrics* 28(3): 209-217. doi:10.1080/00401706.1986.10488128 | [−100, 100] | 0 at 0 | VS(Jamil-Yang); whether the paper has variants 2 and 3 U |
 | Shekel's foxholes (De Jong's F5) | 2 | De Jong (1975), after Shekel (1971) | [−65.536, 65.536] | ≈ 0.998 at (−32, −32) | n VS(Y99); formula and grid U |
-| Hartmann 3 and 6 | 3, 6 | Hartman, J. K. (1973). Some experiments in global optimization. *Naval Research Logistics Quarterly* 20(3): 569-576. doi:10.1002/nav.3800200316; constants tabulated in Dixon and Szegö (1978) | [0, 1]ⁿ | H3: −3.86278 at (0.114614, 0.555649, 0.852547); H6: −3.32237 at (0.201690, 0.150011, 0.476874, 0.275332, 0.311652, 0.657301) | VS(Jamil-Yang, Y99 to 2 digits); longer digits U |
-| Shekel 5, 7, 10 | 4 | Shekel, J. (1971). Test functions for multimodal search techniques. Proc. 5th Princeton Conf. on Information Sciences and Systems; constants in Dixon and Szegö (1978) | [0, 10]⁴ | −10.1532, −10.4029, −10.5364 near (4, 4, 4, 4) | VS(Y99 f21-f23); Jamil-Yang's values are at exactly (4, 4, 4, 4), not the minima |
+| Hartmann 3 and 6 | 3, 6 | Hartman, J. K. (1973). Some experiments in global optimization. *Naval Research Logistics Quarterly* 20(3): 569-576. doi:10.1002/nav.3800200316 (the 1972 report NPS-55HH72051A, read in batch 6, defines the form with random, unprinted constants and has no 3- or 6-D problem); constants tabulated in Dixon and Szegö (1978) | [0, 1]ⁿ | H3: −3.862782147820755 at (0.1146143, 0.5556488, 0.8525470); H6: −3.322368011415515 at (0.2016895, 0.1500107, 0.4768740, 0.2753324, 0.3116516, 0.6573005) (batch 6, Newton's method) | VS(Y99 tables XII-XIII, read in batch 6, whose H6 p₃₂ = 0.1415 is a misprint for 0.1451); Dixon and Szegö unread |
+| Shekel 5, 7, 10 | 4 | Shekel, J. (1971). Test functions for multimodal search techniques. Proc. 5th Princeton Conf. on Information Sciences and Systems; constants in Dixon and Szegö (1978) | [0, 10]⁴ | −10.153199679, −10.402940567, −10.536409817 near (4, 4, 4, 4) (batch 6, Newton's method) | VS(Y99 table XIV, read in batch 6); Jamil-Yang put the minima at (4, 4, 4, 4) with −10.1499, −10.3999, −10.5319, which are neither the minima nor the values there (−10.153196, −10.402819, −10.536284) |
 | Langermann | 2 (orig. 10) | Bersini, H., Dorigo, M., Langerman, S., Seront, G. and Gambardella, L. (1996). Results of the first international contest on evolutionary optimisation (1st ICEO). Proc. IEEE ICEC: 611-615. doi:10.1109/ICEC.1996.542670 | [0, 10] | ≈ −4.1558 (2-D, 5 terms) | U |
 | Kowalik | 4 | Y99 f15 (data fit, 11 points) | [−5, 5] | ≈ 3.075e-4 | U |
 
@@ -142,6 +142,22 @@ from Dixon and Szegö, not from Jamil and Yang; Branin's third minimum (3π, 2.4
 has no domain in its paper; Rosenbrock's chained form (Y99, CEC05) versus the pairwise
 "extended" form of Moré, Garbow and Hillstrom (1981, ACM TOMS 7(1): 17-41,
 doi:10.1145/355934.355936); Schaffer F6 has √(x² + y²) inside sin².
+
+**Checked in batch 6** (Hartmann, Shekel, Easom, Eggholder, Schaffer F6). Read: Hartman's 1972
+report (NPS-55HH72051A, through the Internet Archive), Yao, Liu and Lin (1999, tables XII-XIV),
+Whitley, Mathias, Rana and Dzubera (1996, the authors' copy), Mishra (2006, MPRA paper 2718) and
+the CEC 2005 report. Not reachable: Hartman (1973), Dixon and Szegö (1978), Törn and Žilinskas
+(1989), Shekel (1971), Easom (1990), Stuckman and Easom (1992) and Schaffer et al. (1989); a
+search inside Dixon and Szegö's volume (Google Books, tokens only, not a reading) finds 0.03815,
+0.0381 and 0.1451 but not 0.1415, and −3.86278, −3.32237, −10.1532, −10.4029 and −10.5364.
+Findings: Hartman's report has no Hartmann 3 or 6 constants (they are Dixon and Szegö's); Y99's
+H6 p₃₂ = 0.1415 is a misprint (it moves the minimum to −3.3219952 at x₂ = 0.1468, away from Y99's
+own minimizer), Y99's table I gives n = 4 for f19, and its Shekel appendix drops the minus sign;
+Jamil and Yang misprint H3's p₂₂ (0.4837), H6's p₁₆ (0.5586), Shekel's minima (at (4, 4, 4, 4),
+with values that aren't f there) and the eggholder's sign; the eggholder's original domain is
+[−512, 511], where x₁ = 512 is out of the box, and the usual x₂ = 404.2319 is 404.2318 to 4
+decimals. Every minimum is recomputed to 40 digits by Newton's method (mpmath) and, but for Easom
+and Schaffer F6 (proven from the formulas), stored as a best known value (`is_proven()` false).
 
 **Hand-computed test values (VC):** Rosenbrock (−1.2, 1) = 24.2; Powell (3, −1, 0, 1) = 215;
 Goldstein-Price (0, −1) = 3 and its three local minima's values from the paper; Beale (3, 0.5) =
@@ -203,12 +219,12 @@ x*. "Max" marks an objective negated from a maximization (inferred from the repo
 | g16 | 5 | nonlinear | 0.0204% | 4 | 34 | 0 | 0 | 4 | | −1.90515525853479 | 7-10 |
 | g17 | 6 | nonlinear | 0.0000% | 0 | 0 | 0 | 4 | 4 | | 8853.53967480648 (see errata) | 10 |
 | g18 | 9 | quadratic | 0.0000% | 0 | 13 | 0 | 0 | 6 | yes (−area) | −0.866025403784439 | 11 |
-| g19 | 15 | nonlinear | 33.4761% | 0 | 5 | 0 | 0 | 0 | | 32.6555929502463 | 11-12 |
-| g20 | 24 | linear | 0.0000% | 0 | 6 | 2 | 12 | 16 | | 0.2049794002 (Table 4; x* slightly infeasible) | 12-13 |
+| g19 | 15 | nonlinear | 33.4761% | 0 | 5 | 0 | 0 | 0 (5 at x*, errata 9) | | 32.6555929502463 | 11-12 |
+| g20 | 24 | linear | 0.0000% | 0 | 6 | 2 | 12 | 16 | | 0.2049794002 (Table 4; x* infeasible, g₁ = 0.1438; none feasible, errata 3) | 12-13 |
 | g21 | 7 | linear | 0.0000% | 0 | 1 | 0 | 5 | 6 | | 193.724510070035 | 13 |
-| g22 | 22 | linear | 0.0000% | 0 | 1 | 8 | 11 | 19 | | 236.430975504001 | 13-14 |
+| g22 | 22 | linear | 0.0000% | 0 | 1 | 8 | 11 | 19 | | 236.430975504001 (236.370313314566 exists, errata 9) | 13-14 |
 | g23 | 9 | linear | 0.0000% | 0 | 2 | 3 | 1 | 6 | | −400.055099999999584 | 14-15 |
-| g24 | 2 | linear | 79.6556% | 0 | 2 | 0 | 0 | 2 | yes (−x₁ − x₂) | −5.50801327159536 | 15 |
+| g24 | 2 | linear | 79.6556% (g₁ alone; 44.206% with both, errata 9) | 0 | 2 | 0 | 0 | 2 | yes (−x₁ − x₂) | −5.50801327159536 | 15 |
 
 "Max" for g02, g03, g08 and g12 agrees with Runarsson and Yao (2000, IEEE TEVC 4(3): 284-294,
 doi:10.1109/4235.873238) and Michalewicz and Schoenauer (1996, Evolutionary Computation 4(1):
@@ -259,9 +275,24 @@ with a tolerance of 1e-9 relative.
    jumps at x₂ = 100 and x₁ = 300 (piecewise), x₂* sits just below 100, and f₁ is defined for
    x₁ < 400 and f₂ for x₂ < 1000 while the bounds include 400 and 1000: the implementation picks the
    closed end and documents it.
-3. **g20** has no known feasible solution: the printed x* is slightly infeasible (Σx ≈ 1.0001).
-   `optimum()` returns the value as a best known, not proven, with that note.
-4. **g22:** the earlier best known was 382.902205; 236.430975504001 is εDE's. Spettel, Ba and
+3. **g20** has no known feasible solution, and none exists (below): the report calls its x*
+   "a little infeasible". `optimum()` returns the value as a best known, not proven, with that
+   note. Checked in batch 6: the x* meets the 14 equalities within δ but violates g₁ by 0.1438
+   (x₁₃ = 0.158 in (x₁ + x₁₃)/(Σx + e₁)); that total is 20 times the mean violation 0.00718768
+   that Takahama and Sakai (2006, "Constrained optimization by the ε constrained differential
+   evolution with gradient-based mutation and feasible elites", IEEE CEC 2006) give for it. It evaluates to 0.204979400285636, which table 4
+   truncates to 0.2049794002 (the text gives no f(x*)); `G20` stores table 4's value. **No
+   feasible solution exists** (derived in batch 6, not in the report): g₁…g₆ are nonnegative sums
+   over positive denominators, so they force x₁, x₂, x₃, x₇, x₈, x₉, x₁₃, x₁₄, x₁₅, x₁₉, x₂₀, x₂₁
+   to 0. With pᵢ = (xᵢ/bᵢ)/Σⱼ xⱼ/bⱼ over the six liquids left and S₂ = Σᵢ₌₁₃²⁴ xᵢ/bᵢ, h₁…h₁₂
+   give Σ cᵢpᵢ = 40 (to 6δ) and Σᵢ₌₁₃²⁴ xᵢ = S₂ Σ bᵢcᵢpᵢ/40; over distributions p with Σ cᵢpᵢ =
+   40 (an LP with two constraints, whose vertices mix x₅, the only cᵢ > 40, with one other), the
+   least is 109.57 S₂, with x₅ and x₁₀. h₁₄ gives S₂ ≥ (1.671 − δ − Σᵢ₌₁¹² xᵢ/dᵢ)/k ≥ 0.0115, so
+   Σx ≥ 1.26 where h₁₃ allows 1 + δ. The point of that bound, built in `G20`'s test, meets every
+   constraint but h₁₃, which it misses by 0.287. At the origin the equalities are 0/0: the fitness
+   is invalid there.
+4. **g22:** the earlier best known was 382.902205; 236.430975504001 is εDE's (Takahama and Sakai
+   2006 found it again, and cite it as new). Spettel, Ba and
    Arnold (2022, Evolutionary Computation 30(4): 531-553, doi:10.1162/evco_a_00311) state a better
    value exists: **unverified (paywalled)**.
 5. g10: Table 3 says a = 6, the text names only g1-g3 as active; at x* all six are active (to
@@ -276,6 +307,43 @@ with a tolerance of 1e-9 relative.
    are labelled gg₁…gg₁₃; g17's eq. 35 writes f(x₁) + f(x₂) for f₁(x₁) + f₂(x₂).
 8. g12's constraint is a disjunction: min over p, q, r ∈ {1..9} of (x₁−p)² + (x₂−q)² + (x₃−r)² −
    0.0625 ≤ 0, one NI constraint.
+9. **Checked in batch 6 (g19-g24).** The formulas, bounds and data were read from the typeset
+   report (tables 1 and 2 rendered at 300 dpi; c of g19 is symmetric, a₁₃…a₂₄ and b₁₃…b₂₄ of g20
+   repeat a₁…a₁₂ and b₁…b₁₂), and table 3's LI, NI, LE and NE counted from them: all match. Each
+   x* evaluates to the text's f(x*): g19 to 2.8e-14, g21 to 2.8e-14, g22 to 5.7e-14, g23 to
+   1.1e-13 (with the repaired x₈, x₉) and g24 exactly; g20 as in item 3. The organizers' C code
+   (fcnsuite.c, in the report's repository, with no license) was only read, to compare its
+   formulas with the report's: they agree, and no value was taken from it.
+   - g19: table 3 says a = 0; at x* all five constraints are active (|g| ≤ 1e-14). ρ: 33.467 %
+     of 2·10⁶ random points are feasible (table 3: 33.4761 %).
+   - g21: x* is on the tolerance boundary of all five equalities (|h| = δ, beyond it by 1e-12
+     from rounding), with g₁ active. The equalities leave x₄ free: h₃…h₅ give x₅…x₇, and h₁, h₂
+     factor as (x₄ − 300)(x₃ − 25(x₅ − x₆)) and (100 − x₄)(x₂ − 155.365 + 25x₇). With g₁ active f
+     is a function of x₄: 193.788 = 35 (25 ln 2)^0.6 at x₄ = 100 (x₂ = 0, every equality exact),
+     rising to 330.6 near x₄ = 293 and falling to 325.1 at x₄ = 299.53, where x₂ reaches 40. The
+     second end is the local optimum (324.70 with the tolerance) where about a third of SHADE's
+     runs end (32 of 100 with a population of 50).
+   - g22: x* is feasible, every |h| < δ, and g₁ = −2.2e-7. **The report's best known is not
+     the best:** the 19 equalities leave x₁, x₈ and x₉ free (h₁…h₆ and h₁₀, h₁₁ are linear in x₈
+     and x₉: x₁₀ = 430 − x₈, x₁₁ = 440 − x₉ + x₈, x₁₂ = 160 + x₉, x₁₆ = 440 − x₉, x₁₇ = 160;
+     h₁₂…h₁₆ give x₁₈…x₂₂ as logarithms; h₁₇…h₁₉ give x₁₃ = 30/(x₁₈ − x₁₉),
+     x₁₄ = 40/(x₂₀ − x₂₁), x₁₅ = 60/(ln 160 − 4.60517); h₇…h₉ give x₂…x₄), and with g₁ active f
+     is a function of x₈, x₉ on x₈ ≥ 130, x₉ ≥ x₈ + 40 (x₁₀ ≤ 300, x₁₁ ≤ 400). A 2001 × 3001
+     grid and a local search find its least value at the corner x₈ = 130, x₉ = 170:
+     236.370313314566, every equality met exactly, 0.0607 below the report's 236.430975504001
+     (which has x₈ = 130.075, x₉ = 170.817). This agrees with Spettel, Ba and Arnold (2022, item 4
+     above) that a better value exists. `G22` keeps the report's value as `optimum()` and gives
+     this solution in its docs and tests. No run of genoxide's algorithms (SHADE, L-SHADE, CMA-ES
+     with or without restarts, 25 seeds each, 500,000 evaluations) found a feasible solution; in
+     the organizers' comparison of the session's entries no algorithm succeeded on g22 either.
+   - g23: x* meets h₁…h₄ at |h| = δ, g₂ is active and g₁ = −2.5e-6. (0, 100, 0, 100, 0, 0, 100,
+     200, 0.01) meets every constraint exactly, at f = −400: the best known is 0.0551 lower
+     through the tolerance.
+   - g24: **table 3's ρ = 79.6556 % is the share where g₁ alone holds** (79.651 %, integrated);
+     with both constraints it is 44.206 %. g₂'s bound on x₂ is 4((x₁ − 1)(x₁ − 3))², so the
+     report's "two disconnected sub-regions" meet at (1, 0). The optimum is proven by reducing to
+     x₁ alone (the best x₂ is min(4, both bounds)): the minimum is where the bounds cross, a root
+     of x₁⁴ − 12x₁³ + 40x₁² − 48x₁ + 17, which the report's x₁ is to 1.5e-14.
 
 ### 1.3 Multi objective, unconstrained
 
@@ -967,7 +1035,7 @@ algorithms come on top of these.
 | 3 | done ([#191](https://github.com/tachsin/genoxide/pull/191)) | Engineering design, single objective, and the mixed-variable convention (`design()`) | Welded beam, Pressure vessel, Tension/compression spring, Speed reducer, Gear train (integer), Three-bar truss, Cantilever beam, Car side impact (single objective) (8), and CEC 2006 g01-g06 (6) | `pressure_vessel` (switch to `engineering::PressureVessel`); new `welded_beam` (constrained); new `gear_train` (integer genome; category integer); new `tension_compression_spring`, `speed_reducer`, `three_bar_truss`, `cantilever_beam`, `car_side_impact` and `cec2006_g01` to `cec2006_g06` |
 | 4 | done (#270) | Scalable many-objective problems | DTLZ5, DTLZ6, DTLZ7, ZDT5 (binary), WFG1-WFG9 (13) | an example per problem: `zdt5`, `dtlz5_3obj`, `dtlz6_3obj`, `dtlz7_3obj`, `wfg1` to `wfg9` (2 objectives); later, `wfg_many_objective`: NSGA-III and MOEA/D on WFG4 and WFG9 with 5 objectives, IGD to the sampled front |
 | 5 | done (#277) | CEC 2006, part 2 | g07-g18 (12) | `cec2006_g07` to `cec2006_g18`; `cec2006`: SHADE with Deb's rules on all of the problems so far, printing f − f* and feasibility, as in the report's evaluation criteria |
-| 6 |  | CEC 2006, part 3, and the low-dimensional classics with tables | g19-g24 (6), Hartmann 3-D, Hartmann 6-D, Shekel 5/7/10, Easom, Eggholder, Schaffer F6 (8) | `cec2006_g19` to `cec2006_g24` and an example per function (e.g. `hartmann_3d`, `eggholder`); `cec2006` covers all 24 |
+| 6 | done | CEC 2006, part 3, and the low-dimensional classics with tables | g19-g24 (6), Hartmann 3-D, Hartmann 6-D, Shekel 5/7/10, Easom, Eggholder, Schaffer F6 (8) | `cec2006_g19` to `cec2006_g24` and an example per function: `hartmann3`, `hartmann6`, `shekel5`, `shekel7`, `shekel10`, `easom`, `eggholder`, `schaffer_f6` (the `cec2006` comparison of all 24 is still to come) |
 | 7 |  | Constrained test problems with tunable difficulty (CTP needs its paper first: every CTP detail is unverified) | CTP1-CTP8 (8), C1-DTLZ1, C1-DTLZ3, C2-DTLZ2, C2-convex-DTLZ2, C3-DTLZ1, C3-DTLZ4 (6) | `ctp` (NSGA-II on CTP2/CTP7's disconnected feasible fronts); `c2_dtlz2` (NSGA-III with constraints, 3 objectives) |
 | 8 |  | Scaled and inverted DTLZ, and MW | Convex DTLZ2, scaled DTLZ1, scaled DTLZ2, inverted DTLZ1 (4), MW1-MW14 (14) | `mw` (constrained multi-objective, several fronts) |
 | 9 |  | Engineering design, several objectives | Two-bar truss, welded beam (2 objectives), disc brake, car side impact (3 objectives), speed reducer (2 objectives), four-bar truss, water resource planning, rocket injector, vehicle crashworthiness, conceptual marine design (10) | `two_bar_truss`; `car_side_impact` |
