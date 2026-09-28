@@ -12,8 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - *(python)* parallel_breeding for De ([#296](https://github.com/tachsin/genoxide/pull/296))
 - *(site)* example families as tabs, and a sidebar of every example ([#279](https://github.com/tachsin/genoxide/pull/279))
-- *(benchmarks)* [**breaking**] single-objective scenarios only, for now ([#283](https://github.com/tachsin/genoxide/pull/283))
-- *(benchmarks)* [**breaking**] a matched suite of three problems, one method each ([#284](https://github.com/tachsin/genoxide/pull/284))
+- *(benchmarks)* single-objective scenarios only, for now (the benchmark harness's commands changed; the library's API didn't) ([#283](https://github.com/tachsin/genoxide/pull/283))
+- *(benchmarks)* a matched suite of three problems, one method each (a new harness command set, as above) ([#284](https://github.com/tachsin/genoxide/pull/284))
 - breed a GA's offspring in parallel with GaBuilder::parallel_breeding ([#289](https://github.com/tachsin/genoxide/pull/289))
 - parameter control with Engine::control, and re-evaluation in the single-objective algorithms ([#292](https://github.com/tachsin/genoxide/pull/292))
 - isolated islands that never migrate, with Topology::Isolated ([#293](https://github.com/tachsin/genoxide/pull/293))
@@ -29,7 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### <!-- 4 -->Documentation
 
-- the roadmap as released, with 0.10 and GP moved to 0.11 ([#299](https://github.com/tachsin/genoxide/pull/299))
+- the roadmap as released: this release's control and parallel breeding, genetic programming in 0.10 ([#299](https://github.com/tachsin/genoxide/pull/299))
 
 ## [0.9.1](https://github.com/tachsin/genoxide/compare/v0.9.0...v0.9.1) - 2026-09-28
 
