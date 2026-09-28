@@ -2,7 +2,7 @@
 //! `GENOXIDE_TRACE` names: both fronts and their hypervolumes, in at most 64 generations. A
 //! frame's evaluations are the two runs' together. The Python example writes the same file.
 
-use crate::REFERENCE;
+use crate::{REFERENCE, REGIONS};
 use genoxide::Objective::Minimize;
 use genoxide::multi::MultiSnapshot;
 use genoxide::multi::indicator::hypervolume;
@@ -80,12 +80,27 @@ impl Trace {
             "plot": "front-2d",
             "problem": {
                 "objectives": ["f1", "f2"],
-                "true_front": Wfg2::<2>::default().optimal_front(100),
+                // the front in its six pieces, so the plot doesn't join them across the gaps
+                "true_front": pieces(&Wfg2::<2>::default().optimal_front(100).expect("known")),
                 "series": names,
             },
         });
         write(&path, settings, frames.into_vec());
     }
+}
+
+// the points of a front on each region of REGIONS (f₁ within 0.01 of the region's range)
+fn pieces(front: &[[f64; 2]]) -> Vec<Vec<[f64; 2]>> {
+    REGIONS
+        .iter()
+        .map(|&(low, high)| {
+            front
+                .iter()
+                .filter(|point| point[0] >= low - 0.01 && point[0] <= high + 0.01)
+                .copied()
+                .collect()
+        })
+        .collect()
 }
 
 // ---- the same in every example's trace ---------------------------------------------------------
