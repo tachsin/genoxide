@@ -1529,6 +1529,10 @@ class De(_SingleObjective):
           hasn't improved for ``patience`` generations (at least 1).
 
         None is ``{"tolerance": 1e-12, "patience": 200}``, or ``"never"`` with ``l_shade``.
+    parallel_breeding : bool, default False
+        Whether the trials are built on all cores, each with random numbers of its own: a seed
+        gives other results than without it, but the same on any number of cores. It pays off
+        with hundreds of individuals or genes and a fast or batch fitness function.
     objective : {"maximize", "minimize"}, default "maximize"
         Whether higher or lower scores are better.
     seed : int, optional
@@ -1547,6 +1551,7 @@ class De(_SingleObjective):
         strategy: DeStrategy | None = None,
         control: DeControl | None = None,
         restarts: DeRestarts | None = None,
+        parallel_breeding: bool | None = None,
         objective: ObjectiveName = "maximize",
         seed: int | None = None,
     ) -> None:
@@ -1557,6 +1562,7 @@ class De(_SingleObjective):
         self.strategy = strategy
         self.control = control
         self.restarts = restarts
+        self.parallel_breeding = parallel_breeding
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
@@ -1568,6 +1574,7 @@ class De(_SingleObjective):
             "strategy": _de_setting("strategy", self.strategy, _DE_STRATEGIES, _DE_STRATEGY),
             "control": _de_setting("control", self.control, _DE_CONTROLS, _DE_CONTROL),
             "restarts": _de_setting("restarts", self.restarts, _DE_RESTARTS, _DE_RESTART),
+            "parallel_breeding": _flag("parallel_breeding", self.parallel_breeding),
         }
 
 

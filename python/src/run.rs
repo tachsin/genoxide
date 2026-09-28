@@ -337,6 +337,7 @@ fn real_algorithm<'py>(
             strategy,
             control,
             restarts,
+            parallel_breeding,
         } => {
             let mut builder = match l_shade {
                 Some(evaluations) => De::l_shade(real, evaluations),
@@ -356,6 +357,9 @@ fn real_algorithm<'py>(
             }
             if let Some(restarts) = restarts {
                 builder = builder.restarts(de_restarts(restarts));
+            }
+            if let Some(parallel_breeding) = parallel_breeding {
+                builder = builder.parallel_breeding(parallel_breeding);
             }
             let builder = builder.objective(context.single_objective()?);
             generational(py, setting(builder.build())?, DeSettings, context)

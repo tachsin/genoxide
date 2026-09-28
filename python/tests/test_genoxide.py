@@ -2,9 +2,12 @@ import dataclasses
 import importlib.metadata
 import json
 import math
+import os
 import pathlib
 import re
 import signal
+import subprocess
+import sys
 import threading
 
 import numpy as np
@@ -299,6 +302,69 @@ def test_parallel_breeding_is_reproducible():
     assert parallel[0] < 50
     with pytest.raises(ValueError, match="parallel_breeding is True or False"):
         run(parallel_breeding=1)
+
+
+def test_de_parallel_breeding_is_reproducible():
+    def run(**settings):
+        result = gx.De(
+            gx.Real((-5.0, 5.0), length=20),
+            population_size=60,
+            objective="minimize",
+            seed=3,
+            **settings,
+        ).run(lambda x: (x * x).sum(axis=1), generations=30, batch=True)
+        return result.best_fitness, result.best_genome.tolist(), result.evaluations
+
+    parallel = run(parallel_breeding=True)
+    assert run(parallel_breeding=True) == parallel
+    assert run(parallel_breeding=False) == run()
+    assert run() != parallel
+    # from about 115 for the best of the initial population
+    assert parallel[0] < 10
+    # with L-SHADE's shrinking population and restarts too
+    for settings in ({"l_shade": 5_000}, {"restarts": {"tolerance": 0.0, "patience": 1}}):
+        assert run(parallel_breeding=True, **settings) == run(parallel_breeding=True, **settings)
+        assert run(parallel_breeding=True, **settings) != run(**settings), settings
+    with pytest.raises(ValueError, match="parallel_breeding is True or False"):
+        run(parallel_breeding="yes")
+
+
+# a seeded run with parallel breeding, printed; rayon reads its number of threads once, from
+# RAYON_NUM_THREADS, so each count needs a process of its own
+PARALLEL_BREEDING_RUNS = """
+import genoxide as gx
+real = gx.Real((-5.0, 5.0), length=20)
+ga = gx.Ga(
+    real,
+    population_size=101,
+    select=gx.Tournament(3),
+    crossover=gx.SimulatedBinaryCrossover(15.0),
+    mutation=gx.PolynomialMutation(20.0, rate=0.1),
+    parallel_breeding=True,
+    objective="minimize",
+    seed=3,
+)
+de = gx.De(real, population_size=60, parallel_breeding=True, objective="minimize", seed=3)
+for algorithm in (ga, de):
+    result = algorithm.run(lambda x: (x * x).sum(axis=1), generations=20, batch=True)
+    print(repr(result.best_fitness), result.best_genome.tolist(), result.evaluations)
+"""
+
+
+def test_parallel_breeding_is_the_same_on_any_number_of_threads():
+    def on_threads(threads):
+        return subprocess.run(
+            [sys.executable, "-c", PARALLEL_BREEDING_RUNS],
+            env={**os.environ, "RAYON_NUM_THREADS": str(threads)},
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+
+    one = on_threads(1)
+    assert len(one.splitlines()) == 2
+    assert on_threads(2) == one
+    assert on_threads(8) == one
 
 
 def test_every_selection():
