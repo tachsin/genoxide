@@ -44,6 +44,6 @@ Found a setting that brings radiate closer to the definition, or a difference th
 
 ## Bugs found
 
-None in the GA run here. Found in methods no longer in the suite, not filed:
+None in the GA run here. Found in methods no longer in the suite, reported in [pkalivas/radiate#29](https://github.com/pkalivas/radiate/issues/29), fix proposed in [pkalivas/radiate#30](https://github.com/pkalivas/radiate/pull/30):
 - The guide recommends `ShuffleCrossover` for permutations ([alters/index.md, line 37](https://github.com/pkalivas/radiate/blob/v1.3.2/docs/source/alters/index.md#L37)), but its children aren't permutations, and the engine replaces them with random individuals without a warning.
 - The guide describes `GaussianMutator` as producing "small, incremental changes" ([mutators.md](https://github.com/pkalivas/radiate/blob/v1.3.2/docs/source/alters/mutators.md#L45-L56)); its standard deviation is a quarter of the gene's initial range.
