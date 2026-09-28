@@ -335,6 +335,8 @@ impl Cmaes {
 
     // the fitness of a re-evaluation: the best of the population, and fitness histories that
     // start over
+    #[cold]
+    #[inline(never)]
     fn rescore(&mut self) {
         let objective = self.objective;
         self.best = None;

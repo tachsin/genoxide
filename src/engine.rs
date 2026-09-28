@@ -753,17 +753,15 @@ where
             }
         }
         let start = Instant::now();
+        // whether the algorithm has a best: from its first tell on, a tell that doesn't advance
+        // the generation scores again what the algorithm keeps (a re-evaluation)
+        let mut evaluated = self.algorithm.best().is_some();
         loop {
-            // the generation before this tell, once there is a best: a tell that doesn't advance
-            // it scores again what the algorithm keeps (a re-evaluation)
-            let before = self
-                .algorithm
-                .best()
-                .is_some()
-                .then(|| self.algorithm.generation());
+            let generation = self.algorithm.generation();
             self.evaluate()?;
             self.algorithm.tell(&self.scores)?;
-            let reevaluated = before == Some(self.algorithm.generation());
+            let reevaluated = evaluated && self.algorithm.generation() == generation;
+            evaluated = true;
             self.idle = if self.scores.is_empty() {
                 self.idle + 1
             } else {

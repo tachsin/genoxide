@@ -5,7 +5,7 @@ use genoxide::algorithm::islands::Topology;
 use genoxide::multi::{MultiObjectiveAlgorithm, MultiOutcome};
 use genoxide::observer::{GenerationStatistics, Observer, Snapshot};
 use genoxide::prelude::*;
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -272,7 +272,7 @@ fn outcomes_compare_and_serialize_without_the_info() {
 #[test]
 fn parallel_info_matches_sequential() {
     let run = |parallel: bool| {
-        let infos = RefCell::new(Vec::new());
+        let infos = std::cell::RefCell::new(Vec::new());
         let outcome = Engine::new(
             ga(Scheme::MuPlusLambda { lambda: 30 }, true, 5),
             one_max_seen,
