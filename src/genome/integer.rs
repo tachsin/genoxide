@@ -16,10 +16,25 @@ use std::ops::{Deref, DerefMut, Range, RangeInclusive};
 /// genome[1] = 5;
 /// assert_eq!(genome.iter().sum::<i64>(), 12);
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Integers {
     genes: Vec<i64>,
+}
+
+impl Clone for Integers {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            genes: self.genes.clone(),
+        }
+    }
+
+    // in the memory of `self`: algorithms copy parents into the genomes they no longer use
+    #[inline]
+    fn clone_from(&mut self, source: &Self) {
+        self.genes.clone_from(&source.genes);
+    }
 }
 
 impl Integers {
