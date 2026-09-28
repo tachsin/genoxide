@@ -163,17 +163,25 @@ jobs:
           # the tests run the README's code blocks and the module docstring's example too
           pytest -v
           # every example in Python, examples/<name>/main.py, printing what its output.txt has
-          # (Linux's output). Except function_suite on macOS and Windows: their math libraries
-          # round sin and cos differently in the last bit, and its long runs drift apart.
+          # (Linux's output). Except, on macOS and Windows, the examples whose long runs drift
+          # apart there: their math libraries round sin and cos differently in the last bit.
+          # Every example runs, and the step fails at the end with the list of those that differ.
+          linux_only=" function_suite schwefel_2_26 "
+          failed=""
           for example in ../examples/*/main.py; do
             folder=$(dirname "$example")
+            name=$(basename "$folder")
             echo "::group::$example"
             python "$example" | tee output.actual
             echo "::endgroup::"
-            if [ "$(basename "$folder")" != function_suite ] || [ "$RUNNER_OS" = Linux ]; then
-              diff <(tr -d '\r' < "$folder/output.txt") <(tr -d '\r' < output.actual)
+            if [ "$RUNNER_OS" = Linux ] || [[ "$linux_only" != *" $name "* ]]; then
+              diff <(tr -d '\r' < "$folder/output.txt") <(tr -d '\r' < output.actual) || failed="$failed $name"
             fi
           done
+          if [ -n "$failed" ]; then
+            echo "::error::output differs from output.txt:$failed"
+            exit 1
+          fi
 
   msrv:
     name: MSRV (1.86)

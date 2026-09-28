@@ -87,7 +87,10 @@ genoxide's `De::l_shade` takes L-SHADE's settings, so the example only gives it 
 
 The first line gives the minimum. Then one line per algorithm: the best value it found, to 2
 decimals, and how many of its 30 genes are within 1 of 420.97, in the basin of the global minimum.
-In Python, `run` evaluates the function in Rust, so both versions print the same.
+In Python, `run` evaluates the function in Rust, so both versions print the same on one
+platform. The function calls the platform's `sin`, whose last bit differs between operating
+systems, and CMA-ES's long run amplifies it: on macOS it ends at another local minimum (−9193.85,
+with 11 genes within 1 of 420.97) than in `output.txt`, which is the Linux output.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/schwefel-2-26) plays back another
 run: L-SHADE on Schwefel 2.26 in 2 dimensions, so that the population can be drawn on the
