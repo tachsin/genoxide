@@ -40,6 +40,8 @@
 //! | [`Dtlz1`], [`Dtlz2`], [`Dtlz3`], [`Dtlz4`] | M or more (M + 4, M + 9) | any M ≥ 2 | | linear; spherical |
 //! | [`Dtlz5`], [`Dtlz6`] | M or more (M + 9) | any M ≥ 2 | | a curve for M ≤ 3; not known for more |
 //! | [`Dtlz7`] | M or more (M + 19) | any M ≥ 2 | | 2^(M−1) disconnected regions |
+//! | [`Wfg1`], [`Wfg2`], [`Wfg3`] | k + l (k = 4 or 2(M − 1), l = 20) | any M ≥ 2 | | convex and mixed; convex, disconnected; linear for M = 2 |
+//! | [`Wfg4`] to [`Wfg9`] | k + l (k = 4 or 2(M − 1), l = 20) | any M ≥ 2 | | concave |
 //! | [`Schaffer1`] | 1 | 2 | | convex |
 //! | [`Schaffer2`] | 1 | 2 | | two pieces |
 //! | [`FonsecaFleming`] | 1 or more (3) | 2 | | concave |
@@ -55,7 +57,9 @@
 //! ZDT is Zitzler, Deb and Thiele's suite (2000, *Evolutionary Computation* 8(2): 173-195), and
 //! DTLZ Deb, Thiele, Laumanns and Zitzler's (2001, TIK-Report 112, ETH Zürich; and 2002,
 //! *Proceedings of the 2002 Congress on Evolutionary Computation*: 825-830), in the numbering of
-//! their technical report, whose DTLZ6 and DTLZ7 the paper calls DTLZ5 and DTLZ6. [`Zdt5`] has
+//! their technical report, whose DTLZ6 and DTLZ7 the paper calls DTLZ5 and DTLZ6, and WFG
+//! Huband, Hingston, Barone and While's (2006, *IEEE Transactions on Evolutionary Computation*
+//! 10(5): 477-506), checked against the authors' C++ toolkit. [`Zdt5`] has
 //! [`Binary`](crate::genome::Binary) genomes, and so isn't in [`all`], whose problems have
 //! [`Real`] ones. Each other problem's docs give its definition and cite its original authors.
 //! Some originals are conference proceedings that aren't online: those definitions are taken from
@@ -68,6 +72,7 @@
 
 mod classic;
 mod dtlz;
+mod wfg;
 mod zdt;
 
 pub use classic::{
@@ -75,6 +80,7 @@ pub use classic::{
     Viennet2, Viennet3,
 };
 pub use dtlz::{Dtlz1, Dtlz2, Dtlz3, Dtlz4, Dtlz5, Dtlz6, Dtlz7};
+pub use wfg::{Wfg1, Wfg2, Wfg3, Wfg4, Wfg5, Wfg6, Wfg7, Wfg8, Wfg9};
 pub use zdt::{Zdt1, Zdt2, Zdt3, Zdt4, Zdt5, Zdt6};
 
 use super::{IntoScores, MultiFitnessFunction, Scores};
@@ -273,7 +279,8 @@ where
 
 /// Every problem of this module with `M` objectives and [`Real`] genomes, at its default size:
 /// the two-objective problems for `M = 2` and the Viennet problems for `M = 3`, in the order of
-/// the table above, then DTLZ1-7 for any `M` from 2 on. [`Zdt5`], on bit strings, isn't in it.
+/// the table above, then DTLZ1-7 and WFG1-9 for any `M`
+/// from 2 on. [`Zdt5`], on bit strings, isn't in it.
 pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
     let fixed = [
         try_boxed::<_, 2, M>(Zdt1::default()),
@@ -304,6 +311,15 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
         problems.push(boxed(Dtlz5::<M>::default()));
         problems.push(boxed(Dtlz6::<M>::default()));
         problems.push(boxed(Dtlz7::<M>::default()));
+        problems.push(boxed(Wfg1::<M>::default()));
+        problems.push(boxed(Wfg2::<M>::default()));
+        problems.push(boxed(Wfg3::<M>::default()));
+        problems.push(boxed(Wfg4::<M>::default()));
+        problems.push(boxed(Wfg5::<M>::default()));
+        problems.push(boxed(Wfg6::<M>::default()));
+        problems.push(boxed(Wfg7::<M>::default()));
+        problems.push(boxed(Wfg8::<M>::default()));
+        problems.push(boxed(Wfg9::<M>::default()));
     }
     problems
 }
@@ -604,14 +620,14 @@ mod tests {
     #[test]
     fn the_registries_describe_every_problem() {
         let two = all::<2>();
-        assert_eq!(two.len(), 22);
+        assert_eq!(two.len(), 31);
         check_registry(two);
         let three = all::<3>();
         assert_eq!(
             three.iter().map(|p| p.name()).collect::<Vec<_>>(),
             [
                 "VNT1", "VNT2", "VNT3", "DTLZ1", "DTLZ2", "DTLZ3", "DTLZ4", "DTLZ5", "DTLZ6",
-                "DTLZ7"
+                "DTLZ7", "WFG1", "WFG2", "WFG3", "WFG4", "WFG5", "WFG6", "WFG7", "WFG8", "WFG9"
             ]
         );
         check_registry(three);

@@ -245,7 +245,7 @@ fn spherical<const M: usize>(x: &[f64], radius: f64, alpha: f64) -> [f64; M] {
 // Das and Dennis's points, as many as `MultiProblem::optimal_front` promises: none for 0, exactly
 // `points` for 2 objectives (0 and 1 would otherwise give both ends), and the smallest set of
 // at least `points` for more
-fn simplex_points<const M: usize>(points: usize) -> Vec<[f64; M]> {
+pub(super) fn simplex_points<const M: usize>(points: usize) -> Vec<[f64; M]> {
     if points == 0 {
         return Vec::new();
     }
@@ -256,7 +256,7 @@ fn simplex_points<const M: usize>(points: usize) -> Vec<[f64; M]> {
     simplex
 }
 
-fn spherical_front<const M: usize>(points: usize) -> Vec<[f64; M]> {
+pub(super) fn spherical_front<const M: usize>(points: usize) -> Vec<[f64; M]> {
     simplex_points::<M>(points)
         .into_iter()
         .map(|p| {

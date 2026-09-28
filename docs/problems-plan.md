@@ -351,9 +351,18 @@ Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobje
 problems and a scalable test problem toolkit. *IEEE TEVC* 10(5): 477-506.
 doi:10.1109/TEVC.2005.861417. Earlier: Huband, S., Barone, L., While, L. and Hingston, P.
 (2005). A scalable multi-objective test problem toolkit. EMO 2005, LNCS 3410: 280-295.
-doi:10.1007/978-3-540-31880-4_20. **U: the full text couldn't be reached during the survey.**
-The structure below is the commonly described one and must be checked against the TEVC paper's
-tables before implementation:
+doi:10.1007/978-3-540-31880-4_20. **VO (batch 4):** checked in the TEVC paper as published (the
+authors' copy, www.wfg.csse.uwa.edu.au/publications/WFG2006c.pdf, through the Internet Archive:
+tables X-XIV, sections VIII-IX), in the EMO paper's corrected version of 25 May 2005 (table 6)
+and its errata, and against the authors' C++ toolkit, `WFG_v2006.03.28.zip` (compiled; its
+license allows use and copying for any purpose with its notice kept; used only for test values).
+Two findings: the toolkit's README recommends k = 4 for M = 2 and 2(M − 1) for more (the paper's
+experiments use k = 4, l = 20), which genoxide's defaults follow; and in floating point zᵢ / 2i
+is never exactly 0.35 for some i (3, 6, 12, 24, …), which WFG1's b_poly(·, 0.02) turns into a
+distance of about 0.48 in that parameter, so no genome reaches WFG1's front at the default sizes
+(the toolkit's README warns of the bias; see `Wfg1`'s docs). Ishibuchi et al. (2016) is
+doi:10.1109/TEVC.2015.2505784, still U (paywalled); genoxide gives no front for WFG3 with
+M ≥ 3. The entry as surveyed:
 
 - f_m = D x_M + S_m h_m(x₁…x_{M−1}), D = 1, S_m = 2m; zᵢ ∈ [0, 2i]; n = k + l, k a multiple
   of M − 1, l even for WFG2 and WFG3; typical k = 2(M − 1) (or 4), l = 20.
@@ -367,8 +376,8 @@ tables before implementation:
   non-separable concave; WFG7 parameter-dependent bias (position); WFG8 parameter-dependent bias
   (distance), its Pareto set not at 0.35; WFG9 multimodal, deceptive and non-separable.
 - The WFG group's C++ toolkit (University of Western Australia, formerly
-  www.wfg.csse.uwa.edu.au) is the authors' reference implementation; its availability and
-  license are to be checked before using it to generate test values (section 3.3).
+  www.wfg.csse.uwa.edu.au) is the authors' reference implementation; version 2006.03.28 is kept
+  by the Internet Archive, and its license allows generating test values (section 3.3).
 
 #### Many-objective suites (optional, batch 13)
 
@@ -948,7 +957,7 @@ algorithms come on top of these.
 | 1 | done ([#170](https://github.com/tachsin/genoxide/pull/170)) | The `problems` module (trait, `Optimum`, `Constraints`, registry), `gx.problems` with native evaluation, `gx.indicators`; the classic continuous functions | Sphere, Axis-parallel ellipsoid, Schwefel 1.2, Rastrigin, Rosenbrock, Ackley, Griewank, Schwefel (2.26), Levy, Zakharov, Styblinski-Tang, Himmelblau, Michalewicz, Branin, Goldstein-Price, Six-hump camel (16) | `rastrigin` (switch to `problems::Rastrigin`); new `function_suite`: CMA-ES, SHADE and PSO on the batch's scalable functions in 10-D, printing the error to the optimum; new `himmelblau`: the four minima found by restarts of a local search (continuous); new `branin`, `goldstein_price` and `six_hump_camel`, the same way; and a page per scalable function: `sphere`, `axis_parallel_ellipsoid`, `schwefel_1_2`, `zakharov`, `rosenbrock`, `levy`, `styblinski_tang`, `michalewicz`, `ackley`, `griewank`, `schwefel_2_26` |
 | 2 | done ([#177](https://github.com/tachsin/genoxide/pull/177)) | `MultiProblem` (the breaking change), constraints in multi-objective problems, the pymoo test values replaced (section 5); the classic two- and three-objective problems | Schaffer 1, Schaffer 2, Fonseca-Fleming, Kursawe, Poloni, Viennet 1-3, BNH, SRN, TNK, OSY, CONSTR (13; WATER is batch 9's water resource planning) | `bnh` (NSGA-II on a constrained problem, IGD+ to the analytic front; multi-objective); `kursawe` (disconnected front, SPEA2 vs NSGA-II); new `schaffer1`, `schaffer2`, `fonseca_fleming`, `poloni`, `srn`, `tnk`, `osy` and `constr` (NSGA-II), and `viennet1`, `viennet2` and `viennet3` (NSGA-III) |
 | 3 | done ([#191](https://github.com/tachsin/genoxide/pull/191)) | Engineering design, single objective, and the mixed-variable convention (`design()`) | Welded beam, Pressure vessel, Tension/compression spring, Speed reducer, Gear train (integer), Three-bar truss, Cantilever beam, Car side impact (single objective) (8), and CEC 2006 g01-g06 (6) | `pressure_vessel` (switch to `engineering::PressureVessel`); new `welded_beam` (constrained); new `gear_train` (integer genome; category integer); new `tension_compression_spring`, `speed_reducer`, `three_bar_truss`, `cantilever_beam`, `car_side_impact` and `cec2006_g01` to `cec2006_g06` |
-| 4 | DTLZ5-7 and ZDT5: library done, examples pending | Scalable many-objective problems | DTLZ5, DTLZ6, DTLZ7, ZDT5 (binary), WFG1-WFG9 (13) | `wfg_many_objective`: NSGA-III and MOEA/D on WFG4 and WFG9 with 5 objectives, IGD to the sampled front; `zdt5` (binary genome, multi-objective) |
+| 4 | library done for all 13 (DTLZ5-7, ZDT5, WFG1-9), examples pending | Scalable many-objective problems | DTLZ5, DTLZ6, DTLZ7, ZDT5 (binary), WFG1-WFG9 (13) | `wfg_many_objective`: NSGA-III and MOEA/D on WFG4 and WFG9 with 5 objectives, IGD to the sampled front; `zdt5` (binary genome, multi-objective) |
 | 5 |  | CEC 2006, part 2 | g07-g18 (12) | `cec2006_g07` to `cec2006_g18`; `cec2006`: SHADE with Deb's rules on all of the problems so far, printing f − f* and feasibility, as in the report's evaluation criteria |
 | 6 |  | CEC 2006, part 3, and the low-dimensional classics with tables | g19-g24 (6), Hartmann 3-D, Hartmann 6-D, Shekel 5/7/10, Easom, Eggholder, Schaffer F6 (8) | `cec2006_g19` to `cec2006_g24` and an example per function (e.g. `hartmann_3d`, `eggholder`); `cec2006` covers all 24 |
 | 7 |  | Constrained test problems with tunable difficulty (CTP needs its paper first: every CTP detail is unverified) | CTP1-CTP8 (8), C1-DTLZ1, C1-DTLZ3, C2-DTLZ2, C2-convex-DTLZ2, C3-DTLZ1, C3-DTLZ4 (6) | `ctp` (NSGA-II on CTP2/CTP7's disconnected feasible fronts); `c2_dtlz2` (NSGA-III with constraints, 3 objectives) |

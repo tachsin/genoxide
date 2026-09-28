@@ -174,7 +174,8 @@ print(result.best_fitness, result.evaluations, problem.reference)
 ```
 
 The multi-objective problems, `Zdt1` to `Zdt6` (`Zdt5` on a `Binary` genome),
-`Dtlz1(objectives, variables)` to `Dtlz7`, `Schaffer1`, `Schaffer2`, `FonsecaFleming`,
+`Dtlz1(objectives, variables)` to `Dtlz7`,
+`Wfg1(objectives, position, distance)` to `Wfg9`, `Schaffer1`, `Schaffer2`, `FonsecaFleming`,
 `Kursawe`, `Poloni`, `Viennet1` to `Viennet3` and the constrained `Bnh`, `Srn`, `Tnk`, `Osy` and
 `Constr`, run with the multi-objective algorithms in the same way. Each gives its `objectives`,
 for the algorithm, and `optimal_front(points)`, None where the front isn't known; a constrained one

@@ -139,6 +139,51 @@ pub enum MultiConfig {
         objectives: usize,
         variables: Option<usize>,
     },
+    Wfg1 {
+        objectives: usize,
+        position: Option<usize>,
+        distance: usize,
+    },
+    Wfg2 {
+        objectives: usize,
+        position: Option<usize>,
+        distance: usize,
+    },
+    Wfg3 {
+        objectives: usize,
+        position: Option<usize>,
+        distance: usize,
+    },
+    Wfg4 {
+        objectives: usize,
+        position: Option<usize>,
+        distance: usize,
+    },
+    Wfg5 {
+        objectives: usize,
+        position: Option<usize>,
+        distance: usize,
+    },
+    Wfg6 {
+        objectives: usize,
+        position: Option<usize>,
+        distance: usize,
+    },
+    Wfg7 {
+        objectives: usize,
+        position: Option<usize>,
+        distance: usize,
+    },
+    Wfg8 {
+        objectives: usize,
+        position: Option<usize>,
+        distance: usize,
+    },
+    Wfg9 {
+        objectives: usize,
+        position: Option<usize>,
+        distance: usize,
+    },
     Schaffer1 {},
     Schaffer2 {},
     FonsecaFleming {
@@ -169,6 +214,47 @@ fn at_least(value: usize, minimum: usize, name: &str, what: &str) -> Result<usiz
     }
 }
 
+// WFG's sizes, checked: 2 to 6 objectives, a positive multiple of objectives − 1 position
+// parameters, and at least 1 distance parameter, an even number for WFG2 and WFG3
+fn check_wfg(
+    name: &str,
+    objectives: usize,
+    position: Option<usize>,
+    distance: usize,
+    even: bool,
+) -> Result<(), String> {
+    if !(2..=6).contains(&objectives) {
+        return Err(format!(
+            "WFG takes 2 to 6 objectives in Python, not {objectives}"
+        ));
+    }
+    if position.is_some_and(|position| position == 0 || position % (objectives - 1) != 0) {
+        return Err(format!(
+            "{name} needs a positive multiple of {} (objectives − 1) position parameters, not {}",
+            objectives - 1,
+            position.unwrap_or_default()
+        ));
+    }
+    if distance == 0 {
+        return Err(format!("{name} needs at least 1 distance parameter"));
+    }
+    if even && distance % 2 == 1 {
+        return Err(format!(
+            "{name} needs an even number of distance parameters, not {distance}"
+        ));
+    }
+    Ok(())
+}
+
+// a WFG problem with M objectives, `position` position parameters (the default if None) and
+// `distance` distance parameters
+macro_rules! wfg {
+    ($problem:ident, $position:expr, $distance:expr) => {{
+        let position = $position.unwrap_or_else(|| multi::$problem::<M>::default().position());
+        Some(multi::boxed(multi::$problem::<M>::new(position, $distance)))
+    }};
+}
+
 impl MultiConfig {
     /// The number of objectives.
     pub fn objectives(&self) -> usize {
@@ -179,7 +265,16 @@ impl MultiConfig {
             | Self::Dtlz4 { objectives, .. }
             | Self::Dtlz5 { objectives, .. }
             | Self::Dtlz6 { objectives, .. }
-            | Self::Dtlz7 { objectives, .. } => objectives,
+            | Self::Dtlz7 { objectives, .. }
+            | Self::Wfg1 { objectives, .. }
+            | Self::Wfg2 { objectives, .. }
+            | Self::Wfg3 { objectives, .. }
+            | Self::Wfg4 { objectives, .. }
+            | Self::Wfg5 { objectives, .. }
+            | Self::Wfg6 { objectives, .. }
+            | Self::Wfg7 { objectives, .. }
+            | Self::Wfg8 { objectives, .. }
+            | Self::Wfg9 { objectives, .. } => objectives,
             Self::Viennet1 {} | Self::Viennet2 {} | Self::Viennet3 {} => 3,
             _ => 2,
         }
@@ -250,6 +345,51 @@ impl MultiConfig {
                     _ => Err("ZDT5's genome has at most 2^24 bits".to_string()),
                 }
             }
+            Self::Wfg1 {
+                objectives,
+                position,
+                distance,
+            } => check_wfg("WFG1", objectives, position, distance, false),
+            Self::Wfg2 {
+                objectives,
+                position,
+                distance,
+            } => check_wfg("WFG2", objectives, position, distance, true),
+            Self::Wfg3 {
+                objectives,
+                position,
+                distance,
+            } => check_wfg("WFG3", objectives, position, distance, true),
+            Self::Wfg4 {
+                objectives,
+                position,
+                distance,
+            } => check_wfg("WFG4", objectives, position, distance, false),
+            Self::Wfg5 {
+                objectives,
+                position,
+                distance,
+            } => check_wfg("WFG5", objectives, position, distance, false),
+            Self::Wfg6 {
+                objectives,
+                position,
+                distance,
+            } => check_wfg("WFG6", objectives, position, distance, false),
+            Self::Wfg7 {
+                objectives,
+                position,
+                distance,
+            } => check_wfg("WFG7", objectives, position, distance, false),
+            Self::Wfg8 {
+                objectives,
+                position,
+                distance,
+            } => check_wfg("WFG8", objectives, position, distance, false),
+            Self::Wfg9 {
+                objectives,
+                position,
+                distance,
+            } => check_wfg("WFG9", objectives, position, distance, false),
             _ => Ok(()),
         }
     }
@@ -293,6 +433,33 @@ impl MultiConfig {
             Self::Dtlz7 { variables, .. } => Some(multi::boxed(
                 variables.map_or_else(multi::Dtlz7::<M>::default, multi::Dtlz7::<M>::new),
             )),
+            Self::Wfg1 {
+                position, distance, ..
+            } => wfg!(Wfg1, position, distance),
+            Self::Wfg2 {
+                position, distance, ..
+            } => wfg!(Wfg2, position, distance),
+            Self::Wfg3 {
+                position, distance, ..
+            } => wfg!(Wfg3, position, distance),
+            Self::Wfg4 {
+                position, distance, ..
+            } => wfg!(Wfg4, position, distance),
+            Self::Wfg5 {
+                position, distance, ..
+            } => wfg!(Wfg5, position, distance),
+            Self::Wfg6 {
+                position, distance, ..
+            } => wfg!(Wfg6, position, distance),
+            Self::Wfg7 {
+                position, distance, ..
+            } => wfg!(Wfg7, position, distance),
+            Self::Wfg8 {
+                position, distance, ..
+            } => wfg!(Wfg8, position, distance),
+            Self::Wfg9 {
+                position, distance, ..
+            } => wfg!(Wfg9, position, distance),
             Self::Schaffer1 {} => try_boxed::<_, 2, M>(multi::Schaffer1),
             Self::Schaffer2 {} => try_boxed::<_, 2, M>(multi::Schaffer2),
             Self::FonsecaFleming { variables } => {
