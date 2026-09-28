@@ -5,7 +5,7 @@ For each library and scenario:
 - values (rule 1.2): the adapter's `values` command evaluates fixed points, including the optimum,
   and must agree with problems.py;
 - runs (rules 1.3, 2.1, 2.3, 2.4, 3.3): two short runs; each reported solution must evaluate to the
-  reported best (or front), stay within its problem's domain, and each run must end only at the
+  reported best, stay within its problem's domain, and each run must end only at the
   target, its budget (plus at most one generation) or its time cap, with no evaluation outside the
   bounds and a first hit of the target consistent with the run. `run.py` applies the same checks
   (check_run) to every timed run;
@@ -124,20 +124,15 @@ def in_domain(problem, size, solution):
         return len(solution) == size and all(bit in (0, 1, True, False) for bit in solution)
     if problem == "nqueens":
         return sorted(solution) == list(range(size))
-    if problem in problems.REAL_BOUNDS:
-        lower, upper = problems.REAL_BOUNDS[problem]
-        return len(solution) == size and all(lower - 1e-12 <= v <= upper + 1e-12 for v in solution)
-    n = problems.FRONT_VARIABLES[problem](size)
-    return len(solution) == n and all(-1e-12 <= v <= 1 + 1e-12 for v in solution)
+    lower, upper = problems.REAL_BOUNDS[problem]
+    return len(solution) == size and all(lower - 1e-12 <= v <= upper + 1e-12 for v in solution)
 
 
 def check_run(r, problem, size, budget, cap):
     """The failures of one run, in `run.py check` and in every timed run."""
     where = f"{r.get('solver')} seed {r.get('seed')}"
-    common = ["library", "solver", "problem", "size", "mode", "seed", "time_s", "generations", "evaluations",
-              "last_generation"]
-    front = problem in problems.FRONT_VARIABLES
-    fields = common + (["front", "solutions"] if front else ["best", "target", "success", "solution", "first_hit"])
+    fields = ["library", "solver", "problem", "size", "mode", "seed", "time_s", "generations", "evaluations",
+              "last_generation", "best", "target", "success", "solution", "first_hit"]
     missing = [field for field in fields if field not in r]
     if missing:
         return [f"{where}: missing {', '.join(missing)}"]
@@ -158,26 +153,11 @@ def check_run(r, problem, size, budget, cap):
                         f"a generation ({per_generation})")
     capped = r["time_s"] >= CAPPED * cap
     # rule 2.4: every evaluated solution inside the bounds
-    if problem in problems.REAL_BOUNDS or front:
+    if problem in problems.REAL_BOUNDS:
         if "outside" not in r:
             failures.append(f"{where}: missing outside (rule 2.4)")
         elif r["outside"] != 0:
             failures.append(f"{where}: {r['outside']} evaluated solutions outside the bounds (rule 2.4)")
-    if front:
-        # an empty front only from a run the library ended with an error (hypervolume 0)
-        if len(r["front"]) != len(r["solutions"]) or not (r["front"] or r.get("error")):
-            failures.append(f"{where}: {len(r['front'])} points in the front, {len(r['solutions'])} solutions")
-        for solution, point in zip(r["solutions"], r["front"]):
-            if not in_domain(problem, size, solution):
-                failures.append(f"{where}: a solution outside [0, 1]: {short(solution)}")
-                break
-            expected = problems.value(problem, size, solution)
-            if not problems.close(point, expected, 1e-6):
-                failures.append(f"{where}: front point {short(point)}, but its solution evaluates to {short(expected)}")
-                break
-        if evaluations < budget and not capped:
-            failures.append(f"{where}: ended after {evaluations} of {budget} evaluations in {r['time_s']:.1f} s")
-        return failures
     solution = r["solution"]
     if not in_domain(problem, size, solution):
         return failures + [f"{where}: the solution isn't valid: {short(solution)}"]
@@ -263,8 +243,6 @@ def check_scenario(name, problem, size, mode, budget, cap):
 
 def repeatable(r):
     """What must be the same for the same seed."""
-    if "front" in r:
-        return (r["evaluations"], json.dumps(r["front"]))
     hit = r.get("first_hit")
     return (r["evaluations"], r["best"], hit.get("evaluations") if isinstance(hit, dict) else None)
 

@@ -9,18 +9,18 @@ Know a better way to solve one of these problems with genoxide's Python package?
 
 ## How the adapter runs the package
 
-- **Fitness functions:** numpy, as python/README.md writes them ([bench.py, lines 60-229](../../../benchmarks/adapters/genoxide_python/bench.py#L60-L229)): a function per genome for OneMax and N-Queens, as its first example; `batch=True` (a generation per call, "one call per generation") for the real-valued and multi-objective problems, as its Rastrigin example. A batch doesn't change the algorithm ("The same seed repeats a run exactly: one genome at a time, in batches or in parallel"). The shifts of rule 1.4 are computed once per size. `bench.py --self-check` compares every function with problems.py.
-- **Evaluations:** each function counts its genomes, one per call or the rows of a batch ([`count`](../../../benchmarks/adapters/genoxide_python/bench.py#L75-L80)), and records the first hit. Any difference from `result.evaluations` is printed to stderr ([`solve`, lines 384-459](../../../benchmarks/adapters/genoxide_python/bench.py#L384-L459), [`solve_front`, lines 462-501](../../../benchmarks/adapters/genoxide_python/bench.py#L462-L501)).
-- **Stop:** `run(..., target=..., evaluations=...)` after every generation, and the time cap: `time=...` for CMA-ES, DE, local search and the multi-objective algorithms, and an `on_generation` callback returning False for the GA.
-- **Keeping going (rule 2.2):** DE and CMA-ES (IPOP) restart by themselves. Local search redraws a neighbor that didn't change, so it can't stall. A child identical to a parent isn't evaluated, so a GA or a multi-objective algorithm can run generations with nothing to evaluate. After 10 in a row, its `on_generation` callback ends the attempt, and the adapter restarts it with the seeds of rule 2.2 and prints `restarts`. It replaces the package's own "stalled", after 10,000 such generations. No test run stalled.
+- **Fitness functions:** numpy, as python/README.md writes them ([bench.py, lines 60-169](../../../benchmarks/adapters/genoxide_python/bench.py#L60-L169)): a function per genome for OneMax and N-Queens, as its first example; `batch=True` (a generation per call, "one call per generation") for the real-valued problems, as its Rastrigin example. A batch doesn't change the algorithm ("The same seed repeats a run exactly: one genome at a time, in batches or in parallel"). The shifts of rule 1.4 are computed once per size. `bench.py --self-check` compares every function with problems.py.
+- **Evaluations:** each function counts its genomes, one per call or the rows of a batch ([`count`](../../../benchmarks/adapters/genoxide_python/bench.py#L75-L80)), and records the first hit. Any difference from `result.evaluations` is printed to stderr ([`solve`, lines 287-362](../../../benchmarks/adapters/genoxide_python/bench.py#L287-L362)).
+- **Stop:** `run(..., target=..., evaluations=...)` after every generation, and the time cap: `time=...` for CMA-ES, DE and local search, and an `on_generation` callback returning False for the GA.
+- **Keeping going (rule 2.2):** DE and CMA-ES (IPOP) restart by themselves. Local search redraws a neighbor that didn't change, so it can't stall. A child identical to a parent isn't evaluated, so a GA can run generations with nothing to evaluate. After 10 in a row, its `on_generation` callback ends the attempt, and the adapter restarts it with the seeds of rule 2.2 and prints `restarts`. It replaces the package's own "stalled", after 10,000 such generations. No test run stalled.
 - **Bounds (rule 2.4):** genoxide's: CMA-ES redraws a sample outside the bounds up to 100 times, then clips it; DE sets an outside trial gene halfway between the parent's gene and the bound; SBX and polynomial mutation are bounded.
 - **Time:** from before the algorithm object is created to the return of `run`, which creates the initial population.
 - **One thread:** `parallel` off; numpy's BLAS (OpenMP, OpenBLAS, MKL) set to 1 thread before import ([lines 46-48](../../../benchmarks/adapters/genoxide_python/bench.py#L46-L48)).
 - **Seeds:** the algorithm's `seed`; a seed repeats a run exactly.
-- **Solutions:** `result.best_genome`; for several objectives, `result.front_genomes` and `result.front_objectives`, the final non-dominated front without copies.
+- **Solutions:** `result.best_genome`.
 - **Separate tests:** 2026-09-25, the package 0.6.0 built from 03e237b, seeds 0 to 4, the scenario's budget, 60 s cap. The counts equalled `result.evaluations`, and `outside` was 0, in every run.
 
-**Settings from the literature**, for settings without a default ([lines 231-248](../../../benchmarks/adapters/genoxide_python/bench.py#L231-L248)):
+**Settings from the literature**, for settings without a default ([lines 171-188](../../../benchmarks/adapters/genoxide_python/bench.py#L171-L188)):
 - a GA's population of 100, binary tournament (`Tournament(2)`), SBX η 20 and polynomial mutation η 20 at 1 / n per gene: Deb, Pratap, Agarwal and Meyarivan, "A fast and elitist multiobjective genetic algorithm: NSGA-II", IEEE Transactions on Evolutionary Computation 6(2), 2002;
 - bit-flip mutation at 1 / n per gene: Mühlenbein, "How genetic algorithms really work: mutation and hillclimbing", PPSN 1992;
 - swap mutation (`SwapMutation()`, one swap) for permutations.
@@ -30,8 +30,8 @@ A GA's crossover is the first python/README.md names for the genome: `UniformCro
 ## Binary: OneMax 100 and 1000
 
 **Methods:**
-- **Matched:** the [README](../../../benchmarks/README.md)'s matched GA with the package's components: population 300, `Tournament(3)` (with replacement), `PointCrossover(2)` on each consecutive pair at 0.5, each child mutated at 0.2 by `BitFlip(rate=1 / n)`, `Generational(elitism=0)` ([lines 253-268](../../../benchmarks/adapters/genoxide_python/bench.py#L253-L268)). Difference from eaSimple: a child identical to a parent isn't evaluated, also one crossed or mutated back to it.
-- **Idiomatic (OneMax 100):** the GA, the one method python/README.md recommends for binary genomes: population 100, `Tournament(2)`, `UniformCrossover()`, `BitFlip(rate=1 / n)`, the default rates and scheme, a function per genome, `bits.sum()` ([lines 269-280](../../../benchmarks/adapters/genoxide_python/bench.py#L269-L280)).
+- **Matched:** the [README](../../../benchmarks/README.md)'s matched GA with the package's components: population 300, `Tournament(3)` (with replacement), `PointCrossover(2)` on each consecutive pair at 0.5, each child mutated at 0.2 by `BitFlip(rate=1 / n)`, `Generational(elitism=0)` ([lines 193-208](../../../benchmarks/adapters/genoxide_python/bench.py#L193-L208)). Difference from eaSimple: a child identical to a parent isn't evaluated, also one crossed or mutated back to it.
+- **Idiomatic (OneMax 100):** the GA, the one method python/README.md recommends for binary genomes: population 100, `Tournament(2)`, `UniformCrossover()`, `BitFlip(rate=1 / n)`, the default rates and scheme, a function per genome, `bits.sum()` ([lines 209-220](../../../benchmarks/adapters/genoxide_python/bench.py#L209-L220)).
 
 **Keeping going:** to the target or the budget.
 
@@ -59,7 +59,7 @@ OneMax 100, idiomatic (budget 200,000):
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods** ([lines 283-305](../../../benchmarks/adapters/genoxide_python/bench.py#L283-L305)): python/README.md prefers local search on permutations ("often beats a GA on permutations"); the GA comes second.
+**Methods** ([lines 223-245](../../../benchmarks/adapters/genoxide_python/bench.py#L223-L245)): python/README.md prefers local search on permutations ("often beats a GA on permutations"); the GA comes second.
 - **`local_search`:** hill climbing with its defaults (1 neighbor per step, `NotWorse()` acceptance), `SwapMutation()` neighbors.
 - **`ga`:** population 100, `Tournament(2)`, `OrderCrossover()`, `SwapMutation()`, the default rates and scheme.
 
@@ -87,7 +87,7 @@ N-Queens 64 (budget 1,000,000):
 
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
-**Methods** ([lines 308-332](../../../benchmarks/adapters/genoxide_python/bench.py#L308-L332)): python/README.md prefers CMA-ES ("the strongest general choice", with restarts "for multimodal functions") and DE ("often needs far fewer evaluations than a GA"); the third is the GA, which it names for reals.
+**Methods** ([lines 248-272](../../../benchmarks/adapters/genoxide_python/bench.py#L248-L272)): python/README.md prefers CMA-ES ("the strongest general choice", with restarts "for multimodal functions") and DE ("often needs far fewer evaluations than a GA"); the third is the GA, which it names for reals.
 - **`cma_es`:** `gx.Cmaes(genome, restarts="ipop")`, with the defaults (4 + ⌊3 ln n⌋ samples, an initial step of 0.3 of each range).
 - **`de`:** `gx.De(genome)` with its defaults: SHADE's published settings (Tanabe and Fukunaga, IEEE CEC 2013: current-to-pbest/1 with an archive, SHADE's adaptation of F and CR, 100 individuals), and genoxide's own restarts when the population converges or stalls (#113).
 - **`ga`:** population 100, `Tournament(2)`, `SimulatedBinaryCrossover(20)` at the default 0.9, `PolynomialMutation(20, rate=1 / n)`, the default scheme.
@@ -124,7 +124,7 @@ Ackley 30 (budget 1,000,000):
 
 ## Continuous, unimodal: Rosenbrock 10
 
-**Methods** ([lines 308-319](../../../benchmarks/adapters/genoxide_python/bench.py#L308-L319)): the first two python/README.md recommends for reals, as on the multimodal functions.
+**Methods** ([lines 248-259](../../../benchmarks/adapters/genoxide_python/bench.py#L248-L259)): the first two python/README.md recommends for reals, as on the multimodal functions.
 - **`cma_es`:** `gx.Cmaes(genome, restarts="ipop")` with its defaults: IPOP restarts a converged CMA-ES (rule 2.2).
 - **`de`:** `gx.De(genome)` (above).
 
@@ -140,75 +140,9 @@ Rosenbrock 10 (budget 500,000):
 |---|---|---|---|---|---|---|---|
 | de | 5 | 5 | 38,077 | 0.008082 | 0.004516 | 0.008217 | 0 |
 
-## Multi-objective: ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1
-
-The matched settings of the [README](../../../benchmarks/README.md#scenarios), with the package's own operators.
-
-**Methods** ([lines 335-369](../../../benchmarks/adapters/genoxide_python/bench.py#L335-L369)), with `batch=True` functions returning a row of objectives per genome:
-- **`nsga2`, `spea2`, `sms_emoa`:** 100 individuals (92 with 3 objectives), `SimulatedBinaryCrossover(15)` at the default 0.9, `PolynomialMutation(20, rate=1 / n)`. SMS-EMOA breeds one child per generation (`offspring=1`).
-- **`nsga3`:** `das_dennis(2, 99)` (100 directions, population 100) or `das_dennis(3, 12)` (91, population 92), SBX η 30 at the default 1, the same mutation.
-- **`moead`:** `das_dennis(2, 99)` or `das_dennis(3, 12)` weights, its defaults of 20 neighbors, neighborhood parents at 0.9 and at most 2 replacements; `Tchebycheff()` with 2 objectives, `Pbi(5.0)` with 3; SBX η 20 at the default 1, the same mutation.
-- **No duplicate elimination:** `eliminate_duplicates=False` for NSGA-II, NSGA-III, SPEA2 and SMS-EMOA, which drop duplicates by default (python/README.md); MOEA/D has none.
-
-**Keeping going:** no convergence criterion; every run uses its budget. An attempt that stalls restarts, and the front is the last attempt's.
-
-**Separate tests** (hypervolume as `run.py` computes it):
-
-ZDT1 (budget 25,000):
-
-| Solver | Runs | Hypervolume: median | best | worst | Evaluations (median) | Front size (median) | Capped |
-|---|---|---|---|---|---|---|---|
-| nsga2 | 5 | 0.8693 | 0.8697 | 0.8691 | 25,024 | 99 | 0 |
-| nsga3 | 5 | 0.8701 | 0.8704 | 0.8699 | 25,022 | 100 | 0 |
-| spea2 | 5 | 0.8703 | 0.8707 | 0.8700 | 25,083 | 100 | 0 |
-| sms_emoa | 5 | 0.8719 | 0.8720 | 0.8719 | 25,000 | 100 | 0 |
-| moead | 5 | 0.8687 | 0.8697 | 0.8684 | 25,006 | 100 | 0 |
-
-ZDT2 (budget 25,000):
-
-| Solver | Runs | Hypervolume: median | best | worst | Evaluations (median) | Front size (median) | Capped |
-|---|---|---|---|---|---|---|---|
-| nsga2 | 5 | 0.5363 | 0.5365 | 0.5360 | 25,041 | 100 | 0 |
-| nsga3 | 5 | 0.5366 | 0.5370 | 0.5365 | 25,016 | 100 | 0 |
-| spea2 | 5 | 0.5368 | 0.5373 | 0.5363 | 25,041 | 100 | 0 |
-| sms_emoa | 5 | 0.5386 | 0.5387 | 0.5386 | 25,000 | 100 | 0 |
-| moead | 5 | 0.5352 | 0.5366 | 0.5351 | 25,070 | 98 | 0 |
-
-ZDT3 (budget 25,000):
-
-| Solver | Runs | Hypervolume: median | best | worst | Evaluations (median) | Front size (median) | Capped |
-|---|---|---|---|---|---|---|---|
-| nsga2 | 5 | 1.3269 | 1.3273 | 1.2447 | 25,059 | 100 | 0 |
-| nsga3 | 5 | 1.3255 | 1.3259 | 1.3241 | 25,015 | 100 | 0 |
-| spea2 | 5 | 1.3273 | 1.3277 | 1.3270 | 25,063 | 100 | 0 |
-| sms_emoa | 5 | 1.3244 | 1.3293 | 1.2458 | 25,000 | 100 | 0 |
-| moead | 5 | 1.3227 | 1.3236 | 1.3213 | 25,049 | 76 | 0 |
-
-1 NSGA-II run and 2 SMS-EMOA runs end without the front's last segment (f1 above 0.65), at a hypervolume of about 1.245.
-
-DTLZ2, 3 objectives (budget 25,000):
-
-| Solver | Runs | Hypervolume: median | best | worst | Evaluations (median) | Front size (median) | Capped |
-|---|---|---|---|---|---|---|---|
-| nsga2 | 5 | 0.6972 | 0.7021 | 0.6929 | 25,062 | 92 | 0 |
-| nsga3 | 5 | 0.7443 | 0.7444 | 0.7441 | 25,023 | 92 | 0 |
-| spea2 | 5 | 0.7292 | 0.7316 | 0.7282 | 25,029 | 92 | 0 |
-| sms_emoa | 5 | 0.7556 | 0.7557 | 0.7554 | 25,000 | 92 | 0 |
-| moead | 5 | 0.7441 | 0.7441 | 0.7440 | 25,014 | 91 | 0 |
-
-DTLZ1, 3 objectives (budget 40,000):
-
-| Solver | Runs | Hypervolume: median | best | worst | Evaluations (median) | Front size (median) | Capped |
-|---|---|---|---|---|---|---|---|
-| nsga2 | 5 | 0.1338 | 0.1369 | 0.1307 | 40,036 | 91 | 0 |
-| nsga3 | 5 | 0.1398 | 0.1400 | 0.1390 | 40,038 | 92 | 0 |
-| spea2 | 5 | 0.1392 | 0.1398 | 0.1391 | 40,032 | 92 | 0 |
-| sms_emoa | 5 | 0.1401 | 0.1402 | 0.1401 | 40,000 | 92 | 0 |
-| moead | 5 | 0.1397 | 0.1398 | 0.1393 | 40,039 | 91 | 0 |
-
 ## Can't run
 
-Nothing. The package has no multi-objective algorithm beyond the five of rule 6.1.
+Nothing: the package runs all 9 scenarios.
 
 ## Bugs found
 

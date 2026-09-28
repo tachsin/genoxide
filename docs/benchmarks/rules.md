@@ -8,7 +8,7 @@ Every library is measured under these rules. An adapter that breaks one isn't be
 
 1.2. Each adapter implements them in its library's language, as its users would. **[checked]** The adapter evaluates fixed points, including the optimum, and the values must match the reference to 1e-9 relative.
 
-1.3. Each run prints the best solution it found, not only its value. **[checked]** `run.py` evaluates that solution with the reference; the run is invalid if the two values differ. It also recomputes whether the solution reaches the target. A multi-objective run prints the solutions of its front, and `run.py` computes their objectives itself.
+1.3. Each run prints the best solution it found, not only its value. **[checked]** `run.py` evaluates that solution with the reference; the run is invalid if the two values differ. It also recomputes whether the solution reaches the target.
 
 1.4. Rastrigin and Ackley are shifted, so an optimum at the origin can't favour operators that drift towards 0. The optimum is at `s_i = 0.8 * upper * (2 * ((37 * i + 11) % 101) / 101 - 1)`, for i from 0, where `upper` is the box's upper bound: 5.12 for Rastrigin, 32.768 for Ackley. Every adapter computes it in this order, in double precision. Rosenbrock isn't shifted: its optimum, all ones, is already away from the origin.
 
@@ -17,9 +17,9 @@ Every library is measured under these rules. An adapter that breaks one isn't be
 2.1. A run ends at the first of:
 - the target, reached by the best solution found;
 - the scenario's evaluation budget;
-- the scenario's time cap: 60 seconds in a scenario with a target, 600 seconds in a multi-objective scenario.
+- the scenario's time cap: 60 seconds.
 
-Nothing else ends a run. A multi-objective run must use its whole budget (rule 7.1), so its cap is longer.
+Nothing else ends a run.
 
 2.2. **Methods that stop by themselves keep going.**
 - **A limit that's only a budget,** such as a maximum number of generations or iterations, is lifted.
@@ -40,7 +40,7 @@ Which criteria count:
 
 2.3. A library that checks the stop only between generations may go past the target or the budget by at most one generation. **[checked]** Evaluations beyond the budget plus one generation make the run invalid. Every run reports `last_generation`, the evaluations its adapter counted since the start of its last generation (a restart's initial population is a generation), and a generation is the larger of that and the run's average.
 
-2.4. **Only inside the bounds.** Every solution a method evaluates must lie inside the problem's box. The library's own bound handling is used: clipping, repair, a transformation or a bounded operator. The page says which. **[checked]** Each run of a continuous or multi-objective problem reports `outside`, the number of evaluated solutions outside the bounds, from the adapter's own counter. It must be 0.
+2.4. **Only inside the bounds.** Every solution a method evaluates must lie inside the problem's box. The library's own bound handling is used: clipping, repair, a transformation or a bounded operator. The page says which. **[checked]** Each run of a continuous problem reports `outside`, the number of evaluated solutions outside the bounds, from the adapter's own counter. It must be 0.
 
 ## 3. Counting evaluations
 
@@ -48,13 +48,13 @@ Which criteria count:
 
 3.2. The adapter counts them itself, with a counter around the fitness function, not with the library's own count. Every call counts: copies, restarts, local search and final polishing. A library that doesn't evaluate a copy again saves that evaluation. That's a real saving, and it's reported.
 
-3.3. **The first hit.** Every single-objective run prints `"first_hit": {"evaluations": E, "time_s": T}`. E is the number of the first evaluation whose true value reaches the target, counting that evaluation. T is the run's clock at that evaluation. A run that never reaches the target prints `"first_hit": null`. The adapter's counter records it at each evaluation, whatever the library's stop granularity. The run still stops as rules 2.1 and 2.3 say. A first hit later than the scenario's time cap counts as not reached. **[checked]** `first_hit` is present when the solution reaches the target and null otherwise; E is at most the run's evaluations, and T at most its time.
+3.3. **The first hit.** Every run prints `"first_hit": {"evaluations": E, "time_s": T}`. E is the number of the first evaluation whose true value reaches the target, counting that evaluation. T is the run's clock at that evaluation. A run that never reaches the target prints `"first_hit": null`. The adapter's counter records it at each evaluation, whatever the library's stop granularity. The run still stops as rules 2.1 and 2.3 say. A first hit later than the scenario's time cap counts as not reached. **[checked]** `first_hit` is present when the solution reaches the target and null otherwise; E is at most the run's evaluations, and T at most its time.
 
 3.4. **Batch evaluation.** A Python library with a documented batch or vectorized evaluation interface evaluates a generation at once with numpy, as its users would: pycma's `fmin2(parallel_objective=...)`, PyGAD's `fitness_batch_size`, pygmo's `batch_fitness` with a `bfe` where the algorithm accepts one. An interface that changes the algorithm isn't used: SciPy's `vectorized=True` forces deferred updating. Each row of a batch counts as one evaluation.
 
 ## 4. Time
 
-4.1. The clock starts before the initial population is created and stops right after the run ends. It includes every evaluation. It stops before any output: formatting, extracting the front, recomputing objectives. Adapter bookkeeping other than counting evaluations and recording the first hit, such as storing every evaluated solution, isn't done while the clock runs.
+4.1. The clock starts before the initial population is created and stops right after the run ends. It includes every evaluation. It stops before any output, such as formatting. Adapter bookkeeping other than counting evaluations and recording the first hit, such as storing every evaluated solution, isn't done while the clock runs.
 
 4.2. Excluded:
 - interpreter and JVM startup;
@@ -74,7 +74,7 @@ Which criteria count:
 
 5.2. **[checked]** The same seed gives the same evaluations, the same best value and the same first hit, where the library supports seeding. A run doesn't depend on the runs before it in the same process: seed 1 gives the same alone as after seed 0. A library that can't be seeded says so on its page.
 
-5.3. In a scenario with a target, a solver whose first 3 seeds all run to the time cap without reaching the target runs no more seeds. Its result shows 3 runs. A multi-objective scenario runs every seed.
+5.3. A solver whose first 3 seeds all run to the time cap without reaching the target runs no more seeds. Its result shows 3 runs.
 
 ## 6. Which methods run
 
@@ -83,14 +83,12 @@ Which criteria count:
 - **A missing component** means the library doesn't run the scenario. Its adapter prints nothing, and its page says what's missing.
 - **Smaller differences** are allowed only where the library can't express the exact setting, such as a per-gene rate with the same mean. The library's page lists them.
 - **Matched OneMax** is generational without elitism, as DEAP's `eaSimple`. A library that can only run it elitist, as (μ+λ), or with another replacement doesn't run it.
-- **Matched multi-objective** runs only NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA. NSGA-III runs on the ZDT problems too, in every library that has it. Duplicate elimination is off. SMS-EMOA is steady-state: one child per step; a library whose SMS-EMOA can't do that doesn't run it. A library's other multi-objective algorithms aren't run; its page lists them.
 
 6.2. **Idiomatic mode:** the methods a library's own documentation recommends for each problem type:
 - binary;
 - permutation;
 - continuous and multimodal;
-- continuous and unimodal;
-- multi-objective.
+- continuous and unimodal.
 
 For each method, the adapter cites where the library recommends it: a page of the docs, an example or the README. The settings are the documented defaults, or the ones documented for that problem type.
 
@@ -116,11 +114,7 @@ The separate test runs are shown on the page, but they never pick a method or a 
 
 ## 7. Multi-objective runs
 
-7.1. They have no target. Each run ends at its evaluation budget or at its time cap (rule 2.1).
-
-7.2. The front reported is the non-dominated part of the algorithm's final population, of the size the scenario sets. For SPEA2, that's its archive of that size. An unbounded archive of every solution ever evaluated isn't comparable: it would always look better.
-
-7.3. `run.py` computes the objectives of the front's solutions with the reference, keeps the non-dominated ones, and computes their hypervolume with the same exact code for every library. The objectives the adapter printed are only checked against the reference, never used. The reference point is 1.1 times the nadir of the optimal front: (1.1, 1.1) for ZDT, (1.1, 1.1, 1.1) for DTLZ2, (0.55, 0.55, 0.55) for DTLZ1.
+Removed for now. The benchmarks have single-objective scenarios only, until genoxide solves them well; multi-objective scenarios come back after that, with their rules. The number is kept so the other rules keep theirs.
 
 ## 8. Reporting
 
@@ -140,12 +134,12 @@ The charts show the capped runs apart from the runs that ended at the target or 
 
 8.4. Library bugs aren't worked around, except where the library's page says so and shows both results. A crash isn't convergence: catching one and restarting is a workaround, labelled so. The [notes](notes.md) list every bug found.
 
-8.5. **The overall score** sums up the 14 scenarios, 9 single-objective and 5 multi-objective, in one number per library. `run.py` computes it from the same summaries as the other charts:
-- **A library's time in a scenario.** With a target: its fastest method's expected running time to the target (rule 8.1), as in the summary chart. Multi-objective: its fastest method's median time for the evaluation budget, among its methods whose median hypervolume is within 1% (relative) of the best median hypervolume of any library in the scenario. As in the chart of the multi-objective times, the runs the time cap stopped are summarized apart from the others, with the time they took: about the cap.
-- **Unsolved.** A library that runs the scenario but has no such time (no method with an expected running time, or none within 1% of the best hypervolume) gets twice the scenario's time cap. This is PAR-2, the penalized average runtime of the SAT competitions.
+8.5. **The overall score** sums up the 9 scenarios in one number per library. `run.py` computes it from the same summaries as the other charts:
+- **A library's time in a scenario.** Its fastest method's expected running time to the target (rule 8.1), as in the summary chart.
+- **Unsolved.** A library that runs the scenario but has no such time (no method with an expected running time) gets twice the scenario's time cap. This is PAR-2, the penalized average runtime of the SAT competitions.
 - **Points.** With t the library's time, t₁ the fastest library's time (penalties included) and P twice the time cap, the library gets 100 × (1 − ln(t / t₁) / ln(P / t₁)) points, clamped to [0, 100]. The fastest library gets 100, an unsolved scenario 0, and in between every order of magnitude of time costs the same points. Each scenario has its own scale, from its fastest time to its penalty. If no library solves a scenario, all get 0 there.
 - **Score.** The mean of the library's points over the scenarios it runs, to one decimal. A scenario it can't run (rule 8.2) is left out, not counted as 0. A score of 100 means the fastest library in every scenario it runs.
-- **Coverage.** Beside the score, the scenarios the library runs, of 14, and those it solved.
+- **Coverage.** Beside the score, the scenarios the library runs, of 9, and those it solved.
 
 genoxide and its Python package are two libraries here, as in the other charts. The score measures speed to a solution on these scenarios and nothing else. The chart is `overall.svg`, and `charts.json` has each library's points, time and speed ratio (the fastest time divided by its own) in each scenario.
 
@@ -163,7 +157,7 @@ genoxide and its Python package are two libraries here, as in the other charts. 
 
 ## 10. Instruction counts: genoxide's versions
 
-CPU instructions are counted for genoxide only, to compare its versions on the same runs. The other libraries aren't counted: their times, evaluations and hypervolumes are in the charts above.
+CPU instructions are counted for genoxide only, to compare its versions on the same runs. The other libraries aren't counted: their times and evaluations are in the charts above.
 
 10.1. **The same runs.** In every scenario, each of genoxide's methods makes one run with seed 0, the first seed of every timed run, to its target or its evaluation budget. There's no time cap: nothing else ends the run. The adapter is the same source for every version (`benchmarks/adapters/genoxide`), built against the version: a release from crates.io, or the repository's genoxide for an unreleased one. A version whose API the adapter doesn't compile against isn't measured.
 
@@ -171,4 +165,4 @@ CPU instructions are counted for genoxide only, to compare its versions on the s
 
 10.3. **Checked.** Each run is made once without Callgrind too, and must be the same under it: the same evaluations and the same result. It's checked like a timed run (rules 1.3, 2.3, 2.4 and 3.3); a run that fails is recorded with its failures.
 
-10.4. **Reported.** `docs/benchmarks/genoxide-versions.json` keeps a row per version: the date it was measured and released, the machine, the compiler and Valgrind, and per scenario and method the instructions, the evaluations and whether the run reached the target (its best value), or, multi-objective, its front's hypervolume. The chart `genoxide_versions.svg` and its numbers in `charts.json` show each method's instructions across the versions, hollow where the run didn't reach the target. Fewer instructions to the same target mean less work: a cheaper evaluation, fewer evaluations, or both, which the evaluations tell apart.
+10.4. **Reported.** `docs/benchmarks/genoxide-versions.json` keeps a row per version: the date it was measured and released, the machine, the compiler and Valgrind, and per scenario and method the instructions, the evaluations and whether the run reached the target (its best value). The chart `genoxide_versions.svg` and its numbers in `charts.json` show each method's instructions across the versions, hollow where the run didn't reach the target. Fewer instructions to the same target mean less work: a cheaper evaluation, fewer evaluations, or both, which the evaluations tell apart.

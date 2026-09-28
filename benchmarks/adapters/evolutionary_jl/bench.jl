@@ -95,79 +95,6 @@ const REAL_PROBLEMS = Dict(
 )
 const REAL_TARGET = 0.01
 
-# multi-objective problems, in place F .= f(x) (the in-place form of docs/src/tutorial.md), all
-# variables in [0, 1]
-zdt_g(x) = 1.0 + 9.0 * sum(@view x[2:end]) / (length(x) - 1)
-
-function zdt1!(F, x)
-    g = zdt_g(x)
-    F[1] = x[1]
-    F[2] = g * (1.0 - sqrt(x[1] / g))
-    return F
-end
-
-function zdt2!(F, x)
-    g = zdt_g(x)
-    F[1] = x[1]
-    F[2] = g * (1.0 - (x[1] / g)^2)
-    return F
-end
-
-function zdt3!(F, x)
-    g = zdt_g(x)
-    F[1] = x[1]
-    F[2] = g * (1.0 - sqrt(x[1] / g) - x[1] / g * sin(10π * x[1]))
-    return F
-end
-
-# DTLZ2 with M = length(F) objectives and k = length(x) - M + 1 = 10
-function dtlz2!(F, x)
-    m = length(F)
-    g = 0.0
-    for v in @view x[m:end]
-        g += (v - 0.5)^2
-    end
-    for j in 1:m
-        f = 1.0 + g
-        for v in @view x[1:(m - j)]
-            f *= cos(v * π / 2)
-        end
-        j > 1 && (f *= sin(x[m - j + 1] * π / 2))
-        F[j] = f
-    end
-    return F
-end
-
-# DTLZ1 with M = length(F) objectives and k = length(x) - M + 1 = 5
-function dtlz1!(F, x)
-    m = length(F)
-    k = length(x) - m + 1
-    s = 0.0
-    for v in @view x[m:end]
-        s += (v - 0.5)^2 - cos(20π * (v - 0.5))
-    end
-    g = 100.0 * (k + s)
-    for j in 1:m
-        f = 0.5 * (1.0 + g)
-        for v in @view x[1:(m - j)]
-            f *= v
-        end
-        j > 1 && (f *= 1.0 - x[m - j + 1])
-        F[j] = f
-    end
-    return F
-end
-
-# (function, variables for the size, objectives for the size, population size)
-const FRONT_PROBLEMS = Dict(
-    "zdt1" => (zdt1!, size -> size, size -> 2, 100),
-    "zdt2" => (zdt2!, size -> size, size -> 2, 100),
-    "zdt3" => (zdt3!, size -> size, size -> 2, 100),
-    # size: the number of objectives, with k = 10 (DTLZ2) and k = 5 (DTLZ1)
-    "dtlz2" => (dtlz2!, size -> size + 9, size -> size, 92),
-    "dtlz1" => (dtlz1!, size -> size + 4, size -> size, 92),
-)
-
 # -------------------------------------------------------------------------------------------------
 # The budget: counts every evaluation (rule 3) and keeps the best value and solution; stops at the
 # target, at max_evaluations or at max_seconds (checked by the callback after every generation).
@@ -192,7 +119,7 @@ mutable struct Budget
     const start::UInt64
 end
 
-Budget(max_evaluations, max_seconds, target = -Inf) =
+Budget(max_evaluations, max_seconds, target) =
     Budget(0, Inf, nothing, 0, -1, 0.0, 0, 0, max_evaluations, max_seconds, target, time_ns())
 
 seconds(budget::Budget) = (time_ns() - budget.start) / 1.0e9
@@ -229,14 +156,6 @@ function counted(f, budget::Budget; bounds = nothing)
     end
 end
 
-function counted!(f!, budget::Budget)
-    return function (F, x)
-        budget.evaluations += 1
-        outside(x, (0.0, 1.0)) && (budget.outside += 1)
-        return f!(F, x)
-    end
-end
-
 exhausted(budget::Budget) =
     budget.best <= budget.target ||
     budget.evaluations >= budget.max_evaluations ||
@@ -248,7 +167,7 @@ first_hit(budget::Budget) = budget.first_hit_evaluations < 0 ? nothing :
 
 # Rule 2.2. The iteration limit, only a budget, is lifted (typemax(Int); the library's default is
 # 1,000, 1,500 for CMAES). The convergence test is the library's: each method's default metric
-# (AbsDiff(1e-12) for GA and CMAES, AbsDiff(1e-10) for DE and ES, GD for NSGA2) below its tolerance
+# (AbsDiff(1e-12) for GA and CMAES, AbsDiff(1e-10) for DE and ES) below its tolerance
 # for more than `successive_f_tol` generations (src/api/optimize.jl); `successive_f_tol` is the
 # default 10, or the value of the library's example for the problem type. It ends the attempt, and
 # run_restarting starts a new one. The callback of Options (docs/src/tutorial.md, "General
@@ -393,56 +312,10 @@ function real_solvers(problem, size)
     return [("cma_es", cma_es), ("de", de), third]
 end
 
-# -------------------------------------------------------------------------------------------------
-# Multi-objective: NSGA-II with the matched settings
-#
-# NSGA2 of Evolutionary.jl 0.12.0 has a bug (SciML/Evolutionary.jl#174): update_state!
-# (src/nsga2.jl) reorders the parents (`parents .= state.population[fitidx]`) but not their
-# objective values in `state.fitpop[:, 1:N]`, nor their ranks and crowding distances, so from the
-# second generation on it sorts and selects on the values of other individuals. The multi-objective
-# scenarios run it anyway, as the library's users get it (rule 8.4), and their results show the
-# bug. The front printed holds the true objective values of the final population, computed after
-# the clock stops, not counted. EVOLUTIONARY_JL_NSGA2=0 skips them (prints nothing).
-# -------------------------------------------------------------------------------------------------
-
 # the untimed warm-up run of every solver before the timed ones (rule 4.2), with the scenario's
 # time cap
 const WARM_UP_EVALUATIONS = 50_000
 const WARM_UP_SEED = 999_999
-
-non_dominated(points) = [i for (i, p) in enumerate(points) if !any(q -> all(q .<= p) && any(q .< p), points)]
-
-# NSGA-II with the matched settings of every library: population 100 (92 for DTLZ), SBX with η 15
-# at 0.9 (crossoverRate), polynomial mutation with η 20 at 1 / n; binary tournament on rank and
-# crowding distance (the library's default). Differences: Evolutionary's SBX and PLM are the
-# unbounded variants (the offspring are clipped to [0, 1] by the box constraints), its SBX crosses
-# each variable with probability 0.5 (as pymoo's default). A pair that isn't crossed passes the
-# parents themselves to the offspring, which PLM then mutates in place (the library's bug, see the
-# page), as users get it.
-function run_front(problem, size, budget, seed)
-    f!, variables, objectives, population_size = FRONT_PROBLEMS[problem]
-    n = variables(size)
-    m = objectives(size)
-    population = Vector{Float64}[]
-    generations, restarts = run_restarting(budget, seed) do rng
-        method = NSGA2(
-            populationSize = population_size,
-            crossover = SBX(0.5, 15),
-            crossoverRate = 0.9,
-            mutation = PLM(1.0; η = 20, pm = 1.0 / n),
-            mutationRate = 1.0,
-        )
-        # the initial population, uniform in [0, 1]; NSGA2 replaces its members in place, so it
-        # holds the final population afterwards (rule 7.2). The matched configuration has no
-        # convergence criterion, so the GD metrics are lifted (successive_f_tol = typemax(Int)):
-        # the run goes to the budget in one attempt.
-        population = [rand(rng, n) for _ in 1:population_size]
-        Evolutionary.optimize(
-            counted!(f!, budget), zeros(m), BoxConstraints(0.0, 1.0, n), method, population, options(budget, rng; successive_f_tol = typemax(Int)),
-        )
-    end
-    return generations, restarts, population
-end
 
 # -------------------------------------------------------------------------------------------------
 # Output
@@ -461,7 +334,7 @@ function print_line(fields)
     return flush(stdout)
 end
 
-# `values <problem> <size>`: one JSON solution per line on stdin, its value (or objectives) per
+# `values <problem> <size>`: one JSON solution per line on stdin, its value per
 # line on stdout, with the fitness functions above (rule 1.2)
 function print_values(problem, size)
     for line in eachline(stdin)
@@ -474,9 +347,6 @@ function print_values(problem, size)
             println(json_value(nqueens(round.(Int, x) .+ 1)))
         elseif haskey(REAL_PROBLEMS, problem)
             println(json_value(REAL_PROBLEMS[problem][1](x)))
-        else
-            f!, _, objectives, _ = FRONT_PROBLEMS[problem]
-            println(json_value(f!(zeros(objectives(size)), x)))
         end
     end
     return
@@ -501,32 +371,6 @@ function main(args)
     seed_from, seed_to = parse(Int, args[4]), parse(Int, args[5])
     max_evaluations, max_seconds = parse(Int, args[6]), parse(Float64, args[7])
     size <= MAX_GENES || error("at most $MAX_GENES genes")
-
-    if haskey(FRONT_PROBLEMS, problem)
-        if get(ENV, "EVOLUTIONARY_JL_NSGA2", "1") == "0"
-            println(stderr, "evolutionary_jl: $problem skipped (EVOLUTIONARY_JL_NSGA2=0)")
-            return
-        end
-        f!, _, objectives, _ = FRONT_PROBLEMS[problem]
-        run_front(problem, size, Budget(WARM_UP_EVALUATIONS, max_seconds), WARM_UP_SEED)
-        for seed in seed_from:seed_to
-            Random.seed!(seed)
-            budget = Budget(max_evaluations, max_seconds)  # the clock starts
-            generations, restarts, population = run_front(problem, size, budget, seed)
-            elapsed = seconds(budget)
-            # the objectives of the final population, after the clock and not counted
-            points = [f!(zeros(objectives(size)), x) for x in population]
-            front = non_dominated(points)
-            print_line([
-                "library" => "evolutionary_jl", "solver" => "nsga2", "problem" => problem, "size" => size,
-                "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-                "generations" => generations, "evaluations" => budget.evaluations,
-                "last_generation" => last_generation(budget), "restarts" => restarts,
-                "outside" => budget.outside, "front" => points[front], "solutions" => population[front],
-            ])
-        end
-        return
-    end
 
     if problem == "onemax"
         solvers = onemax_solvers(size, mode)

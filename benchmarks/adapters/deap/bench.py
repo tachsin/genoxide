@@ -5,7 +5,7 @@ Usage:
     python bench.py values <problem> <size>    (one JSON solution per line on stdin)
 
 The first prints one JSON line per solver per seed, see ../../README.md for the fields; the second
-prints the value (or objectives) of each solution with the fitness functions below.
+prints the value of each solution with the fitness functions below.
 
 The methods, their settings, where DEAP's docs and examples show them, what was left out and the
 separate test runs are in docs/benchmarks/libraries/deap.md. Every setting below cites the DEAP
@@ -33,10 +33,6 @@ creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
 creator.create("IndividualMax", list, fitness=creator.FitnessMax)
 creator.create("IndividualMin", list, fitness=creator.FitnessMin)
-creator.create("FitnessMin2", base.Fitness, weights=(-1.0, -1.0))
-creator.create("FitnessMin3", base.Fitness, weights=(-1.0, -1.0, -1.0))
-creator.create("Individual2", list, fitness=creator.FitnessMin2)
-creator.create("Individual3", list, fitness=creator.FitnessMin3)
 
 REAL_TARGET = 0.01
 
@@ -58,12 +54,9 @@ class Budget:
         self.first_hit = None
         # the evaluations when the last generation started (rule 2.3), marked by the solvers below
         self.generation_start = 0
-        # the box of a continuous or multi-objective problem, and the evaluated solutions outside it
-        # (rule 2.4)
+        # the box of a continuous problem, and the evaluated solutions outside it (rule 2.4)
         if problem in REAL_PROBLEMS:
             self.bounds = REAL_PROBLEMS[problem][1:]
-        elif problem in FRONT_PROBLEMS:
-            self.bounds = (0.0, 1.0)
         else:
             self.bounds = None
         self.outside = 0
@@ -185,64 +178,6 @@ REAL_PROBLEMS = {
     "ackley": (ackley, -32.768, 32.768),
 }
 MULTIMODAL = {"rastrigin", "ackley"}
-
-
-def zdt_g(x):
-    return 1 + 9 * sum(x[1:]) / (len(x) - 1)
-
-
-def zdt1(x):
-    g = zdt_g(x)
-    return x[0], g * (1 - math.sqrt(x[0] / g))
-
-
-def zdt2(x):
-    g = zdt_g(x)
-    return x[0], g * (1 - (x[0] / g) ** 2)
-
-
-def zdt3(x):
-    g = zdt_g(x)
-    return x[0], g * (1 - math.sqrt(x[0] / g) - x[0] / g * math.sin(10 * math.pi * x[0]))
-
-
-def dtlz2(x, objectives):
-    g = sum((v - 0.5) ** 2 for v in x[objectives - 1:])
-    values = []
-    for m in range(objectives):
-        f = 1 + g
-        for v in x[:objectives - 1 - m]:
-            f *= math.cos(v * math.pi / 2)
-        if m > 0:
-            f *= math.sin(x[objectives - 1 - m] * math.pi / 2)
-        values.append(f)
-    return tuple(values)
-
-
-def dtlz1(x, objectives):
-    tail = x[objectives - 1:]
-    g = 100 * (len(tail) + sum((v - 0.5) ** 2 - math.cos(20 * math.pi * (v - 0.5)) for v in tail))
-    values = []
-    for m in range(objectives):
-        f = 0.5 * (1 + g)
-        for v in x[:objectives - 1 - m]:
-            f *= v
-        if m > 0:
-            f *= 1 - x[objectives - 1 - m]
-        values.append(f)
-    return tuple(values)
-
-
-# (fitness function of the size, number of variables, number of objectives), all minimized, all
-# variables in [0, 1]; the size of DTLZ is its number of objectives, with k = 10 (DTLZ2) and 5
-# (DTLZ1) distance variables
-FRONT_PROBLEMS = {
-    "zdt1": (lambda size: zdt1, lambda size: size, lambda size: 2),
-    "zdt2": (lambda size: zdt2, lambda size: size, lambda size: 2),
-    "zdt3": (lambda size: zdt3, lambda size: size, lambda size: 2),
-    "dtlz2": (lambda size: lambda x: dtlz2(x, size), lambda size: size + 9, lambda size: size),
-    "dtlz1": (lambda size: lambda x: dtlz1(x, size), lambda size: size + 4, lambda size: size),
-}
 
 
 # -------------------------------------------------------------------------------------------------
@@ -600,75 +535,6 @@ def solve_de(problem, size, budget):
 
 
 # -------------------------------------------------------------------------------------------------
-# Multi-objective: NSGA-II and NSGA-III with the matched settings
-# -------------------------------------------------------------------------------------------------
-
-
-def solve_front(problem, size, solver, budget):
-    """NSGA-II as examples/ga/nsga2.py, NSGA-III as examples/ga/nsga3.py, with the matched settings
-    of every library: 100 individuals (92 with 3 objectives), SBX with eta 15 at 0.9 and polynomial
-    mutation with eta 20 at 1 / n for NSGA-II; Das-Dennis reference points with 99 divisions (12
-    with 3 objectives), SBX with eta 30 at 1 and the same mutation for NSGA-III. Returns the final
-    population and the generations."""
-    function, variables, objectives = (f(size) for f in FRONT_PROBLEMS[problem])
-    n = variables
-    population_size = 100 if objectives == 2 else 92
-    individual = creator.Individual2 if objectives == 2 else creator.Individual3
-    toolbox = base.Toolbox()
-    toolbox.register("attribute", random.random)
-    toolbox.register("individual", tools.initRepeat, individual, toolbox.attribute, n)
-    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-    toolbox.register("evaluate", counted_front(budget, function))
-    eta = 15.0 if solver == "nsga2" else 30.0
-    toolbox.register("mate", tools.cxSimulatedBinaryBounded, low=0.0, up=1.0, eta=eta)
-    toolbox.register("mutate", tools.mutPolynomialBounded, low=0.0, up=1.0, eta=20.0, indpb=1.0 / n)
-    if solver == "nsga2":
-        toolbox.register("select", tools.selNSGA2)
-    else:
-        reference = tools.uniform_reference_points(objectives, 99 if objectives == 2 else 12)
-        toolbox.register("select", tools.selNSGA3, ref_points=reference)
-
-    population = toolbox.population(n=population_size)
-    budget.new_generation()
-    for member in population:
-        member.fitness.values = toolbox.evaluate(member)
-    if solver == "nsga2":
-        # nsga2.py: "This is just to assign the crowding distance to the individuals" (nsga3.py
-        # has no such step)
-        population = toolbox.select(population, len(population))
-    generations = 0
-    while not budget.exhausted():
-        generations += 1
-        budget.new_generation()
-        if solver == "nsga2":
-            # nsga2.py: crowded binary tournament, then each pair crossed with probability 0.9 and
-            # both children mutated
-            offspring = [toolbox.clone(member) for member in tools.selTournamentDCD(population, len(population))]
-            for a, b in zip(offspring[::2], offspring[1::2]):
-                if random.random() <= 0.9:
-                    toolbox.mate(a, b)
-                toolbox.mutate(a)
-                toolbox.mutate(b)
-                del a.fitness.values, b.fitness.values
-        else:
-            # nsga3.py: varAnd with cxpb 1 and mutpb 1
-            offspring = algorithms.varAnd(population, toolbox, 1.0, 1.0)
-        for member in offspring:
-            if not member.fitness.valid:
-                member.fitness.values = toolbox.evaluate(member)
-        population = toolbox.select(population + offspring, population_size)
-    return population, generations
-
-
-def counted_front(budget, function):
-    def counted(individual):
-        budget.count(individual)
-        return function(individual)
-
-    return counted
-
-
-# -------------------------------------------------------------------------------------------------
 
 
 def solvers_of(problem, size, mode):
@@ -685,15 +551,12 @@ def solvers_of(problem, size, mode):
 
 
 def values(problem, size):
-    """Prints the value, or the objectives, of each solution read from stdin."""
-    if problem in FRONT_PROBLEMS:
-        function = FRONT_PROBLEMS[problem][0](size)
-    else:
-        function = {"onemax": onemax, "nqueens": nqueens}.get(problem) or REAL_PROBLEMS[problem][0]
+    """Prints the value of each solution read from stdin."""
+    function = {"onemax": onemax, "nqueens": nqueens}.get(problem) or REAL_PROBLEMS[problem][0]
     for line in sys.stdin:
         if line.strip():
             result = function(json.loads(line))
-            print(json.dumps(list(result) if problem in FRONT_PROBLEMS else result[0]), flush=True)
+            print(json.dumps(result[0]), flush=True)
 
 
 def main():
@@ -708,26 +571,6 @@ def main():
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
 
     for seed in range(seed_from, seed_to + 1):
-        if problem in FRONT_PROBLEMS:
-            for solver in ("nsga2", "nsga3"):
-                random.seed(seed)
-                numpy.random.seed(seed)
-                start = time.perf_counter()
-                budget = Budget(problem, size, max_evaluations, max_seconds, start)
-                population, generations = solve_front(problem, size, solver, budget)
-                elapsed = time.perf_counter() - start
-                # rule 7.2, after the clock: the first non-dominated front of the final population
-                front = tools.sortNondominated(population, len(population), first_front_only=True)[0]
-                print(json.dumps({
-                    "library": "deap", "solver": solver, "problem": problem, "size": size, "mode": mode,
-                    "seed": seed, "time_s": round(elapsed, 6), "generations": generations,
-                    "evaluations": budget.evaluations, "last_generation": budget.last_generation(),
-                    "outside": budget.outside,
-                    "front": [list(member.fitness.values) for member in front],
-                    "solutions": [list(member) for member in front],
-                }), flush=True)
-            continue
-
         solvers = solvers_of(problem, size, mode)
         if solvers is None:
             print(f"unknown problem {problem}", file=sys.stderr)

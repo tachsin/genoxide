@@ -7,10 +7,10 @@ Know a better way to solve one of these problems with Nevergrad? [Open a benchma
 
 ## How the adapter runs Nevergrad
 
-- **The loop** ([`run`](../../../benchmarks/adapters/nevergrad/bench.py#L215-L244)): the docs' [ask and tell loop](https://facebookresearch.github.io/nevergrad/optimization.html#ask-and-tell-interface), one worker, the optimizer given the scenario's budget ("the budget tells NgIohTuned which algorithm to choose"). Every optimizer runs with its defaults.
+- **The loop** ([`run`](../../../benchmarks/adapters/nevergrad/bench.py#L212-L241)): the docs' [ask and tell loop](https://facebookresearch.github.io/nevergrad/optimization.html#ask-and-tell-interface), one worker, the optimizer given the scenario's budget ("the budget tells NgIohTuned which algorithm to choose"). Every optimizer runs with its defaults.
 - **Stop:** right after the evaluation that reaches the target, or before one past the budget or the time cap.
 - **Keeping going (rule 2.2):** the optimizers have no stop criterion. The CMA-ES inside `CMA` and `NgIohTuned` restarts from the middle of the domain, with the same population size, when pycma's criteria end it (`optimizerlib.py`, `_CMA.es`).
-- **Imports (rule 4.2):** pycma with matplotlib, scikit-learn and SciPy's COBYLA, which Nevergrad imports during its first run (about 0.4 s), are imported before the clock ([the imports](../../../benchmarks/adapters/nevergrad/bench.py#L45-L52)).
+- **Imports (rule 4.2):** pycma with matplotlib, scikit-learn and SciPy's COBYLA, which Nevergrad imports during its first run (about 0.4 s), are imported before the clock ([the imports](../../../benchmarks/adapters/nevergrad/bench.py#L43-L50)).
 - **Seeds:** the docs' two ways ([Reproducibility](https://facebookresearch.github.io/nevergrad/optimization.html#reproducibility)): numpy's global random state and the parametrization's `random_state`.
 - **Rule 5.3:** applied in the adapter too.
 - **Choosing among the docs (rule 6.2):** [Choosing an optimizer](https://facebookresearch.github.io/nevergrad/optimization.html#choosing-an-optimizer) lists "rules of thumb", each for its case. The first is the default: "`NgIohTuned` is 'meta'-optimizer which adapts to the provided settings ... and should therefore be a good default". It runs on every problem; the other methods come from the list's cases or the docs' example for the problem type.
@@ -18,7 +18,7 @@ Know a better way to solve one of these problems with Nevergrad? [Open a benchma
 
 ## Binary: OneMax 100 (idiomatic)
 
-**Methods** ([`solvers`](../../../benchmarks/adapters/nevergrad/bench.py#L176-L212)), on the docs' OneMax parameter, `ng.p.TransitionChoice(range(2), repetitions=100)` ([Basic example](https://facebookresearch.github.io/nevergrad/optimization.html#basic-example)):
+**Methods** ([`solvers`](../../../benchmarks/adapters/nevergrad/bench.py#L173-L209)), on the docs' OneMax parameter, `ng.p.TransitionChoice(range(2), repetitions=100)` ([Basic example](https://facebookresearch.github.io/nevergrad/optimization.html#basic-example)):
 - **`ngiohtuned`:** the default; here it chooses `DoubleFastGADiscreteOnePlusOne`.
 - **`discrete_one_plus_one`:** `DiscreteOnePlusOne`, the docs' OneMax example.
 - **`portfolio_discrete_one_plus_one`:** "`PortfolioDiscreteOnePlusOne` is excellent in discrete settings of mixed settings when high precision on parameters is not relevant".
@@ -113,8 +113,7 @@ The runs reached the cap after about 2,200 evaluations (`ngiohtuned`), 75,000 (`
 ## Can't run
 
 - OneMax 100 and 1000, matched: no GA with the matched operators.
-- The multi-objective scenarios: Nevergrad has none of the five matched algorithms. Its docs recommend DE for several objectives; its result, `optimizer.pareto_front()`, is the non-dominated set of every point evaluated, an unbounded archive that rule 7.2 excludes (DE's `optimizer.population` would give a front of the scenario's size).
 
 ## Bugs found
 
-- **`NgIohTuned`'s metamodel crashes with NumPy 2.5.** It calls `float()` on a one-element array (`metamodel.py`, `loss_function_sm`), which NumPy 2.5 refuses (`TypeError`). Worked around: the adapter restores the old conversion in that module only ([the line](../../../benchmarks/adapters/nevergrad/bench.py#L57-L61)); the algorithm is unchanged. Both results: without it, every `ngiohtuned` run on Rastrigin, Rosenbrock and Ackley crashes at the metamodel's first fit (after 118 evaluations in 10 dimensions, 892 or 1,784 in 30), with no result; with it, the results above. Not reported upstream yet.
+- **`NgIohTuned`'s metamodel crashes with NumPy 2.5.** It calls `float()` on a one-element array (`metamodel.py`, `loss_function_sm`), which NumPy 2.5 refuses (`TypeError`). Worked around: the adapter restores the old conversion in that module only ([the line](../../../benchmarks/adapters/nevergrad/bench.py#L55-L59)); the algorithm is unchanged. Both results: without it, every `ngiohtuned` run on Rastrigin, Rosenbrock and Ackley crashes at the metamodel's first fit (after 118 evaluations in 10 dimensions, 892 or 1,784 in 30), with no result; with it, the results above. Not reported upstream yet.

@@ -10,23 +10,22 @@ next to the code below.
 
 pagmo's algorithms run in C++ and call the fitness of a Python user-defined problem (UDP),
 single-threaded (no islands or archipelagos). The algorithms that accept a batch fitness evaluator
-(cmaes, gaco, nsga2) get pygmo's member_bfe, which evaluates a whole generation in one call of the
+(cmaes, gaco) get pygmo's member_bfe, which evaluates a whole generation in one call of the
 UDP's batch_fitness, with numpy; the others call its fitness, one decision vector at a time. The
 UDP counts every decision vector evaluated (rule 3), the initial populations and every restart
 included, and keeps the best solution and the first evaluation that reaches the target. It also
 counts the evaluated solutions outside the bounds, as pagmo proposed them (rule 2.4: pagmo's own
 bound handling keeps them inside, see the page). How a run ends (rule 2):
-- single-objective runs: the counter raises Stop from inside the fitness at the first of the target,
-  the budget and the time limit: after the evaluation, or the batch, that reaches the target; a
-  batch that would go past the budget is evaluated only up to it;
+- the counter raises Stop from inside the fitness at the first of the target, the budget and the
+  time limit: after the evaluation, or the batch, that reaches the target; a batch that would go
+  past the budget is evaluated only up to it;
 - a limit that's only a budget (every algorithm's gen) is lifted: gen covers the whole budget;
 - an algorithm that ends on convergence (sade's, CMA-ES' and xNES' ftol and xtol, GACO's impstop and
   evalstop) starts again from a new random population, the procedure of pygmo's cmaes_vs_xnes
   tutorial for algorithms "with well defined exit conditions", with the run's seed first and
   (seed + 1) * 1_000_000 + restart for restart 1 on;
 - simulated annealing's cooling schedule has a fixed length; it's annealed again from its best
-  point, as in the solving_schwefel_20 tutorial;
-- multi-objective runs have no target and run the generations of the budget, see evolve_front.
+  point, as in the solving_schwefel_20 tutorial.
 """
 
 import os
@@ -118,13 +117,6 @@ class Counter:
             self.stopped = True
             raise Stop()
 
-    def count_front(self, x):
-        """The evaluations of a multi-objective run, which evolve_front ends."""
-        self.evaluations += len(x)
-
-    def out_of_time(self):
-        return time.perf_counter() >= self.deadline
-
 
 counter = Counter(0, 0.0, 0.0)
 
@@ -193,88 +185,29 @@ REAL_PROBLEMS = {
 }
 
 
-def zdt_g(x):
-    return 1 + 9 * np.sum(x[:, 1:], axis=1) / (x.shape[1] - 1)
-
-
-def zdt1(x):
-    g = zdt_g(x)
-    return np.stack([x[:, 0], g * (1 - np.sqrt(x[:, 0] / g))], axis=1)
-
-
-def zdt2(x):
-    g = zdt_g(x)
-    return np.stack([x[:, 0], g * (1 - (x[:, 0] / g) ** 2)], axis=1)
-
-
-def zdt3(x):
-    g = zdt_g(x)
-    return np.stack([x[:, 0], g * (1 - np.sqrt(x[:, 0] / g) - x[:, 0] / g * np.sin(10 * np.pi * x[:, 0]))],
-                    axis=1)
-
-
-def dtlz2(x, objectives):
-    k = objectives - 1
-    g = np.sum((x[:, k:] - 0.5) ** 2, axis=1)
-    angles = x[:, :k] * np.pi / 2
-    # f_m = (1 + g) cos(x_0) ... cos(x_(k-m-1)) sin(x_(k-m)), without the sine for m = 0
-    ones = np.ones((len(x), 1))
-    f = (1 + g)[:, None] * np.concatenate((ones, np.cumprod(np.cos(angles), axis=1)), axis=1)[:, ::-1]
-    f[:, 1:] *= np.sin(angles)[:, ::-1]
-    return f
-
-
-def dtlz1(x, objectives):
-    k = objectives - 1
-    tail = x[:, k:] - 0.5
-    g = 100 * (tail.shape[1] + np.sum(tail * tail - np.cos(20 * np.pi * tail), axis=1))
-    # f_m = (1 + g) / 2 x_0 ... x_(k-m-1) (1 - x_(k-m)), without the last factor for m = 0
-    ones = np.ones((len(x), 1))
-    f = 0.5 * (1 + g)[:, None] * np.concatenate((ones, np.cumprod(x[:, :k], axis=1)), axis=1)[:, ::-1]
-    f[:, 1:] *= 1 - x[:, :k][:, ::-1]
-    return f
-
-
-# (fitness function of x and the size, variables, objectives, population size of NSGA-II, a
-# multiple of 4)
-FRONT_PROBLEMS = {
-    "zdt1": (lambda x, size: zdt1(x), lambda size: size, 2, 100),
-    "zdt2": (lambda x, size: zdt2(x), lambda size: size, 2, 100),
-    "zdt3": (lambda x, size: zdt3(x), lambda size: size, 2, 100),
-    # size: the number of objectives, with k = 10 (DTLZ2) and 5 (DTLZ1)
-    "dtlz2": (lambda x, size: dtlz2(x, size), lambda size: size + 9, 3, 92),
-    "dtlz1": (lambda x, size: dtlz1(x, size), lambda size: size + 4, 3, 92),
-}
-
-
 class Problem:
     """A pagmo user-defined problem: a box-bounded fitness that counts its evaluations, with a batch
     fitness (tutorials/coding_udp_simple; pygmo.problem.batch_fitness: "the decision vectors ...
     are all concatenated in a single array"). `sign` is -1 for OneMax, which is maximized (pagmo
     minimizes)."""
 
-    def __init__(self, function, lower, upper, objectives=1, integers=0, sign=1.0):
+    def __init__(self, function, lower, upper, integers=0, sign=1.0):
         self.function = function
         self.lower = lower
         self.upper = upper
-        self.objectives = objectives
         self.integers = integers
         self.sign = sign
         self.low, self.high = np.array(lower, dtype=float), np.array(upper, dtype=float)
 
     def evaluate(self, x):
         """The fitness vectors of the rows of x, counted."""
-        if self.objectives == 1:
-            # never past the budget: the counter stops the run there
-            x = x[:counter.left()]
+        # never past the budget: the counter stops the run there
+        x = x[:counter.left()]
         # rule 2.4: x as pagmo proposed it, not clipped here
         counter.outside += int(np.sum(np.any((x < self.low) | (x > self.high), axis=1)))
-        if self.objectives == 1:
-            values = self.sign * self.function(x)
-            counter.count(x, values)
-            return values[:, None]
-        counter.count_front(x)
-        return self.function(x)
+        values = self.sign * self.function(x)
+        counter.count(x, values)
+        return values[:, None]
 
     def fitness(self, x):
         return self.evaluate(np.asarray(x, dtype=float)[None, :])[0]
@@ -287,9 +220,6 @@ class Problem:
 
     def get_bounds(self):
         return self.lower, self.upper
-
-    def get_nobj(self):
-        return self.objectives
 
     def get_nix(self):
         return self.integers
@@ -459,49 +389,6 @@ def single_solvers(problem, size, mode):
 
 
 # -------------------------------------------------------------------------------------------------
-# Multi-objective
-# -------------------------------------------------------------------------------------------------
-
-
-def front_solvers(problem, size):
-    """[(solver, problem, population size, algorithm factory (gen, seed) -> UDA)]"""
-    function, variables, objectives, population = FRONT_PROBLEMS[problem]
-    n = variables(size)
-    udp = Problem(functools.partial(function, size=size), [0.0] * n, [1.0] * n, objectives=objectives)
-    # The matched scenarios run only NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA (rule 6.1).
-    # pagmo 2.19.1 has no NSGA-III, SPEA2 or SMS-EMOA, and its MOEA/D (moead, moead_gen) is the DE
-    # variant, which can't use SBX; NSPSO and MACO aren't matched algorithms
-    return [
-        # the matched settings: SBX with eta 15 at 0.9, polynomial mutation with eta 20 at 1 / n.
-        # Both of pagmo's operators keep the genes within the bounds: its SBX clips the children,
-        # and its polynomial mutation is Deb's bounded one. It accepts a bfe: a generation in one
-        # batch
-        ("nsga2", udp, population,
-         lambda gen, seed: with_bfe(pg.nsga2(gen=gen, cr=0.9, eta_c=15, m=1.0 / n, eta_m=20, seed=seed))),
-    ]
-
-
-def evolve_front(udp, population_size, make_algorithm, seed):
-    """Multi-objective runs have no target: one call of evolve with the generations of the budget,
-    as pagmo is used, when they fit in the time limit with room to spare (3 times the time of the
-    initial population's evaluations per generation). Otherwise one generation per call, with the
-    time checked after each. Returns (population, generations)."""
-    initial = time.perf_counter()
-    population = pg.population(udp, population_size, seed=seed)
-    seconds_per_generation = time.perf_counter() - initial
-    generations = max(1, math.ceil((counter.max_evaluations - counter.evaluations) / population_size))
-    if generations * seconds_per_generation * 3 < counter.deadline - time.perf_counter():
-        algorithm = pg.algorithm(make_algorithm(generations, seed))
-        return algorithm.evolve(population), generations
-    algorithm = pg.algorithm(make_algorithm(1, seed))
-    done = 0
-    while done < generations and not counter.out_of_time():
-        population = algorithm.evolve(population)
-        done += 1
-    return population, done
-
-
-# -------------------------------------------------------------------------------------------------
 
 
 def values(problem, size):
@@ -510,9 +397,7 @@ def values(problem, size):
         if not line.strip():
             continue
         x = np.array([json.loads(line)], dtype=float)
-        if problem in FRONT_PROBLEMS:
-            value = FRONT_PROBLEMS[problem][0](x, size)[0].tolist()
-        elif problem == "onemax":
+        if problem == "onemax":
             value = int(onemax(x)[0])
         elif problem in REAL_PROBLEMS:
             value = float(REAL_PROBLEMS[problem][0](x)[0])
@@ -533,35 +418,6 @@ def main():
     problem, size, mode = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     seed_from, seed_to = int(sys.argv[4]), int(sys.argv[5])
     max_evaluations, max_seconds = int(sys.argv[6]), float(sys.argv[7])
-
-    if problem in FRONT_PROBLEMS:
-        for seed in range(seed_from, seed_to + 1):
-            for solver, udp, population_size, make_algorithm in front_solvers(problem, size):
-                problem_ = pg.problem(udp)
-                start = time.perf_counter()
-                counter = Counter(max_evaluations, start, max_seconds)
-                population, generations = evolve_front(problem_, population_size, make_algorithm, seed)
-                # the clock stops when the run ends, before the front is extracted (rule 4.1)
-                elapsed = time.perf_counter() - start
-                # the non-dominated part of the final population (rule 7.2)
-                x, f = population.get_x(), population.get_f()
-                first = pg.fast_non_dominated_sorting(f)[0][0]
-                print(json.dumps({
-                    "library": "pygmo",
-                    "solver": solver,
-                    "problem": problem,
-                    "size": size,
-                    "mode": mode,
-                    "seed": seed,
-                    "time_s": round(elapsed, 6),
-                    "generations": generations,
-                    "evaluations": counter.evaluations,
-                    "last_generation": last_generation(counter.evaluations, population_size, population_size),
-                    "front": [[float(v) for v in f[i]] for i in first],
-                    "solutions": [[float(v) for v in x[i]] for i in first],
-                    "outside": counter.outside,
-                }), flush=True)
-        return
 
     target = -size if problem == "onemax" else TARGET
     for seed in range(seed_from, seed_to + 1):

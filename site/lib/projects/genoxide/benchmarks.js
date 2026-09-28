@@ -17,9 +17,9 @@ export const BENCHMARK_CHARTS_FILE = "docs/benchmarks/charts.json";
 
 /** What the overall score is, under its title: rule 8.5 of docs/benchmarks/rules.md, in short. */
 const OVERALL_CAPTION =
-  "How fast each library solves the 14 scenarios, in one number. Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, " +
+  "How fast each library solves the 9 scenarios, in one number. Per scenario, the fastest library gets 100 points and a library that doesn't solve it within the time cap 0, " +
   "evenly per order of magnitude of time in between; the score is the mean over the scenarios a library runs. " +
-  "Its time is its fastest method's expected time to the target or, with several objectives, its fastest method's time for the budget among those within 1% of the best hypervolume. " +
+  "Its time is its fastest method's expected time to the target. " +
   "Hover a bar for its points in each scenario.";
 
 /** What genoxide's versions chart is (rule 10 of docs/benchmarks/rules.md), in short. */
@@ -53,20 +53,10 @@ export const BENCHMARK_CHARTS = [
     kind: "to-target",
     title: "Time and evaluations to target",
     caption:
-      "Every method's expected running time to each single-objective target, per scenario, or the fitness evaluations it took: what counts when the fitness function is expensive.",
+      "Every method's expected running time to each target, per scenario, or the fitness evaluations it took: what counts when the fitness function is expensive.",
     views: [
       { data: "time_to_target", label: "Time", file: "docs/benchmarks/time_to_target.svg" },
       { data: "evaluations_to_target", label: "Evaluations", file: "docs/benchmarks/evaluations_to_target.svg" },
-    ],
-  },
-  {
-    id: "hypervolume",
-    kind: "front",
-    title: "Multi-objective fronts",
-    caption: "Median hypervolume of the final front on ZDT and DTLZ problems, or the time its evaluation budget took.",
-    views: [
-      { data: "hypervolume", label: "Hypervolume", file: "docs/benchmarks/hypervolume.svg" },
-      { data: "front_time", label: "Time", file: "docs/benchmarks/front_time.svg" },
     ],
   },
   {
@@ -98,7 +88,7 @@ export const BENCHMARK_IMAGES = [
   {
     id: "time-to-target",
     title: "Time to target",
-    caption: "Expected running time to reach each single-objective target, per scenario.",
+    caption: "Expected running time to reach each target, per scenario.",
     file: "docs/benchmarks/time_to_target.svg",
   },
   {
@@ -106,12 +96,6 @@ export const BENCHMARK_IMAGES = [
     title: "Evaluations to target",
     caption: "Fitness evaluations to reach the target: what counts when the fitness function is expensive.",
     file: "docs/benchmarks/evaluations_to_target.svg",
-  },
-  {
-    id: "hypervolume",
-    title: "Hypervolume",
-    caption: "Median hypervolume of the final front on ZDT and DTLZ problems.",
-    file: "docs/benchmarks/hypervolume.svg",
   },
   {
     id: "genoxide-versions",
@@ -131,11 +115,8 @@ export async function getBenchmarkImages() {
   return files ? BENCHMARK_IMAGES.filter((image) => files.has(image.file)) : BENCHMARK_IMAGES;
 }
 
-/** The problems, as in benchmarks/README.md. */
-export const BENCHMARK_PROBLEMS = {
-  single: ["OneMax", "N-Queens", "Rastrigin (shifted)", "Rosenbrock", "Ackley (shifted)"],
-  multi: ["ZDT1", "ZDT2", "ZDT3", "DTLZ1", "DTLZ2"],
-};
+/** The problems, as in benchmarks/README.md: single-objective only, for now. */
+export const BENCHMARK_PROBLEMS = ["OneMax", "N-Queens", "Rastrigin (shifted)", "Rosenbrock", "Ackley (shifted)"];
 
 const LIBRARY_NAMES = {
   genoxide: "genoxide",

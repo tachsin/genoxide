@@ -2,8 +2,8 @@ import { formatTick, formatValue } from "../player/chart-kit";
 
 /**
  * Number formats of the benchmark charts, by the quantity charts.json gives
- * each chart ("seconds", "evaluations", "instructions", "hypervolume",
- * "distance", "score"). The bars' own labels are the harness's (`text`), so they read
+ * each chart ("seconds", "evaluations", "instructions", "distance",
+ * "score"). The bars' own labels are the harness's (`text`), so they read
  * as in its SVG charts; these are for axes and tooltips.
  */
 
@@ -16,7 +16,6 @@ export const QUANTITY_NAMES = {
   evaluations: "Evaluations",
   // genoxide's versions chart: the CPU instructions of a whole run
   instructions: "Instructions",
-  hypervolume: "Hypervolume",
   distance: "Distance to the optimum",
   score: "Score",
 };
@@ -71,14 +70,13 @@ export function percent(share) {
 
 const count = new Intl.NumberFormat("en");
 
-/** The notes of a bar, in words: why it's missing, how many runs reached the target, were stopped or failed. */
+/** The notes of a bar, in words: why it's missing, how many runs reached the target or were stopped. */
 export function barNotes(bar) {
   // a point of genoxide's versions chart: one run of a method in a version
   if (typeof bar.version === "string") {
     const notes = [];
     if (typeof bar.evaluations === "number") notes.push(`${count.format(bar.evaluations)} evaluations`);
     if (typeof bar.reached === "number") notes.push(bar.reached ? "reached the target" : "didn't reach the target within the budget");
-    if (typeof bar.hypervolume === "number") notes.push(`hypervolume ${bar.hypervolume.toFixed(4)}, for the whole budget`);
     if (bar.invalid) notes.push("failed a check of the rules");
     return notes;
   }
@@ -88,7 +86,6 @@ export function barNotes(bar) {
   if (typeof bar.reached === "number" && typeof bar.runs === "number" && bar.reached < bar.runs) {
     notes.push(`reached the target in ${bar.reached} of ${bar.runs} runs`);
   }
-  if (bar.errors) notes.push(`${bar.errors} of ${bar.runs} runs failed`);
   if (bar.capped) {
     notes.push(
       `${bar.capped} run${bar.capped === 1 ? "" : "s"} stopped by the time cap` +
@@ -102,6 +99,5 @@ export function barNotes(bar) {
       `runs ${bar.scenarios} of the ${bar.of} scenarios` + (typeof bar.solved === "number" ? `, solves ${bar.solved}` : ""),
     );
   }
-  if (bar.below_axis) notes.push("below the axis's start");
   return notes;
 }

@@ -9,20 +9,20 @@ Know a better way to solve one of these problems with DEAP? [Open a benchmark is
 
 ## How the adapter runs DEAP
 
-- **Fitness functions:** plain Python on one individual, returning a tuple, as DEAP's examples and `deap.benchmarks` write them ([bench.py, lines 127-245](../../../benchmarks/adapters/deap/bench.py#L127-L245)). DEAP evaluates one individual per call, so there's no batch interface (rule 3.4).
-- **Evaluations:** a wrapper counts every call ([`Budget`, lines 44-117](../../../benchmarks/adapters/deap/bench.py#L44-L117)) and records the first hit ([lines 84-95](../../../benchmarks/adapters/deap/bench.py#L84-L95)). `eaSimple` and `varAnd` don't evaluate an individual that was neither crossed nor mutated.
-- **Stop:** the target and the time cap between generations; the budget before each evaluation, so no run passes it ([`full`, lines 108-111](../../../benchmarks/adapters/deap/bench.py#L108-L111)). A multi-objective run ends after the generation that reaches its budget.
-- **Keeping going (rule 2.2):** the examples' GA, DE and NSGA loops have only generation limits, which are lifted. The BIPOP-CMA-ES's stop criteria are part of its example, so each ends a CMA-ES run and the example's BIPOP restarts start the next, drawing from numpy's generator, seeded once per run. The GA loop starts again from a new random population with the next restart seed after 10 generations in a row without an evaluation ([`ea_simple`, lines 254-295](../../../benchmarks/adapters/deap/bench.py#L254-L295)), and the run prints `restarts`; the DE and NSGA loops evaluate every child.
+- **Fitness functions:** plain Python on one individual, returning a tuple, as DEAP's examples and `deap.benchmarks` write them ([bench.py, lines 120-180](../../../benchmarks/adapters/deap/bench.py#L120-L180)). DEAP evaluates one individual per call, so there's no batch interface (rule 3.4).
+- **Evaluations:** a wrapper counts every call ([`Budget`, lines 40-110](../../../benchmarks/adapters/deap/bench.py#L40-L110)) and records the first hit ([lines 77-88](../../../benchmarks/adapters/deap/bench.py#L77-L88)). `eaSimple` and `varAnd` don't evaluate an individual that was neither crossed nor mutated.
+- **Stop:** the target and the time cap between generations; the budget before each evaluation, so no run passes it ([`full`, lines 101-104](../../../benchmarks/adapters/deap/bench.py#L101-L104)).
+- **Keeping going (rule 2.2):** the examples' GA and DE loops have only generation limits, which are lifted. The BIPOP-CMA-ES's stop criteria are part of its example, so each ends a CMA-ES run and the example's BIPOP restarts start the next, drawing from numpy's generator, seeded once per run. The GA loop starts again from a new random population with the next restart seed after 10 generations in a row without an evaluation ([`ea_simple`, lines 189-230](../../../benchmarks/adapters/deap/bench.py#L189-L230)), and the run prints `restarts`; the DE loops evaluate every child.
 - **Bounds (rule 2.4):** per section.
 - **One thread:** numpy's BLAS set to one thread before import ([lines 17-19](../../../benchmarks/adapters/deap/bench.py#L17-L19)); DEAP evaluates in the calling thread.
-- **Seeds:** `random` (the operators) and `numpy.random` (CMA-ES) ([lines 737-738](../../../benchmarks/adapters/deap/bench.py#L737-L738), [713-714](../../../benchmarks/adapters/deap/bench.py#L713-L714)).
-- **Solutions:** the best the wrapper saw; a multi-objective run prints the first non-dominated front of its final population ([line 720](../../../benchmarks/adapters/deap/bench.py#L720)).
+- **Seeds:** `random` (the operators) and `numpy.random` (CMA-ES) ([lines 580-581](../../../benchmarks/adapters/deap/bench.py#L580-L581)).
+- **Solutions:** the best the wrapper saw.
 - **Separate tests:** 2026-09-25, DEAP 1.4.4, numpy 2.5.3, Python 3.13.9, seeds 0 to 4, the scenario's budget, 60 s cap, with other processes on the machine. `outside` was 0 in every run.
 
 ## Binary: OneMax 100 and 1000
 
 **Methods:**
-- **Matched:** the matched GA is DEAP's OneMax example, run as it is ([`solve_onemax`, lines 298-311](../../../benchmarks/adapters/deap/bench.py#L298-L311), [`ea_simple`, lines 254-295](../../../benchmarks/adapters/deap/bench.py#L254-L295)): [examples/ga/onemax.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/ga/onemax.py) ([docs](https://deap.readthedocs.io/en/master/examples/ga_onemax.html)) with `algorithms.eaSimple` as in [onemax_short.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/ga/onemax_short.py) ([docs](https://deap.readthedocs.io/en/master/examples/ga_onemax_short.html)): 300 individuals, `selTournament` of 3, `cxTwoPoint` at 0.5, `mutFlipBit` on 20% of the individuals, generational, no elitism. One difference: a bit flips with probability 1 / n, not 0.05.
+- **Matched:** the matched GA is DEAP's OneMax example, run as it is ([`solve_onemax`, lines 233-246](../../../benchmarks/adapters/deap/bench.py#L233-L246), [`ea_simple`, lines 189-230](../../../benchmarks/adapters/deap/bench.py#L189-L230)): [examples/ga/onemax.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/ga/onemax.py) ([docs](https://deap.readthedocs.io/en/master/examples/ga_onemax.html)) with `algorithms.eaSimple` as in [onemax_short.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/ga/onemax_short.py) ([docs](https://deap.readthedocs.io/en/master/examples/ga_onemax_short.html)): 300 individuals, `selTournament` of 3, `cxTwoPoint` at 0.5, `mutFlipBit` on 20% of the individuals, generational, no elitism. One difference: a bit flips with probability 1 / n, not 0.05.
 - **Idiomatic (OneMax 100):** the same example with its `indpb=0.05`.
 
 **Keeping going:** the examples' generation limits (1,000; `ngen` 40) are lifted.
@@ -56,7 +56,7 @@ OneMax 100, idiomatic (budget 200,000):
 
 ## Permutation: N-Queens 32 and 64
 
-**Methods:** `ga`, [examples/ga/nqueens.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/ga/nqueens.py): permutations (`random.sample`), `cxPartialyMatched`, `mutShuffleIndexes` with `indpb` 2 / n, `selTournament` of 3, 300 individuals, `eaSimple` with crossover 0.5 and mutation 0.2 ([`solve_nqueens`, lines 314-325](../../../benchmarks/adapters/deap/bench.py#L314-L325)). The example counts conflicting pairs; the reference fitness is 0 at the same boards.
+**Methods:** `ga`, [examples/ga/nqueens.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/ga/nqueens.py): permutations (`random.sample`), `cxPartialyMatched`, `mutShuffleIndexes` with `indpb` 2 / n, `selTournament` of 3, 300 individuals, `eaSimple` with crossover 0.5 and mutation 0.2 ([`solve_nqueens`, lines 249-260](../../../benchmarks/adapters/deap/bench.py#L249-L260)). The example counts conflicting pairs; the reference fitness is 0 at the same boards.
 
 **Keeping going:** the example's 100 generations are lifted.
 
@@ -79,13 +79,13 @@ N-Queens 64 (budget 1,000,000):
 ## Continuous, multimodal: Rastrigin 10 and 30, Ackley 30
 
 **Methods:**
-- **`cma_es`:** BI-population CMA-ES, [examples/es/cma_bipop.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/es/cma_bipop.py) ([docs](https://deap.readthedocs.io/en/master/examples/bipop_cmaes.html)), DEAP's CMA-ES with restarts, on Rastrigin, run line for line ([`solve_bipop_cmaes`, lines 357-513](../../../benchmarks/adapters/deap/bench.py#L357-L513)):
+- **`cma_es`:** BI-population CMA-ES, [examples/es/cma_bipop.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/es/cma_bipop.py) ([docs](https://deap.readthedocs.io/en/master/examples/bipop_cmaes.html)), DEAP's CMA-ES with restarts, on Rastrigin, run line for line ([`solve_bipop_cmaes`, lines 292-448](../../../benchmarks/adapters/deap/bench.py#L292-L448)):
   - large-population runs start with λ = 4 + 3 ln n, doubled at each restart; small-population runs use the example's random λ and σ;
   - each run ends at the first of the example's 9 criteria (MaxIter, TolHistFun, EqualFunVals, TolX, TolUpSigma, Stagnation, ConditionCov, NoEffectAxis, NoEffectCoor);
   - the example starts uniformly in [−4, 4] of its [−5, 5] domain with σ₀ = 2, "1/5th of the domain"; the adapter takes the same shares of each box (the inner 80%, σ₀ 2.048 for Rastrigin and 13.1 for Ackley).
-- **`de`:** [examples/de/sphere.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/de/sphere.py), the DE example on a multimodal function (Griewank): DE/rand/1 with the example's exponential crossover (see [Bugs found](#bugs-found)), F 0.8, CR 0.8, 10 n agents, donors by `selRandom`, children replacing their agents at the end of the generation ([`cx_exponential`, lines 523-534](../../../benchmarks/adapters/deap/bench.py#L523-L534); [`solve_de`, lines 537-599](../../../benchmarks/adapters/deap/bench.py#L537-L599)). It starts uniformly in the box (the example: [−3, 3]). DEAP's README lists DE among the "examples of alternative algorithms".
+- **`de`:** [examples/de/sphere.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/de/sphere.py), the DE example on a multimodal function (Griewank): DE/rand/1 with the example's exponential crossover (see [Bugs found](#bugs-found)), F 0.8, CR 0.8, 10 n agents, donors by `selRandom`, children replacing their agents at the end of the generation ([`cx_exponential`, lines 458-469](../../../benchmarks/adapters/deap/bench.py#L458-L469); [`solve_de`, lines 472-534](../../../benchmarks/adapters/deap/bench.py#L472-L534)). It starts uniformly in the box (the example: [−3, 3]). DEAP's README lists DE among the "examples of alternative algorithms".
 
-**Bounds:** DEAP's CMA-ES and DE are unbounded, and its documented constraint handling is a penalty ([Constraint Handling](https://deap.readthedocs.io/en/master/tutorials/advanced/constraints.html)). As DEAP's box-bounded ES example ([cma_mo.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/es/cma_mo.py)) does, the adapter uses `tools.ClosestValidPenalty`: a sample outside the box is evaluated at its closest point inside, plus 10⁶ times the squared distance ([`bounded_evaluate`, lines 333-354](../../../benchmarks/adapters/deap/bench.py#L333-L354)). The counter sees the repaired point, so `outside` is 0 by construction. In seed 0 of each scenario, 1.3 to 7.9% of the CMA-ES's samples and 3.1 to 6.9% of DE's were repaired.
+**Bounds:** DEAP's CMA-ES and DE are unbounded, and its documented constraint handling is a penalty ([Constraint Handling](https://deap.readthedocs.io/en/master/tutorials/advanced/constraints.html)). As DEAP's box-bounded ES example ([cma_mo.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/es/cma_mo.py)) does, the adapter uses `tools.ClosestValidPenalty`: a sample outside the box is evaluated at its closest point inside, plus 10⁶ times the squared distance ([`bounded_evaluate`, lines 268-289](../../../benchmarks/adapters/deap/bench.py#L268-L289)). The counter sees the repaired point, so `outside` is 0 by construction. In seed 0 of each scenario, 1.3 to 7.9% of the CMA-ES's samples and 3.1 to 6.9% of DE's were repaired.
 
 **Keeping going:**
 - `cma_es`: the 9 criteria end each run and BIPOP starts the next. The example's limit of 10 runs (`NRESTARTS`) is lifted, with its regime rule, less the clause that makes the tenth run a large one. `cma.Strategy`'s `numpy.linalg.LinAlgError`, when the covariance matrix degenerates, also ends a run.
@@ -127,7 +127,7 @@ With a 900 s cap (seeds 0 to 2), both reached Rastrigin 30 in 3 of 3 runs: `cma_
 
 **Methods:**
 - **`cma_es`:** the same BIPOP-CMA-ES.
-- **`de`:** [examples/de/basic.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/de/basic.py), the DE example on the sphere: DE/rand/1/bin, F 1, CR 0.25, 300 agents, each child replacing its agent at once when better ([lines 585-598](../../../benchmarks/adapters/deap/bench.py#L585-L598)). It starts uniformly in the box (the example: [−3, 3]).
+- **`de`:** [examples/de/basic.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/de/basic.py), the DE example on the sphere: DE/rand/1/bin, F 1, CR 0.25, 300 agents, each child replacing its agent at once when better ([lines 520-533](../../../benchmarks/adapters/deap/bench.py#L520-L533)). It starts uniformly in the box (the example: [−3, 3]).
 
 **Bounds**, **keeping going** and **left out:** as for the multimodal problems; [de/sphere.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/de/sphere.py) is the multimodal example.
 
@@ -140,64 +140,9 @@ Rosenbrock 10 (budget 500,000):
 | cma_es | 5 | 5 | 5,691 | 0.00925 (0.00791, 0.00941) | 0 |
 | de | 5 | 0 | - | 0.608 (0.455, 0.91) | 0 |
 
-## Multi-objective (matched): ZDT1, ZDT2, ZDT3, DTLZ2, DTLZ1
-
-**Methods** ([`solve_front`, lines 607-660](../../../benchmarks/adapters/deap/bench.py#L607-L660)):
-- **`nsga2`:** [examples/ga/nsga2.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/ga/nsga2.py) with the matched settings: `selNSGA2`, `selTournamentDCD` for the parents, `cxSimulatedBinaryBounded` η 15 (the example's is 20) on each pair at 0.9, `mutPolynomialBounded` η 20 at 1 / n on every child, 100 individuals (92 with 3 objectives). As in the example, the initial population goes through `selNSGA2` once, for the first tournament's crowding distances.
-- **`nsga3`** (every problem): [examples/ga/nsga3.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/ga/nsga3.py) ([docs](https://deap.readthedocs.io/en/master/examples/nsga3.html)), whose DTLZ2 settings are the matched ones: `selNSGA3` with `uniform_reference_points`, 99 divisions (100 points, 100 individuals) or 12 (91 points, 92 individuals), `varAnd` with crossover and mutation probability 1, `cxSimulatedBinaryBounded` η 30, `mutPolynomialBounded` η 20 at 1 / n. The example's population rule, `int(H + (4 - H % 4))`, would give 104 for 100 points; the matched population is 100.
-
-**Bounds:** the bounded SBX and polynomial mutation.
-
-**Keeping going:** the examples' generation counts are lifted.
-
-**The front:** the first non-dominated front of the final population (`sortNondominated`).
-
-**Left out (rule 6.1):**
-- SPEA2: DEAP has its environmental selection, `tools.selSPEA2`, but not the algorithm: no example and no mating selection on SPEA2's fitness.
-- SMS-EMOA: none. [mo_rhv.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/ga/mo_rhv.py) is a generational (μ + μ) algorithm with hypervolume selection, not one child per step.
-- MOEA/D: none.
-- MO-CMA-ES ([cma_mo.py](https://github.com/DEAP/deap/blob/8a96fd3a75026f7b30e835f595a5199c75634ddf/examples/es/cma_mo.py)): not a matched algorithm.
-
-**Separate tests:**
-
-ZDT1 (budget 25,000):
-
-| Solver | Runs | Hypervolume: median (best, worst) | Median evaluations | Runs at the cap |
-|---|---|---|---|---|
-| nsga2 | 5 | 0.8690 (0.8696, 0.8689) | 25,000 | 0 |
-| nsga3 | 5 | 0.8706 (0.8706, 0.8703) | 25,000 | 0 |
-
-ZDT2 (budget 25,000):
-
-| Solver | Runs | Hypervolume: median (best, worst) | Median evaluations | Runs at the cap |
-|---|---|---|---|---|
-| nsga2 | 5 | 0.5363 (0.5365, 0.5357) | 25,000 | 0 |
-| nsga3 | 5 | 0.5367 (0.5374, 0.5360) | 25,000 | 0 |
-
-ZDT3 (budget 25,000):
-
-| Solver | Runs | Hypervolume: median (best, worst) | Median evaluations | Runs at the cap |
-|---|---|---|---|---|
-| nsga2 | 5 | 1.3273 (1.3275, 1.3272) | 25,000 | 0 |
-| nsga3 | 5 | 1.3258 (1.3268, 1.3245) | 25,000 | 0 |
-
-DTLZ2, 3 objectives (budget 25,000):
-
-| Solver | Runs | Hypervolume: median (best, worst) | Median evaluations | Runs at the cap |
-|---|---|---|---|---|
-| nsga2 | 5 | 0.6883 (0.6973, 0.6852) | 25,024 | 0 |
-| nsga3 | 5 | 0.7431 (0.7439, 0.7426) | 25,024 | 0 |
-
-DTLZ1, 3 objectives (budget 40,000):
-
-| Solver | Runs | Hypervolume: median (best, worst) | Median evaluations | Runs at the cap |
-|---|---|---|---|---|
-| nsga2 | 5 | 0.1339 (0.1362, 0.1326) | 40,020 | 0 |
-| nsga3 | 5 | 0.1398 (0.1399, 0.1344) | 40,020 | 0 |
-
 ## Can't run
 
-SPEA2, SMS-EMOA and MOEA/D in the multi-objective scenarios: DEAP doesn't have them as algorithms. It runs every other scenario.
+Nothing: DEAP runs all 9 scenarios.
 
 ## Bugs found
 

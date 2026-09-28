@@ -1,28 +1,28 @@
 # Benchmarks
 
-16 evolutionary computation libraries in 5 languages, and genoxide's Python package, on the same problems, with the same fitness functions and evaluation budgets.
+16 evolutionary computation libraries in 5 languages, and genoxide's Python package, on the same single-objective problems, with the same fitness functions and evaluation budgets. Multi-objective benchmarks are left out for now: they come back once genoxide solves these problems well.
 
 **Interactive results, every chart and table: [tachsin.gr/projects/genoxide/benchmarks](https://tachsin.gr/projects/genoxide/benchmarks).** The full tables are in [results.md](../docs/benchmarks/results.md).
 
-| Library | Language | Version | Solvers (single-objective; multi-objective) |
+| Library | Language | Version | Solvers |
 |---|---|---|---|
-| [genoxide](../docs/benchmarks/libraries/genoxide.md) | Rust | this repository | GA, local search, CMA-ES (IPOP), DE, ES; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
-| [genoxide (Python)](../docs/benchmarks/libraries/genoxide_python.md) | Rust via Python | this repository ([python/](../python)) | GA, local search, CMA-ES (IPOP), DE; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
+| [genoxide](../docs/benchmarks/libraries/genoxide.md) | Rust | this repository | GA, local search, CMA-ES (IPOP), DE, ES |
+| [genoxide (Python)](../docs/benchmarks/libraries/genoxide_python.md) | Rust via Python | this repository ([python/](../python)) | GA, local search, CMA-ES (IPOP), DE |
 | [genetic_algorithm](../docs/benchmarks/libraries/genetic_algorithm.md) | Rust | 0.27.3 | GA, hill climbing |
-| [radiate](../docs/benchmarks/libraries/radiate.md) | Rust | 1.3.1 | GA, as its examples set it and with the crossovers its guide recommends; NSGA-II/III |
+| [radiate](../docs/benchmarks/libraries/radiate.md) | Rust | 1.3.1 | GA, as its examples set it and with the crossovers its guide recommends |
 | [moors](../docs/benchmarks/libraries/moors.md) | Rust | 0.2.11 | GA |
 | [openGA](../docs/benchmarks/libraries/openga.md) | C++ | 1.0.5+f9b15e7 | GA, as its Rastrigin example and its code generator set it |
-| [pygmo](../docs/benchmarks/libraries/pygmo.md) | C++ via Python | 2.19.8 | SGA, IHS, GACO, SaDE, CMA-ES, simulated annealing, xNES; NSGA-II |
-| [DEAP](../docs/benchmarks/libraries/deap.md) | Python | 1.4.4 | GA, BIPOP-CMA-ES, DE; NSGA-II/III |
-| [pymoo](../docs/benchmarks/libraries/pymoo.md) | Python | 0.6.2 | GA, BRKGA, CMA-ES (IPOP), DE, ES, Nelder-Mead; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
-| [PyGAD](../docs/benchmarks/libraries/pygad.md) | Python | 3.7.0 | GA; NSGA-II/III |
+| [pygmo](../docs/benchmarks/libraries/pygmo.md) | C++ via Python | 2.19.8 | SGA, IHS, GACO, SaDE, CMA-ES, simulated annealing, xNES |
+| [DEAP](../docs/benchmarks/libraries/deap.md) | Python | 1.4.4 | GA, BIPOP-CMA-ES, DE |
+| [pymoo](../docs/benchmarks/libraries/pymoo.md) | Python | 0.6.2 | GA, BRKGA, CMA-ES (IPOP), DE, ES, Nelder-Mead |
+| [PyGAD](../docs/benchmarks/libraries/pygad.md) | Python | 3.7.0 | GA |
 | [pycma](../docs/benchmarks/libraries/pycma.md) | Python | 4.5.0 | IPOP-CMA-ES, BIPOP-CMA-ES, lq-CMA-ES |
 | [Nevergrad](../docs/benchmarks/libraries/nevergrad.md) | Python | 1.0.12 | NgIohTuned, DiscreteOnePlusOne, PortfolioDiscreteOnePlusOne, RotatedTwoPointsDE, GeneticDE, OnePlusOne, CMA |
 | [SciPy](../docs/benchmarks/libraries/scipy.md) | Python | 1.18.1 | `differential_evolution`, `dual_annealing`, `direct`, `minimize` (L-BFGS-B, Nelder-Mead) |
 | [Jenetics](../docs/benchmarks/libraries/jenetics.md) | Java | 9.1.0 | GA |
-| [jMetal](../docs/benchmarks/libraries/jmetal.md) | Java | 7.5 | GA, ES, DE, CMA-ES; NSGA-II/III, SPEA2, MOEA/D, SMS-EMOA |
-| [Evolutionary.jl](../docs/benchmarks/libraries/evolutionary_jl.md) | Julia | 0.12.0 | GA, ES, CMA-ES, DE; NSGA-II |
-| [Metaheuristics.jl](../docs/benchmarks/libraries/metaheuristics_jl.md) | Julia | 3.5.0 | GA, BRKGA, ECA, DE, PSO; NSGA-II/III, SPEA2, SMS-EMOA |
+| [jMetal](../docs/benchmarks/libraries/jmetal.md) | Java | 7.5 | GA, ES, DE, CMA-ES |
+| [Evolutionary.jl](../docs/benchmarks/libraries/evolutionary_jl.md) | Julia | 0.12.0 | GA, ES, CMA-ES, DE |
+| [Metaheuristics.jl](../docs/benchmarks/libraries/metaheuristics_jl.md) | Julia | 3.5.0 | GA, BRKGA, ECA, DE, PSO |
 
 The versions are the ones the published results measured. Since then, the adapters' pins moved to genetic_algorithm 0.27.4, radiate 1.3.2 and Evolutionary.jl 0.12.1: the next run measures them, and `python run.py outdated` lists them as "not rerun" until then.
 
@@ -33,15 +33,15 @@ Each library's page gives its methods, their sources, what it leaves out, its se
 The full protocol is in [rules.md](../docs/benchmarks/rules.md). In short:
 
 - **Problems:** every adapter implements the fitness functions below in its library's language. `run.py check` compares them with a Python reference.
-- **Stop:** the target, the evaluation budget or the time cap, whichever comes first. The cap is 60 seconds with a target and 600 seconds for a multi-objective scenario. A method that converges or stalls starts again ([rule 2.2](../docs/benchmarks/rules.md#2-the-budget)).
-- **Seeds:** 10 per scenario. In a scenario with a target, a solver whose first 3 seeds all reach the time cap without the target stops there; `run.py` applies this to every library.
+- **Stop:** the target, the evaluation budget or the time cap, whichever comes first. The cap is 60 seconds. A method that converges or stalls starts again ([rule 2.2](../docs/benchmarks/rules.md#2-the-budget)).
+- **Seeds:** 10 per scenario. A solver whose first 3 seeds all reach the time cap without the target stops there; `run.py` applies this to every library.
 - **Time:** measured inside the adapter, around the optimization only. Every library runs single-threaded, one run at a time.
 - **Results:** time and evaluations to target are the expected running time (ERT, [rule 8.1](../docs/benchmarks/rules.md#8-reporting)), given when at least 3 runs reached the target. A first hit after the time cap counts as not reached. Runs stopped by the time cap before their budget are "capped", and the charts show them apart. The other results are medians.
-- **Overall score** ([rule 8.5](../docs/benchmarks/rules.md#8-reporting)): per scenario, 100 points for the fastest library and 0 for a library that doesn't solve it within the time cap (its time counts twice the cap, PAR-2), evenly per order of magnitude of time in between. A library's time is its fastest method's expected time to target, or, multi-objective, its fastest method's median time among those within 1% of the best hypervolume. The score is the mean of the points over the scenarios the library runs, shown with how many it runs and solves.
+- **Overall score** ([rule 8.5](../docs/benchmarks/rules.md#8-reporting)): per scenario, 100 points for the fastest library and 0 for a library that doesn't solve it within the time cap (its time counts twice the cap, PAR-2), evenly per order of magnitude of time in between. A library's time is its fastest method's expected time to target. The score is the mean of the points over the scenarios the library runs, shown with how many it runs and solves.
 - **Validation:** every timed run passes the checks of `run.py check`, or it's left out and listed.
 - **Matched:** configurations as equal as the libraries allow, with each library's own components. They measure framework cost and algorithm implementations.
 - **Idiomatic:** each library's recommended configuration, from its docs and examples, up to 3 solvers per problem type. They measure what its users get.
-- **Multi-objective:** no target; each run uses its budget. `run.py` computes the hypervolume of the final front with the same code for every library.
+- **Single-objective only, for now:** the multi-objective scenarios (ZDT and DTLZ, by hypervolume) were taken out, to first make sure genoxide solves these problems well. They come back after that ([rule 7](../docs/benchmarks/rules.md#7-multi-objective-runs)).
 - **Bugs** in the libraries aren't worked around, except where a library's page says so and shows both results.
 
 **What time to target is made of.** Time to target is the number of evaluations times the cost of one evaluation, framework and fitness function together. With a cheap fitness function, as here, the library's own cost dominates. With an expensive one, the number of evaluations does, so the charts show evaluations to target too.
@@ -70,21 +70,6 @@ Rastrigin and Ackley are shifted so that an optimum at the origin doesn't favour
 
 A library that lacks one of these components doesn't run it ([rule 6.1](../docs/benchmarks/rules.md#6-which-methods-run)).
 
-Multi-objective scenarios:
-
-| Problem | Variables | Objectives | Budget | Hypervolume reference point |
-|---|---|---|---|---|
-| ZDT1 (convex front) | 30 in [0, 1] | 2 | 25,000 | (1.1, 1.1) |
-| ZDT2 (concave front) | 30 in [0, 1] | 2 | 25,000 | (1.1, 1.1) |
-| ZDT3 (disconnected front) | 30 in [0, 1] | 2 | 25,000 | (1.1, 1.1) |
-| DTLZ2 (spherical front) | 12 in [0, 1] | 3 | 25,000 | (1.1, 1.1, 1.1) |
-| DTLZ1 (linear front, multimodal) | 7 in [0, 1] | 3 | 40,000 | (0.55, 0.55, 0.55) |
-
-They use the matched settings, with the library's own SBX and polynomial mutation and no duplicate elimination:
-- **NSGA-II, SPEA2 and SMS-EMOA:** 100 individuals (92 with 3 objectives), SBX with η 15 at 0.9, polynomial mutation with η 20 at 1 / n. SMS-EMOA is steady-state: one child per step.
-- **NSGA-III:** Das-Dennis reference directions (99 divisions with 2 objectives, 12 with 3), SBX with η 30 at 1. It runs on every problem, with 100 individuals on ZDT.
-- **MOEA/D:** 100 weight vectors (91 with 3 objectives), 20 neighbors, parents from the neighborhood with probability 0.9, Tchebycheff (PBI with θ 5 for DTLZ), SBX with η 20 at 1.
-
 ## Running
 
 This needs Linux or WSL, with Python 3.11+, Rust (cargo) and g++. Under WSL, pin the virtual machine first, from an Administrator PowerShell. `-Install` adds a scheduled task that pins it at logon and every minute. On another machine, pass its cores to both the script (`-Cores`) and `run.py` (`--cores`):
@@ -112,17 +97,17 @@ python run.py versions --genoxide 0.8.0  # count the instructions of genoxide 0.
 Each run writes the raw runs to `results/<timestamp>.json`, tables to `results/latest.md`, and charts to `results/charts/`: an SVG per chart, and `charts.json`, the numbers, labels and notes of every chart with the run's date, machine and versions, written from the same summaries as the SVGs. The project site's [benchmarks page](https://tachsin.gr/projects/genoxide/benchmarks) draws its interactive charts from `charts.json`.
 
 Beside it, `runs/<scenario>.json` holds the run details, one file per scenario, so the page reads only the one it shows when a bar is clicked:
-- **The scenario:** its problem, size, mode, budget, time cap, target (or hypervolume reference point) and seeds.
-- **Per library and method:** its version and language, its summary as the charts show it (and apart, the runs the time cap stopped), and every run. A run has its seed, time, evaluations, best value or hypervolume, whether it reached the target and its first hit, whether the time cap stopped it, why it's invalid if it is, and `output`, the JSON line its adapter printed. The line leaves out a front's solutions, as the published results do.
+- **The scenario:** its problem, size, mode, budget, time cap, target and seeds.
+- **Per library and method:** its version and language, its summary as the charts show it (and apart, the runs the time cap stopped), and every run. A run has its seed, time, evaluations, best value, whether it reached the target and its first hit, whether the time cap stopped it, why it's invalid if it is, and `output`, the JSON line its adapter printed.
 - **Its code:** the blocks of the adapter that set the method up and run it. Each block has its file, lines and text, at most 80 lines, and the commit whose file has those lines, if the file is unchanged from it. [method_code.py](method_code.py) maps each library's methods to these blocks by the text of their first line, not by line numbers, so the map survives edits and the adapters don't change for it. A method the map doesn't know has no code in the details, and a block it can't find is printed.
 
 `chart` and `publish` write the same files from any results file, raw or published.
 
-**Publishing a run.** `python run.py publish` (`--results <file>` for another run than the latest) writes the latest run of `results/` into [docs/benchmarks/](../docs/benchmarks/): the tables, [results.md](../docs/benchmarks/results.md), summarized from its runs; the SVGs, `charts.json` and the run details, [runs/](../docs/benchmarks/runs/); and the run itself, [results.json.xz](../docs/benchmarks/results.json.xz), compressed with xz, which Python reads without a package (`lzma`). The published copy leaves out the solutions of the multi-objective runs' fronts, 97% of the file: each run keeps its hypervolume, computed from them when it ran, and its seed gives the same run again where the library can be seeded ([rule 5.2](../docs/benchmarks/rules.md#5-seeds-and-repeated-runs)). Commit the files it changes.
+**Publishing a run.** `python run.py publish` (`--results <file>` for another run than the latest) writes the latest run of `results/` into [docs/benchmarks/](../docs/benchmarks/): the tables, [results.md](../docs/benchmarks/results.md), summarized from its runs; the SVGs, `charts.json` and the run details, [runs/](../docs/benchmarks/runs/); and the run itself, [results.json.xz](../docs/benchmarks/results.json.xz), compressed with xz, which Python reads without a package (`lzma`). Commit the files it changes.
 
 The published run is the default of `chart` and `--update`, so anyone can redraw the published charts: `python run.py chart` draws the charts of the published run, or of a newer run in `results/`, into `results/charts/`; `python run.py chart --results <file> --charts <folder>` draws a given results file, the run's JSON or the published `.json.xz`.
 
-**The full rerun.** On the machine of the published results, [rerun.sh](rerun.sh) runs every step in turn, in WSL, and stops at the first that fails: `run.py setup`, `run.py check`, the timed run (every library, 10 seeds), `run.py versions --genoxide <version>` and `run.py publish`. It logs everything to `results/rerun-<timestamp>.log`. The version is genoxide's release on crates.io, or `path` for the repository's genoxide before the release. It takes about 6 hours; nothing else may run meanwhile.
+**The full rerun.** On the machine of the published results, [rerun.sh](rerun.sh) runs every step in turn, in WSL, and stops at the first that fails: `run.py setup`, `run.py check`, the timed run (every library, 10 seeds), `run.py versions --genoxide <version>` and `run.py publish`. It logs everything to `results/rerun-<timestamp>.log`. The version is genoxide's release on crates.io, or `path` for the repository's genoxide before the release. It takes about 4 to 5 hours; nothing else may run meanwhile.
 
 ```sh
 benchmarks/rerun.sh 0.9.0
@@ -145,13 +130,13 @@ python run.py publish
 
 ## genoxide's versions: instruction counts
 
-CPU instructions are counted for genoxide only, to see how its versions solve the same problems ([rule 10](../docs/benchmarks/rules.md#10-instruction-counts-genoxides-versions)). The other libraries have times, evaluations and hypervolumes, not instruction counts.
+CPU instructions are counted for genoxide only, to see how its versions solve the same problems ([rule 10](../docs/benchmarks/rules.md#10-instruction-counts-genoxides-versions)). The other libraries have times and evaluations, not instruction counts.
 
 `python run.py versions --genoxide 0.8.0` measures genoxide 0.8.0, with Callgrind, on Linux with [Valgrind](https://valgrind.org/):
 
 - **The build.** The genoxide adapter, as it is in the repository, is copied to `adapters/genoxide/target/versions/0.8.0/` with `genoxide = "=0.8.0"` from crates.io in its Cargo.toml, and built there with the adapter's Cargo.lock. Nothing in the repository changes. `--genoxide path` builds it against the repository's genoxide instead, for an unreleased version: its row is labelled with the version and commit, e.g. `0.8.0+034f3cd`. There's at most one such row, and a newer release replaces it. A release whose API the adapter doesn't compile against is reported and skipped. Several versions can be given at once.
 - **The runs.** In every scenario, each method runs once with seed 0, to its target or its evaluation budget, with no time cap. The adapter runs one method per process when `GENOXIDE_BENCH_SOLVER` names it, and none with a name no method has: that process, the startup, is subtracted from each method's count. Each run is made without Callgrind too, and the two must be the same run.
-- **The history.** Each version is a row of [genoxide-versions.json](../docs/benchmarks/genoxide-versions.json), added or replaced: the version, its release date, the day it was measured, the machine, rustc and Valgrind, and per scenario the startup and, per method, the instructions, the evaluations, and whether it reached the target and its best value, or its front's hypervolume.
+- **The history.** Each version is a row of [genoxide-versions.json](../docs/benchmarks/genoxide-versions.json), added or replaced: the version, its release date, the day it was measured, the machine, rustc and Valgrind, and per scenario the startup and, per method, the instructions, the evaluations, and whether it reached the target and its best value.
 - **The chart.** It redraws [genoxide_versions.svg](../docs/benchmarks/genoxide_versions.svg), a panel per scenario with the versions on the x axis, and its numbers in `charts.json` beside it. `python run.py versions` without `--genoxide` only redraws them. `python run.py chart` draws it too, from the same history file (`--history` for another).
 
 The counts don't depend on the load, so WSL needn't be pinned: it runs up to `--jobs` processes at once (default: one per core). Under Callgrind a run takes about 50 times as long; a version takes about 20 minutes on 20 cores, most of it CMA-ES on Rastrigin 30. A count changes with genoxide and also with the adapter, rustc or Valgrind: compare versions measured with the same ones, which each row records. After a change to the adapter or the toolchain, measure every version again. The build differs a little too: the same sources, built from crates.io and from the repository, count up to about 0.1% apart, so a change between a repository row and a release smaller than that isn't genoxide's.
@@ -183,12 +168,11 @@ It prints one JSON line per solver per seed, with the best solution found:
 ```
 
 - `first_hit`: the number and clock of the first evaluation that reaches the target, or `null` ([rule 3.3](../docs/benchmarks/rules.md#3-counting-evaluations)).
-- `outside`, in a continuous or multi-objective run: the evaluated solutions outside the bounds, which must be 0 (rule 2.4).
+- `outside`, in a continuous run: the evaluated solutions outside the bounds, which must be 0 (rule 2.4).
 - `last_generation`: the evaluations the adapter counted since the start of the run's last generation, in every run ([rule 2.3](../docs/benchmarks/rules.md#2-the-budget)). A restart's initial population counts as a generation, and a method that evaluates one solution per step has generations of 1.
-- A multi-objective run prints `"front": [[f1, f2], ...]` and `"solutions": [[x1, x2, ...], ...]` instead of `best`, `target`, `success`, `first_hit` and `solution`.
 - For a problem its library can't do, an adapter prints nothing.
 
-The second reads one JSON solution per line and prints its value, or its list of objectives, with the adapter's own fitness functions:
+The second reads one JSON solution per line and prints its value, with the adapter's own fitness functions:
 
 ```
 <adapter> values <problem> <size>

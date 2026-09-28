@@ -90,71 +90,6 @@ const REAL_PROBLEMS = Dict(
 )
 const REAL_TARGET = 0.01
 
-zdt_g(x) = 1.0 + 9.0 * sum(@view x[2:end]) / (length(x) - 1)
-
-function zdt1(x, m)
-    g = zdt_g(x)
-    return [x[1], g * (1.0 - sqrt(x[1] / g))]
-end
-
-function zdt2(x, m)
-    g = zdt_g(x)
-    return [x[1], g * (1.0 - (x[1] / g)^2)]
-end
-
-function zdt3(x, m)
-    g = zdt_g(x)
-    return [x[1], g * (1.0 - sqrt(x[1] / g) - x[1] / g * sin(10π * x[1]))]
-end
-
-# DTLZ2 with m objectives and k = length(x) - m + 1 = 10
-function dtlz2(x, m)
-    g = 0.0
-    for v in @view x[m:end]
-        g += (v - 0.5)^2
-    end
-    F = zeros(m)
-    for j in 1:m
-        f = 1.0 + g
-        for v in @view x[1:(m - j)]
-            f *= cos(v * π / 2)
-        end
-        j > 1 && (f *= sin(x[m - j + 1] * π / 2))
-        F[j] = f
-    end
-    return F
-end
-
-# DTLZ1 with m objectives and k = length(x) - m + 1 = 5
-function dtlz1(x, m)
-    k = length(x) - m + 1
-    s = 0.0
-    for v in @view x[m:end]
-        s += (v - 0.5)^2 - cos(20π * (v - 0.5))
-    end
-    g = 100.0 * (k + s)
-    F = zeros(m)
-    for j in 1:m
-        f = 0.5 * (1.0 + g)
-        for v in @view x[1:(m - j)]
-            f *= v
-        end
-        j > 1 && (f *= 1.0 - x[m - j + 1])
-        F[j] = f
-    end
-    return F
-end
-
-# (function, variables for the size, objectives for the size, population size, Das-Dennis divisions)
-const FRONT_PROBLEMS = Dict(
-    "zdt1" => (zdt1, size -> size, size -> 2, 100, 99),
-    "zdt2" => (zdt2, size -> size, size -> 2, 100, 99),
-    "zdt3" => (zdt3, size -> size, size -> 2, 100, 99),
-    # size: the number of objectives, with k = 10 (DTLZ2) and k = 5 (DTLZ1)
-    "dtlz2" => (dtlz2, size -> size + 9, size -> size, 92, 12),
-    "dtlz1" => (dtlz1, size -> size + 4, size -> size, 92, 12),
-)
-
 # -------------------------------------------------------------------------------------------------
 # The budget: counts every evaluation (rule 3) and keeps the best value and solution. A termination
 # criterion stops the run at the target, at max_evaluations or at max_seconds, checked after every
@@ -179,7 +114,7 @@ mutable struct Budget
     const start::UInt64
 end
 
-Budget(max_evaluations, max_seconds, target = -Inf) =
+Budget(max_evaluations, max_seconds, target) =
     Budget(0, Inf, nothing, 0, -1, 0.0, 0, 0, max_evaluations, max_seconds, target, time_ns())
 
 seconds(budget::Budget) = (time_ns() - budget.start) / 1.0e9
@@ -235,27 +170,16 @@ function counted(f, budget::Budget; bounds = nothing)
     end
 end
 
-# multi-objective: (objectives, inequality constraints, equality constraints), the form the
-# multi-objective algorithms take (NSGA2 docstring)
-function counted_front(f, m, budget::Budget)
-    return function (x)
-        budget.evaluations += 1
-        outside(x, (0.0, 1.0)) && (budget.outside += 1)
-        return f(x, m), [0.0], [0.0]
-    end
-end
-
 # The options (Options docstring, docs/src/api.md) of one attempt: its seed, and what is left of the
 # evaluations and of the time. f_calls_limit is also what ECA uses to switch to exploitation at 95%
 # of it (eca_solution in src/algorithms/singleobjective/ECA/ECA.jl). The tolerances are the
 # defaults (f_tol 1e-12, f_tol_rel eps(), x_tol 1e-8). The iteration limit, only a budget, is
-# lifted (rule 2.2). A matched run has no convergence criterion: f_tol = -1 makes the one optimize
-# always checks (CheckConvergence, which needs all of its criteria) impossible.
-options(budget::Budget, seed; matched = false) = Options(
+# lifted (rule 2.2).
+options(budget::Budget, seed) = Options(
     f_calls_limit = budget.max_evaluations - budget.evaluations,
     time_limit = budget.max_seconds - seconds(budget),
     iterations = typemax(Int) ÷ 4,
-    f_tol = matched ? -1.0 : 1e-12,
+    f_tol = 1e-12,
     seed = seed,
 )
 
@@ -263,15 +187,10 @@ options(budget::Budget, seed; matched = false) = Options(
 # (rule 2.2): the one optimize checks always (default_stop_check in src/termination/default.jl:
 # CheckConvergence, all of AbsoluteFunctionConvergence(f_tol), RelativeFunctionConvergence(f_tol_rel),
 # SmallStandardDeviation and RelativeParameterConvergence(x_tol)), and the one it adds when the user
-# gives no termination (src/optimize/before.jl): the same CheckConvergence for one objective,
-# RobustConvergence(ftol = f_tol) for several.
-# The matched scenarios (the multi-objective ones) run the matched configuration, which has no
-# convergence criterion: they run to the budget, with BudgetTermination only, and never restart.
-function algorithm_kwargs(budget, seed; front = false, matched = false)
-    opts = options(budget, seed; matched)
-    matched && return (options = opts, termination = BudgetTermination(budget))
-    convergence = front ? Metaheuristics.RobustConvergence(ftol = opts.f_tol) :
-        Metaheuristics.CheckConvergence(f_tol_abs = opts.f_tol, f_tol_rel = opts.f_tol_rel, x_tol = opts.x_tol)
+# gives no termination (src/optimize/before.jl): the same CheckConvergence for one objective.
+function algorithm_kwargs(budget, seed)
+    opts = options(budget, seed)
+    convergence = Metaheuristics.CheckConvergence(f_tol_abs = opts.f_tol, f_tol_rel = opts.f_tol_rel, x_tol = opts.x_tol)
     return (options = opts, termination = Metaheuristics.Termination(checkany = [BudgetTermination(budget), convergence]))
 end
 
@@ -369,53 +288,15 @@ function real_solvers(problem, size)
     ]
 end
 
-# The matched settings of every library:
-# - NSGA-II, SPEA2, SMS-EMOA: population 100 (92 for DTLZ), SBX η 15 at 0.9, polynomial
-#   mutation η 20 at 1 / n.
-# - NSGA-III: Das-Dennis directions (12 divisions for 3 objectives, 91; 99 for 2, 100), population
-#   92 (100), SBX η 30 at 1, polynomial mutation η 20 at 1 / n.
-# - MOEA/D: 100 weights (91 for 3 objectives), 20 neighbours, parents from the neighbourhood at 0.9.
-# Differences:
-# - the library's p_cr is the probability of crossing each variable, and every pair is crossed
-#   (pymoo: pairs at 0.9, variables at 0.5)
-# - its NSGA-II and SPEA2 create 2N children per generation, not N (the reproduction of
-#   AbstractNSGA in src/algorithms/multiobjective/NSGA2/NSGA2.jl); its SMS-EMOA is steady-state,
-#   one child at a time, N per iteration
-# - its SMS-EMOA estimates the hypervolume contributions with 3 objectives by Monte Carlo, with its
-#   default n_samples = 10,000 samples for every child
-# Not run (rule 6.1): the library's MOEA/D is MOEAD_DE, whose reproduction is DE/rand/1 with
-# polynomial mutation and can't take the matched SBX (MOEAD_DE_reproduction in
-# src/algorithms/multiobjective/MOEAD_DE/MOEAD_DE.jl); CCMO is for constrained problems.
-function front_solvers(problem, size)
-    f, variables, objectives, population, divisions = FRONT_PROBLEMS[problem]
-    n = variables(size)
-    m = objectives(size)
-    # the bounds: the initial population within them, and the library's repair of the offspring
-    # (reset_to_violated_bounds! after SBX and polynomial mutation)
-    bounds = boxconstraints(lb = zeros(n), ub = ones(n))
-    solve(make) = (budget, seed) -> optimize(
-        counted_front(f, m, budget), bounds, make(algorithm_kwargs(budget, seed; matched = true));
-        logger = generation_logger(budget),
-    )
-    return [
-        ("nsga2", solve(kwargs -> NSGA2(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
-        ("nsga3", solve(kwargs -> NSGA3(; N = population, η_cr = 30, p_cr = 1.0, η_m = 20, p_m = 1.0 / n, partitions = divisions, kwargs...))),
-        ("spea2", solve(kwargs -> SPEA2(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
-        ("sms_emoa", solve(kwargs -> SMS_EMOA(; N = population, η_cr = 15, p_cr = 0.9, η_m = 20, p_m = 1.0 / n, kwargs...))),
-    ]
-end
-
 # the untimed warm-up run of every solver before the timed ones (rule 4.2), with the scenario's
 # time cap
 const WARM_UP_EVALUATIONS = 50_000
 const WARM_UP_SEED = 999_999
 
 # rule 5.3: a solver whose first EARLY_SEEDS runs all hit the time cap (a run that took CAPPED of
-# it) without reaching the target runs no more seeds; only in a scenario with a target
+# it) without reaching the target runs no more seeds
 const EARLY_SEEDS = 3
 const CAPPED = 0.98
-
-non_dominated(points) = [i for (i, p) in enumerate(points) if !any(q -> all(q .<= p) && any(q .< p), points)]
 
 # -------------------------------------------------------------------------------------------------
 # Output
@@ -434,7 +315,7 @@ function print_line(fields)
     return flush(stdout)
 end
 
-# `values <problem> <size>`: one JSON solution per line on stdin, its value (or objectives) per
+# `values <problem> <size>`: one JSON solution per line on stdin, its value per
 # line on stdout, with the fitness functions above (rule 1.2)
 function print_values(problem, size)
     for line in eachline(stdin)
@@ -447,9 +328,6 @@ function print_values(problem, size)
             println(json_value(nqueens(round.(Int, x) .+ 1)))
         elseif haskey(REAL_PROBLEMS, problem)
             println(json_value(REAL_PROBLEMS[problem][1](x)))
-        else
-            f, _, objectives, _, _ = FRONT_PROBLEMS[problem]
-            println(json_value(f(x, objectives(size))))
         end
     end
     return
@@ -474,33 +352,6 @@ function main(args)
     seed_from, seed_to = parse(Int, args[4]), parse(Int, args[5])
     max_evaluations, max_seconds = parse(Int, args[6]), parse(Float64, args[7])
     size <= MAX_GENES || error("at most $MAX_GENES genes")
-
-    if haskey(FRONT_PROBLEMS, problem)
-        solvers = front_solvers(problem, size)
-        for (_, run) in solvers
-            budget = Budget(WARM_UP_EVALUATIONS, max_seconds)
-            run_restarting(s -> run(budget, s), budget, WARM_UP_SEED)
-        end
-        # rule 5.3 applies only to scenarios with a target: every seed runs
-        for seed in seed_from:seed_to, (solver, run) in solvers
-            budget = Budget(max_evaluations, max_seconds)  # the clock starts
-            status, iterations, restarts = run_restarting(s -> run(budget, s), budget, seed)
-            elapsed = seconds(budget)
-            # the final population of the last attempt (rule 7.2): the objective values the library
-            # evaluated
-            points = [Metaheuristics.fval(s) for s in status.population]
-            front = non_dominated(points)
-            print_line([
-                "library" => "metaheuristics_jl", "solver" => solver, "problem" => problem, "size" => size,
-                "mode" => mode, "seed" => seed, "time_s" => round(elapsed, digits = 6),
-                "generations" => iterations, "evaluations" => budget.evaluations,
-                "last_generation" => last_generation(budget), "restarts" => restarts,
-                "outside" => budget.outside, "population" => length(points), "front" => points[front],
-                "solutions" => [Metaheuristics.get_position(status.population[i]) for i in front],
-            ])
-        end
-        return
-    end
 
     if problem == "onemax"
         solvers = onemax_solvers(size, mode)

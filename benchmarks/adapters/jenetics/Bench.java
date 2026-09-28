@@ -32,9 +32,7 @@
  * - Bounds (rule 2.4): the continuous runs count the evaluated solutions outside the problem's
  *   bounds, in the fitness function, and print them as "outside".
  * - The matched OneMax scenarios aren't run (rule 6.1): Jenetics has no bit-flip mutation among its
- *   own components. The multi-objective scenarios aren't run either: they use the library's own SBX
- *   and polynomial mutation, and Jenetics has no polynomial mutation (nor NSGA-III, SPEA2, MOEA/D
- *   or SMS-EMOA). The adapter prints nothing for them.
+ *   own components. The adapter prints nothing for them.
  */
 
 import io.jenetics.BitChromosome;

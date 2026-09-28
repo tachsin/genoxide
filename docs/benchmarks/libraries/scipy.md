@@ -77,7 +77,6 @@ On Rastrigin 30, `de` reached the cap after about 370,000 evaluations and `direc
 
 - OneMax: `differential_evolution` has an `integrality` option, but SciPy presents no method for binary strings.
 - N-Queens: no permutation search.
-- The multi-objective scenarios: one objective only.
 
 ## Bugs found
 

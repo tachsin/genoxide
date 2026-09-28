@@ -139,7 +139,6 @@ export default function RunDetails({ endpoint, issuesUrl, methodologyUrl }) {
 
 function Details({ data, run, issuesUrl, methodologyUrl }) {
   const { scenario, method, code, links } = data;
-  const multi = scenario.objectives === "multi";
   const [pageUrl, setPageUrl] = useState(null);
   useEffect(() => {
     setPageUrl(`${window.location.origin}${window.location.pathname}${runHash(run)}`);
@@ -179,20 +178,19 @@ function Details({ data, run, issuesUrl, methodologyUrl }) {
         </div>
         <div>
           <h4 className="font-medium text-sm">The summary</h4>
-          <Facts rows={multi ? frontSummaryRows(method) : summaryRows(method, scenario)} />
-          {method.parts?.length ? <Parts parts={method.parts} multi={multi} /> : null}
+          <Facts rows={summaryRows(method, scenario)} />
+          {method.parts?.length ? <Parts parts={method.parts} /> : null}
         </div>
       </div>
 
       <div>
         <h4 className="font-medium text-sm">Each seed</h4>
-        <SeedsTable runs={method.runs} multi={multi} caption={`${method.label}, ${scenario.title}: each seed's run`} />
+        <SeedsTable runs={method.runs} caption={`${method.label}, ${scenario.title}: each seed's run`} />
       </div>
 
       <details className="group">
         <summary className="cursor-pointer text-base-content/75 text-sm hover:text-primary">
           The output: the JSON line each run printed ({method.runs.length})
-          {multi ? <span className="text-base-content/55"> · without the front's solutions</span> : null}
         </summary>
         <div className="proj-code-group mt-3">
           <div className="proj-code-meta">
@@ -266,9 +264,8 @@ const MODES = {
 };
 
 function scenarioRows(scenario, methodologyUrl) {
-  const size = scenario.objectives === "multi" && scenario.problem.startsWith("dtlz")
-    ? `${scenario.size} objectives`
-    : scenario.problem === "onemax"
+  const size =
+    scenario.problem === "onemax"
       ? `${count.format(scenario.size)} bits`
       : scenario.problem === "nqueens"
         ? `${scenario.size} queens`
@@ -286,9 +283,7 @@ function scenarioRows(scenario, methodologyUrl) {
     ],
     ["Budget", typeof scenario.budget === "number" ? `${count.format(scenario.budget)} evaluations` : "–"],
     ["Time cap", typeof scenario.cap === "number" ? `${formatValue(scenario.cap)} s` : "–"],
-    scenario.objectives === "multi"
-      ? ["Hypervolume reference", scenario.reference_point ? `(${scenario.reference_point.join(", ")})` : "–"]
-      : ["Target", typeof scenario.target === "number" ? (scenario.problem === "onemax" ? `${scenario.target} (all ones)` : `≤ ${formatValue(scenario.target)}`) : "–"],
+    ["Target", typeof scenario.target === "number" ? (scenario.problem === "onemax" ? `${scenario.target} (all ones)` : `≤ ${formatValue(scenario.target)}`) : "–"],
     ["Seeds", scenario.seeds?.length ? `${scenario.seeds.length} (${scenario.seeds[0]} to ${scenario.seeds.at(-1)})` : "–"],
   ];
 }
@@ -321,36 +316,21 @@ function summaryRows(method, scenario) {
   ];
 }
 
-function frontSummaryRows(method) {
-  const s = method.summary;
-  if (!s) return [["Runs", "every run failed a check of the rules: none is summarized"]];
-  return [
-    ["Median hypervolume", s.median_hypervolume.toFixed(4), `${s.worst_hypervolume.toFixed(4)} worst, ${s.best_hypervolume.toFixed(4)} best`],
-    ["Median time", seconds(s.median_time)],
-    ["Median evaluations", count.format(Math.round(s.median_evaluations))],
-    ["Evaluations per second", count.format(Math.round(s.evaluations_per_second))],
-    ["Runs", `${s.runs}${s.errors ? `, ${s.errors} failed (an empty front)` : ""}`],
-    ["Stopped by the time cap", cappedText(s)],
-  ];
-}
-
 /** The runs the time cap stopped and the others, summarized apart, as the charts show them. */
-function Parts({ parts, multi }) {
+function Parts({ parts }) {
   return (
     <ul className="mt-2 space-y-0.5 text-base-content/65 text-xs">
       {parts.map((part) => (
         <li key={String(part.ended_on_cap)}>
-          {part.ended_on_cap ? "Stopped by the time cap" : "The others"} ({part.runs}):{" "}
-          {multi
-            ? `median hypervolume ${part.median_hypervolume.toFixed(4)}, median time ${seconds(part.median_time)}`
-            : `reached ${part.reached} of ${part.runs}, median distance ${formatValue(part.median_gap)}`}
+          {part.ended_on_cap ? "Stopped by the time cap" : "The others"} ({part.runs}): reached {part.reached} of {part.runs},
+          median distance {formatValue(part.median_gap)}
         </li>
       ))}
     </ul>
   );
 }
 
-function SeedsTable({ runs, multi, caption }) {
+function SeedsTable({ runs, caption }) {
   return (
     <div className="mt-2 max-w-full overflow-x-auto">
       <table className="w-full min-w-[30rem] text-left text-xs">
@@ -367,13 +347,11 @@ function SeedsTable({ runs, multi, caption }) {
               Evaluations
             </th>
             <th scope="col" className="py-1 pr-3 font-normal">
-              {multi ? "Hypervolume" : "Outcome"}
+              Outcome
             </th>
-            {multi ? null : (
-              <th scope="col" className="py-1 pr-3 text-right font-normal">
-                Best
-              </th>
-            )}
+            <th scope="col" className="py-1 pr-3 text-right font-normal">
+              Best
+            </th>
             <th scope="col" className="py-1 font-normal">
               Notes
             </th>
@@ -389,10 +367,8 @@ function SeedsTable({ runs, multi, caption }) {
               <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums">
                 {typeof run.evaluations === "number" ? count.format(run.evaluations) : "–"}
               </td>
-              <td className="whitespace-nowrap py-1 pr-3 tabular-nums">{multi ? hypervolumeText(run) : outcome(run)}</td>
-              {multi ? null : (
-                <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums">{typeof run.best === "number" ? formatValue(run.best) : "–"}</td>
-              )}
+              <td className="whitespace-nowrap py-1 pr-3 tabular-nums">{outcome(run)}</td>
+              <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums">{typeof run.best === "number" ? formatValue(run.best) : "–"}</td>
               <td className="py-1 text-base-content/65">{notes(run).join("; ")}</td>
             </tr>
           ))}
@@ -410,14 +386,9 @@ function outcome(run) {
   return "not reached";
 }
 
-function hypervolumeText(run) {
-  return typeof run.hypervolume === "number" ? run.hypervolume.toFixed(4) : "–";
-}
-
 function notes(run) {
   const out = [];
   if (run.capped) out.push("stopped by the time cap");
-  if (run.error) out.push(`the library failed: ${run.error}`);
   if (run.invalid) out.push(`invalid, left out: ${run.invalid.join("; ")}`);
   return out;
 }
@@ -465,26 +436,14 @@ function CodeBlock({ block }) {
 function issueUrl({ issuesUrl, data, pageUrl }) {
   const { scenario, method, code, links, run } = data;
   const s = method.summary;
-  const multi = scenario.objectives === "multi";
   const settings = [
     typeof scenario.budget === "number" ? `budget ${count.format(scenario.budget)} evaluations` : null,
     typeof scenario.cap === "number" ? `time cap ${formatValue(scenario.cap)} s` : null,
-    multi
-      ? scenario.reference_point
-        ? `hypervolume reference point (${scenario.reference_point.join(", ")})`
-        : null
-      : typeof scenario.target === "number"
-        ? `target ${formatValue(scenario.target)}`
-        : null,
+    typeof scenario.target === "number" ? `target ${formatValue(scenario.target)}` : null,
     `${scenario.seeds?.length ?? method.runs.length} seeds`,
   ].filter(Boolean);
   let numbers = "none summarized: every run failed a check of the rules";
-  if (s && multi) {
-    numbers =
-      `median hypervolume ${s.median_hypervolume.toFixed(4)} (${s.worst_hypervolume.toFixed(4)} to ${s.best_hypervolume.toFixed(4)}), ` +
-      `median time ${seconds(s.median_time)}, median evaluations ${count.format(Math.round(s.median_evaluations))}` +
-      (s.capped ? `, ${s.capped} of ${s.runs} runs stopped by the time cap` : "");
-  } else if (s) {
+  if (s) {
     numbers =
       `reached the target in ${s.reached} of ${s.runs} runs` +
       (typeof s.ert_time === "number" ? `, expected time to target ${seconds(s.ert_time)}` : "") +
