@@ -19,12 +19,29 @@ const WORD_BITS: usize = u64::BITS as usize;
 /// assert_eq!(bits.count_ones(), 3);
 /// assert_eq!(bits.to_string(), "111");
 /// ```
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Bits {
     // ceil(len / 64) words, the unused high bits of the last word are always zero
     words: Vec<u64>,
     len: usize,
+}
+
+impl Clone for Bits {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            words: self.words.clone(),
+            len: self.len,
+        }
+    }
+
+    // in the memory of `self`: algorithms copy parents into the genomes they no longer use
+    #[inline]
+    fn clone_from(&mut self, source: &Self) {
+        self.words.clone_from(&source.words);
+        self.len = source.len;
+    }
 }
 
 impl Bits {

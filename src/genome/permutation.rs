@@ -18,10 +18,25 @@ use std::ops::Deref;
 /// assert!(Order::new(vec![0, 0, 1]).is_err());
 /// # Ok::<(), genoxide::Error>(())
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Order {
     genes: Vec<usize>,
+}
+
+impl Clone for Order {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            genes: self.genes.clone(),
+        }
+    }
+
+    // in the memory of `self`: algorithms copy parents into the genomes they no longer use
+    #[inline]
+    fn clone_from(&mut self, source: &Self) {
+        self.genes.clone_from(&source.genes);
+    }
 }
 
 impl Order {

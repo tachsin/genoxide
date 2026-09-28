@@ -167,6 +167,9 @@ pub struct Ga<R: Representation, S, C, M> {
     offspring: Vec<Individual<R::Genome>>,
     // offspring evaluated in the last generation that didn't survive
     discarded: Vec<Individual<R::Genome>>,
+    // genomes no longer in use, whose memory the next offspring reuse
+    #[cfg_attr(feature = "serde", serde(skip))]
+    spare: Spare<R::Genome>,
     // memetic local search: (parents, neighbors per parent)
     memetic: Option<(usize, usize)>,
     // the parent of each memetic neighbor, which are the last offspring
@@ -323,7 +326,9 @@ impl<R: Representation, S, C, M> Ga<R, S, C, M> {
             .iter_mut()
             .for_each(Individual::clear_fitness);
         // they were discarded by the last generation, which observers have seen
-        self.discarded.clear();
+        let limit = self.spare_limit();
+        self.spare
+            .recycle(self.discarded.drain(..).map(Individual::into_genome), limit);
         self.phase = Phase::Initial;
         Ok(())
     }
@@ -367,6 +372,16 @@ impl<R: Representation, S, C, M> Ga<R, S, C, M> {
     /// ```
     pub fn mutate_mut(&mut self) -> &mut M {
         &mut self.mutate
+    }
+
+    // the most spare genomes worth keeping: one per genome a generation copies, each child of the
+    // selected pairs and each memetic neighbor
+    fn spare_limit(&self) -> usize {
+        let count = self.scheme.offspring_count(self.population_size);
+        let neighbors = self
+            .memetic
+            .map_or(0, |(parents, neighbors)| parents * neighbors);
+        count + count % 2 + neighbors
     }
 }
 
@@ -436,9 +451,24 @@ where
             // a stream per pair, from the seed, the generation and the pair's position: the same
             // children on any number of threads
             let streams = self.rng.derive(BREEDING_STREAMS).derive(self.generation);
-            breed_pairs(&breeding, &parents, count, &streams, &mut self.offspring);
+            let genomes: Vec<Option<R::Genome>> =
+                parents.iter().map(|_| self.spare.0.pop()).collect();
+            breed_pairs(
+                &breeding,
+                &parents,
+                count,
+                genomes,
+                &streams,
+                &mut self.offspring,
+            );
         } else {
-            breeding.pairs(&parents, count, &mut self.rng, &mut self.offspring);
+            breeding.pairs(
+                &parents,
+                count,
+                &mut self.rng,
+                &mut self.spare,
+                &mut self.offspring,
+            );
         }
 
         // memetic: neighbors of the best parents, evaluated with the offspring
@@ -491,13 +521,16 @@ where
     // forms the next population from the evaluated offspring
     fn survive(&mut self) {
         let size = self.population_size;
-        self.discarded.clear();
+        let limit = self.spare_limit();
+        // observers have seen the last generation's discarded offspring
+        self.spare
+            .recycle(self.discarded.drain(..).map(Individual::into_genome), limit);
         match self.scheme {
             Scheme::Generational { elitism } => {
-                self.keep_best_parents(elitism);
+                self.keep_best_parents(elitism, limit);
             }
             Scheme::SteadyState { replacements } => {
-                self.keep_best_parents(size - replacements);
+                self.keep_best_parents(size - replacements, limit);
             }
             Scheme::MuPlusLambda { .. } => {
                 let mut all = mem::take(&mut self.offspring);
@@ -505,20 +538,30 @@ where
                 let (population, rest) = best_of(all, size, self.objective);
                 self.population = population;
                 // the parents were seen before, only the offspring are new: parents have been aged
-                self.discarded
-                    .extend(rest.into_iter().filter(|individual| individual.age() == 0));
+                for individual in rest {
+                    if individual.age() == 0 {
+                        self.discarded.push(individual);
+                    } else {
+                        self.spare.recycle([individual.into_genome()], limit);
+                    }
+                }
             }
             Scheme::MuCommaLambda { .. } => {
                 let offspring = mem::take(&mut self.offspring);
+                let parents = mem::take(&mut self.population);
+                self.spare
+                    .recycle(parents.into_iter().map(Individual::into_genome), limit);
                 (self.population, self.discarded) = best_of(offspring, size, self.objective);
             }
         }
     }
 
-    // the next population is the `count` best parents followed by the offspring
-    fn keep_best_parents(&mut self, count: usize) {
-        self.population.sort_best_first(self.objective);
-        self.population.truncate(count);
+    // the next population is the `count` best parents followed by the offspring; the others'
+    // genomes are spare, up to `limit`
+    fn keep_best_parents(&mut self, count: usize, limit: usize) {
+        let others = self.population.keep_best(count, self.objective);
+        self.spare
+            .recycle(others.map(Individual::into_genome), limit);
         self.population
             .iter_mut()
             .for_each(Individual::increment_age);
@@ -549,9 +592,10 @@ where
     M: Mutate<R>,
 {
     // the children of the pairs of parents at the positions `parents`, one pair after the other,
-    // pushed to `offspring` until `wanted` are made (at most two per pair), drawing from `rng`:
-    // recombined with the crossover rate, each mutated with the mutation rate, and a copy of a
-    // parent with the parent's fitness. The only code that breeds a GA's children, sequentially
+    // pushed to `offspring` until `wanted` are made (at most two per pair), in the memory of
+    // genomes popped from `spare` while there are any, drawing from `rng`: recombined with the
+    // crossover rate, each mutated with the mutation rate, and a copy of a parent with the
+    // parent's fitness. The only code that breeds a GA's children, sequentially
     // and in parallel: out of line, so that each operator has this one caller and is inlined
     // here, as it was before parallel breeding.
     #[inline(never)]
@@ -560,13 +604,14 @@ where
         parents: &[usize],
         wanted: usize,
         rng: &mut StreamRng,
+        spare: &mut Spare<R::Genome>,
         offspring: &mut Vec<Individual<R::Genome>>,
     ) {
         let end = offspring.len() + wanted;
         for pair in parents.chunks_exact(2) {
             let parents = [&self.population[pair[0]], &self.population[pair[1]]];
-            let mut a = parents[0].genome().clone();
-            let mut b = parents[1].genome().clone();
+            let mut a = spare.copy(parents[0].genome());
+            let mut b = spare.copy(parents[1].genome());
             if rng.chance(self.crossover_chance) {
                 self.crossover
                     .crossover(self.representation, &mut a, &mut b, rng);
@@ -593,12 +638,14 @@ where
 }
 
 // the `count` children of the selected `parents` into `offspring`, each pair bred on its stream,
-// derived from `streams` with the pair's position, in parallel
+// derived from `streams` with the pair's position, in the memory of its `genomes` (one per
+// parent, if any), in parallel
 #[cfg(feature = "parallel")]
 fn breed_pairs<R, C, M>(
     breeding: &Breeding<'_, R, C, M>,
     parents: &[usize],
     count: usize,
+    mut genomes: Vec<Option<R::Genome>>,
     streams: &StreamRng,
     offspring: &mut Vec<Individual<R::Genome>>,
 ) where
@@ -607,18 +654,24 @@ fn breed_pairs<R, C, M>(
     M: Mutate<R>,
 {
     use rayon::prelude::*;
+    type Bred<G> = (Spare<G>, Vec<Individual<G>>);
     // the children of consecutive pairs, in order: collecting keeps the order of the folds,
     // whatever the thread count
-    let children: Vec<Vec<Individual<R::Genome>>> = parents
+    let bred: Vec<Bred<R::Genome>> = parents
         .par_chunks_exact(2)
+        .zip(genomes.par_chunks_mut(2))
         .enumerate()
-        .fold(Vec::new, |mut children, (index, pair)| {
-            let mut rng = streams.derive(index as u64);
-            breeding.pairs(pair, count - 2 * index, &mut rng, &mut children);
-            children
-        })
+        .fold(
+            || (Spare::default(), Vec::new()),
+            |(mut spare, mut children): Bred<R::Genome>, (index, (pair, genomes))| {
+                spare.0.extend(genomes.iter_mut().filter_map(Option::take));
+                let mut rng = streams.derive(index as u64);
+                breeding.pairs(pair, count - 2 * index, &mut rng, &mut spare, &mut children);
+                (spare, children)
+            },
+        )
         .collect();
-    offspring.extend(children.into_iter().flatten());
+    offspring.extend(bred.into_iter().flat_map(|(_, children)| children));
 }
 
 // without the `parallel` feature (a checkpoint of a run with parallel breeding), the same
@@ -628,6 +681,7 @@ fn breed_pairs<R, C, M>(
     breeding: &Breeding<'_, R, C, M>,
     parents: &[usize],
     count: usize,
+    mut genomes: Vec<Option<R::Genome>>,
     streams: &StreamRng,
     offspring: &mut Vec<Individual<R::Genome>>,
 ) where
@@ -635,9 +689,61 @@ fn breed_pairs<R, C, M>(
     C: Crossover<R>,
     M: Mutate<R>,
 {
-    for (index, pair) in parents.chunks_exact(2).enumerate() {
+    let mut spare = Spare::default();
+    for (index, (pair, genomes)) in parents
+        .chunks_exact(2)
+        .zip(genomes.chunks_mut(2))
+        .enumerate()
+    {
+        spare.0.extend(genomes.iter_mut().filter_map(Option::take));
         let mut rng = streams.derive(index as u64);
-        breeding.pairs(pair, count - 2 * index, &mut rng, offspring);
+        breeding.pairs(pair, count - 2 * index, &mut rng, &mut spare, offspring);
+    }
+}
+
+// genomes no longer in use, whose memory new ones reuse: none in a clone, a checkpoint or its
+// debug output, as they change no result
+struct Spare<G>(Vec<G>);
+
+impl<G> Spare<G> {
+    // keeps `genomes` until `limit` are kept, and drops the rest
+    fn recycle(&mut self, genomes: impl IntoIterator<Item = G>, limit: usize) {
+        let room = limit.saturating_sub(self.0.len());
+        self.0.extend(genomes.into_iter().take(room));
+    }
+
+    // a copy of `source`, in the memory of a spare genome if there is one: inlined into the
+    // breeding loop, with the genome's `clone_from`
+    #[inline(always)]
+    fn copy(&mut self, source: &G) -> G
+    where
+        G: Clone,
+    {
+        match self.0.pop() {
+            Some(mut genome) => {
+                genome.clone_from(source);
+                genome
+            }
+            None => source.clone(),
+        }
+    }
+}
+
+impl<G> Default for Spare<G> {
+    fn default() -> Self {
+        Spare(Vec::new())
+    }
+}
+
+impl<G> Clone for Spare<G> {
+    fn clone(&self) -> Self {
+        Spare::default()
+    }
+}
+
+impl<G> std::fmt::Debug for Spare<G> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Spare")
     }
 }
 
@@ -737,8 +843,10 @@ where
         }
         let count = migrants.len().min(self.population.len());
         let size = self.population.len();
-        self.population.sort_best_first(self.objective);
-        self.population.truncate(size - count);
+        let limit = self.spare_limit();
+        let replaced = self.population.keep_best(size - count, self.objective);
+        self.spare
+            .recycle(replaced.map(Individual::into_genome), limit);
         self.population.extend(migrants.into_iter().take(count));
         if update_best(
             &mut self.best,
@@ -1159,6 +1267,7 @@ impl<R: Representation, S, C, M> GaBuilder<R, S, C, M> {
             population: Population::from_genomes(genomes),
             offspring: Vec::new(),
             discarded: Vec::new(),
+            spare: Spare::default(),
             memetic: self.memetic,
             refined: Vec::new(),
             phase: Phase::Initial,
@@ -1946,7 +2055,42 @@ mod tests {
                 prop_assert!(!objective.is_better(best_so_far, now));
                 prop_assert!(!objective.is_better(best, now));
                 best_so_far = now;
+                // the genomes kept for the next offspring are at most one per copy
+                prop_assert!(ga.spare.0.len() <= ga.spare_limit());
+            }
+            // a clone has no spare genomes, and makes the same run
+            let mut clone = ga.clone();
+            prop_assert!(clone.spare.0.is_empty());
+            for _ in 0..3 {
+                step(&mut ga);
+                step(&mut clone);
+                prop_assert_eq!(clone.population(), ga.population());
+                prop_assert_eq!(clone.discarded(), ga.discarded());
             }
         }
+    }
+
+    #[test]
+    fn offspring_reuse_the_genomes_of_the_replaced_parents() {
+        let mut ga = builder(16)
+            .scheme(Scheme::Generational { elitism: 0 })
+            .build()
+            .unwrap();
+        step(&mut ga);
+        step(&mut ga);
+        // the ten parents replaced
+        assert_eq!(ga.spare.0.len(), 10);
+        let spare: Vec<*const u64> = ga
+            .spare
+            .0
+            .iter()
+            .map(|genome| genome.as_words().as_ptr())
+            .collect();
+        step(&mut ga);
+        let offspring = ga
+            .population()
+            .iter()
+            .map(|child| child.genome().as_words().as_ptr());
+        assert!(offspring.into_iter().all(|child| spare.contains(&child)));
     }
 }

@@ -113,13 +113,56 @@ impl<G: Genome> Population<G> {
     /// Sorts best first. The sort is stable: ties keep their order. Individuals that aren't
     /// evaluated yet go last.
     pub fn sort_best_first(&mut self, objective: Objective) {
-        self.individuals
-            .sort_by(|a, b| match (a.fitness(), b.fitness()) {
-                (Some(a), Some(b)) => objective.compare(b, a),
-                (Some(_), None) => Ordering::Less,
-                (None, Some(_)) => Ordering::Greater,
-                (None, None) => Ordering::Equal,
-            });
+        self.individuals.sort_by(|a, b| best_first(objective, a, b));
+    }
+
+    // Keeps the `count` best individuals, exactly as `sort_best_first` followed by
+    // `truncate(count)`, and removes the others, which it returns in no particular order. When
+    // at most half are kept, it selects them and sorts only those.
+    pub(crate) fn keep_best(
+        &mut self,
+        count: usize,
+        objective: Objective,
+    ) -> std::vec::Drain<'_, Individual<G>> {
+        let len = self.individuals.len();
+        if count == 0 || count >= len {
+            if count > 1 {
+                self.sort_best_first(objective);
+            }
+            return self.individuals.drain(count.min(len)..);
+        }
+        if count > len / 2 {
+            self.sort_best_first(objective);
+            return self.individuals.drain(count..);
+        }
+        // the positions of the `count` best: those that the stable sort puts first, the order of
+        // the fitness and then of the position
+        let individuals = &self.individuals;
+        let mut positions: Vec<usize> = (0..len).collect();
+        positions.select_nth_unstable_by(count - 1, |&a, &b| {
+            best_first(objective, &individuals[a], &individuals[b]).then(a.cmp(&b))
+        });
+        let kept = &mut positions[..count];
+        kept.sort_unstable();
+        // to the front, in their order: each moves to a position before it, whose individual
+        // isn't kept or has already moved
+        for (to, &from) in kept.iter().enumerate() {
+            self.individuals.swap(to, from);
+        }
+        // stable: the earlier one first on ties, as it was in the population
+        self.individuals[..count].sort_by(|a, b| best_first(objective, a, b));
+        self.individuals.drain(count..)
+    }
+}
+
+// the order of `sort_best_first`: the better first, and unevaluated individuals last
+#[inline]
+fn best_first<G: Genome>(objective: Objective, a: &Individual<G>, b: &Individual<G>) -> Ordering {
+    match (a.fitness(), b.fitness()) {
+        (Some(a), Some(b)) => objective.compare(b, a),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
     }
 }
 
@@ -273,6 +316,23 @@ mod tests {
             if let Some(best) = original.best(objective) {
                 prop_assert_eq!(&sorted[0], best);
             }
+        }
+
+        #[test]
+        fn keep_best_is_sort_and_truncate(fitness in prop::collection::vec(any_fitness(), 0..40), objective in any_objective(), count in 0usize..45) {
+            let original = population(&fitness);
+            let mut expected = original.clone();
+            expected.sort_best_first(objective);
+            let mut removed_expected = expected.as_slice()[count.min(expected.len())..].to_vec();
+            expected.truncate(count);
+            let mut kept = original.clone();
+            let mut removed: Vec<Individual<Bits>> = kept.keep_best(count, objective).collect();
+            prop_assert_eq!(&kept, &expected);
+            // the others, in any order
+            let key = |individual: &Individual<Bits>| individual.genome().to_string();
+            removed.sort_by_key(key);
+            removed_expected.sort_by_key(key);
+            prop_assert_eq!(removed, removed_expected);
         }
     }
 }

@@ -19,11 +19,28 @@ use std::ops::{Deref, DerefMut, Range};
 /// assert_eq!(genome.iter().sum::<f64>(), -0.5);
 /// assert_eq!(genome.step(), 0.1);
 /// ```
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AdaptiveReals {
     genes: Reals,
     step: f64,
+}
+
+impl Clone for AdaptiveReals {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            genes: self.genes.clone(),
+            step: self.step,
+        }
+    }
+
+    // in the memory of `self`: algorithms copy parents into the genomes they no longer use
+    #[inline]
+    fn clone_from(&mut self, source: &Self) {
+        self.genes.clone_from(&source.genes);
+        self.step = source.step;
+    }
 }
 
 impl AdaptiveReals {
