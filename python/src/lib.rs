@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 
 mod config;
+mod control;
 mod errors;
 mod fitness;
 mod genes;
@@ -18,6 +19,7 @@ use pyo3::prelude::*;
 #[pymodule]
 fn _genoxide(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run::run, module)?)?;
+    module.add_class::<control::Running>()?;
     module.add_function(wrap_pyfunction!(run::das_dennis, module)?)?;
     module.add_function(wrap_pyfunction!(problems::problem_info, module)?)?;
     module.add_function(wrap_pyfunction!(problems::evaluate, module)?)?;

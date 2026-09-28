@@ -602,3 +602,36 @@ fn control_errors_stop_the_run() {
         })
     ));
 }
+
+#[test]
+fn control_schedule_as_in_python() {
+    // python/tests/test_control.py has the same run through the Python package, with the same
+    // result: a mutation step and rates that change every generation, and a re-evaluation
+    use genoxide::problems::{Problem, Sphere};
+    let problem = Sphere::new(5);
+    let ga = Ga::builder(problem.representation())
+        .population_size(20)
+        .select(Tournament::new(3).unwrap())
+        .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
+        .mutate(GaussianMutation::per_gene(0.2, 0.1).unwrap())
+        .minimize()
+        .seed(1)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(ga, problem)
+        .stop_when(Stop::generations(50))
+        .control(|ga, progress| {
+            let generation = progress.generation();
+            *ga.mutate_mut() = GaussianMutation::per_gene(0.2, 0.1 / (1 + generation) as f64)?;
+            ga.set_crossover_rate(if generation % 2 == 0 { 0.5 } else { 0.9 })?;
+            ga.set_mutation_rate(1.0 / (1 + generation % 3) as f64)?;
+            if generation == 10 {
+                ga.reevaluate()?;
+            }
+            Ok(())
+        })
+        .run()
+        .unwrap();
+    assert_eq!(outcome.evaluations(), 757);
+    assert_eq!(outcome.best_fitness().score(), Some(312.0610000182302));
+}

@@ -241,6 +241,80 @@ def report(progress):
 result = ga.run(lambda bits: bits.sum(), generations=1_000, on_generation=report)
 ```
 
+## Parameter control
+
+`run(..., control=callback)` calls `callback(algorithm, progress)` once per generation, after `on_generation`, with a handle to the running algorithm and the same `Progress`. A change applies from the next generation:
+
+| Algorithm | Handle | Settings |
+|---|---|---|
+| `Ga` | `RunningGa` | `crossover_rate`, `mutation_rate`, `select`, `crossover`, `mutation` (any operator that fits the genome) |
+| `De` | `RunningDe` | `strategy`, `control` (F and CR), in the forms of `De`'s settings |
+| `Pso` | `RunningPso` | `inertia`, `acceleration` (`(cognitive, social)`) |
+| `LocalSearch` | `RunningLocalSearch` | `neighbor`, `neighbors` |
+| `Cmaes` | `RunningCmaes` | none: CMA-ES adapts its own |
+
+- Reading a setting gives the one in use, the defaults included.
+- A wrong value raises a `ValueError`, as in the constructor, and changes nothing.
+- The callback also runs after the last generation. What it returns is ignored; an exception stops the run, and `run` raises it.
+- The handle works only during the callback.
+- A seeded run with a control repeats, and a control that changes nothing gives the same result as none.
+
+```python
+import numpy as np
+import genoxide as gx
+
+def sphere(x):
+    return float(np.sum(x * x))
+
+# a mutation step annealed from 10% to 0.1% of each gene's range
+def anneal(ga, progress):
+    sigma = 0.1 * 0.01 ** (progress.generation / 300)
+    ga.mutation = gx.GaussianMutation(sigma, rate=0.2)
+
+ga = gx.Ga(
+    gx.Real((-5, 5), length=10),
+    population_size=40,
+    select=gx.Tournament(3),
+    crossover=gx.UniformCrossover(),
+    mutation=gx.GaussianMutation(0.1, rate=0.2),
+    objective="minimize",
+    seed=1,
+)
+result = ga.run(sphere, generations=300, control=anneal)
+print(result.best_fitness)
+```
+
+`algorithm.reevaluate()` scores again what the algorithm keeps, for a fitness function that changed during the run: adaptive penalty weights, a retrained surrogate, a moving optimum. The next generation evaluates the population again instead of breeding: `on_generation` is called again with the same generation number, `control` isn't, and the best solution is then the best by the new function. Every single-objective algorithm has it: a particle swarm also scores its personal bests again, and a local search its current and best solution.
+
+```python
+# maximize the ones, with at most 10 of them allowed: the penalty's weight rises while the best
+# breaks the limit
+weight = 0.1
+
+def penalized(bits):
+    ones = int(bits.sum())
+    return ones - weight * max(ones - 10, 0)
+
+def adapt(ga, progress):
+    global weight
+    if progress.generation % 20 == 19 and progress.best_genome.sum() > 10:
+        weight *= 4
+        ga.reevaluate()
+
+ga = gx.Ga(
+    gx.Binary(32),
+    population_size=30,
+    select=gx.Tournament(3),
+    crossover=gx.UniformCrossover(),
+    mutation=gx.BitFlip(rate=1 / 32),
+    seed=2,
+)
+result = ga.run(penalized, generations=200, control=adapt)
+print(result.best_genome.sum())  # 10
+```
+
+Multi-objective runs have no control yet.
+
 ## Benchmarks
 
 The package is benchmarked as a library of its own, genoxide (Python), beside the Rust library and the other libraries, on a small, matched suite: three problems, one method each, under public [rules](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md). Every library runs a problem only with its own implementation of that problem's method, set to the same written definition: a GA on OneMax 1000, DE/rand/1/bin on Rastrigin 30 (a fixed budget, measured by the time for it and the error at the end) and CMA-ES on Rosenbrock 10. Single-threaded on the same machine, 10 seeds each. More problems, and multi-objective ones, come back after these.
@@ -263,7 +337,7 @@ The package covers a subset of the Rust library. These parts are only in Rust:
 - penalty functions for constraints, and the NaN policy: in Python, NaN is always an invalid solution
 - advanced settings:
   - CMA-ES: the initial mean
-  - PSO: the inertia, the acceleration and the maximum velocity
+  - PSO: the initial inertia and acceleration (a control can change them during a run), and the maximum velocity
   - DE: population size reduction other than L-SHADE's
   - the rate of `UniformCrossover` and the weight of `ArithmeticCrossover`
 
@@ -285,6 +359,8 @@ Some names differ:
 | `De(control={"f": 0.5, "cr": 0.9})` | `.control(de::Control::Fixed { f: 0.5, cr: 0.9 })`; `{"min_f", "max_f", "cr"}` for `Dither`, `{"c"}` for `Jade`, `{"memory"}` for `Shade` |
 | `De(restarts="never")`, `De(restarts={"tolerance": 1e-12, "patience": 200})` | `.restarts(de::Restarts::Never)`, `.restarts(de::Restarts::OnStagnation { tolerance: 1e-12, patience: 200 })` |
 | `Pbi(theta)` | `Decomposition::Pbi { theta }` |
+| `run(control=...)`, `ga.mutation = ...` in it | `Engine::control(...)`, `*ga.mutate_mut() = ...` |
+| `ga.mutation_rate = p`, `de.control = {...}`, `pso.inertia = w` in a control | `ga.set_mutation_rate(p)?`, `de.set_control(...)?`, `pso.set_inertia(w)?` |
 | `run(generations=..., time=..., ...)` | `Stop::generations(...).or(Stop::time(...))` |
 | `time` (seconds) | `Stop::time(Duration)` |
 | `result.seconds` | `Outcome::elapsed()` |
