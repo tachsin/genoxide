@@ -429,7 +429,7 @@ impl FitnessFunction<Reals> for Rosenbrock {
         x.windows(2)
             .map(|pair| {
                 let (xi, next) = (pair[0], pair[1]);
-                100.0 * (next - xi * xi).powi(2) + (xi - 1.0).powi(2)
+                100.0 * math::powi(next - xi * xi, 2) + math::powi(xi - 1.0, 2)
             })
             .sum()
     }
@@ -584,12 +584,12 @@ impl FitnessFunction<Reals> for Levy {
             .iter()
             .map(|&xi| {
                 let wi = w(xi);
-                (wi - 1.0).powi(2) * (1.0 + 10.0 * math::sin(PI * wi + 1.0).powi(2))
+                math::powi(wi - 1.0, 2) * (1.0 + 10.0 * math::powi(math::sin(PI * wi + 1.0), 2))
             })
             .sum();
-        math::sin(PI * first).powi(2)
+        math::powi(math::sin(PI * first), 2)
             + middle
-            + (last - 1.0).powi(2) * (1.0 + math::sin(2.0 * PI * last).powi(2))
+            + math::powi(last - 1.0, 2) * (1.0 + math::powi(math::sin(2.0 * PI * last), 2))
     }
 }
 
@@ -629,7 +629,7 @@ impl FitnessFunction<Reals> for Zakharov {
             .enumerate()
             .map(|(i, xi)| 0.5 * (i + 1) as f64 * xi)
             .sum();
-        squares + weighted.powi(2) + weighted.powi(4)
+        squares + math::powi(weighted, 2) + math::powi(weighted, 4)
     }
 }
 
@@ -665,7 +665,7 @@ impl FitnessFunction<Reals> for StyblinskiTang {
     fn evaluate(&self, x: &Reals) -> f64 {
         0.5 * x
             .iter()
-            .map(|xi| xi.powi(4) - 16.0 * xi * xi + 5.0 * xi)
+            .map(|xi| math::powi(*xi, 4) - 16.0 * xi * xi + 5.0 * xi)
             .sum::<f64>()
     }
 }
@@ -706,7 +706,7 @@ const MICHALEWICZ_M: i32 = 10;
 // the term of gene `i` (from 0)
 fn michalewicz_term(i: usize, xi: f64) -> f64 {
     let index = (i + 1) as f64;
-    -math::sin(xi) * math::sin(index * xi * xi / PI).powi(2 * MICHALEWICZ_M)
+    -math::sin(xi) * math::powi(math::sin(index * xi * xi / PI), 2 * MICHALEWICZ_M)
 }
 
 // the gene that minimizes the term of gene `i` on [0, π]. The second sine is zero at
@@ -845,7 +845,7 @@ impl FitnessFunction<Reals> for Himmelblau {
     /// If `x` has fewer than 2 genes.
     fn evaluate(&self, x: &Reals) -> f64 {
         let (x1, x2) = (x[0], x[1]);
-        (x1 * x1 + x2 - 11.0).powi(2) + (x1 + x2 * x2 - 7.0).powi(2)
+        math::powi(x1 * x1 + x2 - 11.0, 2) + math::powi(x1 + x2 * x2 - 7.0, 2)
     }
 }
 
@@ -905,7 +905,7 @@ impl FitnessFunction<Reals> for Branin {
         let b = 5.1 / (4.0 * PI * PI);
         let c = 5.0 / PI;
         let t = 1.0 / (8.0 * PI);
-        (x2 - b * x1 * x1 + c * x1 - 6.0).powi(2) + 10.0 * (1.0 - t) * math::cos(x1) + 10.0
+        math::powi(x2 - b * x1 * x1 + c * x1 - 6.0, 2) + 10.0 * (1.0 - t) * math::cos(x1) + 10.0
     }
 }
 
@@ -967,10 +967,10 @@ impl FitnessFunction<Reals> for GoldsteinPrice {
     fn evaluate(&self, x: &Reals) -> f64 {
         let (x1, x2) = (x[0], x[1]);
         let a = 1.0
-            + (x1 + x2 + 1.0).powi(2)
+            + math::powi(x1 + x2 + 1.0, 2)
                 * (19.0 - 14.0 * x1 + 3.0 * x1 * x1 - 14.0 * x2 + 6.0 * x1 * x2 + 3.0 * x2 * x2);
         let b = 30.0
-            + (2.0 * x1 - 3.0 * x2).powi(2)
+            + math::powi(2.0 * x1 - 3.0 * x2, 2)
                 * (18.0 - 32.0 * x1 + 12.0 * x1 * x1 + 48.0 * x2 - 36.0 * x1 * x2 + 27.0 * x2 * x2);
         a * b
     }
@@ -1210,7 +1210,7 @@ mod tests {
         // x = (1, 5), w = (1, 2): sin² π + 0 + 1² (1 + sin² 4π) = 1
         assert_close(Levy::new(2).evaluate(&at(&[1.0, 5.0])), 1.0, 1e-12);
         // x = (5, 1), w = (2, 1): sin² 2π + 1² (1 + 10 sin²(2π + 1)) + 0
-        let expected = 1.0 + 10.0 * math::sin(1f64).powi(2);
+        let expected = 1.0 + 10.0 * math::powi(math::sin(1f64), 2);
         assert_close(Levy::new(2).evaluate(&at(&[5.0, 1.0])), expected, 1e-12);
     }
 
@@ -1233,7 +1233,7 @@ mod tests {
         assert_eq!(StyblinskiTang::new(2).evaluate(&at(&[1.0, 2.0])), -24.0);
         // the minimizer is a root of the derivative 4x³ − 32x + 5
         let x = STYBLINSKI_TANG_X;
-        assert!((4.0 * x.powi(3) - 32.0 * x + 5.0).abs() < 1e-12);
+        assert!((4.0 * math::powi(x, 3) - 32.0 * x + 5.0).abs() < 1e-12);
         // the value that Jamil and Yang give for two dimensions, −78.332, to its digits
         let optimum = StyblinskiTang::new(2).optimum().expect("known").value();
         assert_eq!((optimum * 1000.0).round() / 1000.0, -78.332);
@@ -1339,8 +1339,8 @@ mod tests {
         // the gradient is 0 at the minima
         for solution in SixHumpCamel.optimum().expect("known").solutions() {
             let (x1, x2) = (solution[0], solution[1]);
-            let dx1 = 8.0 * x1 - 8.4 * x1.powi(3) + 2.0 * x1.powi(5) + x2;
-            let dx2 = x1 - 8.0 * x2 + 16.0 * x2.powi(3);
+            let dx1 = 8.0 * x1 - 8.4 * math::powi(x1, 3) + 2.0 * math::powi(x1, 5) + x2;
+            let dx2 = x1 - 8.0 * x2 + 16.0 * math::powi(x2, 3);
             assert!(dx1.abs() < 1e-14 && dx2.abs() < 1e-14);
         }
     }

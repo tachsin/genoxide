@@ -47,7 +47,7 @@
 //! - [`problems`]: single-objective test problems from the literature, with their bounds, known
 //!   optima and references
 //! - [`prelude`]: everything above in one import
-//! - [`math`]: `sin`, `cos`, `exp`, `powf` and the like, the same to the bit on every platform, for
+//! - [`math`]: `sin`, `cos`, `exp`, `powf`, `powi` and the like, the same to the bit on every platform, for
 //!   fitness functions that must give the same results everywhere
 //!
 //! Cargo features:

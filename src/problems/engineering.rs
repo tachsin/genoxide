@@ -115,15 +115,15 @@ impl WeldedBeam {
         let (h, l, t, b) = (x[0], x[1], x[2], x[3]);
         let shear_1 = LOAD / (SQRT_2 * h * l);
         let moment = LOAD * (LENGTH + l / 2.0);
-        let radius = (l * l / 4.0 + ((h + t) / 2.0).powi(2)).sqrt();
-        let polar = 2.0 * (SQRT_2 * h * l * (l * l / 12.0 + ((h + t) / 2.0).powi(2)));
+        let radius = (l * l / 4.0 + math::powi((h + t) / 2.0, 2)).sqrt();
+        let polar = 2.0 * (SQRT_2 * h * l * (l * l / 12.0 + math::powi((h + t) / 2.0, 2)));
         let shear_2 = moment * radius / polar;
         let shear =
             (shear_1 * shear_1 + 2.0 * shear_1 * shear_2 * l / (2.0 * radius) + shear_2 * shear_2)
                 .sqrt();
         let bending = 6.0 * LOAD * LENGTH / (b * t * t);
-        let deflection = 4.0 * LOAD * LENGTH.powi(3) / (YOUNG * t.powi(3) * b);
-        let buckling = 4.013 * YOUNG * (t * t * b.powi(6) / 36.0).sqrt() / (LENGTH * LENGTH)
+        let deflection = 4.0 * LOAD * math::powi(LENGTH, 3) / (YOUNG * math::powi(t, 3) * b);
+        let buckling = 4.013 * YOUNG * (t * t * math::powi(b, 6) / 36.0).sqrt() / (LENGTH * LENGTH)
             * (1.0 - t / (2.0 * LENGTH) * (YOUNG / (4.0 * SHEAR)).sqrt());
         [
             shear - 13_600.0,
@@ -203,15 +203,15 @@ impl WeldedBeamRagsdell {
 
     fn values(&self, x: &Reals) -> [f64; 5] {
         let (h, l, t, b) = (x[0], x[1], x[2], x[3]);
-        let half_diagonal = (0.25 * (l * l + (h + t).powi(2))).sqrt();
+        let half_diagonal = (0.25 * (l * l + math::powi(h + t, 2))).sqrt();
         let shear_1 = 6000.0 / (SQRT_2 * h * l);
         let shear_2 = 6000.0 * (14.0 + 0.5 * l) * half_diagonal
-            / (2.0 * (0.707 * h * l * (l * l / 12.0 + 0.25 * (h + t).powi(2))));
+            / (2.0 * (0.707 * h * l * (l * l / 12.0 + 0.25 * math::powi(h + t, 2))));
         let shear =
             (shear_1 * shear_1 + shear_2 * shear_2 + l * shear_1 * shear_2 / half_diagonal).sqrt();
         let bending = 504_000.0 / (t * t * b);
-        let buckling = 64_746.022 * (1.0 - 0.028_234_6 * t) * t * b.powi(3);
-        let deflection = 2.1952 / (t.powi(3) * b);
+        let buckling = 64_746.022 * (1.0 - 0.028_234_6 * t) * t * math::powi(b, 3);
+        let deflection = 2.1952 / (math::powi(t, 3) * b);
         [
             shear - 13_600.0,
             bending - 30_000.0,
@@ -328,7 +328,7 @@ impl PressureVessel {
         [
             -shell + 0.0193 * radius,
             -head + 0.009_54 * radius,
-            -PI * radius * radius * length - 4.0 / 3.0 * PI * radius.powi(3) + VOLUME,
+            -PI * radius * radius * length - 4.0 / 3.0 * PI * math::powi(radius, 3) + VOLUME,
             length - 240.0,
         ]
     }
@@ -410,8 +410,9 @@ impl TensionCompressionSpring {
     fn values(&self, x: &Reals) -> [f64; 4] {
         let (d, coil, n) = (x[0], x[1], x[2]);
         [
-            1.0 - coil.powi(3) * n / (71_785.0 * d.powi(4)),
-            (4.0 * coil * coil - d * coil) / (12_566.0 * (coil * d.powi(3) - d.powi(4)))
+            1.0 - math::powi(coil, 3) * n / (71_785.0 * math::powi(d, 4)),
+            (4.0 * coil * coil - d * coil)
+                / (12_566.0 * (coil * math::powi(d, 3) - math::powi(d, 4)))
                 + 1.0 / (5108.0 * d * d)
                 - 1.0,
             1.0 - 140.45 * d / (coil * coil * n),
@@ -510,7 +511,7 @@ impl SpeedReducer {
         let [x1, x2, x3, x4, x5, x6, x7] = self.design(x);
         0.7854 * x1 * x2 * x2 * (3.3333 * x3 * x3 + 14.9334 * x3 - 43.0934)
             - 1.508 * x1 * (x6 * x6 + x7 * x7)
-            + 7.4777 * (x6.powi(3) + x7.powi(3))
+            + 7.4777 * (math::powi(x6, 3) + math::powi(x7, 3))
             + 0.7854 * (x4 * x6 * x6 + x5 * x7 * x7)
     }
 
@@ -519,10 +520,12 @@ impl SpeedReducer {
         [
             27.0 / (x1 * x2 * x2 * x3) - 1.0,
             397.5 / (x1 * x2 * x2 * x3 * x3) - 1.0,
-            1.93 * x4.powi(3) / (x2 * x3 * x6.powi(4)) - 1.0,
-            1.93 * x5.powi(3) / (x2 * x3 * x7.powi(4)) - 1.0,
-            ((745.0 * x4 / (x2 * x3)).powi(2) + 16.9e6).sqrt() / (110.0 * x6.powi(3)) - 1.0,
-            ((745.0 * x5 / (x2 * x3)).powi(2) + 157.5e6).sqrt() / (85.0 * x7.powi(3)) - 1.0,
+            1.93 * math::powi(x4, 3) / (x2 * x3 * math::powi(x6, 4)) - 1.0,
+            1.93 * math::powi(x5, 3) / (x2 * x3 * math::powi(x7, 4)) - 1.0,
+            (math::powi(745.0 * x4 / (x2 * x3), 2) + 16.9e6).sqrt() / (110.0 * math::powi(x6, 3))
+                - 1.0,
+            (math::powi(745.0 * x5 / (x2 * x3), 2) + 157.5e6).sqrt() / (85.0 * math::powi(x7, 3))
+                - 1.0,
             x2 * x3 / 40.0 - 1.0,
             5.0 * x2 / x1 - 1.0,
             x1 / (12.0 * x2) - 1.0,
@@ -606,7 +609,7 @@ impl FitnessFunction<Integers> for GearTrain {
     /// If `x` has fewer than 4 genes.
     fn evaluate(&self, x: &Integers) -> f64 {
         let ratio = (x[0] * x[1]) as f64 / (x[2] * x[3]) as f64;
-        (GEAR_RATIO - ratio).powi(2)
+        math::powi(GEAR_RATIO - ratio, 2)
     }
 }
 
@@ -624,7 +627,7 @@ impl Problem for GearTrain {
     fn optimum(&self) -> Option<Optimum<Integers>> {
         let solution = |x: [i64; 4]| Integers::from(x.to_vec());
         Some(Optimum::proven(
-            (GEAR_RATIO - 304.0 / 2107.0).powi(2),
+            math::powi(GEAR_RATIO - 304.0 / 2107.0, 2),
             vec![
                 solution([16, 19, 43, 49]),
                 solution([16, 19, 49, 43]),
@@ -791,7 +794,7 @@ impl CantileverBeam {
         let deflection: f64 = CANTILEVER
             .iter()
             .zip(&x[..5])
-            .map(|(a, xi)| a / xi.powi(3))
+            .map(|(a, xi)| a / math::powi(*xi, 3))
             .sum();
         [deflection - 1.0]
     }
@@ -1172,7 +1175,7 @@ mod tests {
         assert_eq!((value * 1e12).round(), 1362.0);
         // a ratio of 1: (1/6.931 − 1)²
         let one = GearTrain.evaluate(&Integers::from(vec![12, 12, 12, 12]));
-        assert_close(one, (1.0 / 6.931 - 1.0f64).powi(2), 1e-15);
+        assert_close(one, math::powi(1.0 / 6.931 - 1.0f64, 2), 1e-15);
     }
 
     // every one of the 49⁴ genomes, by the products of their pairs: none beats the optimum, and
@@ -1190,7 +1193,7 @@ mod tests {
         let mut count = 0;
         for &(top, _) in &products {
             for &(bottom, _) in &products {
-                let value = (GEAR_RATIO - top as f64 / bottom as f64).powi(2);
+                let value = math::powi(GEAR_RATIO - top as f64 / bottom as f64, 2);
                 if value < best {
                     best = value;
                     count = 0;
@@ -1243,7 +1246,7 @@ mod tests {
         let ratios: Vec<f64> = CANTILEVER
             .iter()
             .zip(x.iter())
-            .map(|(a, xi)| a / xi.powi(4))
+            .map(|(a, xi)| a / math::powi(*xi, 4))
             .collect();
         assert!(ratios.iter().all(|r| (r - ratios[0]).abs() < 1e-15));
         // at xᵢ = 5: 0.0624 · 25, and 125 / 125 − 1 = 0

@@ -336,7 +336,7 @@ impl MultiFitnessFunction<Reals, 2> for Zdt6 {
     ///
     /// If `x` is empty.
     fn evaluate(&self, x: &Reals) -> [f64; 2] {
-        let f1 = 1.0 - math::exp(-4.0 * x[0]) * math::sin(6.0 * PI * x[0]).powi(6);
+        let f1 = 1.0 - math::exp(-4.0 * x[0]) * math::powi(math::sin(6.0 * PI * x[0]), 6);
         let g = 1.0 + 9.0 * math::powf(tail_mean(x), 0.25);
         [f1, g * (1.0 - (f1 / g) * (f1 / g))]
     }
@@ -450,7 +450,7 @@ mod tests {
     // ZDT6's front starts where f₁ = 1 − exp(−4x) sin⁶(6πx) is smallest, at x = atan(9π) / (6π)
     #[test]
     fn zdt6_starts_at_the_minimum_of_f1() {
-        let f1 = |x: f64| 1.0 - math::exp(-4.0 * x) * math::sin(6.0 * PI * x).powi(6);
+        let f1 = |x: f64| 1.0 - math::exp(-4.0 * x) * math::powi(math::sin(6.0 * PI * x), 6);
         let x = math::atan(9.0 * PI) / (6.0 * PI);
         assert!((f1(x) - ZDT6_START).abs() < 1e-15);
         // a dense grid finds nothing lower

@@ -48,7 +48,8 @@ pub const FUNCTIONS: &[Function] = &[
             vec![
                 x.windows(2)
                     .map(|pair| {
-                        100.0 * (pair[1] - pair[0] * pair[0]).powi(2) + (1.0 - pair[0]).powi(2)
+                        100.0 * math::powi(pair[1] - pair[0] * pair[0], 2)
+                            + math::powi(1.0 - pair[0], 2)
                     })
                     .sum(),
             ]

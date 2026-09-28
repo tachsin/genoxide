@@ -635,9 +635,9 @@ impl MultiFitnessFunction<Reals, 3> for Viennet2 {
     fn evaluate(&self, x: &Reals) -> [f64; 3] {
         let (x1, x2) = (x[0], x[1]);
         [
-            (x1 - 2.0).powi(2) / 2.0 + (x2 + 1.0).powi(2) / 13.0 + 3.0,
-            (x1 + x2 - 3.0).powi(2) / 36.0 + (-x1 + x2 + 2.0).powi(2) / 8.0 - 17.0,
-            (x1 + 2.0 * x2 - 1.0).powi(2) / 175.0 + (2.0 * x2 - x1).powi(2) / 17.0 - 13.0,
+            math::powi(x1 - 2.0, 2) / 2.0 + math::powi(x2 + 1.0, 2) / 13.0 + 3.0,
+            math::powi(x1 + x2 - 3.0, 2) / 36.0 + math::powi(-x1 + x2 + 2.0, 2) / 8.0 - 17.0,
+            math::powi(x1 + 2.0 * x2 - 1.0, 2) / 175.0 + math::powi(2.0 * x2 - x1, 2) / 17.0 - 13.0,
         ]
     }
 }
@@ -707,7 +707,9 @@ impl MultiFitnessFunction<Reals, 3> for Viennet3 {
         let squares = x1 * x1 + x2 * x2;
         [
             0.5 * squares + math::sin(squares),
-            (3.0 * x1 - 2.0 * x2 + 4.0).powi(2) / 8.0 + (x1 - x2 + 1.0).powi(2) / 27.0 + 15.0,
+            math::powi(3.0 * x1 - 2.0 * x2 + 4.0, 2) / 8.0
+                + math::powi(x1 - x2 + 1.0, 2) / 27.0
+                + 15.0,
             1.0 / (squares + 1.0) - 1.1 * math::exp(-squares),
         ]
     }
@@ -1081,11 +1083,11 @@ pub struct Osy;
 
 impl Osy {
     fn objectives(&self, x: &Reals) -> [f64; 2] {
-        let f1 = -(25.0 * (x[0] - 2.0).powi(2)
-            + (x[1] - 2.0).powi(2)
-            + (x[2] - 1.0).powi(2)
-            + (x[3] - 4.0).powi(2)
-            + (x[4] - 1.0).powi(2));
+        let f1 = -(25.0 * math::powi(x[0] - 2.0, 2)
+            + math::powi(x[1] - 2.0, 2)
+            + math::powi(x[2] - 1.0, 2)
+            + math::powi(x[3] - 4.0, 2)
+            + math::powi(x[4] - 1.0, 2));
         let f2 = x[..6].iter().map(|xi| xi * xi).sum();
         [f1, f2]
     }
@@ -1096,8 +1098,8 @@ impl Osy {
             x[0] + x[1] - 6.0,
             x[1] - x[0] - 2.0,
             x[0] - 3.0 * x[1] - 2.0,
-            (x[2] - 3.0).powi(2) + x[3] - 4.0,
-            4.0 - (x[4] - 3.0).powi(2) - x[5],
+            math::powi(x[2] - 3.0, 2) + x[3] - 4.0,
+            4.0 - math::powi(x[4] - 3.0, 2) - x[5],
         ]
     }
 
@@ -1385,7 +1387,7 @@ mod tests {
         let front = Schaffer1.optimal_front(11).expect("known");
         assert_eq!((front[0], front[10]), ([0.0, 4.0], [4.0, 0.0]));
         for [f1, f2] in front {
-            assert!((f2 - (f1.sqrt() - 2.0).powi(2)).abs() < 1e-12);
+            assert!((f2 - math::powi(f1.sqrt() - 2.0, 2)).abs() < 1e-12);
         }
         assert_eq!(Schaffer1.representation().bounds(), [-1000.0..=1000.0]);
         no_genome_dominates_the_front(&Schaffer1, 1e-9);
@@ -1522,7 +1524,7 @@ mod tests {
         );
         let a1 = 0.5 * s1 - 2.0 * c1 + s2 - 1.5 * c2;
         let a2 = 1.5 * s1 - c1 + 2.0 * s2 - 0.5 * c2;
-        let f1 = 1.0 + (a1 + 3.5).powi(2) + (a2 + 1.5).powi(2);
+        let f1 = 1.0 + math::powi(a1 + 3.5, 2) + math::powi(a2 + 1.5, 2);
         assert_close(&Poloni.evaluate(&at(&[0.0, 0.0])), &[f1, 10.0]);
         assert_eq!(Poloni.representation().bounds()[1], -PI..=PI);
         // the ends of the front: f₁ at (−3, −1), and f₂ at (1, 2)
@@ -1693,7 +1695,7 @@ mod tests {
         // the optimal solutions x₁ = x₂ = t reach the front
         for t in [0.0, 1.0, 2.5, 5.0] {
             let (f, violation) = Bnh.evaluate(&at(&[t, t]));
-            assert_close(&f, &[8.0 * t * t, 2.0 * (t - 5.0).powi(2)]);
+            assert_close(&f, &[8.0 * t * t, 2.0 * math::powi(t - 5.0, 2)]);
             assert_eq!(violation, 0.0);
         }
         assert_eq!(Bnh.representation().bounds()[1], -15.0..=30.0);

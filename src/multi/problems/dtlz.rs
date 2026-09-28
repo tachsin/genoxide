@@ -320,7 +320,7 @@ mod tests {
         // DTLZ4 at x₁ = x₂ = 0.5 on the front: both angles are 0.5¹⁰⁰ π/2 ≈ 1.2e-30, so
         // f = (cos θ cos θ, cos θ sin θ, sin θ) = (1, θ, θ) to double precision: the bias
         // towards f₁ that the paper describes
-        let theta = 0.5f64.powi(100) * PI / 2.0;
+        let theta = math::powi(0.5f64, 100) * PI / 2.0;
         let f = Dtlz4::<3>::default().evaluate(&at(&[0.5; 12]));
         assert_eq!(f[0], 1.0);
         assert_close(&f[1..], &[theta, theta]);

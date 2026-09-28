@@ -259,6 +259,30 @@ from_libm! {
     hypot = hypot(x, y);
 }
 
+/// `x` to the integer power `n`, the same on every platform.
+///
+/// `f64::powi` doesn't promise the same result everywhere. This is its usual algorithm, binary
+/// exponentiation (LLVM's and compiler-rt's), written out so that the order of the rounded
+/// multiplications is fixed: exact for `n` in -1..=2, within a few ulps otherwise.
+#[inline]
+#[must_use]
+pub fn powi(x: f64, n: i32) -> f64 {
+    let mut base = x;
+    let mut exponent = n.unsigned_abs();
+    let mut result = 1.0;
+    loop {
+        if exponent & 1 == 1 {
+            result *= base;
+        }
+        exponent >>= 1;
+        if exponent == 0 {
+            break;
+        }
+        base *= base;
+    }
+    if n < 0 { 1.0 / result } else { result }
+}
+
 /// The sine and cosine of `x` (in radians), the same on every platform, as `x.sin_cos()`.
 #[inline]
 #[must_use]
@@ -426,5 +450,22 @@ mod tests {
                 "powf({y}, {x})"
             );
         }
+    }
+
+    /// The same bits as `f64::powi`'s usual algorithm, whatever the compiler does with it.
+    #[test]
+    fn powi_is_binary_exponentiation() {
+        let mut rng = StreamRng::seed_from_u64(2);
+        for _ in 0..20_000 {
+            let x = (rng.unit_f64() - 0.5) * 20.0;
+            for n in [-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 20, 31] {
+                let n = std::hint::black_box(n);
+                assert_eq!(powi(x, n).to_bits(), x.powi(n).to_bits(), "powi({x}, {n})");
+            }
+        }
+        assert_eq!(powi(0.0, -1), f64::INFINITY);
+        assert!(powi(f64::NAN, 2).is_nan());
+        assert_eq!(powi(f64::NAN, 0), 1.0);
+        assert_eq!(powi(1.1, 3).to_bits(), 4608673110276677044); // 1.3310000000000004
     }
 }
