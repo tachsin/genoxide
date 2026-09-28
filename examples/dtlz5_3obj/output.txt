@@ -1,0 +1,3 @@
+NSGA-III 92 solutions, IGD+ 0.0088, hypervolume 0.1268, largest gap 7.3°, largest g 0.0206
+NSGA-II  92 solutions, IGD+ 0.0032, hypervolume 0.1323, largest gap 2.6°, largest g 0.0121
+the whole front: hypervolume 0.1349
