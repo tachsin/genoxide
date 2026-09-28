@@ -99,6 +99,19 @@ impl Bits {
         self.len - self.count_ones()
     }
 
+    /// The bits packed in words, 64 per word: bit `i` is bit `i % 64` of word `i / 64`, and the
+    /// unused high bits of the last word are zero. For converting many bits at a time.
+    ///
+    /// ```
+    /// use genoxide::genome::Bits;
+    ///
+    /// let bits: Bits = [true, false, true].into_iter().collect();
+    /// assert_eq!(bits.as_words(), [0b101]);
+    /// ```
+    pub fn as_words(&self) -> &[u64] {
+        &self.words
+    }
+
     /// The bits, from index 0.
     pub fn iter(&self) -> impl ExactSizeIterator<Item = bool> + '_ {
         (0..self.len).map(|index| self.words[index / WORD_BITS] >> (index % WORD_BITS) & 1 == 1)

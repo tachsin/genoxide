@@ -611,6 +611,21 @@ def test_a_native_zdt5_run_equals_a_run_with_python_calls(parallel):
     assert np.all(native.front_objectives[:, 0] * native.front_objectives[:, 1] >= 10)
 
 
+@pytest.mark.parametrize("first_bits, substrings", [(3, 2), (30, 34)])
+def test_bits_reach_a_python_function_as_they_are(first_bits, substrings):
+    # 13 bits, part of a word, and 200, three words and 8 bits: a run with Python calls is the
+    # native run only if every bit of every genome reaches Python unchanged
+    problem = gx.problems.Zdt5(first_bits=first_bits, substrings=substrings)
+    algorithm = _zdt5_nsga2(problem.genome)
+    native = algorithm.run(problem, generations=10)
+    python = algorithm.run(lambda x: problem(x), generations=10)
+    threads = algorithm.run(lambda x: problem(x), generations=10, parallel=True)
+    batch = algorithm.run(problem.evaluate, generations=10, batch=True)
+    for other in (python, threads, batch):
+        assert np.array_equal(other.front_objectives, native.front_objectives)
+        assert np.array_equal(other.front_genomes, native.front_genomes)
+
+
 def _spread_point(n, a, b):
     """z with zᵢ = 2i ((a i + b) mod 1), as in the Rust tests."""
     i = np.arange(1, n + 1, dtype=np.float64)

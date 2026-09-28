@@ -24,16 +24,23 @@ use std::sync::{Arc, Mutex, PoisonError};
 pub struct Shared {
     function: Py<PyAny>,
     batch: bool,
+    parallel: bool,
     on_generation: Option<Py<PyAny>>,
     error: Mutex<Option<PyErr>>,
     abort: Arc<AtomicBool>,
 }
 
 impl Shared {
-    pub fn new(function: Py<PyAny>, batch: bool, on_generation: Option<Py<PyAny>>) -> Self {
+    pub fn new(
+        function: Py<PyAny>,
+        batch: bool,
+        parallel: bool,
+        on_generation: Option<Py<PyAny>>,
+    ) -> Self {
         Self {
             function,
             batch,
+            parallel,
             on_generation,
             error: Mutex::new(None),
             abort: Arc::new(AtomicBool::new(false)),
@@ -47,6 +54,14 @@ impl Shared {
 
     fn aborted(&self) -> bool {
         self.abort.load(Ordering::Relaxed)
+    }
+
+    // whether the engine hands the function a generation at a time (`evaluate_batch`): a batch
+    // function, and a function of one genome called on the engine's thread, which attaches to
+    // Python once per generation rather than once per genome. The genomes, their order and the
+    // calls are the same either way.
+    fn by_generation(&self) -> bool {
+        self.batch || !self.parallel
     }
 
     // keeps the first error and stops the run
@@ -117,6 +132,20 @@ impl Shared {
             .and_then(|argument| self.function.bind(py).call1((argument,)))
             .and_then(|result| convert(&result));
         result.map_err(|error| self.fail(error)).ok()
+    }
+
+    // calls the function of one genome with `genome`, unless the run is stopping
+    fn call_genome<'py, G: Genes, T>(
+        &self,
+        py: Python<'py>,
+        genome: &G,
+        convert: impl FnOnce(&Bound<'py, PyAny>) -> PyResult<T>,
+    ) -> Option<T> {
+        if self.aborted() {
+            return None;
+        }
+        let argument = Ok(genes::array(py, genome).into_any());
+        self.call(py, argument, convert)
     }
 }
 
@@ -260,14 +289,11 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
             }
             None => {}
         }
-        Python::attach(|py| {
-            let argument = Ok(genes::array(py, genome).into_any());
-            shared.call(py, argument, value).unwrap_or(Value::Invalid)
-        })
+        Python::attach(|py| shared.call_genome(py, genome, value)).unwrap_or(Value::Invalid)
     }
 
     fn is_batch(&self) -> bool {
-        self.shared.batch && self.problem.is_none()
+        self.shared.by_generation() && self.problem.is_none()
     }
 
     fn evaluate_batch(&self, genomes: &[&G]) -> Vec<Value> {
@@ -283,6 +309,16 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
             return vec![Value::Invalid; genomes.len()];
         }
         Python::attach(|py| {
+            if !shared.batch {
+                return genomes
+                    .iter()
+                    .map(|genome| {
+                        shared
+                            .call_genome(py, *genome, value)
+                            .unwrap_or(Value::Invalid)
+                    })
+                    .collect();
+            }
             let argument = genes::matrix(py, genomes).map(Bound::into_any);
             shared
                 .call(py, argument, |result| values(result, genomes.len()))
@@ -413,16 +449,12 @@ impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
             // the run checks that the genome is the problem's
             return MultiValue::Native(problem.evaluate(genome));
         }
-        Python::attach(|py| {
-            let argument = Ok(genes::array(py, genome).into_any());
-            shared
-                .call(py, argument, multi_value)
-                .unwrap_or(MultiValue::Invalid)
-        })
+        Python::attach(|py| shared.call_genome(py, genome, multi_value))
+            .unwrap_or(MultiValue::Invalid)
     }
 
     fn is_batch(&self) -> bool {
-        self.shared.batch && self.problem.is_none()
+        self.shared.by_generation() && self.problem.is_none()
     }
 
     fn evaluate_batch(&self, genomes: &[&G]) -> Vec<MultiValue<M>> {
@@ -438,6 +470,16 @@ impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
             return vec![MultiValue::Invalid; genomes.len()];
         }
         Python::attach(|py| {
+            if !shared.batch {
+                return genomes
+                    .iter()
+                    .map(|genome| {
+                        shared
+                            .call_genome(py, *genome, multi_value)
+                            .unwrap_or(MultiValue::Invalid)
+                    })
+                    .collect();
+            }
             let argument = genes::matrix(py, genomes).map(Bound::into_any);
             shared
                 .call(py, argument, |result| multi_values(result, genomes.len()))
