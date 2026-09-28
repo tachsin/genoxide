@@ -6,7 +6,7 @@ reference: "Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review 
 reference_url: https://doi.org/10.1109/TEVC.2005.861417
 optimum: "the front f₁ = 2 (1 − cos(x₁π/2)), f₂ = 4 (1 − x₁ + sin(10πx₁) / 10π) for x₁ in [0, 1]; hypervolume 6.7857 (reference point (2.2, 4.4)); no genome reaches it in double precision"
 languages: [rust, python]
-order: 116
+order: 126
 family: WFG
 ---
 
