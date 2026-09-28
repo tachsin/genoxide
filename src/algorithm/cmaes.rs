@@ -1,6 +1,6 @@
 //! The covariance matrix adaptation evolution strategy (CMA-ES), with IPOP and BIPOP restarts.
 
-use super::{Algorithm, Candidates};
+use super::{Algorithm, Candidates, Reevaluate};
 use crate::genome::{Real, Reals, Representation};
 use crate::math::{exp, ln};
 use crate::operator::check_size;
@@ -232,6 +232,8 @@ pub struct Cmaes {
     small_run: bool,
     run_evaluations: u64,
     population: Population<Reals>,
+    // a re-evaluation of the population for the next ask
+    reevaluating: bool,
     started: bool,
     asked: bool,
     pending: Vec<usize>,
@@ -299,6 +301,59 @@ impl Cmaes {
     /// The seed of the random numbers: the given one, or a random one if none was given.
     pub fn seed(&self) -> u64 {
         self.seed
+    }
+
+    /// Marks the population, the last samples, as not evaluated, for a fitness function that
+    /// changed during the run. The next [`ask`](Algorithm::ask) gives them instead of new
+    /// samples, and its [`tell`](Algorithm::tell) sets their fitness without updating the
+    /// distribution, which has learned from them already.
+    ///
+    /// - It isn't a generation: [`generation`](Algorithm::generation) doesn't change. The
+    ///   evaluations are counted, also toward the budgets of the [BIPOP](Restarts::Bipop)
+    ///   regimes.
+    /// - [`best`](Algorithm::best) is then the best of the re-evaluated samples, found in the
+    ///   current generation: old and new values are never compared. The stop criteria that
+    ///   compare the fitness of generations, [`Criterion::TolHistFun`] and
+    ///   [`Criterion::EqualFunValues`], start over, and if the run had converged by one of them,
+    ///   it hasn't any more. The criteria on the distribution stay, and a restart they made due
+    ///   still happens at the next ask after the re-evaluation.
+    /// - The distribution (its mean, step size, covariance matrix and evolution paths) doesn't
+    ///   change, and no random number is drawn: a seeded run that re-evaluates at the same points
+    ///   gives the same results.
+    /// - Before the first tell nothing is evaluated yet, and it changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ReevaluationOutOfTurn`] between an ask and its tell. Nothing changes on errors.
+    pub fn reevaluate(&mut self) -> Result<()> {
+        if self.asked {
+            return Err(Error::ReevaluationOutOfTurn);
+        }
+        self.reevaluating = self.started;
+        Ok(())
+    }
+
+    // the fitness of a re-evaluation: the best of the population, and fitness histories that
+    // start over
+    fn rescore(&mut self) {
+        let objective = self.objective;
+        self.best = None;
+        for candidate in self.population.iter() {
+            let fitness = candidate.fitness().unwrap_or(Fitness::invalid());
+            let better = self.best.as_ref().is_none_or(|best| {
+                objective.is_better(fitness, best.fitness().unwrap_or(Fitness::invalid()))
+            });
+            if better {
+                self.best = Some(candidate.clone());
+            }
+        }
+        self.best_generation = self.generation;
+        self.best_scores.clear();
+        self.equal_values.clear();
+        if let Some(Criterion::TolHistFun | Criterion::EqualFunValues) = self.converged {
+            self.converged = None;
+        }
+        self.reevaluating = false;
     }
 
     fn dimensions(&self) -> usize {
@@ -848,6 +903,13 @@ fn diagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
     }
 }
 
+impl Reevaluate for Cmaes {
+    /// As [`Cmaes::reevaluate`]: the next ask gives the last samples.
+    fn reevaluate(&mut self) -> Result<()> {
+        Cmaes::reevaluate(self)
+    }
+}
+
 impl Algorithm for Cmaes {
     type Genome = Reals;
 
@@ -857,7 +919,7 @@ impl Algorithm for Cmaes {
 
     fn ask(&mut self) -> Candidates<'_, Reals> {
         if !self.asked {
-            if self.started {
+            if self.started && !self.reevaluating {
                 if self.converged.is_some() && self.restarts != Restarts::Never {
                     self.restart();
                 }
@@ -883,13 +945,17 @@ impl Algorithm for Cmaes {
         self.asked = false;
         self.evaluations += fitness.len() as u64;
         self.run_evaluations += fitness.len() as u64;
+        for (individual, &fitness) in self.population.iter_mut().zip(fitness) {
+            individual.set_fitness(fitness);
+        }
+        if self.reevaluating {
+            self.rescore();
+            return Ok(());
+        }
         if self.started {
             self.generation += 1;
         }
         let objective = self.objective;
-        for (individual, &fitness) in self.population.iter_mut().zip(fitness) {
-            individual.set_fitness(fitness);
-        }
         // the best so far, the first one on ties
         let mut improved = false;
         for candidate in self.population.iter() {
@@ -1099,6 +1165,7 @@ impl CmaesBuilder {
             small_run: true,
             run_evaluations: 0,
             population: Population::new(Vec::new()),
+            reevaluating: false,
             started: false,
             asked: false,
             pending: Vec::new(),
@@ -1444,6 +1511,177 @@ mod tests {
             assert_eq!(run(3), run(3));
             assert_ne!(run(3), run(4));
         }
+    }
+
+    // the sphere around 1 instead of 0
+    fn shifted(x: &Reals) -> f64 {
+        x.iter().map(|xi| (xi - 1.0) * (xi - 1.0)).sum()
+    }
+
+    // the state of the search distribution
+    fn distribution(cmaes: &Cmaes) -> Vec<Vec<f64>> {
+        vec![
+            cmaes.mean.clone(),
+            vec![cmaes.sigma, cmaes.decay],
+            cmaes.covariance.clone(),
+            cmaes.basis.clone(),
+            cmaes.deviations.clone(),
+            cmaes.path_sigma.clone(),
+            cmaes.path_c.clone(),
+        ]
+    }
+
+    #[test]
+    fn a_reevaluation_scores_the_samples_again_without_an_update() {
+        let mut cmaes = builder(10, 0).build().unwrap();
+        for _ in 0..5 {
+            step(&mut cmaes, sphere);
+        }
+        let samples: Vec<Reals> = cmaes
+            .population()
+            .iter()
+            .map(|x| x.genome().clone())
+            .collect();
+        let before = distribution(&cmaes);
+        let (generation, evaluations) = (cmaes.generation(), cmaes.evaluations());
+        assert!(!cmaes.best_scores.is_empty());
+
+        cmaes.reevaluate().unwrap();
+        let asked: Vec<Reals> = cmaes.ask().iter().cloned().collect();
+        assert_eq!(asked, samples);
+        step(&mut cmaes, shifted);
+
+        assert_eq!(cmaes.generation(), generation);
+        assert_eq!(cmaes.evaluations(), evaluations + 10);
+        assert_eq!(distribution(&cmaes), before);
+        assert_eq!(cmaes.run_generation, 5);
+        let lowest = samples.iter().map(shifted).fold(f64::INFINITY, f64::min);
+        assert_eq!(cmaes.best().unwrap().fitness(), Some(Fitness::new(lowest)));
+        assert_eq!(cmaes.best_generation(), generation);
+        assert!(cmaes.best_scores.is_empty() && cmaes.equal_values.is_empty());
+        // and the next generation samples again
+        let next: Vec<Reals> = cmaes.ask().iter().cloned().collect();
+        assert_eq!(next.len(), 10);
+        assert_ne!(next, samples);
+        step(&mut cmaes, shifted);
+        assert_eq!(cmaes.generation(), generation + 1);
+        assert_eq!(cmaes.best_scores.len(), 1);
+    }
+
+    #[test]
+    fn a_reevaluation_waits_for_the_tell() {
+        let mut cmaes = builder(4, 1).build().unwrap();
+        // before anything is evaluated, it changes nothing
+        cmaes.reevaluate().unwrap();
+        step(&mut cmaes, sphere);
+        let mut other = builder(4, 1).build().unwrap();
+        step(&mut other, sphere);
+        assert_eq!(cmaes.population(), other.population());
+        assert_eq!(distribution(&cmaes), distribution(&other));
+
+        cmaes.ask();
+        assert_eq!(cmaes.reevaluate(), Err(Error::ReevaluationOutOfTurn));
+        step(&mut cmaes, sphere);
+        assert_eq!(cmaes.generation(), 1);
+    }
+
+    #[test]
+    fn a_reevaluation_with_the_same_function_changes_only_the_count() {
+        let run = |reevaluate: bool| {
+            let mut cmaes = builder(6, 2).build().unwrap();
+            for generation in 0..30 {
+                if reevaluate && generation == 10 {
+                    cmaes.reevaluate().unwrap();
+                    step(&mut cmaes, rosenbrock);
+                }
+                step(&mut cmaes, rosenbrock);
+            }
+            (
+                cmaes.population().clone(),
+                distribution(&cmaes),
+                cmaes.evaluations(),
+            )
+        };
+        let (population, distribution, evaluations) = run(false);
+        assert_eq!(run(true), (population, distribution, evaluations + 9));
+    }
+
+    #[test]
+    fn a_reevaluation_starts_the_fitness_criteria_over() {
+        // a plateau converges by EqualFunValues, which a re-evaluation forgets
+        let flat = |restarts| {
+            let mut cmaes = builder(4, 3).restarts(restarts).build().unwrap();
+            while cmaes.converged().is_none() {
+                step(&mut cmaes, |_| 1.0);
+            }
+            assert_eq!(cmaes.converged(), Some(Criterion::EqualFunValues));
+            cmaes
+        };
+        let mut cmaes = flat(Restarts::Ipop);
+        cmaes.reevaluate().unwrap();
+        step(&mut cmaes, sphere);
+        assert_eq!(cmaes.converged(), None);
+        // no restart
+        assert_eq!(cmaes.ask().len(), 8);
+        assert_eq!(cmaes.restart_count(), 0);
+
+        // the criteria on the distribution stay, and so does the restart they made due
+        let mut cmaes = flat(Restarts::Ipop);
+        cmaes.converged = Some(Criterion::TolX);
+        cmaes.reevaluate().unwrap();
+        step(&mut cmaes, sphere);
+        assert_eq!(cmaes.converged(), Some(Criterion::TolX));
+        assert_eq!(cmaes.ask().len(), 16);
+        assert_eq!(cmaes.restart_count(), 1);
+    }
+
+    #[test]
+    fn reevaluations_repeat_with_a_seed() {
+        let run = || {
+            let mut cmaes = builder(5, 4).restarts(Restarts::Bipop).build().unwrap();
+            for generation in 0..60 {
+                if generation == 20 {
+                    cmaes.reevaluate().unwrap();
+                }
+                step(&mut cmaes, if generation < 20 { sphere } else { shifted });
+            }
+            (cmaes.population().clone(), cmaes.best().cloned())
+        };
+        assert_eq!(run(), run());
+    }
+
+    #[test]
+    fn an_engine_control_reevaluates_once() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        // the center of the sphere, moved from 0 to 1 after generation 20
+        let center = AtomicU64::new(0.0_f64.to_bits());
+        let moving = |x: &Reals| {
+            let center = f64::from_bits(center.load(Ordering::Relaxed));
+            x.iter()
+                .map(|xi| (xi - center) * (xi - center))
+                .sum::<f64>()
+        };
+        let mut controls = 0;
+        let mut engine = Engine::new(builder(10, 5).build().unwrap(), &moving)
+            .stop_when(Stop::generations(100))
+            .control(|cmaes: &mut Cmaes, progress| {
+                controls += 1;
+                if progress.generation() == 20 {
+                    center.store(1.0_f64.to_bits(), Ordering::Relaxed);
+                    cmaes.reevaluate()?;
+                }
+                Ok(())
+            });
+        let outcome = engine.run().unwrap();
+        drop(engine);
+        // once per generation, not after the re-evaluation
+        assert_eq!(controls, 101);
+        assert_eq!(outcome.generations(), 100);
+        assert_eq!(outcome.evaluations(), 10 + 100 * 10 + 10);
+        // the best by the new function
+        let best = outcome.best_fitness().score().unwrap();
+        assert_eq!(best, shifted(outcome.best_genome()));
+        assert!(best < 0.1, "{best}");
     }
 
     fn symmetric(n: usize) -> impl Strategy<Value = Vec<f64>> {

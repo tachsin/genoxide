@@ -1,7 +1,7 @@
 //! Local search: improving a single solution, one step at a time.
 
 use super::ga::Unset;
-use super::{Algorithm, Candidates};
+use super::{Algorithm, Candidates, Reevaluate};
 use crate::genome::Representation;
 use crate::math::exp;
 use crate::operator::{MAX_SIZE, Mutate, check_size, neighbor};
@@ -141,6 +141,8 @@ pub struct LocalSearch<R: Representation, M> {
     current: Population<R::Genome>,
     candidates: Vec<Individual<R::Genome>>,
     discarded: Vec<Individual<R::Genome>>,
+    // a re-evaluation of the current and the best solution for the next ask
+    reevaluating: bool,
     started: bool,
     asked: bool,
     pending: Vec<usize>,
@@ -212,6 +214,72 @@ impl<R: Representation, M> LocalSearch<R, M> {
         self.restarts
     }
 
+    /// Mutable access to the neighbor operator, to change it during a run (parameter control),
+    /// e.g. to smaller moves as the search settles, with a new operator built by its own
+    /// validating constructor. A change applies from the next [`ask`](Algorithm::ask) after a
+    /// [`tell`](Algorithm::tell), to the neighbors and to the kicks of a restart.
+    pub fn neighbor_mut(&mut self) -> &mut M {
+        &mut self.neighbor
+    }
+
+    /// Changes the number of neighbors evaluated per step during a run. As
+    /// [`neighbor_mut`](LocalSearch::neighbor_mut), it applies from the next ask.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] as for [`LocalSearchBuilder::neighbors`]: 0 neighbors or more
+    /// than 2^24. The number doesn't change on errors.
+    pub fn set_neighbors(&mut self, neighbors: usize) -> Result<()> {
+        check_neighbors(neighbors)?;
+        self.neighbors = neighbors;
+        Ok(())
+    }
+
+    /// Marks the current and the best solution as not evaluated, for a fitness function that
+    /// changed during the run. The next [`ask`](Algorithm::ask) gives the current solution, then
+    /// the best if it's another one, and its [`tell`](Algorithm::tell) sets their fitness
+    /// without a step.
+    ///
+    /// - It isn't a generation: [`generation`](Algorithm::generation) doesn't change. The
+    ///   evaluations are counted.
+    /// - [`best`](Algorithm::best) is then the better of the two, the old best on ties, found in
+    ///   the current generation: old and new values are never compared. The patience of
+    ///   [iterated local search](LocalSearchBuilder::restart) starts over from there.
+    /// - The temperature of simulated annealing and the tabu list don't change, and no random
+    ///   number is drawn: a seeded run that re-evaluates at the same points gives the same
+    ///   results.
+    /// - Before the first tell nothing is evaluated yet, and it changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ReevaluationOutOfTurn`] between an ask and its tell. Nothing changes on errors.
+    pub fn reevaluate(&mut self) -> Result<()> {
+        if self.asked {
+            return Err(Error::ReevaluationOutOfTurn);
+        }
+        self.reevaluating = self.started;
+        Ok(())
+    }
+
+    // sets the fitness of the current solution and of the best, in the order asked, and the best
+    // from them
+    fn rescore(&mut self, fitness: &[Fitness]) {
+        // the best is asked last, or with the current solution when it's the same
+        let (current, best) = (fitness[0], fitness[fitness.len() - 1]);
+        self.current[0].set_fitness(current);
+        let mut previous = self.best.take().expect("best after the first tell");
+        previous.set_fitness(best);
+        self.best = Some(if self.objective.is_better(current, best) {
+            self.current[0].clone()
+        } else {
+            previous
+        });
+        self.best_generation = self.generation;
+        // the neighbors of the last step have been seen with it
+        self.discarded.clear();
+        self.reevaluating = false;
+    }
+
     // whether iterated local search restarts now: `patience` steps without a new best, since the
     // last restart
     fn restart_due(&self) -> bool {
@@ -270,6 +338,13 @@ impl<R: Representation, M> LocalSearch<R, M> {
     }
 }
 
+impl<R: Representation, M: Mutate<R>> Reevaluate for LocalSearch<R, M> {
+    /// As [`LocalSearch::reevaluate`]: the next ask gives the current and the best solution.
+    fn reevaluate(&mut self) -> Result<()> {
+        LocalSearch::reevaluate(self)
+    }
+}
+
 impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
     type Genome = R::Genome;
 
@@ -280,7 +355,15 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
     fn ask(&mut self) -> Candidates<'_, R::Genome> {
         if !self.asked {
             self.pending.clear();
-            if self.started && self.restart_due() {
+            if self.reevaluating {
+                let best = self.best.as_ref().expect("best after the first tell");
+                self.candidates.clear();
+                self.candidates.push(self.current[0].clone());
+                if best.genome() != self.current[0].genome() {
+                    self.candidates.push(best.clone());
+                }
+                self.pending.extend(0..self.candidates.len());
+            } else if self.started && self.restart_due() {
                 // iterated local search: kick the best solution
                 let (_, kicks) = self.restart.expect("a restart is due");
                 let best = self.best.as_ref().expect("best after the first tell");
@@ -328,6 +411,10 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
         self.evaluations += fitness.len() as u64;
         if self.tabu_set.len() != self.tabu.len() {
             self.tabu_set = self.tabu.iter().cloned().collect();
+        }
+        if self.reevaluating {
+            self.rescore(fitness);
+            return Ok(());
         }
         if !self.started {
             self.current[0].set_fitness(fitness[0]);
@@ -533,13 +620,7 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
     where
         M: Mutate<R>,
     {
-        if self.neighbors == 0 {
-            return Err(Error::InvalidSetting {
-                setting: "neighbors",
-                reason: "must be at least 1".to_string(),
-            });
-        }
-        check_size("neighbors", self.neighbors)?;
+        check_neighbors(self.neighbors)?;
         self.acceptance.validate()?;
         if let Some((patience, kicks)) = self.restart {
             if patience == 0 || kicks == 0 || kicks > MAX_SIZE {
@@ -581,6 +662,7 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
             current: Population::from_genomes([initial]),
             candidates: Vec::new(),
             discarded: Vec::new(),
+            reevaluating: false,
             started: false,
             asked: false,
             pending: Vec::new(),
@@ -596,6 +678,17 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
             restarts: 0,
         })
     }
+}
+
+fn check_neighbors(neighbors: usize) -> Result<()> {
+    if neighbors == 0 {
+        return Err(Error::InvalidSetting {
+            setting: "neighbors",
+            reason: "must be at least 1".to_string(),
+        });
+    }
+    check_size("neighbors", neighbors)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -904,5 +997,246 @@ mod tests {
         };
         assert_eq!(run(4), run(4));
         assert_ne!(run(4), run(5));
+    }
+
+    fn zeros(genome: &Bits) -> f64 {
+        genome.count_zeros() as f64
+    }
+
+    fn hot() -> Acceptance {
+        Acceptance::Annealing {
+            initial_temperature: 1_000.0,
+            cooling: 1.0,
+        }
+    }
+
+    #[test]
+    fn a_reevaluation_scores_the_current_and_the_best_solution_again() {
+        let mut search = search(hot(), 2, 3);
+        trajectory(&mut search, 30, ones);
+        let current = search.population()[0].genome().clone();
+        let best = search.best().unwrap().genome().clone();
+        assert_ne!(current, best);
+        let (generation, evaluations) = (search.generation(), search.evaluations());
+
+        search.reevaluate().unwrap();
+        let asked: Vec<Bits> = search.ask().iter().cloned().collect();
+        assert_eq!(asked, [current.clone(), best.clone()]);
+        let fitness: Vec<Fitness> = asked.iter().map(|x| Fitness::new(zeros(x))).collect();
+        search.tell(&fitness).unwrap();
+
+        assert_eq!(search.generation(), generation);
+        assert_eq!(search.evaluations(), evaluations + 2);
+        assert_eq!(search.population()[0].genome(), &current);
+        assert_eq!(
+            search.population()[0].fitness(),
+            Some(Fitness::new(zeros(&current)))
+        );
+        // the better of the two, the best on ties
+        let expected = if zeros(&current) > zeros(&best) {
+            &current
+        } else {
+            &best
+        };
+        assert_eq!(search.best().unwrap().genome(), expected);
+        assert_eq!(
+            search.best().unwrap().fitness(),
+            Some(Fitness::new(zeros(expected)))
+        );
+        assert_eq!(search.best_generation(), generation);
+        assert!(search.discarded().is_empty());
+        assert_eq!(search.temperature(), 1_000.0);
+        // and the search goes on
+        assert_eq!(search.ask().len(), 2);
+        trajectory(&mut search, 0, zeros);
+        assert_eq!(search.generation(), generation + 1);
+
+        // a current solution that is the best is asked once
+        let mut search = search_on_plateau(Acceptance::Improving, 0);
+        search.reevaluate().unwrap();
+        assert_eq!(search.ask().len(), 1);
+        search.tell(&[Fitness::new(5.0)]).unwrap();
+        assert_eq!(search.best().unwrap().fitness(), Some(Fitness::new(5.0)));
+        assert_eq!(search.best(), Some(&search.population()[0]));
+    }
+
+    #[test]
+    fn a_reevaluation_waits_for_the_tell() {
+        let mut search = search(Acceptance::NotWorse, 3, 1);
+        // before anything is evaluated, it changes nothing
+        search.reevaluate().unwrap();
+        trajectory(&mut search, 0, ones);
+        let mut other = super::tests::search(Acceptance::NotWorse, 3, 1);
+        trajectory(&mut other, 0, ones);
+        assert_eq!(search.population(), other.population());
+
+        search.ask();
+        assert_eq!(search.reevaluate(), Err(Error::ReevaluationOutOfTurn));
+        // still the neighbors
+        assert_eq!(search.ask().len(), 3);
+        let fitness: Vec<Fitness> = search.ask().iter().map(|x| Fitness::new(ones(x))).collect();
+        search.tell(&fitness).unwrap();
+        assert_eq!(search.generation(), 1);
+    }
+
+    #[test]
+    fn a_reevaluation_with_the_same_function_changes_only_the_count() {
+        let tabu = Acceptance::Tabu { tenure: 5 };
+        let run = |reevaluate: bool| {
+            let mut search = search(tabu, 3, 2);
+            let mut extra = 0;
+            for generation in 0..40 {
+                if reevaluate && generation == 20 {
+                    search.reevaluate().unwrap();
+                    extra = search.ask().len() as u64;
+                    trajectory(&mut search, 0, ones);
+                }
+                trajectory(&mut search, 0, ones);
+            }
+            (
+                search.population().clone(),
+                search.best().cloned(),
+                search.tabu.clone(),
+                search.evaluations() - extra,
+            )
+        };
+        assert_eq!(run(true), run(false));
+    }
+
+    #[test]
+    fn a_reevaluation_starts_the_restart_patience_over() {
+        let first_restart = |reevaluate_at: Option<u64>| {
+            let mut search = LocalSearch::builder(Binary::new(32).unwrap())
+                .neighbor(BitFlip::count(1).unwrap())
+                .acceptance(Acceptance::Improving)
+                .restart(5, 3)
+                .seed(0)
+                .build()
+                .unwrap();
+            // a flat landscape never improves
+            trajectory(&mut search, 0, |_| 1.0);
+            while search.restarts() == 0 {
+                if reevaluate_at == Some(search.generation()) {
+                    search.reevaluate().unwrap();
+                    trajectory(&mut search, 0, |_| 1.0);
+                }
+                trajectory(&mut search, 0, |_| 1.0);
+            }
+            // the kick is the step before
+            search.generation() - 1
+        };
+        assert_eq!(first_restart(None), 5);
+        assert_eq!(first_restart(Some(3)), 8);
+    }
+
+    #[test]
+    fn reevaluations_repeat_with_a_seed() {
+        let run = || {
+            let mut search = search(hot(), 2, 4);
+            trajectory(&mut search, 20, ones);
+            search.reevaluate().unwrap();
+            trajectory(&mut search, 20, zeros);
+            (search.population().clone(), search.best().cloned())
+        };
+        assert_eq!(run(), run());
+    }
+
+    #[test]
+    fn neighbors_validate_like_the_builder() {
+        let mut search = search(Acceptance::NotWorse, 3, 0);
+        for neighbors in [0, MAX_SIZE + 1] {
+            assert!(matches!(
+                search.set_neighbors(neighbors),
+                Err(Error::InvalidSetting {
+                    setting: "neighbors",
+                    ..
+                })
+            ));
+            assert_eq!(search.neighbors(), 3);
+        }
+        search.set_neighbors(MAX_SIZE).unwrap();
+        assert_eq!(search.neighbors(), MAX_SIZE);
+    }
+
+    #[test]
+    fn a_setting_changed_before_a_step_gives_the_search_built_with_it() {
+        let run = |mut search: Search, change: fn(&mut Search)| {
+            trajectory(&mut search, 0, ones);
+            change(&mut search);
+            trajectory(&mut search, 20, ones);
+            search.population().clone()
+        };
+        let built = LocalSearch::builder(Binary::new(32).unwrap())
+            .neighbor(BitFlip::count(3).unwrap())
+            .neighbors(4)
+            .seed(5)
+            .build()
+            .unwrap();
+        let expected = run(built, |_| {});
+        let changed = |search: &mut Search| {
+            search.set_neighbors(4).unwrap();
+            *search.neighbor_mut() = BitFlip::count(3).unwrap();
+        };
+        let default = || search(Acceptance::NotWorse, 1, 5);
+        assert_eq!(run(default(), changed), expected);
+        assert_ne!(run(default(), |_| {}), expected);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn checkpoints_keep_changed_settings() {
+        use crate::checkpoint;
+        let mut search = search(Acceptance::NotWorse, 1, 6);
+        trajectory(&mut search, 3, ones);
+        search.set_neighbors(5).unwrap();
+        *search.neighbor_mut() = BitFlip::count(3).unwrap();
+        search.reevaluate().unwrap();
+        let mut bytes = Vec::new();
+        checkpoint::save(&search, &mut bytes).unwrap();
+        let mut loaded: Search = checkpoint::load(bytes.as_slice()).unwrap();
+        assert_eq!(loaded.neighbors(), 5);
+        assert_eq!(loaded.neighbor(), &BitFlip::count(3).unwrap());
+        // the re-evaluation too
+        assert_eq!(loaded.ask().len(), search.ask().len());
+        assert_eq!(
+            trajectory(&mut loaded, 10, ones),
+            trajectory(&mut search, 10, ones)
+        );
+        assert_eq!(loaded.population(), search.population());
+    }
+
+    #[test]
+    fn an_engine_control_reevaluates_once() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        // the ones, then the zeros from generation 100
+        let flipped = AtomicBool::new(false);
+        let target = |bits: &Bits| {
+            if flipped.load(Ordering::Relaxed) {
+                zeros(bits)
+            } else {
+                ones(bits)
+            }
+        };
+        let mut controls = 0;
+        let mut engine = Engine::new(search(Acceptance::NotWorse, 2, 7), &target)
+            .stop_when(Stop::generations(300))
+            .control(|search: &mut Search, progress| {
+                controls += 1;
+                if progress.generation() == 100 {
+                    flipped.store(true, Ordering::Relaxed);
+                    search.reevaluate()?;
+                }
+                Ok(())
+            });
+        let outcome = engine.run().unwrap();
+        drop(engine);
+        // once per generation, not after the re-evaluation
+        assert_eq!(controls, 301);
+        assert_eq!(outcome.generations(), 300);
+        assert!([1 + 300 * 2 + 1, 1 + 300 * 2 + 2].contains(&outcome.evaluations()));
+        // the best by the new function
+        let best = outcome.best_fitness().score().unwrap();
+        assert_eq!(best, zeros(outcome.best_genome()));
+        assert!(best > 16.0, "{best}");
     }
 }
