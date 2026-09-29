@@ -12,8 +12,11 @@ use genoxide::Objective::Minimize;
 use genoxide::gp::{Columns, Gp, PrimitiveSet, SubtreeCrossover, Tree};
 use genoxide::multi::problems::{Dtlz2, MultiProblem, Zdt1};
 use genoxide::multi::{self, MultiFitnessFunction};
+use genoxide::nn::{Activation, Mlp};
 use genoxide::prelude::*;
+use genoxide::problems::control::DoublePole;
 use gungraun::prelude::*;
+use rand::RngExt;
 use std::hint::black_box;
 
 type OneMaxGa = Ga<Binary, Tournament, UniformCrossover, BitFlip>;
@@ -669,6 +672,57 @@ fn tree_columns((gp, trees, _): (Gp<Op>, Vec<Tree>, StreamRng)) -> f64 {
     black_box(evaluate_trees(&gp, &trees))
 }
 
+// a network of 6 inputs, 16 hidden tanh units and a tanh output, and random weights and inputs
+fn mlp_and_weights(passes: usize) -> (Mlp, Vec<f64>, Vec<[f64; 6]>) {
+    let mlp = Mlp::new([6, 16, 1], Activation::Tanh)
+        .unwrap()
+        .output_activation(Activation::Tanh);
+    let mut rng = StreamRng::seed_from_u64(0);
+    let real = mlp.representation(-1.0..=1.0).unwrap();
+    let weights = real.random_genome(&mut rng).to_vec();
+    let inputs = (0..passes)
+        .map(|_| std::array::from_fn(|_| rng.random_range(-1.0..1.0)))
+        .collect();
+    (mlp, weights, inputs)
+}
+
+#[library_benchmark]
+#[bench::inputs_6_hidden_16(setup = mlp_and_weights, args = (1_000))]
+fn mlp_forward((mlp, weights, inputs): (Mlp, Vec<f64>, Vec<[f64; 6]>)) -> f64 {
+    let mut network = mlp.with(&weights).unwrap();
+    let mut output = [0.0];
+    let mut sum = 0.0;
+    for input in &inputs {
+        network.forward(input, &mut output);
+        sum += output[0];
+    }
+    black_box(sum)
+}
+
+// the double_pole example's solution, rounded to 3 decimals
+const DOUBLE_POLE_WEIGHTS: [f64; 42] = [
+    -0.015, -0.311, 0.528, 0.638, -0.969, -0.102, -0.097, 0.195, 0.784, -0.006, -0.768, 0.013,
+    0.145, 0.082, 0.378, 0.404, -0.733, 0.178, 0.260, -0.451, 0.761, 0.509, -0.193, -0.385, 0.248,
+    0.327, -0.148, -0.782, 0.491, 0.096, -0.043, -0.650, -0.205, -0.307, 0.425, 0.169, -0.803,
+    -0.822, -0.288, -0.251, 0.044, 0.483,
+];
+
+// the double pole's 1000-step damping episode, driven by a 6-6-1 network
+fn double_pole_policy(_: ()) -> (Mlp, Vec<f64>) {
+    let mlp = Mlp::new([6, 6, 1], Activation::Tanh)
+        .unwrap()
+        .output_activation(Activation::Tanh)
+        .bias(false);
+    (mlp, DOUBLE_POLE_WEIGHTS.to_vec())
+}
+
+#[library_benchmark]
+#[bench::steps_1000(setup = double_pole_policy, args = (()))]
+fn double_pole_episode((mlp, weights): (Mlp, Vec<f64>)) -> f64 {
+    let mut network = mlp.with(&weights).unwrap();
+    black_box(DoublePole::new().damping_fitness(&mut network))
+}
+
 library_benchmark_group!(
     name = hot_paths,
     benchmarks = [
@@ -702,7 +756,9 @@ library_benchmark_group!(
         non_dominated_sort,
         hypervolume,
         subtree_crossover,
-        tree_columns
+        tree_columns,
+        mlp_forward,
+        double_pole_episode
     ]
 );
 
