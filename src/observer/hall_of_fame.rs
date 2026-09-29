@@ -181,10 +181,10 @@ impl<G: Genome> Observer<G> for HallOfFame<G> {
     fn observe(&mut self, snapshot: &Snapshot<'_, G>) {
         let objective = snapshot.progress().objective();
         for individual in snapshot.population().iter().chain(snapshot.discarded()) {
-            if self.enter(individual, objective) {
-                if let Some(info) = snapshot.infos.get(individual.genome()) {
-                    self.infos.insert(individual.genome().clone(), info.clone());
-                }
+            if self.enter(individual, objective)
+                && let Some(info) = snapshot.infos.get(individual.genome())
+            {
+                self.infos.insert(individual.genome().clone(), info.clone());
             }
         }
     }

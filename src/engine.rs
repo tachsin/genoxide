@@ -474,7 +474,7 @@ pub(crate) fn checkpoint<A>(
     stopping: bool,
 ) -> Result<()> {
     match checkpoint {
-        Some((every, save)) if stopping || generation % *every == 0 => save(algorithm),
+        Some((every, save)) if stopping || generation.is_multiple_of(*every) => save(algorithm),
         _ => Ok(()),
     }
 }

@@ -68,6 +68,9 @@ impl<G: Genome, F> Population<G, F> {
         if self.individuals.is_empty() {
             std::mem::swap(&mut self.individuals, others);
         } else {
+            // moved one at a time: `append` copies the memory at once, but glibc copies a large
+            // population with `rep movsb`, which Callgrind counts per byte
+            #[allow(clippy::extend_with_drain)]
             self.individuals.extend(others.drain(..));
         }
     }

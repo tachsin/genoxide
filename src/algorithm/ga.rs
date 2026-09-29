@@ -608,6 +608,8 @@ where
         offspring: &mut Vec<Individual<R::Genome>>,
     ) {
         let end = offspring.len() + wanted;
+        // `as_chunks` measured a few instructions more per generation on real-valued genomes
+        #[allow(clippy::chunks_exact_to_as_chunks)]
         for pair in parents.chunks_exact(2) {
             let parents = [&self.population[pair[0]], &self.population[pair[1]]];
             let mut a = spare.copy(parents[0].genome());

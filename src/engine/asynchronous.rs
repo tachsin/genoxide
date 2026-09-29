@@ -420,10 +420,10 @@ impl<A: Incremental> Driver<'_, '_, A> {
             Err(error) => return Err(error),
         };
         let info = info.map(|info| (genome.clone(), info));
-        if let Some(individual) = self.algorithm.receive(genome, fitness)? {
-            if !self.observers.is_empty() {
-                self.discarded.push(individual);
-            }
+        if let Some(individual) = self.algorithm.receive(genome, fitness)?
+            && !self.observers.is_empty()
+        {
+            self.discarded.push(individual);
         }
         if let Some((genome, info)) = info {
             self.infos.insert(genome, info);
@@ -434,7 +434,7 @@ impl<A: Incremental> Driver<'_, '_, A> {
     // after a result while running: a generation's observers and checkpoint, and why to stop
     fn after_result(&mut self) -> Result<Option<StopReason>> {
         let progress = self.progress();
-        if progress.evaluations % self.size == 0 {
+        if progress.evaluations.is_multiple_of(self.size) {
             trace::generation(&progress, None);
             self.notify(&progress);
             checkpoint(self.save, &*self.algorithm, progress.generation, false)?;
@@ -512,7 +512,7 @@ impl<A: Incremental> Driver<'_, '_, A> {
     // a generation's observers, trace and checkpoint for a result that arrives while stopping
     fn after_late_result(&mut self) -> Result<()> {
         let progress = self.progress();
-        if progress.evaluations % self.size == 0 {
+        if progress.evaluations.is_multiple_of(self.size) {
             trace::generation(&progress, None);
             self.notify(&progress);
             checkpoint(self.save, &*self.algorithm, progress.generation, false)?;

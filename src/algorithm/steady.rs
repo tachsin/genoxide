@@ -408,10 +408,10 @@ where
         }
         // the second child of the last crossover, unless it joined the population meanwhile
         self.rehash();
-        if let Some(genome) = self.queued.take() {
-            if !self.contains(&genome) {
-                return genome;
-            }
+        if let Some(genome) = self.queued.take()
+            && !self.contains(&genome)
+        {
+            return genome;
         }
         let mut children = self.breed();
         // whether each child is in the population, found once

@@ -416,7 +416,8 @@ impl<A: Migrate> Algorithm for Islands<A> {
             self.best = None;
         } else if self.started {
             self.generation += 1;
-            if self.topology != Topology::Isolated && self.generation % self.interval == 0 {
+            if self.topology != Topology::Isolated && self.generation.is_multiple_of(self.interval)
+            {
                 self.migrate()?;
             }
         }
