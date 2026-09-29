@@ -701,13 +701,13 @@ fn breed_pairs<R, C, M>(
     }
 }
 
-// genomes no longer in use, whose memory new ones reuse: none in a clone, a checkpoint or its
+// genomes no longer in use, whose memory new ones reuse (a GA's, and islands' copies): none in a clone, a checkpoint or its
 // debug output, as they change no result
-struct Spare<G>(Vec<G>);
+pub(super) struct Spare<G>(Vec<G>);
 
 impl<G> Spare<G> {
     // keeps `genomes` until `limit` are kept, and drops the rest
-    fn recycle(&mut self, genomes: impl IntoIterator<Item = G>, limit: usize) {
+    pub(super) fn recycle(&mut self, genomes: impl IntoIterator<Item = G>, limit: usize) {
         let room = limit.saturating_sub(self.0.len());
         self.0.extend(genomes.into_iter().take(room));
     }
@@ -715,7 +715,7 @@ impl<G> Spare<G> {
     // a copy of `source`, in the memory of a spare genome if there is one: inlined into the
     // breeding loop, with the genome's `clone_from`
     #[inline(always)]
-    fn copy(&mut self, source: &G) -> G
+    pub(super) fn copy(&mut self, source: &G) -> G
     where
         G: Clone,
     {

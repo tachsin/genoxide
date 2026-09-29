@@ -1,5 +1,6 @@
 //! The island model: several populations that evolve apart and exchange their best individuals.
 
+use super::ga::Spare;
 use super::{Algorithm, Candidates, Reevaluate};
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
@@ -102,6 +103,9 @@ pub struct Islands<A: Migrate> {
     // copies of the genomes asked by the islands, and how many each asked
     candidates: Vec<Individual<A::Genome>>,
     counts: Vec<usize>,
+    // the genomes of the told copies, whose memory the next copies reuse
+    #[cfg_attr(feature = "serde", serde(skip))]
+    spare: Spare<A::Genome>,
     pending: Vec<usize>,
     // the combined population and discarded individuals, built when first asked for: a run
     // without observers never copies them
@@ -305,8 +309,12 @@ impl<A: Migrate> Algorithm for Islands<A> {
             for island in &mut self.islands {
                 let asked = island.ask();
                 self.counts.push(asked.len());
-                self.candidates
-                    .extend(asked.iter().map(|genome| Individual::new(genome.clone())));
+                let spare = &mut self.spare;
+                self.candidates.extend(
+                    asked
+                        .iter()
+                        .map(|genome| Individual::new(spare.copy(genome))),
+                );
             }
             self.pending.clear();
             self.pending.extend(0..self.candidates.len());
@@ -334,8 +342,12 @@ impl<A: Migrate> Algorithm for Islands<A> {
             island.tell(own)?;
             rest = others;
         }
-        // the copies are told: drop them
-        self.candidates.clear();
+        // the copies are told: their memory is for the next ones
+        let limit = self.candidates.len();
+        self.spare.recycle(
+            self.candidates.drain(..).map(Individual::into_genome),
+            limit,
+        );
         if self.reevaluating {
             // the best is measured by another function now: it comes from the islands again
             self.reevaluating = false;
@@ -523,6 +535,7 @@ impl<A: Migrate> IslandsBuilder<A> {
             rng: StreamRng::seed_from_u64(seed),
             candidates: Vec::new(),
             counts: Vec::new(),
+            spare: Spare::default(),
             pending: Vec::new(),
             population: OnceLock::new(),
             discarded: OnceLock::new(),
