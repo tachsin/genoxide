@@ -6,7 +6,7 @@ reference: null
 reference_url: null
 optimum: null
 languages: [rust]
-order: 160
+order: 260
 trace_note: "Recorded from another run like the one below: its times and values differ."
 ---
 
