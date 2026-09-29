@@ -1,0 +1,5 @@
+solved after 2756 evaluations in 211 generations
+balanced for 100000 steps from the start, and for 1000 steps from 238 of the 625 generalization starts (at least 200 needed)
+damping fitness 0.105284
+over the 100000 steps: the cart within 0.7502 m, the poles within 10.7894° and 18.0648°
+weights: [0.231, -0.963, 0.761, 0.614, -0.388, 0.800, -0.055, 0.629, -0.107, 0.818, 0.533, 0.848, -0.184, -0.429, 0.868, -0.182, -0.406, 0.156, 0.780, 0.712, 0.725]
