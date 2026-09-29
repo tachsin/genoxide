@@ -13,6 +13,7 @@ use crate::operators::{
     bit_flip, integer_mutation,
 };
 use crate::problems;
+use crate::snapshot::{Snapshot, objective_values};
 use genoxide::algorithm::{GaBuilder, Reevaluate, cmaes, pso};
 use genoxide::engine::Progress;
 use genoxide::genome::Representation;
@@ -943,53 +944,31 @@ where
 }
 
 // the arguments of the progress callback after a single-objective generation: the best score
-// and genome so far, and the population's genomes, scores and violations (NaN for an invalid
-// solution)
+// and genome so far, and the population, made into arrays when Python reads them
 fn single_state<'py, G: Genes>(
     py: Python<'py>,
     population: &Population<G>,
     best: &Individual<G>,
     progress: &Progress,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let genomes: Vec<&G> = population.iter().map(Individual::genome).collect();
-    let (scores, violations): (Vec<f64>, Vec<f64>) = population
-        .iter()
-        .map(|individual| {
-            let fitness = individual.fitness().unwrap_or(Fitness::invalid());
-            let score = fitness.score();
-            (
-                score.unwrap_or(f64::NAN),
-                score.map_or(f64::NAN, |_| fitness.violation()),
-            )
-        })
-        .unzip();
     let score = progress.best().and_then(Fitness::score);
     Ok(vec![
         score.into_pyobject(py)?.into_any(),
         genes::array(py, best.genome()).into_any(),
-        genes::matrix(py, &genomes)?.into_any(),
-        PyArray1::from_vec(py, scores).into_any(),
-        PyArray1::from_vec(py, violations).into_any(),
+        Bound::new(py, Snapshot::single(population.iter()))?.into_any(),
     ])
 }
 
 // the arguments of the progress callback after a multi-objective generation: the size of the
-// front, the population's genomes, objective values and violations, and the front's
+// front, and the population and the front, made into arrays when Python reads them
 fn multi_state<'py, G: Genes, const N: usize>(
     py: Python<'py>,
     snapshot: &MultiSnapshot<'_, G, N>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let population = snapshot.population();
-    let genomes: Vec<&G> = population.iter().map(Individual::genome).collect();
-    let (objectives, violations) = objective_rows(py, population.iter())?;
-    let (front_objectives, front_violations) = objective_rows(py, snapshot.front())?;
     Ok(vec![
         snapshot.front().len().into_pyobject(py)?.into_any(),
-        genes::matrix(py, &genomes)?.into_any(),
-        objectives.into_any(),
-        violations.into_any(),
-        front_objectives.into_any(),
-        front_violations.into_any(),
+        Bound::new(py, Snapshot::multi(snapshot.population().iter(), true))?.into_any(),
+        Bound::new(py, Snapshot::multi(snapshot.front().iter(), false))?.into_any(),
     ])
 }
 
@@ -1002,19 +981,7 @@ fn objective_rows<'a, 'py, G: Genes + 'a, const N: usize>(
     py: Python<'py>,
     individuals: impl IntoIterator<Item = &'a Individual<G, Scores<N>>>,
 ) -> PyResult<ObjectiveRows<'py>> {
-    let mut objectives = Vec::new();
-    let mut violations = Vec::new();
-    for individual in individuals {
-        let scores = individual.fitness();
-        objectives.extend(
-            scores
-                .and_then(|scores| scores.values())
-                .unwrap_or([f64::NAN; N]),
-        );
-        // no violation for an invalid solution: NaN, as 0 means feasible
-        let valid = scores.filter(|scores| scores.is_valid());
-        violations.push(valid.map_or(f64::NAN, |scores| scores.violation()));
-    }
+    let (objectives, violations) = objective_values(individuals);
     let objectives = Array2::from_shape_vec((violations.len(), N), objectives)
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))?
         .into_pyarray(py);

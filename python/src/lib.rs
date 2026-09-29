@@ -13,6 +13,7 @@ mod indicators;
 mod operators;
 mod problems;
 mod run;
+mod snapshot;
 
 use pyo3::prelude::*;
 
@@ -20,6 +21,7 @@ use pyo3::prelude::*;
 fn _genoxide(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run::run, module)?)?;
     module.add_class::<control::Running>()?;
+    module.add_class::<snapshot::Snapshot>()?;
     module.add_function(wrap_pyfunction!(run::das_dennis, module)?)?;
     module.add_function(wrap_pyfunction!(problems::problem_info, module)?)?;
     module.add_function(wrap_pyfunction!(problems::evaluate, module)?)?;

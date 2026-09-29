@@ -84,8 +84,8 @@ impl Shared {
     /// After a generation, on the thread that runs the engine, the one that called `run`: stops
     /// the run on Ctrl+C, which Python handles there, and calls the progress callback with the
     /// generation, the evaluations, the seconds and the values `state` makes (the best fitness
-    /// or the size of the front, then the population as arrays), only made for a callback. The
-    /// callback returns False to stop the run.
+    /// or the size of the front, then copies of the population, made into arrays when read),
+    /// only made for a callback. The callback returns False to stop the run.
     pub fn after_generation<S>(&self, progress: &Progress, state: S)
     where
         S: for<'py> FnOnce(Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>>,

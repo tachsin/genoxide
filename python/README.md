@@ -237,6 +237,8 @@ The result has the condition that stopped it, `stop_reason`, and the `generation
 - `Progress`: the `generation`, `evaluations`, `seconds` and `best_fitness` so far (`None` before a valid solution), the `best_genome` so far, and the `population` (a genome per row) with its `scores` and `violations`
 - `MultiProgress`, for a multi-objective algorithm: the same, with `front_size` (the number of non-dominated individuals in the population, each genome once) instead of `best_fitness` and the best genome, the population's `objectives` (a row per genome) instead of its scores, and the `front_objectives` and `front_violations` of its non-dominated individuals
 
+The population's arrays (`population`, `scores`, `violations`, `objectives`, `front_objectives`, `front_violations`) are made when first read, then kept: a callback that reads only the numbers doesn't pay for them. A progress object kept after its callback stays valid, and can be copied and pickled. It isn't a dataclass: `dataclasses.fields`, `asdict` and `replace` don't apply to it.
+
 If `callback` returns `False`, the run stops with the stop reason `"aborted"`. If it raises an exception, the run stops and `run` raises it.
 
 ```python

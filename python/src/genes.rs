@@ -10,12 +10,22 @@ use std::cell::RefCell;
 use std::thread::LocalKey;
 
 /// A genome whose genes go into numpy arrays.
-pub trait Genes: Genome {
+pub trait Genes: Genome + 'static {
     /// The numpy type of a gene: `bool`, `float64` or `int64`.
     type Element: Element + Copy;
 
+    /// What a genome is kept as in a [`crate::snapshot::Snapshot`], until its genes are read: its
+    /// genes, or the 64-bit words of its bits, eight times smaller than their bools.
+    type Word: Copy + Send + Sync + 'static;
+
     /// Appends the genes to `genes`.
     fn push_genes(&self, genes: &mut Vec<Self::Element>);
+
+    /// Appends the genome's words to `words`.
+    fn push_words(&self, words: &mut Vec<Self::Word>);
+
+    /// Appends the genes of a genome of `length` genes, from its words, to `genes`.
+    fn push_genes_of(words: &[Self::Word], length: usize, genes: &mut Vec<Self::Element>);
 
     /// The genome as a 1-D array.
     fn array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<Self::Element>>;
@@ -56,13 +66,21 @@ const BYTE_BITS: [[bool; 8]; 256] = {
 
 impl Genes for Bits {
     type Element = bool;
+    type Word = u64;
+
+    fn push_genes(&self, genes: &mut Vec<bool>) {
+        Self::push_genes_of(self.as_words(), self.len(), genes);
+    }
+
+    fn push_words(&self, words: &mut Vec<u64>) {
+        words.extend_from_slice(self.as_words());
+    }
 
     // a byte of bits at a time, from a table: bit by bit takes ten times as long
-    fn push_genes(&self, genes: &mut Vec<bool>) {
+    fn push_genes_of(words: &[u64], length: usize, genes: &mut Vec<bool>) {
         let start = genes.len();
-        genes.resize(start + self.len(), false);
+        genes.resize(start + length, false);
         let genes = &mut genes[start..];
-        let words = self.as_words();
         let (chunks, rest) = genes.as_chunks_mut::<WORD_BITS>();
         let full = chunks.len();
         for (chunk, word) in chunks.iter_mut().zip(words) {
@@ -89,9 +107,18 @@ impl Genes for Bits {
 
 impl Genes for Reals {
     type Element = f64;
+    type Word = f64;
 
     fn push_genes(&self, genes: &mut Vec<f64>) {
         genes.extend_from_slice(self);
+    }
+
+    fn push_words(&self, words: &mut Vec<f64>) {
+        words.extend_from_slice(self);
+    }
+
+    fn push_genes_of(words: &[f64], _: usize, genes: &mut Vec<f64>) {
+        genes.extend_from_slice(words);
     }
 
     fn array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
@@ -105,9 +132,18 @@ impl Genes for Reals {
 
 impl Genes for Integers {
     type Element = i64;
+    type Word = i64;
 
     fn push_genes(&self, genes: &mut Vec<i64>) {
         genes.extend_from_slice(self);
+    }
+
+    fn push_words(&self, words: &mut Vec<i64>) {
+        words.extend_from_slice(self);
+    }
+
+    fn push_genes_of(words: &[i64], _: usize, genes: &mut Vec<i64>) {
+        genes.extend_from_slice(words);
     }
 
     fn array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<i64>> {
@@ -121,10 +157,19 @@ impl Genes for Integers {
 
 impl Genes for Order {
     type Element = i64;
+    type Word = i64;
 
     // positions fit in an i64: a permutation of more than 2^63 elements can't be allocated
     fn push_genes(&self, genes: &mut Vec<i64>) {
         genes.extend(self.iter().map(|&position| position as i64));
+    }
+
+    fn push_words(&self, words: &mut Vec<i64>) {
+        self.push_genes(words);
+    }
+
+    fn push_genes_of(words: &[i64], _: usize, genes: &mut Vec<i64>) {
+        genes.extend_from_slice(words);
     }
 
     fn array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<i64>> {
