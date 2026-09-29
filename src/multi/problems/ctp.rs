@@ -179,9 +179,7 @@ fn sampled_front(waves: &[Wave], top: f64) -> Vec<[f64; 2]> {
                 candidates.push(point);
             }
             // where the curve enters or leaves the feasible region, its last feasible point
-            if let Some((previous, was_inside)) = last
-                && was_inside != inside
-            {
+            if let Some((previous, _)) = last.filter(|&(_, was_inside)| was_inside != inside) {
                 let (mut good, mut bad) = if inside { (t, previous) } else { (previous, t) };
                 for _ in 0..60 {
                     let middle = 0.5 * (good + bad);
