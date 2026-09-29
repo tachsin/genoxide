@@ -1,10 +1,12 @@
 //! A steady-state genetic algorithm that takes results one at a time and in any order, for
 //! asynchronous evaluation.
 
+use crate::engine::GenomeHashing;
 use crate::genome::{Genome, Representation};
 use crate::operator::{Crossover, Mutate, Select};
 use crate::rng::Chance;
 use crate::{Fitness, Individual, Objective, Population, Result, StreamRng};
+use std::hash::BuildHasher;
 
 /// An algorithm that proposes genomes one at a time and takes their fitness in any order, with
 /// more genomes proposed before earlier results arrive: for asynchronous evaluation, where every
@@ -116,9 +118,18 @@ pub struct SteadyGa<R: Representation, S, C, M> {
     // the second child of the last crossover, proposed next
     queued: Option<R::Genome>,
     population: Population<R::Genome>,
+    // a hash of each genome of the population, in its order, to find a genome by comparing only
+    // those with its hash; rebuilt after a checkpoint
+    #[cfg_attr(feature = "serde", serde(skip))]
+    hashes: Vec<u64>,
     evaluations: u64,
     best: Option<Individual<R::Genome>>,
     best_evaluation: u64,
+}
+
+// a genome's hash, which only narrows down the genomes it's compared with
+fn hash<G: Genome>(genome: &G) -> u64 {
+    GenomeHashing::default().hash_one(genome)
 }
 
 // how many times a child identical to a parent is bred again
@@ -153,6 +164,7 @@ impl<R: Representation, S, C, M> SteadyGa<R, S, C, M> {
             initial_proposed: 0,
             queued: None,
             population: Population::new(Vec::new()),
+            hashes: Vec::new(),
             evaluations: 0,
             best: None,
             best_evaluation: 0,
@@ -202,9 +214,23 @@ where
 
     // whether `genome` is in the population
     fn contains(&self, genome: &R::Genome) -> bool {
-        self.population
+        let hash = hash(genome);
+        self.hashes
             .iter()
-            .any(|individual| individual.genome() == genome)
+            .zip(self.population.iter())
+            .any(|(&other, individual)| other == hash && individual.genome() == genome)
+    }
+
+    // the hashes of the population, after a checkpoint
+    fn rehash(&mut self) {
+        if self.hashes.len() != self.population.len() {
+            self.hashes.clear();
+            self.hashes.extend(
+                self.population
+                    .iter()
+                    .map(|individual| hash(individual.genome())),
+            );
+        }
     }
 }
 
@@ -234,20 +260,25 @@ where
             return self.representation.random_genome(&mut self.rng);
         }
         // the second child of the last crossover, unless it joined the population meanwhile
+        self.rehash();
         if let Some(genome) = self.queued.take() {
             if !self.contains(&genome) {
                 return genome;
             }
         }
+        self.rehash();
         let mut children = self.breed();
+        // whether each child is in the population, found once
+        let mut present = children.each_ref().map(|child| self.contains(child));
         for _ in 1..ATTEMPTS {
-            if children.iter().any(|child| !self.contains(child)) {
+            if present != [true, true] {
                 break;
             }
             children = self.breed();
+            present = children.each_ref().map(|child| self.contains(child));
         }
         let [a, b] = children;
-        match (self.contains(&a), self.contains(&b)) {
+        match (present[0], present[1]) {
             (false, false) => {
                 // twins would be the same evaluation twice
                 if b != a {
@@ -277,10 +308,12 @@ where
             self.best = Some(individual.clone());
             self.best_evaluation = self.evaluations;
         }
+        self.rehash();
         if self.contains(individual.genome()) {
             return Ok(Some(individual));
         }
         if self.population.len() < self.population_size {
+            self.hashes.push(hash(individual.genome()));
             self.population.push(individual);
             return Ok(None);
         }
@@ -301,6 +334,7 @@ where
         if objective.is_better(fitness_at(worst), fitness) {
             return Ok(Some(individual));
         }
+        self.hashes[worst] = hash(individual.genome());
         Ok(Some(std::mem::replace(
             &mut self.population[worst],
             individual,
