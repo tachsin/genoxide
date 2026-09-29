@@ -8,6 +8,9 @@
 //! cargo bench --bench instructions
 //! ```
 
+use genoxide::Objective::Minimize;
+use genoxide::multi::problems::{Dtlz2, MultiProblem, Zdt1};
+use genoxide::multi::{self, MultiFitnessFunction};
 use genoxide::prelude::*;
 use gungraun::prelude::*;
 use std::hint::black_box;
@@ -469,6 +472,97 @@ fn local_search_steps(mut search: TourSearch) -> TourSearch {
     black_box(search)
 }
 
+type ZdtNsga2 = Nsga2<Real, SimulatedBinaryCrossover, PolynomialMutation, 2>;
+
+// NSGA-II on ZDT1 (30 genes, 100 individuals), with its initial population evaluated
+fn evaluated_nsga2(len: usize) -> ZdtNsga2 {
+    let mut nsga2 = Nsga2::builder(Real::uniform(len, 0.0..=1.0).unwrap(), [Minimize; 2])
+        .population_size(100)
+        .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / len as f64, 20.0).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    tell_multi(&mut nsga2, Zdt1::new(len));
+    nsga2
+}
+
+type DtlzNsga3 = Nsga3<Real, SimulatedBinaryCrossover, PolynomialMutation, 3>;
+
+// NSGA-III on DTLZ2 with 3 objectives (12 genes, 91 directions), with its initial population
+// evaluated
+fn evaluated_nsga3(divisions: usize) -> DtlzNsga3 {
+    let problem = Dtlz2::<3>::new(12);
+    let mut nsga3 = Nsga3::builder(
+        problem.representation(),
+        [Minimize; 3],
+        multi::das_dennis::<3>(divisions),
+    )
+    .crossover(SimulatedBinaryCrossover::new(30.0).unwrap())
+    .mutate(PolynomialMutation::per_gene(1.0 / 12.0, 20.0).unwrap())
+    .seed(0)
+    .build()
+    .unwrap();
+    tell_multi(&mut nsga3, problem);
+    nsga3
+}
+
+fn tell_multi<A, F, const M: usize>(algorithm: &mut A, problem: F)
+where
+    A: MultiObjectiveAlgorithm<M, Genome = Reals>,
+    F: MultiFitnessFunction<Reals, M, Output = [f64; M]>,
+{
+    let scores: Vec<multi::Scores<M>> = algorithm
+        .ask()
+        .iter()
+        .map(|x| multi::Scores::new(problem.evaluate(x)))
+        .collect();
+    algorithm.tell(&scores).unwrap();
+}
+
+// the scores of `size` random points on and behind the positive eighth of the unit sphere
+fn sphere_scores(size: usize) -> Vec<multi::Scores<3>> {
+    let problem = Dtlz2::<3>::new(12);
+    let real = problem.representation();
+    let mut rng = StreamRng::seed_from_u64(0);
+    (0..size)
+        .map(|_| multi::Scores::new(problem.evaluate(&real.random_genome(&mut rng))))
+        .collect()
+}
+
+// one generation of NSGA-II: breeding, evaluation, non-dominated sorting and crowding
+#[library_benchmark]
+#[bench::zdt1_30(setup = evaluated_nsga2, args = (30))]
+fn nsga2_generation(mut nsga2: ZdtNsga2) -> ZdtNsga2 {
+    tell_multi(&mut nsga2, Zdt1::new(30));
+    black_box(nsga2)
+}
+
+// one generation of NSGA-III: breeding, evaluation, sorting, normalization and niching
+#[library_benchmark]
+#[bench::dtlz2_91(setup = evaluated_nsga3, args = (12))]
+fn nsga3_generation(mut nsga3: DtlzNsga3) -> DtlzNsga3 {
+    tell_multi(&mut nsga3, Dtlz2::<3>::new(12));
+    black_box(nsga3)
+}
+
+#[library_benchmark]
+#[bench::three_objectives_200(setup = sphere_scores, args = (200))]
+fn non_dominated_sort(scores: Vec<multi::Scores<3>>) -> Vec<Vec<usize>> {
+    black_box(multi::non_dominated_sort(&scores, &[Minimize; 3]))
+}
+
+#[library_benchmark]
+#[bench::three_objectives_200(setup = sphere_scores, args = (200))]
+fn hypervolume(scores: Vec<multi::Scores<3>>) -> f64 {
+    let front: Vec<[f64; 3]> = scores.iter().filter_map(multi::Scores::values).collect();
+    black_box(multi::indicator::hypervolume(
+        &front,
+        &[4.0; 3],
+        &[Minimize; 3],
+    ))
+}
+
 #[library_benchmark]
 #[bench::one_max_100_50_generations(100)]
 fn run(len: usize) -> Outcome<Bits> {
@@ -507,7 +601,11 @@ library_benchmark_group!(
         run,
         islands_generation,
         steady_results,
-        run_observed
+        run_observed,
+        nsga2_generation,
+        nsga3_generation,
+        non_dominated_sort,
+        hypervolume
     ]
 );
 

@@ -47,10 +47,65 @@ pub fn dominates<const M: usize>(
         // equally infeasible
         return false;
     }
-    pareto_dominates(
-        &minimized(a.raw(), objectives),
-        &minimized(b.raw(), objectives),
-    )
+    pareto_dominates_in(a.raw(), b.raw(), objectives)
+}
+
+// whether `a` dominates `b` and whether `b` dominates `a`: `dominates` both ways, in one pass
+// over the values
+pub(crate) fn dominance<const M: usize>(
+    a: &Scores<M>,
+    b: &Scores<M>,
+    objectives: &[Objective; M],
+) -> (bool, bool) {
+    match (a.is_valid(), b.is_valid()) {
+        (true, true) => {}
+        (a_valid, b_valid) => return (a_valid && !b_valid, b_valid && !a_valid),
+    }
+    if a.violation() != b.violation() {
+        let smaller = a.violation() < b.violation();
+        return (smaller, !smaller);
+    }
+    if a.violation() > 0.0 {
+        // equally infeasible
+        return (false, false);
+    }
+    let (a, b) = (a.raw(), b.raw());
+    let (mut a_better, mut b_better) = (false, false);
+    for j in 0..M {
+        let (x, y) = match objectives[j] {
+            Objective::Minimize => (a[j], b[j]),
+            Objective::Maximize => (b[j], a[j]),
+        };
+        a_better |= x < y;
+        b_better |= y < x;
+        if a_better && b_better {
+            return (false, false);
+        }
+    }
+    (a_better, b_better)
+}
+
+// Pareto dominance between non-NaN values in the direction of each objective: comparing the
+// values the other way round for a maximized objective is comparing their negations, without
+// building the minimized arrays
+#[inline]
+fn pareto_dominates_in<const M: usize>(
+    a: &[f64; M],
+    b: &[f64; M],
+    objectives: &[Objective; M],
+) -> bool {
+    let mut better = false;
+    for j in 0..M {
+        let (x, y) = match objectives[j] {
+            Objective::Minimize => (a[j], b[j]),
+            Objective::Maximize => (b[j], a[j]),
+        };
+        if x > y {
+            return false;
+        }
+        better |= x < y;
+    }
+    better
 }
 
 // the values with every objective turned into one to minimize
@@ -61,14 +116,19 @@ fn minimized<const M: usize>(values: &[f64; M], objectives: &[Objective; M]) -> 
     })
 }
 
-// Pareto dominance between minimized, non-NaN values
-fn pareto_dominates(a: &[f64], b: &[f64]) -> bool {
-    let mut better = false;
-    for (x, y) in a.iter().zip(b) {
-        if x > y {
+// Pareto dominance between minimized, non-NaN values, of `a` over `b` where `a` comes before `b`
+// in lexicographic order, so that `a[0] <= b[0]`: only the other values can make it fail
+#[inline]
+fn dominates_later<const M: usize>(a: &[f64; M], b: &[f64; M]) -> bool {
+    if M == 0 {
+        return false;
+    }
+    let mut better = a[0] < b[0];
+    for j in 1..M {
+        if a[j] > b[j] {
             return false;
         }
-        better |= x < y;
+        better |= a[j] < b[j];
     }
     better
 }
@@ -79,9 +139,22 @@ pub(crate) fn gains<const M: usize>(
     old: &[Scores<M>],
     objectives: &[Objective; M],
 ) -> bool {
+    // a candidate equal to a member of `old` is no gain. Most of a front often is, in the same
+    // order, as survivors keep theirs: the member after the last one found is checked first,
+    // which finds them without comparing each with the whole previous front
+    let mut next = 0;
     new.iter().any(|candidate| {
-        !old.iter()
-            .any(|other| other == candidate || dominates(other, candidate, objectives))
+        if old.get(next) == Some(candidate) {
+            next += 1;
+            return false;
+        }
+        !old.iter().enumerate().any(|(position, other)| {
+            if other == candidate {
+                next = position + 1;
+                return true;
+            }
+            dominates(other, candidate, objectives)
+        })
     })
 }
 
@@ -113,7 +186,7 @@ pub fn non_dominated_sort<const M: usize>(
     scores: &[Scores<M>],
     objectives: &[Objective; M],
 ) -> Vec<Vec<usize>> {
-    let mut feasible = Vec::new();
+    let mut feasible = Vec::with_capacity(scores.len());
     let mut infeasible = Vec::new();
     let mut invalid = Vec::new();
     for (index, score) in scores.iter().enumerate() {
@@ -134,12 +207,17 @@ pub fn non_dominated_sort<const M: usize>(
     } else {
         ens_ranks(&points)
     };
-    let mut fronts: Vec<Vec<usize>> = Vec::new();
-    for (position, &rank) in ranks.iter().enumerate() {
-        if rank >= fronts.len() {
-            fronts.resize(rank + 1, Vec::new());
+    // each front with room for its members, which are added in ascending order
+    let mut sizes: Vec<usize> = Vec::new();
+    for &rank in &ranks {
+        if rank >= sizes.len() {
+            sizes.resize(rank + 1, 0);
         }
-        fronts[rank].push(feasible[position]);
+        sizes[rank] += 1;
+    }
+    let mut fronts: Vec<Vec<usize>> = sizes.iter().map(|&size| Vec::with_capacity(size)).collect();
+    for (&rank, &index) in ranks.iter().zip(&feasible) {
+        fronts[rank].push(index);
     }
     // one front per violation, smallest first; the sort is stable, so indices stay ascending
     infeasible.sort_by(|&a, &b| scores[a].violation().total_cmp(&scores[b].violation()));
@@ -149,23 +227,23 @@ pub fn non_dominated_sort<const M: usize>(
     if !invalid.is_empty() {
         fronts.push(invalid);
     }
-    for front in &mut fronts {
-        front.sort_unstable();
-    }
+    debug_assert!(fronts.iter().all(|front| front.is_sorted()));
     fronts
 }
 
 // the positions of `points`, lexicographically sorted, the earlier position on ties
 fn lexicographic_order<const M: usize>(points: &[[f64; M]]) -> Vec<usize> {
     let mut order: Vec<usize> = (0..points.len()).collect();
-    order.sort_by(|&a, &b| {
-        points[a]
-            .iter()
-            .zip(&points[b])
-            .map(|(x, y)| x.partial_cmp(y).unwrap_or(Ordering::Equal))
-            .find(|ordering| ordering.is_ne())
-            .unwrap_or(Ordering::Equal)
-            .then(a.cmp(&b))
+    // a total order, ties broken by position: an unstable sort gives the stable sort's order
+    order.sort_unstable_by(|&a, &b| {
+        let (x, y) = (&points[a], &points[b]);
+        for j in 0..M {
+            match x[j].partial_cmp(&y[j]) {
+                Some(Ordering::Equal) | None => {}
+                Some(ordering) => return ordering,
+            }
+        }
+        a.cmp(&b)
     });
     order
 }
@@ -200,21 +278,22 @@ fn two_objective_ranks<const M: usize>(points: &[[f64; M]]) -> Vec<usize> {
 // front does too, so a binary search finds the first front that doesn't dominate it
 fn ens_ranks<const M: usize>(points: &[[f64; M]]) -> Vec<usize> {
     let mut ranks = vec![0; points.len()];
-    let mut fronts: Vec<Vec<usize>> = Vec::new();
+    // the points of each front, in the order they were added
+    let mut fronts: Vec<Vec<[f64; M]>> = Vec::new();
     for position in lexicographic_order(points) {
         let point = &points[position];
-        let dominated_by = |front: &Vec<usize>| {
+        let dominated_by = |front: &Vec<[f64; M]>| {
             // the most recently added points are the most likely to dominate
             front
                 .iter()
                 .rev()
-                .any(|&other| pareto_dominates(&points[other], point))
+                .any(|other| dominates_later(other, point))
         };
         let rank = fronts.partition_point(dominated_by);
         if rank == fronts.len() {
             fronts.push(Vec::new());
         }
-        fronts[rank].push(position);
+        fronts[rank].push(*point);
         ranks[position] = rank;
     }
     ranks
@@ -255,9 +334,15 @@ pub fn crowding_distance<const M: usize>(scores: &[Scores<M>], front: &[usize]) 
         return distances;
     }
     let mut order: Vec<usize> = (0..front.len()).collect();
+    // the values of the objective, by position in the front
+    let mut values = vec![0.0; front.len()];
     for objective in 0..M {
-        let value = |position: usize| scores[front[position]].raw()[objective];
-        order.sort_by(|&a, &b| value(a).total_cmp(&value(b)).then(a.cmp(&b)));
+        for (value, &index) in values.iter_mut().zip(front) {
+            *value = scores[index].raw()[objective];
+        }
+        let value = |position: usize| values[position];
+        // a total order, ties broken by position: an unstable sort gives the stable sort's order
+        order.sort_unstable_by(|&a, &b| value(a).total_cmp(&value(b)).then(a.cmp(&b)));
         let (first, last) = (order[0], order[order.len() - 1]);
         let range = value(last) - value(first);
         // a flat objective has no ends: with every value equal, the first and last in the order
@@ -465,6 +550,31 @@ mod tests {
             let five_objectives = [Minimize, Maximize, Minimize, Minimize, Maximize];
             prop_assert_eq!(non_dominated_sort(&five, &five_objectives), reference_sort(&five, &five_objectives));
             prop_assert_eq!(non_dominated_sort(&one, &[Minimize]), reference_sort(&one, &[Minimize]));
+        }
+
+        #[test]
+        fn dominance_both_ways_matches_dominates(
+            a in any_scores::<3>(), b in any_scores::<3>(), objectives in any_objectives::<3>(),
+        ) {
+            prop_assert_eq!(
+                super::dominance(&a, &b, &objectives),
+                (dominates(&a, &b, &objectives), dominates(&b, &a, &objectives))
+            );
+        }
+
+        #[test]
+        fn gains_match_the_definition(
+            new in prop::collection::vec(any_scores::<2>(), 0..40),
+            old in prop::collection::vec(any_scores::<2>(), 0..40),
+            objectives in any_objectives::<2>(),
+        ) {
+            let expected = |new: &[Scores<2>], old: &[Scores<2>]| new.iter().any(|candidate| {
+                !old.iter().any(|other| other == candidate || dominates(other, candidate, &objectives))
+            });
+            prop_assert_eq!(gains(&new, &old, &objectives), expected(&new, &old));
+            // most of the new front in the same order as in the old one
+            let old: Vec<Scores<2>> = new.iter().skip(1).step_by(2).chain(&old).copied().collect();
+            prop_assert_eq!(gains(&new, &old, &objectives), expected(&new, &old));
         }
 
         #[test]

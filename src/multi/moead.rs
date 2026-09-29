@@ -27,6 +27,26 @@ pub enum Decomposition {
     },
 }
 
+// whether `a` is better than `b` for a subproblem: the smaller violation, and then the smaller
+// decomposition value, from `a_value` and `b_value` only if the violations are equal; invalid is
+// the worst
+fn improves<const M: usize>(
+    a: &Scores<M>,
+    b: &Scores<M>,
+    a_value: impl FnOnce() -> f64,
+    b_value: impl FnOnce() -> f64,
+) -> bool {
+    match (a.is_valid(), b.is_valid()) {
+        (false, _) => return false,
+        (true, false) => return true,
+        (true, true) => {}
+    }
+    if a.violation() != b.violation() {
+        return a.violation() < b.violation();
+    }
+    a_value() < b_value()
+}
+
 impl Decomposition {
     // the value of minimized objective values for a weight vector and the ideal point
     fn value<const M: usize>(
@@ -276,21 +296,20 @@ where
 
     // whether `a` is better than `b` for a subproblem: the smaller violation, and then the
     // smaller decomposition value; invalid is the worst
+    #[cfg(test)]
     fn improves(&self, a: &Scores<M>, b: &Scores<M>, subproblem: usize) -> bool {
-        match (a.is_valid(), b.is_valid()) {
-            (false, _) => return false,
-            (true, false) => return true,
-            (true, true) => {}
-        }
-        if a.violation() != b.violation() {
-            return a.violation() < b.violation();
-        }
-        let weights = &self.weights[subproblem];
-        let value = |s: &Scores<M>| {
-            self.decomposition
-                .value(&minimized(s, &self.objectives), weights, &self.ideal)
-        };
-        value(a) < value(b)
+        improves(
+            a,
+            b,
+            || self.value(a, subproblem),
+            || self.value(b, subproblem),
+        )
+    }
+
+    // the decomposition value of scores for a subproblem
+    fn value(&self, scores: &Scores<M>, subproblem: usize) -> f64 {
+        let values = minimized(scores, &self.objectives);
+        (self.decomposition).value(&values, &self.weights[subproblem], &self.ideal)
     }
 
     // the children replace the neighbors they improve on, in a random order
@@ -306,24 +325,36 @@ where
         }
         // the child in each slot, if a child replaced its solution
         let mut holders: Vec<Option<usize>> = vec![None; size];
+        // the decomposition value of each slot's solution for its subproblem, once needed: the
+        // ideal point doesn't move while children replace solutions
+        let mut values: Vec<Option<f64>> = vec![None; size];
+        let mut neighbors = Vec::new();
         for subproblem in order {
             let child = &children[subproblem];
             let scores = child.fitness().unwrap_or(Scores::invalid());
-            let mut neighbors = self.neighborhoods[subproblem].clone();
+            neighbors.clone_from(&self.neighborhoods[subproblem]);
             for i in (1..neighbors.len()).rev() {
                 neighbors.swap(i, self.rng.below(i + 1));
             }
             let mut replaced = 0;
-            for neighbor in neighbors {
+            for &neighbor in &neighbors {
                 if replaced == self.max_replacements {
                     break;
                 }
                 let current = self.population[neighbor]
                     .fitness()
                     .unwrap_or(Scores::invalid());
-                if self.improves(&scores, &current, neighbor) {
+                let mut child_value = None;
+                let better = improves(
+                    &scores,
+                    &current,
+                    || *child_value.insert(self.value(&scores, neighbor)),
+                    || *values[neighbor].get_or_insert_with(|| self.value(&current, neighbor)),
+                );
+                if better {
                     self.population[neighbor] = child.clone();
                     holders[neighbor] = Some(subproblem);
+                    values[neighbor] = child_value;
                     replaced += 1;
                 }
             }
@@ -608,13 +639,13 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
         if self.max_replacements == 0 {
             return invalid("max_replacements", "must be at least 1".to_string());
         }
-        if let Decomposition::Pbi { theta } = self.decomposition {
-            if !(theta >= 0.0 && theta.is_finite()) {
-                return invalid(
-                    "theta",
-                    format!("must be 0 or more and finite, got {theta}"),
-                );
-            }
+        if let Decomposition::Pbi { theta } = self.decomposition
+            && !(theta >= 0.0 && theta.is_finite())
+        {
+            return invalid(
+                "theta",
+                format!("must be 0 or more and finite, got {theta}"),
+            );
         }
         let (crossover_rate, mutation_rate) = check_rates(
             self.crossover_rate,

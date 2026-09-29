@@ -60,21 +60,25 @@ pub fn hypervolume<const M: usize>(
     objectives: &[Objective; M],
 ) -> f64 {
     let reference = minimized(reference, objectives);
-    let points: Vec<Vec<f64>> = front
+    let mut points: Vec<[f64; M]> = front
         .iter()
         .map(|point| minimized(point, objectives))
         .filter(|point| point.iter().zip(&reference).all(|(x, r)| x < r))
-        .map(|point| point.to_vec())
         .collect();
     if points.is_empty() {
         return 0.0;
     }
-    hypervolume_of(points, &reference)
+    hypervolume_of(&mut points, M, &reference)
 }
 
-// the hypervolume of minimized points that all dominate the reference point
-fn hypervolume_of(mut points: Vec<Vec<f64>>, reference: &[f64]) -> f64 {
-    let dimensions = reference.len();
+// the hypervolume of minimized points that all dominate the reference point, in their first
+// `dimensions` values. The result depends only on the points, not on their order: every sort
+// is by one value at a time, and points with equal values add nothing between them.
+fn hypervolume_of<const M: usize>(
+    points: &mut [[f64; M]],
+    dimensions: usize,
+    reference: &[f64; M],
+) -> f64 {
     match dimensions {
         0 => 0.0,
         1 => points
@@ -84,10 +88,40 @@ fn hypervolume_of(mut points: Vec<Vec<f64>>, reference: &[f64]) -> f64 {
         2 => {
             points.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])));
             let (mut volume, mut ceiling) = (0.0, reference[1]);
-            for point in &points {
+            for point in points.iter() {
                 if point[1] < ceiling {
                     volume += (reference[0] - point[0]) * (ceiling - point[1]);
                     ceiling = point[1];
+                }
+            }
+            volume
+        }
+        3 => {
+            // slices along the third objective, with the points below kept sorted as the
+            // 2-dimensional case sorts them, instead of sorting a copy for each slice
+            points.sort_by(|a, b| a[2].total_cmp(&b[2]));
+            let mut volume = 0.0;
+            let mut below: Vec<[f64; 2]> = Vec::with_capacity(points.len());
+            for (index, point) in points.iter().enumerate() {
+                let flat = [point[0], point[1]];
+                let at = below.partition_point(|other| {
+                    other[0]
+                        .total_cmp(&flat[0])
+                        .then(other[1].total_cmp(&flat[1]))
+                        .is_le()
+                });
+                below.insert(at, flat);
+                let top = points.get(index + 1).map_or(reference[2], |next| next[2]);
+                let thickness = top - point[2];
+                if thickness > 0.0 {
+                    let (mut area, mut ceiling) = (0.0, reference[1]);
+                    for &[x, y] in &below {
+                        if y < ceiling {
+                            area += (reference[0] - x) * (ceiling - y);
+                            ceiling = y;
+                        }
+                    }
+                    volume += thickness * area;
                 }
             }
             volume
@@ -98,15 +132,16 @@ fn hypervolume_of(mut points: Vec<Vec<f64>>, reference: &[f64]) -> f64 {
             let last = dimensions - 1;
             points.sort_by(|a, b| a[last].total_cmp(&b[last]));
             let mut volume = 0.0;
-            let mut below: Vec<Vec<f64>> = Vec::with_capacity(points.len());
-            for (index, point) in points.iter().enumerate() {
-                below.push(point[..last].to_vec());
+            let mut below: Vec<[f64; M]> = Vec::with_capacity(points.len());
+            for index in 0..points.len() {
                 let top = points
                     .get(index + 1)
                     .map_or(reference[last], |next| next[last]);
-                let thickness = top - point[last];
+                let thickness = top - points[index][last];
                 if thickness > 0.0 {
-                    volume += thickness * hypervolume_of(below.clone(), &reference[..last]);
+                    below.clear();
+                    below.extend_from_slice(&points[..=index]);
+                    volume += thickness * hypervolume_of(&mut below, last, reference);
                 }
             }
             volume
@@ -662,7 +697,72 @@ mod tests {
         )
     }
 
+    // the hypervolume by slicing, as it was computed before its slices reused buffers: a copy
+    // of the points below each slice, sorted again. The faster one must give the same bits.
+    fn sliced(mut points: Vec<Vec<f64>>, reference: &[f64]) -> f64 {
+        let dimensions = reference.len();
+        match dimensions {
+            1 => points
+                .iter()
+                .map(|p| reference[0] - p[0])
+                .fold(0.0, f64::max),
+            2 => {
+                points.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])));
+                let (mut volume, mut ceiling) = (0.0, reference[1]);
+                for point in &points {
+                    if point[1] < ceiling {
+                        volume += (reference[0] - point[0]) * (ceiling - point[1]);
+                        ceiling = point[1];
+                    }
+                }
+                volume
+            }
+            _ => {
+                let last = dimensions - 1;
+                points.sort_by(|a, b| a[last].total_cmp(&b[last]));
+                let mut volume = 0.0;
+                let mut below: Vec<Vec<f64>> = Vec::new();
+                for (index, point) in points.iter().enumerate() {
+                    below.push(point[..last].to_vec());
+                    let top = points
+                        .get(index + 1)
+                        .map_or(reference[last], |next| next[last]);
+                    let thickness = top - point[last];
+                    if thickness > 0.0 {
+                        volume += thickness * sliced(below.clone(), &reference[..last]);
+                    }
+                }
+                volume
+            }
+        }
+    }
+
+    fn same_as_sliced<const M: usize>(front: &[[f64; M]], reference: f64) -> bool {
+        let inside: Vec<Vec<f64>> = front
+            .iter()
+            .filter(|p| p.iter().all(|&x| x < reference))
+            .map(|p| p.to_vec())
+            .collect();
+        let expected = if inside.is_empty() {
+            0.0
+        } else {
+            sliced(inside, &[reference; M])
+        };
+        hypervolume(front, &[reference; M], &[Minimize; M]).to_bits() == expected.to_bits()
+    }
+
     proptest! {
+        #[test]
+        fn hypervolume_is_the_sliced_one_to_the_bit(
+            three in prop::collection::vec(prop::array::uniform::<_, 3>(prop_oneof![(0..6).prop_map(f64::from), 0.0..4.0]), 0..60),
+            four in prop::collection::vec(prop::array::uniform::<_, 4>(prop_oneof![(0..6).prop_map(f64::from), 0.0..4.0]), 0..30),
+            five in prop::collection::vec(prop::array::uniform::<_, 5>(prop_oneof![(0..6).prop_map(f64::from), 0.0..4.0]), 0..15),
+        ) {
+            prop_assert!(same_as_sliced(&three, 4.5));
+            prop_assert!(same_as_sliced(&four, 4.5));
+            prop_assert!(same_as_sliced(&five, 4.5));
+        }
+
         #[test]
         fn hypervolume_matches_inclusion_exclusion(
             two in any_front::<2>(10),
