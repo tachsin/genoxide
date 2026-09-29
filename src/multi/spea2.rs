@@ -214,7 +214,8 @@ fn truncate(survivors: &mut Vec<usize>, distances: &[Vec<f64>], size: usize) {
                 .filter(|&&b| b != a)
                 .map(|&b| distances[a][b])
                 .collect();
-            row.sort_by(f64::total_cmp);
+            // equal under total_cmp means the same bits: an unstable sort gives the same row
+            row.sort_unstable_by(f64::total_cmp);
             row
         })
         .collect();
