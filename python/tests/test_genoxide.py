@@ -9,6 +9,7 @@ import signal
 import subprocess
 import sys
 import threading
+import weakref
 
 import numpy as np
 import pytest
@@ -345,9 +346,19 @@ ga = gx.Ga(
     seed=3,
 )
 de = gx.De(real, population_size=60, parallel_breeding=True, objective="minimize", seed=3)
-for algorithm in (ga, de):
-    result = algorithm.run(lambda x: (x * x).sum(axis=1), generations=20, batch=True)
-    print(repr(result.best_fitness), result.best_genome.tolist(), result.evaluations)
+es = gx.Es(real, parents=10, offspring=70, parallel_breeding=True, objective="minimize", seed=3)
+islands = gx.Islands(
+    [
+        gx.De(real, population_size=30, parallel_breeding=True, objective="minimize", seed=seed)
+        for seed in range(3)
+    ]
+)
+for algorithm in (ga, de, es, islands):
+    for parallel in (False, True):
+        result = algorithm.run(
+            lambda x: (x * x).sum(axis=1), generations=20, batch=True, parallel=parallel
+        )
+        print(repr(result.best_fitness), result.best_genome.tolist(), result.evaluations)
 """
 
 
@@ -362,7 +373,7 @@ def test_parallel_breeding_is_the_same_on_any_number_of_threads():
         ).stdout
 
     one = on_threads(1)
-    assert len(one.splitlines()) == 2
+    assert len(one.splitlines()) == 8
     assert on_threads(2) == one
     assert on_threads(8) == one
 
@@ -1368,3 +1379,55 @@ def test_the_package_has_the_license_files():
     files = importlib.metadata.distribution("genoxide").files or []
     names = {pathlib.PurePath(str(file)).name for file in files}
     assert {"LICENSE-MIT", "LICENSE-APACHE"} <= names, sorted(names)
+
+
+def test_a_batch_matrix_is_reused_when_python_keeps_none():
+    kept = []
+    copies = []
+    reused = []
+    first = None
+
+    def keeping(x):
+        kept.append(x)
+        copies.append(x.copy())
+        return (x * x).sum(axis=1)
+
+    def forgetting(x):
+        nonlocal first
+        if first is None:
+            first = weakref.ref(x)
+        else:
+            reused.append(first() is x)
+        return (x * x).sum(axis=1)
+
+    pso = gx.Pso(gx.Real((-1.0, 1.0), length=5), population_size=20, objective="minimize", seed=1)
+    one = pso.run(keeping, generations=10, batch=True)
+    # what the function kept never changes
+    assert all(np.array_equal(a, b) for a, b in zip(kept, copies))
+    assert len({id(x) for x in kept}) == 11
+    again = pso.run(forgetting, generations=10, batch=True)
+    # the same matrix, written again
+    assert reused == [True] * 10
+    assert one.best_fitness == again.best_fitness
+
+
+def test_a_batch_matrix_that_changed_is_not_reused():
+    def read_only(x):
+        x.flags.writeable = False
+        return (x * x).sum(axis=1)
+
+    def writing(x):
+        scores = (x * x).sum(axis=1)
+        x[:] = 0.0
+        return scores
+
+    def reshaping(x):
+        scores = (x * x).sum(axis=1)
+        x.resize((x.size,), refcheck=False)
+        return scores
+
+    pso = gx.Pso(gx.Real((-1.0, 1.0), length=5), population_size=20, objective="minimize", seed=1)
+    one = pso.run(lambda x: (x * x).sum(axis=1), generations=10, batch=True)
+    for function in (read_only, writing, reshaping):
+        other = pso.run(function, generations=10, batch=True)
+        assert other.best_fitness == one.best_fitness, function.__name__

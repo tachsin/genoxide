@@ -4,6 +4,7 @@
 
 #![forbid(unsafe_code)]
 
+mod checkpoint;
 mod config;
 mod control;
 mod errors;

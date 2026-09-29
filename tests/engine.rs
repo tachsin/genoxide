@@ -635,3 +635,116 @@ fn control_schedule_as_in_python() {
     assert_eq!(outcome.evaluations(), 757);
     assert_eq!(outcome.best_fitness().score(), Some(312.0610000182302));
 }
+
+#[test]
+fn evolution_strategy_as_in_python() {
+    // python/tests/test_es_islands.py has the same run through the Python package, with the same
+    // result
+    use genoxide::problems::{Problem, Sphere};
+    let problem = Sphere::new(5);
+    let es = Es::builder(problem.representation())
+        .parents(4)
+        .offspring(20)
+        .recombination(es::Recombination::Dominant { rho: 2 })
+        .selection(es::Selection::Plus)
+        .step_sizes(es::StepSizes::One)
+        .initial_step(0.2)
+        .minimize()
+        .seed(3)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(es, problem)
+        .stop_when(Stop::generations(40))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.evaluations(), 804);
+    assert_eq!(outcome.best_fitness().score(), Some(4.633969563787936e-05));
+}
+
+#[test]
+fn self_adaptive_ga_as_in_python() {
+    // python/tests/test_es_islands.py has the same run through the Python package
+    use genoxide::problems::{Problem, Sphere};
+    let problem = Sphere::new(5);
+    let ga = Ga::builder(AdaptiveReal::new(problem.representation(), 0.2).unwrap())
+        .population_size(10)
+        .select(Tournament::new(2).unwrap())
+        .crossover(UniformCrossover::new())
+        .mutate(
+            SelfAdaptiveMutation::with_learning_rate(0.5)
+                .unwrap()
+                .with_min_step(1e-6)
+                .unwrap(),
+        )
+        .scheme(Scheme::MuCommaLambda { lambda: 40 })
+        .minimize()
+        .seed(4)
+        .build()
+        .unwrap();
+    // the problem evaluates the genes, without the step size
+    let fitness = |genome: &AdaptiveReals| problem.evaluate(genome.genes());
+    let outcome = Engine::new(ga, fitness)
+        .stop_when(Stop::generations(40))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.evaluations(), 1610);
+    assert_eq!(outcome.best_fitness().score(), Some(1.6145262132260095e-07));
+}
+
+#[test]
+fn islands_as_in_python() {
+    // python/tests/test_es_islands.py has the same runs through the Python package: islands of
+    // GAs with a random topology, and of DEs fully connected
+    use genoxide::algorithm::islands::Topology;
+    use genoxide::problems::{Problem, Rastrigin};
+    let problem = Rastrigin::new(6);
+    let gas = (0..3)
+        .map(|seed| {
+            Ga::builder(problem.representation())
+                .population_size(20)
+                .select(Tournament::new(3).unwrap())
+                .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
+                .mutate(PolynomialMutation::per_gene(1.0 / 6.0, 20.0).unwrap())
+                .minimize()
+                .seed(seed)
+                .build()
+                .unwrap()
+        })
+        .collect();
+    let islands = Islands::builder(gas)
+        .topology(Topology::Random)
+        .interval(5)
+        .migrants(2)
+        .seed(9)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(islands, problem)
+        .stop_when(Stop::generations(50))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.evaluations(), 2684);
+    assert_eq!(outcome.best_fitness().score(), Some(0.5250156249865867));
+
+    let des = (0..3)
+        .map(|seed| {
+            De::builder(problem.representation())
+                .population_size(20)
+                .minimize()
+                .seed(seed)
+                .build()
+                .unwrap()
+        })
+        .collect();
+    let islands = Islands::builder(des)
+        .topology(Topology::FullyConnected)
+        .interval(7)
+        .migrants(1)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(islands, problem)
+        .stop_when(Stop::generations(50))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.evaluations(), 3060);
+    assert_eq!(outcome.best_fitness().score(), Some(6.14046463019362));
+}

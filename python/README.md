@@ -7,7 +7,8 @@
 The algorithms of [genoxide](https://github.com/tachsin/genoxide), a Rust library, with fitness functions in Python and numpy:
 
 - genetic algorithms and local search
-- differential evolution, CMA-ES and particle swarm optimization
+- differential evolution, evolution strategies, CMA-ES and particle swarm optimization
+- the island model, and checkpoints to resume a long run
 - NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives
 
 The API reference: [tachsin.github.io/genoxide/api/python](https://tachsin.github.io/genoxide/api/python/)
@@ -78,6 +79,7 @@ A fitness function takes a genome as a numpy array:
 | `Integer(bounds, length)` | `int64` |
 | `Real(bounds, length)` | `float64` |
 | `Permutation(length)` | `int64`, an ordering of `0 .. length - 1` |
+| `AdaptiveReal(real, initial_step)` | `float64`, the genes of `real`, without the step size that evolves with them |
 
 `bounds` is one pair `(low, high)` for every gene, with `length`, or a list of pairs, one per gene.
 
@@ -92,7 +94,7 @@ With `batch=True`, the function takes a whole generation as a 2-D array, a genom
 - an array of scores, or a tuple of scores and constraint violations (arrays or `(n, 1)` columns)
 - for several objectives, a 2-D array or a list with a row of objective values per genome, or a tuple of one array per objective (`return f1, f2`)
 
-It's one call per generation, and none for a generation whose children are all copies of their parents. Vectorized numpy, a GPU or a remote service pays its cost per call once per generation, not once per genome.
+It's one call per generation, and none for a generation whose children are all copies of their parents. Vectorized numpy, a GPU or a remote service pays its cost per call once per generation, not once per genome. The next call of as many genomes gets the same matrix back, written again, if the function kept no reference to it: a large matrix is allocated once per run. A function that keeps its matrix, or a view of it, gets a new one next time, and what it kept never changes.
 
 With `parallel=True`, genoxide calls a non-batch function from several threads at once. It pays off when the function releases the GIL (numpy on large arrays, waiting for I/O), or on free-threaded Python.
 
@@ -104,13 +106,14 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 |---|---|---|
 | Yes / no choices (subsets) | `Binary` | `Ga` with `UniformCrossover()` or `PointCrossover(points)`, and `BitFlip` |
 | An order (tours, sequencing) | `Permutation` | `LocalSearch`, which often beats a GA on permutations; `Ga` with `OrderCrossover()` (sequences) or `EdgeRecombinationCrossover()` (tours) |
-| Reals in ranges | `Real` | `Cmaes`; `De`; `Ga` with `SimulatedBinaryCrossover(eta)` and `PolynomialMutation(eta)` |
+| Reals in ranges | `Real` | `Cmaes`; `De`; `Es`; `Ga` with `SimulatedBinaryCrossover(eta)` and `PolynomialMutation(eta)` |
 | Several objectives | any | `Nsga2` for 2 or 3 objectives; `Nsga3` or `Moead` for more |
 
 - `Cmaes` is the strongest general choice for continuous problems with up to a few hundred genes, especially when the genes interact. Its defaults need no tuning. For multimodal functions, add `restarts="ipop"` or `"bipop"`. For thousands of genes or separable problems, `covariance="diagonal"` (sep-CMA-ES): O(n) per sample, no correlations between genes.
 - `De` often needs far fewer evaluations than a GA on continuous problems.
 - `Pso` with `ring=1` explores longer than the default global topology, for multimodal functions.
-- For smooth problems that need precise answers, the Rust library also has an evolution strategy, `Es`.
+- `Es`, an evolution strategy whose step sizes evolve with its solutions, suits smooth problems that need precise answers. A `Ga` on an `AdaptiveReal` genome with `SelfAdaptiveMutation()` is one too.
+- `Islands` of `Ga`s or `De`s evolve apart and exchange their best: more diverse than one large population, and often faster on multimodal problems.
 
 ## Algorithms
 
@@ -119,8 +122,10 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | `Ga` | all | `population_size`, `select`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1), `scheme`, `parallel_breeding` (False) |
 | `LocalSearch` | all | `neighbor` (a mutation), `neighbors` (1), `acceptance`, `restart=(patience, kicks)` |
 | `De` | real | `population_size` (100; with `l_shade`, 18 × genes, at least 4), `l_shade` (a budget of evaluations, for L-SHADE), `strategy` (`{"max_p": 0.2, "archive": 1.0}`; `"rand1"`, `"best1"`, `{"p", "archive"}`), `control` (`{"memory": 100}`; `{"f", "cr"}`, `{"min_f", "max_f", "cr"}`, `{"c"}`), `restarts` (`{"tolerance": 1e-12, "patience": 200}`; `"never"`), `parallel_breeding` (False) |
+| `Es` | real | `parents` (μ), `offspring` (λ, 5 to 7 times μ), `recombination` (`"intermediate"`; `"dominant"`), `rho` (the parents per offspring, all by default), `selection` (`"comma"`; `"plus"`), `step_sizes` (`"per_gene"`; `"one"`), `initial_step` (0.3 of each range), `parallel_breeding` (False) |
 | `Cmaes` | real | `population_size`, `restarts` (`"ipop"`, `"bipop"`), `initial_step`, `covariance` (`"full"`; `"diagonal"`) |
 | `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
+| `Islands` | those of its islands | `islands` (a list of `Ga` or of `De`, with the same genome and objective, and seeds of their own), `topology` (`"ring"`; `"fully_connected"`, `"random"`, `"isolated"`), `interval` (10 generations between migrations), `migrants` (2 copies of each island's best), `seed` (of the random topology) |
 | `Nsga2` | all | `objectives`, `population_size`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1) |
 | `Nsga3` | all | `objectives`, `reference_directions`, `crossover`, `mutation`, `population_size` (the number of reference directions), `crossover_rate` (1), `mutation_rate` (1) |
 | `Spea2` | all | `objectives`, `population_size` (the archive's), `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1) |
@@ -143,6 +148,45 @@ A solution that couldn't be scored has NaN objective values and a NaN violation.
 
 Every algorithm takes a `seed`. The same seed repeats a run exactly: one genome at a time, in batches or in parallel.
 
+```python
+import numpy as np
+import genoxide as gx
+
+def sphere(x):
+    return float(np.sum(x * x))
+
+# (5/5_I, 35)-ES: intermediate recombination of all 5 parents, comma selection
+es = gx.Es(gx.Real((-5, 5), length=5), parents=5, offspring=35, objective="minimize", seed=1)
+result = es.run(sphere, target=1e-10, evaluations=100_000)
+print(result.best_fitness, result.evaluations)
+
+# four GAs on Rastrigin, exchanging copies of their 2 best every 10 generations, in a ring
+def rastrigin(x):
+    return 10 * len(x) + float(np.sum(x**2 - 10 * np.cos(2 * np.pi * x)))
+
+islands = gx.Islands(
+    [
+        gx.Ga(
+            gx.Real((-5.12, 5.12), length=10),
+            population_size=25,
+            select=gx.Tournament(3),
+            crossover=gx.UniformCrossover(),
+            mutation=gx.PolynomialMutation(20, rate=0.1),
+            objective="minimize",
+            seed=seed,
+        )
+        for seed in range(4)
+    ],
+    topology="ring",
+    interval=10,
+    migrants=2,
+)
+result = islands.run(rastrigin, target=0.01, evaluations=500_000)
+print(result.best_fitness, result.evaluations)
+```
+
+The islands' candidates are evaluated together each generation: in one batch with `batch=True`, or in parallel with `parallel=True`. Breeding and migration are sequential, so a seeded run is the same on any number of threads. Each island counts its own evaluations: give an `l_shade` island its share of the budget.
+
 Operators:
 - **Selection:** `Tournament(size)`, `Rank(pressure)`, `Roulette()`, `StochasticUniversalSampling()`, `Truncation(fraction)`, `RandomSelection()`
 - **Crossover:**
@@ -153,6 +197,7 @@ Operators:
   - binary genomes: `BitFlip(rate=... | count=...)`
   - integer and real genomes: `UniformMutation(rate=... | count=...)`
   - real genomes: `GaussianMutation(sigma, rate=... | count=...)`, `PolynomialMutation(eta, rate=... | count=...)`
+  - adaptive real genomes: `SelfAdaptiveMutation(learning_rate, min_step)` (`1 / sqrt(genes)` and 1e-12 by default), with `UniformCrossover()`, `PointCrossover(points)` or `NoCrossover()`
   - permutations: `SwapMutation(count)`, `InversionMutation()`, `InsertionMutation()`, `ScrambleMutation()`
 - **Genetic algorithm schemes:** `Generational(elitism)` (the default, with 1), `SteadyState(replacements)`, `MuPlusLambda(offspring)`, `MuCommaLambda(offspring)`
 - **Local search acceptance:** `NotWorse()` (the default), `Improving()`, `Annealing(initial_temperature, cooling)`, `Tabu(tenure)`
@@ -260,6 +305,8 @@ result = ga.run(lambda bits: bits.sum(), generations=1_000, on_generation=report
 | `Pso` | `RunningPso` | `inertia`, `acceleration` (`(cognitive, social)`) |
 | `LocalSearch` | `RunningLocalSearch` | `neighbor`, `neighbors` |
 | `Cmaes` | `RunningCmaes` | none: CMA-ES adapts its own |
+| `Es` | `RunningEs` | none: an evolution strategy adapts its own step sizes |
+| `Islands` | `RunningIslands` | `islands`: a `RunningGa` or `RunningDe` per island, each with its settings, e.g. a mutation step per island |
 
 - Reading a setting gives the one in use, the defaults included.
 - A wrong value raises a `ValueError`, as in the constructor, and changes nothing.
@@ -323,6 +370,42 @@ print(result.best_genome.sum())  # 10
 
 Multi-objective runs have no control yet.
 
+## Checkpoints
+
+`run(..., checkpoint=path, checkpoint_every=n)` saves the run every `n` generations and when it stops, and `run(..., resume=path)` continues it later, maybe in another process, with the results of an uninterrupted run:
+
+```python
+import os
+import tempfile
+
+path = os.path.join(tempfile.gettempdir(), "genoxide-one-max.ckpt")
+ga = gx.Ga(
+    gx.Binary(200),
+    population_size=50,
+    select=gx.Tournament(3),
+    crossover=gx.UniformCrossover(),
+    mutation=gx.BitFlip(rate=1 / 200),
+    seed=1,
+)
+one_max = lambda bits: bits.sum()
+result = ga.run(
+    one_max,
+    target=200,
+    generations=5_000,
+    checkpoint=path,
+    checkpoint_every=100,
+    resume=path if os.path.exists(path) else None,
+)
+print(result.best_fitness, result.generations)
+os.remove(path)  # done: the next run starts afresh
+```
+
+- Every algorithm has them, the multi-objective ones too.
+- A checkpoint resumes only the settings that saved it: the algorithm with its operators and seed, its genome and its objectives. The fitness function, the stop conditions, `batch`, `parallel`, the callbacks and `checkpoint` can change, e.g. to run longer. `generations` and `evaluations` count from the start of the first run; `time` from the start of this one.
+- A checkpoint is saved atomically: a crash while saving keeps the previous one. After an exception in the fitness function or a callback, or Ctrl+C, the last checkpoint before it stays.
+- The file is in the Rust library's checkpoint format, with the version of genoxide that saved it: it resumes with the same version only.
+- Load only checkpoints you trust, like the program that saved them: the checksum detects accidental damage, not tampering, and a crafted checkpoint can make a run loop or fail, though never break memory safety.
+
 ## Benchmarks
 
 The package is benchmarked as a library of its own, genoxide (Python), beside the Rust library and the other libraries, on a small, matched suite: three problems, one method each, under public [rules](https://github.com/tachsin/genoxide/blob/main/docs/benchmarks/rules.md). Every library runs a problem only with its own implementation of that problem's method, set to the same written definition: a GA on OneMax 1000, DE/rand/1/bin on Rastrigin 30 (a fixed budget, measured by the time for it and the error at the end) and CMA-ES on Rosenbrock 10. Single-threaded on the same machine, 10 seeds each. More problems, and multi-objective ones, come back after these.
@@ -334,12 +417,11 @@ The package is benchmarked as a library of its own, genoxide (Python), beside th
 ## The Rust library
 
 The package covers a subset of the Rust library. These parts are only in Rust:
-- the evolution strategy `Es`, with self-adaptive mutation
-- the island model, `Islands`
 - `SteadyGa` and the asynchronous engine, for evaluations of varying duration
 - memetic search in `Ga`, and initial genomes for a population
 - operators of your own
-- checkpoints, to save and resume a run
+- islands of algorithms other than `Ga` and `De`, or of both kinds together
+- checkpoints in other formats, e.g. JSON through serde
 - observers: statistics, a hall of fame and reports
 - stop conditions combined with `and`, and custom ones
 - penalty functions for constraints, and the NaN policy: in Python, NaN is always an invalid solution
@@ -367,6 +449,13 @@ Some names differ:
 | `De(control={"f": 0.5, "cr": 0.9})` | `.control(de::Control::Fixed { f: 0.5, cr: 0.9 })`; `{"min_f", "max_f", "cr"}` for `Dither`, `{"c"}` for `Jade`, `{"memory"}` for `Shade` |
 | `De(restarts="never")`, `De(restarts={"tolerance": 1e-12, "patience": 200})` | `.restarts(de::Restarts::Never)`, `.restarts(de::Restarts::OnStagnation { tolerance: 1e-12, patience: 200 })` |
 | `Pbi(theta)` | `Decomposition::Pbi { theta }` |
+| `Es(recombination="dominant", rho=2, selection="plus", step_sizes="one")` | `.recombination(es::Recombination::Dominant { rho: 2 })`, `.selection(es::Selection::Plus)`, `.step_sizes(es::StepSizes::One)` |
+| `AdaptiveReal(real, initial_step)` | `AdaptiveReal::new(real, initial_step)?` |
+| `SelfAdaptiveMutation(learning_rate=tau, min_step=m)` | `SelfAdaptiveMutation::with_learning_rate(tau)?.with_min_step(m)?` |
+| `Islands([...], topology="fully_connected")` | `Islands::builder(vec![...]).topology(Topology::FullyConnected)` |
+| `islands.islands[i].mutation = ...` in a control | `islands.islands_mut()[i].mutate_mut()` |
+| `run(checkpoint=path, checkpoint_every=n)` | `.checkpoint_every(n, \|a\| checkpoint::save_file(a, &path))`, which saves the algorithm alone; Python's checkpoint holds the settings with it |
+| `run(resume=path)` | `checkpoint::load_file(&path)?`, with the algorithm's type |
 | `run(control=...)`, `ga.mutation = ...` in it | `Engine::control(...)`, `*ga.mutate_mut() = ...` |
 | `ga.mutation_rate = p`, `de.control = {...}`, `pso.inertia = w` in a control | `ga.set_mutation_rate(p)?`, `de.set_control(...)?`, `pso.set_inertia(w)?` |
 | `run(generations=..., time=..., ...)` | `Stop::generations(...).or(Stop::time(...))` |

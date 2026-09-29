@@ -1,7 +1,8 @@
 """Evolutionary computation in Rust, for Python.
 
-Genetic algorithms, local search, differential evolution, CMA-ES, particle swarm optimization,
-and NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives, from
+Genetic algorithms, local search, differential evolution, evolution strategies, CMA-ES, particle
+swarm optimization, the island model, and NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for
+several objectives, from
 `genoxide <https://github.com/tachsin/genoxide>`_, with Python fitness functions::
 
     import genoxide as gx
@@ -19,7 +20,8 @@ and NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives, from
     print(result.best_fitness, result.generations)
 
 A fitness function takes a genome as a numpy array (``bool`` for :class:`Binary`, ``float64`` for
-:class:`Real`, ``int64`` for :class:`Integer` and :class:`Permutation`) and returns a number,
+:class:`Real` and :class:`AdaptiveReal`, ``int64`` for :class:`Integer` and :class:`Permutation`)
+and returns a number,
 ``None`` for an invalid solution, or a tuple ``(score, constraint_violation)``. With
 ``batch=True``, it takes a whole generation as a 2-D array, a genome per row, and returns an array
 of scores: at most one call per generation, for vectorized numpy code.
@@ -36,6 +38,9 @@ A single-objective run's ``control`` callback gets the running algorithm once pe
 change its settings (parameter control, e.g. an annealed mutation step) or to re-evaluate it after
 the fitness function changed: see :class:`Running`.
 
+``run(..., checkpoint="run.ckpt", checkpoint_every=100)`` saves the run as it goes, and
+``run(..., resume="run.ckpt")`` continues it later, with the results of an uninterrupted run.
+
 Settings are checked before a run: a count, a size or an integer bound is a whole number (an
 ``int`` or a numpy integer, not a ``bool`` or a ``float``), and a real setting is a finite number.
 A wrong one is a ``ValueError`` that names it.
@@ -47,6 +52,7 @@ import json
 import math
 import numbers
 import operator
+import os
 from collections.abc import Callable, Sequence
 from dataclasses import FrozenInstanceError, dataclass
 from functools import cached_property
@@ -64,6 +70,7 @@ __all__ = [
     "Integer",
     "Real",
     "Permutation",
+    "AdaptiveReal",
     # selection
     "Tournament",
     "Rank",
@@ -91,6 +98,7 @@ __all__ = [
     "InversionMutation",
     "InsertionMutation",
     "ScrambleMutation",
+    "SelfAdaptiveMutation",
     # schemes and acceptance
     "Generational",
     "SteadyState",
@@ -106,9 +114,11 @@ __all__ = [
     # algorithms
     "Ga",
     "De",
+    "Es",
     "Cmaes",
     "Pso",
     "LocalSearch",
+    "Islands",
     "Nsga2",
     "Nsga3",
     "Spea2",
@@ -124,9 +134,11 @@ __all__ = [
     "Running",
     "RunningGa",
     "RunningDe",
+    "RunningEs",
     "RunningCmaes",
     "RunningPso",
     "RunningLocalSearch",
+    "RunningIslands",
     # submodules
     "problems",
     "indicators",
@@ -167,6 +179,7 @@ def _whole(
 
 # what each setting object is, for the error when it's something else
 _GENOME = "a genome such as gx.Binary(8) or gx.Real((0, 1), length=5)"
+_REAL = "a gx.Real, e.g. gx.Real((0, 1), length=5)"
 _SELECT = "a selection such as gx.Tournament(3)"
 _CROSSOVER = "a crossover such as gx.UniformCrossover()"
 _MUTATION = "a mutation such as gx.BitFlip(rate=0.01)"
@@ -322,7 +335,34 @@ class Permutation:
         return {"type": "permutation", "length": _whole("Permutation.length", self.length)}
 
 
-Genome = Union[Binary, Integer, Real, Permutation]
+@dataclass(frozen=True)
+class AdaptiveReal:
+    """Real numbers between bounds, each genome with a mutation step size that evolves with it:
+    numpy ``float64`` arrays of the genes, as :class:`Real`'s, without the step size.
+
+    ``real`` gives the bounds. :class:`SelfAdaptiveMutation` changes the step size, a fraction
+    of each gene's range starting at ``initial_step`` (greater than 0 and finite, e.g. 0.3 to start
+    broad), and then the genes by normal steps of it: steps that lead to good genomes survive with
+    them, so the search tunes its own step size. With :class:`NoCrossover` and
+    :class:`MuCommaLambda`, a :class:`Ga` is then a (mu, lambda) evolution strategy; :class:`Es`
+    is one, with a step size per gene and recombination. Crossovers: :class:`UniformCrossover`,
+    :class:`PointCrossover` and :class:`NoCrossover`.
+    """
+
+    real: Real
+    initial_step: float
+
+    def _describe(self) -> dict[str, Any]:
+        if not isinstance(self.real, Real):
+            raise ValueError(f"AdaptiveReal.real is {_REAL}, not {self.real!r}")
+        return {
+            "type": "adaptive_real",
+            "bounds": self.real._describe()["bounds"],
+            "initial_step": _number("AdaptiveReal.initial_step", self.initial_step),
+        }
+
+
+Genome = Union[Binary, Integer, Real, Permutation, AdaptiveReal]
 
 # --- selection -----------------------------------------------------------------------------------
 
@@ -600,6 +640,30 @@ class ScrambleMutation:
         return {"type": "scramble"}
 
 
+@dataclass(frozen=True)
+class SelfAdaptiveMutation:
+    """Self-adaptive Gaussian mutation, for :class:`AdaptiveReal` genomes: first the genome's step
+    size changes log-normally, ``step * exp(learning_rate * N(0, 1))``, then every gene moves by a
+    normal step with that standard deviation times its range, mirrored at the bounds.
+
+    ``learning_rate`` is how fast the step size changes, greater than 0 and finite; None is
+    ``1 / sqrt(n)`` for the ``n`` genes that can take more than one value. ``min_step`` is the
+    smallest step size, greater than 0 and finite; None is 1e-12. The step size is at most 10.
+    """
+
+    learning_rate: float | None = None
+    min_step: float | None = None
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "self_adaptive",
+            "learning_rate": _optional_number(
+                "SelfAdaptiveMutation.learning_rate", self.learning_rate
+            ),
+            "min_step": _optional_number("SelfAdaptiveMutation.min_step", self.min_step),
+        }
+
+
 Mutation = Union[
     BitFlip,
     UniformMutation,
@@ -609,6 +673,7 @@ Mutation = Union[
     InversionMutation,
     InsertionMutation,
     ScrambleMutation,
+    SelfAdaptiveMutation,
 ]
 
 # --- schemes of the genetic algorithm ------------------------------------------------------------
@@ -1029,10 +1094,10 @@ class Running:
     ``on_generation`` to stop a run.
 
     Each algorithm has a class of its own, with its settings as properties: :class:`RunningGa`,
-    :class:`RunningDe`, :class:`RunningCmaes`, :class:`RunningPso` and
-    :class:`RunningLocalSearch`. A new value is checked as in the algorithm's constructor: a
-    wrong one raises a ``ValueError`` and changes nothing. The handle works only during the
-    callback; afterwards it raises a ``RuntimeError``.
+    :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`, :class:`RunningPso`,
+    :class:`RunningLocalSearch` and :class:`RunningIslands`. A new value is checked as in the
+    algorithm's constructor: a wrong one raises a ``ValueError`` and changes nothing. The handle
+    works only during the callback; afterwards it raises a ``RuntimeError``.
 
     A control that changes nothing leaves the run as it is: with a seed, the same result as
     without the control.
@@ -1175,6 +1240,13 @@ class RunningCmaes(Running):
     __slots__ = ()
 
 
+class RunningEs(Running):
+    """A running :class:`Es`, for ``control``: an evolution strategy adapts its own step sizes,
+    and only re-evaluates, keeping its parents' step sizes."""
+
+    __slots__ = ()
+
+
 class RunningPso(Running):
     """A running :class:`Pso`, for ``control``: its inertia and accelerations, e.g. an inertia
     falling from 0.9 to 0.4 over the run (Shi and Eberhart, 1998), or accelerations from a large
@@ -1241,6 +1313,51 @@ class RunningLocalSearch(Running):
     @neighbors.setter
     def neighbors(self, neighbors: int) -> None:
         self._set("neighbors", _whole("neighbors", neighbors))
+
+
+class _Island:
+    """The native handle of one island of a running :class:`Islands`: its settings, named
+    ``index/setting`` for the islands' handle."""
+
+    __slots__ = ("_native", "_index")
+
+    def __init__(self, native: Any, index: int) -> None:
+        self._native = native
+        self._index = index
+
+    def get(self, name: str) -> str:
+        result: str = self._native.get(f"{self._index}/{name}")
+        return result
+
+    def set(self, name: str, value: str) -> None:
+        self._native.set(f"{self._index}/{name}", value)
+
+    def reevaluate(self) -> None:
+        raise ValueError(
+            "the islands are re-evaluated together: call reevaluate() on the RunningIslands"
+        )
+
+
+class RunningIslands(Running):
+    """A running :class:`Islands`, for ``control``: ``islands`` has a handle per island, a
+    :class:`RunningGa` or :class:`RunningDe`, to change that island's settings, e.g. a mutation
+    step per island. ``reevaluate()`` re-evaluates every island; an island's handle can't
+    re-evaluate it alone."""
+
+    __slots__ = ("_islands",)
+
+    def __init__(self, native: Any, algorithm: _SingleObjective) -> None:
+        super().__init__(native, algorithm)
+        assert isinstance(algorithm, Islands)
+        self._islands = tuple(
+            island._running(_Island(native, index), island)
+            for index, island in enumerate(algorithm.islands)
+        )
+
+    @property
+    def islands(self) -> tuple[Running, ...]:
+        """A handle per island, in the order of :class:`Islands`'s ``islands``."""
+        return self._islands
 
 
 # --- running -------------------------------------------------------------------------------------
@@ -1321,6 +1438,30 @@ def _control(
         control(running, Progress(*state))
 
     return call
+
+
+def _path(name: str, path: Any) -> str | None:
+    """A file's path, from a ``str`` or an ``os.PathLike``, or None."""
+    if path is None:
+        return None
+    try:
+        path = os.fspath(path)
+    except TypeError:
+        raise ValueError(f"{name} is a path, a str or a pathlib.Path, not {path!r}") from None
+    if not isinstance(path, str):
+        raise ValueError(f"{name} is a path, a str or a pathlib.Path, not {path!r}")
+    return path
+
+
+def _checkpoints(checkpoint: Any, checkpoint_every: Any, resume: Any) -> dict[str, Any]:
+    """The checkpoint settings of a run, for the native ``run``."""
+    path = _path("checkpoint", checkpoint)
+    if (path is None) != (checkpoint_every is None):
+        raise ValueError("checkpoint and checkpoint_every go together")
+    every = None if checkpoint_every is None else _whole(
+        "checkpoint_every", checkpoint_every, minimum=1
+    )
+    return {"checkpoint": path, "checkpoint_every": every, "resume": _path("resume", resume)}
 
 
 def _json_number(value: Any) -> Any:
@@ -1409,6 +1550,7 @@ class _Algorithm:
         on_generation: Callable[..., bool] | None,
         problem: str | None = None,
         control: Callable[..., None] | None = None,
+        checkpoints: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         run = {
             "genome": _describe_setting("genome", self._genome, _GENOME),
@@ -1419,7 +1561,14 @@ class _Algorithm:
         # NaN and infinity aren't JSON: the settings are finite, or an error names them
         description = json.dumps(run, default=_json_number, allow_nan=False)
         return _genoxide.run(
-            description, fitness, bool(batch), bool(parallel), on_generation, problem, control
+            description,
+            fitness,
+            bool(batch),
+            bool(parallel),
+            on_generation,
+            problem,
+            control,
+            **(checkpoints or {}),
         )
 
 
@@ -1446,6 +1595,9 @@ class _SingleObjective(_Algorithm):
         parallel: bool = False,
         on_generation: Callable[[Progress], bool | None] | None = None,
         control: Callable[[Any, Progress], Any] | None = None,
+        checkpoint: str | os.PathLike[str] | None = None,
+        checkpoint_every: int | None = None,
+        resume: str | os.PathLike[str] | None = None,
     ) -> Result:
         """Runs the algorithm until the first stop condition.
 
@@ -1493,10 +1645,29 @@ class _SingleObjective(_Algorithm):
         control : callable, optional
             Called as ``control(algorithm, progress)`` once per generation, after
             ``on_generation``, on the same thread, with the running algorithm (a
-            :class:`RunningGa`, :class:`RunningDe`, :class:`RunningCmaes`, :class:`RunningPso` or
-            :class:`RunningLocalSearch`) and a :class:`Progress`: to change the algorithm's
+            :class:`RunningGa`, :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`,
+            :class:`RunningPso`, :class:`RunningLocalSearch` or :class:`RunningIslands`) and a
+            :class:`Progress`: to change the algorithm's
             settings for the next generation, or to re-evaluate it after the fitness function
             changed. See :class:`Running`.
+        checkpoint : str or os.PathLike, optional
+            Saves the run to this file every ``checkpoint_every`` generations and when it stops,
+            to resume it later with ``resume``. The file is replaced atomically: a crash while
+            saving keeps the previous checkpoint. None saves nothing.
+        checkpoint_every : int, optional
+            The generations between checkpoints, at least 1, with ``checkpoint``. A checkpoint
+            is saved when the generation is a multiple of it, so a resumed run keeps the
+            schedule.
+        resume : str or os.PathLike, optional
+            Continues the run saved in this checkpoint, with the results it would have had
+            without the interruption. The algorithm, its genome and the objectives must be the
+            ones that saved it; the fitness function, the stop conditions, ``batch``,
+            ``parallel``, the callbacks and ``checkpoint`` can change, e.g. to run longer.
+            ``generations`` and ``evaluations`` count from the start of the first run, ``time``
+            from the start of this one. The file must come from the same version of genoxide.
+            Load only checkpoints you trust, like the program that saved them: the checksum
+            detects accidental damage, not tampering, and a crafted checkpoint can make a run
+            loop or fail, though never break memory safety.
 
         At least one of ``generations``, ``evaluations``, ``target``, ``time`` and
         ``stagnation`` is needed. None is no condition.
@@ -1512,9 +1683,13 @@ class _SingleObjective(_Algorithm):
             Without a stop condition; for a wrong setting of the run, the algorithm, its genome
             or its operators, or an operator that doesn't fit the genome (the message names the
             setting); for a problem whose genome isn't a :class:`Real` of its dimensions, or a
-            multi-objective problem; and for
+            multi-objective problem; for a checkpoint to resume from that isn't one, is damaged,
+            comes from another version of genoxide or was saved with other settings; and for
             a wrong fitness result: a negative constraint violation, or a batch result with a
             length other than the number of genomes.
+        OSError
+            If the checkpoint to resume from can't be read, e.g. a ``FileNotFoundError``, or a
+            checkpoint can't be saved.
         TypeError
             If ``fitness``, ``on_generation`` or ``control`` isn't callable, or ``fitness``
             returns something that isn't a number. Another error converting a result, e.g. an
@@ -1533,13 +1708,18 @@ class _SingleObjective(_Algorithm):
         stop = _stop(generations, evaluations, target, time, stagnation)
         callback = _on_generation(on_generation, Progress)
         controls = _control(control, self)
+        saving = _checkpoints(checkpoint, checkpoint_every, resume)
         if isinstance(fitness, problems.Problem):
             description = fitness._json()
             return Result(
-                **self._run(fitness, stop, False, parallel, callback, description, controls)
+                **self._run(
+                    fitness, stop, False, parallel, callback, description, controls, saving
+                )
             )
         function = _batch_scores(fitness) if batch else fitness
-        return Result(**self._run(function, stop, batch, parallel, callback, None, controls))
+        return Result(
+            **self._run(function, stop, batch, parallel, callback, None, controls, saving)
+        )
 
 
 class Ga(_SingleObjective):
@@ -1801,6 +1981,103 @@ def _de_running(
     return setting
 
 
+class Es(_SingleObjective):
+    """A (mu/rho +, lambda) evolution strategy with self-adapted step sizes. Real genomes.
+
+    Each generation makes ``offspring`` (lambda) offspring from the ``parents`` (mu): each
+    recombines ``rho`` random parents, then its step sizes change log-normally (Schwefel's
+    self-adaptation) and each gene moves by a normal step of its step size, a fraction of the
+    gene's range, mirrored at the bounds. Good step sizes survive with the good solutions they
+    made, so the search tunes them: for smooth problems that need precise answers. For rotated,
+    badly conditioned or multimodal problems, :class:`Cmaes` is stronger.
+
+    Parameters
+    ----------
+    genome : Real
+        The search space. At least one gene needs ``low < high``.
+    parents : int
+        The parents mu, 1 to 2^24.
+    offspring : int
+        The offspring per generation lambda, 1 to 2^24, and at least ``parents`` with comma
+        selection; e.g. 5 to 7 times ``parents``.
+    recombination : {"intermediate", "dominant"}, default "intermediate"
+        "intermediate" gives an offspring the mean of its parents' genes and the geometric mean
+        of their step sizes; "dominant" gives it each gene, with its step size, from a random
+        one of its parents.
+    rho : int, optional
+        The parents of each offspring, 1 to ``parents``; all of them by default. 1 is no
+        recombination: a mutated copy of one random parent.
+    selection : {"comma", "plus"}, default "comma"
+        "comma" (mu, lambda): the best offspring become the parents, which never survive; it
+        forgets misadapted step sizes, and suits self-adaptation best. "plus" (mu + lambda): the
+        best of parents and offspring survive, offspring first on ties.
+    step_sizes : {"per_gene", "one"}, default "per_gene"
+        A step size per gene, which learns the scaling of each gene, or one for all genes.
+    initial_step : float, default 0.3
+        The initial step size as a fraction of each gene's range, greater than 0 and at most 10.
+    parallel_breeding : bool, default False
+        Whether the offspring are made on all cores, each with random numbers of its own: a
+        seed gives other results than without it, but the same on any number of cores. It pays
+        off with many genes or offspring and a fast or batch fitness function.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
+    """
+
+    _running = RunningEs
+
+    def __init__(
+        self,
+        genome: Real,
+        *,
+        parents: int,
+        offspring: int,
+        recombination: Literal["intermediate", "dominant"] | None = None,
+        rho: int | None = None,
+        selection: Literal["comma", "plus"] | None = None,
+        step_sizes: Literal["per_gene", "one"] | None = None,
+        initial_step: float | None = None,
+        parallel_breeding: bool | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.parents = parents
+        self.offspring = offspring
+        self.recombination = recombination
+        self.rho = rho
+        self.selection = selection
+        self.step_sizes = step_sizes
+        self.initial_step = initial_step
+        self.parallel_breeding = parallel_breeding
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        if self.recombination not in (None, "intermediate", "dominant"):
+            raise ValueError(
+                f'recombination is "intermediate" or "dominant", not {self.recombination!r}'
+            )
+        if self.selection not in (None, "comma", "plus"):
+            raise ValueError(f'selection is "comma" or "plus", not {self.selection!r}')
+        if self.step_sizes not in (None, "per_gene", "one"):
+            raise ValueError(f'step_sizes is "per_gene" or "one", not {self.step_sizes!r}')
+        return {
+            "type": "es",
+            "parents": _whole("parents", self.parents),
+            "offspring": _whole("offspring", self.offspring),
+            "recombination": self.recombination,
+            "rho": _optional_whole("rho", self.rho),
+            "selection": self.selection,
+            "step_sizes": self.step_sizes,
+            "initial_step": _optional_number("initial_step", self.initial_step),
+            "parallel_breeding": _flag("parallel_breeding", self.parallel_breeding),
+            "seed": _optional_whole("seed", self.seed),
+        }
+
+
 class Cmaes(_SingleObjective):
     """CMA-ES, the covariance matrix adaptation evolution strategy. Real genomes.
 
@@ -1992,6 +2269,110 @@ class LocalSearch(_SingleObjective):
         }
 
 
+class Islands(_SingleObjective):
+    """The island model: several :class:`Ga` or several :class:`De`, the islands, that evolve
+    apart and, every ``interval`` generations, send copies of their ``migrants`` best individuals
+    to other islands, where they replace the worst. Isolation keeps the islands diverse, and
+    migration spreads what they find: often better than one large population on multimodal
+    problems.
+
+    The islands share their genome and objective, and should have different seeds; their other
+    settings can differ, e.g. a mutation step per island. Each generation, every island makes a
+    generation, and ``run`` evaluates the candidates of all islands together (in parallel with
+    ``parallel=True``, or in one batch). Breeding and migration are sequential, so a seeded run is
+    the same on any number of threads. A progress's population is the islands' populations one
+    after another. Each island counts its own evaluations: give an ``l_shade`` island its share
+    of the budget.
+
+    Parameters
+    ----------
+    islands : sequence of Ga, or of De
+        At least 2 islands, all :class:`Ga` or all :class:`De`, with the same genome and
+        objective.
+    topology : {"ring", "fully_connected", "random", "isolated"}, default "ring"
+        Where the migrants go: "ring", each island to the next one and the last to the first,
+        which spreads good solutions slowly and keeps the islands diverse; "fully_connected",
+        each island to every other one, the fastest; "random", each island to another one
+        chosen at random at every migration; "isolated", no migration: the islands evolve apart
+        for the whole run, e.g. with settings of their own to compare or hedge between them.
+    interval : int, default 10
+        The generations between migrations, at least 1.
+    migrants : int, default 2
+        The individuals each island sends at a migration, copies of its best, at least 1; a few
+        percent of an island's population is common.
+    seed : int, optional
+        The seed of the random topology's choices, 0 to 2^64 - 1. None is a random seed.
+    """
+
+    _running = RunningIslands
+
+    def __init__(
+        self,
+        islands: Sequence[Ga] | Sequence[De],
+        *,
+        topology: Literal["ring", "fully_connected", "random", "isolated"] | None = None,
+        interval: int | None = None,
+        migrants: int | None = None,
+        seed: int | None = None,
+    ) -> None:
+        self.islands: list[Ga | De] = list(islands)
+        self.topology = topology
+        self.interval = interval
+        self.migrants = migrants
+        self.seed = seed
+
+    @property
+    def _genome(self) -> Genome:  # type: ignore[override]
+        return self._first()._genome
+
+    @property
+    def _objective(self) -> ObjectiveName:  # type: ignore[override]
+        return self._first()._objective
+
+    def _first(self) -> Ga | De:
+        if len(self.islands) < 2:
+            raise ValueError(
+                f"invalid setting `islands`: at least 2 islands, got {len(self.islands)}"
+            )
+        first = self.islands[0]
+        kind = type(first)
+        for index, island in enumerate(self.islands):
+            if type(island) not in (Ga, De):
+                raise ValueError(f"islands are Ga or De, not {island!r} (island {index})")
+            if type(island) is not kind:
+                raise ValueError("the islands are all Ga or all De")
+        return first
+
+    def _describe(self) -> dict[str, Any]:
+        first = self._first()
+        genome = _describe_setting("genome", first._genome, _GENOME)
+        for index, island in enumerate(self.islands):
+            if _describe_setting("genome", island._genome, _GENOME) != genome:
+                raise ValueError(
+                    "invalid setting `islands`: the islands must share a genome, so migrants "
+                    f"fit: island {index} has another one than island 0"
+                )
+            if island._objective != first._objective:
+                raise ValueError(
+                    "invalid setting `islands`: the islands must share an objective: island "
+                    f"{index} has another one than island 0"
+                )
+        topologies = (None, "ring", "fully_connected", "random", "isolated")
+        if self.topology not in topologies:
+            raise ValueError(
+                'topology is "ring", "fully_connected", "random" or "isolated", not '
+                f"{self.topology!r}"
+            )
+        return {
+            "type": "islands",
+            "islands": [island._describe() for island in self.islands],
+            "topology": self.topology,
+            "interval": _optional_whole("interval", self.interval),
+            "migrants": _optional_whole("migrants", self.migrants),
+            "seed": _optional_whole("seed", self.seed),
+        }
+
+
 def das_dennis(objectives: int, divisions: int) -> np.ndarray:
     """Points evenly spread on the unit simplex (Das and Dennis, 1998), a point per row: every
     point with ``objectives`` coordinates (2 to 6) that are multiples of ``1 / divisions`` and sum
@@ -2055,6 +2436,9 @@ class _MultiObjective(_Algorithm):
         batch: bool = False,
         parallel: bool = False,
         on_generation: Callable[[MultiProgress], bool | None] | None = None,
+        checkpoint: str | os.PathLike[str] | None = None,
+        checkpoint_every: int | None = None,
+        resume: str | os.PathLike[str] | None = None,
     ) -> MultiResult:
         """Runs the algorithm until the first stop condition.
 
@@ -2101,6 +2485,24 @@ class _MultiObjective(_Algorithm):
             Called with a :class:`MultiProgress` after every generation, the initial population
             (generation 0) included, on the thread that called ``run``. If it returns False, the
             run stops with the stop reason "aborted".
+        checkpoint : str or os.PathLike, optional
+            Saves the run to this file every ``checkpoint_every`` generations and when it stops,
+            to resume it later with ``resume``. The file is replaced atomically: a crash while
+            saving keeps the previous checkpoint. None saves nothing.
+        checkpoint_every : int, optional
+            The generations between checkpoints, at least 1, with ``checkpoint``. A checkpoint
+            is saved when the generation is a multiple of it, so a resumed run keeps the
+            schedule.
+        resume : str or os.PathLike, optional
+            Continues the run saved in this checkpoint, with the results it would have had
+            without the interruption. The algorithm, its genome and the objectives must be the
+            ones that saved it; the fitness function, the stop conditions, ``batch``,
+            ``parallel``, the callbacks and ``checkpoint`` can change, e.g. to run longer.
+            ``generations`` and ``evaluations`` count from the start of the first run, ``time``
+            from the start of this one. The file must come from the same version of genoxide.
+            Load only checkpoints you trust, like the program that saved them: the checksum
+            detects accidental damage, not tampering, and a crafted checkpoint can make a run
+            loop or fail, though never break memory safety.
 
         At least one of ``generations``, ``evaluations``, ``time`` and ``stagnation`` is
         needed. None is no condition.
@@ -2120,7 +2522,12 @@ class _MultiObjective(_Algorithm):
             or genome don't match the algorithm's; and for a wrong fitness result: the
             wrong number of objective values, a negative constraint violation, a batch result
             that isn't a 2-D array or a tuple of an array per objective, or one with a number of
-            rows other than the number of genomes.
+            rows other than the number of genomes; and for a checkpoint to resume from that isn't
+            one, is damaged, comes from another version of genoxide or was saved with other
+            settings.
+        OSError
+            If the checkpoint to resume from can't be read, e.g. a ``FileNotFoundError``, or a
+            checkpoint can't be saved.
         TypeError
             If ``fitness`` or ``on_generation`` isn't callable, or ``fitness`` returns something
             that isn't a sequence of numbers. Another error converting a result, e.g. an
@@ -2136,11 +2543,16 @@ class _MultiObjective(_Algorithm):
             )
         stop = _stop(generations, evaluations, None, time, stagnation)
         callback = _on_generation(on_generation, MultiProgress)
+        saving = _checkpoints(checkpoint, checkpoint_every, resume)
         if isinstance(fitness, problems.MultiProblem):
             description = fitness._json()
-            return MultiResult(**self._run(fitness, stop, False, parallel, callback, description))
+            return MultiResult(
+                **self._run(fitness, stop, False, parallel, callback, description, None, saving)
+            )
         function = _batch_objectives(fitness, len(self._objectives())) if batch else fitness
-        return MultiResult(**self._run(function, stop, batch, parallel, callback))
+        return MultiResult(
+            **self._run(function, stop, batch, parallel, callback, None, None, saving)
+        )
 
 
 class Nsga2(_MultiObjective):

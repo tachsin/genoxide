@@ -1,21 +1,22 @@
-//! The operators of a run: an enum per kind of genome, with only the operators that fit it.
+//! The operators of a run: an enum per kind of genome, with only the operators that fit it. They
+//! implement serde as the operators in them, for checkpoints.
 
 use crate::config;
 use crate::errors::setting;
-use genoxide::genome::{Binary, Genome, Integer, Permutation, Real, Representation};
+use genoxide::genome::{AdaptiveReal, Binary, Genome, Integer, Permutation, Real, Representation};
 use genoxide::operator::{
     ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, CycleCrossover,
     EdgeRecombinationCrossover, GaussianMutation, InsertionMutation, InversionMutation, Mutate,
     NoCrossover, OrderCrossover, PartiallyMappedCrossover, PointCrossover, PolynomialMutation,
-    RandomSelection, Rank, Roulette, ScrambleMutation, Select, SimulatedBinaryCrossover,
-    StochasticUniversalSampling, SwapMutation, Tournament, Truncation, UniformCrossover,
-    UniformMutation,
+    RandomSelection, Rank, Roulette, ScrambleMutation, Select, SelfAdaptiveMutation,
+    SimulatedBinaryCrossover, StochasticUniversalSampling, SwapMutation, Tournament, Truncation,
+    UniformCrossover, UniformMutation,
 };
 use genoxide::{Objective, Population, StreamRng};
 
 type Result<T> = std::result::Result<T, String>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum AnySelect {
     Tournament(Tournament),
     Rank(Rank),
@@ -91,6 +92,7 @@ fn mutate_name(mutate: config::Mutate) -> &'static str {
         config::Mutate::Inversion {} => "InversionMutation",
         config::Mutate::Insertion {} => "InsertionMutation",
         config::Mutate::Scramble {} => "ScrambleMutation",
+        config::Mutate::SelfAdaptive { .. } => "SelfAdaptiveMutation",
     }
 }
 
@@ -126,8 +128,8 @@ fn point(points: usize) -> Result<PointCrossover> {
     setting(PointCrossover::k_point(points))
 }
 
-/// A crossover of binary and integer genomes.
-#[derive(Clone, Debug)]
+/// A crossover of binary, integer and adaptive real genomes.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum ListCrossover {
     Uniform(UniformCrossover),
     Point(PointCrossover),
@@ -175,9 +177,10 @@ macro_rules! list_crossover {
 
 list_crossover!(Binary);
 list_crossover!(Integer);
+list_crossover!(AdaptiveReal);
 
 /// A crossover of real genomes.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum RealCrossover {
     Uniform(UniformCrossover),
     Point(PointCrossover),
@@ -233,7 +236,7 @@ impl Crossover<Real> for RealCrossover {
 }
 
 /// A crossover of permutations.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum OrderCrossovers {
     Order(OrderCrossover),
     PartiallyMapped(PartiallyMappedCrossover),
@@ -307,8 +310,32 @@ pub fn integer_mutation(mutate: config::Mutate) -> Result<UniformMutation> {
     }
 }
 
+/// The mutation of adaptive real genomes, which changes their step size too.
+pub fn self_adaptive(mutate: config::Mutate) -> Result<SelfAdaptiveMutation> {
+    match mutate {
+        config::Mutate::SelfAdaptive {
+            learning_rate,
+            min_step,
+        } => {
+            let mutation = match learning_rate {
+                Some(tau) => setting(SelfAdaptiveMutation::with_learning_rate(tau))?,
+                None => SelfAdaptiveMutation::new(),
+            };
+            match min_step {
+                Some(min_step) => setting(mutation.with_min_step(min_step)),
+                None => Ok(mutation),
+            }
+        }
+        _ => Err(wrong_mutate(
+            mutate,
+            "adaptive real",
+            "SelfAdaptiveMutation",
+        )),
+    }
+}
+
 /// A mutation of real genomes.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum RealMutation {
     Uniform(UniformMutation),
     Gaussian(GaussianMutation),
@@ -363,7 +390,7 @@ impl Mutate<Real> for RealMutation {
 }
 
 /// A mutation of permutations.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum OrderMutation {
     Swap(SwapMutation),
     Inversion(InversionMutation),

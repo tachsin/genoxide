@@ -17,10 +17,23 @@ pub struct Run {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Genome {
-    Binary { length: usize },
-    Integer { bounds: Vec<(i64, i64)> },
-    Real { bounds: Vec<(f64, f64)> },
-    Permutation { length: usize },
+    Binary {
+        length: usize,
+    },
+    Integer {
+        bounds: Vec<(i64, i64)>,
+    },
+    Real {
+        bounds: Vec<(f64, f64)>,
+    },
+    Permutation {
+        length: usize,
+    },
+    /// Real genes with a step size that evolves with them.
+    AdaptiveReal {
+        bounds: Vec<(f64, f64)>,
+        initial_step: f64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -35,16 +48,28 @@ pub enum Objective {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Algorithm {
     Ga(Ga),
-    De {
-        population_size: Option<usize>,
-        seed: Option<u64>,
-        /// L-SHADE with this many evaluations, instead of the defaults.
-        l_shade: Option<u64>,
-        strategy: Option<DeStrategy>,
-        control: Option<DeControl>,
-        restarts: Option<DeRestarts>,
-        /// Each trial built on its own random stream, in parallel.
+    De(De),
+    Es {
+        parents: usize,
+        offspring: usize,
+        recombination: Option<Recombination>,
+        /// The parents per offspring, all of them by default.
+        rho: Option<usize>,
+        selection: Option<EsSelection>,
+        step_sizes: Option<StepSizes>,
+        /// The initial step size, as a fraction of each gene's range.
+        initial_step: Option<f64>,
+        /// Each offspring made on its own random stream, in parallel.
         parallel_breeding: Option<bool>,
+        seed: Option<u64>,
+    },
+    /// Islands of genetic algorithms, or of differential evolutions.
+    Islands {
+        islands: Vec<Algorithm>,
+        topology: Option<Topology>,
+        interval: Option<u64>,
+        migrants: Option<usize>,
+        seed: Option<u64>,
     },
     Cmaes {
         population_size: Option<usize>,
@@ -101,6 +126,55 @@ pub enum Algorithm {
         seed: Option<u64>,
         variation: Variation,
     },
+}
+
+/// Differential evolution.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct De {
+    pub population_size: Option<usize>,
+    pub seed: Option<u64>,
+    /// L-SHADE with this many evaluations, instead of the defaults.
+    pub l_shade: Option<u64>,
+    pub strategy: Option<DeStrategy>,
+    pub control: Option<DeControl>,
+    pub restarts: Option<DeRestarts>,
+    /// Each trial built on its own random stream, in parallel.
+    pub parallel_breeding: Option<bool>,
+}
+
+/// How an evolution strategy combines its parents.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Recombination {
+    Intermediate,
+    Dominant,
+}
+
+/// Which individuals of an evolution strategy survive.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EsSelection {
+    Comma,
+    Plus,
+}
+
+/// An evolution strategy's step sizes: one per individual, or one per gene.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepSizes {
+    One,
+    PerGene,
+}
+
+/// Where the migrants of islands go.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Topology {
+    Ring,
+    FullyConnected,
+    Random,
+    Isolated,
 }
 
 /// How a multi-objective algorithm makes children.
@@ -193,6 +267,10 @@ pub enum Mutate {
     Inversion {},
     Insertion {},
     Scramble {},
+    SelfAdaptive {
+        learning_rate: Option<f64>,
+        min_step: Option<f64>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
