@@ -41,6 +41,8 @@
 //!   asynchronous evaluation
 //! - [`Engine`]: runs an algorithm with stop conditions, parallel or [batch](engine::Batch)
 //!   evaluation and cancellation; [`AsyncEngine`](engine::AsyncEngine) evaluates asynchronously
+//! - [`gp`]: tree genetic programming, strongly typed: programs and formulas as genomes, with
+//!   subtree crossover and mutation
 //! - [`multi`]: multi-objective optimization: NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA, the
 //!   [`MultiEngine`](multi::MultiEngine), Pareto dominance and non-dominated sorting
 //! - [`observer`]: statistics, hall of fame, progress lines and custom callbacks
@@ -82,6 +84,7 @@ pub mod engine;
 pub mod error;
 pub mod fitness;
 pub mod genome;
+pub mod gp;
 pub mod individual;
 pub mod math;
 pub mod multi;

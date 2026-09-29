@@ -699,3 +699,75 @@ fn a_controlled_run_resumes() {
     assert_eq!(outcome.evaluations(), expected.evaluations());
     assert_eq!(bytes(second.algorithm()), bytes(whole.algorithm()));
 }
+
+// genetic programming: trees, the typed set with its constants, and the tree operators
+#[test]
+fn genetic_programs_resume_exactly() {
+    use genoxide::gp::{Constants, Gp, PrimitiveSet, SubtreeCrossover, SubtreeMutation, Tree};
+
+    #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+    enum Op {
+        Add,
+        Mul,
+        Less,
+        If,
+        X,
+    }
+    fn gp() -> Gp<Op> {
+        let mut set = PrimitiveSet::builder();
+        let real = set.new_type("real");
+        let boolean = set.new_type("bool");
+        set.function("add", Op::Add, [real, real], real)
+            .function("mul", Op::Mul, [real, real], real)
+            .function("less", Op::Less, [real, real], boolean)
+            .function("if", Op::If, [boolean, real, real], real)
+            .terminal("x", Op::X, real)
+            .constants(real, Constants::uniform(-1.0..=1.0).unwrap());
+        Gp::builder(set.build(real).unwrap()).build().unwrap()
+    }
+    // |x| at 11 points
+    fn error(tree: &Tree) -> f64 {
+        let set = gp().primitives().clone();
+        let mut stack = Vec::new();
+        (0..=10)
+            .map(|i| {
+                let x = f64::from(i) / 5.0 - 1.0;
+                let value = tree.evaluate(
+                    &set,
+                    &mut stack,
+                    |op, args: &[f64]| match op {
+                        Op::Add => args[0] + args[1],
+                        Op::Mul => args[0] * args[1],
+                        Op::Less => f64::from(u8::from(args[0] < args[1])),
+                        Op::If => {
+                            if args[0] != 0.0 {
+                                args[1]
+                            } else {
+                                args[2]
+                            }
+                        }
+                        Op::X => x,
+                    },
+                    |_, value| value,
+                );
+                (value - x.abs()).abs()
+            })
+            .sum()
+    }
+    for breeding in [false, true] {
+        let make = || {
+            let builder = Ga::builder(gp())
+                .population_size(30)
+                .select(Tournament::new(3).unwrap())
+                .crossover(SubtreeCrossover::new())
+                .mutate(SubtreeMutation::new())
+                .mutation_rate(0.2)
+                .minimize()
+                .seed(4);
+            #[cfg(feature = "parallel")]
+            let builder = builder.parallel_breeding(breeding);
+            builder.build().unwrap()
+        };
+        resumes(make, error, 6, 15);
+    }
+}

@@ -9,6 +9,7 @@
 //! ```
 
 use genoxide::Objective::Minimize;
+use genoxide::gp::{Columns, Gp, PrimitiveSet, SubtreeCrossover, Tree};
 use genoxide::multi::problems::{Dtlz2, MultiProblem, Zdt1};
 use genoxide::multi::{self, MultiFitnessFunction};
 use genoxide::prelude::*;
@@ -574,6 +575,100 @@ fn run(len: usize) -> Outcome<Bits> {
     )
 }
 
+// genetic programming: {+, −, ×, analytic quotient, sin, cos, x, constants}, as in the plan's
+// measurements
+#[derive(Clone, Copy, Debug)]
+enum Op {
+    Add,
+    Sub,
+    Mul,
+    Aq,
+    Sin,
+    Cos,
+    X,
+}
+
+fn formula_gp() -> Gp<Op> {
+    let mut set = PrimitiveSet::builder();
+    let real = set.new_type("real");
+    set.function("add", Op::Add, [real, real], real)
+        .function("sub", Op::Sub, [real, real], real)
+        .function("mul", Op::Mul, [real, real], real)
+        .function("aq", Op::Aq, [real, real], real)
+        .function("sin", Op::Sin, [real], real)
+        .function("cos", Op::Cos, [real], real)
+        .terminal("x", Op::X, real)
+        .constants(real, genoxide::gp::Constants::uniform(-1.0..=1.0).unwrap());
+    Gp::builder(set.build(real).unwrap()).build().unwrap()
+}
+
+// `count` random trees of 45 to 55 nodes
+fn formula_trees(count: usize) -> (Gp<Op>, Vec<Tree>, StreamRng) {
+    let gp = formula_gp();
+    let mut rng = StreamRng::seed_from_u64(0);
+    let mut trees = Vec::with_capacity(count);
+    while trees.len() < count {
+        let tree = gp.grow(8, &mut rng).unwrap();
+        if (45..=55).contains(&tree.len()) {
+            trees.push(tree);
+        }
+    }
+    (gp, trees, rng)
+}
+
+fn formula_columns(op: Op, args: &[&[f64]], out: &mut [f64], xs: &[f64]) {
+    let binary = |out: &mut [f64], f: fn(f64, f64) -> f64| {
+        for ((out, &a), &b) in out.iter_mut().zip(args[0]).zip(args[1]) {
+            *out = f(a, b);
+        }
+    };
+    let unary = |out: &mut [f64], f: fn(f64) -> f64| {
+        for (out, &a) in out.iter_mut().zip(args[0]) {
+            *out = f(a);
+        }
+    };
+    match op {
+        Op::Add => binary(out, |a, b| a + b),
+        Op::Sub => binary(out, |a, b| a - b),
+        Op::Mul => binary(out, |a, b| a * b),
+        Op::Aq => binary(out, |a, b| a / (1.0 + b * b).sqrt()),
+        Op::Sin => unary(out, genoxide::math::sin),
+        Op::Cos => unary(out, genoxide::math::cos),
+        Op::X => out.copy_from_slice(xs),
+    }
+}
+
+#[library_benchmark]
+#[bench::pairs_of_50_nodes(setup = formula_trees, args = (2 * REPEATS))]
+fn subtree_crossover((gp, mut trees, mut rng): (Gp<Op>, Vec<Tree>, StreamRng)) -> Vec<Tree> {
+    let crossover = SubtreeCrossover::new();
+    for [a, b] in trees.as_chunks_mut::<2>().0 {
+        crossover.crossover(&gp, a, b, &mut rng);
+    }
+    black_box(trees)
+}
+
+// every tree on 100 points; outside the benchmark, whose closures Callgrind leaves out (it toggles
+// its collection on the benchmark's name)
+fn evaluate_trees(gp: &Gp<Op>, trees: &[Tree]) -> f64 {
+    let xs: Vec<f64> = (0..100).map(|i| f64::from(i) / 49.5 - 1.0).collect();
+    let mut columns = Columns::new(xs.len());
+    let mut sum = 0.0;
+    for tree in trees {
+        let values = tree.evaluate_columns(gp.primitives(), &mut columns, |op, args, out| {
+            formula_columns(op, args, out, &xs)
+        });
+        sum += values[0];
+    }
+    sum
+}
+
+#[library_benchmark]
+#[bench::trees_of_50_nodes_100_points(setup = formula_trees, args = (REPEATS))]
+fn tree_columns((gp, trees, _): (Gp<Op>, Vec<Tree>, StreamRng)) -> f64 {
+    black_box(evaluate_trees(&gp, &trees))
+}
+
 library_benchmark_group!(
     name = hot_paths,
     benchmarks = [
@@ -605,7 +700,9 @@ library_benchmark_group!(
         nsga2_generation,
         nsga3_generation,
         non_dominated_sort,
-        hypervolume
+        hypervolume,
+        subtree_crossover,
+        tree_columns
     ]
 );
 

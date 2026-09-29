@@ -11,6 +11,7 @@
 //! | [`Real`] | [`Reals`] | `f64`, inclusive bounds per gene, of finite width |
 //! | [`Permutation`] | [`Order`] | an ordering of `0..n` |
 //! | [`AdaptiveReal`] | [`AdaptiveReals`] | `f64` like [`Real`], plus a mutation step size |
+//! | [`Gp`](crate::gp::Gp) | [`Tree`](crate::gp::Tree) | the nodes of a program, in prefix order: see [`gp`](crate::gp) |
 
 pub mod adaptive;
 pub mod binary;
@@ -99,7 +100,8 @@ pub trait Representation: Clone + Debug + Send + Sync {
     /// The genome type of this representation.
     type Genome: Genome;
 
-    /// The number of genes of every genome.
+    /// The number of genes of every genome, or the most genes, for a variable-length genome
+    /// (e.g. the size limit of [`Gp`](crate::gp::Gp)'s trees).
     fn genome_len(&self) -> usize;
 
     /// A random genome, uniformly distributed over the space.

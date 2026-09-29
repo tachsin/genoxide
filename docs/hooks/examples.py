@@ -32,6 +32,7 @@ CATEGORIES = {
     "multi-objective",
     "constrained",
     "neuroevolution",
+    "genetic programming",
     "engine",
 }
 FIELDS = {

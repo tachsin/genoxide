@@ -17,6 +17,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - Integer and real, bounded per gene
 - Permutation
 - Real with a self-adaptive step size
+- Trees of a genetic program, strongly typed
 
 ## Genetic algorithms
 
@@ -31,6 +32,14 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - **Schemes:** generational with elitism, steady-state, (μ+λ), (μ,λ), and memetic (Lamarckian local search on the best parents).
 - **Parameter control:** a GA's rates and operators can be changed between generations, e.g. to anneal the mutation step or raise it when the search stagnates.
 - **Parallel breeding:** crossover and mutation on all cores, each pair of parents on a random stream of its own, so a seeded run gives the same results on any number of threads. For large populations and operators that do real work per gene, when evaluation is fast. Differential evolution's trials and an evolution strategy's offspring can be made in parallel the same way.
+
+## Genetic programming
+
+- **Trees** (`gp`): programs and formulas as genomes, made of your own primitives (an enum) with typed arguments and results (Montana's strongly typed GP), terminals and ephemeral random constants. Stored as flat arrays in prefix order, so copying, comparing, hashing and saving a tree never recurse; read and written as text, e.g. `add(x, mul(x, 0.5))`.
+- **Initialization:** full, grow and ramped half-and-half (Koza's default, depths 2 to 6, with duplicates redrawn), always within the limits: Koza's depth of 17 and a size of 1024 nodes.
+- **Operators:** subtree crossover with Koza's 90% bias to function nodes, whose second point keeps both children within the limits, and subtree mutation.
+- **Evaluation:** a stack machine for values of any type, the same on columns of all the data's points at once (several times faster, the same results to the bit), and a top-down walk for interpreters.
+- Runs on the genetic algorithms, islands and the multi-objective algorithms, with checkpoints and parallel breeding.
 
 ## Other single-objective methods
 
@@ -96,7 +105,8 @@ cargo run --release --example bnh                 # two objectives and two const
 cargo run --release --example kursawe             # a disconnected front, SPEA2 and NSGA-II
 cargo run --release --example dtlz2_3obj          # three objectives, NSGA-III, hypervolume
 cargo run --release --example xor_neuroevolution  # a 2-2-1 neural network's weights, CMA-ES
+cargo run --release --example koza_quartic        # genetic programming finds x^4 + x^3 + x^2 + x exactly
 cargo run --release --example asynchronous        # a slow fitness function, asynchronous evaluation
 cargo run --release --manifest-path examples/gpu/Cargo.toml  # neuroevolution on the GPU, with wgpu
-python examples/tsp_berlin52/main.py              # the same in Python, for all but the last two
+python examples/tsp_berlin52/main.py              # the same in Python, for all but the last three
 ```

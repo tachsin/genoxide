@@ -1,0 +1,9 @@
+Koza's quartic x^4 + x^3 + x^2 + x from 20 points in [-1, 1]
+8 islands of 500 trees, until the RMSE is at most 1.27e-10
+
+Target after 4 generations and 17061 evaluations
+RMSE on the 20 training points: 1.12e-16
+RMSE on the 101 test points:    1.30e-16
+
+the expression, 15 nodes of depth 4:
+add(add(x, mul(x, x)), mul(add(x, mul(x, x)), mul(x, x)))

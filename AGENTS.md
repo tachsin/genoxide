@@ -37,6 +37,7 @@ fn main() -> genoxide::Result<()> {
 | Reals in ranges | `Real::new([lo..=hi, ...])`, `Real::uniform(len, lo..=hi)` | `Reals` (`[f64]`) | `SimulatedBinaryCrossover` (η 15), `BlendCrossover` (α 0.5), `ArithmeticCrossover`, `UniformCrossover`, `PointCrossover` | `PolynomialMutation` (η 20), `GaussianMutation`, `UniformMutation` |
 | Reals with an adaptive step size | `AdaptiveReal::new(Real::..., initial_step)` | `AdaptiveReals` (`[f64]`, `.step()`) | `NoCrossover` (an ES), `UniformCrossover`, `PointCrossover` | `SelfAdaptiveMutation` |
 | An order of `0..n` (tours, sequencing) | `Permutation::new(n)` | `Order` (`[usize]`) | `OrderCrossover` (sequences), `EdgeRecombinationCrossover` (tours), `PartiallyMappedCrossover`, `CycleCrossover` | `InversionMutation` (tours), `SwapMutation`, `InsertionMutation`, `ScrambleMutation` |
+| Programs and formulas: trees of typed functions (genetic programming) | `gp::Gp::builder(set)` ([template](#genetic-programming)) | `gp::Tree` (nodes in prefix order) | `gp::SubtreeCrossover` | `gp::SubtreeMutation` |
 
 Any selection fits any representation; usually `Tournament` of size 2 to 5.
 
@@ -87,6 +88,8 @@ During a run (parameter control, e.g. an annealed mutation step): `ga.set_crosso
 | `SelfAdaptiveMutation::new()`, `with_learning_rate(tau)?`, `.with_min_step(min)?` | `AdaptiveReal`; tau > 0, default 1/√n; min > 0, default 1e-12 |
 | `SwapMutation::new()`, `SwapMutation::count(n)?` | n ≥ 1 |
 | `OrderCrossover`, `PartiallyMappedCrossover`, `CycleCrossover`, `EdgeRecombinationCrossover`, `InversionMutation`, `InsertionMutation`, `ScrambleMutation` | unit structs, `Permutation` |
+| `gp::SubtreeCrossover::new()`, `with_internal_rate(p)?` | `Gp`; points at function nodes with probability p (0.9, Koza's), else at leaves; the second point of the same type, chosen so both children stay within the limits |
+| `gp::SubtreeMutation::new()`, `with_max_depth(d)?` | `Gp`; a node chosen uniformly gets a new subtree of its type, grown to depth d (default 4) within the limits; never the same subtree |
 
 `per_gene(rate)` changes each gene with that probability (at `1 / length`, a third of the children are unevaluated copies); `count(n)` exactly `n` genes. A picked gene always changes.
 
@@ -236,6 +239,78 @@ fn main() -> genoxide::Result<()> {
     Ok(())
 }
 ```
+
+### Genetic programming
+
+Trees of the user's primitives (an enum), strongly typed: declare types, functions (argument types, return type), terminals and ephemeral random constants, then match on the enum in the fitness function. `Gp::builder(set)`: `.max_depth(17)`, `.max_size(1024)`, `.init(gp::Init::RampedHalfAndHalf { depths: 2..=6 })` (also `Full`, `Grow`), the defaults. `set.parse("add(x, 1.0)")?` and `tree.display(&set)` read and write trees; `gp.validate(&tree)` checks types and limits. Evaluate with `tree.evaluate(&set, &mut stack, |op, args: &[f64]| ..., |ty, constant| ...)` per point, `tree.evaluate_columns(&set, &mut gp::Columns::new(points), |op, args, out| ...)` on all points at once (several times faster for data, the same bits), or walk `tree.root(&set)` top-down. Seed a population with `gp.ramped_half_and_half(n, &mut rng)?` (Koza's even division, no duplicates). Not in Python yet.
+
+```rust
+use genoxide::gp::{Constants, Gp, PrimitiveSet, SubtreeCrossover, SubtreeMutation, Tree};
+use genoxide::prelude::*;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Op {
+    Add,
+    Sub,
+    Mul,
+    X,
+}
+
+fn main() -> genoxide::Result<()> {
+    let mut set = PrimitiveSet::builder();
+    let real = set.new_type("real"); // one type: untyped GP
+    set.function("add", Op::Add, [real, real], real)
+        .function("sub", Op::Sub, [real, real], real)
+        .function("mul", Op::Mul, [real, real], real)
+        .terminal("x", Op::X, real)
+        .constants(real, Constants::integers(-2..=2)?);
+    let gp = Gp::builder(set.build(real)?).build()?;
+    let set = gp.primitives().clone();
+
+    // find x³ − 2x from 21 points
+    let xs: Vec<f64> = (0..=20).map(|i| f64::from(i) / 10.0 - 1.0).collect();
+    let error = |tree: &Tree| {
+        let mut stack = Vec::new();
+        let mut sum = 0.0;
+        for &x in &xs {
+            let y = tree.evaluate(
+                &set,
+                &mut stack,
+                |op, args: &[f64]| match op {
+                    Op::Add => args[0] + args[1],
+                    Op::Sub => args[0] - args[1],
+                    Op::Mul => args[0] * args[1],
+                    Op::X => x,
+                },
+                |_, constant| constant,
+            );
+            sum += (y - (x * x * x - 2.0 * x)).abs();
+        }
+        sum
+    };
+    let initial = gp.ramped_half_and_half(200, &mut StreamRng::seed_from_u64(1))?;
+    let ga = Ga::builder(gp)
+        .population_size(200)
+        .initial_genomes(initial)
+        .select(Tournament::new(7)?)
+        .crossover(SubtreeCrossover::new())
+        .mutate(SubtreeMutation::new())
+        .mutation_rate(0.1)
+        .minimize()
+        .seed(1)
+        .build()?;
+    let outcome = Engine::new(ga, error)
+        .stop_when(Stop::target(0.0).or(Stop::generations(200)))
+        .run()?;
+    println!("{}", outcome.best_genome().display(&set));
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    Ok(())
+}
+```
+
+- Types: `set.new_type("bool")`, `set.function("less", Op::Less, [real, real], boolean)`; every tree genoxide makes is typed. `build` rejects a set whose types can't make a tree.
+- The primitive set is data, not closures, so a `Gp<Op>` checkpoints when `Op` derives `Serialize` and `Deserialize`.
+- For many points, `evaluate_columns` with a `thread_local!` `Columns` per thread (see `examples/koza_quartic`).
 
 ### Statistics, progress output, parallel evaluation and cancellation
 
@@ -689,6 +764,7 @@ every = 50
 | `Error::MissingSetting { setting: "stop_when" }` | `.stop_when(Stop::generations(n))`, or an abort flag |
 | `Error::InvalidSetting { setting, reason }` | Read `reason`; see [Settings](#settings) |
 | `Error::InvalidGenome { reason }` | Match the initial genome's length and bounds |
+| ``error[E0282]: type annotations needed for `&[_]` `` in `tree.evaluate` | Name the value type: `\|op, args: &[f64]\| ...` |
 | `Error::NanFitness` | Fix the NaN, or keep `NanPolicy::Invalid` |
 | `Error::InvalidFitness` | A violation must be ≥ 0: use `constraint::at_most` and friends |
 | `Error::TellWithoutAsk` / `Error::FitnessCount` | One `tell` per `ask`, one fitness per asked genome, in order |
