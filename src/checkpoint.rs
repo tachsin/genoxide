@@ -10,9 +10,9 @@
 //! [`Error::Checkpoint`].
 //!
 //! Load only checkpoints you trust, like the program that saved them: the checksum detects
-//! accidental damage, not tampering, and the algorithm's state isn't validated again. A crafted
-//! checkpoint can make a run panic or loop, though never break memory safety: genoxide has no
-//! unsafe code.
+//! accidental damage, not tampering, and the algorithm's state is validated only in part (see
+//! below). A crafted checkpoint can make a run panic or loop, though never break memory safety:
+//! genoxide has no unsafe code.
 //!
 //! [`Engine::checkpoint_every`](crate::Engine::checkpoint_every) saves the algorithm every few
 //! generations and when the run stops. To resume, load it and run it in a new engine with the same
@@ -56,7 +56,9 @@
 //! Every algorithm, genome, representation and operator of genoxide, and the statistics and hall
 //! of fame, also implement `serde`'s `Serialize` and `Deserialize`, for other formats.
 //! Deserializing checks fitness values, scores, genomes (a permutation is one, bits fit their
-//! length) and representations (valid bounds) on their own, not whether they fit together.
+//! length) and representations (valid bounds) on their own, not whether they fit together, and
+//! that a [`De`](crate::algorithm::De) has at least 4 individuals and
+//! [`Islands`](crate::algorithm::Islands) at least one island.
 //! JSON can't store NaN or infinities, which invalid fitness values and some algorithms (e.g.
 //! crowding distances) use: prefer a binary format, or this module.
 

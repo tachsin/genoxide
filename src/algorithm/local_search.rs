@@ -34,7 +34,8 @@ pub enum Acceptance {
     /// tabu neighbor is still allowed if it's better than the best solution so far (aspiration).
     /// If every neighbor is tabu, the search stays. Use it with several neighbors per step.
     Tabu {
-        /// The number of recent solutions that are tabu, at least 1.
+        /// The number of recent solutions that are tabu, at least 1. They are kept as copies,
+        /// two per solution: memory grows with the tenure, up to a solution per step.
         tenure: usize,
     },
 }

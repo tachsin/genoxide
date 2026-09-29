@@ -668,6 +668,69 @@ fn deserializing_validates() {
     assert!(fitness.score().unwrap().is_sign_positive());
 }
 
+// what a hand-edited or damaged checkpoint can hold, and would hang or panic a run
+#[test]
+fn deserializing_checks_what_would_hang_or_panic() {
+    fn sphere(x: &Reals) -> f64 {
+        x.iter().map(|xi| xi * xi).sum()
+    }
+
+    // a De of 3 individuals never finds three others for a trial
+    let de = De::builder(Real::uniform(3, -5.0..=5.0).unwrap())
+        .population_size(10)
+        .strategy(genoxide::algorithm::de::Strategy::Rand1)
+        .minimize()
+        .seed(1)
+        .build()
+        .unwrap();
+    let mut engine = Engine::new(de, sphere).stop_when(Stop::generations(2));
+    engine.run().unwrap();
+    let mut json = serde_json::to_value(engine.algorithm()).unwrap();
+    json["population"]["individuals"]
+        .as_array_mut()
+        .unwrap()
+        .truncate(4);
+    serde_json::from_value::<De>(json.clone()).unwrap();
+    json["population"]["individuals"]
+        .as_array_mut()
+        .unwrap()
+        .truncate(3);
+    let message = serde_json::from_value::<De>(json).unwrap_err().to_string();
+    assert!(
+        message.contains("differential evolution needs at least 4 individuals, got 3"),
+        "{message}"
+    );
+
+    // islands without an island have no objective
+    let islands = (0..2)
+        .map(|seed| {
+            De::builder(Real::uniform(3, -5.0..=5.0).unwrap())
+                .population_size(10)
+                .minimize()
+                .seed(seed)
+                .build()
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let islands = Islands::builder(islands)
+        .topology(Topology::Ring)
+        .build()
+        .unwrap();
+    let mut json = serde_json::to_value(&islands).unwrap();
+    assert_eq!(
+        bytes(&serde_json::from_value::<Islands<De>>(json.clone()).unwrap()),
+        bytes(&islands)
+    );
+    json["islands"].as_array_mut().unwrap().clear();
+    let message = serde_json::from_value::<Islands<De>>(json)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        message.contains("islands need at least 1 island"),
+        "{message}"
+    );
+}
+
 #[test]
 fn a_controlled_run_resumes() {
     use genoxide::engine::Progress;
