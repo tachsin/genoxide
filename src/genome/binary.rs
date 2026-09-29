@@ -144,26 +144,30 @@ impl Bits {
 
     fn clear_unused_bits(&mut self) {
         let used = self.len % WORD_BITS;
-        if used > 0 {
-            if let Some(last) = self.words.last_mut() {
-                *last &= (1 << used) - 1;
-            }
+        if used > 0
+            && let Some(last) = self.words.last_mut()
+        {
+            *last &= (1 << used) - 1;
         }
     }
 }
 
 impl FromIterator<bool> for Bits {
     fn from_iter<I: IntoIterator<Item = bool>>(iter: I) -> Self {
-        let mut words = Vec::new();
-        let mut len = 0;
+        let iter = iter.into_iter();
+        let mut words = Vec::with_capacity(iter.size_hint().0.div_ceil(WORD_BITS));
+        // the word being filled, pushed when full, and the last one when partly filled
+        let (mut word, mut len) = (0, 0);
         for bit in iter {
-            if len % WORD_BITS == 0 {
-                words.push(0);
-            }
-            if bit {
-                *words.last_mut().expect("pushed above") |= 1 << (len % WORD_BITS);
-            }
+            word |= u64::from(bit) << (len % WORD_BITS);
             len += 1;
+            if len.is_multiple_of(WORD_BITS) {
+                words.push(word);
+                word = 0;
+            }
+        }
+        if !len.is_multiple_of(WORD_BITS) {
+            words.push(word);
         }
         Self { words, len }
     }
