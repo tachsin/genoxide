@@ -54,9 +54,11 @@ function regionImage(region) {
 
 /**
  * `front-2d`: each algorithm's front in objective space over the true
- * front; infeasible points hollow. A constrained problem's trace may give its
- * feasible region (`problem.feasible_region`), shaded behind the fronts. The axes follow the points with a short
- * glide, so the front's approach reads at every scale.
+ * front; infeasible points hollow, the true front's isolated points as rings.
+ * A constrained problem's trace may give its feasible region
+ * (`problem.feasible_region`, see `regionImage`), shaded behind the fronts.
+ * The axes follow the points with a short glide, so the front's approach
+ * reads at every scale.
  */
 export default function Front2dPlot({ trace, frame, dark, reduced, compact = false }) {
   const [hover, setHover] = useState(null);
@@ -73,8 +75,11 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
   const truePieces =
     Array.isArray(problem.true_front) && Array.isArray(problem.true_front[0]?.[0]) ? problem.true_front : null;
   const trueFront = truePieces ? truePieces.flat() : Array.isArray(problem.true_front) ? problem.true_front : null;
-  // a front of separate points (e.g. ZDT5's, on a binary genome) is drawn as rings, not a line
+  // a front of separate points (e.g. ZDT5's, on a binary genome) is drawn as rings, not a line,
+  // and so is a piece of a single point
   const discrete = problem.true_front_kind === "points";
+  const lonePoints = truePieces ? truePieces.filter((piece) => piece.length === 1).map((piece) => piece[0]) : [];
+  // the feasible region of a constrained problem, shaded behind everything
   const region = problem.feasible_region ?? null;
   const regionUrl = useMemo(() => regionImage(region), [region]);
 
@@ -88,10 +93,10 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
 
   const hasInfeasible = names.some((n) => (infeasible[n] ?? []).length);
   const legend = [
-    ...(regionUrl ? [{ label: "feasible region", shape: "square", className: "text-base-content/20" }] : []),
     ...names.map((n, k) => ({ label: n, color: palette[k % palette.length], shape: SHAPES[k % SHAPES.length] })),
     ...(hasInfeasible ? [{ label: "infeasible", shape: "ring", className: "text-base-content/50" }] : []),
     ...(trueFront ? [{ label: "true front", shape: discrete ? "ring" : "line", className: "text-base-content/45" }] : []),
+    ...(regionUrl ? [{ label: "feasible region", shape: "square", className: "text-base-content/20" }] : []),
   ];
 
   return (
@@ -180,16 +185,9 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
                   />
                 </>
               ) : null}
-              {trueFront && discrete
-                ? trueFront.map((p, i) => (
-                    <circle key={`t${i}`} cx={x(p[0])} cy={y(p[1])} r={5} fill="none" className="stroke-base-content/45" strokeWidth={1.5} />
-                  ))
-                : null}
-              {truePieces && !discrete
-                ? truePieces
-                    .filter((piece) => piece.length === 1)
-                    .map(([p], i) => <circle key={`s${i}`} cx={x(p[0])} cy={y(p[1])} r={3} className="fill-base-content/45" />)
-                : null}
+              {(discrete ? (trueFront ?? []) : lonePoints).map((p, i) => (
+                <circle key={`t${i}`} cx={x(p[0])} cy={y(p[1])} r={5} fill="none" className="stroke-base-content/45" strokeWidth={1.5} />
+              ))}
               {trueFront && !discrete ? (
                 <path
                   d={truePieces ? truePieces.map((piece) => piecePath(piece, x, y)).join("") : frontPath(trueFront, x, y)}

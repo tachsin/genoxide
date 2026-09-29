@@ -141,6 +141,24 @@ python examples/tsp_berlin52/main.py
 | [Convex C2-DTLZ2 with 3 objectives](convex_c2_dtlz2_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/convex-c2-dtlz2-3obj) |
 | [C3-DTLZ1 with 3 objectives](c3_dtlz1_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/c3-dtlz1-3obj) |
 | [C3-DTLZ4 with 3 objectives](c3_dtlz4_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/c3-dtlz4-3obj) |
+| [Convex DTLZ2 with 3 objectives](convex_dtlz2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/convex-dtlz2) |
+| [Scaled DTLZ1 with 3 objectives](scaled_dtlz1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/scaled-dtlz1) |
+| [Scaled DTLZ2 with 3 objectives](scaled_dtlz2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/scaled-dtlz2) |
+| [Inverted DTLZ1 with 3 objectives](inverted_dtlz1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/inverted-dtlz1) |
+| [MW1](mw1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw1) |
+| [MW2](mw2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw2) |
+| [MW3](mw3/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw3) |
+| [MW4](mw4/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw4) |
+| [MW5](mw5/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw5) |
+| [MW6](mw6/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw6) |
+| [MW7](mw7/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw7) |
+| [MW8](mw8/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw8) |
+| [MW9](mw9/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw9) |
+| [MW10](mw10/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw10) |
+| [MW11](mw11/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw11) |
+| [MW12](mw12/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw12) |
+| [MW13](mw13/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw13) |
+| [MW14](mw14/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw14) |
 | [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neuroevolution) |
 | [Asynchronous evaluation](asynchronous/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/asynchronous) |
 | [Neuroevolution on the GPU](gpu/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gpu) |

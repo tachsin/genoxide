@@ -1,0 +1,4 @@
+NSGA-II, η = 20, 600 generations: 100 solutions, 100 feasible, IGD+ 0.1873, hypervolume 0.5631
+NSGA-II, η = 2, 5000 generations: 100 solutions, 100 feasible, IGD+ 0.0472, hypervolume 0.7433
+the whole front: hypervolume 0.8099
+without the point (1, 1): IGD+ 0.0015; the front's nearest point to it is 0.4390 away

@@ -213,7 +213,7 @@ dtlz!(
 );
 
 // DTLZ1 and DTLZ3's multimodal distance function
-fn rastrigin_g(tail: &[f64]) -> f64 {
+pub(super) fn rastrigin_g(tail: &[f64]) -> f64 {
     100.0
         * (tail.len() as f64
             + tail
