@@ -64,7 +64,7 @@ ga = gx.Ga(
 )
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(INSTANCE, MACHINES, OPTIMUM, schedule)
-result = ga.run(makespan, target=OPTIMUM, generations=1_000, on_generation=trace.on_generation)
+result = ga.run(makespan, target=OPTIMUM, generations=5_000, on_generation=trace.on_generation)
 
 print(
     f"makespan {result.best_fitness:.0f} after {result.generations} generations "
