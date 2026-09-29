@@ -6,9 +6,8 @@ use crate::multi::{IntoScores, Scores};
 use crate::{Fitness, Result};
 use std::any::Any;
 use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
 use std::fmt;
-use std::hash::BuildHasherDefault;
+use std::hash::{BuildHasherDefault, Hasher};
 use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::sync::Arc;
 
@@ -176,15 +175,78 @@ impl fmt::Debug for Info {
     }
 }
 
-// a hasher without random keys: the store is never iterated in an order that matters, and it's
-// created without a call to the system's random number generator
-type Hasher = BuildHasherDefault<DefaultHasher>;
+// A fast hasher of genomes without random keys, for maps and sets of genomes whose order never
+// matters: created without a call to the system's random number generator, and results never
+// depend on it, as the genomes are compared. Every word is mixed in with a folded multiply (the
+// two halves of a 128-bit product xored), and the result is finalized so that the low bits,
+// which pick a bucket, depend on every bit. SipHash, the default, spends several times as long on
+// a genome of many words.
+#[derive(Clone, Copy)]
+pub(crate) struct GenomeHasher(u64);
+
+impl Default for GenomeHasher {
+    #[inline]
+    fn default() -> Self {
+        Self(0x243f_6a88_85a3_08d3)
+    }
+}
+
+impl Hasher for GenomeHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        let (words, rest) = bytes.as_chunks::<8>();
+        for &word in words {
+            self.write_u64(u64::from_le_bytes(word));
+        }
+        for &byte in rest {
+            self.write_u64(u64::from(byte));
+        }
+    }
+
+    #[inline]
+    fn write_u64(&mut self, word: u64) {
+        let product = u128::from(self.0 ^ word) * 0x9e37_79b9_7f4a_7c15;
+        self.0 = product as u64 ^ (product >> 64) as u64;
+    }
+
+    #[inline]
+    fn write_u8(&mut self, n: u8) {
+        self.write_u64(n.into());
+    }
+
+    #[inline]
+    fn write_u32(&mut self, n: u32) {
+        self.write_u64(n.into());
+    }
+
+    #[inline]
+    fn write_usize(&mut self, n: usize) {
+        self.write_u64(n as u64);
+    }
+
+    #[inline]
+    fn write_i64(&mut self, n: i64) {
+        self.write_u64(n as u64);
+    }
+
+    #[inline]
+    fn finish(&self) -> u64 {
+        // SplitMix64's finalizer
+        let mut x = self.0;
+        x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        x ^ (x >> 31)
+    }
+}
+
+// builds `GenomeHasher`s
+pub(crate) type GenomeHashing = BuildHasherDefault<GenomeHasher>;
 
 // The info of genomes, by genome. Empty, and neither allocated nor hashed into, unless a fitness
 // function returns info.
 #[derive(Clone)]
 pub(crate) struct InfoStore<G> {
-    entries: HashMap<G, Entry, Hasher>,
+    entries: HashMap<G, Entry, GenomeHashing>,
     // the number of the last pruning
     round: u64,
 }

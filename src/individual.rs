@@ -24,12 +24,31 @@ use crate::genome::Genome;
 /// individual.genome_mut().flip(0);
 /// assert_eq!(individual.fitness(), None); // changed, so not evaluated
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Individual<G: Genome, F = Fitness> {
     genome: G,
     fitness: Option<F>,
     age: u32,
+}
+
+impl<G: Genome, F: Clone> Clone for Individual<G, F> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            genome: self.genome.clone(),
+            fitness: self.fitness.clone(),
+            age: self.age,
+        }
+    }
+
+    // in the memory of `self`'s genome, e.g. the best so far replaced by a better one
+    #[inline]
+    fn clone_from(&mut self, source: &Self) {
+        self.genome.clone_from(&source.genome);
+        self.fitness.clone_from(&source.fitness);
+        self.age = source.age;
+    }
 }
 
 impl<G: Genome> Individual<G> {

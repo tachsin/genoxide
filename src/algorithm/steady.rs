@@ -1,10 +1,14 @@
 //! A steady-state genetic algorithm that takes results one at a time and in any order, for
 //! asynchronous evaluation.
 
+use crate::engine::GenomeHashing;
 use crate::genome::{Genome, Representation};
 use crate::operator::{Crossover, Mutate, Select};
 use crate::rng::Chance;
 use crate::{Fitness, Individual, Objective, Population, Result, StreamRng};
+use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
 
 /// An algorithm that proposes genomes one at a time and takes their fitness in any order, with
 /// more genomes proposed before earlier results arrive: for asynchronous evaluation, where every
@@ -116,9 +120,172 @@ pub struct SteadyGa<R: Representation, S, C, M> {
     // the second child of the last crossover, proposed next
     queued: Option<R::Genome>,
     population: Population<R::Genome>,
+    // finds genomes and the worst individual in the population; rebuilt after a checkpoint
+    #[cfg_attr(feature = "serde", serde(skip))]
+    lookup: Lookup,
     evaluations: u64,
     best: Option<Individual<R::Genome>>,
     best_evaluation: u64,
+}
+
+// a genome's hash, which only narrows down the genomes it's compared with
+fn hash<G: Genome>(genome: &G) -> u64 {
+    GenomeHashing::default().hash_one(genome)
+}
+
+// What finds a genome and the worst individual in a steady-state GA's population without going
+// through all of it: the hash of each genome, in the population's order, how many genomes have
+// each hash, and the population's positions in a binary heap with the worst individual at the
+// top, the earliest on ties. Not serialized, and rebuilt when it doesn't match the population.
+#[derive(Clone, Default)]
+struct Lookup {
+    hashes: Vec<u64>,
+    counts: HashMap<u64, u32, BuildHasherDefault<Prehashed>>,
+    heap: Vec<usize>,
+}
+
+impl std::fmt::Debug for Lookup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Lookup")
+    }
+}
+
+impl Lookup {
+    fn rebuild<G: Genome>(&mut self, population: &Population<G>, objective: Objective) {
+        let len = population.len();
+        self.hashes.clear();
+        self.hashes.extend(
+            population
+                .iter()
+                .map(|individual| hash(individual.genome())),
+        );
+        self.counts.clear();
+        for &hash in &self.hashes {
+            *self.counts.entry(hash).or_default() += 1;
+        }
+        self.heap.clear();
+        self.heap.extend(0..len);
+        for slot in (0..len / 2).rev() {
+            self.sift_down(slot, population, objective);
+        }
+    }
+
+    // whether `genome`, whose hash is `hash`, is in `population`
+    fn contains<G: Genome>(&self, population: &Population<G>, genome: &G, hash: u64) -> bool {
+        self.counts.contains_key(&hash)
+            && self
+                .hashes
+                .iter()
+                .zip(population.iter())
+                .any(|(&other, individual)| other == hash && individual.genome() == genome)
+    }
+
+    // after an individual whose genome has `hash` was added at the end of `population`
+    fn push<G: Genome>(&mut self, population: &Population<G>, objective: Objective, hash: u64) {
+        self.hashes.push(hash);
+        *self.counts.entry(hash).or_default() += 1;
+        let slot = self.heap.len();
+        self.heap.push(population.len() - 1);
+        self.sift_up(slot, population, objective);
+    }
+
+    // the position of the worst individual, the earliest on ties
+    fn worst(&self) -> usize {
+        self.heap[0]
+    }
+
+    // after the worst individual was replaced by one whose genome has `hash`
+    fn replace_worst<G: Genome>(
+        &mut self,
+        population: &Population<G>,
+        objective: Objective,
+        hash: u64,
+    ) {
+        let worst = self.heap[0];
+        let old = std::mem::replace(&mut self.hashes[worst], hash);
+        if let Some(count) = self.counts.get_mut(&old) {
+            *count -= 1;
+            if *count == 0 {
+                self.counts.remove(&old);
+            }
+        }
+        *self.counts.entry(hash).or_default() += 1;
+        self.sift_down(0, population, objective);
+    }
+
+    // whether the individual at position `a` goes above the one at `b` in the heap: worse, or as
+    // good and earlier
+    fn above<G: Genome>(
+        population: &Population<G>,
+        objective: Objective,
+        a: usize,
+        b: usize,
+    ) -> bool {
+        let fitness = |index: usize| population[index].fitness().unwrap_or(Fitness::invalid());
+        match objective.compare(fitness(a), fitness(b)) {
+            Ordering::Less => true,
+            Ordering::Greater => false,
+            Ordering::Equal => a < b,
+        }
+    }
+
+    fn sift_up<G: Genome>(
+        &mut self,
+        mut slot: usize,
+        population: &Population<G>,
+        objective: Objective,
+    ) {
+        while slot > 0 {
+            let parent = (slot - 1) / 2;
+            if !Self::above(population, objective, self.heap[slot], self.heap[parent]) {
+                break;
+            }
+            self.heap.swap(slot, parent);
+            slot = parent;
+        }
+    }
+
+    fn sift_down<G: Genome>(
+        &mut self,
+        mut slot: usize,
+        population: &Population<G>,
+        objective: Objective,
+    ) {
+        let len = self.heap.len();
+        loop {
+            let mut top = slot;
+            for child in [2 * slot + 1, 2 * slot + 2] {
+                if child < len
+                    && Self::above(population, objective, self.heap[child], self.heap[top])
+                {
+                    top = child;
+                }
+            }
+            if top == slot {
+                break;
+            }
+            self.heap.swap(slot, top);
+            slot = top;
+        }
+    }
+}
+
+// a map keyed by hashes, which are hashed already
+#[derive(Default)]
+struct Prehashed(u64);
+
+impl Hasher for Prehashed {
+    fn write(&mut self, _bytes: &[u8]) {
+        unreachable!("only hashes are hashed")
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        self.0 = value;
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
 }
 
 // how many times a child identical to a parent is bred again
@@ -153,6 +320,7 @@ impl<R: Representation, S, C, M> SteadyGa<R, S, C, M> {
             initial_proposed: 0,
             queued: None,
             population: Population::new(Vec::new()),
+            lookup: Lookup::default(),
             evaluations: 0,
             best: None,
             best_evaluation: 0,
@@ -202,9 +370,14 @@ where
 
     // whether `genome` is in the population
     fn contains(&self, genome: &R::Genome) -> bool {
-        self.population
-            .iter()
-            .any(|individual| individual.genome() == genome)
+        self.lookup.contains(&self.population, genome, hash(genome))
+    }
+
+    // the lookup of the population, after a checkpoint
+    fn rehash(&mut self) {
+        if self.lookup.hashes.len() != self.population.len() {
+            self.lookup.rebuild(&self.population, self.objective);
+        }
     }
 }
 
@@ -234,20 +407,24 @@ where
             return self.representation.random_genome(&mut self.rng);
         }
         // the second child of the last crossover, unless it joined the population meanwhile
-        if let Some(genome) = self.queued.take() {
-            if !self.contains(&genome) {
-                return genome;
-            }
+        self.rehash();
+        if let Some(genome) = self.queued.take()
+            && !self.contains(&genome)
+        {
+            return genome;
         }
         let mut children = self.breed();
+        // whether each child is in the population, found once
+        let mut present = children.each_ref().map(|child| self.contains(child));
         for _ in 1..ATTEMPTS {
-            if children.iter().any(|child| !self.contains(child)) {
+            if present != [true, true] {
                 break;
             }
             children = self.breed();
+            present = children.each_ref().map(|child| self.contains(child));
         }
         let [a, b] = children;
-        match (self.contains(&a), self.contains(&b)) {
+        match (present[0], present[1]) {
             (false, false) => {
                 // twins would be the same evaluation twice
                 if b != a {
@@ -277,34 +454,31 @@ where
             self.best = Some(individual.clone());
             self.best_evaluation = self.evaluations;
         }
-        if self.contains(individual.genome()) {
+        self.rehash();
+        let hash = hash(individual.genome());
+        if self
+            .lookup
+            .contains(&self.population, individual.genome(), hash)
+        {
             return Ok(Some(individual));
         }
         if self.population.len() < self.population_size {
             self.population.push(individual);
+            self.lookup.push(&self.population, self.objective, hash);
             return Ok(None);
         }
         // the worst, the earliest on ties
-        let objective = self.objective;
-        let fitness_at = |index: usize| {
-            self.population[index]
-                .fitness()
-                .unwrap_or(Fitness::invalid())
-        };
-        let worst = (1..self.population.len()).fold(0, |worst, index| {
-            if objective.is_better(fitness_at(worst), fitness_at(index)) {
-                index
-            } else {
-                worst
-            }
-        });
-        if objective.is_better(fitness_at(worst), fitness) {
+        let worst = self.lookup.worst();
+        let worst_fitness = self.population[worst]
+            .fitness()
+            .unwrap_or(Fitness::invalid());
+        if self.objective.is_better(worst_fitness, fitness) {
             return Ok(Some(individual));
         }
-        Ok(Some(std::mem::replace(
-            &mut self.population[worst],
-            individual,
-        )))
+        let replaced = std::mem::replace(&mut self.population[worst], individual);
+        self.lookup
+            .replace_worst(&self.population, self.objective, hash);
+        Ok(Some(replaced))
     }
 
     fn population(&self) -> &Population<R::Genome> {
@@ -386,6 +560,56 @@ mod tests {
             assert!(!steady.contains(&genome), "{proposals:?}, then {genome:?}");
             proposals.push(genome.clone());
             steady.receive(genome, Fitness::new(0.0)).unwrap();
+        }
+    }
+
+    // The lookup finds the worst as a scan of the population does, the earliest on ties, with
+    // ties, invalid and infeasible fitness, and after a checkpoint's rebuild (a clone of the
+    // population without the lookup).
+    #[test]
+    fn the_worst_is_the_first_of_the_worst() {
+        for objective in [Objective::Maximize, Objective::Minimize] {
+            let mut steady = Ga::builder(Binary::new(12).unwrap())
+                .population_size(20)
+                .select(Tournament::new(2).unwrap())
+                .crossover(UniformCrossover::new())
+                .mutate(BitFlip::count(1).unwrap())
+                .objective(objective)
+                .seed(5)
+                .build_steady()
+                .unwrap();
+            let mut rng = StreamRng::seed_from_u64(9);
+            for step in 0..3_000 {
+                if step % 700 == 0 {
+                    steady.lookup = Lookup::default();
+                }
+                let genome = steady.propose();
+                let fitness = match rng.below(8) {
+                    0 => Fitness::invalid(),
+                    1 => Fitness::constrained(1.0, rng.below(3) as f64),
+                    value => Fitness::new(value as f64),
+                };
+                let population = steady.population().clone();
+                let full = population.len() == 20;
+                let contained = steady.contains(&genome);
+                let returned = steady.receive(genome.clone(), fitness).unwrap();
+                if full && !contained {
+                    let fitness_at = |index: usize| population[index].fitness().unwrap();
+                    let worst = (1..population.len()).fold(0, |worst, index| {
+                        if objective.is_better(fitness_at(worst), fitness_at(index)) {
+                            index
+                        } else {
+                            worst
+                        }
+                    });
+                    if objective.is_better(fitness_at(worst), fitness) {
+                        assert_eq!(steady.population(), &population);
+                    } else {
+                        assert_eq!(returned.as_ref(), Some(&population[worst]));
+                        assert_eq!(steady.population()[worst].genome(), &genome);
+                    }
+                }
+            }
         }
     }
 }

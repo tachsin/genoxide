@@ -148,7 +148,7 @@ impl<W: Write> Report<W> {
                     || progress.elapsed().as_nanos() / interval > last.as_nanos() / interval
             }
             (Some((last, _)), Every::Generations(generations)) => {
-                progress.generation() != last && progress.generation() % generations == 0
+                progress.generation() != last && progress.generation().is_multiple_of(generations)
             }
         };
         if due {

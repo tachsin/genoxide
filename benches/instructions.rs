@@ -122,6 +122,52 @@ fn evaluated_population(size: usize) -> (Population<Bits>, StreamRng) {
     (population, rng)
 }
 
+type OneMaxSteady = SteadyGa<Binary, Tournament, UniformCrossover, BitFlip>;
+
+// a steady-state GA for asynchronous evaluation, with its population of `size` evaluated
+fn evaluated_steady(size: usize) -> OneMaxSteady {
+    let mut steady = Ga::builder(Binary::new(100).unwrap())
+        .population_size(size)
+        .select(Tournament::new(3).unwrap())
+        .crossover(UniformCrossover::new())
+        .mutate(BitFlip::per_gene(0.01).unwrap())
+        .seed(0)
+        .build_steady()
+        .unwrap();
+    for _ in 0..size {
+        let genome = steady.propose();
+        let fitness = Fitness::new(one_max(&genome));
+        steady.receive(genome, fitness).unwrap();
+    }
+    steady
+}
+
+type OneMaxIslands = Islands<OneMaxGa>;
+
+// four islands of 25, with their initial populations evaluated
+fn evaluated_islands(len: usize) -> OneMaxIslands {
+    let islands = (0..4)
+        .map(|seed| {
+            Ga::builder(Binary::new(len).unwrap())
+                .population_size(25)
+                .select(Tournament::new(3).unwrap())
+                .crossover(UniformCrossover::new())
+                .mutate(BitFlip::per_gene(1.0 / len as f64).unwrap())
+                .seed(seed)
+                .build()
+                .unwrap()
+        })
+        .collect();
+    let mut islands = Islands::builder(islands).interval(1).build().unwrap();
+    let fitness: Vec<Fitness> = islands
+        .ask()
+        .iter()
+        .map(|genome| Fitness::new(one_max(genome)))
+        .collect();
+    islands.tell(&fitness).unwrap();
+    islands
+}
+
 #[library_benchmark]
 #[bench::binary_1000(1_000)]
 fn random_binary_genome(len: usize) -> Bits {
@@ -295,6 +341,46 @@ fn es_generation(mut es: Es) -> Es {
     black_box(es)
 }
 
+// one generation of four islands, with a migration
+#[library_benchmark]
+#[bench::one_max_1000(setup = evaluated_islands, args = (1_000))]
+fn islands_generation(mut islands: OneMaxIslands) -> OneMaxIslands {
+    let fitness: Vec<Fitness> = islands
+        .ask()
+        .iter()
+        .map(|genome| Fitness::new(one_max(genome)))
+        .collect();
+    islands.tell(&fitness).unwrap();
+    black_box(islands)
+}
+
+// 100 results of a steady-state GA of 100, each one proposed and received in turn
+#[library_benchmark]
+#[bench::one_max_100(setup = evaluated_steady, args = (100))]
+fn steady_results(mut steady: OneMaxSteady) -> OneMaxSteady {
+    for _ in 0..100 {
+        let genome = steady.propose();
+        let fitness = Fitness::new(one_max(&genome));
+        black_box(steady.receive(genome, fitness).unwrap());
+    }
+    steady
+}
+
+// the CI's `run`, with statistics and a hall of fame
+#[library_benchmark]
+#[bench::one_max_100_50_generations(100)]
+fn run_observed(len: usize) -> (Outcome<Bits>, Statistics, HallOfFame<Bits>) {
+    let mut statistics = Statistics::new();
+    let mut hall_of_fame = HallOfFame::new(10).unwrap();
+    let outcome = Engine::new(one_max_ga(len), one_max)
+        .stop_when(Stop::generations(50))
+        .observe(&mut statistics)
+        .observe(&mut hall_of_fame)
+        .run()
+        .unwrap();
+    black_box((outcome, statistics, hall_of_fame))
+}
+
 #[library_benchmark]
 #[bench::one_max_100_50_generations(100)]
 fn run(len: usize) -> Outcome<Bits> {
@@ -327,7 +413,10 @@ library_benchmark_group!(
         generation,
         de_generation,
         es_generation,
-        run
+        run,
+        islands_generation,
+        steady_results,
+        run_observed
     ]
 );
 
