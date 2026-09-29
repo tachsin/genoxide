@@ -1,4 +1,4 @@
 60 of 1001 evenly spaced x1 give f1 below 0.6404
-100 solutions on the front, 45 with f1 below 0.6404, the smallest 0.2808
-IGD+ to the optimal front: 0.0071
-hypervolume 0.4959 (the whole front: 0.5079)
+100 solutions on the front, 47 with f1 below 0.6404, the smallest 0.2808
+IGD+ to the optimal front: 0.0030
+hypervolume 0.5029 (the whole front: 0.5079)

@@ -52,7 +52,7 @@ fn main() -> Result<()> {
     // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
     let mut trace = trace::Trace::from_env();
     let outcome = MultiEngine::new(nsga2, problem)
-        .stop_when(Stop::generations(250))
+        .stop_when(Stop::generations(500))
         .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
