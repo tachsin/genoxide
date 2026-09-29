@@ -104,9 +104,22 @@ pub(crate) fn gains<const M: usize>(
     old: &[Scores<M>],
     objectives: &[Objective; M],
 ) -> bool {
+    // a candidate equal to a member of `old` is no gain. Most of a front often is, in the same
+    // order, as survivors keep theirs: the member after the last one found is checked first,
+    // which finds them without comparing each with the whole previous front
+    let mut next = 0;
     new.iter().any(|candidate| {
-        !old.iter()
-            .any(|other| other == candidate || dominates(other, candidate, objectives))
+        if old.get(next) == Some(candidate) {
+            next += 1;
+            return false;
+        }
+        !old.iter().enumerate().any(|(position, other)| {
+            if other == candidate {
+                next = position + 1;
+                return true;
+            }
+            dominates(other, candidate, objectives)
+        })
     })
 }
 
@@ -499,6 +512,21 @@ mod tests {
             let five_objectives = [Minimize, Maximize, Minimize, Minimize, Maximize];
             prop_assert_eq!(non_dominated_sort(&five, &five_objectives), reference_sort(&five, &five_objectives));
             prop_assert_eq!(non_dominated_sort(&one, &[Minimize]), reference_sort(&one, &[Minimize]));
+        }
+
+        #[test]
+        fn gains_match_the_definition(
+            new in prop::collection::vec(any_scores::<2>(), 0..40),
+            old in prop::collection::vec(any_scores::<2>(), 0..40),
+            objectives in any_objectives::<2>(),
+        ) {
+            let expected = |new: &[Scores<2>], old: &[Scores<2>]| new.iter().any(|candidate| {
+                !old.iter().any(|other| other == candidate || dominates(other, candidate, &objectives))
+            });
+            prop_assert_eq!(gains(&new, &old, &objectives), expected(&new, &old));
+            // most of the new front in the same order as in the old one
+            let old: Vec<Scores<2>> = new.iter().skip(1).step_by(2).chain(&old).copied().collect();
+            prop_assert_eq!(gains(&new, &old, &objectives), expected(&new, &old));
         }
 
         #[test]
