@@ -48,7 +48,8 @@ import math
 import numbers
 import operator
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import FrozenInstanceError, dataclass
+from functools import cached_property
 from typing import Any, Literal, Union
 
 import numpy as np
@@ -804,9 +805,67 @@ class MultiResult:
     """
 
 
-@dataclass(frozen=True, eq=False)
-class Progress:
-    """A single-objective run after a generation, for ``on_generation``."""
+class _Arrays:
+    """A population's arrays, already made: what a copied or unpickled progress object reads, in
+    place of the run's copy of the population."""
+
+    __slots__ = ("_genomes", "_values", "_violations")
+
+    def __init__(
+        self, genomes: np.ndarray | None, values: np.ndarray, violations: np.ndarray
+    ) -> None:
+        self._genomes = genomes
+        self._values = values
+        self._violations = violations
+
+    def genomes(self) -> np.ndarray | None:
+        return self._genomes
+
+    def values(self) -> np.ndarray:
+        return self._values
+
+    def violations(self) -> np.ndarray:
+        return self._violations
+
+
+class _ReadOnly:
+    """A progress object: read-only, with the population's arrays made when first read and then
+    kept (``cached_property`` writes them to the instance's ``__dict__`` directly)."""
+
+    _repr_fields: tuple[str, ...] = ()
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenInstanceError(f"cannot assign to field {name!r}")
+
+    def __delattr__(self, name: str) -> None:
+        raise FrozenInstanceError(f"cannot delete field {name!r}")
+
+    def __repr__(self) -> str:
+        fields = ", ".join(f"{name}={getattr(self, name)!r}" for name in self._repr_fields)
+        return f"{type(self).__name__}({fields})"
+
+
+class Progress(_ReadOnly):
+    """A single-objective run after a generation, for ``on_generation`` and ``control``.
+
+    It's read-only. ``population``, ``scores`` and ``violations`` are made when first read, from a
+    copy of the population that the run takes after the generation, and then kept: a callback that
+    doesn't read them doesn't pay for their arrays. A progress object kept after its callback
+    returned stays valid, and can be copied and pickled. It isn't a dataclass:
+    ``dataclasses.fields``, ``asdict`` and ``replace`` don't apply to it.
+    """
+
+    __match_args__ = (
+        "generation",
+        "evaluations",
+        "seconds",
+        "best_fitness",
+        "best_genome",
+        "population",
+        "scores",
+        "violations",
+    )
+    _repr_fields = ("generation", "evaluations", "seconds", "best_fitness")
 
     generation: int
     """The generations completed: 0 after the initial population."""
@@ -816,20 +875,79 @@ class Progress:
     """The time since the run started."""
     best_fitness: float | None
     """The best score so far, or None if no valid solution was found yet."""
-    best_genome: np.ndarray = field(repr=False)
+    best_genome: np.ndarray
     """The best genome so far."""
-    population: np.ndarray = field(repr=False)
-    """The population after the generation, a genome per row."""
-    scores: np.ndarray = field(repr=False)
-    """The population's scores: NaN for an invalid solution."""
-    violations: np.ndarray = field(repr=False)
-    """The population's constraint violations: 0 for a feasible solution, NaN for an invalid
-    one."""
+
+    def __init__(
+        self,
+        generation: int,
+        evaluations: int,
+        seconds: float,
+        best_fitness: float | None,
+        best_genome: np.ndarray,
+        population: Any,
+    ) -> None:
+        # `population`: the run's copy of the population, or its arrays (`_Arrays`)
+        self.__dict__.update(
+            generation=generation,
+            evaluations=evaluations,
+            seconds=seconds,
+            best_fitness=best_fitness,
+            best_genome=best_genome,
+            _population=population,
+        )
+
+    @cached_property
+    def population(self) -> np.ndarray:
+        """The population after the generation, a genome per row."""
+        return self._population.genomes()
+
+    @cached_property
+    def scores(self) -> np.ndarray:
+        """The population's scores: NaN for an invalid solution."""
+        return self._population.values()
+
+    @cached_property
+    def violations(self) -> np.ndarray:
+        """The population's constraint violations: 0 for a feasible solution, NaN for an invalid
+        one."""
+        return self._population.violations()
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        arrays = _Arrays(self.population, self.scores, self.violations)
+        return (
+            Progress,
+            (
+                self.generation,
+                self.evaluations,
+                self.seconds,
+                self.best_fitness,
+                self.best_genome,
+                arrays,
+            ),
+        )
 
 
-@dataclass(frozen=True, eq=False)
-class MultiProgress:
-    """A multi-objective run after a generation, for ``on_generation``."""
+class MultiProgress(_ReadOnly):
+    """A multi-objective run after a generation, for ``on_generation``.
+
+    It's read-only. ``population``, ``objectives``, ``violations``, ``front_objectives`` and
+    ``front_violations`` are made when first read, as :class:`Progress`'s population, and then
+    kept. It isn't a dataclass either.
+    """
+
+    __match_args__ = (
+        "generation",
+        "evaluations",
+        "seconds",
+        "front_size",
+        "population",
+        "objectives",
+        "violations",
+        "front_objectives",
+        "front_violations",
+    )
+    _repr_fields = ("generation", "evaluations", "seconds", "front_size")
 
     generation: int
     """The generations completed: 0 after the initial population."""
@@ -839,18 +957,60 @@ class MultiProgress:
     """The time since the run started."""
     front_size: int
     """The number of non-dominated individuals in the population, each genome once."""
-    population: np.ndarray = field(repr=False)
-    """The population after the generation, a genome per row."""
-    objectives: np.ndarray = field(repr=False)
-    """The population's objective values, a row each: NaN for an invalid solution."""
-    violations: np.ndarray = field(repr=False)
-    """The population's constraint violations: 0 for a feasible solution, NaN for an invalid
-    one."""
-    front_objectives: np.ndarray = field(repr=False)
-    """The objective values of the population's non-dominated individuals, each genome once, a
-    row each: the ``front_objectives`` of ``MultiResult`` after the last generation."""
-    front_violations: np.ndarray = field(repr=False)
-    """Their constraint violations."""
+
+    def __init__(
+        self,
+        generation: int,
+        evaluations: int,
+        seconds: float,
+        front_size: int,
+        population: Any,
+        front: Any,
+    ) -> None:
+        # `population` and `front`: the run's copies of them, or their arrays (`_Arrays`)
+        self.__dict__.update(
+            generation=generation,
+            evaluations=evaluations,
+            seconds=seconds,
+            front_size=front_size,
+            _population=population,
+            _front=front,
+        )
+
+    @cached_property
+    def population(self) -> np.ndarray:
+        """The population after the generation, a genome per row."""
+        return self._population.genomes()
+
+    @cached_property
+    def objectives(self) -> np.ndarray:
+        """The population's objective values, a row each: NaN for an invalid solution."""
+        return self._population.values()
+
+    @cached_property
+    def violations(self) -> np.ndarray:
+        """The population's constraint violations: 0 for a feasible solution, NaN for an invalid
+        one."""
+        return self._population.violations()
+
+    @cached_property
+    def front_objectives(self) -> np.ndarray:
+        """The objective values of the population's non-dominated individuals, each genome once, a
+        row each: the ``front_objectives`` of ``MultiResult`` after the last generation."""
+        return self._front.values()
+
+    @cached_property
+    def front_violations(self) -> np.ndarray:
+        """Their constraint violations."""
+        return self._front.violations()
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        population = _Arrays(self.population, self.objectives, self.violations)
+        front = _Arrays(None, self.front_objectives, self.front_violations)
+        return (
+            MultiProgress,
+            (self.generation, self.evaluations, self.seconds, self.front_size, population, front),
+        )
 
 
 # --- parameter control ---------------------------------------------------------------------------
@@ -1130,8 +1290,8 @@ def _on_generation(
     callback: Callable[[Any], Any] | None, progress: type[Progress] | type[MultiProgress]
 ) -> Callable[..., bool] | None:
     """The callback, called with the generation, the evaluations, the seconds, the best fitness
-    or the size of the front and the population's arrays, as a ``progress``; False from it stops
-    the run."""
+    or the size of the front, and the run's copies of the population (and of the front), as a
+    ``progress``; False from it stops the run."""
     if callback is None:
         return None
     _check_callable(callback, "on_generation")
