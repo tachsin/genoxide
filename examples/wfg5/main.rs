@@ -2,11 +2,12 @@
 //! deceptive parameters, with NSGA-II and SMS-EMOA.
 //!
 //! The Walking Fish Group's fifth problem, from genoxide's `multi::problems::Wfg5`, with the
-//! recommended sizes: 4 position and 20 distance parameters. Runs each algorithm for 1,000
-//! generations, and prints its front after 250 and after 1,000: the size, the IGD+ to 500 points
-//! of the optimal front and the hypervolume; then how far the front is from the optimal one, and
-//! where the population's distance parameters are: at the bounds, where their deceptive shift
-//! leads, or near 0.35, its optimum.
+//! recommended sizes: 4 position and 20 distance parameters. Runs NSGA-II with polynomial
+//! mutation for 1,000 generations, and SMS-EMOA with uniform mutation for 20,000, and prints their
+//! fronts after 1,000 and 20,000: the size, the IGD+ to 500 points of the optimal front and the
+//! hypervolume; then how far the front is from the optimal one, and where the population's
+//! distance parameters are: at the bounds, where their deceptive shift leads, or near 0.35, its
+//! optimum.
 //!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its runs for the plot on the example's
 //! page, with `trace.rs`.
@@ -26,11 +27,11 @@ use genoxide::prelude::*;
 // the reference point of the hypervolume, 1.1 times the nadir point (2, 4)
 const REFERENCE: [f64; 2] = [2.2, 4.4];
 
-// the generation of the first report: the NSGA-II paper's budget
-const FIRST: u64 = 250;
+// the generation of NSGA-II's report, and of SMS-EMOA's first
+const FIRST: u64 = 1_000;
 
-// the length of the run
-const GENERATIONS: u64 = 1_000;
+// the generation of SMS-EMOA's last report
+const LAST: u64 = 20_000;
 
 // the position parameters, k: the distance parameters follow them
 const POSITION: usize = 4;
@@ -47,15 +48,16 @@ fn main() -> Result<()> {
         .mutate(PolynomialMutation::per_gene(1.0 / 24.0, 20.0)?)
         .seed(1)
         .build()?;
-    run("NSGA-II", nsga2, &mut trace)?;
+    run("NSGA-II", nsga2, &[FIRST], &mut trace)?;
 
+    // uniform mutation: one gene per child, drawn anew anywhere in its range
     let sms_emoa = SmsEmoa::builder(problem.representation(), [Minimize; 2])
         .population_size(100)
         .crossover(SimulatedBinaryCrossover::new(15.0)?)
-        .mutate(PolynomialMutation::per_gene(1.0 / 24.0, 20.0)?)
+        .mutate(UniformMutation::count(1)?)
         .seed(1)
         .build()?;
-    run("SMS-EMOA", sms_emoa, &mut trace)?;
+    run("SMS-EMOA", sms_emoa, &[FIRST, LAST], &mut trace)?;
 
     println!("the whole front: hypervolume 3.3968");
     trace.write();
@@ -82,18 +84,19 @@ impl Report {
     }
 }
 
-// runs `algorithm` for 1,000 generations, and reports after 250 and after 1,000
-fn run<A>(name: &'static str, algorithm: A, trace: &mut trace::Trace) -> Result<()>
+// runs `algorithm` up to the last of `after`, and reports after each of those generations
+fn run<A>(name: &'static str, algorithm: A, after: &[u64], trace: &mut trace::Trace) -> Result<()>
 where
     A: MultiObjectiveAlgorithm<2, Genome = Reals>,
 {
     let mut record = trace.fronts(name);
     let mut reports = Vec::new();
+    let last = *after.last().expect("a report");
     MultiEngine::new(algorithm, Wfg5::<2>::default())
-        .stop_when(Stop::generations(GENERATIONS))
+        .stop_when(Stop::generations(last))
         .on_generation(|snapshot| {
             let generation = snapshot.progress().generation();
-            if generation == FIRST || generation == GENERATIONS {
+            if after.contains(&generation) {
                 reports.push((generation, Report::of(snapshot)));
             }
             record(snapshot);
@@ -123,7 +126,8 @@ fn distance(f: &[f64; 2]) -> f64 {
     (b - (b * b - 4.0 * a * c).max(0.0).sqrt()) / (2.0 * a)
 }
 
-// prints the size of a front, its IGD+ to 500 points of the optimal front and its hypervolume;
+// prints the size of a front, its IGD+ to 500 points of the optimal front, also with the
+// objectives scaled to [0, 1] over the front's ranges, 2 and 4, and its hypervolume;
 // then the least and the largest distance of its points from the optimal front, and how many of
 // the population's distance parameters are within 0.001 of the bounds 0 and 1, and within 0.001
 // of 0.35
@@ -131,10 +135,14 @@ fn print(name: &str, generations: u64, report: &Report) {
     let front = &report.front;
     let optimal = Wfg5::<2>::default().optimal_front(500).expect("known");
     let igd = igd_plus(front, &optimal, &[Minimize; 2]);
+    let scale = |points: &[[f64; 2]]| -> Vec<[f64; 2]> {
+        points.iter().map(|f| [f[0] / 2.0, f[1] / 4.0]).collect()
+    };
+    let scaled = igd_plus(&scale(front), &scale(&optimal), &[Minimize; 2]);
     let volume = hypervolume(front, &REFERENCE, &[Minimize; 2]);
     println!(
-        "{name} after {generations} generations: {} solutions, IGD+ {igd:.4}, hypervolume \
-         {volume:.4}",
+        "{name} after {generations} generations: {} solutions, IGD+ {igd:.4} (scaled \
+         {scaled:.4}), hypervolume {volume:.4}",
         front.len()
     );
     let distances = front.iter().map(distance);

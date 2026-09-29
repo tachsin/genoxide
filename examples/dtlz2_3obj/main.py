@@ -1,12 +1,13 @@
 """DTLZ2 with 3 objectives: minimize three conflicting objectives over 12 variables in [0, 1], whose
 Pareto front is the positive eighth of the unit sphere.
 
-NSGA-III with the 91 reference directions of Das and Dennis's method with 12 divisions, a
-population of 92 and 250 generations, as in Deb and Jain (2014). Prints the size of the final
-front and its hypervolume. The fitness function takes a generation at a time.
+NSGA-III twice: with Deb and Jain's (2014) settings, 91 reference directions from Das and Dennis's
+method with 12 divisions and a population of 92; and with 703 directions, 36 divisions, and as
+many solutions. Both run for 250 generations. Prints each final front's size, hypervolume and IGD+
+to 1,035 points of the optimal front. The fitness function takes a generation at a time.
 
-With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
-page, with trace.py.
+With ``GENOXIDE_TRACE=<file>``, it also writes a trace of the second run for the plot on the
+example's page, with trace.py.
 
     python examples/dtlz2_3obj/main.py
 """
@@ -52,22 +53,39 @@ def hypervolume(front, reference):
     return volume
 
 
-nsga3 = gx.Nsga3(
-    gx.Real((0.0, 1.0), length=VARIABLES),
-    objectives=["minimize"] * 3,
-    reference_directions=gx.das_dennis(3, 12),
-    population_size=92,
-    crossover=gx.SimulatedBinaryCrossover(30),
-    mutation=gx.PolynomialMutation(20, rate=1 / VARIABLES),
-    seed=1,
-)
-# with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
-trace = Trace()
-result = nsga3.run(dtlz2, batch=True, generations=250, on_generation=trace.on_generation)
+# 1,035 points spread evenly over the sphere, for IGD+
+OPTIMAL = gx.problems.Dtlz2(objectives=3, variables=VARIABLES).optimal_front(1000)
 
-# the hypervolume of the front, with the reference point (1.1, 1.1, 1.1); the whole front's is
-# 1.1³ minus the eighth of the unit ball, π/6
-front = result.front_objectives
-volume = hypervolume(front, np.array([1.1, 1.1, 1.1]))
-print(f"{len(front)} solutions on the front, hypervolume {volume:.4f} (the whole front: 0.8074)")
+
+def run(name, divisions, population, on_generation=None):
+    """Runs NSGA-III with the directions of Das and Dennis's method with ``divisions`` for 250
+    generations, and reports its front."""
+    nsga3 = gx.Nsga3(
+        gx.Real((0.0, 1.0), length=VARIABLES),
+        objectives=["minimize"] * 3,
+        reference_directions=gx.das_dennis(3, divisions),
+        population_size=population,
+        crossover=gx.SimulatedBinaryCrossover(30),
+        mutation=gx.PolynomialMutation(20, rate=1 / VARIABLES),
+        seed=1,
+    )
+    result = nsga3.run(dtlz2, batch=True, generations=250, on_generation=on_generation)
+
+    front = result.front_objectives
+    volume = hypervolume(front, np.array([1.1, 1.1, 1.1]))
+    distance = gx.indicators.igd_plus(front, OPTIMAL)
+    print(f"{name:<14} {len(front)} solutions, hypervolume {volume:.4f}, IGD+ {distance:.4f}")
+
+
+# Deb and Jain's settings: 91 directions and a population of 92, the multiple of 4 above
+run("91 directions", 12, 92)
+
+# with GENOXIDE_TRACE=<file>, a trace of this run for the plot on the example's page
+trace = Trace()
+# 703 directions, and a solution for each
+run("703 directions", 36, None, trace.on_generation)
+
+# the whole front's hypervolume, with the reference point (1.1, 1.1, 1.1): 1.1³ minus the eighth
+# of the unit ball, π/6
+print("the whole front: hypervolume 0.8074")
 trace.write()

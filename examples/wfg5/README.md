@@ -1,7 +1,7 @@
 ---
 title: WFG5
 category: multi-objective
-summary: Minimize two objectives over 24 variables, with a concave front and deceptive parameters that lead every run to a front 0.05 behind it, with NSGA-II and SMS-EMOA.
+summary: Minimize two objectives over 24 variables, with a concave front and deceptive parameters that lead most runs to a front 0.05 behind it, with NSGA-II and SMS-EMOA.
 reference: "Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation 10(5): 477-506."
 reference_url: https://doi.org/10.1109/TEVC.2005.861417
 optimum: "the front (f₁ / 2)² + (f₂ / 4)² = 1, a quarter ellipse from (0, 4) to (2, 0); hypervolume 3.3968 (reference point (2.2, 4.4))"
@@ -76,22 +76,29 @@ A `Real` genome of 24 genes, the i-th in [0, 2i]: the vector z. The problem is g
 
 ## Algorithm
 
-Two algorithms, with the settings of the ZDT examples: a population of 100, simulated binary
-crossover with η = 15 at genoxide's default rate of 0.9, and polynomial mutation with η = 20 at a
-rate of 1/24 per gene, one gene per child on average. Each runs for 1,000 generations, and the
-example reports its front after 250, the NSGA-II paper's budget, and after 1,000.
+Two algorithms, both with a population of 100 and simulated binary crossover with η = 15 at
+genoxide's default rate of 0.9. They differ in how they mutate and how they select.
 
 - NSGA-II (Deb, Pratap, Agarwal and Meyarivan, 2002, IEEE Transactions on Evolutionary
-  Computation 6(2): 182-197), as the ZDT1 example runs it. It sorts solutions into non-dominated
-  fronts, and within a front prefers solutions with a larger crowding distance, a measure of the
-  gap between their neighbors.
+  Computation 6(2): 182-197), as the ZDT1 example runs it: polynomial mutation with η = 20 at a
+  rate of 1/24 per gene, one gene per child on average, for 1,000 generations. It sorts solutions
+  into non-dominated fronts, and within a front prefers solutions with a larger crowding distance,
+  a measure of the gap between their neighbors.
 - SMS-EMOA (Beume, Naujoks and Emmerich, 2007, European Journal of Operational Research 181(3):
   1653-1669), in genoxide's generational form: 100 children a generation. From the last front
-  that fits only in part, it removes the solutions that add the least hypervolume.
+  that fits only in part, it removes the solutions that add the least hypervolume. Its mutation is
+  uniform: one gene per child, drawn anew anywhere in its range. It runs for 20,000 generations,
+  2,000,100 evaluations, and the example reports its front after 1,000 and after 20,000.
 
-SMS-EMOA is the algorithm that did best on WFG4, whose front is the same. Here it shows whether a
-different selection helps against deception. Both are expected to be deceived, and the example
-shows how far from the front they end.
+Uniform mutation is there for the window. Polynomial mutation almost never lands in it (see What
+makes it hard); a uniform draw lands in it once in 10,000 tries, wherever the parameter was. A child
+with one distance parameter in the window has a smaller x₂ than its parent and the same position, so
+it dominates its parent, and it survives. Crossover then passes the parameter on, and SBX between
+two parents in the window keeps the child near them. The hypervolume rewards every such step,
+however small, and SMS-EMOA keeps the solutions that make them. With 20 distance parameters, each
+found about once in 10,000 draws, it takes many generations: hence 20,000.
+
+With polynomial mutation, SMS-EMOA is deceived as NSGA-II is; see Good results.
 
 ## Output
 
@@ -105,7 +112,9 @@ IGD+ (Ishibuchi et al., 2015, EMO 2015, LNCS 9019: 110-125) is measured to 500 p
 optimal front, those of genoxide's `optimal_front`: evenly spaced points of the line from (1, 0) to
 (0, 1), moved onto the unit circle and stretched by 2 and 4. It averages, over those 500 points,
 the distance to the nearest point of the found front, counting only the objectives in which the
-found point is worse. 0 means that the found front covers the optimal one. Smaller is better.
+found point is worse. 0 means that the found front covers the optimal one. Smaller is better. The
+objectives' ranges on the front differ, 2 for f₁ and 4 for f₂, so the example also gives IGD+
+scaled: with f₁ divided by 2 and f₂ by 4, both in [0, 1] on the front.
 
 The hypervolume (Zitzler and Thiele, 1999, IEEE Transactions on Evolutionary Computation 3(4):
 257-271) is the area that the front dominates, up to the reference point (2.2, 4.4): 1.1 times the
@@ -113,35 +122,43 @@ nadir point, as the ZDT examples use (1.1, 1.1). Larger is better. For the whole
 rectangle less the quarter ellipse, 2.2 × 4.4 − 2π = 3.3968.
 
 The deceptive front, 0.05 behind, has a hypervolume of 2.15 × 4.35 − 2π = 3.0693, and 100 points
-of it, those of `optimal_front(100)` moved up by 0.05, have 3.0335 and an IGD+ of 0.0631.
+of it, those of `optimal_front(100)` moved up by 0.05, have 3.0335 and an IGD+ of 0.0631, scaled
+0.0238.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/wfg5) plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/wfg5) plays these runs back.
 
 ## Good results
 
-A good front would have 100 solutions spread from (0, 4) to (2, 0), an IGD+ near 0 and a
-hypervolume near 3.3968; 100 points of the optimal front give 3.3610 and an IGD+ of 0.0051. Neither
-algorithm comes near. Both are deceived, as expected: they end on the deceptive front, 0.05 behind
-the true one.
+A good front would have 100 solutions spread from (0, 4) to (2, 0), an IGD+ near 0 and a hypervolume
+near 3.3968; 100 points of the optimal front give 3.3610 and an IGD+ of 0.0051, scaled 0.0019. The
+target here is a scaled IGD+ of at most 0.01, or a hypervolume of at least 99% of the whole front's,
+3.3628.
 
-The first front, of 17 solutions, has a hypervolume of 0.9577. The distance parameters slide down
-their slopes quickly: after 250 generations, 1,454 of NSGA-II's 2,000 are within 0.001 of a bound,
-and 1,978 of SMS-EMOA's. None is in the V. NSGA-II's front is 0.0509 to 0.0603 behind, with an IGD+
-of 0.0722 and a hypervolume of 2.9620; SMS-EMOA's 0.0502 to 0.0515 behind, with 0.0719 and 2.9681.
-
-After 1,000 generations, the fronts sit on the deceptive front: SMS-EMOA's is 0.0500 to 0.0507
-behind, with 1,993 of its distance parameters at the bounds, an IGD+ of 0.0681 and a hypervolume of
-2.9909. NSGA-II's is 0.0500 to 0.0624 behind, with an IGD+ of 0.0704 and 2.9736. Still, no distance
-parameter is in the V. Both are further from the true front than 100 points of the deceptive front,
-because the position is deceptive too. NSGA-II's front begins at f₁ = 0.2070: all four position
-parameters of that solution are at 1, to 0.00001. SMS-EMOA's begins at 0.1890: one of its position
-parameters is 0.000017 from 0.35, in the window, and SMS-EMOA keeps it for the hypervolume it adds
-at the end of the front. At the other end, near (2.05, 0.05), both have their position parameters
-0.001 to 0.002 from 0.35, just at the rim of the V, where the shift is near 1, as that end needs.
-The search finds the V, but only its rim.
-
-The deception holds on every seed and for every algorithm tried. On seeds 1 to 5, after 4,000
-generations, NSGA-II, SMS-EMOA, SPEA2 and MOEA/D (100 weight vectors, the same operators) all end
-with the front 0.0500 behind at its closest point, and IGD+ values from 0.0650 to 0.0695. A longer
+NSGA-II is deceived, as expected: it ends on the deceptive front. After 1,000 generations, its front
+is 0.0500 to 0.0624 behind, with 1,866 of the population's 2,000 distance parameters within 0.001 of
+a bound and none in the V, an IGD+ of 0.0704, scaled 0.0281, and a hypervolume of 2.9736. Its front
+begins at f₁ = 0.2070: all four position parameters of that solution are at 1, to 0.00001. A longer
 run spreads the points better along the deceptive front; it doesn't bring them closer to the true
 one.
+
+SMS-EMOA with uniform mutation finds the window, one parameter at a time. After 1,000 generations,
+193 of its 2,000 distance parameters are within 0.00005 of 0.35, and its front is 0.047 to 0.060
+behind, still near the deceptive one: an IGD+ of 0.0699, scaled 0.0283, and a hypervolume of 2.9832.
+The count grows to 1,181 by generation 5,000, 1,790 by 10,000 and 1,995 by 15,000, and the scaled
+IGD+ falls with it, from 0.0194 at generation 5,000 to 0.0123 at 10,000, below 0.01 at generation
+12,242, and 0.0072 at 20,000. The front is then 0.0051 to 0.0183 behind, with no distance parameter
+at a bound: an IGD+ of 0.0169, scaled 0.0072, within the target, and a hypervolume of 3.2625, 96.0%
+of the whole front's. The rest of the distance is inside the window, where the shift is still up to
+0.05, and at the ends of the front, which need position parameters in the V too.
+
+Over seeds 1 to 20, SMS-EMOA with uniform mutation reaches the target in every run after 20,000
+generations, with a scaled IGD+ of 0.0058 to 0.0097, an IGD+ of 0.0139 to 0.0229 and a hypervolume
+of 3.2276 to 3.2802, 95.0% to 96.6% of the whole front's: the hypervolume target isn't met. After
+15,000 generations, 15 of the 20 runs have reached it.
+
+With polynomial mutation, the deception holds on every seed and for every algorithm tried. On seeds
+1 to 5, after 4,000 generations, NSGA-II, SMS-EMOA, SPEA2 and MOEA/D (100 weight vectors, the same
+operators) all end with the front 0.0500 behind at its closest point, and IGD+ values from 0.0650 to
+0.0695. Uniform mutation helps SMS-EMOA most: with it, NSGA-II ends seeds 1 to 10 with a scaled IGD+
+of 0.0223 to 0.0281 after 20,000 generations, and MOEA/D (Tchebycheff) with 0.0117 to 0.0175, and
+with 0.0076 to 0.0110 after 40,000.

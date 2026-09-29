@@ -1,7 +1,7 @@
 ---
 title: DTLZ1 with 3 objectives
 category: multi-objective
-summary: Minimize three conflicting objectives whose Pareto front is a triangle in a plane, behind 11⁵ − 1 local fronts, with NSGA-III.
+summary: Minimize three conflicting objectives whose Pareto front is a triangle in a plane, behind 11⁵ − 1 local fronts, with NSGA-III and 91 or 861 reference directions.
 reference: "Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2002). Scalable multi-objective optimization test problems. Proceedings of the 2002 Congress on Evolutionary Computation, pp. 825-830."
 reference_url: https://doi.org/10.1109/CEC.2002.1007032
 optimum: "the plane f₁ + f₂ + f₃ = 0.5; hypervolume 0.1455 (reference point (0.55, 0.55, 0.55))"
@@ -50,7 +50,7 @@ front, that variable has to move by 0.1. Halfway, g is about 200 higher, so a ch
 only part of the way is far worse than its parent and doesn't survive. The search needs a child
 that jumps across the ridge in one step.
 
-A random solution lies far from all of this: the non-dominated solutions of this run's initial
+A random solution lies far from all of this: the non-dominated solutions of the first run's initial
 population have g from 98 to 683, objectives that sum to between 50 and 342. Once the population
 reaches the true front, it still has to spread over the whole triangle.
 
@@ -67,48 +67,67 @@ next population. Instead of crowding distance, it spreads the front along refere
 each solution joins the direction nearest to it, and directions with few members get more.
 genoxide's docs recommend it for three or more objectives, and Deb and Jain test it on DTLZ1.
 
-The settings are Deb and Jain's for DTLZ1 with 3 objectives:
+The example runs it twice, with Deb and Jain's operators for DTLZ1 with 3 objectives: simulated
+binary crossover with η = 30, and polynomial mutation with η = 20 at a rate of 1/7 per gene, one
+gene per child on average. The reference directions come from Das and Dennis's method (1998, SIAM
+Journal on Optimization 8(3): 631-657): all points (a/H, b/H, c/H) with a + b + c = H, for H
+divisions.
 
-- 91 reference directions from Das and Dennis's method (1998, SIAM Journal on Optimization 8(3):
-  631-657) with 12 divisions: all points (a/12, b/12, c/12) with a + b + c = 12;
-- a population of 92, the multiple of four just above 91;
-- simulated binary crossover with η = 30, and polynomial mutation with η = 20 at a rate of 1/7 per
-  gene, one gene per child on average;
-- 400 generations, 36,892 evaluations.
+- Deb and Jain's settings: 12 divisions, 91 directions, a population of 92, the multiple of four
+  just above 91, and 400 generations, 36,892 evaluations.
+- 40 divisions: 861 directions, a population of 861, one solution per direction, and 300
+  generations, 259,161 evaluations.
 
-The run goes through three phases. Until generation 80, the population descends through the local
-fronts: the best g falls from 98 to about 1. The hypervolume stays 0, because no solution is yet
-inside the box of the reference point. Between generations 88 and 120, the population crosses the
-last ridges, and the median g falls from 1.5 to 0.02. By generation 170, the front covers the whole
-triangle, with a hypervolume of 0.1392. The last 230 generations refine it: the largest g on the
-front falls from 0.06 to 0.001, and the hypervolume reaches 0.1400.
+The second run is there for the target: a front within 1% of the optimal one, measured by IGD+
+(see Good results). NSGA-III aims at one solution per direction, and 91 points can't cover a
+triangle that closely, however well they converge. 861 can.
+
+With 861 directions, the run goes through three phases. Until generation 38, the population descends
+through the local fronts: the best g falls from 95 to 0.13. From generation 41, some solutions are
+inside the box of the reference point, and the hypervolume grows. Between generations 80 and 89, the
+front grows from 292 solutions to all 861, and by generation 100 it covers the whole triangle, with
+a hypervolume of 0.1423. The last 200 generations refine it: the median g on the front falls from
+0.019 to 0.0002.
 
 ## Output
 
-Three lines. The first gives how many solutions are on the final front, and its hypervolume. The
-hypervolume is the volume that the front dominates, up to a reference point. Larger is better. The
-reference point here is (0.55, 0.55, 0.55), 1.1 times the nadir point (0.5, 0.5, 0.5), the worst
-value of each objective on the front, as genoxide's benchmarks use for DTLZ1. For the whole front,
-the hypervolume is 0.55³ − 0.5³/6 = 0.1455: the cube minus the corner that the plane cuts off.
+A line per run: how many solutions are on its final front, the front's hypervolume, its IGD+ and
+the largest g among its solutions. The last line gives the whole front's hypervolume.
 
-The second gives the front's IGD+ (Ishibuchi et al., 2015, EMO 2015, LNCS 9019: 110-125) to 1,035
-points of the optimal front, from genoxide's `optimal_front`: Das and Dennis's points with 44
-divisions, halved. IGD+ averages, over those points, the distance to the nearest point of the
-found front, counting only the objectives in which the found point is worse. 0 means that the found
-front covers the optimal one. Smaller is better.
+The hypervolume is the volume that the front dominates, up to a reference point. Larger is better.
+The reference point here is (0.55, 0.55, 0.55), 1.1 times the nadir point (0.5, 0.5, 0.5), the
+worst value of each objective on the front, as genoxide's benchmarks use for DTLZ1. For the whole
+front, the hypervolume is 0.55³ − 0.5³/6 = 0.1455: the cube minus the corner that the plane cuts
+off.
 
-The third gives the largest g among the front's solutions, computed as 2 (f₁ + f₂ + f₃) − 1. It
-shows convergence alone: 0 is on the true front, and about 1 is the nearest local front.
+IGD+ (Ishibuchi et al., 2015, EMO 2015, LNCS 9019: 110-125) is measured to 1,035 points of the
+optimal front, from genoxide's `optimal_front`: Das and Dennis's points with 44 divisions, halved.
+It averages, over those points, the distance to the nearest point of the found front, counting
+only the objectives in which the found point is worse. 0 means that the found front covers the
+optimal one. Smaller is better. Scaled, it is divided by 0.5, the range of each objective on the
+front: the IGD+ of the front with every objective scaled to [0, 1].
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/dtlz1-3obj) plays this run back.
+The largest g is computed as 2 (f₁ + f₂ + f₃) − 1. It shows convergence alone: 0 is on the true
+front, and about 1 is the nearest local front.
+
+[The project page](https://tachsin.gr/projects/genoxide/examples/dtlz1-3obj) plays the second
+run back.
 
 ## Good results
 
-No finite set of solutions reaches 0.1455. NSGA-III aims at one solution per reference direction.
-The 91 points where the directions meet the plane have a hypervolume of 0.1400 and an IGD+ of
-0.0143.
+The target is a front close to the whole optimal one: a scaled IGD+ of at most 0.01, the front
+within about 1% of the objectives' range, or a hypervolume of at least 99% of the whole front's,
+0.1440. No finite set reaches 0.1455, and neither target can be met with 91 points: the 91 points
+where the directions meet the plane have a hypervolume of 0.1400 and a scaled IGD+ of 0.0286. For a
+scaled IGD+ of 0.01 it takes about 700 points evenly spread over the triangle, and for 99% of the
+hypervolume about 1,100.
 
-The run's front has 92 solutions, a hypervolume of about 0.1400 and an IGD+ of about 0.0145: as good
-as those 91 points. Every solution has g below 0.0012, far below the nearest local front's 1. Over
-seeds 1 to 20, every run converges, with hypervolumes from 0.1387 to 0.1400 and IGD+ from 0.0144
-to 0.0180.
+With Deb and Jain's settings, the run's front has 92 solutions, a hypervolume of 0.1400 and a
+scaled IGD+ of 0.0289: as good as those 91 points. Every solution has g below 0.0012, far below the
+nearest local front's 1. Over seeds 1 to 20, every run converges, with hypervolumes from 0.1387 to
+0.1400 and IGD+ from 0.0144 to 0.0180, scaled 0.0288 to 0.0360.
+
+With 861 directions, the front has 861 solutions, a hypervolume of 0.1439 (98.9% of the whole
+front's) and a scaled IGD+ of 0.0085: within the target. Its largest g is 0.0039. Over seeds 1 to
+20, every run reaches the target, with scaled IGD+ from 0.0084 to 0.0089 and hypervolumes from
+0.1438 to 0.1439. After 200 generations, 19 of the 20 already have.

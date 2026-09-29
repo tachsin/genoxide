@@ -1,6 +1,7 @@
 """The trace of the run for the plot on the example's page, written to the file that
-``GENOXIDE_TRACE`` names: the front and its hypervolume, in at most 100 generations. The Rust
-example writes the same file."""
+``GENOXIDE_TRACE`` names: the front and its hypervolume, in at most 100 generations, with at most
+100 points of the front a frame but the whole front in the last. The Rust example writes the same
+file."""
 
 import json
 import math
@@ -15,6 +16,8 @@ class Trace:
     def __init__(self):
         self.path = os.environ.get("GENOXIDE_TRACE")
         self.frames = Frames(100)
+        # the last front recorded, whole
+        self.last = []
 
     @property
     def on_generation(self):
@@ -25,7 +28,11 @@ class Trace:
         """Records a generation: the front and its hypervolume."""
         front = progress.front_objectives
         volume = gx.indicators.hypervolume(front, [1.1, 1.1, 1.1])
-        self.frames.push(frame(progress, {"front": front.tolist(), "hypervolume": volume}))
+        # every k-th point of a front of more than 100, for a file of the usual size
+        every = max(1, -(-len(front) // 100))
+        shown = front[::every].tolist()
+        self.frames.push(frame(progress, {"front": shown, "hypervolume": volume}))
+        self.last = front.tolist()
 
     def write(self):
         """Writes the trace, if there's one."""
@@ -41,7 +48,11 @@ class Trace:
                 "plot": "front-3d",
                 "problem": {"objectives": ["f1", "f2", "f3"], "true_front": "sphere"},
             }
-            write(self.path, settings, self.frames.to_list())
+            # the last frame shows the whole front
+            frames = self.frames.to_list()
+            if frames:
+                frames[-1]["state"]["front"] = self.last
+            write(self.path, settings, frames)
 
 
 # ---- the same in every example's trace ----------------------------------------------------------

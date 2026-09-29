@@ -1,7 +1,7 @@
 ---
 title: WFG9
 category: multi-objective
-summary: Minimize two objectives whose concave front lies behind 24 biased, deceptive, multimodal and non-separable parameters, with NSGA-II and MOEA/D.
+summary: Minimize two objectives whose concave front lies behind 24 biased, deceptive, multimodal and non-separable parameters, with NSGA-II and SMS-EMOA.
 reference: "Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation 10(5): 477-506."
 reference_url: https://doi.org/10.1109/TEVC.2005.861417
 optimum: "the quarter ellipse (f₁/2)² + (f₂/4)² = 1; hypervolume 3.3968 (reference point (2.2, 4.4))"
@@ -96,27 +96,29 @@ print the same.
 
 ## Algorithm
 
-Two algorithms, each for 1,000 generations; the example reports each front after 250 generations
-and after 1,000. Both use simulated binary crossover with η = 15 and polynomial mutation with
-η = 20 at a rate of 1/24 per gene, one gene per child on average.
+Two algorithms, both with a population of 100 and polynomial mutation with η = 20 at a rate of 1/24
+per gene, one gene per child on average, and a crossover rate of 0.9, genoxide's default. They
+differ in how they recombine and how they select.
 
 - NSGA-II (Deb, Pratap, Agarwal and Meyarivan, 2002, IEEE Transactions on Evolutionary
-  Computation 6(2): 182-197), with the settings of the ZDT examples: a population of 100 and a
-  crossover rate of 0.9. It sorts solutions into non-dominated fronts, and within a front prefers
-  solutions with a larger crowding distance, a measure of the gap between their neighbors.
-- MOEA/D (Zhang and Li, 2007, IEEE Transactions on Evolutionary Computation 11(6): 712-731). It
-  splits the problem into 101 single-objective subproblems, one per weight vector, with the
-  weights (0, 1), (0.01, 0.99), …, (1, 0). Each subproblem keeps one solution and gets one child a
-  generation, bred from its 20 nearest neighbors (with probability 0.9) and always recombined, at
-  genoxide's default crossover rate for MOEA/D, 1. A child replaces at most 2 neighbors that it
-  improves on. Each subproblem scores a solution by penalty-based boundary intersection (PBI),
-  with θ = 5: the distance along its weight vector from the ideal point, plus 5 times the distance
-  from that line.
+  Computation 6(2): 182-197), with the settings of the ZDT examples: simulated binary crossover
+  with η = 15, for 1,000 generations. It sorts solutions into non-dominated fronts, and within a
+  front prefers solutions with a larger crowding distance, a measure of the gap between their
+  neighbors.
+- SMS-EMOA (Beume, Naujoks and Emmerich, 2007, European Journal of Operational Research 181(3):
+  1653-1669), in genoxide's generational form: 100 children a generation. From the last front
+  that fits only in part, it removes the solutions that add the least hypervolume. Its crossover
+  is blend crossover, BLX-α (Eshelman and Schaffer, 1993, Foundations of Genetic Algorithms 2:
+  187-202) with α = 0.3: each gene of a child is drawn uniformly from the interval between the
+  parents' values, widened by 0.3 of its length on each side. It runs for 5,000 generations,
+  500,100 evaluations, and the example reports its front after 1,000 and after 5,000.
 
-MOEA/D is here because, of the algorithms tried, it leaves the distance trap most often; see Good
-results. The weight vectors are spaced 0.01 apart, 101 of them rather than 100: the Python version
-passes its weights to Rust as JSON text, and with 100 weight vectors, 1/99 apart, the Python and
-Rust runs differed. With values like 0.01 and 0.99, they match.
+Blend crossover is there for the distance trap. SBX with η = 15 keeps each child's genes near the
+parents', and recombines each gene with probability 1/2 only; once the population's distance
+parameters sit in the trap, its children stay there. Blend crossover draws every gene anew, within
+and around the parents' interval: a wider and more even spread, which in these runs keeps the
+population out of the trap from the start (see Good results). SMS-EMOA then rewards each child that
+comes closer to the front with the hypervolume it adds.
 
 ## Output
 
@@ -131,7 +133,9 @@ over the front.
 IGD+ (Ishibuchi et al., 2015, EMO 2015, LNCS 9019: 110-125) is measured to 500 points of the
 optimal front, from genoxide's `optimal_front`. It averages, over those 500 points, the distance
 to the nearest point of the found front, counting only the objectives in which the found point is
-worse. 0 means that the found front covers the optimal one. Smaller is better.
+worse. 0 means that the found front covers the optimal one. Smaller is better. The objectives'
+ranges on the front differ, 2 for f₁ and 4 for f₂, so the example also gives IGD+ scaled: with f₁
+divided by 2 and f₂ by 4, both in [0, 1] on the front.
 
 The hypervolume (Zitzler and Thiele, 1999, IEEE Transactions on Evolutionary Computation 3(4):
 257-271) is the area that the front dominates, up to a reference point. Larger is better. The
@@ -139,33 +143,41 @@ reference point is (2.2, 4.4), 1.1 times the nadir point (2, 4), as the ZDT exam
 times theirs. For the whole front, the hypervolume is the box up to the reference point less the
 quarter ellipse under the front: 2.2 × 4.4 − 2π = 3.3968.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/wfg9) plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/wfg9) plays these runs back.
 
 ## Good results
 
-A good front would have 100 solutions spread from (0, 4) to (2, 0), distances near 0, an IGD+ near
-0 and a hypervolume near 3.3968; the 100 points of `optimal_front(100)` give 3.3610 and an IGD+
-of 0.0051. Neither run gets there.
+A good front would have 100 solutions spread from (0, 4) to (2, 0), distances near 0, an IGD+ near 0
+and a hypervolume near 3.3968; the 100 points of `optimal_front(100)` give 3.3610 and an IGD+ of
+0.0051, scaled 0.0019. The target here is a scaled IGD+ of at most 0.01, or a hypervolume of at
+least 99% of the whole front's, 3.3628.
 
-NSGA-II falls into the distance trap early. By generation 32 its whole front is 0.097 to 0.110
-from the true one, and it stays there: after 250 generations the distances are 0.0956 to 0.1058,
-after 1,000 0.0953 to 0.0984, a copy of the true front moved up by about 2/21 in both
-objectives. Its IGD+ is 0.1278 and then 0.1267, its hypervolume 2.6914 and then 2.6979. In its
-final front, y₂₄ is within 10⁻⁴ of its upper bound 1, the other distance parameters are raised to
-powers from 6.5 to 50, and they come out of the bias below 0.002, where s_multi is above 0.98.
+NSGA-II falls into the distance trap early. By generation 32 its whole front is 0.097 to 0.110 from
+the true one, and it stays there: after 1,000 generations the distances are 0.0953 to 0.0984, a copy
+of the true front moved up by about 2/21 in both objectives. Its IGD+ is 0.1267, scaled 0.0475, and
+its hypervolume 2.6979. In its final front, y₂₄ is within 10⁻⁴ of its upper bound 1, the other
+distance parameters are raised to powers from 6.5 to 50, and they come out of the bias below 0.002,
+where s_multi is above 0.98. It spans x₁ from 0.02 to 0.97: it doesn't find the deceptive basin, and
+both ends of the front are missing.
 
-MOEA/D starts no better: after 250 generations its front is 0.069 to 0.105 from the true one,
-with an IGD+ of 0.1294 and a hypervolume of 2.6845. Its first points leave the trap at about
-generation 200, and the rest follow slowly. After 1,000, most of its front, from x₁ = 0.2 on, is
-0.045 to 0.052 from the true one, with an IGD+ of 0.0819 and a hypervolume of 2.9394; the part
-below x₁ = 0.1 is still at 0.097. Its front has 78 and then 97 solutions, of the 101 that MOEA/D
-keeps, one per subproblem.
+SMS-EMOA with blend crossover never enters the trap. By generation 24 its front has a solution less
+than 0.05 from the true front, by generation 34 the front's mean distance is below 0.05, and by
+generation 300 it is 0.009. What takes longer is the spread: the deceptive position parameters hold
+the ends of the front back. After 1,000 generations, most of the front is 0.0062 to 0.01 from the
+true one, but a solution at its end is still 0.1185 away, and the smallest f₁ on the front is 0.19:
+an IGD+ of 0.0455, scaled 0.0147, and a hypervolume of 3.1623. At generation 1,431, the last
+solution comes within 0.05, and the scaled IGD+ falls below 0.01. After 5,000 generations, the front
+is 0.0061 to 0.0084 from the true one, with an IGD+ of 0.0186, scaled 0.0065, within the target, and
+a hypervolume of 3.2508, 95.7% of the whole front's. Its ends are still short of the front's: its
+smallest f₁ is 0.097 and its smallest f₂ 0.216, where the front reaches 0.
 
-Both fronts span x₁ from 0.02 to 0.97 throughout: neither finds the deceptive basin, and both
-ends of the front are missing, with f₁ at least 0.063 and f₂ at least 0.19 above the distance.
+Over seeds 1 to 20, SMS-EMOA with blend crossover reaches the target in every run after 5,000
+generations, with a scaled IGD+ of 0.0049 to 0.0094, an IGD+ of 0.0142 to 0.0256 and a hypervolume
+of 3.2172 to 3.2764, 94.7% to 96.5% of the whole front's: the hypervolume target isn't met, because
+of the ends. After 3,000 generations, 19 of the 20 runs have reached it, and after 1,000, 5.
 
-On seeds 1 to 10, the runs split. After 1,000 generations, a run either leaves the trap, with a
-mean distance below 0.05, or stays at 0.095:
+With simulated binary crossover, the runs split: on seeds 1 to 10, after 1,000 generations, a run
+either leaves the trap, with a mean distance below 0.05, or stays at 0.095:
 
 | algorithm | leave the trap | IGD+ after 1,000 generations |
 |---|---|---|
@@ -175,12 +187,12 @@ mean distance below 0.05, or stays at 0.095:
 | MOEA/D, Tchebycheff | 7 of 10 | 0.0196 to 0.1268 |
 | MOEA/D, PBI | 9 of 10 | 0.0354 to 0.0819 |
 
-SMS-EMOA and SPEA2 ran with NSGA-II's settings, and both MOEA/Ds with the 101 weight vectors of
-this example. MOEA/D with PBI leaves the trap on all 10 seeds after 2,000 generations; on seed 1,
-this example's, it is the slowest. The runs of NSGA-II that leave the trap end closer to the
-front than MOEA/D with PBI, with IGD+ from 0.0186 to 0.0255: PBI is the more reliable, not the
-more precise. Changing NSGA-II's operators on seeds 1 to 3 doesn't help: polynomial mutation with
-η = 5 or at a rate of 4/24, and simulated binary crossover with η = 5, stay in the trap on all
-three seeds, and blend crossover (α = 0.5) leaves it on one. Arithmetic crossover, which moves
+SMS-EMOA and SPEA2 ran with NSGA-II's settings, and both MOEA/Ds with 101 weight vectors, 0.01
+apart. MOEA/D with PBI leaves the trap on all 10 seeds after 2,000 generations, but converges
+slowly: after 10,000 generations, 4 of the 10 runs reach the target. Changing NSGA-II's operators on
+seeds 1 to 3 doesn't help much: polynomial mutation with η = 5 or at a rate of 4/24, and simulated
+binary crossover with η = 5, stay in the trap on all three seeds. Arithmetic crossover, which moves
 every gene of a child towards the other parent at once, leaves it on all three but stops at mean
-distances of 0.034 to 0.042.
+distances of 0.034 to 0.042. Blend crossover with α = 0.5 leaves it on one of three seeds with
+NSGA-II, and on 8 of 10 with SMS-EMOA; with α = 0.3, NSGA-II reaches the target on 9 of 10 seeds
+after 3,000 generations, and SMS-EMOA on 19 of 20.
