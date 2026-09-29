@@ -29,7 +29,7 @@ ga = gx.Ga(
 )
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(problem)
-result = ga.run(problem, target=minimum, generations=2_000, on_generation=trace.on_generation)
+result = ga.run(problem, target=minimum, generations=20_000, on_generation=trace.on_generation)
 
 teeth = result.best_genome.tolist()
 ratio = teeth[0] * teeth[1] / (teeth[2] * teeth[3])
