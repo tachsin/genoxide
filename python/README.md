@@ -181,6 +181,10 @@ The multi-objective problems, `Zdt1` to `Zdt6` (`Zdt5` on a `Binary` genome),
 for the algorithm, and `optimal_front(points)`, None where the front isn't known; a constrained one
 returns `(objectives, violation)` and gives its `constraints(x)`.
 
+The constrained problems of tunable difficulty work the same way: `Ctp1` to `Ctp8`, and the
+constrained DTLZ problems `C1Dtlz1(objectives, variables)`, `C1Dtlz3(objectives, variables,
+radius)`, `C2Dtlz2`, `ConvexC2Dtlz2`, `C3Dtlz1` and `C3Dtlz4`.
+
 Two submodules have constrained single-objective problems, whose fitness is `(score,
 violation)`: `gx.problems.cec2006` has CEC 2006's `G01()` to `G24()`, and
 `gx.problems.engineering` has `WeldedBeam()`, `WeldedBeamRagsdell()`, `PressureVessel()`,

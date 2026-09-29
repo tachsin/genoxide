@@ -482,8 +482,8 @@ Deb's part II (as the authors' preprint, IITK report 2012010,
 <https://www.egr.msu.edu/~kdeb/papers/k2012010.pdf>), Ma and Wang's MW paper and supplement (as
 hosted by the authors, <https://intleo.csu.edu.cn/codes/MW.pdf>), DAS-CMOP and LIR-CMOP (arXiv
 versions), the CEC 2009 report (20 April 2009 draft), the C-TAEA supplement (DC-DTLZ) and the DTLZ
-report. BNH, OSY, the Van Veldhuizen constrained problems and all of CTP could not be reached:
-**U**. The PDFs were read as extracted text, so load-bearing constants get a check against the
+report. BNH, OSY and the Van Veldhuizen constrained problems could not be reached: **U**. CTP's
+report was read in batch 7 (below). The PDFs were read as extracted text, so load-bearing constants get a check against the
 typeset paper when implemented. Constraints below are written as the papers print them (mostly
 "≥ 0 is feasible"); genoxide normalizes to g ≤ 0 (section 2).
 
@@ -502,15 +502,13 @@ typeset paper when implemented. Constraints below are written as the papers prin
 #### CTP1-CTP7 (and CTP8)
 
 Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
-evolutionary optimization. EMO 2001, LNCS 1993: 284-298. doi:10.1007/3-540-44719-9_20 (also
-KanGAL report 200002). **U throughout: the paper couldn't be reached.** The EMO paper defines
-CTP1-CTP7 (Tanabe, R. and Oyama, A. (2017). A note on constrained multi-objective optimization
-benchmark problems. Proc. IEEE CEC 2017: 1127-1134. doi:10.1109/CEC.2017.7969433); CTP8 is
-believed to come from the KanGAL report or Deb's 2001 book (U).
-
-Recalled structure, to check: f₁ = x₁; CTP1 f₂ = g exp(−f₁/g) with J constraints
-f₂ − a_j exp(−b_j f₁) ≥ 0 (J = 2: a = (0.858, 0.728), b = (0.541, 0.295)); CTP2-CTP8
-f₂ = g (1 − f₁/g) with cos θ (f₂ − e) − sin θ f₁ ≥ a |sin(bπ(sin θ (f₂ − e) + cos θ f₁)^c)|^d and
+evolutionary optimization. EMO 2001, LNCS 1993: 284-298. doi:10.1007/3-540-44719-9_20.
+**VO (batch 7), from the authors' KanGAL report 200002** (October 2000, 15 pages, the EMO paper's
+preprint; the file `tech-rep5.ps.gz` of the KanGAL site, kept by the Internet Archive, converted
+with Ghostscript and read page by page; the LNCS text not compared). Coello's list of technical
+reports gives the same title as KanGAL report 200005 by Deb and Meyarivan; the file itself says
+200002. The report defines CTP1 (eq. 4, p. 6) and the generator of CTP2-CTP7 (eq. 5, p. 7), with
+the parameters below on pp. 7-11:
 
 | | θ | a | b | c | d | e |
 |---|---|---|---|---|---|---|
@@ -522,8 +520,34 @@ f₂ = g (1 − f₁/g) with cos θ (f₂ − e) − sin θ f₁ ≥ a |sin(bπ(
 | CTP7 | −0.05π | 40 | 5 | 1 | 6 | 0 |
 | CTP8 (two constraints) | 0.1π / −0.05π | 40 / 40 | 0.5 / 2 | 1 / 1 | 2 / 6 | −2 / 0 |
 
-Not established: g, n, the bounds and how CTP1's a_j, b_j are computed. Fronts: CTP2 and CTP7
-disconnected, CTP3-CTP5 points (and pieces), CTP6 and CTP8 behind infeasible tunnels.
+Findings:
+
+- **g, n and the bounds aren't in the report**: its experiments use "Rastrigin's function as the g
+  functional" and five variables, without the formula. The authors' NSGA-II code (version 1.1.6,
+  `nsga2-gnuplot-v1.1.6.tar.gz` on Deb's MSU page, read only; its notice allows academic use) has
+  all eight with two variables, g = 1 + x₂, x₁ ∈ [0, 1] and x₂ ∈ [0, 1] (CTP1-5) or [0, 10]
+  (CTP6-8): genoxide follows it and says so.
+- **Eq. 5 prints f₂ = g (1 − f₁/g)**; the report's figures 6-11 draw the unconstrained front as
+  the curve 1 − √f₁, and the code computes g (1 − √(f₁/g)), which genoxide uses.
+- CTP1's a and b come from a procedure (p. 6) that puts each boundary through the previous one at
+  f₁ = j/(J + 1); the table prints them to three digits (0.858, 0.541; 0.728, 0.295), which the
+  code and genoxide use. The test re-runs the procedure. With the rounded values, the front's
+  corners are at f₁ = 0.33367 and 0.66789.
+- The code writes each constraint as a ratio, left/right − 1 ≥ 0; genoxide keeps the report's
+  difference (feasible at the same points, finite where the right side is 0).
+- **CTP8 isn't in the report** (CTP1-CTP7 only, as Tanabe and Oyama 2017 say); later papers credit
+  it to Deb's 2001 book, which wasn't read. Its definition is the code's (the table's row), **U**
+  against the book.
+- Fronts, derived here: CTP1 three analytic pieces; CTP2 13 pieces of the boundary; CTP3 and CTP4
+  the 13 points (cos θ k/10, 1 + sin θ k/10); **CTP5 one continuous piece and 15 points**, not 16
+  points: near v = 0, sin(bπv²)^0.5 grows linearly and the boundary leaves the line at a shallow
+  slope; CTP6 one piece (v from 1.76 to 1.84, inside the report's "1 ≤ v ≤ 2"); CTP7 six pieces
+  of 1 − √f₁ and the point (0, 1.0446); CTP8 three pieces of CTP6's. `optimal_front` samples the
+  boundaries of the feasible region (constraint boundaries, zeros of the right side, g = 1, the
+  largest g, f₁ = 0 and 1) with bisection at the ends of feasible stretches, and filters; the tests
+  check it against 100,000 random genomes per problem. In floating point the points of CTP3-CTP5
+  are infeasible by about 3e-8 (sin(kπ) ≈ 1e-15 under a square root).
+- The report's OSY (eq. 3) and table 1 match genoxide's `Osy`.
 
 #### Constrained DTLZ (C-DTLZ)
 
@@ -531,7 +555,10 @@ Jain, H. and Deb, K. (2014). An evolutionary many-objective optimization algorit
 reference-point based nondominated sorting approach, part II: handling constraints and extending
 to an adaptive approach. *IEEE TEVC* 18(4): 602-622. doi:10.1109/TEVC.2013.2281534. **VO (from
 the authors' preprint; the TEVC text not compared).** x ∈ [0, 1]ⁿ, M ∈ {3, 5, 8, 10, 15},
-constraints ≥ 0. The paper tabulates no fronts; they're computed from the forms below.
+constraints ≥ 0. The paper tabulates no fronts; they're computed from the forms below. Checked
+again in batch 7 against the typeset manuscript (rendered pages, not extracted text), and part
+I's convex DTLZ2 (section VII-C, eq. 8: fᵢ⁴ for i < M, f_M², front f_M + Σ √fᵢ = 1) in its
+manuscript too.
 
 | Problem | n | Constraints | Front |
 |---|---|---|---|
@@ -542,9 +569,13 @@ constraints ≥ 0. The paper tabulates no fronts; they're computed from the form
 | C3-DTLZ1 | M + 4 | M constraints Σ_{i≠j} fᵢ + fⱼ/0.5 − 1 ≥ 0 (eq. 7) | derived: {f ≥ 0 : Σ fᵢ + minⱼ fⱼ = 1}; DTLZ1's front is infeasible |
 | C3-DTLZ4 | M + 4 (as printed) | M constraints fⱼ²/4 + Σ_{i≠j} fᵢ² − 1 ≥ 0 (eq. 8) | derived: {f ≥ 0 : minⱼ[fⱼ²/4 + Σ_{i≠j} fᵢ²] = 1} |
 
-Pitfalls: C2-DTLZ2's constraint is printed without an inequality sign (the "−min ≥ 0" reading
-is the only consistent one, as in Zhang et al. 2018, arXiv:1807.10275); C3-DTLZ1 is printed with
-i and j swapped; f_M/0.6 and fᵢ/0.5 are fractions (some extractions show exponents). C1-DTLZ1,
+Pitfalls: C2-DTLZ2's constraint is printed as c = max{maxᵢ […], […]} with no inequality sign
+(batch 7, in the typeset manuscript); the text and figure 7 make the inside of the spheres
+feasible, which only min{…} ≤ 0 gives. **Table V confirms that reading and the radii**: 58 of the
+91 Das-Dennis directions (M = 3) and 80 of 210 (M = 5) meet the feasible part of the sphere, and 47
+of 91 and 97 of 210 the convex front outside the cylinder, the table's U/H counts (a test);
+C3-DTLZ1 is printed with i and j swapped (then every constraint is 2S − 1 ≥ 0 and DTLZ1's front is
+feasible, against the text and figure 13); f_M/0.6 and fᵢ/0.5 are fractions (some extractions show exponents). C1-DTLZ1,
 C1-DTLZ3 and C2-DTLZ2 are solvable without constraint handling (Tanabe and Oyama 2017). The
 paper's settings (population per M, generations per problem) are in its tables, for examples.
 
@@ -701,15 +732,14 @@ the papers report. No front file from another project is used.
 | Single objective, unconstrained | 59 continuous (18 scalable unimodal, 21 scalable multimodal, 20 fixed-dimension) | 6 binary and combinatorial; whole CEC/BBOB suites | Goldstein-Price; the CEC 2005 and BBOB forms; citations of Rosenbrock, Griewank, Rastrigin (1991), Styblinski-Tang | most: the originals are books and reports that aren't online; the common forms are secondary (Yao, Liu and Lin 1999; CEC 2005) |
 | Single objective, constrained (CEC 2006) | 24 | | all 24 (the September 2006 report) | g17's better value, g22's claimed better value, g04's variant, the "max" origins |
 | Multi objective, unconstrained | 25 (SCH1, SCH2, FON, KUR, POL, VNT1-3, ZDT5, DTLZ5-7, scaled DTLZ1/2, convex DTLZ2, inverted DTLZ1, WFG1-9) | MaF1-15, UF1-10, Deb's 1999 problems | ZDT5, DTLZ5-7 | WFG (all), scaled/convex/inverted DTLZ, Kursawe, Poloni, Viennet, SCH2's formula; FON secondary |
-| Multi objective, constrained | 45 (CONSTR, SRN, TNK, BNH, OSY, CTP1-8, C-DTLZ ×6, MW1-14, DAS-CMOP1-9, DTLZ8-9) | LIR-CMOP1-14, CF1-10, DC-DTLZ ×6, Viennet 4 / MOP-C | CONSTR, SRN, TNK (as NSGA-II restates them), C-DTLZ, MW, DAS-CMOP, DTLZ8-9, and the optional LIR-CMOP, CF, DC-DTLZ | CTP (all), BNH, OSY; DC2/DC3 parameters |
+| Multi objective, constrained | 45 (CONSTR, SRN, TNK, BNH, OSY, CTP1-8, C-DTLZ ×6, MW1-14, DAS-CMOP1-9, DTLZ8-9) | LIR-CMOP1-14, CF1-10, DC-DTLZ ×6, Viennet 4 / MOP-C | CONSTR, SRN, TNK (as NSGA-II restates them), CTP1-7 (the KanGAL report), C-DTLZ, MW, DAS-CMOP, DTLZ8-9, and the optional LIR-CMOP, CF, DC-DTLZ | CTP8 (from the authors' code, the book unread), BNH, OSY; DC2/DC3 parameters |
 | Engineering design | 8 single-objective (welded beam in two versions, pressure vessel, spring, speed reducer, gear train, three-bar truss, cantilever beam, car side impact) and 11 multi-objective (two-bar truss, welded beam, disc brake, car side impact, speed reducer, gear train, four-bar truss, rocket injector, water resource planning, marine design, crashworthiness) | I-beam, tubular column, concrete beam, stepped cantilever, coil spring, hatch cover, clutch brake, cantilever (Deb) | pressure vessel and cantilever optima (Yang et al. 2013, proofs) | the originals of all the others: secondary (Tanabe and Ishibuchi 2020, Chehouri et al. 2016) or unverified |
 
 **Core total: 172 new problems**, on top of the 9 genoxide has (ZDT1-4, ZDT6, DTLZ1-4), and
 about 75 optional ones.
 
 **To check in the originals before implementing** (by library access, since they're paywalled or
-in print only): the WFG paper (IEEE TEVC 2006), CTP (EMO 2001 / KanGAL 200002), Deb's 2001 book
-(OSY's regions, CTP8), Binh and Korn (1997), Kursawe (1991), Poloni et al. (2000), Viennet et al.
+in print only): the WFG paper (IEEE TEVC 2006), Deb's 2001 book (OSY's regions, CTP8), Binh and Korn (1997), Kursawe (1991), Poloni et al. (2000), Viennet et al.
 (1996), Deb and Jain (2014) part I (scaled and convex DTLZ), Schwefel (1981), Dixon and Szegö
 (1978, Hartmann and Shekel constants), Ragsdell and Phillips (1976), Sandgren (1990), Golinski
 (1970) with Ray (2003), Gu et al. (2001), Osyczka and Kundu (1995), Deb, Pratap and Moitra (2000),
@@ -1042,7 +1072,7 @@ algorithms come on top of these.
 | 4 | done (#270) | Scalable many-objective problems | DTLZ5, DTLZ6, DTLZ7, ZDT5 (binary), WFG1-WFG9 (13) | an example per problem: `zdt5`, `dtlz5_3obj`, `dtlz6_3obj`, `dtlz7_3obj`, `wfg1` to `wfg9` (2 objectives); later, `wfg_many_objective`: NSGA-III and MOEA/D on WFG4 and WFG9 with 5 objectives, IGD to the sampled front |
 | 5 | done (#277) | CEC 2006, part 2 | g07-g18 (12) | `cec2006_g07` to `cec2006_g18`; `cec2006`: SHADE with Deb's rules on all of the problems so far, printing f − f* and feasibility, as in the report's evaluation criteria |
 | 6 | done | CEC 2006, part 3, and the low-dimensional classics with tables | g19-g24 (6), Hartmann 3-D, Hartmann 6-D, Shekel 5/7/10, Easom, Eggholder, Schaffer F6 (8) | `cec2006_g19` to `cec2006_g24` and an example per function: `hartmann3`, `hartmann6`, `shekel5`, `shekel7`, `shekel10`, `easom`, `eggholder`, `schaffer_f6` (the `cec2006` comparison of all 24 is still to come) |
-| 7 |  | Constrained test problems with tunable difficulty (CTP needs its paper first: every CTP detail is unverified) | CTP1-CTP8 (8), C1-DTLZ1, C1-DTLZ3, C2-DTLZ2, C2-convex-DTLZ2, C3-DTLZ1, C3-DTLZ4 (6) | `ctp` (NSGA-II on CTP2/CTP7's disconnected feasible fronts); `c2_dtlz2` (NSGA-III with constraints, 3 objectives) |
+| 7 | done (branch `feat/batch7`) | Constrained test problems with tunable difficulty: CTP checked in the authors' KanGAL report 200002 (g, n and bounds from their NSGA-II code, f₂'s square root from its figures and code, CTP8 from the code only), C-DTLZ in the typeset manuscript, with table V's counts as a test (section 1.4) | CTP1-CTP8 (8), C1-DTLZ1, C1-DTLZ3, C2-DTLZ2, convex C2-DTLZ2, C3-DTLZ1, C3-DTLZ4 (6) | an example per problem: `ctp1` to `ctp8` (NSGA-II, the report's settings; CTP3 and CTP5 longer, CTP4 with MOEA/D for 70,000 generations), `c1_dtlz1_3obj`, `c1_dtlz3_3obj` (NSGA-III stops at the barrier in 19 of 20 runs; ignoring the constraint reaches the front), `c2_dtlz2_3obj`, `convex_c2_dtlz2_3obj`, `c3_dtlz1_3obj`, `c3_dtlz4_3obj` (NSGA-III, the paper's settings); the site shades CTP's feasible regions and draws infeasible solutions in 3-D |
 | 8 |  | Scaled and inverted DTLZ, and MW | Convex DTLZ2, scaled DTLZ1, scaled DTLZ2, inverted DTLZ1 (4), MW1-MW14 (14) | `mw` (constrained multi-objective, several fronts) |
 | 9 |  | Engineering design, several objectives | Two-bar truss, welded beam (2 objectives), disc brake, car side impact (3 objectives), speed reducer (2 objectives), four-bar truss, water resource planning, rocket injector, vehicle crashworthiness, conceptual marine design (10) | `two_bar_truss`; `car_side_impact` |
 | 10a |  | Remaining low-dimensional and classic scalable functions | Beale, Booth, Matyas, Bohachevsky 1-3, Three-hump camel, Dixon-Price, Trid, Powell, Langermann, Shekel's foxholes, Kowalik, Schwefel 2.21, Schwefel 2.22 (15) | an example per function (`function_suite` may compare them too) |
