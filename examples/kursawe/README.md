@@ -4,7 +4,7 @@ category: multi-objective
 summary: Minimize two objectives whose Pareto front is in four separate pieces, a point and three curves, with SPEA2 and NSGA-II.
 reference: "Kursawe, F. (1991). A variant of evolution strategies for vector optimization. Parallel Problem Solving from Nature, LNCS 496: 193-197."
 reference_url: https://doi.org/10.1007/BFb0029752
-optimum: "not known in closed form"
+optimum: "not known in closed form; a reference front from much longer runs has hypervolume 37.3489 (reference point (−14, 1))"
 languages: [rust, python]
 order: 119
 ---
@@ -61,18 +61,30 @@ Both spread the front, in different ways, which matters on a front in pieces.
 ## Output
 
 One line per algorithm: how many solutions are on its final front, how many pieces they cover, and
-the front's hypervolume. The example sorts the front by f₁, and starts a new piece wherever f₁
-grows by more than 0.2 from one solution to the next. Along a piece, it grows by at most about 0.13
-between neighbors on these fronts; the gaps between the pieces of the true front are 0.25 to 0.92
-wide. The hypervolume is the area that the front dominates, up to the
-reference point (−14, 1). Larger is better. In Python, `run` evaluates the problem in Rust, so both
-versions print the same.
+the front's hypervolume. Then the hypervolume of a reference front. The example sorts the front by
+f₁, and starts a new piece wherever f₁ grows by more than 0.2 from one solution to the next. Along
+a piece, it grows by at most about 0.13 between neighbors on these fronts; the gaps between the
+pieces of the true front are 0.25 to 0.92 wide. The hypervolume is the area that the front
+dominates, up to the reference point (−14, 1). Larger is better. In Python, `run` evaluates the
+problem in Rust, so both versions print the same.
+
+The true front isn't known, so I built a reference front from much longer runs: 16 runs of NSGA-II
+with the same crossover and mutation, 500 solutions for 2,000 generations each, keeping every
+solution evaluated in their second halves that no other one dominates. Its 309,166 points have a
+hypervolume of 37.3489. A reference ten times smaller, from 8 runs of 200 solutions for 1,000
+generations, has 30,732 points and 37.3463, only 0.0026 less.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/kursawe) plays this run back.
 
 ## Good results
 
-The front's exact hypervolume isn't known, so there is no target value. A good front covers all
-four pieces: the point (−20, 0), and the three curves with many solutions on each. Both algorithms
-find the four pieces with 100 solutions.
-SPEA2's hypervolume, about 37.10, is a little larger than NSGA-II's, about 37.02, on this seed.
+The front's exact hypervolume isn't known, so the target is the reference front: a hypervolume of
+at least 99% of its 37.3489, or an IGD+ to it of at most 0.01 with the objectives scaled to its
+range (f₁ spans 5.565, f₂ 11.627). A good front also covers all four pieces: the point (−20, 0),
+and the three curves with many solutions on each.
+
+Both algorithms find the four pieces with 100 solutions. SPEA2's hypervolume, 37.1035, is 99.3% of
+the reference front's; NSGA-II's, 37.0213, 99.1%. Their scaled IGD+ to it are 0.0022 and 0.0027.
+Both meet the target on every seed from 1 to 50: SPEA2 with 99.22% to 99.35% of the hypervolume
+and a scaled IGD+ of at most 0.0025, NSGA-II with 99.05% to 99.20% and at most 0.0033. SPEA2's
+worst seed has a larger hypervolume than NSGA-II's best.

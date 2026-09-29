@@ -4,6 +4,10 @@
 //! network evaluations per generation. A generation goes to the GPU at once, through `Batch`: one
 //! upload of the weights, one dispatch with a workgroup per genome, one download of the errors.
 //!
+//! CMA-ES with IPOP restarts fits the network to an error of 1e-5 on the GPU. A genetic algorithm
+//! then runs 300 generations of 512 networks twice, on the GPU and on every CPU core, to compare
+//! their speed; it stops far from a good fit.
+//!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
 //! page, with `trace.rs`.
 //!
@@ -20,6 +24,9 @@ const HIDDEN: usize = 16;
 // per hidden unit: a weight for each input and a bias; then the output weights and bias
 const WEIGHTS: usize = HIDDEN * 3 + HIDDEN + 1;
 const SAMPLES: usize = 4_096;
+// the error CMA-ES stops at
+const TARGET: f64 = 1e-5;
+// the genetic algorithm's population and generations
 const POPULATION: usize = 512;
 const GENERATIONS: u64 = 300;
 
@@ -224,6 +231,15 @@ impl GpuError {
     }
 }
 
+fn cmaes() -> genoxide::Result<Cmaes> {
+    Cmaes::builder(Real::uniform(WEIGHTS, -3.0..=3.0)?)
+        .population_size(128)
+        .restarts(cmaes::Restarts::Ipop)
+        .minimize()
+        .seed(1)
+        .build()
+}
+
 fn ga() -> genoxide::Result<Ga<Real, Tournament, SimulatedBinaryCrossover, PolynomialMutation>> {
     Ga::builder(Real::uniform(WEIGHTS, -3.0..=3.0)?)
         .population_size(POPULATION)
@@ -242,34 +258,49 @@ fn main() -> genoxide::Result<()> {
         return Ok(());
     };
     println!(
-        "a {WEIGHTS}-weight network fitted to {SAMPLES} samples: {POPULATION} genomes, {GENERATIONS} generations\n"
-    );
-
-    let start = Instant::now();
-    let outcome = Engine::new(ga()?, |weights: &Reals| error(weights, &samples))
-        .parallel(true)
-        .stop_when(Stop::generations(GENERATIONS))
-        .run()?;
-    println!(
-        "CPU, every core: {:>6.2} s, error {:.4}",
-        start.elapsed().as_secs_f64(),
-        outcome.best_fitness()
+        "a {WEIGHTS}-weight network fitted to {SAMPLES} samples
+"
     );
 
     // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
     let mut trace = trace::Trace::from_env();
     let start = Instant::now();
     let evaluate = trace.timed(|genomes: &[&Reals]| gpu.evaluate(genomes));
-    let outcome = Engine::new(ga()?, Batch(evaluate))
-        .stop_when(Stop::generations(GENERATIONS))
+    let outcome = Engine::new(cmaes()?, Batch(evaluate))
+        .stop_when(Stop::target(TARGET).or(Stop::evaluations(2_000_000)))
         .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
+    report("CMA-ES on the GPU", &outcome, start.elapsed());
+    let double = error(outcome.best_genome(), &samples);
     println!(
-        "GPU, batches:    {:>6.2} s, error {:.4} ({:.4} on the CPU in double precision)",
-        start.elapsed().as_secs_f64(),
-        outcome.best_fitness(),
-        error(outcome.best_genome(), &samples)
+        "{:19}in double precision on the CPU: error {double:.2e}",
+        ""
     );
     trace.write();
+
+    println!(
+        "
+a genetic algorithm, {GENERATIONS} generations of {POPULATION} networks:"
+    );
+    let start = Instant::now();
+    let outcome = Engine::new(ga()?, Batch(|genomes: &[&Reals]| gpu.evaluate(genomes)))
+        .stop_when(Stop::generations(GENERATIONS))
+        .run()?;
+    report("on the GPU", &outcome, start.elapsed());
+    let start = Instant::now();
+    let outcome = Engine::new(ga()?, |weights: &Reals| error(weights, &samples))
+        .parallel(true)
+        .stop_when(Stop::generations(GENERATIONS))
+        .run()?;
+    report("on every CPU core", &outcome, start.elapsed());
     Ok(())
+}
+
+fn report(name: &str, outcome: &Outcome<Reals>, elapsed: std::time::Duration) {
+    println!(
+        "{name:<19}{:>5.2} s, {:>7} evaluations, error {:.2e}",
+        elapsed.as_secs_f64(),
+        outcome.evaluations(),
+        outcome.best_fitness().score().unwrap_or(f64::NAN)
+    );
 }

@@ -1,4 +1,5 @@
-minimum: -12569.49
-CMA-ES: -7871.22, with 8 of 30 genes within 1 of 420.97
-PSO: -8573.03, with 11 of 30 genes within 1 of 420.97
-L-SHADE: -12569.49, with 30 of 30 genes within 1 of 420.97
+minimum: -12569.49, 300000 evaluations at most
+L-SHADE: -12569.49, error 7.7e-9, 30 of 30 genes within 1 of 420.97
+for contrast, two algorithms that stay far from it:
+CMA-ES with IPOP: -7871.22, error 4.7e3, 8 of 30 genes within 1 of 420.97
+PSO on a ring: -8573.03, error 4.0e3, 11 of 30 genes within 1 of 420.97

@@ -2,8 +2,9 @@
 ``GENOXIDE_TRACE`` names: the best solution so far and its constraint violation, in at most 100
 generations. The Rust example writes the same file.
 
-The curve is the error f − f* of the best feasible solution and of the population's median, on a
-log scale: null while they're infeasible, whose values aren't comparable to f*."""
+The curve is the error f − f* of the best solution and of the population's median, on a log scale,
+measured without the run's ε level: null while they're infeasible, whose values aren't comparable
+to f*."""
 
 import json
 import math
@@ -19,22 +20,27 @@ class Trace:
         self.path = os.environ.get("GENOXIDE_TRACE")
         self.frames = Frames(100)
         self.problem = problem
+        # the last generation recorded: a re-evaluation repeats it
+        self.last = None
 
     def record(self, progress):
         """Records a generation: the errors of the best and the median, the best solution so far
         and its constraint violations, 0 when met."""
-        if self.path:
+        if self.path and progress.generation != self.last:
+            self.last = progress.generation
+            # each solution's value and violation, without the ε level
             best = progress.best_genome
             score, violation = self.problem(best)
             best_error = self.error(score) if violation == 0 else None
             # the population in the order of Deb's rules: the feasible solutions by value, then
             # the infeasible ones
+            scores, violations = self.problem.evaluate(progress.population)
             feasible = sorted(
                 self.error(float(score))
-                for score, violation in zip(progress.scores, progress.violations)
+                for score, violation in zip(scores, violations)
                 if violation == 0
             )
-            middle = median(feasible, len(progress.scores))
+            middle = median(feasible, len(scores))
             # an equality h = 0 is met when |h| ≤ δ: its violation max(0, |h| − δ), 0 when met
             equalities = self.problem.constraints(best).tolist()
             violations = [max(abs(h) - EQUALITY_TOLERANCE, 0.0) for h in equalities]

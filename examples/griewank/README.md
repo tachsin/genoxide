@@ -67,7 +67,8 @@ It runs in each dimension with seeds 1 to 10, twice:
   starts again from a random point with twice the population. genoxide's docs recommend them for
   multimodal functions.
 
-Each run has a budget of 10,000 evaluations per dimension and a target of 1e-8.
+Each run has a budget of 10,000 evaluations per dimension, and at least 100,000 (in 2 and 5
+dimensions, where the restarts need more than 10,000 per dimension), and a target of 1e-8.
 
 ## Output
 
@@ -88,6 +89,8 @@ dimensions, 2 times in 10 in 10 dimensions, 8 or 9 times in 20 and 30, and every
 runs that fail end in a local minimum near the origin: in 30 dimensions, seed 1 ends at 0.0074, with
 x₁ = −3.14 and x₂ = −4.44, the minimum described above.
 
-With IPOP restarts, it reaches the minimum every time from 5 dimensions on. In 2 dimensions, it
-does 6 times in 10: the budget there is only 20,000 evaluations, and the ripples, compared with the
-bowl, are the largest.
+With IPOP restarts, it reaches the minimum every time, in every dimension. In 2 dimensions, where
+the ripples, compared with the bowl, are the largest, it needs the most restarts: with seeds 1 to
+100, it reaches the minimum every time, after at most 64,000 evaluations, but only 56 times with
+20,000 evaluations, 10,000 per dimension, and 92 times with 50,000. In 5 dimensions, it reaches it
+every time with seeds 1 to 100, after at most 85,000 evaluations, and 98 times with 50,000.

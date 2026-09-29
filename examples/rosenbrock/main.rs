@@ -1,9 +1,9 @@
 //! Rosenbrock: minimize a function whose minimum lies at the end of a narrow curved valley, in 30
 //! dimensions.
 //!
-//! Compares CMA-ES (which learns the valley's direction), L-SHADE (differential evolution with a
-//! population that shrinks over the budget) and particle swarm optimization. The global minimum is
-//! 0, at (1, …, 1). The function is genoxide's `problems::Rosenbrock`.
+//! Compares CMA-ES with IPOP restarts (which learns the valley's direction), L-SHADE (differential
+//! evolution with a population that shrinks over the budget) and particle swarm optimization. The
+//! global minimum is 0, at (1, …, 1). The function is genoxide's `problems::Rosenbrock`.
 //!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
 //! page, with `trace.rs`.
@@ -30,12 +30,14 @@ fn main() -> Result<()> {
         optimum.value()
     );
 
+    // IPOP restarts: a run that ends in the local minimum near x₁ = −1 starts again
     let cmaes = Cmaes::builder(problem.representation())
+        .restarts(cmaes::Restarts::Ipop)
         .minimize()
         .seed(1)
         .build()?;
     let outcome = Engine::new(cmaes, problem).stop_when(stop()).run()?;
-    report("CMA-ES", &outcome, &optimum);
+    report("CMA-ES with IPOP", &outcome, &optimum);
 
     let l_shade = De::l_shade(problem.representation(), BUDGET)
         .minimize()

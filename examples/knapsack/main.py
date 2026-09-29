@@ -62,7 +62,7 @@ def optimum():
 
 ga = gx.Ga(
     gx.Binary(len(ITEMS)),
-    population_size=60,
+    population_size=200,
     select=gx.Tournament(3),
     crossover=gx.PointCrossover(2),
     mutation=gx.BitFlip(rate=1 / len(ITEMS)),

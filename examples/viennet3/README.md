@@ -1,7 +1,7 @@
 ---
 title: Viennet 3
 category: multi-objective
-summary: Minimize three objectives of two variables, two of which depend only on the distance from the origin, so that the Pareto front is two separate curves, with NSGA-III.
+summary: Minimize three objectives of two variables, two of which depend only on the distance from the origin, so that the Pareto front is two separate curves, with NSGA-III and SMS-EMOA.
 reference: "Viennet, R., Fonteix, C. and Marc, I. (1996). Multicriteria optimization using a genetic algorithm for determining a Pareto set. International Journal of Systems Science 27(2): 255-260."
 reference_url: https://doi.org/10.1080/00207729608929211
 optimum: "not known in closed form: two curves; hypervolume about 5.3255 (reference point (9.016, 17.2407, 0.2036))"
@@ -76,51 +76,75 @@ fitness is the three objectives. In Python, `run` evaluates it in Rust.
 
 ## Algorithm
 
-NSGA-III (Deb and Jain, 2014, IEEE Transactions on Evolutionary Computation 18(4): 577-601). Like
-NSGA-II, it ranks solutions into non-dominated fronts, and parents and children compete for the
-next population. Instead of crowding distance, it spreads the front along reference directions. It
-first normalizes the objectives by the best values and the extreme points it has found, so their
-different ranges don't matter. Each solution joins the direction nearest to it, and directions with
-few members get more. genoxide's docs recommend it for three or more objectives. Its directions
-cover a surface; on a curve, many of them have no solution near them, and the population spreads
-along the curves instead.
+Two algorithms, each with a population of 92 for 50 generations, 4,692 evaluations, with simulated
+binary crossover with η = 30, as Deb and Jain use, and polynomial mutation with η = 20 at a rate of
+0.5 per gene, one of the two genes per child on average.
 
-The settings:
+- NSGA-III (Deb and Jain, 2014, IEEE Transactions on Evolutionary Computation 18(4): 577-601), with
+  the 91 reference directions of Das and Dennis's method (1998, SIAM Journal on Optimization 8(3):
+  631-657) with 12 divisions, as Deb and Jain use for 3 objectives, and a crossover rate of 1. Like
+  NSGA-II, it ranks solutions into non-dominated fronts, and parents and children compete for the
+  next population. Instead of crowding distance, it spreads the front along reference directions.
+  It first normalizes the objectives by the best values and the extreme points it has found, so
+  their different ranges don't matter. Each solution joins the direction nearest to it, and
+  directions with few members get more. genoxide's docs recommend it for three or more objectives.
+- SMS-EMOA (Beume, Naujoks and Emmerich, 2007, European Journal of Operational Research 181(3):
+  1653-1669), in genoxide's generational form: 92 children a generation, and genoxide's default
+  crossover rate of 0.9. From the last front that fits only in part, it removes the solutions that
+  add the least hypervolume, one at a time.
 
-- 91 reference directions from Das and Dennis's method (1998, SIAM Journal on Optimization 8(3):
-  631-657) with 12 divisions: all points (a/12, b/12, c/12) with a + b + c = 12, as Deb and Jain
-  use for 3 objectives;
-- a population of 92, the multiple of four just above 91;
-- simulated binary crossover with η = 30, as Deb and Jain use, and polynomial mutation with η = 20
-  at a rate of 0.5 per gene, one of the two genes per child on average;
-- 50 generations, 4,692 evaluations.
+NSGA-III's directions cover a surface; on a curve, many of them have no solution near them, and the
+population spreads along the curves instead.
 
-The front needs about 10 generations. All 92 solutions are non-dominated from generation 7 on, and
-the hypervolume reaches 5.26 at generation 10 and its highest, 5.280, at generation 14. After that,
-it drifts down a little, to 5.255 at generation 50: NSGA-III keeps the solutions spread along the
-directions, without regard to the hypervolume. A run of 400 generations ends at about 5.25.
+SMS-EMOA is there for the target, a hypervolume within 1% of the whole front's (see Good results).
+Next to a curve, a solution that isn't optimal adds little hypervolume, since the optimal ones near
+it cover most of what it dominates; SMS-EMOA drops such solutions first.
+
+NSGA-III's front needs about 10 generations. All 92 solutions are non-dominated from generation 7
+on, and the hypervolume reaches 5.26 at generation 10 and its highest, 5.280, at generation 14.
+After that, it drifts down a little, to 5.255 at generation 50: NSGA-III keeps the solutions spread
+along the directions, without regard to the hypervolume. A run of 400 generations ends at about
+5.25. SMS-EMOA's hypervolume rises throughout: 5.259 at generation 8, 5.296 at 14, 5.302 at 20 and
+5.3036 at 50.
 
 ## Output
 
-Two lines. The first gives how many solutions are on the final front, and how many of them are near
-the origin, with r² < 3, or farther out: on each of the two curves, or next to it.
+A line per algorithm: how many solutions are on its final front, how many of them are near the
+origin, with r² < 3, or farther out: on each of the two curves, or next to it; its hypervolume, and
+the hypervolume as a share of the whole front's. The last line gives the whole front's hypervolume.
 
-The second gives the front's hypervolume: the volume that it dominates, up to a reference point.
-Larger is better. The reference point here is (9.016, 17.2407, 0.2036): the nadir point plus a tenth
-of each objective's range from the ideal point, so that the extreme solutions count too, rounded to
-4 decimals. For the whole front, the hypervolume is about 5.3255: 43,192 points of the two curves
-give 5.3254, and a 4,001 × 4,001 grid of the variables gives 5.3255.
+The hypervolume is the volume that the front dominates, up to a reference point. Larger is better.
+The reference point here is (9.016, 17.2407, 0.2036): the nadir point plus a tenth of each
+objective's range from the ideal point, so that the extreme solutions count too, rounded to 4
+decimals.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/viennet3) plays this run back.
+The whole front has no closed form, and its hypervolume is about 5.3255: 43,192 points of the two
+curves give 5.3254, and a 4,001 × 4,001 grid of the variables gives 5.3255. A reference front from a
+much longer run agrees: NSGA-III with 1,891 reference directions (60 divisions) and as many
+solutions, for 1,000 generations, ends with a front of 1,891 solutions and a hypervolume of 5.3220,
+99.9% of 5.3255.
+
+[The project page](https://tachsin.gr/projects/genoxide/examples/viennet3) plays the SMS-EMOA run
+back.
 
 ## Good results
 
-No finite set of solutions reaches 5.3255. A good front has solutions along both curves, from end
-to end, and close to them.
+The target is a hypervolume of at least 99% of the whole front's, 5.2722. No finite set of solutions
+reaches 5.3255. A good front has solutions along both curves, from end to end, and close to them.
 
-The run's front has 92 solutions and a hypervolume of about 5.2553, within 1.3% of the whole
-front's. 68 of its solutions are near the origin, up to r² = 1.39 of the inner curve's 1.50. The
+NSGA-III's front has 92 solutions and a hypervolume of 5.2553, 98.7% of the whole front's: short of
+the target. 68 of its solutions are near the origin, up to r² = 1.39 of the inner curve's 1.50. The
 other 24 are on the outer curve, for r² from 5.08 to 15.45: its two ends, from 4.19 to 5.08 and from
 15.45 to 17.15, have none. Most solutions are on the curves or very near them. For half of them, f₂
 is less than 0.002 above its minimum on their circle; for 90%, less than 0.02; for the worst, 0.21
 above.
+
+SMS-EMOA's front has 92 solutions and a hypervolume of 5.3036, 99.6% of the whole front's: within
+the target. It puts its solutions where they add the most hypervolume: 82 near the origin, up to
+r² = 1.04, and 10 along the outer curve, from r² = 4.04, just inside the gap, to 16.77. They are
+closer to the curves than NSGA-III's: for half of them, f₂ is less than 0.0002 above its minimum on
+their circle; for 90%, less than 0.002; for the worst, 0.019 above.
+
+Over seeds 1 to 20, SMS-EMOA reaches the target in every run, with hypervolumes from 5.3005 to
+5.3046, 99.5% to 99.6% of the whole front's. NSGA-III reaches it in 3 runs, with hypervolumes from
+5.2500 to 5.2762, 98.6% to 99.1%.

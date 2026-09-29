@@ -1,3 +1,4 @@
-NSGA-III 92 solutions, 29 + 22 + 22 + 19 in the four regions, IGD+ 0.0412, hypervolume 1.5990
-NSGA-II  92 solutions, 24 + 23 + 16 + 29 in the four regions, IGD+ 0.0479, hypervolume 1.5542
+NSGA-III, 91 directions  92 solutions, 29 + 22 + 22 + 19 in the four regions, IGD+ 0.0412 (scaled 0.0332), hypervolume 1.5990
+NSGA-II                  92 solutions, 24 + 23 + 16 + 29 in the four regions, IGD+ 0.0479 (scaled 0.0391), hypervolume 1.5542
+NSGA-III, 861 directions 861 solutions, 280 + 208 + 211 + 162 in the four regions, IGD+ 0.0105 (scaled 0.0087), hypervolume 1.7069
 the whole front: hypervolume 1.7392

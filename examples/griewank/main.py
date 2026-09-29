@@ -17,13 +17,15 @@ from trace import record_2d
 
 DIMENSIONS = [2, 5, 10, 20, 30, 50]
 EVALUATIONS_PER_DIMENSION = 10_000
+# the budget in few dimensions, where 10,000 per dimension is too little for IPOP's restarts
+MINIMUM_BUDGET = 100_000
 SEEDS = 10
 
 
 def solved(problem, restarts):
     """The runs of the seeds that reach the target."""
     target = problem.optimum.value + 1e-8
-    budget = EVALUATIONS_PER_DIMENSION * problem.dimensions
+    budget = max(EVALUATIONS_PER_DIMENSION * problem.dimensions, MINIMUM_BUDGET)
     solved = 0
     for seed in range(1, SEEDS + 1):
         cmaes = gx.Cmaes(problem.genome, restarts=restarts, objective="minimize", seed=seed)
@@ -35,7 +37,7 @@ def solved(problem, restarts):
 
 print(
     f"Runs of CMA-ES within 1e-8 of the minimum, of {SEEDS}, with {EVALUATIONS_PER_DIMENSION} "
-    "evaluations per dimension"
+    f"evaluations per dimension, {MINIMUM_BUDGET} at least"
 )
 print(f"{'dimensions':>10}{'no restarts':>14}{'IPOP':>14}")
 for dimensions in DIMENSIONS:

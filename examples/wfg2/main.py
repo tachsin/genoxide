@@ -1,11 +1,11 @@
 """WFG2: minimize two objectives over 24 variables, with a convex front in six disconnected
-regions and non-separable distance parameters, with NSGA-II and MOEA/D.
+regions and non-separable distance parameters, with NSGA-II and SMS-EMOA.
 
 The second problem of Huband, Hingston, Barone and While's WFG toolkit, from genoxide's
 problems.Wfg2, with 2 objectives and the recommended sizes, k = 4 and l = 20; run evaluates it in
-Rust. Runs each algorithm for 1,000 generations, and prints its front after 250 and after 1,000:
-the size, the solutions on each region of the optimal front, the IGD+ to 500 points of it, and
-the hypervolume.
+Rust. Runs NSGA-II with polynomial mutation for 1,000 generations, and SMS-EMOA with uniform
+mutation for 5,000, and prints their fronts after 1,000 and 5,000: the size, the solutions on each
+region of the optimal front, the IGD+ to 500 points of it, and the hypervolume.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its runs for the plot on the example's
 page, with trace.py.
@@ -20,11 +20,11 @@ from trace import Trace
 # the reference point of the hypervolume: 1.1 times the front's worst point, (2, 4)
 REFERENCE = [2.2, 4.4]
 
-# the generation of the first report: the NSGA-II paper's budget
-FIRST = 250
+# the generation of NSGA-II's report, and of SMS-EMOA's first
+FIRST = 1_000
 
-# the generation of the last report
-LAST = 1_000
+# the generation of SMS-EMOA's last report
+LAST = 5_000
 
 # the six regions of the optimal front, as ranges of f₁ = 2 (1 − cos(x₁π/2)), from the ranges of
 # x₁ where 1 − x₁ cos²(5πx₁) is below all its values at smaller x₁
@@ -45,8 +45,7 @@ trace = Trace(REFERENCE, REGIONS)
 
 def report(name, generations, front):
     """Prints the size of a front, its solutions on each region (f₁ within 0.01 of the region's
-    range), its IGD+ to the optimal front and its hypervolume. A front has each solution once,
-    though MOEA/D's subproblems can hold copies of one."""
+    range), its IGD+ to the optimal front and its hypervolume."""
     distance = gx.indicators.igd_plus(front, optimal)
     volume = gx.indicators.hypervolume(front, REFERENCE)
     counts = [
@@ -54,37 +53,48 @@ def report(name, generations, front):
         for low, high in REGIONS
     ]
     print(
-        f"{name:<7} after {generations} generations: {len(front)} solutions "
+        f"{name:<8} after {generations} generations: {len(front)} solutions "
         f"({', '.join(map(str, counts))}), IGD+ {distance:.4f}, hypervolume {volume:.4f}"
     )
 
 
-def run(name, algorithm):
-    """Runs ``algorithm`` for 1,000 generations, and reports its front after 250 and 1,000."""
+def run(name, algorithm, reports):
+    """Runs ``algorithm`` up to the last of ``reports``, and reports its front after each of
+    them."""
     record = trace.fronts(name)
-    first = []
+    fronts = []
 
     def on_generation(progress):
-        if progress.generation == FIRST:
-            first.append(progress.front_objectives)
+        if progress.generation in reports:
+            fronts.append(progress.front_objectives)
         if record:
             record(progress)
 
-    result = algorithm.run(problem, generations=LAST, on_generation=on_generation)
-    report(name, FIRST, first[0])
-    report(name, LAST, result.front_objectives)
+    algorithm.run(problem, generations=reports[-1], on_generation=on_generation)
+    for generations, front in zip(reports, fronts):
+        report(name, generations, front)
 
 
 # polynomial mutation at a rate of 1/24, one gene per child on average
-operators = dict(
+nsga2 = gx.Nsga2(
+    problem.genome,
     objectives=problem.objectives,
+    population_size=100,
     crossover=gx.SimulatedBinaryCrossover(15),
     mutation=gx.PolynomialMutation(20, rate=1 / 24),
     seed=1,
 )
-run("NSGA-II", gx.Nsga2(problem.genome, population_size=100, **operators))
-# 101 weight vectors, evenly spread, and the same operators
-run("MOEA/D", gx.Moead(problem.genome, weights=gx.das_dennis(2, 100), **operators))
+run("NSGA-II", nsga2, [FIRST])
+# uniform mutation: one gene per child, drawn anew anywhere in its range
+sms_emoa = gx.SmsEmoa(
+    problem.genome,
+    objectives=problem.objectives,
+    population_size=100,
+    crossover=gx.SimulatedBinaryCrossover(15),
+    mutation=gx.UniformMutation(count=1),
+    seed=1,
+)
+run("SMS-EMOA", sms_emoa, [FIRST, LAST])
 
 print("the whole front: hypervolume 6.1511")
 trace.write()

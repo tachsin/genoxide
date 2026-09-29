@@ -58,7 +58,7 @@ A genetic algorithm with the operators that genoxide's guide lists for sequences
 - swap mutation, which exchanges two entries;
 - the default generational scheme, which keeps the best individual.
 
-The run stops at the optimum, 55, or after 1,000 generations.
+The run stops at the optimum, 55, or after 5,000 generations.
 
 ## Output
 
@@ -70,4 +70,5 @@ orders define the schedule.
 
 ## Good results
 
-The optimum is 55. The run reaches it after about 120 generations.
+The optimum is 55. The run reaches it after about 120 generations. Over seeds 1 to 100, every run
+reached it, half of them within 190 generations and 90 within 620; the slowest took 1,680.

@@ -1,7 +1,7 @@
 ---
 title: CEC 2006 g22
 category: constrained
-summary: The linear function x1 of 22 variables under 19 equalities with coefficients up to 10⁷, which leave three variables free; L-SHADE with Deb's feasibility rules doesn't find a feasible solution, and solving the equalities by hand beats the report's best known.
+summary: The linear function x1 of 22 variables under 19 equalities with coefficients up to 10⁷, which leave three variables free; L-SHADE on all 22 doesn't find a feasible solution, and SHADE on the three free ones, with the equalities solved in order, beats the report's best known in every run.
 reference: "Liang, J. J., Runarsson, T. P., Mezura-Montes, E., Clerc, M., Suganthan, P. N., Coello Coello, C. A. and Deb, K. (2006). Problem Definitions and Evaluation Criteria for the CEC 2006 Special Session on Constrained Real-Parameter Optimization. Technical report, Nanyang Technological University, Singapore."
 reference_url: "https://github.com/P-N-Suganthan/CEC2006"
 optimum: "236.430975504001 (the report's best known, with the equalities met within 0.0001); 236.370313314566 with every equality met exactly"
@@ -79,9 +79,19 @@ constraints, which genoxide's algorithms don't use.
 
 ## Representation
 
-A `Real` genome of 22 genes, x1 to x22, within the bounds above. genoxide's `problems::cec2006::G22`
-is the fitness: the value f(x) and the total constraint violation, the sum of max(0, g1(x)) and of
+The example runs two searches. The first has a `Real` genome of 22 genes, x1 to x22, within the
+bounds above, as the report poses the problem. genoxide's `problems::cec2006::G22` is the fitness:
+the value f(x) and the total constraint violation, the sum of max(0, g1(x)) and of
 max(0, |h(x)| − 0.0001) over the equalities, 0 for a feasible solution.
+
+The second has a `Real` genome of 3 genes, x1, x8 and x9, within their bounds. Its fitness solves
+the equalities in order, as above, for the other 19 variables, each kept within its bounds, and
+evaluates the 22 with `G22`: the same value and violation as the first search's. A variable that
+its bounds cut, such as x10 = 430 − x8 above 300 when x8 is below 130, leaves its equality unmet,
+and the violation says by how much: the bounds of the 19 solved variables become constraints on the
+three free ones. The logarithms are genoxide's (`genoxide::math::ln`, the same to the bit on every
+platform), which `G22` uses too; the Python example takes them from `G22`'s constraints h12 to h16,
+with x18 to x22 at 0, so both versions compute the same numbers.
 
 genoxide compares fitnesses with Deb's feasibility rules (Deb, 2000, Computer Methods in Applied
 Mechanics and Engineering 186: 311-338): a feasible solution beats an infeasible one, two feasible
@@ -90,43 +100,61 @@ search is a minimization of the violation, and f plays no part.
 
 ## Algorithm
 
-L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665) is SHADE with a population that
-shrinks linearly over a known budget: current-to-pbest/1 mutation with an archive, and a memory of
-the scale factor F and the crossover rate CR that worked. genoxide's `De::l_shade` starts it with 18
-· 22 = 396 individuals and ends it with 4. A trial outside the bounds is brought back halfway
-between its parent and the bound, and Deb's rules decide between a trial and its parent.
+L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665) searches the 22 variables. It is
+SHADE with a population that shrinks linearly over a known budget: current-to-pbest/1 mutation with
+an archive, and a memory of the scale factor F and the crossover rate CR that worked. genoxide's
+`De::l_shade` starts it with 18 · 22 = 396 individuals and ends it with 4. A trial outside the
+bounds is brought back halfway between its parent and the bound, and Deb's rules decide between a
+trial and its parent. It has the report's budget of 500,000 evaluations, and no target.
 
-The run has the report's budget of 500,000 evaluations, and no target: it runs to the end.
+SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78) searches x1, x8 and x9, with genoxide's
+defaults: its published population of 100, and a restart after 200 generations without progress.
+It stops once its best solution is feasible and within 1e-8 of 236.370313314566, the least value
+with every equality met exactly, or after 500,000 evaluations.
 
-Why L-SHADE: none of genoxide's algorithms found a feasible solution in 25 seeds each, and L-SHADE
-came the closest. It ended at a violation between 8.5 and 53 on 12 seeds, and between 4,100 and
-19,300 on the other 13. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78) ended between 4,800
-and 27,000, CMA-ES with IPOP restarts (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2):
-159-195; Auger and Hansen, 2005, IEEE CEC 2005: 1769-1776) between 72 and 301.
+On the 22 variables, none of genoxide's algorithms found a feasible solution in 25 seeds each, and
+L-SHADE came the closest. It ended at a violation between 8.5 and 53 on 12 seeds, and between
+4,100 and 19,300 on the other 13. SHADE ended between 4,800 and 27,000, CMA-ES with IPOP restarts
+(Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195; Auger and Hansen, 2005, IEEE
+CEC 2005: 1769-1776) between 72 and 301. Deb's rules add up the violations in their own units, so
+that h1 to h6, in units of 10⁵ to 10⁷, drown the rest: the runs meet those and miss the logarithms.
+With each constraint's violation divided by its typical size, the median |g| or |h| over 1,000
+random points, SHADE and L-SHADE found a feasible solution in each of 16 runs, but ended between
+f = 243 and 317, far above f*: moving along a layer 0.0001 thick in 22 dimensions is slow. Solving
+the equalities takes the layer away, and leaves a search in 3 dimensions.
 
 ## Output
 
-The first line names the run. The second gives when it stopped and the violation of its best
-solution. The third says whether it found a feasible solution, and the fourth compares f(x) with the
-report's f*, to 6 significant digits. The fifth gives the solution, and the last the constraints:
-for g1, "active" on the boundary (|g| ≤ 1e-6), else the value of g, negative when it's satisfied;
-for h1 to h19, "active" when the equality is met within the tolerance, else by how much
-|h| exceeds it. In Python, `run` evaluates the problem in Rust, so both versions print the same.
+The first two lines give the run on the 22 variables: its name, and its best solution's violation
+when it stopped. The next two give the run on x1, x8 and x9, and what stopped it. The fifth
+compares f(x) with 236.370313, the least value with every equality met, and the sixth with the
+report's f*. The seventh gives the solution, all 22 variables, and the last the constraints: for
+g1, "active" on the boundary (|g| ≤ 1e-6), else the value of g, negative when it's satisfied; for
+h1 to h19, "active" when the equality is met within the tolerance, else by how much |h| exceeds it.
+In Python, `run` evaluates the problem in Rust, and the second run's fitness function evaluates the
+22 variables in Rust, a generation at a time, so both versions print the same.
 
-The page's plot shows each variable on its range, and each constraint's state: violated, active or
-satisfied (an equality met within the tolerance shows as active). Its curve shows the constraint
-violation of the best solution, and of the population's median, on a log scale: with no feasible
-solution, the error f − f* has no meaning.
+The page plays the second run back. Its plot shows each of the 22 variables on its range, and each
+constraint's state: violated, active or satisfied (an equality met within the tolerance shows as
+active). Its curve shows the error f − 236.370313314566 of the best feasible solution, and of the
+population's median, on a log scale.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/cec2006-g22) plays this run back.
 
 ## Good results
 
-A good run would be feasible and end within 1e-4 of f*, the report's success; no run of genoxide's
-algorithms gets there, and this page shows how close one comes.
+A good run is feasible and ends within 1e-4 of f*, the report's success. f* is only the best known,
+and a value below it is possible: 236.370313, with every equality met exactly, is 0.0607 below it.
 
-With seed 1, the violation falls from 5.7·10⁸ in the first random population to 89,000 after 131,643
-evaluations, 76 after 228,761 and 56 after 300,621, and ends at 53.53. The solution meets the linear
-equalities h1 to h11, and h17 and h18, within the tolerance, but not the five logarithms h12 to h16,
-nor h19: it has met the equalities of the large variables, and not those of the small ones. Its f is
-19,926.5, near the bound of x1, since f doesn't count until the solution is feasible.
+L-SHADE on the 22 variables, with seed 1, ends at a violation of 53.53, after 500,003 evaluations.
+Its solution meets the linear equalities h1 to h11, and h17 and h18, within the tolerance, but not
+the five logarithms h12 to h16, nor h19: it has met the equalities of the large variables, and not
+those of the small ones. With seeds 1 to 1,000, no run is feasible: the violations end between 2.2
+and 40,400, 6,870 for half of them.
+
+SHADE on x1, x8 and x9, with seed 1, starts with feasible solutions in its first random population,
+the best at f = 437.5, and meets its target after 25,700 evaluations: f = 236.370313, 9.9·10⁻⁹
+above the least value with every equality met, and 0.060662 below the report's best known. Its
+solution is the corner x8 = 130, x9 = 170, where x10 and x11 are at their upper bounds, 300 and 400,
+with every equality met and g1 active. With seeds 1 to 1,000, every run meets the target, after
+23,400 to 27,500 evaluations (25,800 for half of them).

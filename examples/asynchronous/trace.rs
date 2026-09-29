@@ -55,7 +55,7 @@ impl Trace {
             "objective": "minimize",
             "x_label": "evaluations",
             "y_label": "best value",
-            "log_y": false,
+            "log_y": true,
             "optimum": 0.0,
             "plot": "timeline",
             "problem": { "workers": self.workers },

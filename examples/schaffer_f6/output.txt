@@ -1,5 +1,5 @@
-Schaffer F6: minimum 0 at the origin, 30 seeds, 20000 evaluations at most per run
-runs ending near        best value  GA  PSO
-the minimum, r = 0        0.000000  16   23
-the ring at r = 3.14      0.009716  14    7
-error below 1e-6                     1   23
+Schaffer F6: minimum 0 at the origin, 30 seeds, 50000 evaluations at most per run
+runs ending near        best value  SHADE  PSO  GA
+the minimum, r = 0        0.000000     30   24  24
+the ring at r = 3.14      0.009716      0    6   6
+error below 1e-6                       30   24   5

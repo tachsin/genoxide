@@ -43,7 +43,7 @@ nsga2 = gx.Nsga2(
 )
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(problem, REFERENCE)
-result = nsga2.run(problem, generations=250, on_generation=trace.on_generation)
+result = nsga2.run(problem, generations=500, on_generation=trace.on_generation)
 
 front = result.front_objectives
 below = int((front[:, 0] < MIDDLE).sum())

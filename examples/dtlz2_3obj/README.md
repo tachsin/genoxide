@@ -1,7 +1,7 @@
 ---
 title: DTLZ2 with 3 objectives
 category: multi-objective
-summary: Minimize three conflicting objectives whose Pareto front is an eighth of the unit sphere, with NSGA-III.
+summary: Minimize three conflicting objectives whose Pareto front is an eighth of the unit sphere, with NSGA-III and 91 or 703 reference directions.
 reference: "Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2002). Scalable multi-objective optimization test problems. Proceedings of the 2002 Congress on Evolutionary Computation, pp. 825-830."
 reference_url: https://doi.org/10.1109/CEC.2002.1007032
 optimum: "hypervolume 0.8074 (reference point (1.1, 1.1, 1.1))"
@@ -45,29 +45,58 @@ at a time.
 ## Algorithm
 
 NSGA-III (Deb and Jain, 2014, IEEE Transactions on Evolutionary Computation 18(4): 577-601). Like
-NSGA-II, it ranks solutions into non-dominated fronts, and parents and children compete. Instead of
-crowding distance, it spreads the front along reference directions. Each solution joins the
-direction nearest to it, and directions with few members get more.
+NSGA-II, it ranks solutions into non-dominated fronts, and parents and children compete for the next
+population. Instead of crowding distance, it spreads the front along reference directions: each
+solution joins the direction nearest to it, and directions with few members get more.
 
-The settings are Deb and Jain's for DTLZ2 with 3 objectives:
+The example runs it twice, with Deb and Jain's operators for DTLZ2 with 3 objectives: simulated
+binary crossover with η = 30, and polynomial mutation with η = 20 at a rate of 1/12 per gene, one
+gene per child on average. The reference directions come from Das and Dennis's method (1998, SIAM
+Journal on Optimization 8(3): 631-657): all points (a/H, b/H, c/H) with a + b + c = H, for H
+divisions.
 
-- 91 reference directions from Das and Dennis's method (1998, SIAM Journal on Optimization 8(3):
-  631-657) with 12 divisions: all points (a/12, b/12, c/12) with a + b + c = 12;
-- a population of 92, the multiple of four just above 91;
-- simulated binary crossover with η = 30, and polynomial mutation with η = 20 at a rate of 1/12 per
-  gene;
-- 250 generations.
+- Deb and Jain's settings: 12 divisions, 91 directions, a population of 92, the multiple of four
+  just above 91, and 250 generations, 23,092 evaluations.
+- 36 divisions: 703 directions, a population of 703, one solution per direction, and 250
+  generations, 176,453 evaluations.
+
+The second run is there for the target: a front within 1% of the optimal one, measured by IGD+ (see
+Good results). NSGA-III aims at one solution per direction, and 91 points can't cover an eighth of a
+sphere that closely, however well they converge. 703 can.
 
 ## Output
 
-One line: how many solutions are on the final front, and its hypervolume. The hypervolume is the
-volume that the front dominates, up to the reference point (1.1, 1.1, 1.1). Larger is better. For
-the whole front it is 1.1³ − π/6 = 0.8074: the cube minus the eighth of the unit ball.
+A line per run: how many solutions are on its final front, the front's hypervolume and its IGD+. The
+last line gives the whole front's hypervolume.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/dtlz2-3obj) plays this run back.
+The hypervolume is the volume that the front dominates, up to a reference point. Larger is better.
+The reference point here is (1.1, 1.1, 1.1), 1.1 times the nadir point (1, 1, 1), the worst value of
+each objective on the front. For the whole front, the hypervolume is 1.1³ − π/6 = 0.8074: the cube
+minus the eighth of the unit ball.
+
+IGD+ (Ishibuchi et al., 2015, EMO 2015, LNCS 9019: 110-125) is measured to 1,035 points of the
+optimal front, from genoxide's `optimal_front`: Das and Dennis's points with 44 divisions, projected
+onto the sphere. It averages, over those points, the distance to the nearest point of the found
+front, counting only the objectives in which the found point is worse. 0 means that the found front
+covers the optimal one. Smaller is better. Each objective spans 1 on the front, so IGD+ is already
+on the scale of the front's range.
+
+[The project page](https://tachsin.gr/projects/genoxide/examples/dtlz2-3obj) plays the second
+run back.
 
 ## Good results
 
-No finite set reaches 0.8074. NSGA-III aims at one solution per reference direction. The 91 points
-where the directions meet the sphere have a hypervolume of 0.7449. The run's front has 92 solutions
-and a hypervolume of about 0.7443, within 0.1% of those 91 points.
+The target is a front close to the whole optimal one: an IGD+ of at most 0.01, the front within
+about 1% of the objectives' range, or a hypervolume of at least 99% of the whole front's, 0.7993. No
+finite set reaches 0.8074, and neither target can be met with 91 points: the 91 points where the
+directions meet the sphere have a hypervolume of 0.7449 and an IGD+ of 0.0221. For an IGD+ of 0.01
+it takes about 450 points evenly spread over the sphere; the hypervolume needs far more, since 1,225
+points still give only 98.0% of it.
+
+With Deb and Jain's settings, the run's front has 92 solutions, a hypervolume of 0.7443 and an IGD+
+of 0.0224: as good as those 91 points. Over seeds 1 to 20, the hypervolume is 0.7433 to 0.7443 and
+the IGD+ 0.0224 to 0.0230.
+
+With 703 directions, the front has 703 solutions, a hypervolume of 0.7854 (97.3% of the whole
+front's) and an IGD+ of 0.0079: within the target. Over seeds 1 to 20, every run reaches it, with
+IGD+ from 0.0079 to 0.0080 and hypervolumes from 0.7852 to 0.7854.

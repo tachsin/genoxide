@@ -1,11 +1,12 @@
 //! DTLZ7 with 3 objectives: minimize three conflicting objectives over 22 variables in [0, 1],
 //! whose Pareto front is four disconnected regions.
 //!
-//! NSGA-III with the settings of the DTLZ2 example, and NSGA-II with the same population and
-//! operators, each for 250 generations. Prints, for each, how many solutions of its front lie in
-//! each region, its IGD+ to 1,024 points of the front and its hypervolume.
+//! NSGA-III with the settings of the DTLZ2 example, NSGA-II with the same population and
+//! operators, and NSGA-III with 861 reference directions and as many solutions, each for 250
+//! generations. Prints, for each, how many solutions of its front lie in each region, its IGD+ to
+//! 1,024 points of the front and its hypervolume.
 //!
-//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of the NSGA-III run for the plot on the
+//! With `GENOXIDE_TRACE=<file>`, it also writes a trace of the last run for the plot on the
 //! example's page, with `trace.rs`.
 //!
 //! ```text
@@ -32,24 +33,38 @@ const REFERENCE: [f64; 3] = [1.1 * C, 1.1 * C, 6.6];
 
 fn main() -> Result<()> {
     let problem = Dtlz7::<3>::new(VARIABLES);
-    // with GENOXIDE_TRACE=<file>, a trace of the NSGA-III run for the plot on the example's page
-    let mut trace = trace::Trace::from_env();
+    // polynomial mutation at a rate of 1/22, one gene per child on average
+    let mutation = PolynomialMutation::per_gene(1.0 / VARIABLES as f64, 20.0)?;
+    // 91 directions and a population of 92, the multiple of 4 above
     let directions = multi::das_dennis::<3>(12);
     let nsga3 = Nsga3::builder(problem.representation(), [Minimize; 3], directions)
         .population_size(92)
         .crossover(SimulatedBinaryCrossover::new(30.0)?)
-        .mutate(PolynomialMutation::per_gene(1.0 / VARIABLES as f64, 20.0)?)
+        .mutate(mutation)
         .seed(1)
         .build()?;
-    run("NSGA-III", nsga3, |snapshot| trace.record(snapshot))?;
+    run("NSGA-III, 91 directions", nsga3, |_| {})?;
 
     let nsga2 = Nsga2::builder(problem.representation(), [Minimize; 3])
         .population_size(92)
         .crossover(SimulatedBinaryCrossover::new(30.0)?)
-        .mutate(PolynomialMutation::per_gene(1.0 / VARIABLES as f64, 20.0)?)
+        .mutate(mutation)
         .seed(1)
         .build()?;
     run("NSGA-II", nsga2, |_| {})?;
+
+    // with GENOXIDE_TRACE=<file>, a trace of this run for the plot on the example's page
+    let mut trace = trace::Trace::from_env();
+    // 861 directions, and a solution for each
+    let directions = multi::das_dennis::<3>(40);
+    let nsga3 = Nsga3::builder(problem.representation(), [Minimize; 3], directions)
+        .crossover(SimulatedBinaryCrossover::new(30.0)?)
+        .mutate(mutation)
+        .seed(1)
+        .build()?;
+    run("NSGA-III, 861 directions", nsga3, |snapshot| {
+        trace.record(snapshot)
+    })?;
 
     // the whole front's hypervolume, integrated numerically
     println!("the whole front: hypervolume 1.7392");
@@ -74,14 +89,23 @@ where
     for f in &front {
         regions[2 * high(f[0]) + high(f[1])] += 1;
     }
-    // IGD+ to a grid of 32 × 32 values of f₁ and f₂ over the regions
+    // IGD+ to a grid of 32 × 32 values of f₁ and f₂ over the regions, and scaled: with each
+    // objective scaled to [0, 1] over the front's range, from the ideal to the nadir point
     let optimal = problem.optimal_front(1000).expect("known");
     let distance = igd_plus(&front, &optimal, &[Minimize; 3]);
+    let (ideal, nadir) = (problem.ideal_point(), problem.nadir_point());
+    let (ideal, nadir) = (ideal.expect("known"), nadir.expect("known"));
+    let scale = |points: &[[f64; 3]]| -> Vec<[f64; 3]> {
+        let scaled =
+            |p: &[f64; 3]| std::array::from_fn(|j| (p[j] - ideal[j]) / (nadir[j] - ideal[j]));
+        points.iter().map(scaled).collect()
+    };
+    let scaled = igd_plus(&scale(&front), &scale(&optimal), &[Minimize; 3]);
     let volume = hypervolume(&front, &REFERENCE, &[Minimize; 3]);
     let [low_low, low_high, high_low, high_high] = regions;
     println!(
-        "{name:<8} {} solutions, {low_low} + {low_high} + {high_low} + {high_high} in the four \
-         regions, IGD+ {distance:.4}, hypervolume {volume:.4}",
+        "{name:<24} {} solutions, {low_low} + {low_high} + {high_low} + {high_high} in the four \
+         regions, IGD+ {distance:.4} (scaled {scaled:.4}), hypervolume {volume:.4}",
         front.len()
     );
     Ok(())

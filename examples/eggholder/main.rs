@@ -1,6 +1,6 @@
 //! Eggholder: minimize the eggholder function, deep local minima all over and the deepest on the
-//! edge of the box, from 30 seeds each with CMA-ES with IPOP restarts and with particle swarms of
-//! a global and a ring topology.
+//! edge of the box, from 30 seeds each with particle swarms of a ring and a global topology and,
+//! for contrast, with CMA-ES with IPOP restarts.
 //!
 //! The runs that end close together are grouped, and the table gives each group's best point and
 //! value, and how many runs of each algorithm end there. The function, its bounds and its best
@@ -19,11 +19,11 @@ use genoxide::prelude::*;
 use genoxide::problems::{Eggholder, Problem};
 
 const SEEDS: u64 = 30;
-const BUDGET: u64 = 20_000;
-const PARTICLES: usize = 40;
+const BUDGET: u64 = 50_000;
+const PARTICLES: usize = 80;
 // a run stops once its error to the best known minimum is at most this
 const ERROR: f64 = 1e-6;
-const ALGORITHMS: [&str; 3] = ["CMA-ES, IPOP", "PSO, global", "PSO, ring"];
+const ALGORITHMS: [&str; 3] = ["PSO, ring", "PSO, global", "CMA-ES, IPOP"];
 
 // a group of runs that ended close together: its best point and value, and its runs per
 // algorithm
@@ -46,7 +46,7 @@ fn main() -> Result<()> {
     let mut trace = trace::Trace::from_env();
     for a in 0..ALGORITHMS.len() {
         for seed in 1..=SEEDS {
-            let outcome = if a == 0 {
+            let outcome = if a == 2 {
                 let cmaes = Cmaes::builder(problem.representation())
                     .restarts(cmaes::Restarts::Ipop)
                     .minimize()
@@ -105,20 +105,20 @@ fn main() -> Result<()> {
         "Eggholder: best known minimum {minimum:.4} at (512, 404.2318), {SEEDS} seeds, {BUDGET} \
          evaluations at most per run"
     );
-    let [cmaes, global, ring] = ALGORITHMS;
-    println!("runs ending near        best value  {cmaes}  {global}  {ring}");
+    let [ring, global, cmaes] = ALGORITHMS;
+    println!("runs ending near        best value  {ring}  {global}  {cmaes}");
     for minimum in &minima {
         let [x1, x2] = minimum.point;
         let [a, b, c] = minimum.runs;
         let at = format!("({x1:.1}, {x2:.1})");
         println!(
-            "{at:<16}  {:>16.4}  {a:>12}  {b:>11}  {c:>9}",
+            "{at:<16}  {:>16.4}  {a:>9}  {b:>11}  {c:>12}",
             minimum.value
         );
     }
     let [a, b, c] = reached;
     let label = "error below 1e-6";
-    println!("{label:<34}  {a:>12}  {b:>11}  {c:>9}");
+    println!("{label:<34}  {a:>9}  {b:>11}  {c:>12}");
     trace.write();
     Ok(())
 }

@@ -322,7 +322,9 @@ with a tolerance of 1e-9 relative.
      is a function of x₄: 193.788 = 35 (25 ln 2)^0.6 at x₄ = 100 (x₂ = 0, every equality exact),
      rising to 330.6 near x₄ = 293 and falling to 325.1 at x₄ = 299.53, where x₂ reaches 40. The
      second end is the local optimum (324.70 with the tolerance) where about a third of SHADE's
-     runs end (32 of 100 with a population of 50).
+     runs end (32 of 100 with a population of 50). The example reaches the best known on 982 of
+     1000 seeds with SHADE (population 30) at an ε level lowered to 0 over the first 150,000
+     evaluations (Takahama and Sakai's ε constrained method, with `Engine::control` and re-evaluation).
    - g22: x* is feasible, every |h| < δ, and g₁ = −2.2e-7. **The report's best known is not
      the best:** the 19 equalities leave x₁, x₈ and x₉ free (h₁…h₆ and h₁₀, h₁₁ are linear in x₈
      and x₉: x₁₀ = 430 − x₈, x₁₁ = 440 − x₉ + x₈, x₁₂ = 160 + x₉, x₁₆ = 440 − x₉, x₁₇ = 160;
@@ -333,9 +335,13 @@ with a tolerance of 1e-9 relative.
      236.370313314566, every equality met exactly, 0.0607 below the report's 236.430975504001
      (which has x₈ = 130.075, x₉ = 170.817). This agrees with Spettel, Ba and Arnold (2022, item 4
      above) that a better value exists. `G22` keeps the report's value as `optimum()` and gives
-     this solution in its docs and tests. No run of genoxide's algorithms (SHADE, L-SHADE, CMA-ES
-     with or without restarts, 25 seeds each, 500,000 evaluations) found a feasible solution; in
-     the organizers' comparison of the session's entries no algorithm succeeded on g22 either.
+     this solution in its docs and tests. No run of genoxide's algorithms on all 22 variables (SHADE,
+     L-SHADE, CMA-ES with or without restarts; L-SHADE infeasible on all of 1000 seeds, 500,000
+     evaluations) found a feasible solution, as in the organizers' comparison of the session's
+     entries. Deb's rules add up raw violations, and h₁…h₆ (in units up to 10⁷) drown the others:
+     with each violation divided by its typical size, SHADE and L-SHADE end feasible, at 243 to
+     317. The example searches x₁, x₈, x₉ with SHADE and solves the other 19 from the equalities
+     in order: 236.370313314566 on all of 1000 seeds, after 23,400 to 27,500 evaluations.
    - g23: x* meets h₁…h₄ at |h| = δ, g₂ is active and g₁ = −2.5e-6. (0, 100, 0, 100, 0, 0, 100,
      200, 0.01) meets every constraint exactly, at f = −400: the best known is 0.0551 lower
      through the tolerance.

@@ -60,19 +60,24 @@ minimize. The function, its bounds and its best known minimum are genoxide's `pr
 
 ## Algorithm
 
-Three algorithms, each from seeds 1 to 30, with a budget of 20,000 evaluations per run and a target
+Three algorithms, each from seeds 1 to 30, with a budget of 50,000 evaluations per run and a target
 within 1e-6 of the best known minimum:
 
-- CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) with IPOP restarts
-  (Auger and Hansen, 2005, IEEE CEC 2005: 1769-1776), with genoxide's defaults: it samples a
-  population of 6 from a normal distribution and adapts its mean, step size and covariance matrix,
-  and a run that has converged starts again from a random point with twice the population;
 - particle swarm optimization (Kennedy and Eberhart, 1995, Proceedings of ICNN'95: 1942-1948) with
-  40 particles and Clerc and Kennedy's constriction coefficients (2002, IEEE Transactions on
-  Evolutionary Computation 6(1): 58-73), in which every particle follows the best point of the
-  whole swarm (the global topology);
-- the same swarm on a ring, where each particle follows the best of itself and its two neighbors,
-  so that good points spread slowly and the swarm explores for longer.
+  80 particles and Clerc and Kennedy's constriction coefficients (2002, IEEE Transactions on
+  Evolutionary Computation 6(1): 58-73), on a ring: each particle follows the best of itself and
+  its two neighbors, so that good points spread slowly and the swarm explores for longer;
+- the same swarm with the global topology, in which every particle follows the best point of the
+  whole swarm;
+- for contrast, CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) with
+  IPOP restarts (Auger and Hansen, 2005, IEEE CEC 2005: 1769-1776), with genoxide's defaults: it
+  samples a population of 6 from a normal distribution and adapts its mean, step size and
+  covariance matrix, and a run that has converged starts again from a random point with twice the
+  population.
+
+The swarm is larger than the usual 20 to 50 particles, and the budget larger than most runs need:
+with 40 particles and 20,000 evaluations, the ring didn't reach the minimum in 16 of 1,000 runs
+(seeds 1 to 1,000), and with 80 particles and 50,000 evaluations it reaches it in all of them.
 
 The runs whose best points end within 2% of the bounds' width of each other, in both genes, are
 counted as one group.
@@ -93,15 +98,15 @@ best known minimum, on a logarithmic axis.
 
 ## Good results
 
-A good result reaches −959.6407 in every run. The swarm on a ring does in 28 of the 30 runs; one
-ends at −935.34 and one at −894.58. The swarm with the global topology reaches it in 22 runs, and
-ends 5 times at −894.58, on the other side of the box, and 3 times at −888.95.
+A good result reaches −959.6407 in every run. The swarm on a ring does, in all 30 runs. The swarm
+with the global topology reaches it in 27, and ends twice at −894.58, on the other side of the box,
+and once at −821.20.
 
 CMA-ES with IPOP restarts reaches it only once, from seed 2, in its first run. Its restarts converge
-into many different local minima (the one it finds most often, over the 30 seeds, is −566.0 at
-(−105.9, 423.2)), and the corner's narrow wells are rarely among them. The best points of its other
-runs near the corner, down to −957.7, are samples that fell near a deep minimum on the way, without
-the run converging there: CMA-ES's best point isn't always where it converged.
+into many different local minima, and the corner's narrow wells are rarely among them. The best
+points of its other runs near the corner, down to −957.72, are samples that fell near a deep minimum
+on the way, without the run converging there: CMA-ES's best point isn't always where it converged.
 
-Over seeds 1 to 300, the swarm on a ring reaches the minimum in 99% of the runs, with the global
-topology in 73%, and CMA-ES with IPOP restarts in 2%.
+Over seeds 1 to 1,000, the swarm on a ring reaches the minimum in every run, after at most 32,800
+evaluations, and with the global topology in 93% of the runs. Over seeds 1 to 300, CMA-ES with IPOP
+restarts reaches it in 2%.

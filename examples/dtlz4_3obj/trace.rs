@@ -1,6 +1,7 @@
 //! The trace of the run for the plot on the example's page, written to the file that
-//! `GENOXIDE_TRACE` names: the front and its hypervolume, in at most 100 generations. The Python
-//! example writes the same file.
+//! `GENOXIDE_TRACE` names: the front and its hypervolume, in at most 100 generations, with at
+//! most 100 points of the front a frame but the whole front in the last. The Python example writes
+//! the same file.
 
 use crate::REFERENCE;
 use genoxide::Objective::Minimize;
@@ -12,6 +13,8 @@ use serde_json::{Value, json};
 pub struct Trace {
     path: Option<String>,
     frames: Frames,
+    // the last front recorded, whole
+    last: Vec<[f64; 3]>,
 }
 
 impl Trace {
@@ -19,7 +22,8 @@ impl Trace {
     pub fn from_env() -> Self {
         let path = std::env::var("GENOXIDE_TRACE").ok();
         let frames = Frames::new(100);
-        Self { path, frames }
+        let last = Vec::new();
+        Self { path, frames, last }
     }
 
     // records a generation: the front and its hypervolume
@@ -33,10 +37,14 @@ impl Trace {
             .filter_map(|x| x.fitness()?.values());
         let front: Vec<[f64; 3]> = front.collect();
         let volume = hypervolume(&front, &REFERENCE, &[Minimize; 3]);
+        // every k-th point of a front of more than 100, for a file of the usual size
+        let every = front.len().div_ceil(100);
+        let shown: Vec<[f64; 3]> = front.iter().step_by(every.max(1)).copied().collect();
         self.frames.push(frame(
             snapshot,
-            json!({ "front": front, "hypervolume": volume }),
+            json!({ "front": shown, "hypervolume": volume }),
         ));
+        self.last = front;
     }
 
     // writes the trace, if there's one
@@ -53,7 +61,12 @@ impl Trace {
             "plot": "front-3d",
             "problem": { "objectives": ["f1", "f2", "f3"], "true_front": "sphere" },
         });
-        write(&path, settings, self.frames.into_vec());
+        // the last frame shows the whole front
+        let mut frames = self.frames.into_vec();
+        if let Some(last) = frames.last_mut() {
+            last["state"]["front"] = json!(self.last);
+        }
+        write(&path, settings, frames);
     }
 }
 

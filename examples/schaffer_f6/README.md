@@ -1,7 +1,7 @@
 ---
 title: Schaffer F6
 category: continuous
-summary: Minimize Schaffer's F6, a two-dimensional function of concentric rings whose first ring of local minima surrounds the global minimum behind a ridge, with a genetic algorithm and a particle swarm from 30 seeds.
+summary: Minimize Schaffer's F6, a two-dimensional function of concentric rings whose first ring of local minima surrounds the global minimum behind a ridge, with SHADE, a particle swarm and a genetic algorithm from 30 seeds.
 reference: "Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control parameters affecting online performance of genetic algorithms for function optimization. Proceedings of the Third International Conference on Genetic Algorithms, Morgan Kaufmann: 51-60."
 reference_url: ""
 optimum: "0 at the origin"
@@ -51,16 +51,20 @@ minimize. The function, its bounds and its minimum are genoxide's `problems::Sch
 
 ## Algorithm
 
-Two algorithms, each from seeds 1 to 30, with a budget of 20,000 evaluations per run, and a target
+Three algorithms, each from seeds 1 to 30, with a budget of 50,000 evaluations per run, and a target
 of 1e-6:
 
-- a genetic algorithm of 100 individuals, with tournaments of 3, simulated binary crossover (Deb and
-  Agrawal, 1995, Complex Systems 9(2): 115-148) with η = 15, and polynomial mutation of each gene
-  with a probability of 0.5 and η = 20; generational, keeping the best;
-- particle swarm optimization (Kennedy and Eberhart, 1995, Proceedings of ICNN'95: 1942-1948) with
-  40 particles, in which every particle follows the best point of the whole swarm, and Clerc and
-  Kennedy's constriction coefficients (2002, IEEE Transactions on Evolutionary Computation 6(1):
-  58-73).
+- SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), a differential evolution, with
+  genoxide's defaults: a population of 100; each trial point combines a parent with differences
+  between other points of the population, and replaces the parent only if it is at least as good;
+  the scale factor and crossover rate adapt from the trials that succeeded;
+- for contrast, particle swarm optimization (Kennedy and Eberhart, 1995, Proceedings of ICNN'95:
+  1942-1948) with 40 particles, in which every particle follows the best point of the whole swarm,
+  and Clerc and Kennedy's constriction coefficients (2002, IEEE Transactions on Evolutionary
+  Computation 6(1): 58-73);
+- and a genetic algorithm of 100 individuals, with tournaments of 3, simulated binary crossover
+  (Deb and Agrawal, 1995, Complex Systems 9(2): 115-148) with η = 15, and polynomial mutation of
+  each gene with a probability of 0.5 and η = 20; generational, keeping the best.
 
 A run is counted on the ring nearest its best point: ring k where r rounds to kπ, and the minimum
 for r < π/2.
@@ -72,21 +76,27 @@ on: the lowest value found there, and how many runs of each algorithm ended ther
 counts the runs that come within 1e-6 of the minimum. In Python, `run` evaluates the function in
 Rust, so both versions print the same table.
 
-The page's plot shows the 30 runs of the genetic algorithm, each at its best point so far, over the
-function's contour in the square [−25, 25]², where the runs end: the rings are too close together
-to draw over the whole box. A curve gives the best and the median run's value, its distance above
-the minimum, on a logarithmic axis.
+The page's plot shows the 30 runs of SHADE, each at its best point so far, over the function's
+contour in the square [−25, 25]², where the runs end: the rings are too close together to draw over
+the whole box. A curve gives the best and the median run's value, its distance above the minimum,
+on a logarithmic axis.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/schaffer-f6) plays this run back.
 
 ## Good results
 
-A good result reaches 0. The particle swarm reaches it, within 1e-6, in 23 of the 30 runs, and the
-other 7 end on the first ring, at 0.0097. The genetic algorithm ends in the central basin in 16 runs
-and on the first ring in 14, and comes within 1e-6 of 0 only once. Its mutation's steps are
-relative to a gene's range, 200: with η = 20, a step smaller than 0.001 has a probability of about
-1 in 10,000, so its points in the central basin approach the origin slowly, and its 16 runs there
-end between 6e-7 and 4e-3.
+A good result reaches 0. SHADE reaches it, within 1e-6, in all 30 runs, after a median of about
+28,000 evaluations. Each point of its population is replaced only by a better trial point of its
+own, rather than pulled towards the best point, as a particle is: the population closes in more
+slowly than the swarm, and a ring found early doesn't draw it in.
 
-Over seeds 1 to 300, the swarm reaches the minimum in 70% of the runs, and ends in the central basin
-in 71%; the genetic algorithm ends in the central basin in 52%, and reaches the minimum in 1%.
+The particle swarm, for contrast, reaches the minimum in 24 of the 30 runs, and the other 6 end on
+the first ring, at 0.0097. The genetic algorithm ends in the central basin in 24 runs and on the
+first ring in 6, but comes within 1e-6 of 0 in only 5. Its mutation's steps are relative to a
+gene's range, 200: with η = 20, a step smaller than 0.001 has a probability of about 1 in 10,000,
+so its points in the central basin approach the origin slowly.
+
+Over seeds 1 to 1,000, SHADE reaches the minimum in every run, after at most 48,100 evaluations;
+the swarm in 76% of the runs, and the genetic algorithm in 15%. With the earlier budget of 20,000
+evaluations, SHADE's population of 100 is too slow to close in: it reached the minimum from 1 of
+seeds 1 to 30.

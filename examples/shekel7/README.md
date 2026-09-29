@@ -69,7 +69,7 @@ The function, its bounds and its best known minimum are genoxide's `problems::Sh
 ## Algorithm
 
 Particle swarm optimization (Kennedy and Eberhart, 1995, Proceedings of ICNN'95: 1942-1948), with
-40 particles and Clerc and Kennedy's constriction coefficients (2002, IEEE Transactions on
+80 particles and Clerc and Kennedy's constriction coefficients (2002, IEEE Transactions on
 Evolutionary Computation 6(1): 58-73), genoxide's defaults. Each particle moves towards its own
 best point and a best point of the swarm. Two topologies, each from seeds 1 to 30:
 
@@ -78,8 +78,13 @@ best point and a best point of the swarm. Two topologies, each from seeds 1 to 3
 - ring: each particle follows the best of itself and its two neighbors on a ring. A good point
   spreads one neighbor per step, so parts of the swarm keep exploring other wells for longer.
 
-Each run stops once its value is within 1e-6 of the best known minimum, or after 10,000
+Each run stops once its value is within 1e-6 of the best known minimum, or after 25,000
 evaluations. A run is counted in the well whose center is nearest its best point.
+
+The swarm is larger than the usual 20 to 50 particles, and the budget larger than most runs
+need: with 40 particles and 10,000 evaluations, the ring didn't reach the minimum in 2% to 3% of
+the runs (seeds 1 to 1,000), and with 80 particles and 25,000 evaluations it reaches it in all of
+them.
 
 ## Output
 
@@ -98,10 +103,12 @@ center, and one in a₇'s at (5, 5), where the plane has no well.
 
 ## Good results
 
-A good result reaches −10.4029 in every run. With the global topology, 16 of the 30 runs do, after
-a median of 3,980 evaluations; the other 14 end in five of the other six wells, 2 or 3 in each. With
-the ring topology, 29 runs reach it, after a median of 5,760 evaluations, and one ends in a₃'s well.
+A good result reaches −10.4029 in every run. The ring topology does: all 30 runs come within 1e-6
+of it, after a median of 11,080 evaluations. With the global topology, for contrast, 21 runs end in
+the deepest well and 20 of them come within 1e-6 of its minimum, after a median of 7,120
+evaluations; the other 9 end in three of the other six wells.
 
-Over seeds 1 to 1,000, 53% of the runs with the global topology reach the minimum, and 98% of those
-with the ring topology. The global topology does better than on [Shekel 5](../shekel5/), where it
-reaches the minimum in 39% of the runs.
+Over seeds 1 to 1,000, the ring topology reaches the minimum in every run, after at most 22,640
+evaluations, and the global topology in 58% of the runs. With 40 particles and 10,000 evaluations,
+they reach it in 98% and 53%. The global topology does better than on [Shekel 5](../shekel5/),
+where it reaches the minimum in 47% of the runs.

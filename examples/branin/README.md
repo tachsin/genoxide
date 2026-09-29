@@ -64,7 +64,8 @@ fitness is f, to minimize. The function, its bounds and its three minima are gen
 ## Algorithm
 
 Thirty independent local searches, each from a random point, with seeds 1 to 30. Each is a hill
-climber, with the settings of the [Himmelblau example](../himmelblau/):
+climber, like those of the [Himmelblau example](../himmelblau/) with twice their step size and a
+third of their steps:
 
 - a step makes 10 neighbors of the current point, each with Gaussian noise on both genes, of
   standard deviation 0.001 of the gene's range, 0.015;

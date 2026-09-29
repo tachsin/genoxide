@@ -62,7 +62,8 @@ solutions found so far.
 Crowding distance works in the objectives, not in x. So NSGA-II spreads its front evenly along the
 curve, however unevenly x₁ maps onto it.
 
-- a population of 100, for 250 generations, as in the NSGA-II paper;
+- a population of 100, for 500 generations, twice the NSGA-II paper's 250: the front's slow
+  convergence needs them (see Good results);
 - simulated binary crossover with η = 15, at genoxide's default rate of 0.9;
 - polynomial mutation with η = 20, at a rate of 1/10 per gene, one gene per child on average.
 
@@ -94,16 +95,19 @@ front, evenly spaced in f₁, give 0.5045 and an IGD+ of 0.0020.
 
 The first front has 6 solutions, only one of them with an f₁ below 0.6404. NSGA-II finds the
 front's upper left end quickly: its front has the smallest f₁, 0.2808, from generation 8. It ends
-with 100 solutions, 45 of them in the lower half of the range: the front is spread evenly, against
+with 100 solutions, 47 of them in the lower half of the range: the front is spread evenly, against
 the 6% that the map from x₁ gives.
 
 It is the convergence that is slow. The front's smallest g falls below 2 at about generation 49,
-and below 1.1 at about 112, but after 250 generations g is still 1.005 to 1.010 on the front. The
-run ends with an IGD+ of 0.0071 and a hypervolume of 0.4959, 97.6% of the whole front's: just above
-the front all along it.
+and below 1.1 at about 112, but after 250 generations g is still 1.005 to 1.010 on the front, with
+an IGD+ of 0.0071 and a hypervolume of 0.4959, 97.6% of the whole front's. The next 250
+generations bring g to 1.0003 to 1.0015. The run ends with an IGD+ of 0.0030 and a hypervolume of
+0.5029, 99.0% of the whole front's: close to the front all along it.
 
-On seeds 1 to 5, NSGA-II ends between 0.4953 and 0.4960, with an IGD+ of about 0.0071 to 0.0076.
-More generations help: after 500, it ends between 0.5029 and 0.5035, with an IGD+ of about 0.0028,
-and after 1,000 between 0.5038 and 0.5039. With the same settings and 250 generations, SPEA2 ends
-between 0.4931 and 0.4952, SMS-EMOA between 0.4905 and 0.4951, and MOEA/D lower, between 0.4865
-and 0.4883.
+That meets the target for this example, an IGD+ of at most 0.01 with the objectives scaled to
+the front's range (f₁ spans 0.7192 and f₂ 0.9212: here 0.0037), on every seed from 1 to 50,
+the largest 0.0039. On seeds 1 to 20, the hypervolume ends between 0.5026 and 0.5035 and the IGD+
+between 0.0026 and 0.0031. After only 250 generations, 45 of the 50 seeds reach the target, and
+the hypervolume stays near 0.496. After 1,000, it ends between 0.5038 and 0.5039. With the same
+settings and 250 generations, SPEA2 ends between 0.4931 and 0.4952, SMS-EMOA between 0.4905 and
+0.4951, and MOEA/D lower, between 0.4865 and 0.4883.

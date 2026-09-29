@@ -18,7 +18,7 @@ import genoxide as gx
 from trace import Trace
 
 SEEDS = 30
-BUDGET = 10_000
+BUDGET = 20_000
 # a run stops once its error to the best known minimum is at most this
 ERROR = 1e-6
 # the other local minimum, where a third of local searches end
