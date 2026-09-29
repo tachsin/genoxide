@@ -16,12 +16,12 @@ name = "genoxide"
 version.workspace = true
 edition = "2024"
 rust-version = "1.86"
-description = "Evolutionary computation for Rust: genetic algorithms, evolution strategies, multi-objective optimization and more"
+description = "Optimization for Rust: genetic algorithms, evolution strategies, differential evolution, CMA-ES, multi-objective optimization and more"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tachsin/genoxide"
 readme = "README.md"
 exclude = [".github/", "/assets/", "benchmarks/", "examples/gpu/", "python/", "release-plz.toml", "/site/"]
-keywords = ["genetic-algorithm", "evolutionary", "optimization", "metaheuristics", "ga"]
+keywords = ["optimization", "genetic-algorithm", "evolutionary", "metaheuristics", "multi-objective"]
 categories = ["algorithms", "science", "mathematics"]
 
 [package.metadata.docs.rs]
