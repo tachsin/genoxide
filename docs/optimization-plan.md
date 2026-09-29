@@ -498,25 +498,29 @@ plain loops in a fixed order are portable, and autovectorized element-wise loops
 it: a reduction whose order depends on the CPU (runtime-dispatched SIMD kernels, FMA kernels) or on
 the thread count (rayon's `sum` and `reduce` over splits), and platform `exp`, `ln`, `sin`.
 
-**Decision (recommended): small dense linear algebra in the crate,** a `pub(crate)` module
-`linalg` at first (public later if useful), row-major `Vec<f64>` as CMA-ES uses now:
+**Decision (2026-09-29): a linear algebra dependency** (faer or nalgebra), chosen in batch A1 by
+portability first, then speed, compile time and size. A `pub(crate)` module `linalg` wraps it, so
+the rest of the crate depends on one small interface (row-major `Vec<f64>` as CMA-ES uses now, or
+the dependency's types behind it):
 
 | Operation | Used by |
 |---|---|
-| dot, axpy, gemv, symmetric rank-k updates, blocked gemm in a fixed order | everything |
+| dot, axpy, gemv, symmetric rank-k updates, gemm | everything |
 | Cholesky with growing jitter, triangular solves, rank-one updates | BFGS, GP, SQP, trust region |
 | Householder QR (with column pivoting) | Levenberg-Marquardt, BOBYQA, least squares |
-| Symmetric eigendecomposition (moved from `cmaes.rs`: tred2 and tql2 of JAMA) | CMA-ES, trust-region subproblem |
+| Symmetric eigendecomposition (CMA-ES keeps its own tred2 and tql2 of JAMA unless the dependency's is portable and no slower) | CMA-ES, trust-region subproblem |
 | LDLᵀ with Bunch-Kaufman pivoting and inertia | interior point, KKT systems |
-| Dense strictly convex QP (Goldfarb-Idnani) | SQP |
+| Dense strictly convex QP (Goldfarb-Idnani; in the crate if the dependency has none) | SQP |
 
-- **Why not a dependency.** nalgebra's dynamic-size products call the `matrixmultiply` crate
-  above a size threshold, and faer dispatches SIMD kernels at run time: as far as their docs show,
-  both pick kernels (FMA among them) by the CPU, so two machines with the same operating system
-  could round differently. This is to be confirmed in batch A1 by a test that runs both on two
-  CPUs with and without AVX2 and FMA, and the decision revisited if they can be pinned to a
-  portable path. Also: compile time, and the sizes genoxide needs (n up to a few hundred for dense
-  methods, a few thousand points for a GP) are well served by cache-blocked plain loops.
+- **Portability comes first.** As far as their docs show, nalgebra's dynamic-size products call
+  the `matrixmultiply` crate above a size threshold, and faer dispatches SIMD kernels at run time,
+  FMA among them: two machines could round differently, which breaks genoxide's guarantee. Batch A1
+  therefore starts with a test that runs each candidate's operations on CPUs with and without AVX2
+  and FMA, and on the CI's Linux, macOS (arm64) and Windows runners, comparing the bits, and looks
+  for the way to pin each to a portable path (features, disabling runtime dispatch, fixed kernel
+  selection). The dependency that can be pinned is the one used. If neither can be, that's reported
+  with the evidence before going further, since the guarantee would then need a documented
+  exception for the methods that use it, which is the user's decision.
 - **Speed.** The GP's O(N³) Cholesky is the hot spot: blocked, with independent blocks on rayon
   (each output element's sum in a fixed order, so the same bits on any thread count). A criterion
   benchmark against faer, in `benches/` only, measures what portability costs.
@@ -734,9 +738,8 @@ mixed genome.
 
 ## 7. Open questions
 
-1. **Linear algebra.** In-crate as recommended (2.8), or a dependency (faer, nalgebra) if it can
-   be pinned to a portable path, accepting the check in CI? The recommendation keeps the
-   dependency list as it is (rand, rand_chacha, libm, optional rayon and serde).
+1. **Linear algebra.** Decided (2026-09-29): a dependency, faer or nalgebra, pinned to a portable
+   path; batch A1 checks it first (2.8).
 2. **Gradient source default.** `Gradients::Auto` (supplied if the function provides one,
    forward differences otherwise), or an explicit setting validated against the function (no
    magic, one more line in every example)?
@@ -759,5 +762,7 @@ mixed genome.
    GA operators, DE, the CLI and Python too)?
 8. **Public `linalg` and `model::gp`.** Public from their first batch (users fitting GPs), or
    crate-private until the API settles?
-9. **Milestones.** Where these batches go relative to 0.10 (genetic programming and
-   neuroevolution) and 0.11 (quality-diversity): before them, after them, or interleaved.
+9. **Milestones.** Decided (2026-09-29): these batches come first. 0.10 local methods (A1, A2),
+   0.11 Bayesian optimization (B), 0.12 constrained nonlinear programming (C), 0.13 more local
+   methods (D1, D2), 0.14 advanced Bayesian optimization and surrogates (E, F); genetic programming
+   and neuroevolution, and quality-diversity, after them.
