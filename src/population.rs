@@ -62,6 +62,16 @@ impl<G: Genome, F> Population<G, F> {
         self.individuals.push(individual);
     }
 
+    // moves the individuals of `others` to the end, leaving it empty: into an empty population
+    // (a GA without elitism) by exchanging the vectors, without moving any
+    pub(crate) fn append(&mut self, others: &mut Vec<Individual<G, F>>) {
+        if self.individuals.is_empty() {
+            std::mem::swap(&mut self.individuals, others);
+        } else {
+            self.individuals.extend(others.drain(..));
+        }
+    }
+
     /// Keeps the first `len` individuals and drops the rest. No effect if there are fewer.
     pub fn truncate(&mut self, len: usize) {
         self.individuals.truncate(len);

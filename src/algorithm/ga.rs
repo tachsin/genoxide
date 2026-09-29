@@ -565,7 +565,7 @@ where
         self.population
             .iter_mut()
             .for_each(Individual::increment_age);
-        self.population.extend(self.offspring.drain(..));
+        self.population.append(&mut self.offspring);
     }
 }
 
