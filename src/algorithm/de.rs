@@ -642,15 +642,20 @@ impl De {
     // the index of the best individual, the first one on ties
     fn best_index(&self) -> usize {
         let objective = self.objective;
-        (0..self.population.len())
-            .reduce(|a, b| {
-                if objective.is_better(self.fitness(b), self.fitness(a)) {
-                    b
-                } else {
-                    a
-                }
-            })
-            .unwrap_or(0)
+        let mut individuals = self.population.iter().enumerate();
+        let Some((_, first)) = individuals.next() else {
+            return 0;
+        };
+        let fitness =
+            |individual: &Individual<Reals>| individual.fitness().unwrap_or(Fitness::invalid());
+        let (mut best, mut best_fitness) = (0, fitness(first));
+        for (index, individual) in individuals {
+            let candidate = fitness(individual);
+            if objective.is_better(candidate, best_fitness) {
+                (best, best_fitness) = (index, candidate);
+            }
+        }
+        best
     }
 
     // the best fitness since the last restart, and when it last improved
