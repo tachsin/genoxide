@@ -851,6 +851,17 @@ where
                 &mut self.evaluated_infos,
                 IntoFitness::into_evaluation,
             )?;
+        } else if !self.parallel {
+            // straight into the scores, without a vector of results
+            self.evaluated_infos.clear();
+            self.scores.clear();
+            return evaluate_scores(
+                candidates,
+                &|genome: &A::Genome| fitness.evaluate(genome).into_evaluation(),
+                self.nan_policy,
+                &mut self.scores,
+                &mut self.evaluated_infos,
+            );
         } else {
             evaluate_all(
                 candidates,
@@ -947,6 +958,39 @@ fn evaluate_sequential<G, F, T, E>(
         }
         result
     }));
+}
+
+// evaluates every candidate one after the other into `scores`, as `Engine::evaluate` converts
+// the results of `evaluate_all`: NaN is invalid or an error by `nan_policy`, and the first error
+// in order is returned, after every candidate is evaluated. Out of line, as `evaluate_sequential`.
+#[inline(never)]
+fn evaluate_scores<G, E>(
+    candidates: Candidates<'_, G>,
+    evaluate: &E,
+    nan_policy: NanPolicy,
+    scores: &mut Vec<Fitness>,
+    infos: &mut Vec<(G, Info)>,
+) -> Result<()>
+where
+    G: Genome,
+    E: Fn(&G) -> (Result<Fitness>, Option<Info>),
+{
+    let mut first_error = None;
+    scores.extend(candidates.iter().map(|genome| {
+        let (result, info) = evaluate(genome);
+        if let Some(info) = info {
+            infos.push((genome.clone(), info));
+        }
+        match (result, nan_policy) {
+            (Ok(fitness), _) => fitness,
+            (Err(Error::NanFitness), NanPolicy::Invalid) => Fitness::invalid(),
+            (Err(error), _) => {
+                first_error.get_or_insert(error);
+                Fitness::invalid()
+            }
+        }
+    }));
+    first_error.map_or(Ok(()), Err)
 }
 
 #[cfg(feature = "parallel")]
