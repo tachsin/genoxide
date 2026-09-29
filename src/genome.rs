@@ -44,6 +44,19 @@ pub trait Genome: Clone + Debug + PartialEq + Eq + Hash + Send + Sync {
     }
 }
 
+/// A borrowed genome is a genome too: a population of references to genomes, e.g. a selection's
+/// view of a population with some fitness values changed, as [`Tarpeian`](crate::operator::Tarpeian)
+/// makes, costs no copy of the genomes.
+impl<G: Genome> Genome for &G {
+    fn len(&self) -> usize {
+        G::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        G::is_empty(self)
+    }
+}
+
 /// The space of genomes of a problem, e.g. [`Binary`] genomes of a given length.
 ///
 /// Implement it, with a [`Genome`], for a space of your own; then implement
