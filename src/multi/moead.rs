@@ -639,13 +639,13 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
         if self.max_replacements == 0 {
             return invalid("max_replacements", "must be at least 1".to_string());
         }
-        if let Decomposition::Pbi { theta } = self.decomposition {
-            if !(theta >= 0.0 && theta.is_finite()) {
-                return invalid(
-                    "theta",
-                    format!("must be 0 or more and finite, got {theta}"),
-                );
-            }
+        if let Decomposition::Pbi { theta } = self.decomposition
+            && !(theta >= 0.0 && theta.is_finite())
+        {
+            return invalid(
+                "theta",
+                format!("must be 0 or more and finite, got {theta}"),
+            );
         }
         let (crossover_rate, mutation_rate) = check_rates(
             self.crossover_rate,

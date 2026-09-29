@@ -230,13 +230,13 @@ const fn default_position(objectives: usize) -> usize {
 fn check<const M: usize>(name: &str, position: usize, distance: usize, even: bool) {
     assert!(M >= 2, "{name} needs at least 2 objectives");
     assert!(
-        position > 0 && position % (M - 1) == 0,
+        position > 0 && position.is_multiple_of(M - 1),
         "{name} needs a positive multiple of M − 1 = {} position parameters, not {position}",
         M - 1
     );
     assert!(distance > 0, "{name} needs at least 1 distance parameter");
     assert!(
-        !even || distance % 2 == 0,
+        !even || distance.is_multiple_of(2),
         "{name} needs an even number of distance parameters, not {distance}"
     );
 }
