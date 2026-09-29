@@ -642,15 +642,20 @@ impl De {
     // the index of the best individual, the first one on ties
     fn best_index(&self) -> usize {
         let objective = self.objective;
-        (0..self.population.len())
-            .reduce(|a, b| {
-                if objective.is_better(self.fitness(b), self.fitness(a)) {
-                    b
-                } else {
-                    a
-                }
-            })
-            .unwrap_or(0)
+        let mut individuals = self.population.iter().enumerate();
+        let Some((_, first)) = individuals.next() else {
+            return 0;
+        };
+        let fitness =
+            |individual: &Individual<Reals>| individual.fitness().unwrap_or(Fitness::invalid());
+        let (mut best, mut best_fitness) = (0, fitness(first));
+        for (index, individual) in individuals {
+            let candidate = fitness(individual);
+            if objective.is_better(candidate, best_fitness) {
+                (best, best_fitness) = (index, candidate);
+            }
+        }
+        best
     }
 
     // the best fitness since the last restart, and when it last improved
@@ -1030,10 +1035,7 @@ impl Crossover<'_> {
             let from_mutant = j == self.forced || rng.unit_f64() < self.cr;
             let (start, end) = (*bounds.start(), *bounds.end());
             // the mutant's gene is computed for every gene and chosen without a branch, which the
-            // random choice would make the processor mispredict often: by a mask of bits, which
-            // `black_box` keeps the compiler from turning back into a branch
-            // (`std::hint::select_unpredictable` does that from Rust 1.88, above the minimum
-            // supported version)
+            // random choice would make the processor mispredict often
             let mutant = mutant(x, donors);
             let bounced = if mutant < start {
                 midpoint(start, x)
@@ -1045,8 +1047,7 @@ impl Crossover<'_> {
                 mutant
             };
             let take = from_mutant & (start != end);
-            let mask = std::hint::black_box(u64::from(take).wrapping_neg());
-            *value = f64::from_bits((bounced.to_bits() & mask) | (x.to_bits() & !mask));
+            *value = std::hint::select_unpredictable(take, bounced, x);
         }
         trial
     }
@@ -1463,29 +1464,28 @@ impl DeBuilder {
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
         check_strategy(self.strategy)?;
         check_control(self.control)?;
-        if let Some((min_size, max_evaluations)) = self.reduction {
-            if min_size < 4 || min_size > size || max_evaluations == 0 {
-                return invalid(
-                    "linear_reduction",
-                    format!(
-                        "the minimum size must be between 4 and the population size {size}, and the evaluations at least 1; got {min_size} and {max_evaluations}"
-                    ),
-                );
-            }
+        if let Some((min_size, max_evaluations)) = self.reduction
+            && (min_size < 4 || min_size > size || max_evaluations == 0)
+        {
+            return invalid(
+                "linear_reduction",
+                format!(
+                    "the minimum size must be between 4 and the population size {size}, and the evaluations at least 1; got {min_size} and {max_evaluations}"
+                ),
+            );
         }
         if let Restarts::OnStagnation {
             tolerance,
             patience,
         } = self.restarts
+            && (!(tolerance >= 0.0 && tolerance.is_finite()) || patience == 0)
         {
-            if !(tolerance >= 0.0 && tolerance.is_finite()) || patience == 0 {
-                return invalid(
-                    "restarts",
-                    format!(
-                        "the tolerance must be 0 or more and finite, and the patience at least 1; got {tolerance} and {patience}"
-                    ),
-                );
-            }
+            return invalid(
+                "restarts",
+                format!(
+                    "the tolerance must be 0 or more and finite, and the patience at least 1; got {tolerance} and {patience}"
+                ),
+            );
         }
         if self.initial_genomes.len() > size {
             return invalid(

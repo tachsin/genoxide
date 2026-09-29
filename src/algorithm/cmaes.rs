@@ -386,12 +386,8 @@ impl Cmaes {
 
     // the genome of the scaled coordinates `u`
     fn to_genome(&self, u: &[f64]) -> Reals {
-        let bounds = self.real.bounds();
-        let mut genes: Vec<f64> = bounds.iter().map(|range| *range.start()).collect();
-        for (&gene, &value) in self.free.iter().zip(u) {
-            let (start, end) = (*bounds[gene].start(), *bounds[gene].end());
-            genes[gene] = (start + (end - start) * value).clamp(start, end);
-        }
+        let mut genes = vec![0.0; self.real.bounds().len()];
+        write_genome(&self.real, &self.free, u, &mut genes);
         Reals::from(genes)
     }
 
@@ -453,70 +449,70 @@ impl Cmaes {
         self.start_run(lambda, sigma, mean);
     }
 
-    // samples a new population
+    // samples a new population, in the memory of the last one
     fn sample(&mut self) {
         let n = self.dimensions();
         let lambda = self.parameters.lambda;
-        self.samples.clear();
-        self.steps.clear();
+        let (diagonal, sigma) = (self.diagonal(), self.sigma);
+        // B · D, by rows: each product b · d as in (b · d) · z, taken once per generation
+        let mut scaled_basis = Vec::new();
+        if !diagonal {
+            scaled_basis.reserve_exact(n * n);
+            for row in self.basis.chunks_exact(n) {
+                scaled_basis.extend(row.iter().zip(&self.deviations).map(|(b, d)| b * d));
+            }
+        }
+        self.samples.resize_with(lambda, Vec::new);
+        self.steps.resize_with(lambda, Vec::new);
         let mut z = vec![0.0; n];
-        for _ in 0..lambda {
-            let mut accepted = None;
-            let mut last = (Vec::new(), Vec::new());
+        for (u, step) in self.samples.iter_mut().zip(&mut self.steps) {
+            u.resize(n, 0.0);
+            step.resize(n, 0.0);
+            let mut accepted = false;
             for _ in 0..RESAMPLES {
                 for value in z.iter_mut() {
                     *value = self.rng.normal();
                 }
                 // y = B · D · z
-                let step: Vec<f64> = if self.diagonal() {
-                    self.deviations.iter().zip(&z).map(|(d, z)| d * z).collect()
+                if diagonal {
+                    for ((y, d), z) in step.iter_mut().zip(&self.deviations).zip(&z) {
+                        *y = d * z;
+                    }
                 } else {
-                    (0..n)
-                        .map(|i| {
-                            let row = &self.basis[i * n..(i + 1) * n];
-                            row.iter()
-                                .zip(&self.deviations)
-                                .zip(&z)
-                                .map(|((b, d), z)| b * d * z)
-                                .sum()
-                        })
-                        .collect()
-                };
-                let u: Vec<f64> = self
-                    .mean
-                    .iter()
-                    .zip(&step)
-                    .map(|(m, y)| m + self.sigma * y)
-                    .collect();
+                    for (y, row) in step.iter_mut().zip(scaled_basis.chunks_exact(n)) {
+                        *y = row.iter().zip(&z).map(|(bd, z)| bd * z).sum();
+                    }
+                }
+                for ((u, m), y) in u.iter_mut().zip(&self.mean).zip(&*step) {
+                    *u = m + sigma * y;
+                }
                 if u.iter().all(|u| (0.0..=1.0).contains(u)) {
-                    accepted = Some((u, step));
+                    accepted = true;
                     break;
                 }
-                last = (u, step);
             }
-            let (u, step) = accepted.unwrap_or_else(|| {
+            if !accepted {
                 // clipped, and the step it takes from the mean
-                let u: Vec<f64> = last
-                    .0
-                    .iter()
-                    .zip(&self.mean)
-                    .map(|(&u, &m)| if u.is_nan() { m } else { u.clamp(0.0, 1.0) })
-                    .collect();
-                let step = if self.sigma > 0.0 {
-                    u.iter()
-                        .zip(&self.mean)
-                        .map(|(u, m)| (u - m) / self.sigma)
-                        .collect()
+                for (u, &m) in u.iter_mut().zip(&self.mean) {
+                    *u = if u.is_nan() { m } else { u.clamp(0.0, 1.0) };
+                }
+                if sigma > 0.0 {
+                    for ((y, u), m) in step.iter_mut().zip(&*u).zip(&self.mean) {
+                        *y = (u - m) / sigma;
+                    }
                 } else {
-                    vec![0.0; n]
-                };
-                (u, step)
-            });
-            self.samples.push(u);
-            self.steps.push(step);
+                    step.fill(0.0);
+                }
+            }
         }
-        let genomes: Vec<Reals> = self.samples.iter().map(|u| self.to_genome(u)).collect();
-        self.population = Population::from_genomes(genomes);
+        if self.population.len() == lambda {
+            for (individual, u) in self.population.iter_mut().zip(&self.samples) {
+                write_genome(&self.real, &self.free, u, individual.genome_mut());
+            }
+        } else {
+            let genomes: Vec<Reals> = self.samples.iter().map(|u| self.to_genome(u)).collect();
+            self.population = Population::from_genomes(genomes);
+        }
     }
 
     // the distribution update from the evaluated population
@@ -533,14 +529,22 @@ impl Cmaes {
         order.sort_by(|&a, &b| objective.compare(fitness[b], fitness[a]));
         let p = &self.parameters;
         let (c_sigma, c_c, c_1, c_mu, mu_eff) = (p.c_sigma, p.c_c, p.c_1, p.c_mu, p.mu_eff);
-        let weights = p.weights.clone();
-        // the weighted mean step, and the new mean
-        let mut mean_step = vec![0.0; n];
-        for (&weight, &index) in weights.iter().zip(&order) {
-            for (total, y) in mean_step.iter_mut().zip(&self.steps[index]) {
-                *total += weight * y;
+        // the steps of the best μ samples, best first, by coordinate (`[i * μ + k]`), and each
+        // times its weight, w · y_i as in the products (w · y_i) · y_j of the rank-μ update
+        let mu = p.weights.len();
+        let mut selected = vec![0.0; n * mu];
+        let mut weighted = vec![0.0; n * mu];
+        for (k, (&weight, &index)) in p.weights.iter().zip(&order).enumerate() {
+            for (i, &y) in self.steps[index].iter().enumerate() {
+                selected[i * mu + k] = y;
+                weighted[i * mu + k] = weight * y;
             }
         }
+        // the weighted mean step, and the new mean
+        let mean_step: Vec<f64> = weighted
+            .chunks_exact(mu)
+            .map(|terms| terms.iter().fold(0.0, |total, term| total + term))
+            .collect();
         for (m, y) in self.mean.iter_mut().zip(&mean_step) {
             *m = (*m + self.sigma * y).clamp(0.0, 1.0);
         }
@@ -553,14 +557,16 @@ impl Cmaes {
                 .collect()
         } else {
             let rotated: Vec<f64> = (0..n)
-                .map(|k| {
-                    let projection: f64 =
-                        (0..n).map(|i| self.basis[i * n + k] * mean_step[i]).sum();
-                    projection / self.deviations[k]
+                .zip(&self.deviations)
+                .map(|(k, deviation)| {
+                    let axis = self.basis[k..].iter().step_by(n);
+                    let projection: f64 = axis.zip(&mean_step).map(|(b, y)| b * y).sum();
+                    projection / deviation
                 })
                 .collect();
-            (0..n)
-                .map(|i| (0..n).map(|k| self.basis[i * n + k] * rotated[k]).sum())
+            self.basis
+                .chunks_exact(n)
+                .map(|row| row.iter().zip(&rotated).map(|(b, r)| b * r).sum())
                 .collect()
         };
         let factor = (c_sigma * (2.0 - c_sigma) * mu_eff).sqrt();
@@ -585,24 +591,17 @@ impl Cmaes {
         let delta = if h_sigma { 0.0 } else { c_c * (2.0 - c_c) };
         let keep = 1.0 + c_1 * delta - c_1 - c_mu;
         if self.diagonal() {
-            for i in 0..n {
-                let rank_mu: f64 = weights
-                    .iter()
-                    .zip(&order)
-                    .map(|(w, &index)| w * self.steps[index][i] * self.steps[index][i])
-                    .sum();
+            let by_coordinate = weighted.chunks_exact(mu).zip(selected.chunks_exact(mu));
+            for (i, (weighted, selected)) in by_coordinate.enumerate() {
+                let rank_mu: f64 = weighted.iter().zip(selected).map(|(w, y)| w * y).sum();
                 self.covariance[i] = keep * self.covariance[i]
                     + c_1 * self.path_c[i] * self.path_c[i]
                     + c_mu * rank_mu;
             }
         } else {
-            for i in 0..n {
-                for j in 0..=i {
-                    let rank_mu: f64 = weights
-                        .iter()
-                        .zip(&order)
-                        .map(|(w, &index)| w * self.steps[index][i] * self.steps[index][j])
-                        .sum();
+            for (i, weighted) in weighted.chunks_exact(mu).enumerate() {
+                for (j, selected) in selected.chunks_exact(mu).take(i + 1).enumerate() {
+                    let rank_mu: f64 = weighted.iter().zip(selected).map(|(w, y)| w * y).sum();
                     let value = keep * self.covariance[i * n + j]
                         + c_1 * self.path_c[i] * self.path_c[j]
                         + c_mu * rank_mu;
@@ -625,10 +624,10 @@ impl Cmaes {
     fn decompose(&mut self) {
         let n = self.dimensions();
         self.eigen_generation = self.run_generation;
-        let (mut values, vectors) = if self.diagonal() {
+        let (mut values, transposed) = if self.diagonal() {
             (self.covariance.clone(), Vec::new())
         } else {
-            eigen(&self.covariance, n)
+            eigen_transposed(&self.covariance, n)
         };
         let max = values.iter().copied().fold(f64::MIN, f64::max);
         let min = values.iter().copied().fold(f64::MAX, f64::min);
@@ -643,8 +642,11 @@ impl Cmaes {
                 *value += shift;
             }
         }
-        self.basis = vectors;
-        self.deviations = values.iter().map(|value| value.max(0.0).sqrt()).collect();
+        // B, the eigenvectors as columns, in the memory of the last one
+        transpose_into(&transposed, n, &mut self.basis);
+        self.deviations.clear();
+        self.deviations
+            .extend(values.iter().map(|value| value.max(0.0).sqrt()));
     }
 
     // records the fitness of a generation and checks the stop criteria
@@ -700,6 +702,27 @@ impl Cmaes {
     }
 }
 
+// the genes of the scaled coordinates `u` of the genes `free` into `genes`: the lower bound for the
+// other genes
+fn write_genome(real: &Real, free: &[usize], u: &[f64], genes: &mut [f64]) {
+    let bounds = real.bounds();
+    if free.len() == genes.len() {
+        // every gene
+        for ((gene, range), &value) in genes.iter_mut().zip(bounds).zip(u) {
+            let (start, end) = (*range.start(), *range.end());
+            *gene = (start + (end - start) * value).clamp(start, end);
+        }
+        return;
+    }
+    for (gene, range) in genes.iter_mut().zip(bounds) {
+        *gene = *range.start();
+    }
+    for (&gene, &value) in free.iter().zip(u) {
+        let (start, end) = (*bounds[gene].start(), *bounds[gene].end());
+        genes[gene] = (start + (end - start) * value).clamp(start, end);
+    }
+}
+
 // the score of a feasible fitness
 fn feasible_score(fitness: Fitness) -> Option<f64> {
     fitness.score().filter(|_| fitness.is_feasible())
@@ -728,13 +751,38 @@ fn identity(n: usize) -> Vec<f64> {
 // `n × n` matrix: a Householder reduction to tridiagonal form and the implicit QL method, as
 // tred2 and tql2 of JAMA (public domain), which Hansen's Java CMA-ES uses too. Only +, −, ×, ÷
 // and sqrt, so the same on every platform.
+//
+// JAMA's loops run down the columns of its matrix `V`: they work here on its transpose `w`
+// (`V[r][c]` is `w[c * n + r]`), along contiguous rows, with the same operations in the same
+// order.
+#[cfg(test)]
 fn eigen(matrix: &[f64], n: usize) -> (Vec<f64>, Vec<f64>) {
-    let mut v = matrix.to_vec();
+    let (values, transposed) = eigen_transposed(matrix, n);
+    let mut vectors = Vec::new();
+    transpose_into(&transposed, n, &mut vectors);
+    (values, vectors)
+}
+
+// `eigen` with the eigenvectors as the rows of a row-major matrix
+fn eigen_transposed(matrix: &[f64], n: usize) -> (Vec<f64>, Vec<f64>) {
+    // `V` starts as the symmetric matrix, its own transpose
+    debug_assert!((0..n).all(|i| (0..i).all(|j| matrix[i * n + j] == matrix[j * n + i])));
+    let mut w = matrix.to_vec();
     let mut d = vec![0.0; n];
     let mut e = vec![0.0; n];
-    tridiagonalize(&mut v, &mut d, &mut e, n);
-    diagonalize(&mut v, &mut d, &mut e, n);
-    (d, v)
+    tridiagonalize(&mut w, &mut d, &mut e, n);
+    diagonalize(&mut w, &mut d, &mut e, n);
+    (d, w)
+}
+
+// the transpose of the row-major `n × n` matrix into `transposed` (empty for an empty matrix)
+fn transpose_into(matrix: &[f64], n: usize, transposed: &mut Vec<f64>) {
+    transposed.clear();
+    if !matrix.is_empty() {
+        for c in 0..n {
+            transposed.extend(matrix[c..].iter().step_by(n));
+        }
+    }
 }
 
 // sqrt(a² + b²) without overflow or underflow
@@ -749,19 +797,22 @@ fn hypot(a: f64, b: f64) -> f64 {
     }
 }
 
-// tred2: the Householder reduction of the symmetric `v` to a tridiagonal matrix with diagonal
-// `d` and subdiagonal `e[1..]`, and the transformation in `v`
-fn tridiagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
-    d.copy_from_slice(&v[(n - 1) * n..]);
+// tred2: the Householder reduction of the symmetric `V` to a tridiagonal matrix with diagonal
+// `d` and subdiagonal `e[1..]`, and the transformation in `V`, transposed in `w`
+fn tridiagonalize(w: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
+    // the last row of V
+    for (j, x) in d.iter_mut().enumerate() {
+        *x = w[j * n + n - 1];
+    }
     for i in (1..n).rev() {
         let scale: f64 = d[..i].iter().map(|x| x.abs()).sum();
         let mut h = 0.0;
         if scale == 0.0 {
             e[i] = d[i - 1];
             for j in 0..i {
-                d[j] = v[(i - 1) * n + j];
-                v[i * n + j] = 0.0;
-                v[j * n + i] = 0.0;
+                d[j] = w[j * n + i - 1];
+                w[j * n + i] = 0.0;
+                w[i * n + j] = 0.0;
             }
         } else {
             // the Householder vector
@@ -781,66 +832,72 @@ fn tridiagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
             // the similarity transformation of the remaining columns
             for j in 0..i {
                 f = d[j];
-                v[j * n + i] = f;
-                g = e[j] + v[j * n + j] * f;
-                for k in j + 1..i {
-                    g += v[k * n + j] * d[k];
-                    e[k] += v[k * n + j] * f;
+                w[i * n + j] = f;
+                // column j of V from the diagonal down to row i − 1
+                let column = &w[j * n + j..j * n + i];
+                g = e[j] + column[0] * f;
+                let below = column[1..].iter().zip(&d[j + 1..i]).zip(&mut e[j + 1..i]);
+                for ((&x, &dk), ek) in below {
+                    g += x * dk;
+                    *ek += x * f;
                 }
                 e[j] = g;
             }
             f = 0.0;
-            for j in 0..i {
-                e[j] /= h;
-                f += e[j] * d[j];
+            for (ej, &dj) in e[..i].iter_mut().zip(&d[..i]) {
+                *ej /= h;
+                f += *ej * dj;
             }
             let hh = f / (h + h);
-            for j in 0..i {
-                e[j] -= hh * d[j];
+            for (ej, &dj) in e[..i].iter_mut().zip(&d[..i]) {
+                *ej -= hh * dj;
             }
             for j in 0..i {
                 f = d[j];
                 g = e[j];
-                for k in j..i {
-                    v[k * n + j] -= f * e[k] + g * d[k];
+                let column = &mut w[j * n + j..j * n + i];
+                for ((x, &ek), &dk) in column.iter_mut().zip(&e[j..i]).zip(&d[j..i]) {
+                    *x -= f * ek + g * dk;
                 }
-                d[j] = v[(i - 1) * n + j];
-                v[i * n + j] = 0.0;
+                d[j] = w[j * n + i - 1];
+                w[j * n + i] = 0.0;
             }
         }
         d[i] = h;
     }
     // the accumulated transformations
     for i in 0..n - 1 {
-        v[(n - 1) * n + i] = v[i * n + i];
-        v[i * n + i] = 1.0;
+        w[i * n + n - 1] = w[i * n + i];
+        w[i * n + i] = 1.0;
         let h = d[i + 1];
+        // columns 0..=i of V, and column i + 1, down to row i
+        let (columns, after) = w.split_at_mut((i + 1) * n);
+        let next = &mut after[..=i];
         if h != 0.0 {
-            for k in 0..=i {
-                d[k] = v[k * n + i + 1] / h;
+            for (dk, &x) in d[..=i].iter_mut().zip(&*next) {
+                *dk = x / h;
             }
-            for j in 0..=i {
-                let g: f64 = (0..=i).map(|k| v[k * n + i + 1] * v[k * n + j]).sum();
-                for k in 0..=i {
-                    v[k * n + j] -= g * d[k];
+            for column in columns.chunks_exact_mut(n) {
+                let column = &mut column[..=i];
+                let g: f64 = next.iter().zip(&*column).map(|(a, b)| a * b).sum();
+                for (x, &dk) in column.iter_mut().zip(&d[..=i]) {
+                    *x -= g * dk;
                 }
             }
         }
-        for k in 0..=i {
-            v[k * n + i + 1] = 0.0;
-        }
+        next.fill(0.0);
     }
     for j in 0..n {
-        d[j] = v[(n - 1) * n + j];
-        v[(n - 1) * n + j] = 0.0;
+        d[j] = w[j * n + n - 1];
+        w[j * n + n - 1] = 0.0;
     }
-    v[(n - 1) * n + n - 1] = 1.0;
+    w[(n - 1) * n + n - 1] = 1.0;
     e[0] = 0.0;
 }
 
-// tql2: the eigenvalues (in `d`) and eigenvectors (the columns of `v`) of the tridiagonal matrix
-// from `tridiagonalize`, by the implicit QL method
-fn diagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
+// tql2: the eigenvalues (in `d`) and eigenvectors (the columns of `V`, the rows of `w`) of the
+// tridiagonal matrix from `tridiagonalize`, by the implicit QL method
+fn diagonalize(w: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
     e.copy_within(1.., 0);
     e[n - 1] = 0.0;
     let mut f = 0.0;
@@ -886,10 +943,12 @@ fn diagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
                     c = p / r;
                     p = c * d[i] - s * g;
                     d[i + 1] = h + s * (c * g + s * d[i]);
-                    for k in 0..n {
-                        h = v[k * n + i + 1];
-                        v[k * n + i + 1] = s * v[k * n + i] + c * h;
-                        v[k * n + i] = c * v[k * n + i] - s * h;
+                    // the rotation of columns i and i + 1 of V
+                    let (before, after) = w.split_at_mut((i + 1) * n);
+                    for (x, y) in before[i * n..].iter_mut().zip(&mut after[..n]) {
+                        let h = *y;
+                        *y = s * *x + c * h;
+                        *x = c * *x - s * h;
                     }
                 }
                 p = -s * s2 * c3 * el1 * e[l] / dl1;
