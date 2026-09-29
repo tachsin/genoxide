@@ -199,6 +199,7 @@ pub struct Cmaes {
     restarts: Restarts,
     covariance_type: Covariance,
     initial_step: f64,
+    min_step: f64,
     initial_lambda: usize,
     objective: Objective,
     seed: u64,
@@ -250,6 +251,7 @@ impl Cmaes {
             real,
             population_size: None,
             initial_step: 0.3,
+            min_step: 0.0,
             initial_mean: None,
             restarts: Restarts::Never,
             covariance: Covariance::Full,
@@ -612,7 +614,7 @@ impl Cmaes {
         }
         // cumulative step-size adaptation, at most a factor e per generation
         let change = (c_sigma / self.parameters.d_sigma) * (norm / chi_n - 1.0);
-        self.sigma *= exp(change.min(1.0));
+        self.sigma = (self.sigma * exp(change.min(1.0))).max(self.min_step);
         self.run_generation += 1;
         if self.run_generation - self.eigen_generation >= self.parameters.eigen_interval {
             self.decompose();
@@ -1068,6 +1070,7 @@ pub struct CmaesBuilder {
     real: Real,
     population_size: Option<usize>,
     initial_step: f64,
+    min_step: f64,
     initial_mean: Option<Reals>,
     restarts: Restarts,
     covariance: Covariance,
@@ -1089,6 +1092,21 @@ impl CmaesBuilder {
     /// 1: about a third of the distance to the optimum. 0.3 by default.
     pub fn initial_step(mut self, fraction: f64) -> Self {
         self.initial_step = fraction;
+        self
+    }
+
+    /// A lower bound on the step size `σ`, as a fraction of each gene's range, at least 0 and at
+    /// most the initial step size: the step size never falls below it, so the search goes on
+    /// exploring around its mean instead of converging. 0 (no bound) by default.
+    ///
+    /// For a fitness that stops rewarding what the goal needs once it's near its best, such as a
+    /// control task scored on short episodes but solved by long ones: Igel (2003,
+    /// Neuroevolution for reinforcement learning using evolution strategies, CEC 2003:
+    /// 2588-2595) bounded the step size at half its initial value to solve the double pole
+    /// without velocities. The convergence criterion on the step size, and so a restart through
+    /// it, can't happen with a bound.
+    pub fn min_step(mut self, fraction: f64) -> Self {
+        self.min_step = fraction;
         self
     }
 
@@ -1139,7 +1157,8 @@ impl CmaesBuilder {
     /// # Errors
     ///
     /// - [`Error::InvalidSetting`] for a population size below 2 or above 2^24, an initial step
-    ///   size out of range, or a representation without a gene that has more than one value.
+    ///   size or a minimum step size out of range, or a representation without a gene that has
+    ///   more than one value.
     /// - [`Error::InvalidGenome`] for an initial mean that doesn't fit the representation.
     pub fn build(self) -> Result<Cmaes> {
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
@@ -1172,6 +1191,15 @@ impl CmaesBuilder {
                 ),
             );
         }
+        if !(self.min_step >= 0.0 && self.min_step <= self.initial_step) {
+            return invalid(
+                "min_step",
+                format!(
+                    "must be at least 0 and at most the initial step size {}, got {}",
+                    self.initial_step, self.min_step
+                ),
+            );
+        }
         if let Some(genome) = &self.initial_mean {
             self.real.validate(genome)?;
         }
@@ -1196,6 +1224,7 @@ impl CmaesBuilder {
             restarts: self.restarts,
             covariance_type: self.covariance,
             initial_step: self.initial_step,
+            min_step: self.min_step,
             initial_lambda: lambda,
             objective: self.objective,
             seed,
@@ -1366,6 +1395,33 @@ mod tests {
     }
 
     #[test]
+    fn the_step_size_stays_above_its_minimum() {
+        // on the sphere, the step size shrinks without a bound, and stops at it with one
+        let sphere = |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>();
+        let run = |min: f64| {
+            let mut cmaes = Cmaes::builder(Real::uniform(5, -1.0..=1.0).unwrap())
+                .min_step(min)
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap();
+            let mut smallest = f64::INFINITY;
+            for _ in 0..300 {
+                let fitness: Vec<Fitness> = cmaes
+                    .ask()
+                    .iter()
+                    .map(|x| Fitness::new(sphere(x)))
+                    .collect();
+                cmaes.tell(&fitness).unwrap();
+                smallest = smallest.min(cmaes.step_size());
+            }
+            smallest
+        };
+        assert!(run(0.0) < 1e-6);
+        assert_eq!(run(0.05), 0.05);
+    }
+
+    #[test]
     fn validation() {
         let real = || Real::uniform(2, 0.0..=1.0).unwrap();
         let with_step = |step| Cmaes::builder(real()).initial_step(step).build();
@@ -1376,6 +1432,11 @@ mod tests {
         assert_eq!(setting(with_step(0.0)), "initial_step");
         assert_eq!(setting(with_step(1.5)), "initial_step");
         assert_eq!(setting(with_step(f64::NAN)), "initial_step");
+        let with_min = |min| Cmaes::builder(real()).min_step(min).build();
+        assert_eq!(setting(with_min(-0.1)), "min_step");
+        assert_eq!(setting(with_min(0.31)), "min_step");
+        assert_eq!(setting(with_min(f64::NAN)), "min_step");
+        assert!(with_min(0.3).is_ok() && with_min(0.0).is_ok());
         let fixed = Real::new([1.0..=1.0, 2.0..=2.0]).unwrap();
         assert_eq!(setting(Cmaes::builder(fixed).build()), "real");
         assert!(matches!(
