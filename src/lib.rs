@@ -43,11 +43,13 @@
 //!   evaluation and cancellation; [`AsyncEngine`](engine::AsyncEngine) evaluates asynchronously
 //! - [`gp`]: tree genetic programming, strongly typed: programs and formulas as genomes, with
 //!   subtree crossover and mutation
+//! - [`nn`]: neural networks whose weights are a genome, a multilayer perceptron and an Elman
+//!   recurrent network, for neuroevolution
 //! - [`multi`]: multi-objective optimization: NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA, the
 //!   [`MultiEngine`](multi::MultiEngine), Pareto dominance and non-dominated sorting
 //! - [`observer`]: statistics, hall of fame, progress lines and custom callbacks
 //! - [`problems`]: single-objective test problems from the literature, with their bounds, known
-//!   optima and references
+//!   optima and references, and [control tasks](problems::control) that balance poles on a cart
 //! - [`prelude`]: everything above in one import
 //! - [`math`]: `sin`, `cos`, `exp`, `powf`, `powi` and the like, the same to the bit on every platform, for
 //!   fitness functions that must give the same results everywhere
@@ -88,6 +90,7 @@ pub mod gp;
 pub mod individual;
 pub mod math;
 pub mod multi;
+pub mod nn;
 pub mod observer;
 pub mod operator;
 pub mod population;

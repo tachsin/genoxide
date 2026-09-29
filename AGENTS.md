@@ -38,6 +38,7 @@ fn main() -> genoxide::Result<()> {
 | Reals with an adaptive step size | `AdaptiveReal::new(Real::..., initial_step)` | `AdaptiveReals` (`[f64]`, `.step()`) | `NoCrossover` (an ES), `UniformCrossover`, `PointCrossover` | `SelfAdaptiveMutation` |
 | An order of `0..n` (tours, sequencing) | `Permutation::new(n)` | `Order` (`[usize]`) | `OrderCrossover` (sequences), `EdgeRecombinationCrossover` (tours), `PartiallyMappedCrossover`, `CycleCrossover` | `InversionMutation` (tours), `SwapMutation`, `InsertionMutation`, `ScrambleMutation` |
 | Programs and formulas: trees of typed functions (genetic programming) | `gp::Gp::builder(set)` ([template](#genetic-programming)) | `gp::Tree` (nodes in prefix order) | `gp::SubtreeCrossover`, `gp::OnePointCrossover` | `gp::SubtreeMutation`, `gp::PointMutation`, `gp::HoistMutation`, `gp::ShrinkMutation`, `gp::ConstantMutation`, a mix: `gp::Mutations` |
+| A neural network's weights (neuroevolution) | `nn::Mlp::new([4, 8, 1], nn::Activation::Tanh)?.representation(-1.0..=1.0)?`, `nn::Elman` (recurrent) ([template](#neuroevolution-a-networks-weights-by-cma-es)) | `Reals` | none: `Cmaes` | none: `Cmaes` |
 
 Any selection fits any representation; usually `Tournament` of size 2 to 5. For trees, a selection against bloat (growth without better fitness): `DoubleTournament::new(7, 1.4)?`, `LexicographicTournament::new(7)?` (ties in fitness to the smaller), or `Tarpeian::new(select, rate)?`; size is `genome.len()`.
 
@@ -366,6 +367,39 @@ fn main() -> genoxide::Result<()> {
 
 `Report::new()` writes to stderr every second; also `Report::every(duration)`, `Report::every_generations(n)?`, `.to(writer)`. Multi-objective: `report.update(snapshot.progress())` in `.on_generation`. The `tracing` feature adds a `run` span and per-generation and final events, target `genoxide`.
 
+### Neuroevolution: a network's weights by CMA-ES
+
+`nn::Mlp::new(layers, activation)?` (`.output_activation(a)`, `.bias(false)`; weights unit by unit: each unit's input weights in order, then its bias) and `nn::Elman::new(inputs, hidden, outputs, activation)?` (a hidden layer that also sees its previous outputs; `reset()` between episodes) have `parameters()` weights, `representation(bounds)?` for the genome, and `with(&weights)?` for a network whose `forward(&input, &mut output)` doesn't allocate. Activations: `Identity`, `Tanh`, `Sigmoid`, `Relu`, through `genoxide::math`. `problems::control::{CartPole, DoublePole}` are pole-balancing tasks (Florian's corrected equations, Gomez et al. 2008's settings) driven by a `Policy`: the networks, or a closure `|observation: &[f64], action: &mut [f64]|`. `task.run(&mut policy, steps)` gives the steps balanced from the start (100,000, `SUCCESS_STEPS`, solves it); `DoublePole::without_velocities()` observes `x`, `θ₁`, `θ₂` only and has Gruau et al.'s `damping_fitness` and `generalization` test (`solved` applies both criteria). No biases suit these symmetric tasks. Not in Python yet.
+
+```rust
+use genoxide::nn::{Activation, Mlp};
+use genoxide::prelude::*;
+use genoxide::problems::control::{DoublePole, SUCCESS_STEPS};
+
+fn main() -> genoxide::Result<()> {
+    // a 6-6-1 network without biases balances two poles for 100,000 steps
+    let mlp = Mlp::new([6, 6, 1], Activation::Tanh)?
+        .output_activation(Activation::Tanh)
+        .bias(false);
+    let task = DoublePole::new();
+    let steps = |weights: &Reals| -> Option<f64> {
+        let mut network = mlp.with(weights).ok()?;
+        Some(f64::from(task.run(&mut network, SUCCESS_STEPS)))
+    };
+    let cmaes = Cmaes::builder(mlp.representation(-1.0..=1.0)?)
+        .restarts(cmaes::Restarts::Ipop)
+        .seed(1)
+        .build()?;
+    let outcome = Engine::new(cmaes, steps)
+        .stop_when(Stop::target(f64::from(SUCCESS_STEPS)).or(Stop::evaluations(100_000)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    let mut network = mlp.with(outcome.best_genome())?;
+    assert!(task.solved(&mut network));
+    Ok(())
+}
+```
+
 ### Evolution strategy with self-adaptation
 
 For smooth real-valued problems that need precise answers: step sizes evolve with each solution, one per gene by default.
@@ -450,7 +484,7 @@ fn main() -> genoxide::Result<()> {
 
 ### CMA-ES
 
-The strongest general choice for continuous problems with up to a few hundred `Real` genes, especially when the genes interact (rotated or badly conditioned functions). Nothing needs tuning (initial step: 0.3 of each range). For multimodal functions, add `cmaes::Restarts::Ipop` (growing population) or `Bipop` (large and small in turn). For thousands of genes or separable problems: `.covariance(cmaes::Covariance::Diagonal)` (sep-CMA-ES, O(n) per sample, no correlations).
+The strongest general choice for continuous problems with up to a few hundred `Real` genes, especially when the genes interact (rotated or badly conditioned functions). Nothing needs tuning (initial step: 0.3 of each range). For multimodal functions, add `cmaes::Restarts::Ipop` (growing population) or `Bipop` (large and small in turn). For thousands of genes or separable problems: `.covariance(cmaes::Covariance::Diagonal)` (sep-CMA-ES, O(n) per sample, no correlations). `.min_step(fraction)` (0 to the initial step, 0 by default) bounds the step size below, so the search keeps exploring when the fitness stops pointing at the goal (Igel 2003, on control tasks scored on short episodes).
 
 ```rust
 use genoxide::prelude::*;
@@ -795,4 +829,4 @@ every = 50
 - **Reproducible:** a seed gives the same results on every platform and thread count, parallel or not. The exception is a fitness function that calls the platform's `sin`, `cos`, `exp` and the like (`f64::sin`, numpy): their last bit can differ between operating systems, and long runs drift apart. `genoxide::math::{sin, cos, tan, exp, ln, powf, powi, atan2, ...}` are the same to the bit everywhere, at native speed; `problems` and `multi::problems` use them.
 - **Ties:** the earlier individual wins.
 - **The best is kept:** `outcome.best()` is the best individual ever evaluated.
-- **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `problems` or `multi::problems` constructor with too few dimensions or variables (or a radius that isn't above 0, or none from the paper for `C1Dtlz3::new` and `ConvexC2Dtlz2::new`), and a `Batch` returning no score for a single genome.
+- **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `problems` or `multi::problems` constructor with too few dimensions or variables (or a radius that isn't above 0, or none from the paper for `C1Dtlz3::new` and `ConvexC2Dtlz2::new`), a `Batch` returning no score for a single genome, and an input, output or observation slice of the wrong length for an `nn` network or a `control` task.

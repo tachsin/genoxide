@@ -721,10 +721,10 @@ allocation per forward pass. Not a training framework (ROADMAP.md, not planned).
 
 `genoxide::problems::control`: environments driven by a `Policy` (a trait implemented by `nn`'s
 networks and NEAT's compiled networks, and by closures), integrated with RK4 (step and constants
-from the papers, to check), `genoxide::math::sin` and `cos`, so episodes are the same bits
+from the papers, checked in E1 below), `genoxide::math::sin` and `cos`, so episodes are the same bits
 everywhere.
 
-| Task | Reference | Success criterion (to check) |
+| Task | Reference | Success criterion (checked) |
 |---|---|---|
 | Cart-pole | Barto, A. G., Sutton, R. S. and Anderson, C. W. (1983). Neuronlike adaptive elements that can solve difficult learning control problems. *IEEE Trans. SMC* 13(5): 834-846. doi:10.1109/TSMC.1983.6313077; corrected equations: Florian, R. V. (2007). Correct equations for the dynamics of the cart-pole system. Technical report, Center for Cognitive and Neural Studies, Romania | Balanced for 100,000 steps |
 | Double pole, with velocities | Wieland, A. P. (1991). Evolving neural network controllers for unstable systems. IJCNN 1991, vol. 2: 667-673. doi:10.1109/IJCNN.1991.155416; the settings of Gomez, F., Schmidhuber, J. and Miikkulainen, R. (2008). Accelerated neural evolution through cooperatively coevolved synapses. *JMLR* 9: 937-965 | Balanced for 100,000 steps |
@@ -733,6 +733,29 @@ everywhere.
 Each has `run(&mut policy, steps) -> u32` (steps balanced), the damping fitness where the papers
 use it, and the generalization test. Gomez et al. (2008) tabulate evaluations to success for many
 methods (NEAT, CMA-ES, CoSyNE, ...): the reference points for the examples' READMEs, not tests.
+
+**Checked in E1** against Florian (2007), Stanley and Miikkulainen (2002), Igel (2003) and Gomez et
+al. (2008) (Wieland 1991 and Gruau et al. 1996 through their restatements; Barto et al. 1983
+through Florian):
+
+- **Verified:** RK4 with 0.01 s, two integration steps per 0.02 s control step; the masses,
+  half-lengths (0.5 m, 0.05 m), friction coefficients (0.0005, 0.000002), track (±2.4 m), failure
+  angles (12°, 36°), a force of up to 10 N at least 10/256 N in size; 100,000 steps to succeed;
+  the damping fitness `0.1 f₁ + 0.9 f₂` over 1000 steps; the generalization test's 625 starts
+  (Igel gives the ranges: ±2.16 m, ±1.35 m/s, ±3.6°, ±8.6°/s) and its threshold of 200.
+- **Corrected:** Florian's equation 21 (and 19) as printed has `cos θ − μc sgn(N ẋ)` in its
+  denominator; substituting his equation 18 into 16 gives `cos θ − μc sgn(N ẋ) sin θ`, which the
+  implementation uses and a test checks against Newton's laws solved directly. For two poles,
+  genoxide applies his correction (friction `μc N sgn(N ẋ)`, positive `g`) to Wieland's equations,
+  solving for `ẍ` and `N` together.
+- **Differs between the papers**, genoxide follows Gomez et al. (2008): the long pole's initial
+  angle is 4° (Stanley and Miikkulainen and Igel: 1° with velocities; Igel: 4.5° without); the
+  damping sum runs over the last 100 states (Igel), where Stanley and Miikkulainen and Gomez et
+  al. print `t − 100` to `t`, 101. The papers scale the inputs to [−1, 1] without giving the
+  ranges: genoxide divides by 2.4 m, the failure angle and 2 (velocities).
+- **Added:** `CmaesBuilder::min_step`, a lower bound on σ, as Igel used for the task without
+  velocities; without it CMA-ES solved 13 of 20 seeds within 30,000 evaluations, with it 100 of
+  100 (section 9, E1's examples).
 
 ## 6. Python
 

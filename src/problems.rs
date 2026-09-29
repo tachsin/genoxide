@@ -65,6 +65,10 @@
 //! [`Problem::constraints`] gives a constrained problem's constraint values, as `g(x) <= 0` and
 //! `h(x) = 0`.
 //!
+//! [`control`] holds control tasks instead of functions: the cart-pole and the double pole, with
+//! and without velocities, driven by a [`Policy`](control::Policy) such as a neural network of
+//! [`nn`](crate::nn), for neuroevolution.
+//!
 //! Each problem's docs cite its original authors, and say where its definition and bounds come
 //! from. Most originals are books or reports that aren't online, and some functions have no known
 //! origin: their definitions are taken from later papers that restate them, and are still to be
@@ -91,6 +95,7 @@
 
 pub mod cec2006;
 mod classic;
+pub mod control;
 pub mod engineering;
 
 pub use classic::{

@@ -43,6 +43,12 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - **Evaluation:** a stack machine for values of any type, the same on columns of all the data's points at once (several times faster, the same results to the bit), and a top-down walk for interpreters.
 - Runs on the genetic algorithms, islands and the multi-objective algorithms, with checkpoints and parallel breeding.
 
+## Neuroevolution
+
+- **Networks** (`nn`): a multilayer perceptron and an Elman recurrent network whose weights are a `Real` genome, for CMA-ES or any real-valued method; tanh, logistic, ReLU and linear units, with or without biases; forward passes without allocation, the same bits on every platform.
+- **Control tasks** (`problems::control`): the cart-pole and the double pole, with and without velocities, with Florian's corrected equations and the settings of Gomez et al. (2008), integrated by Runge-Kutta with portable `sin` and `cos`; their success criteria, and Gruau et al.'s damping fitness and generalization test. Driven by a `Policy`: a network or a closure.
+- CMA-ES's step size can be bounded below (Igel 2003), for fitness functions that stop pointing at the goal near their best.
+
 ## Other single-objective methods
 
 - **Evolution strategies:** (μ/ρ +, λ)-ES with intermediate or dominant recombination. Self-adapted step sizes: one, or one per gene.
@@ -108,6 +114,8 @@ cargo run --release --example kursawe             # a disconnected front, SPEA2 
 cargo run --release --example dtlz2_3obj          # three objectives, NSGA-III, hypervolume
 cargo run --release --example xor_neuroevolution  # a 2-2-1 neural network's weights, CMA-ES
 cargo run --release --example koza_quartic        # genetic programming finds x^4 + x^3 + x^2 + x exactly
+cargo run --release --example double_pole         # a network balances two poles for 100,000 steps, CMA-ES
+cargo run --release --example double_pole_no_velocities  # the same with a recurrent network, no velocities
 cargo run --release --example multiplexer_11      # Koza's 11-multiplexer, all 2048 cases, double tournament
 cargo run --release --example abs_typed           # strongly typed GP: |x| from a comparison and a conditional
 cargo run --release --example asynchronous        # a slow fitness function, asynchronous evaluation

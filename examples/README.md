@@ -163,6 +163,9 @@ python examples/tsp_berlin52/main.py
 | [MW13](mw13/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw13) |
 | [MW14](mw14/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw14) |
 | [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neuroevolution) |
+| [Cart-pole](cart_pole/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cart-pole) |
+| [Double pole balancing](double_pole/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/double-pole) |
+| [Double pole balancing without velocities](double_pole_no_velocities/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/double-pole-no-velocities) |
 | [Koza's quartic](koza_quartic/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/koza-quartic) |
 | [Koza's 11-multiplexer](multiplexer_11/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/multiplexer-11) |
 | [\|x\| by strongly typed GP](abs_typed/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/abs-typed) |
