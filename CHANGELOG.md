@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.3](https://github.com/tachsin/genoxide/compare/v0.9.2...v0.9.3) - 2026-09-29
+
+### <!-- 0 -->Added
+
+- batch 6 of the test problems, CEC 2006's g19-g24 and eight classic functions, each with its example ([#307](https://github.com/tachsin/genoxide/pull/307))
+- batches 7 and 8 of the test problems, CTP, C-DTLZ, scaled and inverted DTLZ, and MW, each with its example ([#313](https://github.com/tachsin/genoxide/pull/313))
+
+### <!-- 1 -->Fixed
+
+- *(examples)* every example reaches its optimum ([#312](https://github.com/tachsin/genoxide/pull/312))
+
+### <!-- 2 -->Performance
+
+- recover the instructions 0.9.2 added to the GA, DE, CMA-ES and PSO ([#302](https://github.com/tachsin/genoxide/pull/302))
+- a GA keeps its best without a full sort, and breeds into its unused genomes ([#306](https://github.com/tachsin/genoxide/pull/306))
+
+### <!-- 4 -->Documentation
+
+- room in the examples' order for batches 7 and 8 ([#309](https://github.com/tachsin/genoxide/pull/309))
+
 ## [0.9.2](https://github.com/tachsin/genoxide/compare/v0.9.1...v0.9.2) - 2026-09-28
 
 ### <!-- 0 -->Added
