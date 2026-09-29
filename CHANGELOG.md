@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/tachsin/genoxide/compare/v0.9.3...v0.10.0) - 2026-09-29
+
+### <!-- 0 -->Added
+
+- *(python)* [**breaking**] the progress object makes the population's arrays when first read ([#324](https://github.com/tachsin/genoxide/pull/324))
+- *(examples)* the N-Queens example on 8×8 to 128×128 boards, one family with tabs ([#321](https://github.com/tachsin/genoxide/pull/321))
+
+### <!-- 2 -->Performance
+
+- [**breaking**] move to Rust 1.88, with small performance gains across the library ([#315](https://github.com/tachsin/genoxide/pull/315))
+
+### <!-- 4 -->Documentation
+
+- *(examples)* remove the function suite, since each function has its own page ([#317](https://github.com/tachsin/genoxide/pull/317))
+- the problem plan has one problem per example, and no comparison examples ([#322](https://github.com/tachsin/genoxide/pull/322))
+- a plan for general optimization methods ([#316](https://github.com/tachsin/genoxide/pull/316))
+- the roadmap puts genetic programming and neuroevolution in 0.11, and the other methods from 0.12 ([#325](https://github.com/tachsin/genoxide/pull/325))
+
 ## [0.9.3](https://github.com/tachsin/genoxide/compare/v0.9.2...v0.9.3) - 2026-09-29
 
 ### <!-- 0 -->Added
