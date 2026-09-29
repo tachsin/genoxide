@@ -104,10 +104,17 @@ fn mean(y: &[f64]) -> f64 {
 fn r_nonsep(y: &[f64], a: usize) -> f64 {
     let n = y.len();
     let mut numerator = 0.0;
-    for j in 0..n {
-        numerator += y[j];
-        for k in 0..a - 1 {
-            numerator += (y[j] - y[(j + k + 1) % n]).abs();
+    for (j, &value) in y.iter().enumerate() {
+        numerator += value;
+        // the a − 1 values after it, wrapping around to the first: y[(j + k + 1) % n] for k
+        // from 0, in that order
+        let (after, before) = (&y[j + 1..], &y[..j]);
+        let wrapped = (a - 1).saturating_sub(after.len());
+        for &other in &after[..a - 1 - wrapped] {
+            numerator += (value - other).abs();
+        }
+        for &other in &before[..wrapped] {
+            numerator += (value - other).abs();
         }
     }
     let half = a.div_ceil(2) as f64;
