@@ -1030,10 +1030,7 @@ impl Crossover<'_> {
             let from_mutant = j == self.forced || rng.unit_f64() < self.cr;
             let (start, end) = (*bounds.start(), *bounds.end());
             // the mutant's gene is computed for every gene and chosen without a branch, which the
-            // random choice would make the processor mispredict often: by a mask of bits, which
-            // `black_box` keeps the compiler from turning back into a branch
-            // (`std::hint::select_unpredictable` does that from Rust 1.88, above the minimum
-            // supported version)
+            // random choice would make the processor mispredict often
             let mutant = mutant(x, donors);
             let bounced = if mutant < start {
                 midpoint(start, x)
@@ -1045,8 +1042,7 @@ impl Crossover<'_> {
                 mutant
             };
             let take = from_mutant & (start != end);
-            let mask = std::hint::black_box(u64::from(take).wrapping_neg());
-            *value = f64::from_bits((bounced.to_bits() & mask) | (x.to_bits() & !mask));
+            *value = std::hint::select_unpredictable(take, bounced, x);
         }
         trial
     }
