@@ -18,8 +18,7 @@ fn positions(genes: &[usize]) -> Vec<usize> {
 fn segment(len: usize, min_len: usize, rng: &mut StreamRng) -> (usize, usize) {
     debug_assert!(len > min_len, "segment of {min_len} in {len}");
     loop {
-        let cuts = rng.sample_distinct(2, len + 1);
-        let (start, end) = (cuts[0], cuts[1]);
+        let (start, end) = rng.sample_pair(len + 1);
         if end - start >= min_len && end - start < len {
             return (start, end);
         }
@@ -235,9 +234,9 @@ impl Mutate<Permutation> for InversionMutation {
         }
         // reversing the whole genome changes it too, for a sequence
         let (start, end) = loop {
-            let cuts = rng.sample_distinct(2, len + 1);
-            if cuts[1] - cuts[0] >= 2 {
-                break (cuts[0], cuts[1]);
+            let (start, end) = rng.sample_pair(len + 1);
+            if end - start >= 2 {
+                break (start, end);
             }
         };
         genome.genes_mut()[start..end].reverse();
@@ -285,9 +284,9 @@ impl Mutate<Permutation> for ScrambleMutation {
             return;
         }
         let (start, end) = loop {
-            let cuts = rng.sample_distinct(2, len + 1);
-            if cuts[1] - cuts[0] >= 2 {
-                break (cuts[0], cuts[1]);
+            let (start, end) = rng.sample_pair(len + 1);
+            if end - start >= 2 {
+                break (start, end);
             }
         };
         let segment = &mut genome.genes_mut()[start..end];

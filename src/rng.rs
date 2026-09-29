@@ -185,16 +185,47 @@ impl StreamRng {
     /// `k` distinct integers from `0..n`, in ascending order (Floyd's algorithm). `k <= n`.
     pub(crate) fn sample_distinct(&mut self, k: usize, n: usize) -> Vec<usize> {
         debug_assert!(k <= n, "sample_distinct({k}, {n})");
-        let mut selected = std::collections::BTreeSet::new();
+        if k > SORTED_INSERT_MAX {
+            let mut selected = std::collections::BTreeSet::new();
+            for j in (n - k)..n {
+                let candidate = self.below(j + 1);
+                if !selected.insert(candidate) {
+                    selected.insert(j);
+                }
+            }
+            return selected.into_iter().collect();
+        }
+        // the same draws and the same set, kept sorted in a vector: a single allocation
+        let mut selected = Vec::with_capacity(k);
         for j in (n - k)..n {
             let candidate = self.below(j + 1);
-            if !selected.insert(candidate) {
-                selected.insert(j);
+            match selected.binary_search(&candidate) {
+                // every value selected so far is below j: it goes last
+                Ok(_) => selected.push(j),
+                Err(position) => selected.insert(position, candidate),
             }
         }
-        selected.into_iter().collect()
+        selected
+    }
+
+    /// Two distinct integers from `0..n`, in ascending order: `sample_distinct(2, n)` without an
+    /// allocation. `n >= 2`.
+    #[inline]
+    pub(crate) fn sample_pair(&mut self, n: usize) -> (usize, usize) {
+        debug_assert!(n >= 2, "sample_pair({n})");
+        let first = self.below(n - 1);
+        let second = self.below(n);
+        if second == first {
+            (first, n - 1)
+        } else {
+            (first.min(second), first.max(second))
+        }
     }
 }
+
+// Up to this many, `sample_distinct` inserts into a sorted vector (a few instructions per shifted
+// element), above it into a B-tree (no shifting, but a node search per insertion).
+const SORTED_INSERT_MAX: usize = 64;
 
 /// A probability as an integer threshold, for Bernoulli trials without floating point, with what
 /// [`StreamRng::chosen`] needs to choose among many indices quickly.
@@ -372,6 +403,59 @@ mod tests {
             counts.iter().all(|&c| (8_600..9_400).contains(&c)),
             "{counts:?}"
         );
+    }
+
+    // Floyd's algorithm into a B-tree, as `sample_distinct` did before its sorted vector
+    fn sample_distinct_reference(rng: &mut StreamRng, k: usize, n: usize) -> Vec<usize> {
+        let mut selected = std::collections::BTreeSet::new();
+        for j in (n - k)..n {
+            let candidate = rng.below(j + 1);
+            if !selected.insert(candidate) {
+                selected.insert(j);
+            }
+        }
+        selected.into_iter().collect()
+    }
+
+    #[test]
+    fn sample_distinct_matches_the_reference() {
+        for (k, n) in [
+            (0, 0),
+            (0, 5),
+            (1, 1),
+            (2, 2),
+            (2, 3),
+            (3, 3),
+            (5, 10),
+            (64, 64),
+            (64, 1000),
+            (65, 100),
+            (200, 200),
+        ] {
+            for seed in 0..50 {
+                let mut rng = StreamRng::seed_from_u64(seed);
+                let mut reference = rng.clone();
+                assert_eq!(
+                    rng.sample_distinct(k, n),
+                    sample_distinct_reference(&mut reference, k, n),
+                    "k {k}, n {n}, seed {seed}"
+                );
+                assert_eq!(rng.next_u64(), reference.next_u64());
+            }
+        }
+    }
+
+    #[test]
+    fn sample_pair_is_sample_distinct() {
+        for n in [2, 3, 4, 10, 1001] {
+            for seed in 0..200 {
+                let mut rng = StreamRng::seed_from_u64(seed);
+                let mut reference = rng.clone();
+                let (a, b) = rng.sample_pair(n);
+                assert_eq!(vec![a, b], reference.sample_distinct(2, n), "n {n}");
+                assert_eq!(rng.next_u64(), reference.next_u64());
+            }
+        }
     }
 
     #[test]
