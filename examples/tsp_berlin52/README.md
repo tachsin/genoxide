@@ -46,12 +46,17 @@ for tours.
 
 The acceptance is simulated annealing (Kirkpatrick, Gelatt and Vecchi, 1983, Science 220(4598): 671-680).
 A shorter or equal tour is always accepted. A tour longer by Δ is accepted with probability exp(−Δ /
-T), for a temperature T. T starts at 100 and is multiplied by 0.99996 after every step. At first, a
+T), for a temperature T. T starts at 100 and is multiplied by 0.999995 after every step. At first, a
 tour 100 longer is accepted with probability 37%; the optimal tour's edges are 145 long on average.
-After 50,000 steps T is about 13, and after 200,000 steps about 0.03, when the search only goes
-downhill. Accepting worse tours early lets it leave local optima.
+After 200,000 steps T is about 37, after 400,000 about 14, and after 1,000,000 about 0.7, when the
+search hardly goes uphill. Accepting worse tours early lets it leave local optima; cooling slowly
+gives it time to settle into a good region of tours before the temperature drops.
 
-The run stops at the optimum, or after 200,000 evaluations.
+The search also restarts, as in iterated local search (Lourenço, Martin and Stützle, 2003, in the
+Handbook of Metaheuristics): after 100,000 steps without a shorter tour, it starts again from the
+best tour, changed by 3 random inversions.
+
+The run stops at the optimum, or after 1,000,000 evaluations.
 
 ## Output
 
@@ -65,4 +70,10 @@ map is for orientation: every location inside Berlin, the dense cluster in the c
 
 ## Good results
 
-The optimum is 7542. The run reaches it after about 51,000 evaluations, a quarter of its budget.
+The optimum is 7542. The run of `output.txt` reaches it after 547,764 evaluations. Over seeds 1 to
+100, 99 runs reached it: half within 342,000 evaluations and 91 within 430,000, while T was still
+between about 12 and 30, and the other 8 within 804,000. The last seed ended at 7732. Without the
+restarts, 95 of them reached it.
+
+With a faster cooling, 0.99996 per step down to T ≈ 0.03 at 200,000 steps, and no restarts, half of
+seeds 1 to 30 reached the optimum; the others froze in tours 1.7% to 6% longer.
