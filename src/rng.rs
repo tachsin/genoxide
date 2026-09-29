@@ -213,6 +213,27 @@ impl StreamRng {
         selected
     }
 
+    /// `sample_distinct(k, n)`, without an allocation for up to `SMALL_SAMPLE` integers.
+    pub(crate) fn sample_distinct_small(&mut self, k: usize, n: usize) -> Sample {
+        debug_assert!(k <= n, "sample_distinct_small({k}, {n})");
+        if k > SMALL_SAMPLE {
+            return Sample::Heap(self.sample_distinct(k, n));
+        }
+        // as `sample_distinct`, in an array
+        let mut values = [0; SMALL_SAMPLE];
+        for (len, j) in ((n - k)..n).enumerate() {
+            let candidate = self.below(j + 1);
+            match values[..len].binary_search(&candidate) {
+                Ok(_) => values[len] = j,
+                Err(position) => {
+                    values.copy_within(position..len, position + 1);
+                    values[position] = candidate;
+                }
+            }
+        }
+        Sample::Inline(values, k)
+    }
+
     /// Two distinct integers from `0..n`, in ascending order: `sample_distinct(2, n)` without an
     /// allocation. `n >= 2`.
     #[inline]
@@ -224,6 +245,27 @@ impl StreamRng {
             (first, n - 1)
         } else {
             (first.min(second), first.max(second))
+        }
+    }
+}
+
+// The most integers `sample_distinct_small` keeps in an array.
+const SMALL_SAMPLE: usize = 8;
+
+/// Distinct integers in ascending order, from [`StreamRng::sample_distinct_small`].
+pub(crate) enum Sample {
+    // the first `.1` values
+    Inline([usize; SMALL_SAMPLE], usize),
+    Heap(Vec<usize>),
+}
+
+impl std::ops::Deref for Sample {
+    type Target = [usize];
+
+    fn deref(&self) -> &[usize] {
+        match self {
+            Sample::Inline(values, len) => &values[..*len],
+            Sample::Heap(values) => values,
         }
     }
 }
@@ -444,6 +486,31 @@ mod tests {
                     rng.sample_distinct(k, n),
                     sample_distinct_reference(&mut reference, k, n),
                     "k {k}, n {n}, seed {seed}"
+                );
+                assert_eq!(rng.next_u64(), reference.next_u64());
+            }
+        }
+    }
+
+    #[test]
+    fn sample_distinct_small_is_sample_distinct() {
+        for (k, n) in [
+            (0, 0),
+            (1, 1),
+            (1, 7),
+            (2, 2),
+            (3, 5),
+            (8, 8),
+            (8, 100),
+            (9, 100),
+        ] {
+            for seed in 0..100 {
+                let mut rng = StreamRng::seed_from_u64(seed);
+                let mut reference = rng.clone();
+                assert_eq!(
+                    &rng.sample_distinct_small(k, n)[..],
+                    &reference.sample_distinct(k, n)[..],
+                    "k {k}, n {n}"
                 );
                 assert_eq!(rng.next_u64(), reference.next_u64());
             }

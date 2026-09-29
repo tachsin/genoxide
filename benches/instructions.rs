@@ -203,6 +203,23 @@ fn gaussian_mutation((real, mut a, _, mut rng): (Real, Reals, Reals, StreamRng))
     black_box(a)
 }
 
+fn integers(len: usize) -> (Integer, Integers, StreamRng) {
+    let integer = Integer::uniform(len, -10..=10).unwrap();
+    let mut rng = StreamRng::seed_from_u64(0);
+    let genome = integer.random_genome(&mut rng);
+    (integer, genome, rng)
+}
+
+#[library_benchmark]
+#[bench::integer_50(setup = integers, args = (50))]
+fn uniform_mutation((integer, mut genome, mut rng): (Integer, Integers, StreamRng)) -> Integers {
+    let mutation = UniformMutation::count(1).unwrap();
+    for _ in 0..REPEATS {
+        mutation.mutate(&integer, &mut genome, &mut rng);
+    }
+    black_box(genome)
+}
+
 #[library_benchmark]
 #[bench::permutation_100(setup = two_orders, args = (100))]
 fn order_crossover(
@@ -300,6 +317,7 @@ library_benchmark_group!(
         simulated_binary_crossover,
         polynomial_mutation,
         gaussian_mutation,
+        uniform_mutation,
         order_crossover,
         edge_recombination_crossover,
         inversion_mutation,

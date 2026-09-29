@@ -51,7 +51,7 @@ impl Mode {
                 rng.chosen(chance, genes, |rng, candidate| change(gene(candidate), rng));
             }
             Mode::Count(count) => {
-                for candidate in rng.sample_distinct(count.min(genes), genes) {
+                for &candidate in rng.sample_distinct_small(count.min(genes), genes).iter() {
                     change(gene(candidate), rng);
                 }
             }
