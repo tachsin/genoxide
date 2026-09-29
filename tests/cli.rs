@@ -307,11 +307,12 @@ fn a_fitness_program_that_writes_extra_lines_is_an_error() {
 fn a_fitness_program_that_stops_answering_is_an_error() {
     let directory = directory("silent");
     // waits without answering, in the process that is killed: a child of its own would keep
-    // genoxide's stderr open after that
+    // genoxide's stderr open after that. Its stdout stays the pipe genoxide reads: closed, it
+    // would be a program that exited, not one that doesn't answer
     let silent = script(
         &directory,
         "silent",
-        "exec sleep 20 >/dev/null 2>&1\n",
+        "exec sleep 20 2>/dev/null\n",
         // the second waits for a genome that never comes
         "@set /p first=\r\n@set /p second=\r\n",
     );
