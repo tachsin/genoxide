@@ -50,7 +50,7 @@ tune.
 
 A genetic algorithm:
 
-- a population of 60;
+- a population of 200;
 - tournament selection of size 3; genoxide's guide recommends tournaments with constraints, since
   roulette selection gives infeasible selections no weight;
 - two-point crossover, which swaps a segment of items between the parents;
@@ -73,4 +73,6 @@ nothing better, and their evaluations count too.
 ## Good results
 
 The optimum is 625: 13 items that weigh 395. The run finds it, and the dynamic programming line
-confirms it.
+confirms it. Over seeds 1 to 300, every run found it, stopping after 38,800 evaluations at the
+median and at most 66,748. With a population of 60, 18 of seeds 1 to 100 stopped short of it:
+17 at 624, a selection that fills the knapsack exactly, and one at 619.
