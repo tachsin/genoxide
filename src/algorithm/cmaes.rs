@@ -625,10 +625,10 @@ impl Cmaes {
     fn decompose(&mut self) {
         let n = self.dimensions();
         self.eigen_generation = self.run_generation;
-        let (mut values, vectors) = if self.diagonal() {
+        let (mut values, transposed) = if self.diagonal() {
             (self.covariance.clone(), Vec::new())
         } else {
-            eigen(&self.covariance, n)
+            eigen_transposed(&self.covariance, n)
         };
         let max = values.iter().copied().fold(f64::MIN, f64::max);
         let min = values.iter().copied().fold(f64::MAX, f64::min);
@@ -643,8 +643,11 @@ impl Cmaes {
                 *value += shift;
             }
         }
-        self.basis = vectors;
-        self.deviations = values.iter().map(|value| value.max(0.0).sqrt()).collect();
+        // B, the eigenvectors as columns, in the memory of the last one
+        transpose_into(&transposed, n, &mut self.basis);
+        self.deviations.clear();
+        self.deviations
+            .extend(values.iter().map(|value| value.max(0.0).sqrt()));
     }
 
     // records the fitness of a generation and checks the stop criteria
@@ -728,13 +731,38 @@ fn identity(n: usize) -> Vec<f64> {
 // `n × n` matrix: a Householder reduction to tridiagonal form and the implicit QL method, as
 // tred2 and tql2 of JAMA (public domain), which Hansen's Java CMA-ES uses too. Only +, −, ×, ÷
 // and sqrt, so the same on every platform.
+//
+// JAMA's loops run down the columns of its matrix `V`: they work here on its transpose `w`
+// (`V[r][c]` is `w[c * n + r]`), along contiguous rows, with the same operations in the same
+// order.
+#[cfg(test)]
 fn eigen(matrix: &[f64], n: usize) -> (Vec<f64>, Vec<f64>) {
-    let mut v = matrix.to_vec();
+    let (values, transposed) = eigen_transposed(matrix, n);
+    let mut vectors = Vec::new();
+    transpose_into(&transposed, n, &mut vectors);
+    (values, vectors)
+}
+
+// `eigen` with the eigenvectors as the rows of a row-major matrix
+fn eigen_transposed(matrix: &[f64], n: usize) -> (Vec<f64>, Vec<f64>) {
+    // `V` starts as the symmetric matrix, its own transpose
+    debug_assert!((0..n).all(|i| (0..i).all(|j| matrix[i * n + j] == matrix[j * n + i])));
+    let mut w = matrix.to_vec();
     let mut d = vec![0.0; n];
     let mut e = vec![0.0; n];
-    tridiagonalize(&mut v, &mut d, &mut e, n);
-    diagonalize(&mut v, &mut d, &mut e, n);
-    (d, v)
+    tridiagonalize(&mut w, &mut d, &mut e, n);
+    diagonalize(&mut w, &mut d, &mut e, n);
+    (d, w)
+}
+
+// the transpose of the row-major `n × n` matrix into `transposed` (empty for an empty matrix)
+fn transpose_into(matrix: &[f64], n: usize, transposed: &mut Vec<f64>) {
+    transposed.clear();
+    if !matrix.is_empty() {
+        for c in 0..n {
+            transposed.extend(matrix[c..].iter().step_by(n));
+        }
+    }
 }
 
 // sqrt(a² + b²) without overflow or underflow
@@ -749,19 +777,22 @@ fn hypot(a: f64, b: f64) -> f64 {
     }
 }
 
-// tred2: the Householder reduction of the symmetric `v` to a tridiagonal matrix with diagonal
-// `d` and subdiagonal `e[1..]`, and the transformation in `v`
-fn tridiagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
-    d.copy_from_slice(&v[(n - 1) * n..]);
+// tred2: the Householder reduction of the symmetric `V` to a tridiagonal matrix with diagonal
+// `d` and subdiagonal `e[1..]`, and the transformation in `V`, transposed in `w`
+fn tridiagonalize(w: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
+    // the last row of V
+    for (j, x) in d.iter_mut().enumerate() {
+        *x = w[j * n + n - 1];
+    }
     for i in (1..n).rev() {
         let scale: f64 = d[..i].iter().map(|x| x.abs()).sum();
         let mut h = 0.0;
         if scale == 0.0 {
             e[i] = d[i - 1];
             for j in 0..i {
-                d[j] = v[(i - 1) * n + j];
-                v[i * n + j] = 0.0;
-                v[j * n + i] = 0.0;
+                d[j] = w[j * n + i - 1];
+                w[j * n + i] = 0.0;
+                w[i * n + j] = 0.0;
             }
         } else {
             // the Householder vector
@@ -781,66 +812,72 @@ fn tridiagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
             // the similarity transformation of the remaining columns
             for j in 0..i {
                 f = d[j];
-                v[j * n + i] = f;
-                g = e[j] + v[j * n + j] * f;
-                for k in j + 1..i {
-                    g += v[k * n + j] * d[k];
-                    e[k] += v[k * n + j] * f;
+                w[i * n + j] = f;
+                // column j of V from the diagonal down to row i − 1
+                let column = &w[j * n + j..j * n + i];
+                g = e[j] + column[0] * f;
+                let below = column[1..].iter().zip(&d[j + 1..i]).zip(&mut e[j + 1..i]);
+                for ((&x, &dk), ek) in below {
+                    g += x * dk;
+                    *ek += x * f;
                 }
                 e[j] = g;
             }
             f = 0.0;
-            for j in 0..i {
-                e[j] /= h;
-                f += e[j] * d[j];
+            for (ej, &dj) in e[..i].iter_mut().zip(&d[..i]) {
+                *ej /= h;
+                f += *ej * dj;
             }
             let hh = f / (h + h);
-            for j in 0..i {
-                e[j] -= hh * d[j];
+            for (ej, &dj) in e[..i].iter_mut().zip(&d[..i]) {
+                *ej -= hh * dj;
             }
             for j in 0..i {
                 f = d[j];
                 g = e[j];
-                for k in j..i {
-                    v[k * n + j] -= f * e[k] + g * d[k];
+                let column = &mut w[j * n + j..j * n + i];
+                for ((x, &ek), &dk) in column.iter_mut().zip(&e[j..i]).zip(&d[j..i]) {
+                    *x -= f * ek + g * dk;
                 }
-                d[j] = v[(i - 1) * n + j];
-                v[i * n + j] = 0.0;
+                d[j] = w[j * n + i - 1];
+                w[j * n + i] = 0.0;
             }
         }
         d[i] = h;
     }
     // the accumulated transformations
     for i in 0..n - 1 {
-        v[(n - 1) * n + i] = v[i * n + i];
-        v[i * n + i] = 1.0;
+        w[i * n + n - 1] = w[i * n + i];
+        w[i * n + i] = 1.0;
         let h = d[i + 1];
+        // columns 0..=i of V, and column i + 1, down to row i
+        let (columns, after) = w.split_at_mut((i + 1) * n);
+        let next = &mut after[..=i];
         if h != 0.0 {
-            for k in 0..=i {
-                d[k] = v[k * n + i + 1] / h;
+            for (dk, &x) in d[..=i].iter_mut().zip(&*next) {
+                *dk = x / h;
             }
-            for j in 0..=i {
-                let g: f64 = (0..=i).map(|k| v[k * n + i + 1] * v[k * n + j]).sum();
-                for k in 0..=i {
-                    v[k * n + j] -= g * d[k];
+            for column in columns.chunks_exact_mut(n) {
+                let column = &mut column[..=i];
+                let g: f64 = next.iter().zip(&*column).map(|(a, b)| a * b).sum();
+                for (x, &dk) in column.iter_mut().zip(&d[..=i]) {
+                    *x -= g * dk;
                 }
             }
         }
-        for k in 0..=i {
-            v[k * n + i + 1] = 0.0;
-        }
+        next.fill(0.0);
     }
     for j in 0..n {
-        d[j] = v[(n - 1) * n + j];
-        v[(n - 1) * n + j] = 0.0;
+        d[j] = w[j * n + n - 1];
+        w[j * n + n - 1] = 0.0;
     }
-    v[(n - 1) * n + n - 1] = 1.0;
+    w[(n - 1) * n + n - 1] = 1.0;
     e[0] = 0.0;
 }
 
-// tql2: the eigenvalues (in `d`) and eigenvectors (the columns of `v`) of the tridiagonal matrix
-// from `tridiagonalize`, by the implicit QL method
-fn diagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
+// tql2: the eigenvalues (in `d`) and eigenvectors (the columns of `V`, the rows of `w`) of the
+// tridiagonal matrix from `tridiagonalize`, by the implicit QL method
+fn diagonalize(w: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
     e.copy_within(1.., 0);
     e[n - 1] = 0.0;
     let mut f = 0.0;
@@ -886,10 +923,12 @@ fn diagonalize(v: &mut [f64], d: &mut [f64], e: &mut [f64], n: usize) {
                     c = p / r;
                     p = c * d[i] - s * g;
                     d[i + 1] = h + s * (c * g + s * d[i]);
-                    for k in 0..n {
-                        h = v[k * n + i + 1];
-                        v[k * n + i + 1] = s * v[k * n + i] + c * h;
-                        v[k * n + i] = c * v[k * n + i] - s * h;
+                    // the rotation of columns i and i + 1 of V
+                    let (before, after) = w.split_at_mut((i + 1) * n);
+                    for (x, y) in before[i * n..].iter_mut().zip(&mut after[..n]) {
+                        let h = *y;
+                        *y = s * *x + c * h;
+                        *x = c * *x - s * h;
                     }
                 }
                 p = -s * s2 * c3 * el1 * e[l] / dl1;
