@@ -1,8 +1,9 @@
 //! Crossover and mutation of trees: every child is typed and within its representation's limits.
 
+use super::primitives::PrimitiveSet;
 use super::primitives::{INFINITE, Type};
 use super::representation::{Gp, Method, generate};
-use super::tree::{Tree, for_each_depth, subtree_end};
+use super::tree::{Node, Tree, for_each_depth, subtree_end};
 use crate::genome::Genome;
 use crate::operator::{Crossover, Mutate, check_probability, check_size};
 use crate::rng::Chance;
@@ -201,6 +202,97 @@ impl<P: Copy + Debug + Send + Sync> Crossover<Gp<P>> for SubtreeCrossover {
     }
 }
 
+/// One-point crossover (Poli and Langdon 1998): the two parents are aligned from their roots,
+/// and a point of their common region, chosen uniformly, exchanges the subtrees there.
+///
+/// The common region is where the two trees have the same shape: the roots, and the children of
+/// every pair of aligned functions with the same argument types (the same arity, in untyped
+/// genetic programming), in order. Aligned nodes have the same type and depth, so the children
+/// are typed and within the depth limit; points whose exchange would put a child over the size
+/// limit are left out. The roots are a point of the region too: exchanging them exchanges the
+/// parents whole.
+///
+/// Its interest is theoretical: its schema theory is exact (Poli and Langdon 1998). For search,
+/// [`SubtreeCrossover`] is the usual choice.
+///
+/// ```
+/// use genoxide::gp::{Gp, OnePointCrossover, PrimitiveSet};
+/// use genoxide::prelude::*;
+///
+/// #[derive(Clone, Copy, Debug)]
+/// enum Op {
+///     Add,
+///     Mul,
+///     X,
+///     Y,
+/// }
+///
+/// let mut set = PrimitiveSet::builder();
+/// let real = set.new_type("real");
+/// set.function("add", Op::Add, [real, real], real)
+///     .function("mul", Op::Mul, [real, real], real)
+///     .terminal("x", Op::X, real)
+///     .terminal("y", Op::Y, real);
+/// let gp = Gp::builder(set.build(real)?).build()?;
+/// let mut a = gp.primitives().parse("add(x, mul(x, x))")?;
+/// let mut b = gp.primitives().parse("mul(y, y)")?;
+/// OnePointCrossover.crossover(&gp, &mut a, &mut b, &mut StreamRng::seed_from_u64(1));
+/// // the common region: the roots, and their first and second children
+/// assert!(gp.validate(&a).is_ok() && gp.validate(&b).is_ok());
+/// assert_eq!(a.len() + b.len(), 8);
+/// # Ok::<(), genoxide::Error>(())
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct OnePointCrossover;
+
+impl<P: Copy + Debug + Send + Sync> Crossover<Gp<P>> for OnePointCrossover {
+    fn crossover(&self, gp: &Gp<P>, a: &mut Tree, b: &mut Tree, rng: &mut StreamRng) {
+        if a.is_empty() || b.is_empty() {
+            return;
+        }
+        let set = gp.primitives();
+        let (mut shapes_a, mut shapes_b) = (Vec::new(), Vec::new());
+        shapes(gp, a, &mut shapes_a);
+        shapes(gp, b, &mut shapes_b);
+        let (len_a, len_b, max_size) = (a.len(), b.len(), gp.max_size());
+        // the aligned pairs of the common region whose exchange fits the size limit: the two
+        // trees walked in step, into the children of functions with the same argument types,
+        // past the subtrees of any others
+        let mut pairs = Vec::new();
+        let (mut i, mut j) = (0, 0);
+        while i < len_a && j < len_b {
+            let (x, y) = (shapes_a[i].size as usize, shapes_b[j].size as usize);
+            if len_a - x + y <= max_size && len_b - y + x <= max_size {
+                pairs.push((i, j));
+            }
+            if same_arguments(set, &a.nodes()[i], &b.nodes()[j]) {
+                (i, j) = (i + 1, j + 1);
+            } else {
+                (i, j) = (i + x, j + y);
+            }
+        }
+        if pairs.is_empty() {
+            return;
+        }
+        let (i, j) = pairs[rng.below(pairs.len())];
+        let (x, y) = (shapes_a[i].size as usize, shapes_b[j].size as usize);
+        let from_a = a.nodes()[i..i + x].to_vec();
+        let from_b = &b.nodes()[j..j + y];
+        a.nodes_mut().splice(i..i + x, from_b.iter().copied());
+        b.nodes_mut().splice(j..j + y, from_a);
+    }
+}
+
+// whether two nodes have the same argument types, so their children align
+fn same_arguments<P: Copy>(set: &PrimitiveSet<P>, x: &Node, y: &Node) -> bool {
+    let args = |node: &Node| match *node {
+        Node::Primitive(index) => set.primitives()[index as usize].args(),
+        Node::Constant { .. } => &[],
+    };
+    args(x) == args(y)
+}
+
 /// Subtree mutation (Koza 1992; Poli, Langdon and McPhee 2008, sec. 2.4): a node chosen
 /// uniformly is replaced, with its subtree, by a subtree of the same type grown by the grow
 /// method, of depth at most [`max_depth`](SubtreeMutation::max_depth) (4 by default) and within
@@ -274,8 +366,15 @@ impl SubtreeMutation {
 
 impl<P: Copy + Debug + Send + Sync> Mutate<Gp<P>> for SubtreeMutation {
     fn mutate(&self, gp: &Gp<P>, tree: &mut Tree, rng: &mut StreamRng) {
+        self.apply(gp, tree, rng);
+    }
+}
+
+impl SubtreeMutation {
+    // mutates the tree; false if no subtree can change (then the tree is unchanged)
+    pub(crate) fn apply<P: Copy>(&self, gp: &Gp<P>, tree: &mut Tree, rng: &mut StreamRng) -> bool {
         if tree.is_empty() {
-            return;
+            return false;
         }
         let set = gp.primitives();
         let point = rng.below(tree.len());
@@ -292,7 +391,7 @@ impl<P: Copy + Debug + Send + Sync> Mutate<Gp<P>> for SubtreeMutation {
         let budget = gp.max_size().saturating_sub(tree.len() - (end - point));
         let fewest = |depth: usize| set.min_size(ty, depth);
         if fewest(room) == INFINITE || fewest(room) as usize > budget {
-            return;
+            return false;
         }
         let mut depth = self.max_depth.min(room);
         while fewest(depth) as usize > budget {
@@ -316,5 +415,6 @@ impl<P: Copy + Debug + Send + Sync> Mutate<Gp<P>> for SubtreeMutation {
             }
         }
         tree.nodes_mut().splice(point..end, subtree);
+        true
     }
 }

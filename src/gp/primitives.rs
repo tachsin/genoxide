@@ -142,6 +142,38 @@ impl Constants {
         }
     }
 
+    // whether there's a value other than `value` (by its bits)
+    pub(crate) fn has_other(&self, value: f64) -> bool {
+        match self {
+            Constants::Uniform { low, high } => low < high || value.to_bits() != low.to_bits(),
+            Constants::Integers { low, high } => low < high || value != *low as f64,
+            Constants::Choice(values) => values.iter().any(|v| v.to_bits() != value.to_bits()),
+        }
+    }
+
+    // a random value other than `value`, for constants that have one
+    pub(crate) fn other(&self, value: f64, rng: &mut StreamRng) -> f64 {
+        match self {
+            Constants::Uniform { low, high } if low < high => {
+                crate::genome::real::random_other_in(&(*low..=*high), value, rng)
+            }
+            Constants::Integers { low, high } if low < high && self.contains(value) => {
+                crate::genome::integer::random_other_in(&(*low..=*high), value as i64, rng) as f64
+            }
+            Constants::Choice(values) => {
+                let other = |v: &&f64| v.to_bits() != value.to_bits();
+                let count = values.iter().filter(other).count();
+                *values
+                    .iter()
+                    .filter(other)
+                    .nth(rng.below(count))
+                    .expect("another value")
+            }
+            // a single value, other than `value`
+            _ => self.sample(rng),
+        }
+    }
+
     // checked like the constructors, for deserialized constants
     #[cfg(feature = "serde")]
     fn checked(self) -> Result<Self> {
@@ -316,6 +348,10 @@ struct Tables {
     columns: usize,
     // the primitives by name
     names: BTreeMap<String, u32>,
+    // the primitives of each signature (argument and return types), and each primitive's
+    // signature: what point mutation exchanges
+    signatures: Vec<Vec<u32>>,
+    signature_of: Vec<u32>,
 }
 
 // no tree of the type fits
@@ -413,6 +449,20 @@ impl<P: Copy> PrimitiveSet<P> {
                 setting: "primitives",
                 reason,
             })?;
+        let mut signature_ids: BTreeMap<(Type, &[Type]), u32> = BTreeMap::new();
+        let mut signatures: Vec<Vec<u32>> = Vec::new();
+        let mut signature_of = Vec::with_capacity(primitives.len());
+        for (index, primitive) in primitives.iter().enumerate() {
+            let next = signatures.len() as u32;
+            let id = *signature_ids
+                .entry((primitive.returns, &primitive.args))
+                .or_insert(next);
+            if id == next {
+                signatures.push(Vec::new());
+            }
+            signatures[id as usize].push(index as u32);
+            signature_of.push(id);
+        }
         let tables = Tables {
             terminals,
             functions,
@@ -420,6 +470,8 @@ impl<P: Copy> PrimitiveSet<P> {
             min_size,
             columns,
             names,
+            signatures,
+            signature_of,
         };
         let set = Self {
             types,
@@ -531,6 +583,12 @@ impl<P: Copy> PrimitiveSet<P> {
     #[inline]
     pub(crate) fn functions_of(&self, ty: Type) -> &[u32] {
         &self.tables.functions[ty.index()]
+    }
+
+    // the primitives with the signature of primitive `index`, itself included, in order
+    #[inline]
+    pub(crate) fn same_signature(&self, index: u32) -> &[u32] {
+        &self.tables.signatures[self.tables.signature_of[index as usize] as usize]
     }
 
     #[inline]

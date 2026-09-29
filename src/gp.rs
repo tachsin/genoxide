@@ -12,6 +12,16 @@
 //! | [`Gp`] | The representation: a set, a depth limit (17) and a size limit (1024), and the initialization, [`Init`] (ramped half-and-half, depths 2 to 6) |
 //! | [`SubtreeCrossover`] | Exchanges subtrees of the same type, at function nodes 90% of the time, keeping both children within the limits |
 //! | [`SubtreeMutation`] | Replaces a subtree by a new one grown in its place |
+//! | [`PointMutation`], [`HoistMutation`], [`ShrinkMutation`], [`ConstantMutation`] | Replace nodes by others of the same signature, the tree by one of its subtrees, a subtree by a leaf, move a constant |
+//! | [`Mutations`] | A mix of the mutations, one per call, by weight |
+//! | [`OnePointCrossover`] | Exchanges subtrees at a point of the two trees' common region (Poli and Langdon 1998) |
+//! | [`boolean`] | Koza's multiplexer and even-parity problems |
+//!
+//! Against bloat, the growth of trees without better fitness, [`operator::select`](crate::operator::select)
+//! has [`DoubleTournament`](crate::operator::DoubleTournament),
+//! [`LexicographicTournament`](crate::operator::LexicographicTournament) and
+//! [`Tarpeian`](crate::operator::Tarpeian), which see a tree's size as its
+//! [`len`](crate::genome::Genome::len); hoist and shrink mutation make trees smaller.
 //!
 //! Three ways to evaluate a tree, none allocating once its workspace has grown:
 //!
@@ -108,19 +118,36 @@
 //!   199-230. doi:10.1162/evco.1995.3.2.199. Types, and generating typed trees within a depth
 //!   from a table of the types possible at each depth.
 //! - Poli, R., Langdon, W. B. and McPhee, N. F. (2008). *A Field Guide to Genetic Programming.*
-//!   lulu.com, <http://www.gp-field-guide.org.uk>. Prefix arrays, and subtree mutation.
+//!   lulu.com, <http://www.gp-field-guide.org.uk>. Prefix arrays; subtree mutation; point, hoist
+//!   and shrink mutation (sec. 5.2.2, shrink after Angeline 1996, as cited there); mutation of
+//!   constants by Gaussian noise (after Schoenauer et al. 1996, as cited there); one-point
+//!   crossover's common region (sec. 5.3).
 //! - Angeline, P. J. (1996). An investigation into the sensitivity of genetic programming to the
 //!   frequency of leaf selection during subtree crossover. *Genetic Programming 1996*: 21-29.
 //!   The internal-point rate as a setting.
+//! - Kinnear, K. E. Jr. (1993). Evolving a sort: lessons in genetic programming. *IEEE
+//!   International Conference on Neural Networks 1993*. Hoist mutation: a copy of the subtree of
+//!   a function node becomes the new individual. (The Field Guide cites Kinnear 1994, *IEEE World
+//!   Congress on Computational Intelligence 1994*: 142-147, doi:10.1109/ICEC.1994.350026, which
+//!   uses hoist and refers to the 1993 paper for its definition.)
+//! - Poli, R. and Langdon, W. B. (1998). Schema theory for genetic programming with one-point
+//!   crossover and point mutation. *Evolutionary Computation* 6(3): 231-252.
+//!   doi:10.1162/evco.1998.6.3.231. One-point crossover.
 
+pub mod boolean;
 mod evaluate;
+mod mutations;
 mod operators;
 mod primitives;
 mod representation;
 mod tree;
 
 pub use evaluate::Columns;
-pub use operators::{SubtreeCrossover, SubtreeMutation};
+pub use mutations::{
+    ConstantMutation, HoistMutation, Mutations, MutationsBuilder, PointMutation, ShrinkMutation,
+    TreeMutation,
+};
+pub use operators::{OnePointCrossover, SubtreeCrossover, SubtreeMutation};
 pub use primitives::{Constants, Primitive, PrimitiveSet, PrimitiveSetBuilder, Type};
 pub use representation::{Gp, GpBuilder, Init};
 pub use tree::{Children, Display, Node, Subtree, Tree};

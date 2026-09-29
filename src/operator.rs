@@ -34,7 +34,8 @@ pub use permutation::{
     OrderCrossover, PartiallyMappedCrossover, ScrambleMutation,
 };
 pub use select::{
-    RandomSelection, Rank, Roulette, StochasticUniversalSampling, Tournament, Truncation,
+    DoubleTournament, LexicographicTournament, RandomSelection, Rank, Roulette,
+    StochasticUniversalSampling, Tarpeian, Tournament, Truncation,
 };
 
 use crate::genome::{Genome, Representation};
