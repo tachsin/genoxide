@@ -37,6 +37,7 @@ pub struct StreamRng {
 
 impl StreamRng {
     /// A generator seeded with `seed`: the same seed always gives the same numbers.
+    #[inline]
     pub fn seed_from_u64(seed: u64) -> Self {
         Self {
             inner: ChaCha8Rng::seed_from_u64(seed),
@@ -77,11 +78,13 @@ const DERIVE_WORD_POS: u128 = 1 << 64;
 // are the same on every platform, and don't change when rand changes its sampling algorithms.
 impl StreamRng {
     /// A uniformly random integer in `0..n`. `n` must not be 0.
+    #[inline]
     pub(crate) fn below(&mut self, n: usize) -> usize {
         self.below_u64(n as u64) as usize
     }
 
     /// A uniformly random integer in `0..n` (Lemire's method, unbiased). `n` must not be 0.
+    #[inline]
     pub(crate) fn below_u64(&mut self, n: u64) -> u64 {
         debug_assert!(n > 0, "below(0)");
         let mut product = u128::from(self.next_u64()) * u128::from(n);
@@ -95,6 +98,7 @@ impl StreamRng {
     }
 
     /// A uniformly random `f64` in `[0, 1)`, with 53 random bits.
+    #[inline]
     pub(crate) fn unit_f64(&mut self) -> f64 {
         (self.next_u64() >> 11) as f64 * (1.0 / (1u64 << 53) as f64)
     }
@@ -116,6 +120,7 @@ impl StreamRng {
     }
 
     /// `true` with probability `chance`.
+    #[inline]
     pub(crate) fn chance(&mut self, chance: Chance) -> bool {
         match chance {
             Chance::Never => false,
