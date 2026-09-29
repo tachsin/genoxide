@@ -186,7 +186,7 @@ pub fn non_dominated_sort<const M: usize>(
     scores: &[Scores<M>],
     objectives: &[Objective; M],
 ) -> Vec<Vec<usize>> {
-    let mut feasible = Vec::new();
+    let mut feasible = Vec::with_capacity(scores.len());
     let mut infeasible = Vec::new();
     let mut invalid = Vec::new();
     for (index, score) in scores.iter().enumerate() {
@@ -207,12 +207,17 @@ pub fn non_dominated_sort<const M: usize>(
     } else {
         ens_ranks(&points)
     };
-    let mut fronts: Vec<Vec<usize>> = Vec::new();
-    for (position, &rank) in ranks.iter().enumerate() {
-        if rank >= fronts.len() {
-            fronts.resize(rank + 1, Vec::new());
+    // each front with room for its members, which are added in ascending order
+    let mut sizes: Vec<usize> = Vec::new();
+    for &rank in &ranks {
+        if rank >= sizes.len() {
+            sizes.resize(rank + 1, 0);
         }
-        fronts[rank].push(feasible[position]);
+        sizes[rank] += 1;
+    }
+    let mut fronts: Vec<Vec<usize>> = sizes.iter().map(|&size| Vec::with_capacity(size)).collect();
+    for (&rank, &index) in ranks.iter().zip(&feasible) {
+        fronts[rank].push(index);
     }
     // one front per violation, smallest first; the sort is stable, so indices stay ascending
     infeasible.sort_by(|&a, &b| scores[a].violation().total_cmp(&scores[b].violation()));
@@ -222,9 +227,7 @@ pub fn non_dominated_sort<const M: usize>(
     if !invalid.is_empty() {
         fronts.push(invalid);
     }
-    for front in &mut fronts {
-        front.sort_unstable();
-    }
+    debug_assert!(fronts.iter().all(|front| front.is_sorted()));
     fronts
 }
 
