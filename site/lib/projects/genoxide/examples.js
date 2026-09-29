@@ -21,8 +21,9 @@ import { GENOXIDE_PATH } from "./meta";
  * Front matter fields: title, category, summary, reference, reference_url,
  * optimum, languages, order, and for the problems of a paper that defines
  * several (ZDT, DTLZ, WFG, CEC 2006...) family and tab: `family` names the
- * group, whose pages show its members as tabs and which the sidebar lists
- * together, and `tab` is the example's short label there (its title when
+ * group, whose pages show its members as tabs, which the sidebar lists
+ * together and the index shows as one card, and `tab` is the example's short
+ * label there (its title when
  * absent). All optional: a missing one falls back to something derived from
  * the folder, so a half-written README still shows.
  */
@@ -238,6 +239,112 @@ export function exampleTree(examples) {
   return [...groups]
     .map(([category, entries]) => ({ category, entries }))
     .filter((group) => group.entries.length);
+}
+
+/**
+ * What a family's problems test, for its card in the examples grid: one sentence, general enough
+ * to stay true as problems are added. A family missing here shows its paper's title instead.
+ * @type {Record<string, string>}
+ */
+const FAMILY_SUMMARIES = {
+  "CEC 2006":
+    "The constrained problems of the CEC 2006 competition: linear and nonlinear inequalities and equalities, some with a feasible region that is tiny or in pieces.",
+  DTLZ: "Scalable to any number of objectives, here three: fronts that are a plane, part of a sphere, a curve or disconnected regions, some behind many local fronts.",
+  WFG: "Two objectives from the WFG toolkit: convex, concave, linear, mixed and disconnected fronts behind biased, deceptive, multimodal and non-separable parameters.",
+  ZDT: "Two conflicting objectives, with convex, concave, disconnected, multimodal, deceptive and unevenly crowded Pareto fronts.",
+  Hartmann: "Hartmann's function, four Gaussian wells in the unit cube, in 3 and 6 dimensions.",
+  Shekel: "Shekel's function in 4 dimensions, with 5, 7 or 10 narrow wells.",
+  Schwefel: "Two of the problems of Schwefel's book: a rotated ellipsoid and a deceptive function.",
+  Schaffer: "One variable and two objectives, from the paper of the first multi-objective genetic algorithm, VEGA.",
+  Viennet: "Three objectives of two variables, with curved and split Pareto fronts.",
+};
+
+/**
+ * The authors' surnames, the year and the title of a reference: from "Huband, S., Hingston, P.,
+ * Barone, L. and While, L. (2006). A review of multiobjective test problems...", "Huband et al.",
+ * "2006" and "A review of multiobjective test problems...". Null for a reference in another form.
+ * @param {string} reference
+ * @returns {{ authors: string, year: string, title: string | null } | null}
+ */
+function citation(reference) {
+  const match = /^(.*?)\s*\((\d{4})[a-z]?\)\.?\s*/.exec(reference);
+  if (!match) return null;
+  // "Surname, I. J., Other, K. and Last, L.": the surnames are the parts that aren't initials
+  const surnames = match[1]
+    .replace(/\s+and\s+/g, ", ")
+    .split(/,\s*/)
+    .map((part) => part.trim())
+    .filter((part) => part && !part.endsWith("."));
+  if (!surnames.length) return null;
+  const authors =
+    surnames.length === 1 ? surnames[0] : surnames.length === 2 ? surnames.join(" and ") : `${surnames[0]} et al.`;
+  const title = /^(.+?[.?!])(?:\s|$)/.exec(reference.slice(match[0].length))?.[1].replace(/\.$/, "") ?? null;
+  return { authors, year: match[2], title };
+}
+
+/**
+ * @typedef {object} ExampleCardData  one example in the grid
+ * @property {string} slug
+ * @property {string} title
+ * @property {string} category
+ * @property {string} summary
+ * @property {CodeLanguage[]} languages
+ */
+
+/**
+ * @typedef {object} ExampleFamilyCardData  a family in the grid
+ * @property {"family"} kind
+ * @property {string} name
+ * @property {string} category  its first member's
+ * @property {string} summary   from FAMILY_SUMMARIES, or its paper's title
+ * @property {string | null} cite  its papers' authors and years, e.g. "Deb et al. (2001, 2002)"
+ * @property {CodeLanguage[]} languages  those every member has
+ * @property {(ExampleCardData & { label: string })[]} members  in their order
+ */
+
+/** @typedef {({ kind: "example" } & ExampleCardData) | ExampleFamilyCardData} ExampleGridEntry */
+
+/**
+ * Every example for the index's grid, in order, with only what the grid shows: a family as one
+ * entry where its first member is, with its members inside, as in the sidebar's exampleTree.
+ * @param {ExampleSummary[]} examples  sorted
+ * @returns {ExampleGridEntry[]}
+ */
+export function exampleGrid(examples) {
+  const card = ({ slug, title, category, summary, languages }) => ({ slug, title, category, summary, languages });
+  const entries = [];
+  const families = new Map();
+  for (const e of examples) {
+    if (!e.family) {
+      entries.push({ kind: "example", ...card(e) });
+      continue;
+    }
+    let family = families.get(e.family);
+    if (!family) {
+      family = { members: [], references: [] };
+      families.set(e.family, family);
+      entries.push({ kind: "family", name: e.family, category: e.category, family });
+    }
+    family.members.push({ ...card(e), label: e.tab ?? e.title });
+    if (e.reference && !family.references.includes(e.reference)) family.references.push(e.reference);
+  }
+  return entries.map((entry) => {
+    if (entry.kind === "example") return entry;
+    const { members, references } = entry.family;
+    const cites = references.map(citation).filter(Boolean);
+    // one per list of authors, with its years: "Deb et al. (2001, 2002)"
+    const years = new Map();
+    for (const { authors, year } of cites) years.set(authors, [...new Set([...(years.get(authors) ?? []), year])]);
+    return {
+      kind: "family",
+      name: entry.name,
+      category: entry.category,
+      summary: FAMILY_SUMMARIES[entry.name] ?? cites.find((c) => c.title)?.title ?? "",
+      cite: years.size ? [...years].map(([authors, list]) => `${authors} (${list.sort().join(", ")})`).join("; ") : null,
+      languages: ["rust", "python"].filter((l) => members.every((m) => m.languages.includes(l))),
+      members,
+    };
+  });
 }
 
 /**
