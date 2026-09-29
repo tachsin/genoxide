@@ -1,4 +1,4 @@
-Hartmann 6-D: best known minimum -3.32237, 30 seeds, 10000 evaluations at most per run
+Hartmann 6-D: best known minimum -3.32237, 30 seeds, 20000 evaluations at most per run
 runs              at -3.32237  at -3.20316  elsewhere  evaluations: median  largest
 CMA-ES                     21            9          0                  648      864
 CMA-ES with IPOP           30            0          0                  675     6489

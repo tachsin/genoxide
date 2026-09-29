@@ -62,7 +62,17 @@ minimum. 30 is the dimension of Yao, Liu and Lin's comparison.
 ## Algorithm
 
 Three algorithms, each with a budget of 10,000 evaluations per dimension, 300,000 in all, and a
-target 1e-8 above the minimum.
+target 1e-8 above the minimum: L-SHADE, which reaches it, and, for contrast, CMA-ES and a particle
+swarm, which don't.
+
+L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665) is a differential evolution. For
+each parent, it makes a mutant point from the parent and the differences between other points. The
+trial point takes each gene from the mutant with a probability CR, and the others from the parent.
+L-SHADE adapts CR from the trials that succeeded. With a small CR, a trial changes a few genes and
+keeps the rest: on a separable function, a gene can jump to a better basin without the others
+losing theirs. Its population starts at 18 times the number of genes, 540, and shrinks linearly to
+4 over the budget. genoxide's `De::l_shade` takes L-SHADE's settings, so the example only gives it
+the budget.
 
 CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) samples a population
 from a normal distribution, and adapts its mean, step size and covariance matrix. It uses genoxide's
@@ -75,20 +85,13 @@ particles on a ring: each follows the best of itself and its two neighbors, so t
 spread slowly and the swarm explores for longer. It uses Clerc and Kennedy's constriction
 coefficients (2002, IEEE Transactions on Evolutionary Computation 6(1): 58-73).
 
-L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665) is a differential evolution. For
-each parent, it makes a mutant point from the parent and the differences between other points. The
-trial point takes each gene from the mutant with a probability CR, and the others from the parent.
-L-SHADE adapts CR from the trials that succeeded. With a small CR, a trial changes a few genes and
-keeps the rest: on a separable function, a gene can jump to a better basin without the others
-losing theirs. Its
-population starts at 18 times the number of genes, 540, and shrinks linearly to 4 over the budget.
-genoxide's `De::l_shade` takes L-SHADE's settings, so the example only gives it the budget.
-
 ## Output
 
-The first line gives the minimum. Then one line per algorithm: the best value it found, to 2
-decimals, and how many of its 30 genes are within 1 of 420.97, in the basin of the global minimum.
-In Python, `run` evaluates the function in Rust, so both versions print the same.
+The first line gives the minimum and the budget. Then one line per algorithm, L-SHADE's first and
+then the two contrasts: the best value it found, to 2 decimals, its error (the best value minus the
+minimum, to two significant digits), and how many of its 30 genes are within 1 of 420.97, in the
+basin of the global minimum. In Python, `run` evaluates the function in Rust, so both versions
+print the same.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/schwefel-2-26) plays back another
 run: L-SHADE on Schwefel 2.26 in 2 dimensions, so that the population can be drawn on the
@@ -96,14 +99,15 @@ function's contour.
 
 ## Good results
 
-The minimum is −12569.49, with all 30 genes at 420.97. Only L-SHADE reaches it, after about 222,000
-evaluations. CMA-ES ends at −7871.22, with 8 genes at 420.97, and PSO at −8573.03, with 11.
+The minimum is −12569.49, with all 30 genes at 420.97. L-SHADE reaches it: its error is 7.7e-9,
+below the target of 1e-8, after about 222,000 evaluations. CMA-ES ends at −7871.22, with 8 genes at
+420.97, and PSO at −8573.03, with 11: both about 4,000 above the minimum.
 
-The difference isn't the seed's. With seeds 1 to 10, L-SHADE reaches the minimum every time, after
-216,000 to 223,000 evaluations. CMA-ES with IPOP restarts ends between −7694 and −8523, and PSO on a
-ring between −8451 and −9326. These results agree with the
+The difference isn't the seed's. With seeds 1 to 20, L-SHADE reaches the minimum every time, after
+at most 223,000 evaluations. With seeds 1 to 10, CMA-ES with IPOP restarts ends between −7694 and
+−8523, and PSO on a ring between −8451 and −9326. These results agree with the
 [function suite](https://tachsin.gr/projects/genoxide/examples/function-suite) in 10 dimensions,
-where CMA-ES and PSO stay far from the minimum and a differential evolution comes within 1e-5 of it.
+where CMA-ES and PSO stay far from the minimum and a differential evolution comes within 1e-8 of it.
 
 In runs not shown here, SHADE with F = 0.5 and a fixed CR, without restarts, with seeds 1 to 3,
 reached the minimum every time with CR = 0.1, and ended 700 to 2,000 above it with CR = 0.9: a

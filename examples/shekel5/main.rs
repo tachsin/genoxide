@@ -28,8 +28,8 @@ const WELLS: [[f64; 4]; 5] = [
     [3.0, 7.0, 3.0, 7.0],
 ];
 const SEEDS: u64 = 30;
-const BUDGET: u64 = 10_000;
-const PARTICLES: usize = 40;
+const BUDGET: u64 = 25_000;
+const PARTICLES: usize = 80;
 // a run stops once its error to the best known minimum is at most this
 const ERROR: f64 = 1e-6;
 

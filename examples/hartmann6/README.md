@@ -76,7 +76,7 @@ range, from a random start. It runs from seeds 1 to 30, twice:
 - with IPOP restarts (Auger and Hansen, 2005, IEEE CEC 2005: 1769-1776): a run that has converged
   starts again from a random point with twice the population.
 
-Each run stops once its value is within 1e-6 of the best known minimum, or after 10,000
+Each run stops once its value is within 1e-6 of the best known minimum, or after 20,000
 evaluations. A run is counted at the other minimum if its best value is within 1e-6 of −3.20316.
 
 ## Output
@@ -105,3 +105,6 @@ restarts.
 The share of runs that end at the other minimum isn't the seeds': over seeds 1 to 1,000, 21% of the
 runs without restarts end there (30% of seeds 1 to 30). Those that restart once use 2,889 to 3,123
 evaluations, and the two that restart twice, from seeds 23 and 28, 6,390 and 6,489.
+
+With IPOP restarts, all the runs of seeds 1 to 1,000 reach the minimum, after at most 11,754
+evaluations. With a budget of 10,000, 7 of them didn't.

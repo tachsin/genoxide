@@ -31,8 +31,8 @@ WELLS = [
     (7.0, 3.6, 7.0, 3.6),
 ]
 SEEDS = 30
-BUDGET = 10_000
-PARTICLES = 40
+BUDGET = 25_000
+PARTICLES = 80
 # a run stops once its error to the best known minimum is at most this
 ERROR = 1e-6
 

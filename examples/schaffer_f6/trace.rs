@@ -1,4 +1,4 @@
-//! The trace of the GA's runs for the plot on the example's page, written to the file that
+//! The trace of SHADE's runs for the plot on the example's page, written to the file that
 //! `GENOXIDE_TRACE` names: the best point of each run side by side on the contour, and the best
 //! value's and the median's error to the minimum, in at most 100 of their generations. The Python
 //! example writes the same file.

@@ -19,6 +19,7 @@ import genoxide as gx
 from trace import Trace
 
 SEARCHES = 20
+STEPS = 3_000
 
 
 def scientific(value):
@@ -37,19 +38,19 @@ trace = Trace(minima)
 for seed in range(1, SEARCHES + 1):
     search = gx.LocalSearch(
         problem.genome,
-        neighbor=gx.GaussianMutation(0.001, rate=1.0),
+        neighbor=gx.GaussianMutation(0.0005, rate=1.0),
         neighbors=10,
         acceptance=gx.Improving(),
         objective="minimize",
         seed=seed,
     )
-    result = search.run(problem, generations=1_000, on_generation=trace.on_generation)
+    result = search.run(problem, generations=STEPS, on_generation=trace.on_generation)
     nearest = int(np.argmin(np.linalg.norm(minima - result.best_genome, axis=1)))
     found[nearest][0] += 1
     found[nearest][1] = min(found[nearest][1], result.best_fitness)
     found[nearest][2] = max(found[nearest][2], result.best_fitness)
 
-print(f"{SEARCHES} local searches from random points in [-5, 5] x [-5, 5]")
+print(f"{SEARCHES} local searches from random points in [-5, 5] x [-5, 5], {STEPS} steps each")
 print("minimum                  searches  values reached")
 for minimum, (searches, best, worst) in zip(minima, found):
     print(
