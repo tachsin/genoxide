@@ -3,7 +3,7 @@
 use super::{Algorithm, Candidates, Reevaluate};
 use crate::genome::{Real, Reals, Representation};
 use crate::math::{exp, ln};
-use crate::operator::check_size;
+use crate::operator::{MAX_SIZE, check_size};
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
 use std::collections::VecDeque;
@@ -18,12 +18,12 @@ pub enum Restarts {
     #[default]
     Never,
     /// IPOP-CMA-ES (Auger and Hansen, 2005): each restart doubles the population size, up to
-    /// 1024 times the initial one, and starts from a random point with the initial step size.
+    /// 1024 times the initial one and 2^24, and starts from a random point with the initial step size.
     /// Larger populations smooth out local optima, which suits multimodal functions with a global
     /// structure, like Rastrigin.
     Ipop,
     /// BIPOP-CMA-ES (Hansen, 2009): restarts alternate between a large population regime, which
-    /// doubles the population like IPOP (up to 1024 times the initial one), and a small one with
+    /// doubles the population like IPOP (up to 1024 times the initial one and 2^24), and a small one with
     /// a random population between the initial size and half the last large one, and a random
     /// step size down to 1/100 of the initial one. The regime that has used fewer evaluations
     /// goes next; the first run counts as a small one, as in Hansen's reference code, so the first
@@ -78,8 +78,16 @@ pub enum Covariance {
     Diagonal,
 }
 
-// the population of every restart is at most this many times the initial one
+// the population of every restart is at most this many times the initial one, and at most
+// `MAX_SIZE`
 const MAX_GROWTH: usize = 1024;
+
+// the population of the next large run: twice the last one, up to `MAX_GROWTH` times the initial
+// one and `MAX_SIZE`
+fn doubled(large_lambda: usize, initial_lambda: usize) -> usize {
+    let limit = initial_lambda.saturating_mul(MAX_GROWTH).min(MAX_SIZE);
+    large_lambda.saturating_mul(2).min(limit)
+}
 
 // draws of a sample before an out-of-bounds sample is clipped
 const RESAMPLES: usize = 100;
@@ -437,8 +445,7 @@ impl Cmaes {
                 (lambda.max(2), sigma, true)
             }
             _ => {
-                let limit = self.initial_lambda.saturating_mul(MAX_GROWTH);
-                self.large_lambda = self.large_lambda.saturating_mul(2).min(limit);
+                self.large_lambda = doubled(self.large_lambda, self.initial_lambda);
                 (self.large_lambda, self.initial_step, false)
             }
         };
@@ -1665,6 +1672,15 @@ mod tests {
         };
         let (population, distribution, evaluations) = run(false);
         assert_eq!(run(true), (population, distribution, evaluations + 9));
+    }
+
+    #[test]
+    fn large_runs_stay_within_the_size_limit() {
+        assert_eq!(doubled(8, 8), 16);
+        assert_eq!(doubled(8 * 1024, 8), 8 * 1024);
+        assert_eq!(doubled(1 << 23, 1 << 15), MAX_SIZE);
+        assert_eq!(doubled(MAX_SIZE, 1 << 15), MAX_SIZE);
+        assert_eq!(doubled(MAX_SIZE, MAX_SIZE), MAX_SIZE);
     }
 
     #[test]

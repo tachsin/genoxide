@@ -346,15 +346,23 @@ pub enum MultiConfig {
 }
 
 // a size of at least `minimum`, or an error that names it; the constructors panic instead
+// (a genome of more than 2^24 genes is an error too, not a failed allocation)
 fn at_least(value: usize, minimum: usize, name: &str, what: &str) -> Result<usize, String> {
-    if value >= minimum {
-        Ok(value)
-    } else {
+    if value < minimum {
         Err(format!(
             "{name} needs at least {minimum} {what}, not {value}"
         ))
+    } else if value > MAX_GENES {
+        Err(format!(
+            "{name} takes at most {MAX_GENES} (2^24) {what}, not {value}"
+        ))
+    } else {
+        Ok(value)
     }
 }
+
+// the most genes of a problem's genome, as `Real::new` and `Binary::new` accept
+const MAX_GENES: usize = 1 << 24;
 
 // WFG's sizes, checked: 2 to 6 objectives, a positive multiple of objectives − 1 position
 // parameters, and at least 1 distance parameter, an even number for WFG2 and WFG3
@@ -383,6 +391,18 @@ fn check_wfg(
     if even && distance % 2 == 1 {
         return Err(format!(
             "{name} needs an even number of distance parameters, not {distance}"
+        ));
+    }
+    // the default position parameters: 4 for 2 objectives, 2 (objectives − 1) for more
+    let position = position.unwrap_or(if objectives == 2 {
+        4
+    } else {
+        2 * (objectives - 1)
+    });
+    if position.saturating_add(distance) > MAX_GENES {
+        return Err(format!(
+            "{name} takes at most {MAX_GENES} (2^24) position and distance parameters together, not {}",
+            position.saturating_add(distance)
         ));
     }
     Ok(())
@@ -565,7 +585,7 @@ impl MultiConfig {
                     .checked_mul(5)
                     .and_then(|bits| bits.checked_add(first_bits));
                 match bits {
-                    Some(bits) if bits <= 1 << 24 => Ok(()),
+                    Some(bits) if bits <= MAX_GENES => Ok(()),
                     _ => Err("ZDT5's genome has at most 2^24 bits".to_string()),
                 }
             }

@@ -113,9 +113,9 @@ impl Integer {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidSetting`] for no bounds or an empty range.
+    /// [`Error::InvalidSetting`] for no bounds or more than 2^24, or an empty range.
     pub fn new<I: IntoIterator<Item = RangeInclusive<i64>>>(bounds: I) -> Result<Self> {
-        let bounds: Vec<_> = bounds.into_iter().collect();
+        let bounds = super::collect_bounds(bounds)?;
         if bounds.is_empty() {
             return Err(Error::InvalidSetting {
                 setting: "bounds",
@@ -145,7 +145,7 @@ impl Integer {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidSetting`] for a length of 0 or an empty range.
+    /// [`Error::InvalidSetting`] for a length of 0 or above 2^24, or an empty range.
     pub fn uniform(len: usize, bounds: RangeInclusive<i64>) -> Result<Self> {
         Self::new(std::iter::repeat_n(bounds, len))
     }
@@ -254,6 +254,7 @@ impl<'de> serde::Deserialize<'de> for Integer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::operator::MAX_SIZE;
     use proptest::prelude::*;
 
     #[test]
@@ -263,6 +264,10 @@ mod tests {
         let empty = 1..=0;
         assert!(Integer::new([0..=1, empty]).is_err());
         assert!(Integer::uniform(0, 0..=1).is_err());
+        assert!(Integer::uniform(MAX_SIZE, 0..=1).is_ok());
+        for len in [MAX_SIZE + 1, 1 << 40, usize::MAX] {
+            assert!(Integer::uniform(len, 0..=1).is_err());
+        }
         let integer = Integer::new([0..=1, 5..=5]).unwrap();
         assert_eq!(integer.variable_genes(), &[0]);
         assert!(integer.validate(&Integers::from(vec![1, 5])).is_ok());

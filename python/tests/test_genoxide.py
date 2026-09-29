@@ -1213,6 +1213,13 @@ def test_a_bool_length_is_an_error():
         gx.Permutation(np.True_)._describe()
 
 
+def test_lengths_above_2_to_the_24_are_errors():
+    # before a list of 2^40 bounds is made
+    for genome in [gx.Real((0.0, 1.0), length=2**40), gx.Integer((0, 1), length=2**40)]:
+        with pytest.raises(ValueError, match="length is at most 16777216, not 1099511627776"):
+            genome._describe()
+
+
 # --- fitness values that fail to convert keep their error ---------------------------------------
 
 

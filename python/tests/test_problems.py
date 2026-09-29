@@ -251,6 +251,7 @@ def test_sizes():
         (gx.problems.Rosenbrock(1), "Rosenbrock.dimensions is at least 2, not 1"),
         (gx.problems.Sphere(0), "Sphere.dimensions is at least 1, not 0"),
         (gx.problems.Sphere(2.0), "Sphere.dimensions is a whole number"),
+        (gx.problems.Sphere(2**40), "Sphere.dimensions is at most 16777216, not 1099511627776"),
     ],
 )
 def test_wrong_sizes_are_errors(problem, message):
@@ -811,6 +812,18 @@ def test_wfg_sizes_are_checked_in_rust_too():
     description = '{"type": "wfg1", "objectives": 3, "position": 3, "distance": 4}'
     with pytest.raises(ValueError, match="WFG1 needs a positive multiple of 2"):
         gx._genoxide.problem_info(description)
+    # each at most 2^24, but more together
+    with pytest.raises(ValueError, match="WFG1 takes at most 16777216"):
+        gx.problems.Wfg1(position=2**24, distance=2**24).genome
+
+
+def test_problem_sizes_above_2_to_the_24_are_errors_in_rust_too():
+    for description in [
+        '{"type": "sphere", "dimensions": 1099511627776}',
+        '{"type": "zdt1", "variables": 1099511627776}',
+    ]:
+        with pytest.raises(ValueError, match="at most 16777216"):
+            gx._genoxide.problem_info(description)
 
 
 def test_dtlz_variants_at_chosen_points():
@@ -868,6 +881,7 @@ def test_mw_problems_at_chosen_points():
         (gx.problems.ConvexDtlz2(objectives=7), "ConvexDtlz2.objectives is at most 6, not 7"),
         (gx.problems.Mw1(variables=2), "Mw1.variables is at least 3, not 2"),
         (gx.problems.Mw4(variables=3), "Mw4.variables is at least 4, not 3"),
+        (gx.problems.Mw4(variables=2**40), "Mw4.variables is at most 16777216"),
         (gx.problems.Mw8(objectives=1), "Mw8.objectives is at least 2, not 1"),
     ],
 )
@@ -951,6 +965,8 @@ def test_multi_objective_sizes():
         (gx.problems.Dtlz2(objectives=7), "Dtlz2.objectives is at most 6, not 7"),
         (gx.problems.Dtlz2(objectives=1), "Dtlz2.objectives is at least 2, not 1"),
         (gx.problems.Dtlz1(objectives=4, variables=3), "Dtlz1.variables is at least 4, not 3"),
+        (gx.problems.Zdt1(2**40), "Zdt1.variables is at most 16777216, not 1099511627776"),
+        (gx.problems.Dtlz2(variables=2**40), "Dtlz2.variables is at most 16777216"),
     ],
 )
 def test_wrong_multi_objective_sizes_are_errors(problem, message):
@@ -1033,6 +1049,7 @@ def test_constrained_dtlz_sizes():
         (gx.problems.C2Dtlz2(radius=0), "C2-DTLZ2 needs a finite radius above 0, not 0"),
         (gx.problems.C3Dtlz1(objectives=7), "C3Dtlz1.objectives is at most 6, not 7"),
         (gx.problems.C3Dtlz4(variables=2), "C3Dtlz4.variables is at least 3, not 2"),
+        (gx.problems.C3Dtlz4(variables=2**40), "C3Dtlz4.variables is at most 16777216"),
     ],
 )
 def test_wrong_constrained_dtlz_settings_are_errors(problem, message):

@@ -135,10 +135,10 @@ impl Real {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidSetting`] for no bounds, an empty range (NaN bounds included), or a range
-    /// whose width isn't finite, e.g. `-f64::MAX..=f64::MAX`.
+    /// [`Error::InvalidSetting`] for no bounds or more than 2^24, an empty range (NaN bounds
+    /// included), or a range whose width isn't finite, e.g. `-f64::MAX..=f64::MAX`.
     pub fn new<I: IntoIterator<Item = RangeInclusive<f64>>>(bounds: I) -> Result<Self> {
-        let bounds: Vec<_> = bounds.into_iter().collect();
+        let bounds = super::collect_bounds(bounds)?;
         if bounds.is_empty() {
             return Err(Error::InvalidSetting {
                 setting: "bounds",
@@ -173,7 +173,8 @@ impl Real {
     ///
     /// # Errors
     ///
-    /// As [`new`](Real::new): [`Error::InvalidSetting`] for a length of 0 or invalid bounds.
+    /// As [`new`](Real::new): [`Error::InvalidSetting`] for a length of 0 or above 2^24, or
+    /// invalid bounds.
     pub fn uniform(len: usize, bounds: RangeInclusive<f64>) -> Result<Self> {
         Self::new(std::iter::repeat_n(bounds, len))
     }
@@ -270,11 +271,19 @@ impl<'de> serde::Deserialize<'de> for Real {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::operator::MAX_SIZE;
     use proptest::prelude::*;
 
     #[test]
     fn validation() {
         assert!(Real::new([]).is_err());
+        assert!(Real::uniform(MAX_SIZE, 0.0..=1.0).is_ok());
+        for len in [MAX_SIZE + 1, 1 << 40, usize::MAX] {
+            assert!(Real::uniform(len, 0.0..=1.0).is_err());
+        }
+        // no size hint: counted while collected
+        let genes = std::iter::from_fn(|| Some(0.0..=1.0));
+        assert!(Real::new(genes.take(MAX_SIZE + 1)).is_err());
         assert!(Real::new([0.0..=f64::NAN]).is_err());
         assert!(Real::new([1.0..=0.0]).is_err());
         assert!(Real::new([0.0..=f64::INFINITY]).is_err());

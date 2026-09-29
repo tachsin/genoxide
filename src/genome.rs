@@ -24,6 +24,7 @@ pub use integer::{Integer, Integers};
 pub use permutation::{Order, Permutation};
 pub use real::{Real, Reals};
 
+use crate::operator::MAX_SIZE;
 use crate::{Result, StreamRng};
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -150,4 +151,25 @@ pub trait SwapGenes: Genome {
         let chance = crate::rng::Chance::new(rate);
         rng.chosen(chance, self.len(), |_, index| self.swap_gene(other, index));
     }
+}
+
+// The bounds of a genome, one per gene: at most `MAX_SIZE` of them, checked before and while they
+// are collected, so a huge length is an error instead of a failed allocation.
+pub(crate) fn collect_bounds<B>(bounds: impl IntoIterator<Item = B>) -> Result<Vec<B>> {
+    let too_many = |got: &dyn std::fmt::Display| {
+        Err(crate::Error::InvalidSetting {
+            setting: "bounds",
+            reason: format!("at most {MAX_SIZE} (2^24) genes, got {got}"),
+        })
+    };
+    let mut bounds = bounds.into_iter();
+    let (at_least, _) = bounds.size_hint();
+    if at_least > MAX_SIZE {
+        return too_many(&at_least);
+    }
+    let collected: Vec<_> = bounds.by_ref().take(MAX_SIZE).collect();
+    if bounds.next().is_some() {
+        return too_many(&"more");
+    }
+    Ok(collected)
 }

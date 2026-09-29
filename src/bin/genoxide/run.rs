@@ -168,7 +168,7 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
         ),
         config::Genome::Integer { length, bounds } => {
             let bounds = bounds.per_gene(length)?;
-            let integer = setting(Integer::new(bounds.iter().map(|&[low, high]| low..=high)))?;
+            let integer = setting(Integer::new(bounds.map(|[low, high]| low..=high)))?;
             with_operators(
                 integer,
                 run.algorithm,
@@ -179,7 +179,7 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
         }
         config::Genome::Real { length, bounds } => {
             let bounds = bounds.per_gene(length)?;
-            let real = setting(Real::new(bounds.iter().map(|&[low, high]| low..=high)))?;
+            let real = setting(Real::new(bounds.map(|[low, high]| low..=high)))?;
             real_algorithm(real, run.algorithm, &context)
         }
         config::Genome::Permutation { length } => with_operators(
