@@ -86,7 +86,12 @@ pub enum Topology {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+// deserialized through `Deserialize for Islands`, which checks what the builder checks
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(remote = "Self")
+)]
 #[cfg_attr(
     feature = "serde",
     serde(bound(
@@ -129,6 +134,39 @@ pub struct Islands<A: Migrate> {
     evaluations: u64,
     best: Option<Individual<A::Genome>>,
     best_generation: u64,
+}
+
+#[cfg(feature = "serde")]
+impl<A: Migrate + serde::Serialize> serde::Serialize for Islands<A>
+where
+    A::Genome: serde::Serialize,
+{
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+// the builder's checks that would otherwise panic a run, for a hand-edited or damaged checkpoint:
+// at least one island, whose objective is the islands'
+#[cfg(feature = "serde")]
+impl<'de, A: Migrate + serde::Deserialize<'de>> serde::Deserialize<'de> for Islands<A>
+where
+    A::Genome: serde::Deserialize<'de>,
+{
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        let islands = Self::deserialize(deserializer)?;
+        if islands.islands.is_empty() {
+            return Err(serde::de::Error::custom(
+                "islands need at least 1 island, got none",
+            ));
+        }
+        Ok(islands)
+    }
 }
 
 impl<A: Migrate> Islands<A> {

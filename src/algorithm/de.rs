@@ -27,7 +27,9 @@ pub enum Strategy {
         /// most 1, e.g. 0.05 to 0.2. At least the best individual is always a candidate.
         p: f64,
         /// The size of the archive as a multiple of the population size, 0 for no archive; e.g.
-        /// 1 (JADE) or 2.6 (L-SHADE). When full, a random member makes room.
+        /// 1 (JADE) or 2.6 (L-SHADE). When full, a random member makes room. The archive holds
+        /// copies of genomes: a large multiple takes memory until it fills, up to a population
+        /// per generation.
         archive: f64,
     },
     /// DE/current-to-pbest/1 with a random `p` for every trial, as in SHADE: like
@@ -40,7 +42,9 @@ pub enum Strategy {
         /// and at most 1; SHADE uses 0.2.
         max_p: f64,
         /// The size of the archive as a multiple of the population size, 0 for no archive;
-        /// SHADE uses 1. When full, a random member makes room.
+        /// SHADE uses 1. When full, a random member makes room. The archive holds copies of
+        /// genomes: a large multiple takes memory until it fills, up to a population per
+        /// generation.
         archive: f64,
     },
 }
@@ -190,7 +194,12 @@ pub enum Restarts {
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+// deserialized through `Deserialize for De`, which checks what the builder checks
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(remote = "Self")
+)]
 pub struct De {
     real: Real,
     strategy: Strategy,
@@ -1546,6 +1555,34 @@ impl DeBuilder {
             best: None,
             best_generation: 0,
         })
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for De {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+// the builder's checks that would otherwise hang or panic a run, for a hand-edited or damaged
+// checkpoint: at least 4 individuals, or the trials' distinct indices are never found
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for De {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        let de = Self::deserialize(deserializer)?;
+        if de.population.len() < 4 {
+            return Err(serde::de::Error::custom(format!(
+                "differential evolution needs at least 4 individuals, got {}",
+                de.population.len()
+            )));
+        }
+        Ok(de)
     }
 }
 
