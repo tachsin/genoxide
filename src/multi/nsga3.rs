@@ -314,7 +314,9 @@ where
         self.normalize(&points, &fronts[0]);
         if !last.is_empty() {
             let (ideal, nadir) = (self.ideal, self.nadir(&points, &fronts[0]));
-            let associate = |position: usize| self.associate(&points[position], &ideal, &nadir);
+            let lengths = self.lengths();
+            let associate =
+                |position: usize| self.associate(&points[position], &ideal, &nadir, &lengths);
             let mut counts = vec![0usize; self.reference.len()];
             for &position in &members {
                 counts[associate(position).0] += 1;
@@ -402,9 +404,22 @@ where
         nadir
     }
 
+    // the squared length of each reference direction
+    fn lengths(&self) -> Vec<f64> {
+        let squared = |direction: &[f64; M]| direction.iter().map(|d| d * d).sum();
+        self.reference.iter().map(squared).collect()
+    }
+
     // the reference direction nearest to a point in normalized objective space, and the
-    // perpendicular distance to it; the first one on ties
-    fn associate(&self, point: &[f64; M], ideal: &[f64; M], nadir: &[f64; M]) -> (usize, f64) {
+    // perpendicular distance to it; the first one on ties. `lengths` are the directions' squared
+    // lengths.
+    fn associate(
+        &self,
+        point: &[f64; M],
+        ideal: &[f64; M],
+        nadir: &[f64; M],
+        lengths: &[f64],
+    ) -> (usize, f64) {
         let normalized: [f64; M] = std::array::from_fn(|j| {
             let mut range = nadir[j] - ideal[j];
             if range == 0.0 {
@@ -413,22 +428,27 @@ where
             (point[j] - ideal[j]) / range
         });
         let mut best = (0, f64::INFINITY);
-        for (index, direction) in self.reference.iter().enumerate() {
-            let length: f64 = direction.iter().map(|d| d * d).sum();
+        // the square of the best distance: the square root is monotonic, so only a smaller
+        // square can have a smaller root, and only those need one
+        let mut best_squared = f64::INFINITY;
+        for (index, (direction, &length)) in self.reference.iter().zip(lengths).enumerate() {
             let projection: f64 = normalized
                 .iter()
                 .zip(direction)
                 .map(|(n, d)| n * d)
                 .sum::<f64>()
                 / length;
-            let distance = normalized
+            let squared = normalized
                 .iter()
                 .zip(direction)
                 .map(|(n, d)| (n - projection * d) * (n - projection * d))
-                .sum::<f64>()
-                .sqrt();
-            if distance < best.1 {
-                best = (index, distance);
+                .sum::<f64>();
+            if squared < best_squared {
+                let distance = squared.sqrt();
+                if distance < best.1 {
+                    best = (index, distance);
+                    best_squared = squared;
+                }
             }
         }
         best
@@ -911,9 +931,15 @@ mod tests {
         let nsga3 = builder([Minimize; 2], 2, 0).build().unwrap();
         // the directions (0, 1), (0.5, 0.5), (1, 0)
         let (ideal, nadir) = ([0.0, 0.0], [2.0, 2.0]);
-        assert_eq!(nsga3.associate(&[1.0, 1.0], &ideal, &nadir), (1, 0.0));
-        assert_eq!(nsga3.associate(&[0.0, 2.0], &ideal, &nadir), (0, 0.0));
-        let (niche, distance) = nsga3.associate(&[2.0, 0.2], &ideal, &nadir);
+        assert_eq!(
+            nsga3.associate(&[1.0, 1.0], &ideal, &nadir, &nsga3.lengths()),
+            (1, 0.0)
+        );
+        assert_eq!(
+            nsga3.associate(&[0.0, 2.0], &ideal, &nadir, &nsga3.lengths()),
+            (0, 0.0)
+        );
+        let (niche, distance) = nsga3.associate(&[2.0, 0.2], &ideal, &nadir, &nsga3.lengths());
         assert_eq!(niche, 2);
         assert!((distance - 0.1).abs() < 1e-12);
     }
