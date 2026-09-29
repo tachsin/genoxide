@@ -1,2 +1,3 @@
 SPEA2    100 solutions in 4 pieces, hypervolume 37.1035
 NSGA-II  100 solutions in 4 pieces, hypervolume 37.0213
+a reference front, from much longer runs: hypervolume 37.3489

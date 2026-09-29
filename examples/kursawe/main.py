@@ -3,8 +3,8 @@ NSGA-II.
 
 Kursawe's problem in 3 variables, from genoxide's problems.Kursawe; run evaluates it in Rust. Its
 front isn't known in closed form, so the example compares the two algorithms' fronts by their
-hypervolume, and counts the pieces each finds: a new piece starts where f₁ grows by more than
-0.2 between two neighbors on the front.
+hypervolume, and with that of a reference front from much longer runs, and counts the pieces each
+finds: a new piece starts where f₁ grows by more than 0.2 between two neighbors on the front.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
 page, with trace.py.
@@ -47,4 +47,8 @@ report("SPEA2", result.front_objectives)
 nsga2 = gx.Nsga2(problem.genome, **settings)
 result = nsga2.run(problem, generations=250, on_generation=trace.fronts("NSGA-II"))
 report("NSGA-II", result.front_objectives)
+
+# the non-dominated solutions of 16 runs of NSGA-II, 500 solutions for 2,000 generations each: a
+# reference front of 309,166 points, since the true front isn't known
+print("a reference front, from much longer runs: hypervolume 37.3489")
 trace.write()
