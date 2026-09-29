@@ -63,15 +63,16 @@ impl Genes for Bits {
         genes.resize(start + self.len(), false);
         let genes = &mut genes[start..];
         let words = self.as_words();
-        let full = genes.len() / WORD_BITS;
-        let mut chunks = genes.chunks_exact_mut(WORD_BITS);
-        for (chunk, word) in (&mut chunks).zip(words) {
-            for (genes, byte) in chunk.chunks_exact_mut(8).zip(word.to_le_bytes()) {
-                genes.copy_from_slice(&BYTE_BITS[usize::from(byte)]);
+        let (chunks, rest) = genes.as_chunks_mut::<WORD_BITS>();
+        let full = chunks.len();
+        for (chunk, word) in chunks.iter_mut().zip(words) {
+            let (bytes, _) = chunk.as_chunks_mut::<8>();
+            for (genes, byte) in bytes.iter_mut().zip(word.to_le_bytes()) {
+                *genes = BYTE_BITS[usize::from(byte)];
             }
         }
         if let Some(&word) = words.get(full) {
-            for (bit, gene) in chunks.into_remainder().iter_mut().enumerate() {
+            for (bit, gene) in rest.iter_mut().enumerate() {
                 *gene = word >> bit & 1 == 1;
             }
         }
