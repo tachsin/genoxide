@@ -973,7 +973,9 @@ fn build_in_parallel(
     }
 }
 
-// a random index in `0..n` that isn't in `excluded`; `n` is larger than `excluded`
+// a random index in `0..n` that isn't in `excluded`; `n` is larger than `excluded`. Inlined into
+// the trials' building: with `below` inlined into it, it no longer was
+#[inline]
 fn other_than(rng: &mut StreamRng, n: usize, excluded: &[usize]) -> usize {
     loop {
         let index = rng.below(n);
