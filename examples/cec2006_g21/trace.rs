@@ -2,8 +2,9 @@
 //! `GENOXIDE_TRACE` names: the best solution so far and its constraints, in at most 100
 //! generations. The Python example writes the same file.
 //!
-//! The curve is the error f − f* of the best feasible solution and of the population's median,
-//! on a log scale: null while they're infeasible, whose values aren't comparable to f*.
+//! The curve is the error f − f* of the best solution and of the population's median, on a log
+//! scale, measured without the run's ε level: null while they're infeasible, whose values aren't
+//! comparable to f*.
 
 use genoxide::observer::Snapshot;
 use genoxide::prelude::*;
@@ -14,6 +15,8 @@ use serde_json::{Value, json};
 pub struct Trace {
     path: Option<String>,
     frames: Frames,
+    // the last generation recorded: a re-evaluation repeats it
+    last: Option<u64>,
 }
 
 impl Trace {
@@ -21,7 +24,8 @@ impl Trace {
     pub fn from_env() -> Self {
         let path = std::env::var("GENOXIDE_TRACE").ok();
         let frames = Frames::new(100);
-        Self { path, frames }
+        let last = None;
+        Self { path, frames, last }
     }
 
     // records a generation: the errors of the best and the median, the best solution so far and
@@ -29,23 +33,24 @@ impl Trace {
     // the equalities the excess max(0, |h(x)| - 0.0001), 0 (active) when met (the page shows each
     // one's state)
     pub fn record(&mut self, snapshot: &Snapshot<'_, Reals>) {
-        if self.path.is_none() {
+        let generation = snapshot.progress().generation();
+        if self.path.is_none() || self.last == Some(generation) {
             return;
         }
+        self.last = Some(generation);
+        // each solution's value and violation, without the ε level
+        let problem = G21::default();
         let best = snapshot.best().genome();
-        let fitness = snapshot.best().fitness().expect("evaluated");
-        let best_error = fitness.is_feasible().then(|| error(fitness));
+        let (value, violation) = problem.evaluate(best);
+        let best_error = (violation == 0.0).then(|| error(value));
         // the population in the order of Deb's rules: the feasible solutions by value, then the
         // infeasible ones
-        let population: Vec<Fitness> = snapshot
-            .population()
-            .iter()
-            .filter_map(|individual| individual.fitness())
-            .collect();
+        let population = snapshot.population();
         let mut feasible: Vec<f64> = population
             .iter()
-            .filter(|fitness| fitness.is_feasible())
-            .map(|&fitness| error(fitness))
+            .map(|individual| problem.evaluate(individual.genome()))
+            .filter(|&(_, violation)| violation == 0.0)
+            .map(|(value, _)| error(value))
             .collect();
         feasible.sort_by(f64::total_cmp);
         let median = median(&feasible, population.len());
@@ -94,10 +99,10 @@ impl Trace {
     }
 }
 
-// the error f - f* of a feasible solution, 0 at or below f*
-fn error(fitness: Fitness) -> f64 {
+// the error f - f* of a feasible solution's value, 0 at or below f*
+fn error(value: f64) -> f64 {
     let optimum = G21::default().optimum().expect("known").value();
-    (fitness.score().expect("valid") - optimum).max(0.0)
+    (value - optimum).max(0.0)
 }
 
 // the median error of a population of `size` in the order of Deb's rules, given the sorted

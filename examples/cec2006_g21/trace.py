@@ -2,8 +2,9 @@
 ``GENOXIDE_TRACE`` names: the best solution so far and its constraints, in at most 100
 generations. The Rust example writes the same file.
 
-The curve is the error f − f* of the best feasible solution and of the population's median, on a
-log scale: null while they're infeasible, whose values aren't comparable to f*."""
+The curve is the error f − f* of the best solution and of the population's median, on a log scale,
+measured without the run's ε level: null while they're infeasible, whose values aren't comparable
+to f*."""
 
 import json
 import math
@@ -19,6 +20,8 @@ class Trace:
         self.path = os.environ.get("GENOXIDE_TRACE")
         self.frames = Frames(100)
         self.problem = problem
+        # the last generation recorded: a re-evaluation repeats it
+        self.last = None
 
     @property
     def on_generation(self):
@@ -30,18 +33,21 @@ class Trace:
         its constraints, g(x) for the inequalities, satisfied at or below 0 and active at 0, and for
         the equalities the excess max(0, |h(x)| - 0.0001), 0 (active) when met (the page shows each
         one's state)."""
-        if self.path:
+        if self.path and progress.generation != self.last:
+            self.last = progress.generation
+            # each solution's value and violation, without the ε level
             best = progress.best_genome
             score, violation = self.problem(best)
             best_error = self.error(score) if violation == 0 else None
             # the population in the order of Deb's rules: the feasible solutions by value, then
             # the infeasible ones
+            scores, violations = self.problem.evaluate(progress.population)
             feasible = sorted(
                 self.error(float(score))
-                for score, violation in zip(progress.scores, progress.violations)
+                for score, violation in zip(scores, violations)
                 if violation == 0
             )
-            middle = median(feasible, len(progress.scores))
+            middle = median(feasible, len(scores))
             g1, *h = self.problem.constraints(best).tolist()
             values = [g1] + [max(abs(hj) - EQUALITY_TOLERANCE, 0.0) for hj in h]
             state = {"best": best.tolist(), "violations": values}
