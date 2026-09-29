@@ -386,12 +386,8 @@ impl Cmaes {
 
     // the genome of the scaled coordinates `u`
     fn to_genome(&self, u: &[f64]) -> Reals {
-        let bounds = self.real.bounds();
-        let mut genes: Vec<f64> = bounds.iter().map(|range| *range.start()).collect();
-        for (&gene, &value) in self.free.iter().zip(u) {
-            let (start, end) = (*bounds[gene].start(), *bounds[gene].end());
-            genes[gene] = (start + (end - start) * value).clamp(start, end);
-        }
+        let mut genes = vec![0.0; self.real.bounds().len()];
+        write_genome(&self.real, &self.free, u, &mut genes);
         Reals::from(genes)
     }
 
@@ -453,70 +449,70 @@ impl Cmaes {
         self.start_run(lambda, sigma, mean);
     }
 
-    // samples a new population
+    // samples a new population, in the memory of the last one
     fn sample(&mut self) {
         let n = self.dimensions();
         let lambda = self.parameters.lambda;
-        self.samples.clear();
-        self.steps.clear();
+        let (diagonal, sigma) = (self.diagonal(), self.sigma);
+        // B · D, by rows: each product b · d as in (b · d) · z, taken once per generation
+        let mut scaled_basis = Vec::new();
+        if !diagonal {
+            scaled_basis.reserve_exact(n * n);
+            for row in self.basis.chunks_exact(n) {
+                scaled_basis.extend(row.iter().zip(&self.deviations).map(|(b, d)| b * d));
+            }
+        }
+        self.samples.resize_with(lambda, Vec::new);
+        self.steps.resize_with(lambda, Vec::new);
         let mut z = vec![0.0; n];
-        for _ in 0..lambda {
-            let mut accepted = None;
-            let mut last = (Vec::new(), Vec::new());
+        for (u, step) in self.samples.iter_mut().zip(&mut self.steps) {
+            u.resize(n, 0.0);
+            step.resize(n, 0.0);
+            let mut accepted = false;
             for _ in 0..RESAMPLES {
                 for value in z.iter_mut() {
                     *value = self.rng.normal();
                 }
                 // y = B · D · z
-                let step: Vec<f64> = if self.diagonal() {
-                    self.deviations.iter().zip(&z).map(|(d, z)| d * z).collect()
+                if diagonal {
+                    for ((y, d), z) in step.iter_mut().zip(&self.deviations).zip(&z) {
+                        *y = d * z;
+                    }
                 } else {
-                    (0..n)
-                        .map(|i| {
-                            let row = &self.basis[i * n..(i + 1) * n];
-                            row.iter()
-                                .zip(&self.deviations)
-                                .zip(&z)
-                                .map(|((b, d), z)| b * d * z)
-                                .sum()
-                        })
-                        .collect()
-                };
-                let u: Vec<f64> = self
-                    .mean
-                    .iter()
-                    .zip(&step)
-                    .map(|(m, y)| m + self.sigma * y)
-                    .collect();
+                    for (y, row) in step.iter_mut().zip(scaled_basis.chunks_exact(n)) {
+                        *y = row.iter().zip(&z).map(|(bd, z)| bd * z).sum();
+                    }
+                }
+                for ((u, m), y) in u.iter_mut().zip(&self.mean).zip(&*step) {
+                    *u = m + sigma * y;
+                }
                 if u.iter().all(|u| (0.0..=1.0).contains(u)) {
-                    accepted = Some((u, step));
+                    accepted = true;
                     break;
                 }
-                last = (u, step);
             }
-            let (u, step) = accepted.unwrap_or_else(|| {
+            if !accepted {
                 // clipped, and the step it takes from the mean
-                let u: Vec<f64> = last
-                    .0
-                    .iter()
-                    .zip(&self.mean)
-                    .map(|(&u, &m)| if u.is_nan() { m } else { u.clamp(0.0, 1.0) })
-                    .collect();
-                let step = if self.sigma > 0.0 {
-                    u.iter()
-                        .zip(&self.mean)
-                        .map(|(u, m)| (u - m) / self.sigma)
-                        .collect()
+                for (u, &m) in u.iter_mut().zip(&self.mean) {
+                    *u = if u.is_nan() { m } else { u.clamp(0.0, 1.0) };
+                }
+                if sigma > 0.0 {
+                    for ((y, u), m) in step.iter_mut().zip(&*u).zip(&self.mean) {
+                        *y = (u - m) / sigma;
+                    }
                 } else {
-                    vec![0.0; n]
-                };
-                (u, step)
-            });
-            self.samples.push(u);
-            self.steps.push(step);
+                    step.fill(0.0);
+                }
+            }
         }
-        let genomes: Vec<Reals> = self.samples.iter().map(|u| self.to_genome(u)).collect();
-        self.population = Population::from_genomes(genomes);
+        if self.population.len() == lambda {
+            for (individual, u) in self.population.iter_mut().zip(&self.samples) {
+                write_genome(&self.real, &self.free, u, individual.genome_mut());
+            }
+        } else {
+            let genomes: Vec<Reals> = self.samples.iter().map(|u| self.to_genome(u)).collect();
+            self.population = Population::from_genomes(genomes);
+        }
     }
 
     // the distribution update from the evaluated population
@@ -533,14 +529,22 @@ impl Cmaes {
         order.sort_by(|&a, &b| objective.compare(fitness[b], fitness[a]));
         let p = &self.parameters;
         let (c_sigma, c_c, c_1, c_mu, mu_eff) = (p.c_sigma, p.c_c, p.c_1, p.c_mu, p.mu_eff);
-        let weights = p.weights.clone();
-        // the weighted mean step, and the new mean
-        let mut mean_step = vec![0.0; n];
-        for (&weight, &index) in weights.iter().zip(&order) {
-            for (total, y) in mean_step.iter_mut().zip(&self.steps[index]) {
-                *total += weight * y;
+        // the steps of the best μ samples, best first, by coordinate (`[i * μ + k]`), and each
+        // times its weight, w · y_i as in the products (w · y_i) · y_j of the rank-μ update
+        let mu = p.weights.len();
+        let mut selected = vec![0.0; n * mu];
+        let mut weighted = vec![0.0; n * mu];
+        for (k, (&weight, &index)) in p.weights.iter().zip(&order).enumerate() {
+            for (i, &y) in self.steps[index].iter().enumerate() {
+                selected[i * mu + k] = y;
+                weighted[i * mu + k] = weight * y;
             }
         }
+        // the weighted mean step, and the new mean
+        let mean_step: Vec<f64> = weighted
+            .chunks_exact(mu)
+            .map(|terms| terms.iter().fold(0.0, |total, term| total + term))
+            .collect();
         for (m, y) in self.mean.iter_mut().zip(&mean_step) {
             *m = (*m + self.sigma * y).clamp(0.0, 1.0);
         }
@@ -553,14 +557,16 @@ impl Cmaes {
                 .collect()
         } else {
             let rotated: Vec<f64> = (0..n)
-                .map(|k| {
-                    let projection: f64 =
-                        (0..n).map(|i| self.basis[i * n + k] * mean_step[i]).sum();
-                    projection / self.deviations[k]
+                .zip(&self.deviations)
+                .map(|(k, deviation)| {
+                    let axis = self.basis[k..].iter().step_by(n);
+                    let projection: f64 = axis.zip(&mean_step).map(|(b, y)| b * y).sum();
+                    projection / deviation
                 })
                 .collect();
-            (0..n)
-                .map(|i| (0..n).map(|k| self.basis[i * n + k] * rotated[k]).sum())
+            self.basis
+                .chunks_exact(n)
+                .map(|row| row.iter().zip(&rotated).map(|(b, r)| b * r).sum())
                 .collect()
         };
         let factor = (c_sigma * (2.0 - c_sigma) * mu_eff).sqrt();
@@ -585,24 +591,17 @@ impl Cmaes {
         let delta = if h_sigma { 0.0 } else { c_c * (2.0 - c_c) };
         let keep = 1.0 + c_1 * delta - c_1 - c_mu;
         if self.diagonal() {
-            for i in 0..n {
-                let rank_mu: f64 = weights
-                    .iter()
-                    .zip(&order)
-                    .map(|(w, &index)| w * self.steps[index][i] * self.steps[index][i])
-                    .sum();
+            let by_coordinate = weighted.chunks_exact(mu).zip(selected.chunks_exact(mu));
+            for (i, (weighted, selected)) in by_coordinate.enumerate() {
+                let rank_mu: f64 = weighted.iter().zip(selected).map(|(w, y)| w * y).sum();
                 self.covariance[i] = keep * self.covariance[i]
                     + c_1 * self.path_c[i] * self.path_c[i]
                     + c_mu * rank_mu;
             }
         } else {
-            for i in 0..n {
-                for j in 0..=i {
-                    let rank_mu: f64 = weights
-                        .iter()
-                        .zip(&order)
-                        .map(|(w, &index)| w * self.steps[index][i] * self.steps[index][j])
-                        .sum();
+            for (i, weighted) in weighted.chunks_exact(mu).enumerate() {
+                for (j, selected) in selected.chunks_exact(mu).take(i + 1).enumerate() {
+                    let rank_mu: f64 = weighted.iter().zip(selected).map(|(w, y)| w * y).sum();
                     let value = keep * self.covariance[i * n + j]
                         + c_1 * self.path_c[i] * self.path_c[j]
                         + c_mu * rank_mu;
@@ -700,6 +699,27 @@ impl Cmaes {
             return Some(Criterion::NoEffectCoord);
         }
         None
+    }
+}
+
+// the genes of the scaled coordinates `u` of the genes `free` into `genes`: the lower bound for the
+// other genes
+fn write_genome(real: &Real, free: &[usize], u: &[f64], genes: &mut [f64]) {
+    let bounds = real.bounds();
+    if free.len() == genes.len() {
+        // every gene
+        for ((gene, range), &value) in genes.iter_mut().zip(bounds).zip(u) {
+            let (start, end) = (*range.start(), *range.end());
+            *gene = (start + (end - start) * value).clamp(start, end);
+        }
+        return;
+    }
+    for (gene, range) in genes.iter_mut().zip(bounds) {
+        *gene = *range.start();
+    }
+    for (&gene, &value) in free.iter().zip(u) {
+        let (start, end) = (*bounds[gene].start(), *bounds[gene].end());
+        genes[gene] = (start + (end - start) * value).clamp(start, end);
     }
 }
 
