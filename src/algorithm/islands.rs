@@ -2,6 +2,7 @@
 
 use super::ga::Spare;
 use super::{Algorithm, Candidates, Reevaluate};
+use crate::engine::GenomeHashing;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
 use std::collections::HashMap;
@@ -274,7 +275,11 @@ impl<A: Migrate> Islands<A> {
             let before: Vec<Individual<A::Genome>> = island.population().iter().cloned().collect();
             island.immigrate(migrants)?;
             // the individuals the migrants replaced, which observers see as discarded
-            let mut kept: HashMap<&A::Genome, usize> = HashMap::new();
+            let mut kept: HashMap<&A::Genome, usize, GenomeHashing> =
+                HashMap::with_capacity_and_hasher(
+                    island.population().len(),
+                    GenomeHashing::default(),
+                );
             for individual in island.population().iter() {
                 *kept.entry(individual.genome()).or_default() += 1;
             }
