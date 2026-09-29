@@ -73,7 +73,9 @@ function projector(yaw, pitch) {
  * when focused), over the true front's wireframe. Orthographic, drawn in SVG.
  * Over a sphere, every axis runs from 0 to one maximum; otherwise each axis
  * spans its own objective's values (they can be negative, and far apart in
- * scale). `compact` (a panel of a grid) leaves the legend to the grid.
+ * scale). A constrained problem's frames may give the population's infeasible
+ * solutions (`state.infeasible`), drawn hollow. `compact` (a panel of a grid)
+ * leaves the legend to the grid.
  */
 export default function Front3dPlot({ trace, frame, dark, reduced, compact = false }) {
   const [view, setView] = useState(VIEW);
@@ -89,23 +91,24 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
   // any other true front: sampled points, drawn faint (a curve, disconnected regions, WFG's shapes)
   const sampled = Array.isArray(trace.problem?.true_front) ? trace.problem.true_front : null;
   const front = frame.state?.front ?? [];
+  const infeasible = frame.state?.infeasible ?? [];
 
   // [lo1, lo2, lo3, hi1, hi2, hi3]
   const target = useMemo(() => {
     if (shared) {
       let m = sphere ? 1 : simplex;
-      for (const p of front) for (const c of p) if (c > m) m = c;
+      for (const p of [...front, ...infeasible]) for (const c of p) if (c > m) m = c;
       return [0, 0, 0, m * 1.05, m * 1.05, m * 1.05];
     }
     // the axes span the front and, when it's given as points, the true front too
-    const all = sampled ? [...front, ...sampled] : front;
+    const all = [...front, ...infeasible, ...(sampled ?? [])];
     if (!all.length) return [0, 0, 0, 1, 1, 1];
     const lo = [0, 1, 2].map((k) => Math.min(...all.map((p) => p[k])));
     const hi = [0, 1, 2].map((k) => Math.max(...all.map((p) => p[k])));
     const span = [0, 1, 2].map((k) => hi[k] - lo[k] || Math.abs(hi[k]) || 1);
     // from each objective's least value, as the sphere's cube starts at 0, with room above
     return [...lo, ...hi.map((v, k) => v + span[k] * 0.05)];
-  }, [front, sphere, shared, simplex, sampled]);
+  }, [front, infeasible, sphere, shared, simplex, sampled]);
   const eased = useEased(target, reduced);
   const lo = eased.slice(0, 3);
   const hi = eased.slice(3);
@@ -122,6 +125,7 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
               ? []
               : [
                   { label: "front", color, shape: "dot" },
+                  ...(infeasible.length ? [{ label: "infeasible", shape: "ring", className: "text-base-content/50" }] : []),
                   ...(sphere ? [{ label: "true front (sphere)", shape: "line", className: "text-base-content/35" }] : []),
                   ...(simplex !== null ? [{ label: `true front (f1 + f2 + f3 = ${simplex})`, shape: "line", className: "text-base-content/35" }] : []),
                   ...(sampled ? [{ label: "true front", shape: "dot", className: "text-base-content/30" }] : []),
@@ -143,7 +147,7 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
         aspect={0.9}
         minHeight={compact ? 220 : 280}
         maxHeight={540}
-        label={`The front of ${front.length} points in ${objectives.join(", ")}. Drag or use the arrow keys to rotate.`}
+        label={`The front of ${front.length} points in ${objectives.join(", ")}${infeasible.length ? `, and ${infeasible.length} infeasible solutions` : ""}. Drag or use the arrow keys to rotate.`}
         svgProps={{
           tabIndex: 0,
           className: "block select-none overflow-visible cursor-grab rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary active:cursor-grabbing",
@@ -181,6 +185,7 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
               <TipRows
                 rows={[
                   ...objectives.map((o, k) => [o, formatValue(hover.p[k])]),
+                  ...(hover.infeasible ? [["", "infeasible"]] : []),
                   ...(sphere ? [["distance to origin", formatValue(Number(Math.hypot(...hover.p).toPrecision(4)))]] : []),
                   ...(simplex !== null ? [["f1 + f2 + f3", formatValue(Number((hover.p[0] + hover.p[1] + hover.p[2]).toPrecision(4)))]] : []),
                 ]}
@@ -228,7 +233,8 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
           const depths = points.map((q) => q.depth);
           const dMin = Math.min(...depths);
           const dMax = Math.max(...depths);
-          const hits = points.map((q) => ({ ...q, px: q.x, py: q.y }));
+          const rings = infeasible.map((p) => ({ p, infeasible: true, ...at(p) }));
+          const hits = [...rings, ...points].map((q) => ({ ...q, px: q.x, py: q.y }));
 
           return (
             <>
@@ -249,6 +255,9 @@ export default function Front3dPlot({ trace, frame, dark, reduced, compact = fal
                     return <circle key={`t${i}`} cx={s.x} cy={s.y} r={1.6} className="fill-base-content/25" />;
                   })
                 : null}
+              {rings.map((q, i) => (
+                <circle key={`i${i}`} cx={q.x} cy={q.y} r={3} fill="none" stroke={color} strokeOpacity={0.6} strokeWidth={1.2} />
+              ))}
               {points.map((q, i) => {
                 const t = dMax > dMin ? (q.depth - dMin) / (dMax - dMin) : 1;
                 return (

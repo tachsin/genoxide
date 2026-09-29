@@ -183,6 +183,24 @@ pub enum MultiConfig {
         objectives: usize,
         variables: Option<usize>,
     },
+    ConvexDtlz2 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    ScaledDtlz1 {
+        objectives: usize,
+        variables: Option<usize>,
+        factor: Option<f64>,
+    },
+    ScaledDtlz2 {
+        objectives: usize,
+        variables: Option<usize>,
+        factor: Option<f64>,
+    },
+    InvertedDtlz1 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
     Wfg1 {
         objectives: usize,
         position: Option<usize>,
@@ -245,6 +263,86 @@ pub enum MultiConfig {
     Tnk {},
     Osy {},
     Constr {},
+    Ctp1 {},
+    Ctp2 {},
+    Ctp3 {},
+    Ctp4 {},
+    Ctp5 {},
+    Ctp6 {},
+    Ctp7 {},
+    Ctp8 {},
+    C1Dtlz1 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    C1Dtlz3 {
+        objectives: usize,
+        variables: Option<usize>,
+        radius: Option<f64>,
+    },
+    C2Dtlz2 {
+        objectives: usize,
+        variables: Option<usize>,
+        radius: Option<f64>,
+    },
+    ConvexC2Dtlz2 {
+        objectives: usize,
+        variables: Option<usize>,
+        radius: Option<f64>,
+    },
+    C3Dtlz1 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    C3Dtlz4 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    Mw1 {
+        variables: usize,
+    },
+    Mw2 {
+        variables: usize,
+    },
+    Mw3 {
+        variables: usize,
+    },
+    Mw4 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    Mw5 {
+        variables: usize,
+    },
+    Mw6 {
+        variables: usize,
+    },
+    Mw7 {
+        variables: usize,
+    },
+    Mw8 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    Mw9 {
+        variables: usize,
+    },
+    Mw10 {
+        variables: usize,
+    },
+    Mw11 {
+        variables: usize,
+    },
+    Mw12 {
+        variables: usize,
+    },
+    Mw13 {
+        variables: usize,
+    },
+    Mw14 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
 }
 
 // a size of at least `minimum`, or an error that names it; the constructors panic instead
@@ -290,6 +388,29 @@ fn check_wfg(
     Ok(())
 }
 
+// the sizes of the convex, scaled and inverted DTLZ problems, checked: 2 to 6 objectives, at least
+// as many variables, and a finite, positive scaling factor
+fn check_dtlz_variant(
+    objectives: usize,
+    variables: Option<usize>,
+    factor: Option<f64>,
+) -> Result<(), String> {
+    if !(2..=6).contains(&objectives) {
+        return Err(format!(
+            "DTLZ takes 2 to 6 objectives in Python, not {objectives}"
+        ));
+    }
+    if let Some(n) = variables {
+        at_least(n, objectives, "DTLZ with this many objectives", "variables")?;
+    }
+    match factor {
+        Some(factor) if !(factor.is_finite() && factor > 0.0) => Err(format!(
+            "a scaling factor is finite and positive, not {factor}"
+        )),
+        _ => Ok(()),
+    }
+}
+
 // a WFG problem with M objectives, `position` position parameters (the default if None) and
 // `distance` distance parameters
 macro_rules! wfg {
@@ -297,6 +418,52 @@ macro_rules! wfg {
         let position = $position.unwrap_or_else(|| multi::$problem::<M>::default().position());
         Some(multi::boxed(multi::$problem::<M>::new(position, $distance)))
     }};
+}
+
+// a constrained DTLZ problem with a radius, M objectives, `variables` variables (M + 9, the
+// default, if None) and the radius `radius` (the paper's if None, which `check` makes sure it
+// gives)
+macro_rules! constrained_dtlz {
+    ($problem:ident, $variables:expr, $radius:expr) => {{
+        let variables = $variables.unwrap_or(M + 9);
+        Some(multi::boxed(match $radius {
+            Some(radius) => multi::$problem::<M>::with_radius(variables, radius),
+            None => multi::$problem::<M>::new(variables),
+        }))
+    }};
+}
+
+// the sizes of a constrained DTLZ problem, checked: 2 to 6 objectives, at least as many
+// variables, and for `radius` (its name and value), a finite radius above 0, or none only where
+// `paper` says that the paper gives one
+fn check_constrained_dtlz(
+    objectives: usize,
+    variables: Option<usize>,
+    radius: Option<(&str, Option<f64>)>,
+    paper: Option<()>,
+) -> Result<(), String> {
+    if !(2..=6).contains(&objectives) {
+        return Err(format!(
+            "the constrained DTLZ problems take 2 to 6 objectives in Python, not {objectives}"
+        ));
+    }
+    if let Some(n) = variables {
+        at_least(
+            n,
+            objectives,
+            "a DTLZ problem with this many objectives",
+            "variables",
+        )?;
+    }
+    match radius {
+        Some((name, Some(radius))) if !(radius.is_finite() && radius > 0.0) => Err(format!(
+            "{name} needs a finite radius above 0, not {radius}"
+        )),
+        Some((name, None)) if paper.is_none() => Err(format!(
+            "{name} has no radius for {objectives} objectives in the paper: give one"
+        )),
+        _ => Ok(()),
+    }
 }
 
 impl MultiConfig {
@@ -319,6 +486,19 @@ impl MultiConfig {
             | Self::Wfg7 { objectives, .. }
             | Self::Wfg8 { objectives, .. }
             | Self::Wfg9 { objectives, .. } => objectives,
+            Self::C1Dtlz1 { objectives, .. }
+            | Self::C1Dtlz3 { objectives, .. }
+            | Self::C2Dtlz2 { objectives, .. }
+            | Self::ConvexC2Dtlz2 { objectives, .. }
+            | Self::C3Dtlz1 { objectives, .. }
+            | Self::C3Dtlz4 { objectives, .. } => objectives,
+            Self::ConvexDtlz2 { objectives, .. }
+            | Self::ScaledDtlz1 { objectives, .. }
+            | Self::ScaledDtlz2 { objectives, .. }
+            | Self::InvertedDtlz1 { objectives, .. } => objectives,
+            Self::Mw4 { objectives, .. }
+            | Self::Mw8 { objectives, .. }
+            | Self::Mw14 { objectives, .. } => objectives,
             Self::Viennet1 {} | Self::Viennet2 {} | Self::Viennet3 {} => 3,
             _ => 2,
         }
@@ -434,6 +614,96 @@ impl MultiConfig {
                 position,
                 distance,
             } => check_wfg("WFG9", objectives, position, distance, false),
+            Self::C1Dtlz1 {
+                objectives,
+                variables,
+            }
+            | Self::C3Dtlz1 {
+                objectives,
+                variables,
+            }
+            | Self::C3Dtlz4 {
+                objectives,
+                variables,
+            } => check_constrained_dtlz(objectives, variables, None, None),
+            Self::C1Dtlz3 {
+                objectives,
+                variables,
+                radius,
+            } => check_constrained_dtlz(
+                objectives,
+                variables,
+                Some(("C1-DTLZ3", radius)),
+                [3, 5].contains(&objectives).then_some(()),
+            ),
+            Self::C2Dtlz2 {
+                objectives,
+                variables,
+                radius,
+            } => {
+                check_constrained_dtlz(objectives, variables, Some(("C2-DTLZ2", radius)), Some(()))
+            }
+            Self::ConvexC2Dtlz2 {
+                objectives,
+                variables,
+                radius,
+            } => check_constrained_dtlz(
+                objectives,
+                variables,
+                Some(("convex C2-DTLZ2", radius)),
+                [3, 5].contains(&objectives).then_some(()),
+            ),
+            Self::ConvexDtlz2 {
+                objectives,
+                variables: n,
+            }
+            | Self::InvertedDtlz1 {
+                objectives,
+                variables: n,
+            } => check_dtlz_variant(objectives, n, None),
+            Self::ScaledDtlz1 {
+                objectives,
+                variables: n,
+                factor,
+            }
+            | Self::ScaledDtlz2 {
+                objectives,
+                variables: n,
+                factor,
+            } => check_dtlz_variant(objectives, n, factor),
+            Self::Mw1 { variables: n }
+            | Self::Mw2 { variables: n }
+            | Self::Mw3 { variables: n }
+            | Self::Mw5 { variables: n }
+            | Self::Mw6 { variables: n }
+            | Self::Mw7 { variables: n }
+            | Self::Mw9 { variables: n }
+            | Self::Mw10 { variables: n }
+            | Self::Mw11 { variables: n }
+            | Self::Mw12 { variables: n }
+            | Self::Mw13 { variables: n } => variables(n, 3, "MW"),
+            Self::Mw4 {
+                objectives,
+                variables: n,
+            }
+            | Self::Mw8 {
+                objectives,
+                variables: n,
+            }
+            | Self::Mw14 {
+                objectives,
+                variables: n,
+            } => {
+                if !(2..=6).contains(&objectives) {
+                    return Err(format!(
+                        "MW takes 2 to 6 objectives in Python, not {objectives}"
+                    ));
+                }
+                match n {
+                    Some(n) => variables(n, objectives + 1, "MW with this many objectives"),
+                    None => Ok(()),
+                }
+            }
             _ => Ok(()),
         }
     }
@@ -477,6 +747,38 @@ impl MultiConfig {
             Self::Dtlz7 { variables, .. } => Some(multi::boxed(
                 variables.map_or_else(multi::Dtlz7::<M>::default, multi::Dtlz7::<M>::new),
             )),
+            Self::ConvexDtlz2 { variables, .. } => Some(multi::boxed(variables.map_or_else(
+                multi::ConvexDtlz2::<M>::default,
+                multi::ConvexDtlz2::<M>::new,
+            ))),
+            Self::ScaledDtlz1 {
+                variables, factor, ..
+            } => {
+                let problem = variables.map_or_else(
+                    multi::ScaledDtlz1::<M>::default,
+                    multi::ScaledDtlz1::<M>::new,
+                );
+                Some(multi::boxed(match factor {
+                    Some(factor) => problem.with_factor(factor),
+                    None => problem,
+                }))
+            }
+            Self::ScaledDtlz2 {
+                variables, factor, ..
+            } => {
+                let problem = variables.map_or_else(
+                    multi::ScaledDtlz2::<M>::default,
+                    multi::ScaledDtlz2::<M>::new,
+                );
+                Some(multi::boxed(match factor {
+                    Some(factor) => problem.with_factor(factor),
+                    None => problem,
+                }))
+            }
+            Self::InvertedDtlz1 { variables, .. } => Some(multi::boxed(variables.map_or_else(
+                multi::InvertedDtlz1::<M>::default,
+                multi::InvertedDtlz1::<M>::new,
+            ))),
             Self::Wfg1 {
                 position, distance, ..
             } => wfg!(Wfg1, position, distance),
@@ -519,6 +821,52 @@ impl MultiConfig {
             Self::Tnk {} => try_boxed::<_, 2, M>(multi::Tnk),
             Self::Osy {} => try_boxed::<_, 2, M>(multi::Osy),
             Self::Constr {} => try_boxed::<_, 2, M>(multi::Constr),
+            Self::Ctp1 {} => try_boxed::<_, 2, M>(multi::Ctp1),
+            Self::Ctp2 {} => try_boxed::<_, 2, M>(multi::Ctp2),
+            Self::Ctp3 {} => try_boxed::<_, 2, M>(multi::Ctp3),
+            Self::Ctp4 {} => try_boxed::<_, 2, M>(multi::Ctp4),
+            Self::Ctp5 {} => try_boxed::<_, 2, M>(multi::Ctp5),
+            Self::Ctp6 {} => try_boxed::<_, 2, M>(multi::Ctp6),
+            Self::Ctp7 {} => try_boxed::<_, 2, M>(multi::Ctp7),
+            Self::Ctp8 {} => try_boxed::<_, 2, M>(multi::Ctp8),
+            Self::C1Dtlz1 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::C1Dtlz1::<M>::default, multi::C1Dtlz1::<M>::new),
+            )),
+            Self::C1Dtlz3 {
+                variables, radius, ..
+            } => constrained_dtlz!(C1Dtlz3, variables, radius),
+            Self::C2Dtlz2 {
+                variables, radius, ..
+            } => constrained_dtlz!(C2Dtlz2, variables, radius),
+            Self::ConvexC2Dtlz2 {
+                variables, radius, ..
+            } => constrained_dtlz!(ConvexC2Dtlz2, variables, radius),
+            Self::C3Dtlz1 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::C3Dtlz1::<M>::default, multi::C3Dtlz1::<M>::new),
+            )),
+            Self::C3Dtlz4 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::C3Dtlz4::<M>::default, multi::C3Dtlz4::<M>::new),
+            )),
+            Self::Mw1 { variables } => try_boxed::<_, 2, M>(multi::Mw1::new(variables)),
+            Self::Mw2 { variables } => try_boxed::<_, 2, M>(multi::Mw2::new(variables)),
+            Self::Mw3 { variables } => try_boxed::<_, 2, M>(multi::Mw3::new(variables)),
+            Self::Mw5 { variables } => try_boxed::<_, 2, M>(multi::Mw5::new(variables)),
+            Self::Mw6 { variables } => try_boxed::<_, 2, M>(multi::Mw6::new(variables)),
+            Self::Mw7 { variables } => try_boxed::<_, 2, M>(multi::Mw7::new(variables)),
+            Self::Mw9 { variables } => try_boxed::<_, 2, M>(multi::Mw9::new(variables)),
+            Self::Mw10 { variables } => try_boxed::<_, 2, M>(multi::Mw10::new(variables)),
+            Self::Mw11 { variables } => try_boxed::<_, 2, M>(multi::Mw11::new(variables)),
+            Self::Mw12 { variables } => try_boxed::<_, 2, M>(multi::Mw12::new(variables)),
+            Self::Mw13 { variables } => try_boxed::<_, 2, M>(multi::Mw13::new(variables)),
+            Self::Mw4 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::Mw4::<M>::default, multi::Mw4::<M>::new),
+            )),
+            Self::Mw8 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::Mw8::<M>::default, multi::Mw8::<M>::new),
+            )),
+            Self::Mw14 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::Mw14::<M>::default, multi::Mw14::<M>::new),
+            )),
             // built above
             Self::Zdt5 { .. } => None,
         };

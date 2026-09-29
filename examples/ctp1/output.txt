@@ -1,0 +1,3 @@
+NSGA-II, 500 generations: 100 solutions on the front, all feasible
+  pieces of the optimal front reached: 1 of 1
+  IGD+ 0.00371, hypervolume 0.8756, 99.18% of the whole front's 0.8829

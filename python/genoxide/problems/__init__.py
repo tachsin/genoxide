@@ -130,6 +130,14 @@ __all__ = [
     "Tnk",
     "Osy",
     "Constr",
+    "Ctp1",
+    "Ctp2",
+    "Ctp3",
+    "Ctp4",
+    "Ctp5",
+    "Ctp6",
+    "Ctp7",
+    "Ctp8",
     "Dtlz1",
     "Dtlz2",
     "Dtlz3",
@@ -137,6 +145,10 @@ __all__ = [
     "Dtlz5",
     "Dtlz6",
     "Dtlz7",
+    "ConvexDtlz2",
+    "ScaledDtlz1",
+    "ScaledDtlz2",
+    "InvertedDtlz1",
     "Wfg1",
     "Wfg2",
     "Wfg3",
@@ -146,6 +158,26 @@ __all__ = [
     "Wfg7",
     "Wfg8",
     "Wfg9",
+    "C1Dtlz1",
+    "C1Dtlz3",
+    "C2Dtlz2",
+    "ConvexC2Dtlz2",
+    "C3Dtlz1",
+    "C3Dtlz4",
+    "Mw1",
+    "Mw2",
+    "Mw3",
+    "Mw4",
+    "Mw5",
+    "Mw6",
+    "Mw7",
+    "Mw8",
+    "Mw9",
+    "Mw10",
+    "Mw11",
+    "Mw12",
+    "Mw13",
+    "Mw14",
 ]
 
 @dataclass(frozen=True, eq=False)
@@ -1070,6 +1102,114 @@ class Dtlz7(_Dtlz):
 
 
 @dataclass(frozen=True, init=False)
+class ConvexDtlz2(_Dtlz):
+    """Convex DTLZ2: DTLZ2 with ``fᵢ ← fᵢ⁴`` for the first M − 1 objectives and ``f_M ← f_M²``,
+    which makes the front convex, ``f_M + Σᵢ₌₁^{M−1} √fᵢ = 1``: almost flat near the edges and
+    steep in between. ``ConvexDtlz2(objectives=3, variables=None)``: 2 to 6 objectives, and at
+    least as many variables, None for ``objectives + 9``. The optimal solutions are DTLZ2's, the
+    last variables at 0.5; ideal point the origin, nadir point (1, …, 1).
+
+    Deb, K. and Jain, H. (2014). An evolutionary many-objective optimization algorithm using
+    reference-point-based nondominated sorting approach, part I: solving problems with box
+    constraints. IEEE Transactions on Evolutionary Computation 18(4): 577-601, section V-D,
+    eq. 8.
+    """
+
+    _type: ClassVar[str] = "convex_dtlz2"
+
+
+@dataclass(frozen=True, init=False)
+class _ScaledDtlz(_Dtlz):
+    """A scaled DTLZ problem: objective i multiplied by ``factor^(i − 1)``, the paper's factor for
+    the number of objectives when ``factor`` is None."""
+
+    factor: float | None
+
+    def __init__(
+        self, objectives: int = 3, variables: int | None = None, factor: float | None = None
+    ) -> None:
+        super().__init__(objectives, variables)
+        object.__setattr__(self, "factor", factor)
+
+    def _describe(self) -> dict[str, Any]:
+        description = super()._describe()
+        factor = self.factor
+        if factor is not None:
+            if isinstance(factor, bool) or not isinstance(factor, (int, float)):
+                raise TypeError(f"{type(self).__name__}.factor is a number, not {factor!r}")
+            factor = float(factor)
+            if not (factor > 0 and factor < float("inf")):
+                raise ValueError(
+                    f"{type(self).__name__}.factor is finite and positive, not {factor}"
+                )
+        description["factor"] = factor
+        return description
+
+
+@dataclass(frozen=True, init=False)
+class ScaledDtlz1(_ScaledDtlz):
+    """Scaled DTLZ1: DTLZ1 with objective i multiplied by ``s^(i − 1)``, so that the objectives
+    have ranges of different orders of magnitude. ``ScaledDtlz1(objectives=3, variables=None,
+    factor=None)``: 2 to 6 objectives, at least as many variables (None for ``objectives + 4``),
+    and s, None for the paper's (table VIII): 10 for 3 and 5 objectives, 3 for 8, 2 for 10, 1.2
+    for 15, and for other numbers that of the next larger one in the table.
+
+    The optimal solutions are DTLZ1's; the front is the plane ``Σ fᵢ / s^(i − 1) = 1/2``, from
+    the origin to the nadir point (1/2, s/2, …). The paper's text and figures scale f₁, f₂ and
+    f₃ by 10⁰, 10¹ and 10², while its table captions read 10ⁱ for i from 1: genoxide follows the
+    text and figures.
+
+    Deb, K. and Jain, H. (2014). An evolutionary many-objective optimization algorithm using
+    reference-point-based nondominated sorting approach, part I: solving problems with box
+    constraints. IEEE Transactions on Evolutionary Computation 18(4): 577-601, section V-C and
+    table VIII.
+    """
+
+    _type: ClassVar[str] = "scaled_dtlz1"
+
+
+@dataclass(frozen=True, init=False)
+class ScaledDtlz2(_ScaledDtlz):
+    """Scaled DTLZ2: DTLZ2 with objective i multiplied by ``s^(i − 1)``.
+    ``ScaledDtlz2(objectives=3, variables=None, factor=None)``: 2 to 6 objectives, at least as
+    many variables (None for ``objectives + 9``), and s, None for the paper's (table VIII): 10
+    for 3 and 5 objectives, 3 for 8 and 10, 2 for 15, and for other numbers that of the next
+    larger one in the table.
+
+    The optimal solutions are DTLZ2's; the front is the ellipsoid ``Σ (fᵢ / s^(i − 1))² = 1``,
+    from the origin to the nadir point (1, s, …, s^(M−1)).
+
+    Deb, K. and Jain, H. (2014). An evolutionary many-objective optimization algorithm using
+    reference-point-based nondominated sorting approach, part I: solving problems with box
+    constraints. IEEE Transactions on Evolutionary Computation 18(4): 577-601, section V-C and
+    table VIII.
+    """
+
+    _type: ClassVar[str] = "scaled_dtlz2"
+
+
+@dataclass(frozen=True, init=False)
+class InvertedDtlz1(_Dtlz):
+    """Inverted DTLZ1: DTLZ1 with ``fᵢ ← 0.5 (1 + g) − fᵢ``, g being DTLZ1's distance function,
+    which turns its triangular front upside down. ``InvertedDtlz1(objectives=3,
+    variables=None)``: 2 to 6 objectives, and at least as many variables, None for
+    ``objectives + 4``.
+
+    The optimal solutions are DTLZ1's; the front, derived from the definition, is
+    ``Σ fᵢ = (M − 1)/2`` with each fᵢ in [0, 1/2], so that evenly spread reference directions
+    miss much of it. Ideal point the origin, nadir point (1/2, …, 1/2); with 2 objectives it is
+    DTLZ1's front.
+
+    Jain, H. and Deb, K. (2014). An evolutionary many-objective optimization algorithm using
+    reference-point based nondominated sorting approach, part II: handling constraints and
+    extending to an adaptive approach. IEEE Transactions on Evolutionary Computation 18(4):
+    602-622, section VIII-A, eq. 9.
+    """
+
+    _type: ClassVar[str] = "inverted_dtlz1"
+
+
+@dataclass(frozen=True, init=False)
 class _Wfg(MultiProblem):
     """WFG with ``objectives`` objectives, 2 to 6, ``position`` position parameters k (None for
     the recommended 4 with 2 objectives and 2 (objectives − 1) with more; a positive multiple of
@@ -1562,6 +1702,550 @@ class Constr(MultiProblem):
     """
 
     _type: ClassVar[str] = "constr"
+
+
+@dataclass(frozen=True)
+class Ctp1(MultiProblem):
+    """CTP1: ``f₁ = x₁``, ``f₂ = g exp(−f₁/g)`` with ``g = 1 + x₂``, subject to
+    ``f₂ − aⱼ exp(−bⱼ f₁) ≥ 0`` for j = 1, 2, with a = (0.858, 0.728) and b = (0.541, 0.295).
+
+    Bounds [0, 1]². The front, derived from the definition, is the largest of ``exp(−f₁)`` and
+    the two constraints' boundaries at g = 1: the unconstrained front up to f₁ ≈ 0.3337, then
+    the first boundary to f₁ ≈ 0.6679 and the second to f₁ = 1.
+
+    Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
+    evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
+    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
+    open and prints f₂ without the root that its figures and the code have.
+    """
+
+    _type: ClassVar[str] = "ctp1"
+
+
+@dataclass(frozen=True)
+class Ctp2(MultiProblem):
+    """CTP2: ``f₁ = x₁``, ``f₂ = g (1 − √(f₁/g))`` with ``g = 1 + x₂``, subject to
+    ``cos θ (f₂ − e) − sin θ f₁ ≥ a |sin(bπ (sin θ (f₂ − e) + cos θ f₁)^c)|^d`` with θ = −0.2π,
+    a = 0.2, b = 10, c = 1, d = 6 and e = 1.
+
+    Bounds [0, 1]². The front is 13 disconnected pieces of the constraint's boundary, from (0, 1)
+    to about (0.9845, 0.2872); ``optimal_front`` samples the boundaries of the feasible region.
+
+    Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
+    evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
+    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
+    open and prints f₂ without the root that its figures and the code have.
+    """
+
+    _type: ClassVar[str] = "ctp2"
+
+
+@dataclass(frozen=True)
+class Ctp3(MultiProblem):
+    """CTP3: :class:`Ctp2` with a = 0.1 and d = 0.5: the front shrinks to 13 points on the line
+    ``f₂ = 1 − tan(0.2π) f₁``, from (0, 1) to (0.9708, 0.2947). Bounds [0, 1]².
+
+    Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
+    evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
+    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
+    open and prints f₂ without the root that its figures and the code have.
+    """
+
+    _type: ClassVar[str] = "ctp3"
+
+
+@dataclass(frozen=True)
+class Ctp4(MultiProblem):
+    """CTP4: :class:`Ctp3` with a = 0.75: the same 13 points, each at the end of a long, narrow
+    feasible tunnel. Bounds [0, 1]².
+
+    Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
+    evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
+    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
+    open and prints f₂ without the root that its figures and the code have.
+    """
+
+    _type: ClassVar[str] = "ctp4"
+
+
+@dataclass(frozen=True)
+class Ctp5(MultiProblem):
+    """CTP5: :class:`Ctp3` with c = 2: the optimal points crowd towards larger f₁; the front is a
+    continuous piece from (0, 1) to f₁ ≈ 0.2558 and 15 points, the last at about
+    (0.9908, 0.2801). Bounds [0, 1]².
+
+    Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
+    evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
+    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
+    open and prints f₂ without the root that its figures and the code have.
+    """
+
+    _type: ClassVar[str] = "ctp5"
+
+
+@dataclass(frozen=True)
+class Ctp6(MultiProblem):
+    """CTP6: the constraint of :class:`Ctp2` with θ = 0.1π, a = 40, b = 0.5, c = 1, d = 2 and
+    e = −2: infeasible bands parallel to the front across the whole objective space. Bounds
+    x₁ in [0, 1], x₂ in [0, 10]. The front is one piece of a boundary, from about (0, 3.6958) to
+    (1, 0.8813).
+
+    Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
+    evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
+    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
+    open and prints f₂ without the root that its figures and the code have.
+    """
+
+    _type: ClassVar[str] = "ctp6"
+
+
+@dataclass(frozen=True)
+class Ctp7(MultiProblem):
+    """CTP7: the constraint of :class:`Ctp2` with θ = −0.05π, a = 40, b = 5, c = 1, d = 6 and
+    e = 0: infeasible bands across the front. Bounds x₁ in [0, 1], x₂ in [0, 10]. The front is
+    six disconnected pieces of the unconstrained front ``f₂ = 1 − √f₁``, the last ending at
+    (1, 0), and the point (0, 1.0446).
+
+    Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
+    evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
+    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
+    open and prints f₂ without the root that its figures and the code have.
+    """
+
+    _type: ClassVar[str] = "ctp7"
+
+
+@dataclass(frozen=True)
+class Ctp8(MultiProblem):
+    """CTP8: the constraints of :class:`Ctp6` and of :class:`Ctp7` with b = 2, together. Bounds
+    x₁ in [0, 1], x₂ in [0, 10]. The front is three disconnected pieces of CTP6's, from about
+    (0, 3.6958) to (0.8229, 1.3727).
+
+    Deb, K. (2001). Multi-Objective Optimization Using Evolutionary Algorithms. Wiley, as later
+    papers credit it; the book wasn't read, and the definition is the one in the NSGA-II code
+    of Deb's group. Not in the EMO 2001 paper, which has CTP1-CTP7.
+    """
+
+    _type: ClassVar[str] = "ctp8"
+
+
+@dataclass(frozen=True, init=False)
+class _ConstrainedDtlz(MultiProblem):
+    """A constrained DTLZ problem with ``objectives`` objectives, 2 to 6, and ``variables``
+    variables, at least ``objectives``; None is the paper's size. The field ``objective_count``
+    keeps the number, as the ``objectives`` property lists the objectives."""
+
+    objective_count: int
+    variables: int | None
+
+    def __init__(self, objectives: int = 3, variables: int | None = None) -> None:
+        object.__setattr__(self, "objective_count", objectives)
+        object.__setattr__(self, "variables", variables)
+
+    def _describe(self) -> dict[str, Any]:
+        name = type(self).__name__
+        objectives = _whole(f"{name}.objectives", self.objective_count, minimum=2)
+        if objectives > 6:
+            raise ValueError(f"{name}.objectives is at most 6, not {objectives}")
+        variables = self.variables
+        if variables is not None:
+            variables = _whole(f"{name}.variables", variables, minimum=objectives)
+        return {"type": self._type, "objectives": objectives, "variables": variables}
+
+
+@dataclass(frozen=True, init=False)
+class _WithRadius(_ConstrainedDtlz):
+    """A constrained DTLZ problem with a radius: None is the paper's for this many objectives."""
+
+    radius: float | None
+
+    def __init__(
+        self, objectives: int = 3, variables: int | None = None, radius: float | None = None
+    ) -> None:
+        super().__init__(objectives, variables)
+        object.__setattr__(self, "radius", radius)
+
+    def _describe(self) -> dict[str, Any]:
+        radius = None if self.radius is None else float(self.radius)
+        return {**super()._describe(), "radius": radius}
+
+
+@dataclass(frozen=True, init=False)
+class C1Dtlz1(_ConstrainedDtlz):
+    """C1-DTLZ1: :class:`Dtlz1` subject to ``1 − f_M/0.6 − Σᵢ₌₁^{M−1} fᵢ/0.5 ≥ 0``, which leaves
+    feasible only a thin wedge next to DTLZ1's front. ``C1Dtlz1(objectives=3, variables=None)``:
+    2 to 6 objectives, None for ``objectives + 4`` variables. The front is DTLZ1's, all feasible.
+
+    Jain, H. and Deb, K. (2014). An evolutionary many-objective optimization algorithm using
+    reference-point based nondominated sorting approach, part II: handling constraints and
+    extending to an adaptive approach. IEEE Transactions on Evolutionary Computation 18(4):
+    602-622, checked in its accepted manuscript.
+    """
+
+    _type: ClassVar[str] = "c1_dtlz1"
+
+
+@dataclass(frozen=True, init=False)
+class C1Dtlz3(_WithRadius):
+    """C1-DTLZ3: :class:`Dtlz3` subject to ``(Σ fᵢ² − 16) (Σ fᵢ² − r²) ≥ 0``, an infeasible shell
+    between the radii 4 and r. ``C1Dtlz3(objectives=3, variables=None, radius=None)``: 2 to 6
+    objectives, None for ``objectives + 9`` variables and for the paper's radius, 9 for 3
+    objectives and 12.5 for 5 (the paper gives none for 2, 4 or 6). The front is DTLZ3's.
+
+    Jain, H. and Deb, K. (2014). An evolutionary many-objective optimization algorithm using
+    reference-point based nondominated sorting approach, part II: handling constraints and
+    extending to an adaptive approach. IEEE Transactions on Evolutionary Computation 18(4):
+    602-622, checked in its accepted manuscript.
+    """
+
+    _type: ClassVar[str] = "c1_dtlz3"
+
+
+@dataclass(frozen=True, init=False)
+class C2Dtlz2(_WithRadius):
+    """C2-DTLZ2: :class:`Dtlz2`, feasible only inside M + 1 spheres of radius r, at the front's
+    corners and its middle. ``C2Dtlz2(objectives=3, variables=None, radius=None)``: 2 to 6
+    objectives, None for ``objectives + 9`` variables and for the paper's radius, 0.4 for 3
+    objectives and 0.5 for others. The front is the parts of the unit sphere inside the spheres.
+    The paper prints the constraint as a max with no inequality; genoxide reads it as
+    ``min{…} ≤ 0``, what its text and figure 7 describe.
+
+    Jain, H. and Deb, K. (2014). An evolutionary many-objective optimization algorithm using
+    reference-point based nondominated sorting approach, part II: handling constraints and
+    extending to an adaptive approach. IEEE Transactions on Evolutionary Computation 18(4):
+    602-622, checked in its accepted manuscript.
+    """
+
+    _type: ClassVar[str] = "c2_dtlz2"
+
+
+@dataclass(frozen=True, init=False)
+class ConvexC2Dtlz2(_WithRadius):
+    """Convex C2-DTLZ2: convex DTLZ2 (DTLZ2 with ``fᵢ⁴`` for i < M and ``f_M²``), infeasible
+    inside a cylinder of radius r around the diagonal: ``Σ (fᵢ − λ)² − r² ≥ 0`` with λ the mean
+    of the objectives. ``ConvexC2Dtlz2(objectives=3, variables=None, radius=None)``: 2 to 6
+    objectives, None for ``objectives + 9`` variables and for the paper's radius, 0.225 for 3
+    and 5 objectives (none for 2, 4 or 6). The front is ``f_M + Σ √fᵢ = 1`` outside the
+    cylinder.
+
+    Jain, H. and Deb, K. (2014). An evolutionary many-objective optimization algorithm using
+    reference-point based nondominated sorting approach, part II: handling constraints and
+    extending to an adaptive approach. IEEE Transactions on Evolutionary Computation 18(4):
+    602-622, checked in its accepted manuscript.
+    """
+
+    _type: ClassVar[str] = "convex_c2_dtlz2"
+
+
+@dataclass(frozen=True, init=False)
+class C3Dtlz1(_ConstrainedDtlz):
+    """C3-DTLZ1: :class:`Dtlz1` subject to ``Σ_{i≠j} fᵢ + fⱼ/0.5 − 1 ≥ 0`` for each j (the paper
+    prints i and j swapped). ``C3Dtlz1(objectives=3, variables=None)``: 2 to 6 objectives, None
+    for ``objectives + 4`` variables. DTLZ1's front is infeasible; the front, derived from the
+    definition, is ``{f ≥ 0 : Σ fᵢ + min fⱼ = 1}``, on the constraints' boundaries.
+
+    Jain, H. and Deb, K. (2014). An evolutionary many-objective optimization algorithm using
+    reference-point based nondominated sorting approach, part II: handling constraints and
+    extending to an adaptive approach. IEEE Transactions on Evolutionary Computation 18(4):
+    602-622, checked in its accepted manuscript.
+    """
+
+    _type: ClassVar[str] = "c3_dtlz1"
+
+
+@dataclass(frozen=True, init=False)
+class C3Dtlz4(_ConstrainedDtlz):
+    """C3-DTLZ4: :class:`Dtlz4` subject to ``fⱼ²/4 + Σ_{i≠j} fᵢ² − 1 ≥ 0`` for each j.
+    ``C3Dtlz4(objectives=3, variables=None)``: 2 to 6 objectives, None for ``objectives + 4``
+    variables, as the paper uses. DTLZ4's front is infeasible; the front, derived from the
+    definition, is ``{f ≥ 0 : min_j [fⱼ²/4 + Σ_{i≠j} fᵢ²] = 1}``, from 2 times each unit
+    vector.
+
+    Jain, H. and Deb, K. (2014). An evolutionary many-objective optimization algorithm using
+    reference-point based nondominated sorting approach, part II: handling constraints and
+    extending to an adaptive approach. IEEE Transactions on Evolutionary Computation 18(4):
+    602-622, checked in its accepted manuscript.
+    """
+
+    _type: ClassVar[str] = "c3_dtlz4"
+
+
+# ---- MW1-MW14 (Ma and Wang, 2019) --------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _Mw(_Sized):
+    """A two-objective MW problem in ``variables`` variables, at least 3 (15, the paper's, by
+    default)."""
+
+    variables: int = 15
+    _minimum: ClassVar[int] = 3
+
+
+@dataclass(frozen=True, init=False)
+class _ScalableMw(MultiProblem):
+    """An MW problem with ``objectives`` objectives, 2 to 6, and ``variables`` variables, more
+    than ``objectives``; None is the paper's ``objectives + 12`` (15 for 3 objectives). The field
+    ``objective_count`` keeps the number, as the ``objectives`` property lists the objectives."""
+
+    objective_count: int
+    variables: int | None
+
+    def __init__(self, objectives: int = 3, variables: int | None = None) -> None:
+        object.__setattr__(self, "objective_count", objectives)
+        object.__setattr__(self, "variables", variables)
+
+    def _describe(self) -> dict[str, Any]:
+        name = type(self).__name__
+        objectives = _whole(f"{name}.objectives", self.objective_count, minimum=2)
+        if objectives > 6:
+            raise ValueError(f"{name}.objectives is at most 6, not {objectives}")
+        variables = self.variables
+        if variables is not None:
+            variables = _whole(f"{name}.variables", variables, minimum=objectives + 1)
+        return {"type": self._type, "objectives": objectives, "variables": variables}
+
+
+@dataclass(frozen=True)
+class Mw1(_Mw):
+    """MW1: ``f₁ = x₁``, ``f₂ = g₁ (1 − 0.85 f₁/g₁)``, subject to
+    ``1 − f₁ − f₂ + 0.5 sin(2πl)⁸ ≥ 0`` with ``l = √2 f₂ − √2 f₁``; g₁ is the paper's biased
+    distance function, on [0, 1]ⁿ.
+
+    Type II: the constraint cuts the line ``f₂ = 1 − 0.85 f₁`` into six pieces, the front
+    (derived from the definition). Ideal point (0, 0.15), nadir point (1, 1).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 15.
+    """
+
+    _type: ClassVar[str] = "mw1"
+
+
+@dataclass(frozen=True)
+class Mw2(_Mw):
+    """MW2: ``f₁ = x₁``, ``f₂ = g₂ (1 − f₁/g₂)``, subject to
+    ``1 − f₁ − f₂ + 0.5 sin(3πl)⁸ ≥ 0`` with ``l = √2 f₂ − √2 f₁``; g₂ is the paper's
+    multimodal distance function, on [0, 1]ⁿ.
+
+    Type I: the whole line ``f₂ = 1 − f₁`` is feasible and is the front.
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 16.
+    """
+
+    _type: ClassVar[str] = "mw2"
+
+
+@dataclass(frozen=True)
+class Mw3(_Mw):
+    """MW3: ``f₁ = x₁``, ``f₂ = g₃ (1 − f₁/g₃)``, subject to
+    ``1.05 − f₁ − f₂ + 0.45 sin(0.75πl)⁶ ≥ 0`` and ``0.85 − f₁ − f₂ + 0.3 sin(0.75πl)² ≤ 0``,
+    with ``l = √2 f₂ − √2 f₁``; g₃ is the paper's distance function with linked variables, on
+    [0, 1]ⁿ.
+
+    Type III: the front is the line ``f₂ = 1 − f₁`` for f₁ in [0, 0.1464], [0.3821, 0.6179] and
+    [0.8536, 1], and the second constraint's boundary in between (derived from the definition).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 17.
+    """
+
+    _type: ClassVar[str] = "mw3"
+
+
+@dataclass(frozen=True, init=False)
+class Mw4(_ScalableMw):
+    """MW4, with any number of objectives: ``f₁ = g₁ Π (1 − xᵢ)``, …, ``f_M = g₁ x₁`` (the
+    shape of DTLZ1 with 1 − x for x), subject to ``1 + 0.4 sin(2.5πl)⁸ − Σ fᵢ ≥ 0`` with
+    ``l = f_M − f₁ − … − f_{M−1}``, on [0, 1]ⁿ. ``Mw4(objectives=3, variables=None)``.
+
+    Type I: the simplex ``Σ fᵢ = 1`` is feasible and is the front.
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 18.
+    """
+
+    _type: ClassVar[str] = "mw4"
+
+
+@dataclass(frozen=True)
+class Mw5(_Mw):
+    """MW5: ``f₁ = g₁ x₁``, ``f₂ = g₁ √(1 − (f₁/g₁)²)``, subject to three constraints on the
+    radius ``f₁² + f₂²`` at the angles ``l₁ = arctan(f₂/f₁)`` and
+    ``l₂ = 0.5π − 2 |l₁ − 0.25π|``, on [0, 1]ⁿ.
+
+    Type II, discrete: sixteen points of the unit circle, where ``sin 6l₂³ = 0``, each at the end
+    of a narrow feasible tunnel, and two short curves near the axes (derived from the
+    definition; the paper's figure shows points only). Ideal point (0, 0), nadir point (1, 1).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 19.
+    """
+
+    _type: ClassVar[str] = "mw5"
+
+
+@dataclass(frozen=True)
+class Mw6(_Mw):
+    """MW6: ``f₁ = g₂ x₁``, ``f₂ = g₂ √(1.1² − (f₁/g₂)²)``, subject to
+    ``1 − (f₁/(1 + 0.15l))² − (f₂/(1 + 0.75l))² ≥ 0`` with ``l = cos(6 arctan(f₂/f₁)⁴)¹⁰``, on
+    [0, 1.1]ⁿ.
+
+    Type II: twelve pieces of the circle ``f₁² + f₂² = 1.21`` (derived from the definition).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 20.
+    """
+
+    _type: ClassVar[str] = "mw6"
+
+
+@dataclass(frozen=True)
+class Mw7(_Mw):
+    """MW7: ``f₁ = g₃ x₁``, ``f₂ = g₃ √(1 − (f₁/g₃)²)``, subject to
+    ``(1.2 + 0.4 sin(4l)¹⁶)² − f₁² − f₂² ≥ 0`` and ``(1.15 − 0.2 sin(4l)⁸)² − f₁² − f₂² ≤ 0``,
+    with ``l = arctan(f₂/f₁)``, on [0, 1]ⁿ.
+
+    Type III: three pieces, parts of the unit circle and of the second constraint's boundary
+    (derived from the definition). Ideal point (0, 0), nadir point (1.15, 1.15).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 21.
+    """
+
+    _type: ClassVar[str] = "mw7"
+
+
+@dataclass(frozen=True, init=False)
+class Mw8(_ScalableMw):
+    """MW8, with any number of objectives: DTLZ2's shape with g₂, subject to
+    ``(1.25 − 0.5 sin(6l)²)² − Σ fᵢ² ≥ 0`` with ``l = arcsin(f_M / √(Σ fᵢ²))``, on [0, 1]ⁿ.
+    ``Mw8(objectives=3, variables=None)``.
+
+    Type II: the unit sphere in four bands of l, [0, π/24], [π/8, 5π/24], [7π/24, 3π/8] and
+    [11π/24, π/2] (derived from the definition).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 22.
+    """
+
+    _type: ClassVar[str] = "mw8"
+
+
+@dataclass(frozen=True)
+class Mw9(_Mw):
+    """MW9: ``f₁ = g₁ x₁``, ``f₂ = g₁ (1 − (f₁/g₁)^0.6)``, subject to ``min(T₁, T₂ T₃) ≤ 0``,
+    with ``T₁ = (1 − 0.64 f₁² − f₂)(1 − 0.36 f₁² − f₂)``, ``T₂ = 1.35² − (f₁ + 0.35)² − f₂`` and
+    ``T₃ = 1.15² − (f₁ + 0.15)² − f₂``, on [0, 1]ⁿ.
+
+    Type IV: the front is on the boundary, ``f₂ = 1 − 0.64 f₁²`` up to f₁ = 0.5868 and
+    ``f₂ = 1.15² − (f₁ + 0.15)²`` after (derived from the definition).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 23.
+    """
+
+    _type: ClassVar[str] = "mw9"
+
+
+@dataclass(frozen=True)
+class Mw10(_Mw):
+    """MW10: ``f₁ = g₂ x₁ⁿ``, ``f₂ = g₂ (1 − (f₁/g₂)²)``, subject to three constraints between
+    the parabolas ``f₂ = aᵢ − bᵢ f₁²``, on [0, 1]ⁿ.
+
+    Type III, disconnected: two pieces, each part constraint boundary and part the parabola
+    ``f₂ = 1 − f₁²`` (derived from the definition). Ideal point (0.2325, 0), nadir point
+    (1, 1.1350).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 24.
+    """
+
+    _type: ClassVar[str] = "mw10"
+
+
+@dataclass(frozen=True)
+class Mw11(_Mw):
+    """MW11: ``f₁ = g₃ x₁``, ``f₂ = g₃ √(2 − (f₁/g₃)²)``, subject to four constraints between
+    parabolas, on [0, √2]ⁿ.
+
+    Type IV: two pieces on the boundaries of the feasible islands, and the isolated point (1, 1)
+    (derived from the definition), which needs x₁ = 1 and g₃ = 1 exactly. Ideal point
+    (0.3707, 0.3311), nadir point (2.0662, 2.0383).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 25.
+    """
+
+    _type: ClassVar[str] = "mw11"
+
+
+@dataclass(frozen=True)
+class Mw12(_Mw):
+    """MW12: ``f₁ = g₁ x₁``, ``f₂ = g₁ (0.85 − 0.8 f₁/g₁ − 0.08 |sin(3.2π f₁/g₁)|)``, subject to
+    ``T₁ T₄ ≤ 0`` and ``T₂ T₃ ≥ 0``, four wavy lines, on [0, 1]ⁿ.
+
+    Type IV: the front is the boundary ``T₁ = 0``, from (0, 1) to (1.3164, 0.0039) (derived from
+    the definition).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 26.
+    """
+
+    _type: ClassVar[str] = "mw12"
+
+
+@dataclass(frozen=True)
+class Mw13(_Mw):
+    """MW13: ``f₁ = g₂ x₁``, ``f₂ = g₂ (5 − exp(f₁/g₂) − 0.5 |sin(3π f₁/g₂)|)``, subject to
+    ``T₁ T₄ ≤ 0`` and ``T₂ T₃ ≥ 0``, curves from the Taylor series of eˣ, on [0, 1.5]ⁿ.
+
+    Type III, disconnected: three pieces, parts of the unconstrained front and of the boundary
+    (derived from the definition). Ideal point (0, 0.0183), nadir point (1.5, 4).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 27.
+    """
+
+    _type: ClassVar[str] = "mw13"
+
+
+@dataclass(frozen=True, init=False)
+class Mw14(_ScalableMw):
+    """MW14, with any number of objectives: ``fᵢ = xᵢ`` for the first M − 1 and
+    ``f_M = g₃/(M − 1) Σ (6 − exp(fᵢ) − 1.5 sin(1.1π fᵢ²))``, subject to one constraint that the
+    whole unconstrained front meets, on [0, 1.5]ⁿ. ``Mw14(objectives=3, variables=None)``.
+
+    Type I: 2^(M−1) disconnected patches, each fᵢ in [0, 0.7314] or (1.3296, 1.5] (derived from
+    the definition). Ideal point (0, …, 0, 0.0229), nadir point (1.5, …, 1.5, 5).
+
+    Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective optimization: test
+    suite construction and performance comparisons. IEEE Transactions on Evolutionary
+    Computation 23(6): 972-986, eq. 28.
+    """
+
+    _type: ClassVar[str] = "mw14"
 
 
 from . import cec2006, engineering  # noqa: E402

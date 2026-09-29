@@ -1,0 +1,3 @@
+NSGA-III, 500 generations: 92 solutions, hypervolume 0.7448, 100.0% of the sample's, g 0.00002 (median) to 0.02296
+MOEA/D, 500 generations: 73 solutions, hypervolume 0.4736, 63.6% of the sample's, g 0.00000 (median) to 0.00231
+the whole front: hypervolume 0.7971; the sample of 91 of its points: 0.7449

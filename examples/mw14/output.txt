@@ -1,0 +1,3 @@
+NSGA-III, 3000 generations: 92 solutions, hypervolume 0.6316, 98.0% of the sample's, 7 in the gaps
+SMS-EMOA, 2000 generations: 92 solutions, hypervolume 0.6303, 97.8% of the sample's, 1 in the gaps
+the whole front: hypervolume 0.6742; the sample of 100 of its points: 0.6444

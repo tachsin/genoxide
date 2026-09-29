@@ -40,6 +40,8 @@
 //! | [`Dtlz1`], [`Dtlz2`], [`Dtlz3`], [`Dtlz4`] | M or more (M + 4, M + 9) | any M ≥ 2 | | linear; spherical |
 //! | [`Dtlz5`], [`Dtlz6`] | M or more (M + 9) | any M ≥ 2 | | a curve for M ≤ 3; not known for more |
 //! | [`Dtlz7`] | M or more (M + 19) | any M ≥ 2 | | 2^(M−1) disconnected regions |
+//! | [`ConvexDtlz2`], [`ScaledDtlz2`] | M or more (M + 9) | any M ≥ 2 | | convex; a scaled sphere |
+//! | [`ScaledDtlz1`], [`InvertedDtlz1`] | M or more (M + 4) | any M ≥ 2 | | a scaled plane; an inverted simplex |
 //! | [`Wfg1`], [`Wfg2`], [`Wfg3`] | k + l (k = 4 or 2(M − 1), l = 20) | any M ≥ 2 | | convex and mixed; convex, disconnected; linear for M = 2 |
 //! | [`Wfg4`] to [`Wfg9`] | k + l (k = 4 or 2(M − 1), l = 20) | any M ≥ 2 | | concave |
 //! | [`Schaffer1`] | 1 | 2 | | convex |
@@ -53,13 +55,26 @@
 //! | [`Tnk`] | 2 | 2 | 2 | disconnected, sampled |
 //! | [`Osy`] | 6 | 2 | 6 | five pieces |
 //! | [`Constr`] | 2 | 2 | 2 | convex, two pieces |
+//! | [`Ctp1`] | 2 | 2 | 2 | three pieces, two on constraint boundaries |
+//! | [`Ctp2`], [`Ctp3`], [`Ctp4`], [`Ctp5`] | 2 | 2 | 1 | 13 pieces; 13 points; 13 points behind tunnels; a piece and 15 points |
+//! | [`Ctp6`], [`Ctp7`], [`Ctp8`] | 2 | 2 | 1, 1, 2 | on a boundary, behind infeasible bands; six pieces and a point; three pieces |
+//! | [`C1Dtlz1`], [`C1Dtlz3`] | M or more (M + 4, M + 9) | any M ≥ 2 | 1 | DTLZ1's, DTLZ3's, behind infeasible barriers |
+//! | [`C2Dtlz2`], [`ConvexC2Dtlz2`] | M or more (M + 9) | any M ≥ 2 | 1 | parts of DTLZ2's, of convex DTLZ2's |
+//! | [`C3Dtlz1`], [`C3Dtlz4`] | M or more (M + 4) | any M ≥ 2 | M | on the constraints' boundaries |
+//! | [`Mw1`] to [`Mw3`], [`Mw5`] to [`Mw7`], [`Mw9`] to [`Mw13`] | 3 or more (15) | 2 | 1 to 4 | disconnected, points, or on constraint boundaries |
+//! | [`Mw4`], [`Mw8`], [`Mw14`] | M + 1 or more (M + 12) | any M ≥ 2 | 1 | linear; spherical in four bands; 2^(M−1) patches |
 //!
 //! ZDT is Zitzler, Deb and Thiele's suite (2000, *Evolutionary Computation* 8(2): 173-195), and
 //! DTLZ Deb, Thiele, Laumanns and Zitzler's (2001, TIK-Report 112, ETH Zürich; and 2002,
 //! *Proceedings of the 2002 Congress on Evolutionary Computation*: 825-830), in the numbering of
 //! their technical report, whose DTLZ6 and DTLZ7 the paper calls DTLZ5 and DTLZ6, and WFG
 //! Huband, Hingston, Barone and While's (2006, *IEEE Transactions on Evolutionary Computation*
-//! 10(5): 477-506), checked against the authors' C++ toolkit. [`Zdt5`] has
+//! 10(5): 477-506), checked against the authors' C++ toolkit. The convex, scaled and inverted
+//! DTLZ problems are Deb and Jain's (2014, *IEEE Transactions on Evolutionary Computation* 18(4):
+//! 577-601 and 602-622), CTP Deb, Pratap and Meyarivan's (2001, EMO 2001, LNCS 1993: 284-298),
+//! C-DTLZ Jain and Deb's (2014, *IEEE Transactions on Evolutionary Computation* 18(4): 602-622),
+//! and MW Ma and Wang's (2019, *IEEE Transactions on Evolutionary Computation* 23(6): 972-986).
+//! [`Zdt5`] has
 //! [`Binary`](crate::genome::Binary) genomes, and so isn't in [`all`], whose problems have
 //! [`Real`] ones. Each other problem's docs give its definition and cite its original authors.
 //! Some originals are conference proceedings that aren't online: those definitions are taken from
@@ -70,16 +85,24 @@
 //! The problems compute their trigonometric and exponential functions with [`math`](crate::math),
 //! so their values are the same to the bit on every platform, like the rest of genoxide.
 
+mod cdtlz;
 mod classic;
+mod ctp;
 mod dtlz;
+mod dtlz_variants;
+mod mw;
 mod wfg;
 mod zdt;
 
+pub use cdtlz::{C1Dtlz1, C1Dtlz3, C2Dtlz2, C3Dtlz1, C3Dtlz4, ConvexC2Dtlz2};
 pub use classic::{
     Bnh, Constr, FonsecaFleming, Kursawe, Osy, Poloni, Schaffer1, Schaffer2, Srn, Tnk, Viennet1,
     Viennet2, Viennet3,
 };
+pub use ctp::{Ctp1, Ctp2, Ctp3, Ctp4, Ctp5, Ctp6, Ctp7, Ctp8};
 pub use dtlz::{Dtlz1, Dtlz2, Dtlz3, Dtlz4, Dtlz5, Dtlz6, Dtlz7};
+pub use dtlz_variants::{ConvexDtlz2, InvertedDtlz1, ScaledDtlz1, ScaledDtlz2};
+pub use mw::{Mw1, Mw2, Mw3, Mw4, Mw5, Mw6, Mw7, Mw8, Mw9, Mw10, Mw11, Mw12, Mw13, Mw14};
 pub use wfg::{Wfg1, Wfg2, Wfg3, Wfg4, Wfg5, Wfg6, Wfg7, Wfg8, Wfg9};
 pub use zdt::{Zdt1, Zdt2, Zdt3, Zdt4, Zdt5, Zdt6};
 
@@ -279,8 +302,10 @@ where
 
 /// Every problem of this module with `M` objectives and [`Real`] genomes, at its default size:
 /// the two-objective problems for `M = 2` and the Viennet problems for `M = 3`, in the order of
-/// the table above, then DTLZ1-7 and WFG1-9 for any `M`
-/// from 2 on. [`Zdt5`], on bit strings, isn't in it.
+/// the table above, then DTLZ1-7, the convex, scaled and inverted DTLZ problems, WFG1-9, MW4, MW8
+/// and MW14 for any `M` from 2 on, then the constrained DTLZ problems (C1-DTLZ3 and convex
+/// C2-DTLZ2 only for the numbers of objectives their paper gives a radius for: 3, 5, 8, 10 and
+/// 15). [`Zdt5`], on bit strings, isn't in it.
 pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
     let fixed = [
         try_boxed::<_, 2, M>(Zdt1::default()),
@@ -301,6 +326,25 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
         try_boxed::<_, 2, M>(Tnk),
         try_boxed::<_, 2, M>(Osy),
         try_boxed::<_, 2, M>(Constr),
+        try_boxed::<_, 2, M>(Ctp1),
+        try_boxed::<_, 2, M>(Ctp2),
+        try_boxed::<_, 2, M>(Ctp3),
+        try_boxed::<_, 2, M>(Ctp4),
+        try_boxed::<_, 2, M>(Ctp5),
+        try_boxed::<_, 2, M>(Ctp6),
+        try_boxed::<_, 2, M>(Ctp7),
+        try_boxed::<_, 2, M>(Ctp8),
+        try_boxed::<_, 2, M>(Mw1::default()),
+        try_boxed::<_, 2, M>(Mw2::default()),
+        try_boxed::<_, 2, M>(Mw3::default()),
+        try_boxed::<_, 2, M>(Mw5::default()),
+        try_boxed::<_, 2, M>(Mw6::default()),
+        try_boxed::<_, 2, M>(Mw7::default()),
+        try_boxed::<_, 2, M>(Mw9::default()),
+        try_boxed::<_, 2, M>(Mw10::default()),
+        try_boxed::<_, 2, M>(Mw11::default()),
+        try_boxed::<_, 2, M>(Mw12::default()),
+        try_boxed::<_, 2, M>(Mw13::default()),
     ];
     let mut problems: Vec<_> = fixed.into_iter().flatten().collect();
     if M >= 2 {
@@ -311,6 +355,10 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
         problems.push(boxed(Dtlz5::<M>::default()));
         problems.push(boxed(Dtlz6::<M>::default()));
         problems.push(boxed(Dtlz7::<M>::default()));
+        problems.push(boxed(ConvexDtlz2::<M>::default()));
+        problems.push(boxed(ScaledDtlz1::<M>::default()));
+        problems.push(boxed(ScaledDtlz2::<M>::default()));
+        problems.push(boxed(InvertedDtlz1::<M>::default()));
         problems.push(boxed(Wfg1::<M>::default()));
         problems.push(boxed(Wfg2::<M>::default()));
         problems.push(boxed(Wfg3::<M>::default()));
@@ -320,6 +368,12 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
         problems.push(boxed(Wfg7::<M>::default()));
         problems.push(boxed(Wfg8::<M>::default()));
         problems.push(boxed(Wfg9::<M>::default()));
+        problems.push(boxed(Mw4::<M>::default()));
+        problems.push(boxed(Mw8::<M>::default()));
+        problems.push(boxed(Mw14::<M>::default()));
+    }
+    if M >= 2 {
+        problems.extend(cdtlz::all::<M>());
     }
     problems
 }
@@ -620,14 +674,44 @@ mod tests {
     #[test]
     fn the_registries_describe_every_problem() {
         let two = all::<2>();
-        assert_eq!(two.len(), 31);
+        assert_eq!(two.len(), 61);
         check_registry(two);
         let three = all::<3>();
         assert_eq!(
             three.iter().map(|p| p.name()).collect::<Vec<_>>(),
             [
-                "VNT1", "VNT2", "VNT3", "DTLZ1", "DTLZ2", "DTLZ3", "DTLZ4", "DTLZ5", "DTLZ6",
-                "DTLZ7", "WFG1", "WFG2", "WFG3", "WFG4", "WFG5", "WFG6", "WFG7", "WFG8", "WFG9"
+                "VNT1",
+                "VNT2",
+                "VNT3",
+                "DTLZ1",
+                "DTLZ2",
+                "DTLZ3",
+                "DTLZ4",
+                "DTLZ5",
+                "DTLZ6",
+                "DTLZ7",
+                "Convex DTLZ2",
+                "Scaled DTLZ1",
+                "Scaled DTLZ2",
+                "Inverted DTLZ1",
+                "WFG1",
+                "WFG2",
+                "WFG3",
+                "WFG4",
+                "WFG5",
+                "WFG6",
+                "WFG7",
+                "WFG8",
+                "WFG9",
+                "MW4",
+                "MW8",
+                "MW14",
+                "C1-DTLZ1",
+                "C1-DTLZ3",
+                "C2-DTLZ2",
+                "convex C2-DTLZ2",
+                "C3-DTLZ1",
+                "C3-DTLZ4",
             ]
         );
         check_registry(three);

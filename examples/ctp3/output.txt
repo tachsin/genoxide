@@ -1,0 +1,6 @@
+NSGA-II, 500 generations: 45 solutions on the front, all feasible
+  optimal points reached: 11 of 13
+  IGD+ 0.01553, hypervolume 0.6462, 96.68% of the whole front's 0.6683
+NSGA-II, 3000 generations: 100 solutions on the front, all feasible
+  optimal points reached: 13 of 13
+  IGD+ 0.00596, hypervolume 0.6597, 98.70% of the whole front's 0.6683

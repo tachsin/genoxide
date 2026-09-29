@@ -249,7 +249,10 @@ export function exampleTree(examples) {
 const FAMILY_SUMMARIES = {
   "CEC 2006":
     "The constrained problems of the CEC 2006 competition: linear and nonlinear inequalities and equalities, some with a feasible region that is tiny or in pieces.",
-  DTLZ: "Scalable to any number of objectives, here three: fronts that are a plane, part of a sphere, a curve or disconnected regions, some behind many local fronts.",
+  CTP: "Two objectives, two variables and one or two constraints from a tunable generator: fronts cut into pieces or points, behind infeasible bands or at the ends of narrow tunnels.",
+  "C-DTLZ": "DTLZ problems with constraints, here with three objectives: an infeasible barrier before the front, holes in it, or a new front on the constraints' boundaries.",
+  DTLZ: "Scalable to any number of objectives, here three: fronts that are a plane, part of a sphere, a curve or disconnected regions, some behind many local fronts, and convex, scaled and inverted versions.",
+  MW: "Two or three objectives over 15 variables with one to four constraints: fronts whole, in pieces, in points or on the constraints' boundaries, some reached only through narrow feasible regions.",
   WFG: "Two objectives from the WFG toolkit: convex, concave, linear, mixed and disconnected fronts behind biased, deceptive, multimodal and non-separable parameters.",
   ZDT: "Two conflicting objectives, with convex, concave, disconnected, multimodal, deceptive and unevenly crowded Pareto fronts.",
   Hartmann: "Hartmann's function, four Gaussian wells in the unit cube, in 3 and 6 dimensions.",
