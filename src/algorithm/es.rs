@@ -336,7 +336,7 @@ impl Parents<'_> {
             Recombination::Intermediate { rho } => (rho, false),
             Recombination::Dominant { rho } => (rho, true),
         };
-        let parents = rng.sample_distinct(rho, self.mu);
+        let parents = rng.sample_distinct_small(rho, self.mu);
         let (first, others) = (parents[0], &parents[1..]);
         let (mut genes, mut steps) = match spare {
             Some((mut genes, mut steps)) => {
