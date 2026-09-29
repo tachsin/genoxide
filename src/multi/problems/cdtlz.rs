@@ -238,7 +238,10 @@ impl<const M: usize> C1Dtlz3<M> {
 /// The paper prints the constraint as `c = max{maxᵢ [(fᵢ − 1)² + Σ_{j≠i} fⱼ² − r²],
 /// Σ (fᵢ − 1/√M)² − r²}` with no inequality; the text and its figure 7 make the inside of the
 /// spheres feasible, which only `min{minᵢ [(fᵢ − 1)² + Σ_{j≠i} fⱼ² − r²], Σ (fᵢ − 1/√M)² − r²} ≤ 0`
-/// gives, what [`constraints`](MultiProblem::constraints) returns.
+/// gives, what [`constraints`](MultiProblem::constraints) returns. The paper's table V confirms
+/// it: 58 of the 91 reference directions of Das and Dennis's method with 12 divisions find a
+/// Pareto-optimal solution for 3 objectives, and 80 of 210 with 6 divisions for 5; that many of
+/// the directions meet the unit sphere inside the spheres here.
 ///
 /// Jain, H. and Deb, K. (2014). An evolutionary many-objective optimization algorithm using
 /// reference-point based nondominated sorting approach, part II. *IEEE Transactions on
@@ -323,7 +326,9 @@ impl<const M: usize> C2Dtlz2<M> {
 /// in the middle of the front, and the front is the rest of it.
 /// [`optimal_front`](MultiProblem::optimal_front) maps Das and Dennis's points s to the front,
 /// `fᵢ = sᵢ²` for i < M and `f_M = s_M`, and keeps the feasible ones. That nothing behind the
-/// hole becomes optimal is checked by the tests against random solutions, not proven.
+/// hole becomes optimal is checked by the tests against random solutions, not proven. As the
+/// paper's table V counts, 47 of the 91 reference directions (3 objectives, 12 divisions) and 97
+/// of the 210 (5 objectives, 6 divisions) meet the front outside the cylinder.
 ///
 /// [`constraints`](MultiProblem::constraints) gives `r² − Σ (fᵢ − λ)²`.
 ///
@@ -872,6 +877,36 @@ mod tests {
         assert_close(&f, &[2.0, 0.0, 0.0]);
         assert_eq!(violation, 0.0);
         assert_close(problem.constraints(&x).inequalities(), &[0.0, -3.0, -3.0]);
+    }
+
+    // the paper's table V counts the reference points that find a Pareto-optimal solution: 58 of
+    // 91 for C2-DTLZ2 and 47 of 91 for convex C2-DTLZ2 with 3 objectives, 80 and 97 of 210 with
+    // 5. The directions of Das and Dennis's points (12 and 6 divisions) meet the fronts in as
+    // many feasible points: a check of the constraints' reading and of the radii
+    #[test]
+    fn feasible_reference_points_match_the_papers_counts() {
+        fn counts<const M: usize>(divisions: usize) -> (usize, usize) {
+            let sphere = C2Dtlz2::<M>::default();
+            let convex = ConvexC2Dtlz2::<M>::default();
+            let directions = das_dennis::<M>(divisions);
+            let on_sphere = directions.iter().filter(|w| {
+                let norm = w.iter().map(|v| v * v).sum::<f64>().sqrt();
+                sphere.values(&w.map(|v| v / norm))[0] <= 0.0
+            });
+            // on the convex front, f = t w with t w_M + √t Σᵢ₌₁^{M−1} √wᵢ = 1
+            let on_convex = directions.iter().filter(|w| {
+                let b: f64 = w[..M - 1].iter().map(|v| v.sqrt()).sum();
+                let root = if w[M - 1] > 0.0 {
+                    (-b + (b * b + 4.0 * w[M - 1]).sqrt()) / (2.0 * w[M - 1])
+                } else {
+                    1.0 / b
+                };
+                convex.values(&w.map(|v| v * root * root))[0] <= 0.0
+            });
+            (on_sphere.count(), on_convex.count())
+        }
+        assert_eq!(counts::<3>(12), (58, 47));
+        assert_eq!(counts::<5>(6), (80, 97));
     }
 
     #[test]
