@@ -22,7 +22,12 @@ minimum = problem.optimum.value
 de = gx.De(problem.genome, objective=problem.objective, seed=1)
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(problem)
-result = de.run(problem, evaluations=50_000, on_generation=trace.on_generation)
+result = de.run(
+    problem,
+    target=minimum * (1.0 + 1e-10),
+    evaluations=200_000,
+    on_generation=trace.on_generation,
+)
 
 shell, head, radius, length = problem.design(result.best_genome).tolist()
 print(

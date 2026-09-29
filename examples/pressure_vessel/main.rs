@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
     let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(de, problem)
-        .stop_when(Stop::evaluations(50_000))
+        .stop_when(Stop::target(minimum * (1.0 + 1e-10)).or(Stop::evaluations(200_000)))
         .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
