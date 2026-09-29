@@ -208,6 +208,7 @@ On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)
 - [x] Python: `Progress` builds its arrays only when a callback reads them ([#324](https://github.com/tachsin/genoxide/pull/324))
 
 ### 0.11: Genetic programming and neuroevolution
+The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [ ] Tree GP, strongly typed
 - [ ] Subtree crossover; point, subtree and hoist mutation; bloat control
 - [ ] Symbolic regression examples
