@@ -59,7 +59,9 @@ from a normal distribution, and adapts its mean, step size and covariance matrix
 matrix is what suits this function: the distribution stretches along the directions of past
 successful steps, which here are the directions of the valley, and it keeps turning as the valley
 bends. It uses genoxide's defaults: a population of 4 + ⌊3 ln 30⌋ = 14, a step size of 0.3 of each
-gene's range, a random start, and no restarts.
+gene's range and a random start, with IPOP restarts (Auger and Hansen, 2005, IEEE CEC 2005:
+1769-1776): a run that converges to the local minimum starts again from a random point with twice
+the population.
 
 L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665) is a differential evolution that
 adapts its scale factor and crossover rate from successful trials. Its steps are differences
@@ -85,8 +87,14 @@ contour.
 
 ## Good results
 
-The minimum is 0. CMA-ES reaches the target after about 47,000 evaluations, and L-SHADE after
-about 250,000: the adapted covariance matrix makes CMA-ES five times faster.
+The minimum is 0. CMA-ES reaches the target after about 47,000 evaluations, in its first run,
+without restarting, and L-SHADE after about 250,000: the adapted covariance matrix makes CMA-ES five
+times faster.
+
+Both reach it from every seed tried. With seeds 1 to 100, CMA-ES with IPOP restarts reaches the
+target every time, after at most 114,000 evaluations. Without restarts, 12 of the 100 runs end in
+the local minimum, at 3.99 with x₁ ≈ −1, and stay there. With seeds 1 to 20, L-SHADE reaches the
+target every time, after at most 253,000 evaluations.
 
 PSO ends at an error of 6.79 with the budget spent. Its best point is on the valley floor, but far
 along it from the minimum: x₁ to x₁₂ are within 0.01 of 1, and from there each gene is about the

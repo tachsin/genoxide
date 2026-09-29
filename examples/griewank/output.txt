@@ -1,6 +1,6 @@
-Runs of CMA-ES within 1e-8 of the minimum, of 10, with 10000 evaluations per dimension
+Runs of CMA-ES within 1e-8 of the minimum, of 10, with 10000 evaluations per dimension, 100000 at least
 dimensions   no restarts          IPOP
-         2          0/10          6/10
+         2          0/10         10/10
          5          0/10         10/10
         10          2/10         10/10
         20          9/10         10/10

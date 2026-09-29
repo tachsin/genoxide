@@ -41,9 +41,9 @@ Twenty independent local searches, each from a random point, with seeds 1 to 20.
 climber:
 
 - a step makes 10 neighbors of the current point, each with Gaussian noise on both genes, of
-  standard deviation 0.01 (0.001 of the range of 10);
+  standard deviation 0.005 (0.0005 of the range of 10);
 - the search moves to the best neighbor only if it is strictly better;
-- it stops after 1,000 steps, 10,000 evaluations.
+- it stops after 3,000 steps, 30,001 evaluations with the starting point.
 
 With steps that small, a search follows its basin down to the minimum at the bottom. Restarting from
 random points is the simplest way to find several minima: each start lands in some basin. Each
@@ -51,17 +51,22 @@ search's end point is then assigned to the nearest of the four known minima.
 
 ## Output
 
-The first line gives the number of searches. Then a table has a row per known minimum: its
-coordinates, how many searches ended nearest to it, and the range of values they reached, from the
-best to the worst. In Python, `run` evaluates the function in Rust, so both versions print the same
-table.
+The first line gives the number of searches, the bounds and the length of each search. Then a
+table has a row per known minimum: its coordinates, how many searches ended nearest to it, and the
+range of values they reached, from the best to the worst. In Python, `run` evaluates the function
+in Rust, so both versions print the same table.
 
 The values are small but not 0. The step size is fixed, so near a minimum few neighbors are better
-than the current point, and progress slows down to a stop.
+than the current point, and progress slows down to a stop. The smaller the steps, the closer to 0 a
+search gets, and the longer it takes to reach a minimum from its start: with steps of 0.01 and
+1,000 steps, a quarter of the searches stopped between 1e-6 and 5e-6.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/himmelblau) plays this run back.
 
 ## Good results
 
-Each minimum is worth 0. A good result finds all four, each with a value close to 0. The run finds
-all four, with 3 to 6 searches each, and values between about 6e-9 and 2e-6.
+Each minimum is worth 0. A good result finds all four, each within 1e-6 of 0. The run finds all
+four, with 3 to 6 searches each, and every search ends between 1.4e-8 and 2.1e-7.
+
+With seeds 1 to 600, in 30 groups of 20 searches, every search ends within 5.1e-7 of 0, and 29 of
+the 30 groups find all four minima; the other finds three.

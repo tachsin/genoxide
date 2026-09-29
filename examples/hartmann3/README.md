@@ -104,7 +104,9 @@ A good result reaches the minimum −3.86278 at (0.115, 0.556, 0.853). The run d
 searches end there, 5 at −3.08976 and 14 at −1.00082, and the best is within 2e-8 of the minimum
 after 1,000 steps. In 1,000 searches with the same settings (seeds 1 to 1,000), 47% end at the
 minimum, 26% at −3.08976 and 27% at −1.00082: the basin of the minimum is the largest, but more
-than half the searches from a random point miss it.
+than half the searches from a random point miss it. The restarts are what make the method reliable:
+30 searches all miss it with a probability of 0.53³⁰, about 5 in 10⁹, and in each of 20 groups of
+30 searches (seeds 1 to 600), 10 to 18 end within 1e-6 of the minimum.
 
 For a population method this is an easy function. CMA-ES with genoxide's defaults and no restarts,
 in runs not shown here, reached the minimum to within 1e-6 from 29 of seeds 1 to 30, with about

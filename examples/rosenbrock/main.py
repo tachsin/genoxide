@@ -1,9 +1,10 @@
 """Rosenbrock: minimize a function whose minimum lies at the end of a narrow curved valley, in 30
 dimensions.
 
-Compares CMA-ES (which learns the valley's direction), L-SHADE (differential evolution with a
-population that shrinks over the budget) and particle swarm optimization. The global minimum is
-0, at (1, …, 1). The function is genoxide's problems.Rosenbrock, which run evaluates in Rust.
+Compares CMA-ES with IPOP restarts (which learns the valley's direction), L-SHADE (differential
+evolution with a population that shrinks over the budget) and particle swarm optimization. The
+global minimum is 0, at (1, …, 1). The function is genoxide's problems.Rosenbrock, which run
+evaluates in Rust.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
 page, with trace.py.
@@ -27,7 +28,11 @@ print(
     f"{BUDGET} evaluations at most"
 )
 for name, algorithm in (
-    ("CMA-ES", gx.Cmaes(problem.genome, objective="minimize", seed=1)),
+    # IPOP restarts: a run that ends in the local minimum near x1 = -1 starts again
+    (
+        "CMA-ES with IPOP",
+        gx.Cmaes(problem.genome, restarts="ipop", objective="minimize", seed=1),
+    ),
     ("L-SHADE", gx.De(problem.genome, l_shade=BUDGET, objective="minimize", seed=1)),
     ("PSO", gx.Pso(problem.genome, population_size=40, objective="minimize", seed=1)),
 ):

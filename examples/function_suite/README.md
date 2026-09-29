@@ -83,7 +83,21 @@ platform: the functions use genoxide's portable `math`, the same to the bit ever
 
 ## Good results
 
-The best possible error is 0, and an error below 1e-8 counts as solved. All three solve the unimodal
-functions, except PSO on Rosenbrock. SHADE solves all twelve. CMA-ES solves the multimodal ones
-except Michalewicz and Schwefel 2.26, where it stays far from the minimum. PSO, which has no
-restarts, solves only Ackley and Levy among the multimodal functions.
+The best possible error is 0, and an error below 1e-8 counts as solved. Every function is solved by
+at least one of the three: SHADE solves all twelve, and does so from every one of seeds 1 to 20,
+after at most 88,000 evaluations (on Griewank).
+
+All three solve the unimodal functions, except PSO on Rosenbrock. CMA-ES solves the multimodal ones
+except Michalewicz and Schwefel 2.26, where it stays far from the minimum. With seeds 1 to 20, it
+solves neither of them from any seed (its closest run, on Schwefel 2.26, ends 3.7e-4 above the
+minimum), and misses Rastrigin's minimum from 3 seeds, by 0.995.
+
+The local minima of all three form a grid: each gene has several valleys, and every combination of
+them is a local minimum. On Rastrigin, the valleys get deeper towards the minimum, and the larger
+populations of the IPOP restarts smooth them out into a bowl. Schwefel 2.26 and Michalewicz have no
+such overall slope: Schwefel's best valleys are near the bounds, far from the next best, and
+Michalewicz's are narrow cuts in a plateau. There, CMA-ES's runs converge with a few genes in the
+wrong valley, as in the [Schwefel 2.26](../schwefel_2_26/) and [Michalewicz](../michalewicz/)
+examples in 30 and 10 dimensions. SHADE's crossover can change a few genes and keep the others, so
+one gene can move to a better valley while the rest stay. PSO, which has no restarts, solves only
+Ackley and Levy among the multimodal functions.

@@ -17,6 +17,7 @@ use genoxide::prelude::*;
 use genoxide::problems::{Himmelblau, Problem};
 
 const SEARCHES: u64 = 20;
+const STEPS: u64 = 3_000;
 
 fn main() -> Result<()> {
     let problem = Himmelblau;
@@ -29,14 +30,14 @@ fn main() -> Result<()> {
     let mut trace = trace::Trace::from_env();
     for seed in 1..=SEARCHES {
         let search = LocalSearch::builder(problem.representation())
-            .neighbor(GaussianMutation::per_gene(1.0, 0.001)?)
+            .neighbor(GaussianMutation::per_gene(1.0, 0.0005)?)
             .neighbors(10)
             .acceptance(Acceptance::Improving)
             .minimize()
             .seed(seed)
             .build()?;
         let outcome = Engine::new(search, problem)
-            .stop_when(Stop::generations(1_000))
+            .stop_when(Stop::generations(STEPS))
             .on_generation(|snapshot| trace.record(snapshot))
             .run()?;
         let end = outcome.best_genome();
@@ -50,7 +51,9 @@ fn main() -> Result<()> {
         *worst = worst.max(value);
     }
 
-    println!("{SEARCHES} local searches from random points in [-5, 5] x [-5, 5]");
+    println!(
+        "{SEARCHES} local searches from random points in [-5, 5] x [-5, 5], {STEPS} steps each"
+    );
     println!("minimum                  searches  values reached");
     for (minimum, (searches, best, worst)) in minima.iter().zip(found) {
         println!(

@@ -20,7 +20,7 @@ use genoxide::prelude::*;
 use genoxide::problems::{Hartmann6, Problem};
 
 const SEEDS: u64 = 30;
-const BUDGET: u64 = 10_000;
+const BUDGET: u64 = 20_000;
 // a run stops once its error to the best known minimum is at most this
 const ERROR: f64 = 1e-6;
 // the other local minimum, where a third of local searches end

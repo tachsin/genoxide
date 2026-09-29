@@ -1,6 +1,6 @@
 """Eggholder: minimize the eggholder function, deep local minima all over and the deepest on the
-edge of the box, from 30 seeds each with CMA-ES with IPOP restarts and with particle swarms of a
-global and a ring topology.
+edge of the box, from 30 seeds each with particle swarms of a ring and a global topology and, for
+contrast, with CMA-ES with IPOP restarts.
 
 The runs that end close together are grouped, and the table gives each group's best point and
 value, and how many runs of each algorithm end there. The function, its bounds and its best known
@@ -17,11 +17,11 @@ import genoxide as gx
 from trace import Trace
 
 SEEDS = 30
-BUDGET = 20_000
-PARTICLES = 40
+BUDGET = 50_000
+PARTICLES = 80
 # a run stops once its error to the best known minimum is at most this
 ERROR = 1e-6
-ALGORITHMS = ["CMA-ES, IPOP", "PSO, global", "PSO, ring"]
+ALGORITHMS = ["PSO, ring", "PSO, global", "CMA-ES, IPOP"]
 
 problem = gx.problems.Eggholder()
 minimum = problem.optimum.value
@@ -36,7 +36,7 @@ reached = [0, 0, 0]
 trace = Trace([problem.genome.bounds] * 2, problem.optimum)
 for a in range(len(ALGORITHMS)):
     for seed in range(1, SEEDS + 1):
-        if a == 0:
+        if a == 2:
             algorithm = gx.Cmaes(problem.genome, restarts="ipop", objective="minimize", seed=seed)
         else:
             algorithm = gx.Pso(
@@ -75,14 +75,14 @@ print(
     f"Eggholder: best known minimum {minimum:.4f} at (512, 404.2318), {SEEDS} seeds, {BUDGET} "
     "evaluations at most per run"
 )
-cmaes, pso_global, pso_ring = ALGORITHMS
-print(f"runs ending near        best value  {cmaes}  {pso_global}  {pso_ring}")
+pso_ring, pso_global, cmaes = ALGORITHMS
+print(f"runs ending near        best value  {pso_ring}  {pso_global}  {cmaes}")
 for group in minima:
     x1, x2 = group["point"]
     a, b, c = group["runs"]
     at = f"({x1:.1f}, {x2:.1f})"
-    print(f"{at:<16}  {group['value']:>16.4f}  {a:>12}  {b:>11}  {c:>9}")
+    print(f"{at:<16}  {group['value']:>16.4f}  {a:>9}  {b:>11}  {c:>12}")
 a, b, c = reached
 label = "error below 1e-6"
-print(f"{label:<34}  {a:>12}  {b:>11}  {c:>9}")
+print(f"{label:<34}  {a:>9}  {b:>11}  {c:>12}")
 trace.write()

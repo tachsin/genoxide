@@ -1,10 +1,8 @@
-Shekel 7: best known minimum -10.40294, 30 seeds, 10000 evaluations at most per run, 40 particles
+Shekel 7: best known minimum -10.40294, 30 seeds, 25000 evaluations at most per run, 80 particles
 runs ending in the well at  PSO, global  PSO, ring
-a1 = (4, 4, 4, 4)                    16         29
-a2 = (1, 1, 1, 1)                     2          0
-a3 = (8, 8, 8, 8)                     3          1
-a4 = (6, 6, 6, 6)                     3          0
-a5 = (3, 7, 3, 7)                     3          0
-a7 = (5, 5, 3, 3)                     3          0
-error below 1e-6                     16         29
-evaluations (median)               3980       5760
+a1 = (4, 4, 4, 4)                    21         30
+a3 = (8, 8, 8, 8)                     4          0
+a4 = (6, 6, 6, 6)                     4          0
+a7 = (5, 5, 3, 3)                     1          0
+error below 1e-6                     20         30
+evaluations (median)               7120      11080
