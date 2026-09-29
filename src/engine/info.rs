@@ -178,7 +178,9 @@ impl fmt::Debug for Info {
 // A fast hasher of genomes without random keys, for maps and sets of genomes whose order never
 // matters: created without a call to the system's random number generator, and results never
 // depend on it, as the genomes are compared. Every word is mixed in with a folded multiply (the
-// two halves of a 128-bit product xored), and the result is finalized so that the low bits,
+// two halves of a 128-bit product xored), so a difference in any bit spreads to most bits before
+// the next word (FxHash's rotate and multiply only spread it upwards: bit 63 of one word, rotated
+// to bit 4, cancelled bit 4 of the next), and the result is finalized so that the low bits,
 // which pick a bucket, depend on every bit. SipHash, the default, spends several times as long on
 // a genome of many words.
 #[derive(Clone, Copy)]
@@ -209,8 +211,15 @@ impl Hasher for GenomeHasher {
         self.0 = product as u64 ^ (product >> 64) as u64;
     }
 
+    // every integer is a word, whatever its size, so that a length (a `usize`) hashes the same on
+    // 32 and 64 bits. A slice of `usize`, as in `Order`, still reaches `write` as 4 or 8 bytes each.
     #[inline]
     fn write_u8(&mut self, n: u8) {
+        self.write_u64(n.into());
+    }
+
+    #[inline]
+    fn write_u16(&mut self, n: u16) {
         self.write_u64(n.into());
     }
 
@@ -225,8 +234,28 @@ impl Hasher for GenomeHasher {
     }
 
     #[inline]
+    fn write_i8(&mut self, n: i8) {
+        self.write_i64(n.into());
+    }
+
+    #[inline]
+    fn write_i16(&mut self, n: i16) {
+        self.write_i64(n.into());
+    }
+
+    #[inline]
+    fn write_i32(&mut self, n: i32) {
+        self.write_i64(n.into());
+    }
+
+    #[inline]
     fn write_i64(&mut self, n: i64) {
         self.write_u64(n as u64);
+    }
+
+    #[inline]
+    fn write_isize(&mut self, n: isize) {
+        self.write_i64(n as i64);
     }
 
     #[inline]

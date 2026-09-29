@@ -1,6 +1,7 @@
 //! Breeding shared by the multi-objective genetic algorithms.
 
 use super::Scores;
+use crate::engine::GenomeHashing;
 use crate::genome::Representation;
 use crate::operator::{Crossover, Mutate};
 use crate::rng::Chance;
@@ -8,7 +9,7 @@ use crate::{Individual, Population, StreamRng};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fmt;
-use std::hash::{BuildHasherDefault, Hash, Hasher};
+use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 
 // with duplicate elimination, the children rejected as copies, per child needed, before copies
 // are accepted: a population of few distinct genomes still gets its children
@@ -18,81 +19,11 @@ const REJECTIONS_PER_CHILD: usize = 100;
 // population: SMS-EMOA breeds one child at a time
 const COMPARED_CHILDREN: usize = 8;
 
-// a fast, deterministic 64-bit hash of a genome. It only finds the genomes a child may equal:
-// they are compared, so the results never depend on it, on any platform.
+// a fast, deterministic 64-bit hash of a genome, the engine's genome hasher's. It only finds the
+// genomes a child may equal: they are compared, so the results never depend on it, on any
+// platform.
 fn fingerprint<G: Hash>(genome: &G) -> u64 {
-    let mut hasher = Fingerprinter(0x243f_6a88_85a3_08d3);
-    genome.hash(&mut hasher);
-    // SplitMix64's finalizer: the low bits, which pick the map's bucket, depend on every bit
-    let mut x = hasher.0;
-    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    x ^ (x >> 31)
-}
-
-// every word is mixed in with a folded multiply (the two halves of a 128-bit product xored), so a
-// difference in any bit spreads to most bits before the next word. FxHash's rotate and multiply
-// only spread a difference upwards: bit 63 of one word, rotated to bit 4, cancelled bit 4 of the
-// next.
-struct Fingerprinter(u64);
-
-impl Hasher for Fingerprinter {
-    fn write(&mut self, bytes: &[u8]) {
-        let (words, rest) = bytes.as_chunks::<8>();
-        for &word in words {
-            self.write_u64(u64::from_le_bytes(word));
-        }
-        for &byte in rest {
-            self.write_u64(u64::from(byte));
-        }
-    }
-
-    fn write_u64(&mut self, word: u64) {
-        let product = u128::from(self.0 ^ word) * 0x9e37_79b9_7f4a_7c15;
-        self.0 = product as u64 ^ (product >> 64) as u64;
-    }
-
-    // every integer is a word, whatever its size, so that a length (a `usize`) hashes the same on
-    // 32 and 64 bits. A slice of `usize`, as in `Order`, still reaches `write` as 4 or 8 bytes each.
-    fn write_u8(&mut self, n: u8) {
-        self.write_u64(n.into());
-    }
-
-    fn write_u16(&mut self, n: u16) {
-        self.write_u64(n.into());
-    }
-
-    fn write_u32(&mut self, n: u32) {
-        self.write_u64(n.into());
-    }
-
-    fn write_usize(&mut self, n: usize) {
-        self.write_u64(n as u64);
-    }
-
-    fn write_i8(&mut self, n: i8) {
-        self.write_i64(n.into());
-    }
-
-    fn write_i16(&mut self, n: i16) {
-        self.write_i64(n.into());
-    }
-
-    fn write_i32(&mut self, n: i32) {
-        self.write_i64(n.into());
-    }
-
-    fn write_i64(&mut self, n: i64) {
-        self.write_u64(n as u64);
-    }
-
-    fn write_isize(&mut self, n: isize) {
-        self.write_i64(n as i64);
-    }
-
-    fn finish(&self) -> u64 {
-        self.0
-    }
+    GenomeHashing::default().hash_one(genome)
 }
 
 // a map keyed by fingerprints, which are hashes already
