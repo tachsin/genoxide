@@ -1464,29 +1464,28 @@ impl DeBuilder {
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
         check_strategy(self.strategy)?;
         check_control(self.control)?;
-        if let Some((min_size, max_evaluations)) = self.reduction {
-            if min_size < 4 || min_size > size || max_evaluations == 0 {
-                return invalid(
-                    "linear_reduction",
-                    format!(
-                        "the minimum size must be between 4 and the population size {size}, and the evaluations at least 1; got {min_size} and {max_evaluations}"
-                    ),
-                );
-            }
+        if let Some((min_size, max_evaluations)) = self.reduction
+            && (min_size < 4 || min_size > size || max_evaluations == 0)
+        {
+            return invalid(
+                "linear_reduction",
+                format!(
+                    "the minimum size must be between 4 and the population size {size}, and the evaluations at least 1; got {min_size} and {max_evaluations}"
+                ),
+            );
         }
         if let Restarts::OnStagnation {
             tolerance,
             patience,
         } = self.restarts
+            && (!(tolerance >= 0.0 && tolerance.is_finite()) || patience == 0)
         {
-            if !(tolerance >= 0.0 && tolerance.is_finite()) || patience == 0 {
-                return invalid(
-                    "restarts",
-                    format!(
-                        "the tolerance must be 0 or more and finite, and the patience at least 1; got {tolerance} and {patience}"
-                    ),
-                );
-            }
+            return invalid(
+                "restarts",
+                format!(
+                    "the tolerance must be 0 or more and finite, and the patience at least 1; got {tolerance} and {patience}"
+                ),
+            );
         }
         if self.initial_genomes.len() > size {
             return invalid(

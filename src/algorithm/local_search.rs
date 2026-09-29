@@ -671,15 +671,15 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
     {
         check_neighbors(self.neighbors)?;
         self.acceptance.validate()?;
-        if let Some((patience, kicks)) = self.restart {
-            if patience == 0 || kicks == 0 || kicks > MAX_SIZE {
-                return Err(Error::InvalidSetting {
-                    setting: "restart",
-                    reason: format!(
-                        "patience must be at least 1, and kicks between 1 and {MAX_SIZE}; got {patience} and {kicks}"
-                    ),
-                });
-            }
+        if let Some((patience, kicks)) = self.restart
+            && (patience == 0 || kicks == 0 || kicks > MAX_SIZE)
+        {
+            return Err(Error::InvalidSetting {
+                setting: "restart",
+                reason: format!(
+                    "patience must be at least 1, and kicks between 1 and {MAX_SIZE}; got {patience} and {kicks}"
+                ),
+            });
         }
         if let Some(genome) = &self.initial_genome {
             self.representation.validate(genome)?;
