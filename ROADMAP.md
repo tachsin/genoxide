@@ -214,7 +214,7 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [ ] Symbolic regression examples
 - [ ] NEAT (speciation, innovation numbers)
 - [ ] Neuroevolution with evolution strategies
-- [ ] Python: zero-copy numpy genomes, the ES, islands and checkpoints
+- [x] Python: the ES, islands and checkpoints, and a batch's matrix reused ([#342](https://github.com/tachsin/genoxide/pull/342))
 
 ### 0.12: Local optimization
 - [ ] Linear algebra through a dependency pinned to a portable path, convergence stops, restarts, Nelder-Mead ([docs/optimization-plan.md](docs/optimization-plan.md), batch A1)
