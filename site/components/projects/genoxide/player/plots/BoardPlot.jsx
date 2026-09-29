@@ -4,7 +4,11 @@ import { useState } from "react";
 import { STATUS, categorical } from "../chart-kit";
 import { Legend, Marker, PlotBox, TipRows, Tooltip, nearest, pointerIn } from "../chart-parts";
 
-/** `board`: the best placement of the queens, attacking pairs joined by a line. */
+/**
+ * `board`: the best placement of the queens, attacking pairs joined by a line. On a large board
+ * (128×128 has squares of 2 to 4 pixels), the squares would be only a texture: the board is plain
+ * then, and the attacked queens larger.
+ */
 export default function BoardPlot({ trace, frame, dark }) {
   const [hover, setHover] = useState(null);
   const n = trace.problem?.n ?? frame.state?.best?.length ?? 8;
@@ -52,16 +56,19 @@ export default function BoardPlot({ trace, frame, dark }) {
           const ox = (width - size) / 2;
           const cell = size / n;
           const center = (r) => ({ x: ox + (cols[r] + 0.5) * cell, y: (r + 0.5) * cell });
+          const squares = cell >= 6;
           let dark = "";
-          for (let r = 0; r < n; r++) {
+          for (let r = 0; squares && r < n; r++) {
             for (let c = (r + 1) % 2; c < n; c += 2) dark += `M${(ox + c * cell).toFixed(2)} ${(r * cell).toFixed(2)}h${cell.toFixed(2)}v${cell.toFixed(2)}h${(-cell).toFixed(2)}z`;
           }
-          const r = Math.max(2, cell * (cell < 12 ? 0.38 : 0.3));
+          const r = squares ? Math.max(2, cell * (cell < 12 ? 0.38 : 0.3)) : Math.max(1.5, cell * 0.45);
+          // an attacked queen stands out among many
+          const attackedR = squares ? r * 0.95 : r * 1.3;
           const queens = cols.map((_, row) => ({ row, ...center(row) }));
           return (
             <>
               <rect x={ox} y={0} width={size} height={size} className="fill-base-content/[0.03]" />
-              <path d={dark} className="fill-base-content/[0.09]" shapeRendering="crispEdges" />
+              {squares ? <path d={dark} className="fill-base-content/[0.09]" shapeRendering="crispEdges" /> : null}
               <rect x={ox} y={0} width={size} height={size} fill="none" className="stroke-base-content/25" strokeWidth={1} />
               {attacks.map(([a, b]) => {
                 const p = center(a);
@@ -70,7 +77,7 @@ export default function BoardPlot({ trace, frame, dark }) {
               })}
               {queens.map((q) =>
                 attackedBy.has(q.row) ? (
-                  <Marker key={q.row} shape="diamond" x={q.x} y={q.y} r={r * 0.95} color={STATUS.critical} ring={cell > 8} />
+                  <Marker key={q.row} shape="diamond" x={q.x} y={q.y} r={attackedR} color={STATUS.critical} ring={cell > 8} />
                 ) : (
                   <Marker key={q.row} x={q.x} y={q.y} r={r} color={color} ring={cell > 8} />
                 ),
