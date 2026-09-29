@@ -218,8 +218,9 @@ where
         );
     }
 
-    // the next population from the parents and the offspring
-    fn survive(&mut self) {
+    // the next population from the parents and the offspring; returns the population's first
+    // front, its indices ascending, if the survival sorted enough to know it
+    fn survive(&mut self) -> Option<Vec<usize>> {
         let parents = std::mem::take(&mut self.population).into_vec();
         let parent_count = parents.len();
         let mut pool = parents;
@@ -228,7 +229,7 @@ where
         let size = self.population_size;
         let feasible: Vec<usize> = (0..pool.len()).filter(|&i| is_ok(&scores[i])).collect();
         let mut chosen: Vec<usize> = Vec::with_capacity(size);
-        if feasible.len() <= size {
+        let first = if feasible.len() <= size {
             // every feasible solution, then the least infeasible ones
             chosen.extend(&feasible);
             let mut others: Vec<usize> = (0..pool.len()).filter(|&i| !is_ok(&scores[i])).collect();
@@ -248,20 +249,26 @@ where
             });
             others = order.into_iter().map(|position| others[position]).collect();
             chosen.extend(others.into_iter().take(size - chosen.len()));
-            if !feasible.is_empty() {
+            if feasible.is_empty() {
+                None
+            } else {
                 let points: Vec<[f64; M]> = feasible
                     .iter()
                     .map(|&i| minimized(&scores[i], &self.objectives))
                     .collect();
-                let fronts = non_dominated_sort(
+                let mut fronts = non_dominated_sort(
                     &feasible.iter().map(|&i| scores[i]).collect::<Vec<_>>(),
                     &self.objectives,
                 );
                 self.normalize(&points, &fronts[0]);
+                // the population starts with every feasible solution, which dominate the rest
+                Some(fronts.swap_remove(0))
             }
         } else {
-            self.select_feasible(&scores, &feasible, &mut chosen);
-        }
+            // the population starts with the whole first front, or is part of it
+            let first = self.select_feasible(&scores, &feasible, &mut chosen);
+            Some((0..first).collect())
+        };
         let mut selected = vec![false; pool.len()];
         for &index in &chosen {
             selected[index] = true;
@@ -285,16 +292,18 @@ where
         // the parents that didn't survive
         self.spares.keep_all(slots.into_iter().flatten());
         self.population = Population::new(population);
+        first
     }
 
     // chooses `population_size` of the more numerous feasible solutions: whole fronts, then
-    // niching on the last one
+    // niching on the last one; returns how many of them, first in `chosen`, are of the first
+    // front
     fn select_feasible(
         &mut self,
         scores: &[Scores<M>],
         feasible: &[usize],
         chosen: &mut Vec<usize>,
-    ) {
+    ) -> usize {
         let size = self.population_size;
         let feasible_scores: Vec<Scores<M>> = feasible.iter().map(|&i| scores[i]).collect();
         let fronts = non_dominated_sort(&feasible_scores, &self.objectives);
@@ -337,6 +346,7 @@ where
             members.extend(picked);
         }
         chosen.extend(members.into_iter().map(|position| feasible[position]));
+        fronts[0].len().min(size)
     }
 
     // updates the ideal point, the worst point and the extreme points
@@ -517,11 +527,17 @@ where
     }
 
     // the new front, and whether it improved on the previous one
-    fn update_front(&mut self) {
-        let scores = scores_of(self.population.as_slice());
-        let fronts = non_dominated_sort(&scores, &self.objectives);
-        let first = fronts.first().map(Vec::as_slice).unwrap_or_default();
-        let front = distinct(&self.population, first.iter().copied());
+    // `first`, if known, is the population's first front
+    fn update_front(&mut self, first: Option<Vec<usize>>) {
+        let front = match first {
+            Some(first) => distinct(&self.population, first),
+            None => {
+                let scores = scores_of(self.population.as_slice());
+                let fronts = non_dominated_sort(&scores, &self.objectives);
+                let first = fronts.first().map(Vec::as_slice).unwrap_or_default();
+                distinct(&self.population, first.iter().copied())
+            }
+        };
         if gains(
             &scores_of(&front),
             &scores_of(&self.front),
@@ -631,13 +647,14 @@ where
                 self.offspring[index].set_fitness(score);
             }
             self.generation += 1;
-            self.survive();
+            let first = self.survive();
+            self.update_front(first);
         } else {
             for (individual, &score) in self.population.iter_mut().zip(scores) {
                 individual.set_fitness(score);
             }
+            self.update_front(None);
         }
-        self.update_front();
         self.started = true;
         Ok(())
     }
@@ -999,14 +1016,15 @@ mod tests {
             seed: u64,
             divisions in 1usize..6,
             maximize: bool,
+            infeasible in 1usize..9,
         ) {
             let objectives = if maximize { [Maximize, Minimize, Minimize] } else { [Minimize; 3] };
             let mut nsga3 = builder(objectives, divisions, seed).population_size(divisions + 4).build().unwrap();
             let mut rng = StreamRng::seed_from_u64(seed);
-            // random scores, some infeasible or invalid
+            // random scores, `infeasible` in 10 infeasible or invalid
             let mut random = |_: &Reals| match rng.below(10) {
                 0 => Scores::invalid(),
-                1 => Scores::constrained([0.0; 3], rng.below(3) as f64 + 1.0),
+                n if n < infeasible => Scores::constrained([0.0; 3], rng.below(3) as f64 + 1.0),
                 _ => Scores::new([rng.below(4) as f64, rng.below(4) as f64, rng.below(4) as f64]),
             };
             let told: Vec<Scores<3>> = nsga3.ask().iter().map(&mut random).collect();
@@ -1021,6 +1039,11 @@ mod tests {
                     let scores = member.fitness().unwrap();
                     prop_assert!(!old.iter().any(|o| dominates(o, &scores, &objectives)));
                 }
+                // the front is the population's first front, mostly without sorting it again
+                let population = nsga3.population();
+                let fronts = non_dominated_sort(&scores_of(population.as_slice()), &objectives);
+                let first = distinct(population, fronts[0].iter().copied());
+                prop_assert_eq!(nsga3.front(), first.as_slice());
             }
         }
     }
