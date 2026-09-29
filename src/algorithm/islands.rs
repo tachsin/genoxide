@@ -5,7 +5,7 @@ use super::{Algorithm, Candidates, Reevaluate};
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
 /// An [`Algorithm`] whose population can take individuals from elsewhere: the islands of
 /// [`Islands`].
@@ -113,6 +113,10 @@ pub struct Islands<A: Migrate> {
     population: OnceLock<Population<A::Genome>>,
     #[cfg_attr(feature = "serde", serde(skip))]
     discarded: OnceLock<Vec<Individual<A::Genome>>>,
+    // the individuals of the last combined population and discarded individuals, whose memory the
+    // next ones reuse
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pool: Pool<Individual<A::Genome>>,
     // the individuals that migrants replaced in the last generation
     replaced: Vec<Individual<A::Genome>>,
     asked: bool,
@@ -185,8 +189,7 @@ impl<A: Migrate> Islands<A> {
     /// ```
     pub fn islands_mut(&mut self) -> &mut [A] {
         // the combined population is built again from the islands when asked for
-        self.population = OnceLock::new();
-        self.discarded = OnceLock::new();
+        self.forget_combined();
         &mut self.islands
     }
 
@@ -209,6 +212,22 @@ impl<A: Migrate> Islands<A> {
     /// none was given.
     pub fn seed(&self) -> u64 {
         self.seed
+    }
+
+    // the combined population and discarded individuals are built again when asked for, in the
+    // memory of these
+    fn forget_combined(&mut self) {
+        let pool = self
+            .pool
+            .0
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(population) = self.population.take() {
+            pool.extend(population);
+        }
+        if let Some(discarded) = self.discarded.take() {
+            pool.extend(discarded);
+        }
     }
 
     // sends copies of the best individuals of every island to its neighbors
@@ -272,8 +291,7 @@ impl<A: Migrate> Islands<A> {
     // the best so far, and a new combined population and discarded individuals when asked for
     fn collect(&mut self) {
         let objective = self.objective();
-        self.population = OnceLock::new();
-        self.discarded = OnceLock::new();
+        self.forget_combined();
         let fitness =
             |individual: &Individual<A::Genome>| individual.fitness().unwrap_or(Fitness::invalid());
         let mut improved = false;
@@ -292,6 +310,45 @@ impl<A: Migrate> Islands<A> {
         if improved {
             self.best_generation = self.generation;
         }
+    }
+}
+
+// a copy of `individual`, in the memory of one of `pool` if there is one
+fn copy<T: Clone>(pool: &mut Vec<T>, individual: &T) -> T {
+    match pool.pop() {
+        Some(mut copy) => {
+            copy.clone_from(individual);
+            copy
+        }
+        None => individual.clone(),
+    }
+}
+
+// values no longer in use, whose memory new ones reuse: behind a lock, as the combined population
+// is built through a shared reference; none in a clone, a checkpoint or its debug output
+struct Pool<T>(Mutex<Vec<T>>);
+
+impl<T> Pool<T> {
+    fn lock(&self) -> MutexGuard<'_, Vec<T>> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl<T> Default for Pool<T> {
+    fn default() -> Self {
+        Pool(Mutex::new(Vec::new()))
+    }
+}
+
+impl<T> Clone for Pool<T> {
+    fn clone(&self) -> Self {
+        Pool::default()
+    }
+}
+
+impl<T> std::fmt::Debug for Pool<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Pool")
     }
 }
 
@@ -367,9 +424,11 @@ impl<A: Migrate> Algorithm for Islands<A> {
     /// generation.
     fn population(&self) -> &Population<A::Genome> {
         self.population.get_or_init(|| {
+            let mut pool = self.pool.lock();
             self.islands
                 .iter()
-                .flat_map(|island| island.population().iter().cloned())
+                .flat_map(|island| island.population().iter())
+                .map(|individual| copy(&mut pool, individual))
                 .collect()
         })
     }
@@ -382,10 +441,12 @@ impl<A: Migrate> Algorithm for Islands<A> {
     /// replaced.
     fn discarded(&self) -> &[Individual<A::Genome>] {
         self.discarded.get_or_init(|| {
+            let mut pool = self.pool.lock();
             self.islands
                 .iter()
-                .flat_map(|island| island.discarded().iter().cloned())
-                .chain(self.replaced.iter().cloned())
+                .flat_map(|island| island.discarded().iter())
+                .chain(&self.replaced)
+                .map(|individual| copy(&mut pool, individual))
                 .collect()
         })
     }
@@ -424,8 +485,7 @@ impl<A: Migrate + Reevaluate> Islands<A> {
         self.reevaluating = true;
         // observers have seen the last generation's discarded individuals
         self.replaced.clear();
-        self.population = OnceLock::new();
-        self.discarded = OnceLock::new();
+        self.forget_combined();
         Ok(())
     }
 }
@@ -539,6 +599,7 @@ impl<A: Migrate> IslandsBuilder<A> {
             pending: Vec::new(),
             population: OnceLock::new(),
             discarded: OnceLock::new(),
+            pool: Pool::default(),
             replaced: Vec::new(),
             asked: false,
             started: false,
