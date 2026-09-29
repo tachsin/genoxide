@@ -115,7 +115,7 @@ impl Trace {
                 "objectives": ["f1", "f2"],
                 "true_front": pieces(&problem.optimal_front(400).expect("known")),
                 "series": names,
-                "region": region(problem),
+                "feasible_region": region(problem),
             },
         });
         write(&path, settings, frames.into_vec());
@@ -153,7 +153,7 @@ fn region(problem: &Mw1) -> Value {
     let upper = 1.0;
     let nadir = problem.nadir_point().expect("known");
     let (width, height) = (1.25 * nadir[0], 1.25 * nadir[1]);
-    let mut cells = vec![vec![b'0'; CELLS]; CELLS];
+    let mut cells = vec![vec![false; CELLS]; CELLS];
     for a in 0..SAMPLES {
         let x1 = upper * a as f64 / (SAMPLES - 1) as f64;
         let mut x = vec![x1];
@@ -164,15 +164,27 @@ fn region(problem: &Mw1) -> Value {
             let i = (f[0] / width * CELLS as f64).floor();
             let j = (f[1] / height * CELLS as f64).floor();
             if violation == 0.0 && i >= 0.0 && j >= 0.0 && i < CELLS as f64 && j < CELLS as f64 {
-                cells[j as usize][i as usize] = b'1';
+                cells[j as usize][i as usize] = true;
             }
         }
     }
-    let rows: Vec<String> = cells
-        .into_iter()
-        .map(|row| String::from_utf8(row).expect("ASCII"))
-        .collect();
-    json!({"x": [0.0, width], "y": [0.0, height], "rows": rows})
+    // each row as the pairs of columns [start, end) where it's feasible
+    let rows: Vec<Vec<usize>> = cells.iter().map(Vec::as_slice).map(runs).collect();
+    json!({"x": [0.0, width], "y": [0.0, height], "columns": CELLS, "rows": rows})
+}
+
+// the columns where a row of cells turns feasible or infeasible, as pairs [start, end)
+fn runs(row: &[bool]) -> Vec<usize> {
+    let mut runs = Vec::new();
+    for (column, &inside) in row.iter().enumerate() {
+        if inside != (column > 0 && row[column - 1]) {
+            runs.push(column);
+        }
+    }
+    if row.last() == Some(&true) {
+        runs.push(row.len());
+    }
+    runs
 }
 
 // the distance variables where g₁ is 1: xᵢ^(n−2) = 0.5 + (i − 1)/(2n), each root found by

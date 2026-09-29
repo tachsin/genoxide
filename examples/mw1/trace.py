@@ -81,7 +81,7 @@ class Trace:
                 "objectives": ["f1", "f2"],
                 "true_front": pieces(self.problem.optimal_front(400).tolist()),
                 "series": list(self.series),
-                "region": region(self.problem),
+                "feasible_region": region(self.problem),
             },
         }
         write(self.path, settings, frames.to_list())
@@ -126,10 +126,20 @@ def region(problem):
     i = np.floor(objectives[:, 0] / width * CELLS)
     j = np.floor(objectives[:, 1] / height * CELLS)
     inside = (violations == 0) & (i >= 0) & (j >= 0) & (i < CELLS) & (j < CELLS)
-    cells = [["0"] * CELLS for _ in range(CELLS)]
+    cells = [[False] * CELLS for _ in range(CELLS)]
     for column, row in zip(i[inside].astype(int), j[inside].astype(int)):
-        cells[row][column] = "1"
-    return {"x": [0.0, width], "y": [0.0, height], "rows": ["".join(row) for row in cells]}
+        cells[row][column] = True
+    # each row as the pairs of columns [start, end) where it's feasible
+    rows = [runs(row) for row in cells]
+    return {"x": [0.0, width], "y": [0.0, height], "columns": CELLS, "rows": rows}
+
+
+def runs(row):
+    """The columns where a row of cells turns feasible or infeasible, as pairs [start, end)."""
+    turns = [
+        column for column in range(len(row)) if row[column] != (column > 0 and row[column - 1])
+    ]
+    return turns + ([len(row)] if row[-1] else [])
 
 
 _ROOTS = {}
