@@ -2,7 +2,7 @@
 //! `GENOXIDE_TRACE` names: the best network's output over [0, 1]², on a grid of 21 × 21 points, in
 //! at most 64 generations. The Python example writes the same file.
 
-use crate::{CASES, output};
+use crate::{CASES, MINIMUM, output};
 use genoxide::observer::Snapshot;
 use genoxide::prelude::*;
 use serde_json::{Value, json};
@@ -41,8 +41,8 @@ impl Trace {
             "objective": "minimize",
             "x_label": "evaluations",
             "y_label": "squared error",
-            "log_y": false,
-            "optimum": 0.0,
+            "log_y": true,
+            "optimum": MINIMUM,
             "plot": "surface",
             "problem": {
                 "inputs": CASES.map(|(input, _)| input),

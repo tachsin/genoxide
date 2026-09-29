@@ -75,7 +75,7 @@ fn optimum() -> u32 {
 
 fn main() -> Result<()> {
     let ga = Ga::builder(Binary::new(ITEMS.len())?)
-        .population_size(60)
+        .population_size(200)
         .select(Tournament::new(3)?)
         .crossover(PointCrossover::two_point())
         .mutate(BitFlip::per_gene(1.0 / ITEMS.len() as f64)?)

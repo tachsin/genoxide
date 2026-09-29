@@ -1,4 +1,4 @@
-2000 evaluations of 1 to 8 ms, 20 at a time
+Rastrigin in 4-D, evaluations of 0.25 to 2 ms, 20 at a time
 
-     generational, parallel: 0.70 s, 2877 evaluations/s, best 2.459
- steady-state, asynchronous: 0.50 s, 3963 evaluations/s, best 1.022
+     generational, parallel: 0.48 s, 5984 evaluations, 12393 evaluations/s, best 0.99863022
+ steady-state, asynchronous: 0.39 s, 5945 evaluations, 15417 evaluations/s, best 0.00000053

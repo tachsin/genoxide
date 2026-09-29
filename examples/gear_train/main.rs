@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
     let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(ga, problem)
-        .stop_when(Stop::target(minimum).or(Stop::generations(2_000)))
+        .stop_when(Stop::target(minimum).or(Stop::generations(20_000)))
         .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 

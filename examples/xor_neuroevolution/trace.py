@@ -13,10 +13,10 @@ GRID = 21
 class Trace:
     """Records the run through ``on_generation`` when ``GENOXIDE_TRACE`` is set."""
 
-    def __init__(self, cases, output):
+    def __init__(self, cases, output, minimum):
         self.path = os.environ.get("GENOXIDE_TRACE")
         self.frames = Frames(64)
-        self.cases, self.output = cases, output
+        self.cases, self.output, self.minimum = cases, output, minimum
 
     @property
     def on_generation(self):
@@ -37,8 +37,8 @@ class Trace:
                 "objective": "minimize",
                 "x_label": "evaluations",
                 "y_label": "squared error",
-                "log_y": False,
-                "optimum": 0.0,
+                "log_y": True,
+                "optimum": self.minimum,
                 "plot": "surface",
                 "problem": {
                     "inputs": [inputs for inputs, _ in self.cases],

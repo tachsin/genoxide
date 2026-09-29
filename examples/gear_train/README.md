@@ -53,7 +53,7 @@ A genetic algorithm with the pieces that genoxide's guide lists for integers in 
   there are four.
 
 Uniform crossover combines the gears of two parents, so it can join a good pair T_d T_b from one
-with a good pair T_a T_f from the other. The run stops at the minimum, or after 2,000 generations.
+with a good pair T_a T_f from the other. The run stops at the minimum, or after 20,000 generations.
 
 ## Output
 
@@ -68,3 +68,9 @@ Python, `run` evaluates the problem in Rust, so both versions print the same.
 The minimum is 2.700857e-12, at 16 · 19 / (43 · 49), and at the three designs that swap 16 with 19
 or 43 with 49. The run reaches it after about 180 generations, at most about 18,000 evaluations: a
 third of a percent of the designs.
+
+Other seeds can take much longer: runs often sit for a while at 2.307816e-11, the error of 12
+designs such as 13 · 20 / (34 · 53), none of which a change of a single gear improves. Over seeds 1
+to 100, every run reached the minimum, half of them within 2,300 generations and 99 within 10,000;
+the slowest took 13,660. With a limit of 2,000 generations, half of seeds 1 to 30 would have
+stopped short of it.

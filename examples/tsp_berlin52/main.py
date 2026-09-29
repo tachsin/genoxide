@@ -3,7 +3,8 @@ berlin52, whose optimal tour has length 7542.
 
 A permutation genome is the order of the visits. Local search with inversion neighbors (a random
 2-opt move: a reversed segment of the tour) and simulated annealing, which also accepts worse
-tours, less and less often as the temperature cools.
+tours, less and less often as the temperature cools, with restarts from the best tour when the
+search stalls.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
 page, with trace.py.
@@ -48,14 +49,17 @@ def tour_length(order):
 search = gx.LocalSearch(
     gx.Permutation(len(LOCATIONS)),
     neighbor=gx.InversionMutation(),
-    acceptance=gx.Annealing(initial_temperature=100.0, cooling=0.99996),
+    acceptance=gx.Annealing(initial_temperature=100.0, cooling=0.999_995),
+    # after 100,000 steps without a shorter tour, start again from the best one, changed by 3
+    # inversions
+    restart=(100_000, 3),
     objective="minimize",
     seed=1,
 )
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(LOCATIONS, OPTIMUM)
 result = search.run(
-    tour_length, target=OPTIMUM, evaluations=200_000, on_generation=trace.on_generation
+    tour_length, target=OPTIMUM, evaluations=1_000_000, on_generation=trace.on_generation
 )
 
 print(
