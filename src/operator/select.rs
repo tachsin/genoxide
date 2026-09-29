@@ -492,8 +492,8 @@ mod tests {
             let picks =
                 StochasticUniversalSampling.select(&population, Objective::Maximize, 10, &mut rng);
             sorted += usize::from(picks.is_sorted());
-            for pair in picks.chunks_exact(2) {
-                self_pairs += usize::from(pair[0] == pair[1]);
+            for [a, b] in picks.as_chunks::<2>().0 {
+                self_pairs += usize::from(a == b);
                 pairs += 1;
             }
         }

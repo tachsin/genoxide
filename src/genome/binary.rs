@@ -376,7 +376,7 @@ mod tests {
 
     fn tail_is_clear(bits: &Bits) -> bool {
         bits.words.len() == bits.len.div_ceil(WORD_BITS)
-            && (bits.len % WORD_BITS == 0
+            && (bits.len.is_multiple_of(WORD_BITS)
                 || bits
                     .words
                     .last()

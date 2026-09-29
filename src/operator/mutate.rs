@@ -613,8 +613,8 @@ impl Mutate<Permutation> for SwapMutation {
         for position in (1..positions.len()).rev() {
             positions.swap(position, rng.below(position + 1));
         }
-        for pair in positions.chunks_exact(2) {
-            genome.swap(pair[0], pair[1]);
+        for &[a, b] in positions.as_chunks::<2>().0 {
+            genome.swap(a, b);
         }
     }
 }
