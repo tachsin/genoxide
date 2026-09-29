@@ -1,6 +1,6 @@
 //! SMS-EMOA: the S-metric (hypervolume) selection evolutionary multi-objective algorithm.
 
-use super::breed::{Spares, Variation, distinct, scores_of};
+use super::breed::{Spares, Variation, distinct_into, scores_of};
 use super::indicator::hypervolume_contributions;
 use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, dominates, non_dominated_sort};
@@ -343,23 +343,19 @@ where
     // it survived them: its own first front, as the survivors of a thinned first front are the
     // whole population, and otherwise all of that front survives and dominates the rest
     fn update_front(&mut self, first: Option<usize>) {
-        let front = match first {
-            Some(first) => distinct(&self.population, 0..first),
+        let previous = scores_of(&self.front);
+        match first {
+            Some(first) => distinct_into(&mut self.front, &self.population, 0..first),
             None => {
                 let scores = scores_of(self.population.as_slice());
                 let fronts = non_dominated_sort(&scores, &self.objectives);
                 let first = fronts.first().map(Vec::as_slice).unwrap_or_default();
-                distinct(&self.population, first.iter().copied())
+                distinct_into(&mut self.front, &self.population, first.iter().copied());
             }
-        };
-        if gains(
-            &scores_of(&front),
-            &scores_of(&self.front),
-            &self.objectives,
-        ) {
+        }
+        if gains(&scores_of(&self.front), &previous, &self.objectives) {
             self.front_generation = self.generation;
         }
-        self.front = front;
     }
 }
 
@@ -647,6 +643,7 @@ mod tests {
     use super::*;
     use crate::Objective::{Maximize, Minimize};
     use crate::genome::{Real, Reals};
+    use crate::multi::breed::distinct;
     use crate::operator::{PolynomialMutation, SimulatedBinaryCrossover};
     use proptest::prelude::*;
 

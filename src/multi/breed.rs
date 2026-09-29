@@ -281,6 +281,7 @@ where
 // the members of `population` at `indices`, each genome once: the first of its copies. A front
 // never holds copies of a genome, which MOEA/D's subproblems and a population bred without
 // duplicate elimination can.
+#[cfg(test)]
 pub(crate) fn distinct<G, const M: usize>(
     population: &Population<G, Scores<M>>,
     indices: impl IntoIterator<Item = usize>,
@@ -288,11 +289,27 @@ pub(crate) fn distinct<G, const M: usize>(
 where
     G: crate::genome::Genome,
 {
+    let mut members = Vec::new();
+    distinct_into(&mut members, population, indices);
+    members
+}
+
+// `distinct`, in `members`: copied into the memory of its individuals (the previous front), which
+// it then holds
+pub(crate) fn distinct_into<G, const M: usize>(
+    members: &mut Vec<Individual<G, Scores<M>>>,
+    population: &Population<G, Scores<M>>,
+    indices: impl IntoIterator<Item = usize>,
+) where
+    G: crate::genome::Genome,
+{
     let indices = indices.into_iter();
     // room for every index: at most the population
     let (least, most) = indices.size_hint();
     let room = most.unwrap_or(least).min(population.len());
-    let mut members: Vec<Individual<G, Scores<M>>> = Vec::with_capacity(room);
+    members.reserve(room.saturating_sub(members.len()));
+    // the members so far: `members[..len]`; the rest is memory to copy into
+    let mut len = 0;
     // the fingerprints of the members so far, each with the position of a member that has it
     let mut seen = Fingerprints::with_capacity_and_hasher(room, Default::default());
     for index in indices {
@@ -300,21 +317,27 @@ where
         let genome = individual.genome();
         let copy = match seen.entry(fingerprint(genome)) {
             Entry::Vacant(entry) => {
-                entry.insert(members.len());
+                entry.insert(len);
                 false
             }
             // almost always the same genome; if not, two genomes share the fingerprint, and the
             // genome is compared with every member
             Entry::Occupied(entry) => {
                 members[*entry.get()].genome() == genome
-                    || members.iter().any(|member| member.genome() == genome)
+                    || members[..len]
+                        .iter()
+                        .any(|member| member.genome() == genome)
             }
         };
         if !copy {
-            members.push(individual.clone());
+            match members.get_mut(len) {
+                Some(member) => member.clone_from(individual),
+                None => members.push(individual.clone()),
+            }
+            len += 1;
         }
     }
-    members
+    members.truncate(len);
 }
 
 // the scores of individuals, invalid if not evaluated

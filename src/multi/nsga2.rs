@@ -1,6 +1,6 @@
 //! NSGA-II: the non-dominated sorting genetic algorithm.
 
-use super::breed::{Spares, Variation, distinct, scores_of};
+use super::breed::{Spares, Variation, distinct_into, scores_of};
 use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, crowding_distance, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
@@ -253,15 +253,11 @@ where
     // the new front, and whether it improved on the previous one
     fn update_front(&mut self) {
         let first = (0..self.population.len()).filter(|&i| self.ranks[i] == 0);
-        let front = distinct(&self.population, first);
-        if gains(
-            &scores_of(&front),
-            &scores_of(&self.front),
-            &self.objectives,
-        ) {
+        let previous = scores_of(&self.front);
+        distinct_into(&mut self.front, &self.population, first);
+        if gains(&scores_of(&self.front), &previous, &self.objectives) {
             self.front_generation = self.generation;
         }
-        self.front = front;
     }
 }
 

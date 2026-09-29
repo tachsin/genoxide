@@ -1,6 +1,6 @@
 //! SPEA2: the strength Pareto evolutionary algorithm 2.
 
-use super::breed::{Spares, Variation, distinct, scores_of};
+use super::breed::{Spares, Variation, distinct_into, scores_of};
 use super::pareto::{dominance, gains};
 use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
@@ -362,15 +362,11 @@ where
         let scores = scores_of(self.population.as_slice());
         let fronts = non_dominated_sort(&scores, &self.objectives);
         let first = fronts.first().map(Vec::as_slice).unwrap_or_default();
-        let front = distinct(&self.population, first.iter().copied());
-        if gains(
-            &scores_of(&front),
-            &scores_of(&self.front),
-            &self.objectives,
-        ) {
+        let previous = scores_of(&self.front);
+        distinct_into(&mut self.front, &self.population, first.iter().copied());
+        if gains(&scores_of(&self.front), &previous, &self.objectives) {
             self.front_generation = self.generation;
         }
-        self.front = front;
     }
 }
 
