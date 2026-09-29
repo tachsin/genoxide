@@ -1,4 +1,4 @@
-100 solutions on the front, 100 feasible
-along the five pieces of the front, from f1 = -274 to -42: 23, 24, 31, 12, 10
-IGD+ to the optimal front: 0.4048
-hypervolume 16427.8 (the whole front: 16546.1)
+200 solutions on the front, 200 feasible
+along the five pieces of the front, from f1 = -274 to -42: 37, 42, 68, 19, 34
+IGD+ to the optimal front: 0.1334
+hypervolume 16502.9 (the whole front: 16546.1)

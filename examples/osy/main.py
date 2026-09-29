@@ -19,18 +19,19 @@ import genoxide as gx
 from trace import Trace
 
 problem = gx.problems.Osy()
-# the settings of the NSGA-II paper: a mutation rate of 1/n for n genes
+# the NSGA-II paper's crossover and mutation, a mutation rate of 1/n for n genes; twice its
+# population, which keeps all five pieces of the front, and twice its generations
 nsga2 = gx.Nsga2(
     problem.genome,
     objectives=problem.objectives,
-    population_size=100,
+    population_size=200,
     crossover=gx.SimulatedBinaryCrossover(20),
     mutation=gx.PolynomialMutation(20, rate=1 / 6),
     seed=1,
 )
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(problem)
-result = nsga2.run(problem, generations=250, on_generation=trace.on_generation)
+result = nsga2.run(problem, generations=500, on_generation=trace.on_generation)
 
 front = result.front_objectives
 feasible = int((result.front_violations == 0).sum())
