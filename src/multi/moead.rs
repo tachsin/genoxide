@@ -237,14 +237,14 @@ where
             let neighborhood = &self.neighborhoods[subproblem];
             let from_neighborhood =
                 neighborhood.len() >= 2 && self.rng.chance(self.neighbor_chance);
+            // sample_distinct(2, n) without an allocation
             let (a, b) = if from_neighborhood {
-                let picked = self.rng.sample_distinct(2, neighborhood.len());
-                (neighborhood[picked[0]], neighborhood[picked[1]])
+                let (first, second) = self.rng.sample_pair(neighborhood.len());
+                (neighborhood[first], neighborhood[second])
             } else {
-                let picked = self.rng.sample_distinct(2, size);
-                (picked[0], picked[1])
+                self.rng.sample_pair(size)
             };
-            // sample_distinct is in ascending order: a random order for the crossover
+            // the pair is in ascending order: a random order for the crossover
             let (a, b) = if self.rng.below(2) == 0 {
                 (a, b)
             } else {
