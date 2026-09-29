@@ -878,6 +878,8 @@ N2, E2, G4 and P2 move to a 0.11.x or into 0.12 (open question 11).
 
 ## 12. Open questions
 
+Decided (2026-09-29): every recommendation below, as written. The questions stay for the record.
+
 1. **Crossover and the limits.** Choose the second point among those that keep both children
    within the limits (recommended: no child is wasted, and the variation stays close to Koza's), or
    Koza's rule, where an over-limit child is replaced by its parent (DEAP's `staticLimit`; exact
