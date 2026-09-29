@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "genoxide"
-description = "Evolutionary computation in Rust, for Python: genetic algorithms, CMA-ES, differential evolution, NSGA-II and more"
+description = "Optimization in Rust, for Python: genetic algorithms, CMA-ES, differential evolution, NSGA-II and more"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 license-files = ["licenses/LICENSE-MIT", "licenses/LICENSE-APACHE"]

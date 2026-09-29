@@ -3,7 +3,40 @@ name: CI
 on:
   push:
     branches: [main]
+    # code only: a change to documentation alone (markdown, the docs, the site, the benchmark
+    # harness and its results, the examples' recorded runs) doesn't run the checks. The markdown
+    # that is code stays in: README.md and AGENTS.md are doctests, python/README.md's blocks run
+    # in the Python tests. Later patterns override earlier ones.
+    paths:
+      - "**"
+      - "!**.md"
+      - "!docs/**"
+      - "!site/**"
+      - "!benchmarks/**"
+      - "!examples/**/trace.json"
+      - "!LICENSE-*"
+      - "!.github/workflows/docs-site.yml"
+      - "!.github/workflows/library-releases.yml"
+      - "!.github/workflows/pr-title.yml"
+      - "README.md"
+      - "AGENTS.md"
+      - "python/README.md"
   pull_request:
+    # the same paths as for a push to main
+    paths:
+      - "**"
+      - "!**.md"
+      - "!docs/**"
+      - "!site/**"
+      - "!benchmarks/**"
+      - "!examples/**/trace.json"
+      - "!LICENSE-*"
+      - "!.github/workflows/docs-site.yml"
+      - "!.github/workflows/library-releases.yml"
+      - "!.github/workflows/pr-title.yml"
+      - "README.md"
+      - "AGENTS.md"
+      - "python/README.md"
 
 env:
   CARGO_TERM_COLOR: always

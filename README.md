@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/tachsin/genoxide/main/assets/brand/banner.svg" alt="genoxide: evolutionary computation for Rust and Python" width="100%">
+  <img src="https://raw.githubusercontent.com/tachsin/genoxide/main/assets/brand/banner.svg" alt="genoxide: optimization for Rust and Python" width="100%">
 </p>
 
 [![Crates.io](https://img.shields.io/crates/v/genoxide.svg)](https://crates.io/crates/genoxide)
@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/crates/l/genoxide.svg)](#license)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-16_libraries-ce422b)](https://tachsin.gr/projects/genoxide/benchmarks)
 
-**Evolutionary computation for Rust: genetic algorithms, evolution strategies, differential evolution, particle swarms, local search and multi-objective optimization in one library.**
+**Optimization for Rust: genetic algorithms, evolution strategies, differential evolution, particle swarms, local search and multi-objective optimization in one library.**
 
 ## Install
 
