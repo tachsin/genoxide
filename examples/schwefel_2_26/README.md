@@ -105,9 +105,8 @@ below the target of 1e-8, after about 222,000 evaluations. CMA-ES ends at −787
 
 The difference isn't the seed's. With seeds 1 to 20, L-SHADE reaches the minimum every time, after
 at most 223,000 evaluations. With seeds 1 to 10, CMA-ES with IPOP restarts ends between −7694 and
-−8523, and PSO on a ring between −8451 and −9326. These results agree with the
-[function suite](https://tachsin.gr/projects/genoxide/examples/function-suite) in 10 dimensions,
-where CMA-ES and PSO stay far from the minimum and a differential evolution comes within 1e-8 of it.
+−8523, and PSO on a ring between −8451 and −9326. In 10 dimensions it's the same: CMA-ES and PSO
+stay far from the minimum, and a differential evolution comes within 1e-8 of it.
 
 In runs not shown here, SHADE with F = 0.5 and a fixed CR, without restarts, with seeds 1 to 3,
 reached the minimum every time with CR = 0.1, and ended 700 to 2,000 above it with CR = 0.9: a

@@ -47,8 +47,7 @@ move them to 0, each across a ripple, while the other genes stay put.
 A `Real` genome of 30 genes, each in [−32, 32]: the point x itself. The fitness is f(x), to
 minimize. The function is genoxide's `problems::Ackley`, which brings its bounds and its minimum.
 30 is the dimension of Yao, Liu and Lin's comparison, and the one where the example below shows a
-difference between the algorithms: in 10 dimensions, the PSO of the
-[function suite](https://tachsin.gr/projects/genoxide/examples/function-suite) solves Ackley too.
+difference between the algorithms: in 10 dimensions, PSO solves Ackley too.
 
 ## Algorithm
 

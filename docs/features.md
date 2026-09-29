@@ -87,7 +87,6 @@ cargo run --release --example n_queens            # permutation, (μ+λ)
 cargo run --release --example tsp_berlin52        # TSPLIB berlin52, simulated annealing with 2-opt moves
 cargo run --release --example jobshop_ft06        # job shop ft06, permutation with repetition
 cargo run --release --example rastrigin           # real-valued, CMA-ES with IPOP restarts and L-SHADE
-cargo run --release --example function_suite      # CMA-ES, SHADE and PSO on twelve test functions
 cargo run --release --example himmelblau          # four global minima, by restarts of a local search
 cargo run --release --example pressure_vessel     # constrained mixed discrete-continuous design, SHADE
 cargo run --release --example welded_beam         # constrained design in two forms, SHADE
