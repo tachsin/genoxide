@@ -762,7 +762,9 @@ mixed genome.
    GA operators, DE, the CLI and Python too)?
 8. **Public `linalg` and `model::gp`.** Public from their first batch (users fitting GPs), or
    crate-private until the API settles?
-9. **Milestones.** Decided (2026-09-29): these batches come first. 0.10 local methods (A1, A2),
-   0.11 Bayesian optimization (B), 0.12 constrained nonlinear programming (C), 0.13 more local
-   methods (D1, D2), 0.14 advanced Bayesian optimization and surrogates (E, F); genetic programming
-   and neuroevolution, and quality-diversity, after them.
+9. **Milestones.** Decided (2026-09-29, revised the same day): 0.10 is Rust 1.88 and the
+   performance work, 0.11 genetic programming and neuroevolution, then these batches: 0.12 local
+   methods (A1, A2), 0.13 Bayesian optimization (B), 0.14 constrained nonlinear programming (C),
+   0.15 more local methods (D1, D2), 0.16 advanced Bayesian optimization and surrogates (E, F);
+   quality-diversity after them. A1 and A2 stay first among them: L-BFGS-B optimizes the Gaussian
+   processes' hyperparameters and the acquisition functions of batch B.
