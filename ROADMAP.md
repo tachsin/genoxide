@@ -2,11 +2,11 @@
 
 ## Vision
 
-A complete, fast and reliable evolutionary computation library, in Rust and for Python.
+A complete, fast and reliable optimization library, in Rust and for Python: evolutionary and population-based methods, local and gradient-based methods, constrained nonlinear programming and Bayesian optimization, with the same guarantees of reproducibility, validation and speed. The plan for the methods beyond the evolutionary ones is [docs/optimization-plan.md](docs/optimization-plan.md).
 
 ### Success criteria for 1.0
 
-- **Coverage:** the algorithms and operators of DEAP and pymoo combined.
+- **Coverage:** the algorithms and operators of DEAP and pymoo combined; the local, gradient-based and constrained methods of SciPy's optimize; Bayesian optimization with Gaussian processes and TPE.
 - **Speed:** fast on every problem of the public benchmark suite, in time to target and evaluations per second.
 - **Reproducibility:** bit-identical results per seed on any thread count.
 - **Docs:** the whole public API, and an example per algorithm.
@@ -43,7 +43,9 @@ From a review of existing libraries (e.g. genetic_algorithm, [issues #11 to #78]
 - **`Genome`:** the representation: bits (bit-packed), integers, bounded reals, permutations; planned: mixed (per-gene types), trees (GP), graphs (NEAT).
 - **`Fitness`:** totally ordered `f64`, single or multi-objective (`[f64; M]`, with the number of objectives fixed at compile time), optional constraint violation; batch and async evaluation.
 - **Operators:** `Select`, `Crossover`, `Mutate`, generic over the genome; survival is each algorithm's scheme.
-- **`Algorithm`:** ask / tell state machines (GA, ES, CMA-ES, DE, PSO, NSGA-II, …).
+- **`Algorithm`:** ask / tell state machines (GA, ES, CMA-ES, DE, PSO, NSGA-II, …; planned: Nelder-Mead, L-BFGS-B, SQP, Bayesian optimization).
+- **Derivatives (planned):** supplied gradients, finite differences, constraint and residual Jacobians, declared by the fitness function.
+- **Models (planned):** Gaussian processes for Bayesian and surrogate-assisted optimization.
 - **`Engine`:** termination, parallel evaluation, observers, cancellation, and a hook that changes the algorithm between generations (parameter control, re-evaluation).
 - **`Observer`:** statistics, hall of fame, Pareto archive, logging, checkpoints.
 - **Errors:** one typed error enum; no `&'static str` errors, no panics in library code.
@@ -201,7 +203,27 @@ On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)
 - [x] Benchmarks: a matched suite of three problems, one method each ([#284](https://github.com/tachsin/genoxide/pull/284)), with every library bug it found reported upstream ([notes](docs/benchmarks/notes.md#bugs-found))
 - [x] What a fitness function computes besides the fitness, kept by the engine for the individuals it holds ([#246](https://github.com/tachsin/genoxide/issues/246))
 
-### 0.10: Genetic programming and neuroevolution
+### 0.10: Rust 1.88, and local optimization
+- [ ] Rust 1.88, and small performance gains across the library ([#314](https://github.com/tachsin/genoxide/issues/314), [#315](https://github.com/tachsin/genoxide/pull/315))
+- [ ] Python: `Progress` builds its arrays only when a callback reads them
+- [ ] Linear algebra through a dependency pinned to a portable path, convergence stops, restarts, Nelder-Mead ([docs/optimization-plan.md](docs/optimization-plan.md), batch A1)
+- [ ] Gradients (supplied, or by finite differences evaluated as one batch), line searches, L-BFGS-B (batch A2)
+
+### 0.11: Bayesian optimization
+- [ ] Gaussian processes; EI, log-EI, UCB and PI; batch, constrained and integer-variable Bayesian optimization, also on the asynchronous engine (batch B)
+
+### 0.12: Constrained nonlinear programming
+- [ ] SQP and the augmented Lagrangian, on the constrained test problems (batch C)
+
+### 0.13: More local methods
+- [ ] BFGS, conjugate gradient, trust region, Levenberg-Marquardt, the Adam family (batch D1)
+- [ ] BOBYQA, COBYLA, pattern search, MADS, basin hopping (batch D2)
+
+### 0.14: Advanced Bayesian optimization, surrogates and multi-fidelity
+- [ ] ParEGO, EHVI, TPE, TuRBO, mixed variables (batch E)
+- [ ] Surrogate-assisted evolution, multi-fidelity, DIRECT (batch F)
+
+### 0.15: Genetic programming and neuroevolution
 - [ ] Tree GP, strongly typed
 - [ ] Subtree crossover; point, subtree and hoist mutation; bloat control
 - [ ] Symbolic regression examples
@@ -209,7 +231,7 @@ On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)
 - [ ] Neuroevolution with evolution strategies
 - [ ] Python: zero-copy numpy genomes, the ES, islands and checkpoints
 
-### 0.11: Frontier
+### 0.16: Frontier
 - [ ] Quality-diversity: MAP-Elites, CMA-ME, novelty search
 - [ ] LLM-guided evolution (async operators calling a language model)
 - [ ] Adaptive operator selection and automatic parameter tuning
@@ -252,4 +274,4 @@ On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)
 
 ## Not planned
 
-Gradient-based optimization, Bayesian optimization and general-purpose machine learning: genoxide focuses on evolutionary and population-based methods.
+Reverse-mode automatic differentiation, model training frameworks and general-purpose machine learning; linear, quadratic and mixed-integer programming solvers; large sparse nonlinear programming. genoxide focuses on black-box and small-to-medium dense problems.
