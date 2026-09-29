@@ -323,36 +323,40 @@ impl Pso {
         // in registers for the loop, not read again after each random number
         let (inertia, cognitive, social) = (self.inertia, self.cognitive, self.social);
         let max_velocity = self.max_velocity;
-        for (index, &guide) in guides.iter().enumerate() {
-            let mut position = self.population[index].genome().clone();
-            let personal = self.personal_bests[index].genome();
+        let particles = self.population.iter_mut().zip(&mut self.velocities);
+        for ((particle, velocity), (personal, &guide)) in
+            particles.zip(self.personal_bests.iter().zip(&guides))
+        {
             let neighborhood = self.personal_bests[guide].genome();
-            let velocity = &mut self.velocities[index];
-            for j in 0..position.len() {
-                let (start, end) = (*bounds[j].start(), *bounds[j].end());
+            // a new individual, in the memory of the last one
+            let position = particle.genome_mut();
+            let genes = position.iter_mut().zip(velocity.iter_mut()).zip(bounds);
+            for (((position, velocity), bounds), (&personal, &neighborhood)) in
+                genes.zip(personal.genome().iter().zip(neighborhood.iter()))
+            {
+                let (start, end) = (*bounds.start(), *bounds.end());
                 let limit = max_velocity * (end - start);
                 let (r1, r2) = (self.rng.unit_f64(), self.rng.unit_f64());
-                let mut v = inertia * velocity[j]
-                    + cognitive * r1 * (personal[j] - position[j])
-                    + social * r2 * (neighborhood[j] - position[j]);
+                let mut v = inertia * *velocity
+                    + cognitive * r1 * (personal - *position)
+                    + social * r2 * (neighborhood - *position);
                 // NaN from overflowing terms of opposite signs
                 if v.is_nan() {
                     v = 0.0;
                 }
                 v = v.clamp(-limit, limit);
-                let x = position[j] + v;
+                let x = *position + v;
                 if x < start {
-                    position[j] = start;
+                    *position = start;
                     v = 0.0;
                 } else if x > end {
-                    position[j] = end;
+                    *position = end;
                     v = 0.0;
                 } else {
-                    position[j] = x;
+                    *position = x;
                 }
-                velocity[j] = v;
+                *velocity = v;
             }
-            self.population[index] = Individual::new(position);
         }
     }
 }
@@ -421,7 +425,10 @@ impl Algorithm for Pso {
             if !self.started {
                 self.personal_bests.push(particle.clone());
             } else if !objective.is_better(self.personal_best(index), fitness) {
-                self.personal_bests[index] = particle.clone();
+                // a copy of the particle, in the memory of the last personal best
+                let personal = &mut self.personal_bests[index];
+                personal.genome_mut().clone_from(particle.genome());
+                personal.set_fitness(fitness);
             }
             // the best so far, the first one on ties
             let better = self.best.as_ref().is_none_or(|best| {
