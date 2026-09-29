@@ -6,16 +6,16 @@
    "version": "0.6.0",
    "source": "crates.io",
    "released": "2026-09-25",
-   "measured": "2026-09-28",
+   "measured": "2026-09-29",
    "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
     "onemax-1000-matched": {
-     "startup": 365292,
+     "startup": 384169,
      "methods": {
       "ga": {
-       "instructions": 287730274,
+       "instructions": 309879772,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
@@ -23,10 +23,10 @@
      }
     },
     "rastrigin-30-matched": {
-     "startup": 365261,
+     "startup": 384153,
      "methods": {
       "de": {
-       "instructions": 2343699937,
+       "instructions": 2640991849,
        "evaluations": 300000,
        "reached": null,
        "best": 154.65353066580684
@@ -34,10 +34,10 @@
      }
     },
     "rosenbrock-10-matched": {
-     "startup": 365260,
+     "startup": 384143,
      "methods": {
       "cma_es": {
-       "instructions": 62446932,
+       "instructions": 66180688,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
@@ -50,16 +50,16 @@
    "version": "0.7.0",
    "source": "crates.io",
    "released": "2026-09-26",
-   "measured": "2026-09-28",
+   "measured": "2026-09-29",
    "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
     "onemax-1000-matched": {
-     "startup": 363043,
+     "startup": 384184,
      "methods": {
       "ga": {
-       "instructions": 288181477,
+       "instructions": 309899274,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
@@ -67,10 +67,10 @@
      }
     },
     "rastrigin-30-matched": {
-     "startup": 363021,
+     "startup": 384159,
      "methods": {
       "de": {
-       "instructions": 2345036361,
+       "instructions": 2637623839,
        "evaluations": 300000,
        "reached": null,
        "best": 154.65353066580684
@@ -78,10 +78,10 @@
      }
     },
     "rosenbrock-10-matched": {
-     "startup": 363010,
+     "startup": 384158,
      "methods": {
       "cma_es": {
-       "instructions": 62458597,
+       "instructions": 66191772,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
@@ -94,16 +94,16 @@
    "version": "0.7.1",
    "source": "crates.io",
    "released": "2026-09-27",
-   "measured": "2026-09-28",
+   "measured": "2026-09-29",
    "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
     "onemax-1000-matched": {
-     "startup": 363207,
+     "startup": 384351,
      "methods": {
       "ga": {
-       "instructions": 288181479,
+       "instructions": 310219814,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
@@ -111,10 +111,10 @@
      }
     },
     "rastrigin-30-matched": {
-     "startup": 363185,
+     "startup": 384326,
      "methods": {
       "de": {
-       "instructions": 1882107285,
+       "instructions": 1891777871,
        "evaluations": 300000,
        "reached": null,
        "best": 154.65353066580684
@@ -122,10 +122,10 @@
      }
     },
     "rosenbrock-10-matched": {
-     "startup": 363174,
+     "startup": 384325,
      "methods": {
       "cma_es": {
-       "instructions": 62458607,
+       "instructions": 66191818,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
@@ -138,16 +138,16 @@
    "version": "0.8.0",
    "source": "crates.io",
    "released": "2026-09-28",
-   "measured": "2026-09-28",
+   "measured": "2026-09-29",
    "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
     "onemax-1000-matched": {
-     "startup": 363188,
+     "startup": 384336,
      "methods": {
       "ga": {
-       "instructions": 288181465,
+       "instructions": 309018717,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
@@ -155,10 +155,10 @@
      }
     },
     "rastrigin-30-matched": {
-     "startup": 363166,
+     "startup": 384311,
      "methods": {
       "de": {
-       "instructions": 1882104925,
+       "instructions": 1892067573,
        "evaluations": 300000,
        "reached": null,
        "best": 154.65353066580684
@@ -166,10 +166,10 @@
      }
     },
     "rosenbrock-10-matched": {
-     "startup": 363155,
+     "startup": 384310,
      "methods": {
       "cma_es": {
-       "instructions": 62458632,
+       "instructions": 66192327,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
@@ -182,16 +182,16 @@
    "version": "0.9.0",
    "source": "crates.io",
    "released": "2026-09-28",
-   "measured": "2026-09-28",
+   "measured": "2026-09-29",
    "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
     "onemax-1000-matched": {
-     "startup": 363188,
+     "startup": 386409,
      "methods": {
       "ga": {
-       "instructions": 288181422,
+       "instructions": 309018760,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
@@ -199,10 +199,10 @@
      }
     },
     "rastrigin-30-matched": {
-     "startup": 363166,
+     "startup": 386384,
      "methods": {
       "de": {
-       "instructions": 1882104882,
+       "instructions": 1891780835,
        "evaluations": 300000,
        "reached": null,
        "best": 154.65353066580684
@@ -210,10 +210,10 @@
      }
     },
     "rosenbrock-10-matched": {
-     "startup": 363155,
+     "startup": 386383,
      "methods": {
       "cma_es": {
-       "instructions": 62458632,
+       "instructions": 66192319,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
@@ -226,16 +226,16 @@
    "version": "0.9.1",
    "source": "crates.io",
    "released": "2026-09-28",
-   "measured": "2026-09-28",
+   "measured": "2026-09-29",
    "machine": "Linux, Intel(R) Core(TM) Ultra 7 265K",
    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
     "onemax-1000-matched": {
-     "startup": 363278,
+     "startup": 384324,
      "methods": {
       "ga": {
-       "instructions": 288181452,
+       "instructions": 309339266,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
@@ -243,10 +243,10 @@
      }
     },
     "rastrigin-30-matched": {
-     "startup": 363256,
+     "startup": 384299,
      "methods": {
       "de": {
-       "instructions": 1882104861,
+       "instructions": 1891780841,
        "evaluations": 300000,
        "reached": null,
        "best": 154.65353066580684
@@ -254,10 +254,10 @@
      }
     },
     "rosenbrock-10-matched": {
-     "startup": 363245,
+     "startup": 384298,
      "methods": {
       "cma_es": {
-       "instructions": 62458568,
+       "instructions": 66255172,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
@@ -276,10 +276,10 @@
    "valgrind": "valgrind-3.22.0",
    "scenarios": {
     "onemax-1000-matched": {
-     "startup": 365612,
+     "startup": 384646,
      "methods": {
       "ga": {
-       "instructions": 291389582,
+       "instructions": 310772910,
        "evaluations": 58171,
        "reached": true,
        "best": 1000.0
@@ -287,10 +287,10 @@
      }
     },
     "rastrigin-30-matched": {
-     "startup": 365588,
+     "startup": 384614,
      "methods": {
       "de": {
-       "instructions": 1917429137,
+       "instructions": 1904246312,
        "evaluations": 300000,
        "reached": null,
        "best": 154.65353066580684
@@ -298,10 +298,10 @@
      }
     },
     "rosenbrock-10-matched": {
-     "startup": 365587,
+     "startup": 384611,
      "methods": {
       "cma_es": {
-       "instructions": 62571550,
+       "instructions": 66386274,
        "evaluations": 5840,
        "reached": true,
        "best": 0.008563689681615302
