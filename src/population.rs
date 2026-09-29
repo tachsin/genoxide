@@ -128,7 +128,7 @@ impl<G: Genome> Population<G> {
 
     // Keeps the `count` best individuals, exactly as `sort_best_first` followed by
     // `truncate(count)`, and removes the others, which it returns in no particular order. When
-    // at most half are kept, it selects them and sorts only those; one it finds in a single pass.
+    // at most half are kept, it selects them and sorts only those; a few it finds in a single pass.
     pub(crate) fn keep_best(
         &mut self,
         count: usize,
@@ -161,11 +161,31 @@ impl<G: Genome> Population<G> {
         // the positions of the `count` best: those that the stable sort puts first, the order of
         // the fitness and then of the position
         let individuals = &self.individuals;
-        let mut positions: Vec<usize> = (0..len).collect();
-        positions.select_nth_unstable_by(count - 1, |&a, &b| {
-            best_first(objective, &individuals[a], &individuals[b]).then(a.cmp(&b))
-        });
-        let kept = &mut positions[..count];
+        let is_better =
+            |a: usize, b: usize| best_first(objective, &individuals[a], &individuals[b]).is_lt();
+        let mut kept: Vec<usize> = if count <= FEW_KEPT {
+            // in one pass, best first: each enters after those at least as good, the earlier ones
+            let mut best = Vec::with_capacity(count + 1);
+            for index in 0..len {
+                if best.len() == count && !is_better(index, best[count - 1]) {
+                    continue;
+                }
+                let at = best
+                    .iter()
+                    .position(|&other| is_better(index, other))
+                    .unwrap_or(best.len());
+                best.insert(at, index);
+                best.truncate(count);
+            }
+            best
+        } else {
+            let mut positions: Vec<usize> = (0..len).collect();
+            positions.select_nth_unstable_by(count - 1, |&a, &b| {
+                best_first(objective, &individuals[a], &individuals[b]).then(a.cmp(&b))
+            });
+            positions.truncate(count);
+            positions
+        };
         kept.sort_unstable();
         // to the front, in their order: each moves to a position before it, whose individual
         // isn't kept or has already moved
@@ -177,6 +197,10 @@ impl<G: Genome> Population<G> {
         self.individuals.drain(count..)
     }
 }
+
+// up to this many best individuals are kept by a pass that inserts each better one into the list
+// of the best so far; more are selected with `select_nth_unstable_by`
+const FEW_KEPT: usize = 16;
 
 // the order of `sort_best_first`: the better first, and unevaluated individuals last
 #[inline]
