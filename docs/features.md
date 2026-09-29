@@ -48,6 +48,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - **With:** constraints, duplicate elimination, a Pareto archive.
 - **Indicators:** hypervolume, IGD, IGD+, GD, spread.
 - **Test problems** (`multi::problems`): ZDT1-6 (ZDT5 on bit strings), DTLZ1-7, WFG1-9 (any number of objectives, checked against the authors' toolkit), Schaffer's two, Fonseca and Fleming's, Kursawe's, Poloni's and Viennet's three, and the constrained BNH, SRN, TNK, OSY and CONSTR, each with its optimal front where it's known and its reference, in Rust and Python.
+- **More test problems** (`multi::problems`): Deb and Jain's convex DTLZ2, scaled DTLZ1 and DTLZ2 and inverted DTLZ1, and Ma and Wang's constrained MW1-14, with fronts derived from their definitions, in Rust and Python.
 
 ## Engine
 

@@ -95,6 +95,17 @@ MULTI_PROBLEMS = [
     gx.problems.Tnk,
     gx.problems.Osy,
     gx.problems.Constr,
+    gx.problems.Mw1,
+    gx.problems.Mw2,
+    gx.problems.Mw3,
+    gx.problems.Mw5,
+    gx.problems.Mw6,
+    gx.problems.Mw7,
+    gx.problems.Mw9,
+    gx.problems.Mw10,
+    gx.problems.Mw11,
+    gx.problems.Mw12,
+    gx.problems.Mw13,
     gx.problems.Dtlz1,
     gx.problems.Dtlz2,
     gx.problems.Dtlz3,
@@ -102,6 +113,10 @@ MULTI_PROBLEMS = [
     gx.problems.Dtlz5,
     gx.problems.Dtlz6,
     gx.problems.Dtlz7,
+    gx.problems.ConvexDtlz2,
+    gx.problems.ScaledDtlz1,
+    gx.problems.ScaledDtlz2,
+    gx.problems.InvertedDtlz1,
     gx.problems.Wfg1,
     gx.problems.Wfg2,
     gx.problems.Wfg3,
@@ -111,6 +126,9 @@ MULTI_PROBLEMS = [
     gx.problems.Wfg7,
     gx.problems.Wfg8,
     gx.problems.Wfg9,
+    gx.problems.Mw4,
+    gx.problems.Mw8,
+    gx.problems.Mw14,
 ]
 
 # on bit strings, and so not in the registry of real problems
@@ -121,8 +139,10 @@ def test_the_classes_are_the_rust_registry():
     assert [cls().name for cls in PROBLEMS + CONSTRAINED] == gx._genoxide.problem_names()
     two = [cls().name for cls in MULTI_PROBLEMS if len(cls().objectives) == 2]
     three = [cls().name for cls in MULTI_PROBLEMS if len(cls().objectives) == 3]
-    # the DTLZ and WFG problems have 3 objectives by default
-    assert two == gx._genoxide.multi_problem_names(2)[:-16]
+    # the problems with any number of objectives have 3 by default, and close both lists; the
+    # three-objective list starts with the 3 Viennet problems
+    scalable = len(gx._genoxide.multi_problem_names(3)) - 3
+    assert two == gx._genoxide.multi_problem_names(2)[:-scalable]
     assert three == gx._genoxide.multi_problem_names(3)
     classes = PROBLEMS + MULTI_PROBLEMS + BINARY_PROBLEMS
     assert sorted(cls.__name__ for cls in classes) == sorted(
@@ -775,6 +795,78 @@ def test_wfg_sizes_are_checked_in_rust_too():
         gx._genoxide.problem_info(description)
     description = '{"type": "wfg1", "objectives": 3, "position": 3, "distance": 4}'
     with pytest.raises(ValueError, match="WFG1 needs a positive multiple of 2"):
+        gx._genoxide.problem_info(description)
+
+
+def test_dtlz_variants_at_chosen_points():
+    # DTLZ1 (3 objectives) at 0.5 everywhere is (0.125, 0.125, 0.25) with g = 0: scaled by 1, 10
+    # and 100, and inverted to 0.5 − f
+    x = np.full(7, 0.5)
+    assert list(gx.problems.ScaledDtlz1()(x)) == pytest.approx([0.125, 1.25, 25.0])
+    assert list(gx.problems.InvertedDtlz1()(x)) == pytest.approx([0.375, 0.375, 0.25])
+    # DTLZ2 there is (1/2, 1/2, 1/√2): convex, the first two to the fourth power, the last squared
+    x = np.full(12, 0.5)
+    assert list(gx.problems.ConvexDtlz2()(x)) == pytest.approx([0.0625, 0.0625, 0.5])
+    assert list(gx.problems.ScaledDtlz2(factor=2)(x)) == pytest.approx(
+        [0.5, 1.0, 2 * math.sqrt(2)]
+    )
+    # the fronts and their corners
+    assert gx.problems.ScaledDtlz2(factor=2).nadir_point == pytest.approx([1.0, 2.0, 4.0])
+    assert gx.problems.ScaledDtlz1(objectives=5).nadir_point[-1] == pytest.approx(5000.0)
+    front = gx.problems.InvertedDtlz1().optimal_front(91)
+    assert front.shape == (91, 3) and np.allclose(front.sum(axis=1), 1.0)
+    front = gx.problems.ConvexDtlz2().optimal_front(91)
+    assert np.allclose(front[:, 2] + np.sqrt(front[:, :2]).sum(axis=1), 1.0)
+    assert gx.problems.ScaledDtlz1(objectives=4, variables=10).dimensions == 10
+
+
+def test_mw_problems_at_chosen_points():
+    # MW11 at x₁ = 1 with g₃ = 1: the isolated optimal point (1, 1), feasible
+    x = [1.0]
+    for _ in range(14):
+        x.append(1 - (x[-1] - 0.5) ** 2)
+    objectives, violation = gx.problems.Mw11()(np.array(x))
+    assert list(objectives) == [1.0, 1.0] and violation == 0.0
+    assert gx.problems.Mw11().optimal_front(50).shape == (50, 2)
+    # MW7 at x₁ = 0 with g₃ = 1: (0, 1), inside the second constraint's radius 1.15
+    x[0] = 0.0
+    for i in range(1, 15):
+        x[i] = 1 - (x[i - 1] - 0.5) ** 2
+    objectives, violation = gx.problems.Mw7()(np.array(x))
+    assert list(objectives) == pytest.approx([0.0, 1.0]) and violation == pytest.approx(0.3225)
+    # MW4: the simplex; MW8: the unit sphere; MW14's corners
+    assert np.allclose(gx.problems.Mw4().optimal_front(91).sum(axis=1), 1.0)
+    front = gx.problems.Mw8(objectives=4).optimal_front(50)
+    assert len(front) >= 50 and np.allclose((front**2).sum(axis=1), 1.0)
+    assert gx.problems.Mw14().nadir_point == pytest.approx([1.5, 1.5, 5.0])
+    assert gx.problems.Mw12().nadir_point == pytest.approx([1.3164, 1.0], abs=1e-4)
+    assert gx.problems.Mw5().constraint_count == 3
+    assert gx.problems.Mw4(objectives=5).dimensions == 17
+    assert gx.problems.Mw1(variables=5).dimensions == 5
+
+
+@pytest.mark.parametrize(
+    "problem, message",
+    [
+        (gx.problems.ScaledDtlz1(factor=0), "ScaledDtlz1.factor is finite and positive, not 0"),
+        (gx.problems.ScaledDtlz2(factor="a"), "ScaledDtlz2.factor is a number"),
+        (gx.problems.ConvexDtlz2(objectives=7), "ConvexDtlz2.objectives is at most 6, not 7"),
+        (gx.problems.Mw1(variables=2), "Mw1.variables is at least 3, not 2"),
+        (gx.problems.Mw4(variables=3), "Mw4.variables is at least 4, not 3"),
+        (gx.problems.Mw8(objectives=1), "Mw8.objectives is at least 2, not 1"),
+    ],
+)
+def test_wrong_dtlz_variant_and_mw_sizes_are_errors(problem, message):
+    with pytest.raises((ValueError, TypeError), match=message):
+        problem.genome
+
+
+def test_mw_and_dtlz_variant_sizes_are_checked_in_rust_too():
+    description = '{"type": "mw14", "objectives": 3, "variables": 3}'
+    with pytest.raises(ValueError, match="MW with this many objectives needs at least 4"):
+        gx._genoxide.problem_info(description)
+    description = '{"type": "scaled_dtlz1", "objectives": 3, "variables": null, "factor": -1.0}'
+    with pytest.raises(ValueError, match="a scaling factor is finite and positive"):
         gx._genoxide.problem_info(description)
 
 

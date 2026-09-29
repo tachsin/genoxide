@@ -175,11 +175,14 @@ print(result.best_fitness, result.evaluations, problem.reference)
 
 The multi-objective problems, `Zdt1` to `Zdt6` (`Zdt5` on a `Binary` genome),
 `Dtlz1(objectives, variables)` to `Dtlz7`,
+`ConvexDtlz2`, `ScaledDtlz1(objectives, variables, factor)`, `ScaledDtlz2`, `InvertedDtlz1`,
 `Wfg1(objectives, position, distance)` to `Wfg9`, `Schaffer1`, `Schaffer2`, `FonsecaFleming`,
 `Kursawe`, `Poloni`, `Viennet1` to `Viennet3` and the constrained `Bnh`, `Srn`, `Tnk`, `Osy` and
 `Constr`, run with the multi-objective algorithms in the same way. Each gives its `objectives`,
 for the algorithm, and `optimal_front(points)`, None where the front isn't known; a constrained one
 returns `(objectives, violation)` and gives its `constraints(x)`.
+Ma and Wang's constrained `Mw1` to `Mw14` (`Mw4`, `Mw8` and `Mw14` with any number of
+`objectives`) work the same way.
 
 Two submodules have constrained single-objective problems, whose fitness is `(score,
 violation)`: `gx.problems.cec2006` has CEC 2006's `G01()` to `G24()`, and
