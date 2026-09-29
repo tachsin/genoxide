@@ -348,7 +348,8 @@ with a tolerance of 1e-9 relative.
 ### 1.3 Multi objective, unconstrained
 
 Read in full during the survey: Zitzler, Deb and Thiele (2000), the DTLZ technical report (2001)
-and the DTLZ CEC 2002 paper. The WFG, MaF, CEC 2009, Deb and Jain (2014), Kursawe, Poloni,
+and the DTLZ CEC 2002 paper (and in batch 8, Deb and Jain (2014), parts I and II, below). The
+WFG, MaF, CEC 2009, Kursawe, Poloni,
 Viennet and Van Veldhuizen sources were paywalled or blocked: those entries are **U** and must be
 checked in the original before implementation (the WFG and MaF papers first: MaF's is open
 access at Springer; WFG's through a library).
@@ -414,12 +415,22 @@ All x ∈ [0, 1]ⁿ, n = M + k − 1.
 Deb, K. and Jain, H. (2014). An evolutionary many-objective optimization algorithm using
 reference-point-based nondominated sorting approach, part I. *IEEE TEVC* 18(4): 577-601.
 doi:10.1109/TEVC.2013.2281535. Jain, H. and Deb, K. (2014), part II. *IEEE TEVC* 18(4): 602-622.
-doi:10.1109/TEVC.2013.2281534. **U** (both paywalled; to check in the papers):
+doi:10.1109/TEVC.2013.2281534. **VO (batch 8)** in the authors' copies of the accepted versions
+(<https://www.egr.msu.edu/~kdeb/papers/k2012009.pdf>, k2012010.pdf; pages rendered and read; the
+typeset journal versions not compared):
 
-- Scaled DTLZ1 and DTLZ2: fᵢ multiplied by s^(i−1), with s per M from a table in part I
-  (recalled as 10 for M = 3 and 5, 3 for 8, 2 for 10, 1.2 for 15: U).
-- Convex DTLZ2 (part I): fᵢ⁴ for i < M, f_M².
-- Inverted DTLZ1 (part II): fᵢ ← 0.5 (1 + g) − fᵢ.
+- Scaled DTLZ1 and DTLZ2 (part I, section V-C, tables VII and VIII): fᵢ multiplied by s^(i−1).
+  The text says "a factor 10ⁱ" and its example multiplies f₁, f₂, f₃ by 10⁰, 10¹, 10², as figures
+  24-29 show; the captions of tables VII and VIII say "10ⁱ, i = 1, …, M": **the paper contradicts
+  itself**, and genoxide follows the example and figures. Table VIII's s: DTLZ1 10, 10, 3, 2, 1.2
+  and DTLZ2 10, 10, 3, **3**, **2** for M = 3, 5, 8, 10, 15 (the survey recalled DTLZ1's values
+  for both). For other M, genoxide takes the next larger M's (a documented choice), and
+  `with_factor` sets any.
+- Convex DTLZ2 (part I, section V-D, eq. 8): fᵢ⁴ for i < M, f_M²; front f_M + Σ √fᵢ = 1.
+- Inverted DTLZ1 (part II, section VIII-A, eq. 9): fᵢ ← 0.5 (1 + g) − fᵢ with DTLZ1's g; the
+  front, derived: Σ fᵢ = (M − 1)/2 with fᵢ in [0, 1/2] (for M = 2, DTLZ1's line). The paper's
+  inverted DTLZ1 uses "the original formulation" of DTLZ1: M + 4 variables assumed from part I's
+  DTLZ1 (k = 5), **not stated for the inverted problem**.
 
 #### WFG1-WFG9
 
@@ -570,10 +581,29 @@ derived for this plan and are checked in tests against points generated from the
 | MW13 | III, disconnected | [0, 1.5]ⁿ, g2, 2 | sampled |
 | MW14 | I, M objectives | [0, 1.5]ⁿ, g3, 1 | 2^(M−1) disconnected patches (fᵢ ∈ [0, ≈ 0.731] ∪ [≈ 1.330, 1.5]) |
 
+**Checked in batch 8.** Every formula was read from the rendered pages (eqs. 9, 12-28, table
+II, the supplement's tables S-R-I, S-R-VIII and S-R-IX), and compared with the authors' C++ code
+(`CMO_NSGA2/cexe/exc/AlgC.cpp` in MW.rar, which has no license: read only, nothing taken). They
+agree but for g₁: the code's `i / (2 * X.size())` divides integers and is always 0, so its optimal
+zᵢ are 0.5; genoxide follows the paper, 0.5 + (i − 1)/(2n). MW6's powers read by the paper's own
+local adjustment A sin(B l^C)^D (eq. 9): l = cos(6 arctan(f₂/f₁)⁴)¹⁰, as the code has it. The
+many-objective setting is n = m − 1 + 13 (supplement), genoxide's default M + 12. Fronts: derived
+for every problem, computed as the first feasible point of each ray of x₁ (vertical for MW1-3,
+radial for the others), non-dominated, and checked against solutions near the Pareto set and the
+authors' sampled fronts (`TruePF/MW*.dat`, compared only: IGD of 1e-4 to 1e-3 both ways for the
+two-objective problems, and the three-objective samples lie on the derived surfaces, in the
+derived bands and ranges, to 1e-8). Findings: MW5's
+front has, besides the sixteen points, two short curves near the axes (to l₁ = 1/72), which the
+paper's figure and the authors' samples show as points; MW11's isolated point (1, 1) needs x₁ = 1
+and g₃ = 1 exactly and was never reached (the example shows it); MW12's front starts at the limit
+(0, 1), feasible only in exact arithmetic; MW9's front is analytic (below, confirmed); MW14's ranges
+are [0, 0.7313522974897325] and (1.3296339087402259, 1.5]. The MW8 bands are [0, π/24],
+[π/8, 5π/24], [7π/24, 3π/8] and [11π/24, π/2].
+
 Pitfalls: constraint directions are mixed (some printed ≤ 0, most ≥ 0: implement as printed);
 MW12 and MW13 use |sin| in f₂ and plain sin in the constraints; MW4 and MW8 order their objectives
 so f_M depends on x₁; feasible fractions are tiny (< 0.1‰ for most). The authors' code
-(<https://intleo.csu.edu.cn/codes/MW.rar>) wasn't opened; differences from the paper are unchecked.
+(<https://intleo.csu.edu.cn/codes/MW.rar>) was read in batch 8 (above).
 
 #### DAS-CMOP1-9
 
@@ -694,7 +724,7 @@ the papers report. No front file from another project is used.
 |---|---|---|---|---|
 | Single objective, unconstrained | 59 continuous (18 scalable unimodal, 21 scalable multimodal, 20 fixed-dimension) | 6 binary and combinatorial; whole CEC/BBOB suites | Goldstein-Price; the CEC 2005 and BBOB forms; citations of Rosenbrock, Griewank, Rastrigin (1991), Styblinski-Tang | most: the originals are books and reports that aren't online; the common forms are secondary (Yao, Liu and Lin 1999; CEC 2005) |
 | Single objective, constrained (CEC 2006) | 24 | | all 24 (the September 2006 report) | g17's better value, g22's claimed better value, g04's variant, the "max" origins |
-| Multi objective, unconstrained | 25 (SCH1, SCH2, FON, KUR, POL, VNT1-3, ZDT5, DTLZ5-7, scaled DTLZ1/2, convex DTLZ2, inverted DTLZ1, WFG1-9) | MaF1-15, UF1-10, Deb's 1999 problems | ZDT5, DTLZ5-7 | WFG (all), scaled/convex/inverted DTLZ, Kursawe, Poloni, Viennet, SCH2's formula; FON secondary |
+| Multi objective, unconstrained | 25 (SCH1, SCH2, FON, KUR, POL, VNT1-3, ZDT5, DTLZ5-7, scaled DTLZ1/2, convex DTLZ2, inverted DTLZ1, WFG1-9) | MaF1-15, UF1-10, Deb's 1999 problems | ZDT5, DTLZ5-7, WFG (batch 4), scaled/convex/inverted DTLZ (batch 8) | Kursawe, Poloni, Viennet, SCH2's formula; FON secondary |
 | Multi objective, constrained | 45 (CONSTR, SRN, TNK, BNH, OSY, CTP1-8, C-DTLZ ×6, MW1-14, DAS-CMOP1-9, DTLZ8-9) | LIR-CMOP1-14, CF1-10, DC-DTLZ ×6, Viennet 4 / MOP-C | CONSTR, SRN, TNK (as NSGA-II restates them), C-DTLZ, MW, DAS-CMOP, DTLZ8-9, and the optional LIR-CMOP, CF, DC-DTLZ | CTP (all), BNH, OSY; DC2/DC3 parameters |
 | Engineering design | 8 single-objective (welded beam in two versions, pressure vessel, spring, speed reducer, gear train, three-bar truss, cantilever beam, car side impact) and 11 multi-objective (two-bar truss, welded beam, disc brake, car side impact, speed reducer, gear train, four-bar truss, rocket injector, water resource planning, marine design, crashworthiness) | I-beam, tubular column, concrete beam, stepped cantilever, coil spring, hatch cover, clutch brake, cantilever (Deb) | pressure vessel and cantilever optima (Yang et al. 2013, proofs) | the originals of all the others: secondary (Tanabe and Ishibuchi 2020, Chehouri et al. 2016) or unverified |
 
@@ -704,7 +734,7 @@ about 75 optional ones.
 **To check in the originals before implementing** (by library access, since they're paywalled or
 in print only): the WFG paper (IEEE TEVC 2006), CTP (EMO 2001 / KanGAL 200002), Deb's 2001 book
 (OSY's regions, CTP8), Binh and Korn (1997), Kursawe (1991), Poloni et al. (2000), Viennet et al.
-(1996), Deb and Jain (2014) part I (scaled and convex DTLZ), Schwefel (1981), Dixon and Szegö
+(1996), Schwefel (1981), Dixon and Szegö
 (1978, Hartmann and Shekel constants), Ragsdell and Phillips (1976), Sandgren (1990), Golinski
 (1970) with Ray (2003), Gu et al. (2001), Osyczka and Kundu (1995), Deb, Pratap and Moitra (2000),
 and Stadler and Dauer (1992). A batch doesn't start until the originals of its problems are read;
@@ -1037,7 +1067,7 @@ algorithms come on top of these.
 | 5 | done (#277) | CEC 2006, part 2 | g07-g18 (12) | `cec2006_g07` to `cec2006_g18`; `cec2006`: SHADE with Deb's rules on all of the problems so far, printing f − f* and feasibility, as in the report's evaluation criteria |
 | 6 | done | CEC 2006, part 3, and the low-dimensional classics with tables | g19-g24 (6), Hartmann 3-D, Hartmann 6-D, Shekel 5/7/10, Easom, Eggholder, Schaffer F6 (8) | `cec2006_g19` to `cec2006_g24` and an example per function: `hartmann3`, `hartmann6`, `shekel5`, `shekel7`, `shekel10`, `easom`, `eggholder`, `schaffer_f6` (the `cec2006` comparison of all 24 is still to come) |
 | 7 |  | Constrained test problems with tunable difficulty (CTP needs its paper first: every CTP detail is unverified) | CTP1-CTP8 (8), C1-DTLZ1, C1-DTLZ3, C2-DTLZ2, C2-convex-DTLZ2, C3-DTLZ1, C3-DTLZ4 (6) | `ctp` (NSGA-II on CTP2/CTP7's disconnected feasible fronts); `c2_dtlz2` (NSGA-III with constraints, 3 objectives) |
-| 8 |  | Scaled and inverted DTLZ, and MW | Convex DTLZ2, scaled DTLZ1, scaled DTLZ2, inverted DTLZ1 (4), MW1-MW14 (14) | `mw` (constrained multi-objective, several fronts) |
+| 8 | done | Scaled and inverted DTLZ, and MW | Convex DTLZ2, scaled DTLZ1, scaled DTLZ2, inverted DTLZ1 (4), MW1-MW14 (14) | an example per problem: `convex_dtlz2`, `scaled_dtlz1`, `scaled_dtlz2`, `inverted_dtlz1` (NSGA-III against MOEA/D or other directions) and `mw1` to `mw14` (NSGA-II, NSGA-III and SMS-EMOA, with the paper's settings and settings that reach the fronts); the `mw` comparison of all fourteen is still to come |
 | 9 |  | Engineering design, several objectives | Two-bar truss, welded beam (2 objectives), disc brake, car side impact (3 objectives), speed reducer (2 objectives), four-bar truss, water resource planning, rocket injector, vehicle crashworthiness, conceptual marine design (10) | `two_bar_truss`; `car_side_impact` |
 | 10a |  | Remaining low-dimensional and classic scalable functions | Beale, Booth, Matyas, Bohachevsky 1-3, Three-hump camel, Dixon-Price, Trid, Powell, Langermann, Shekel's foxholes, Kowalik, Schwefel 2.21, Schwefel 2.22 (15) | an example per function (`function_suite` may compare them too) |
 | 10b |  | CEC and BBOB-style functions, and the shift / rotation wrappers | `Shifted<P>`, `Rotated<P>`; Sum of different powers, Step, Quartic (deterministic: without noise, or with noise seeded from the genome, since fitness functions must be deterministic), Penalized 1 and 2, High-conditioned elliptic, Bent cigar, Discus, Büche-Rastrigin, Non-continuous Rastrigin, Weierstrass, Katsuura, HappyCat, HGBat, Schaffer F7, Rotated hyper-ellipsoid, BBOB different powers (17; the shifted and rotated Rastrigin of CEC 2005 and BBOB are the wrappers around `Rastrigin`) | `rotated_functions`: CMA-ES full vs diagonal on rotated vs axis-parallel ellipsoids |

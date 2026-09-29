@@ -32,6 +32,36 @@ function piecePath(points, x, y) {
 }
 
 /**
+ * The feasible region in objective space, from a grid: `region.x` and `region.y` are its extent,
+ * `region.rows` its rows from the bottom, one character per cell, "1" where a feasible solution
+ * lands. Each row's runs of feasible cells become one rectangle.
+ */
+function regionRects(region, x, y) {
+  const rows = Array.isArray(region?.rows) ? region.rows : [];
+  if (!rows.length || !Array.isArray(region.x) || !Array.isArray(region.y)) return [];
+  const columns = rows[0].length;
+  const [x0, x1] = region.x;
+  const [y0, y1] = region.y;
+  const dx = (x1 - x0) / columns;
+  const dy = (y1 - y0) / rows.length;
+  const rects = [];
+  rows.forEach((row, j) => {
+    for (let i = 0; i < row.length; i++) {
+      if (row[i] !== "1") continue;
+      let end = i;
+      while (end + 1 < row.length && row[end + 1] === "1") end++;
+      const left = x(x0 + i * dx);
+      const right = x(x0 + (end + 1) * dx);
+      const top = y(y0 + (j + 1) * dy);
+      const bottom = y(y0 + j * dy);
+      rects.push({ key: `${j}-${i}`, x: left, y: top, width: right - left, height: bottom - top });
+      i = end;
+    }
+  });
+  return rects;
+}
+
+/**
  * `front-2d`: each algorithm's front in objective space over the true
  * front; infeasible points hollow. The axes follow the points with a short
  * glide, so the front's approach reads at every scale.
@@ -51,8 +81,12 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
   const truePieces =
     Array.isArray(problem.true_front) && Array.isArray(problem.true_front[0]?.[0]) ? problem.true_front : null;
   const trueFront = truePieces ? truePieces.flat() : Array.isArray(problem.true_front) ? problem.true_front : null;
-  // a front of separate points (e.g. ZDT5's, on a binary genome) is drawn as rings, not a line
+  // a front of separate points (e.g. ZDT5's, on a binary genome) is drawn as rings, not a line,
+  // and so is a piece of a single point
   const discrete = problem.true_front_kind === "points";
+  const lonePoints = truePieces ? truePieces.filter((piece) => piece.length === 1).map((piece) => piece[0]) : [];
+  // the feasible region of a constrained problem, shaded behind everything
+  const region = problem.region ?? null;
 
   const target = useMemo(() => {
     const pts = [...names.flatMap((n) => fronts[n] ?? []), ...names.flatMap((n) => infeasible[n] ?? []), ...(trueFront ?? [])];
@@ -67,6 +101,7 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
     ...names.map((n, k) => ({ label: n, color: palette[k % palette.length], shape: SHAPES[k % SHAPES.length] })),
     ...(hasInfeasible ? [{ label: "infeasible", shape: "ring", className: "text-base-content/50" }] : []),
     ...(trueFront ? [{ label: "true front", shape: discrete ? "ring" : "line", className: "text-base-content/45" }] : []),
+    ...(region ? [{ label: "feasible region", shape: "square", className: "text-base-content/15" }] : []),
   ];
 
   return (
@@ -132,6 +167,14 @@ export default function Front2dPlot({ trace, frame, dark, reduced, compact = fal
                 </clipPath>
               </defs>
               <g clipPath={`url(#${clip})`}>
+              {region
+                ? regionRects(region, x, y).map((r) => (
+                    <rect key={r.key} x={r.x} y={r.y} width={Math.max(0, r.width)} height={Math.max(0, r.height)} className="fill-base-content/10" />
+                  ))
+                : null}
+              {lonePoints.map((p, i) => (
+                <circle key={`l${i}`} cx={x(p[0])} cy={y(p[1])} r={4.5} fill="none" className="stroke-base-content/45" strokeWidth={2} />
+              ))}
               {trueFront && discrete
                 ? trueFront.map((p, i) => (
                     <circle key={`t${i}`} cx={x(p[0])} cy={y(p[1])} r={5} fill="none" className="stroke-base-content/45" strokeWidth={1.5} />

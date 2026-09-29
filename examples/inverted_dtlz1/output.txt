@@ -1,0 +1,3 @@
+usual directions, 2000 generations: 92 solutions, hypervolume 0.2771, 93.7% of the sample's, g 0.00058 (median) to 0.00058
+inverted directions, 2000 generations: 92 solutions, hypervolume 0.2957, 100.0% of the sample's, g 0.00014 (median) to 0.00014
+the whole front: hypervolume 0.3392; the sample of 91 of its points: 0.2958
