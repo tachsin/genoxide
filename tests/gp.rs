@@ -1,8 +1,10 @@
 //! Tree genetic programming: primitive sets, generation, parsing, the evaluators and the operators.
 
+use genoxide::gp::boolean::{EvenParity, Multiplexer};
 use genoxide::gp::{
-    Columns, Constants, Gp, Init, Node, PrimitiveSet, Subtree, SubtreeCrossover, SubtreeMutation,
-    Tree, Type,
+    Columns, ConstantMutation, Constants, Gp, HoistMutation, Init, Mutations, Node,
+    OnePointCrossover, PointMutation, PrimitiveSet, ShrinkMutation, Subtree, SubtreeCrossover,
+    SubtreeMutation, Tree, Type,
 };
 use genoxide::math;
 use genoxide::prelude::*;
@@ -761,5 +763,665 @@ fn a_ga_finds_the_cubic() {
         StopReason::Target,
         "{:?}",
         outcome.best_fitness()
+    );
+}
+
+// ---- point, hoist, shrink and constant mutation, one-point crossover (batch G2) -------------
+
+// the positions where two trees of the same shape differ
+fn differences(a: &Tree, b: &Tree) -> Vec<usize> {
+    assert_eq!(a.len(), b.len());
+    (0..a.len())
+        .filter(|&i| a.nodes()[i] != b.nodes()[i])
+        .collect()
+}
+
+// the nodes of a tree of the typed set that point mutation can change: every node but the
+// functions alone of their signature (`less`, `and`, `if`)
+fn replaceable(gp: &Gp<Typed>, tree: &Tree) -> usize {
+    let set = gp.primitives();
+    tree.nodes()
+        .iter()
+        .filter(|node| match node {
+            Node::Primitive(index) => !matches!(
+                set.primitives()[*index as usize].value(),
+                Typed::Less | Typed::And | Typed::If
+            ),
+            Node::Constant { .. } => true,
+        })
+        .count()
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    #[test]
+    fn point_mutation_changes_exactly_the_picked_nodes_keeping_types_and_shape(
+        seed: u64, max_depth in 3usize..9, max_size in 15usize..120, count in 1usize..5,
+    ) {
+        let gp = typed_gp(max_depth, max_size);
+        let set = gp.primitives();
+        let mut rng = StreamRng::seed_from_u64(seed);
+        for _ in 0..20 {
+            let tree = gp.random_genome(&mut rng);
+            let mut mutated = tree.clone();
+            PointMutation::count(count).unwrap().mutate(&gp, &mut mutated, &mut rng);
+            prop_assert!(gp.validate(&mutated).is_ok(), "{:?}", gp.validate(&mutated));
+            // a picked node always changes: exactly `count` nodes, or all that can
+            let changed = differences(&tree, &mutated);
+            prop_assert_eq!(changed.len(), count.min(replaceable(&gp, &tree)));
+            for position in changed {
+                let (before, after) = (tree.nodes()[position], mutated.nodes()[position]);
+                let arity = |node: &Node| match node {
+                    Node::Primitive(index) => set.primitives()[*index as usize].arity(),
+                    Node::Constant { .. } => 0,
+                };
+                prop_assert_eq!(arity(&before), arity(&after));
+            }
+            let mut per_node = tree.clone();
+            PointMutation::per_node(0.3).unwrap().mutate(&gp, &mut per_node, &mut rng);
+            prop_assert!(gp.validate(&per_node).is_ok());
+            prop_assert!(differences(&tree, &per_node).len() <= replaceable(&gp, &tree));
+        }
+    }
+
+    #[test]
+    fn hoist_and_shrink_always_shrink_within_the_limits(
+        seed: u64, max_depth in 3usize..9, max_size in 15usize..120,
+    ) {
+        let gp = typed_gp(max_depth, max_size);
+        let mut rng = StreamRng::seed_from_u64(seed);
+        for _ in 0..20 {
+            let tree = gp.random_genome(&mut rng);
+            let mut hoisted = tree.clone();
+            HoistMutation.mutate(&gp, &mut hoisted, &mut rng);
+            prop_assert!(gp.validate(&hoisted).is_ok());
+            // smaller, or unchanged without a function of the root's type below the root
+            let set = gp.primitives();
+            let hoistable = tree.nodes()[1..].iter().any(|node| match node {
+                Node::Primitive(index) => {
+                    let primitive = &set.primitives()[*index as usize];
+                    primitive.arity() > 0 && primitive.returns() == set.root()
+                }
+                Node::Constant { .. } => false,
+            });
+            let expected = if hoistable { hoisted.len() < tree.len() } else { hoisted == tree };
+            prop_assert!(expected);
+            let mut shrunk = tree.clone();
+            ShrinkMutation.mutate(&gp, &mut shrunk, &mut rng);
+            prop_assert!(gp.validate(&shrunk).is_ok());
+            prop_assert!(shrunk.len() < tree.len() || tree.len() == 1);
+        }
+    }
+
+    #[test]
+    fn constant_mutation_moves_one_constant_within_its_range(seed: u64, sigma in 0.001f64..2.0) {
+        let gp = Gp::builder(koza_set()).build().unwrap();
+        let typed = typed_gp(6, 100);
+        let mut rng = StreamRng::seed_from_u64(seed);
+        let mutation = ConstantMutation::gaussian(sigma).unwrap();
+        let constants = |tree: &Tree| {
+            tree.nodes().iter().filter(|n| matches!(n, Node::Constant { .. })).count()
+        };
+        for _ in 0..20 {
+            // uniform constants in [-1, 1], and integers -3 to 3
+            let tree = gp.random_genome(&mut rng);
+            let mut mutated = tree.clone();
+            mutation.mutate(&gp, &mut mutated, &mut rng);
+            prop_assert!(gp.validate(&mutated).is_ok());
+            let changed = differences(&tree, &mutated);
+            prop_assert_eq!(changed.len(), usize::from(constants(&tree) > 0));
+            for position in changed {
+                let is_constant = matches!(mutated.nodes()[position], Node::Constant { .. });
+                prop_assert!(is_constant);
+            }
+            let tree = typed.random_genome(&mut rng);
+            let mut mutated = tree.clone();
+            mutation.mutate(&typed, &mut mutated, &mut rng);
+            prop_assert!(typed.validate(&mutated).is_ok());
+            prop_assert_eq!(differences(&tree, &mutated).len(), usize::from(constants(&tree) > 0));
+        }
+    }
+
+    #[test]
+    fn a_mix_of_mutations_always_changes_the_tree_within_the_limits(
+        seed: u64, max_depth in 3usize..9, max_size in 15usize..120,
+    ) {
+        let gp = typed_gp(max_depth, max_size);
+        let mutations = Mutations::builder()
+            .subtree(1.0)
+            .point(1.0)
+            .hoist(1.0)
+            .shrink(1.0)
+            .with(1.0, ConstantMutation::gaussian(0.1).unwrap())
+            .build()
+            .unwrap();
+        let mut rng = StreamRng::seed_from_u64(seed);
+        for _ in 0..20 {
+            let mut tree = gp.random_genome(&mut rng);
+            let before = tree.clone();
+            mutations.mutate(&gp, &mut tree, &mut rng);
+            prop_assert!(gp.validate(&tree).is_ok());
+            prop_assert_ne!(tree, before);
+        }
+    }
+
+    #[test]
+    fn one_point_crossover_keeps_trees_typed_within_limits_and_conserves_nodes(
+        seed: u64, max_depth in 3usize..9, max_size in 15usize..120,
+    ) {
+        let gp = typed_gp(max_depth, max_size);
+        let mut rng = StreamRng::seed_from_u64(seed);
+        for _ in 0..20 {
+            let (mut a, mut b) = (gp.random_genome(&mut rng), gp.random_genome(&mut rng));
+            let depth = a.depth(gp.primitives()).max(b.depth(gp.primitives()));
+            let before = is_sorted_multiset([a.nodes(), b.nodes()].concat());
+            OnePointCrossover.crossover(&gp, &mut a, &mut b, &mut rng);
+            prop_assert!(gp.validate(&a).is_ok(), "{:?}", gp.validate(&a));
+            prop_assert!(gp.validate(&b).is_ok(), "{:?}", gp.validate(&b));
+            prop_assert_eq!(is_sorted_multiset([a.nodes(), b.nodes()].concat()), before);
+            // exchanged at the same depth: no child deeper than both parents
+            prop_assert!(a.depth(gp.primitives()) <= depth && b.depth(gp.primitives()) <= depth);
+        }
+    }
+}
+
+#[test]
+fn point_mutation_exchanges_primitives_of_one_signature() {
+    let (set, ..) = typed_set();
+    let gp = Gp::builder(set).build().unwrap();
+    let set = gp.primitives();
+    let mut rng = StreamRng::seed_from_u64(1);
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..500 {
+        // add can only become mul; less and if never change; x becomes y or a constant, and the
+        // constant another constant, x or y
+        let mut tree = set.parse("if(less(x, 1.0), add(x, y), x)").unwrap();
+        PointMutation::count(1)
+            .unwrap()
+            .mutate(&gp, &mut tree, &mut rng);
+        seen.insert(tree.display(set).to_string().replace(char::is_numeric, "#"));
+    }
+    let expected: std::collections::BTreeSet<String> = [
+        "if(less(#.#, #.#), add(x, y), x)",
+        "if(less(-#.#, #.#), add(x, y), x)",
+        "if(less(y, #.#), add(x, y), x)",
+        "if(less(x, #.#), add(x, y), x)",
+        "if(less(x, -#.#), add(x, y), x)",
+        "if(less(x, x), add(x, y), x)",
+        "if(less(x, y), add(x, y), x)",
+        "if(less(x, #.#), add(#.#, y), x)",
+        "if(less(x, #.#), add(-#.#, y), x)",
+        "if(less(x, #.#), add(y, y), x)",
+        "if(less(x, #.#), add(x, #.#), x)",
+        "if(less(x, #.#), add(x, -#.#), x)",
+        "if(less(x, #.#), add(x, x), x)",
+        "if(less(x, #.#), mul(x, y), x)",
+        "if(less(x, #.#), add(x, y), #.#)",
+        "if(less(x, #.#), add(x, y), -#.#)",
+        "if(less(x, #.#), add(x, y), y)",
+    ]
+    .map(String::from)
+    .into();
+    assert!(seen.is_subset(&expected), "{seen:?}");
+    // the constant 1.0 was replaced by another value: "less(x, #.#)" with another number
+    assert!(seen.contains("if(less(x, y), add(x, y), x)"));
+    assert!(seen.contains("if(less(x, #.#), mul(x, y), x)"));
+}
+
+#[test]
+fn hoist_and_shrink_by_hand() {
+    let gp = Gp::builder(koza_set()).build().unwrap();
+    let set = gp.primitives();
+    let mut rng = StreamRng::seed_from_u64(1);
+    let mut hoisted = std::collections::BTreeSet::new();
+    let mut shrunk = std::collections::BTreeSet::new();
+    for _ in 0..500 {
+        let tree = set.parse("add(sin(x), mul(x, 0.5))").unwrap();
+        let mut hoist = tree.clone();
+        HoistMutation.mutate(&gp, &mut hoist, &mut rng);
+        hoisted.insert(hoist.display(set).to_string());
+        let mut shrink = tree.clone();
+        ShrinkMutation.mutate(&gp, &mut shrink, &mut rng);
+        shrunk.insert(
+            shrink
+                .display(set)
+                .to_string()
+                .replace(|c: char| c.is_numeric() || c == '-' || c == '.', "#"),
+        );
+    }
+    // the subtrees of the functions below the root
+    let expected: std::collections::BTreeSet<String> =
+        ["sin(x)", "mul(x, 0.5)"].map(String::from).into();
+    assert_eq!(hoisted, expected);
+    // a function's subtree (add, sin or mul) replaced by x or a new constant
+    for text in &shrunk {
+        let leaf = |text: &str| text == "x" || text.chars().all(|c| c == '#');
+        let allowed = leaf(text)
+            || text
+                .strip_prefix("add(")
+                .and_then(|rest| rest.strip_suffix(", mul(x, ###))"))
+                .is_some_and(leaf)
+            || text
+                .strip_prefix("add(sin(x), ")
+                .and_then(|rest| rest.strip_suffix(')'))
+                .is_some_and(leaf);
+        assert!(allowed, "{text}");
+    }
+    assert!(shrunk.contains("x") && shrunk.contains("add(sin(x), x)"));
+    // a single leaf has no subtree to hoist or shrink
+    let leaf = set.parse("x").unwrap();
+    for mutation in [
+        Mutations::builder().hoist(1.0).build().unwrap(),
+        Mutations::builder().shrink(1.0).build().unwrap(),
+    ] {
+        let mut tree = leaf.clone();
+        mutation.mutate(&gp, &mut tree, &mut rng);
+        assert_eq!(tree, leaf);
+    }
+    // with point mutation beside them, the mix changes the leaf
+    let mix = Mutations::builder()
+        .hoist(10.0)
+        .shrink(10.0)
+        .point(1.0)
+        .build()
+        .unwrap();
+    let mut tree = leaf.clone();
+    mix.mutate(&gp, &mut tree, &mut rng);
+    assert_ne!(tree, leaf);
+}
+
+#[test]
+fn invalid_mutations_are_errors() {
+    setting_error(PointMutation::per_node(0.0), "point_mutation_rate");
+    setting_error(PointMutation::per_node(1.5), "point_mutation_rate");
+    setting_error(PointMutation::count(0), "point_mutation_count");
+    setting_error(ConstantMutation::gaussian(0.0), "constant_sigma");
+    setting_error(ConstantMutation::gaussian(f64::NAN), "constant_sigma");
+    setting_error(Mutations::builder().build(), "mutations");
+    setting_error(Mutations::builder().subtree(0.0).build(), "mutations");
+    setting_error(
+        Mutations::builder().subtree(-1.0).point(2.0).build(),
+        "mutations",
+    );
+    setting_error(Mutations::builder().subtree(f64::NAN).build(), "mutations");
+    setting_error(
+        Mutations::builder()
+            .subtree(f64::MAX)
+            .point(f64::MAX)
+            .build(),
+        "mutations",
+    );
+    assert!(Mutations::builder().subtree(0.0).point(1.0).build().is_ok());
+}
+
+#[test]
+fn a_mix_chooses_by_weight() {
+    let gp = Gp::builder(koza_set()).build().unwrap();
+    let set = gp.primitives();
+    // hoist makes the tree smaller, point keeps its size: 3 to 1
+    let mix = Mutations::builder().hoist(3.0).point(1.0).build().unwrap();
+    let tree = set.parse("add(x, sin(x))").unwrap();
+    let mut rng = StreamRng::seed_from_u64(1);
+    let draws = 20_000;
+    let mut hoists = 0u32;
+    for _ in 0..draws {
+        let mut mutated = tree.clone();
+        mix.mutate(&gp, &mut mutated, &mut rng);
+        hoists += u32::from(mutated.len() < tree.len());
+    }
+    let (p, n) = (0.75, f64::from(draws));
+    let deviation = (n * p * (1.0 - p)).sqrt();
+    assert!(
+        (f64::from(hoists) - n * p).abs() < 4.0 * deviation,
+        "{hoists}"
+    );
+}
+
+// ---- Boolean problems -----------------------------------------------------------------------
+
+#[test]
+fn multiplexer_cases_by_hand() {
+    let problem = Multiplexer::new(3).unwrap();
+    assert_eq!((problem.inputs(), problem.cases()), (11, 2048));
+    assert_eq!(problem.address_bits(), 3);
+    let set = problem.primitives();
+    let target = |case: u64| problem.targets()[(case / 64) as usize] >> (case % 64) & 1 == 1;
+    // case bits: a0 a1 a2 (the address, a0 its lowest bit), then d0 to d7
+    let case = |address: u64, data: u64| address | data << 3;
+    assert!(target(case(5, 1 << 5)));
+    assert!(!target(case(5, !(1 << 5) & 0xff)));
+    assert!(target(case(0, 1)));
+    assert!(!target(case(7, 0x7f)));
+    // each data bit alone is right where it's selected (256 cases) and in half the rest
+    for data in 0..8 {
+        let tree = set.parse(&format!("d{data}")).unwrap();
+        assert_eq!(problem.errors(&tree), 896);
+    }
+    assert_eq!(problem.errors(&set.parse("a0").unwrap()), 1024);
+    // the multiplexer itself, and its negation
+    let right =
+        "if(a2, if(a1, if(a0, d7, d6), if(a0, d5, d4)), if(a1, if(a0, d3, d2), if(a0, d1, d0)))";
+    assert_eq!(problem.errors(&set.parse(right).unwrap()), 0);
+    let wrong = set.parse(&format!("not({right})")).unwrap();
+    assert_eq!(problem.errors(&wrong), 2048);
+    assert_eq!(problem.evaluate(&wrong), 2048.0);
+    let outputs = problem.outputs(&set.parse(right).unwrap());
+    assert_eq!(outputs, problem.targets());
+    // the 6-multiplexer: 64 cases, one word; the 3-multiplexer: 8 cases, the rest of the word 0
+    let six = Multiplexer::new(2).unwrap();
+    assert_eq!((six.inputs(), six.cases(), six.targets().len()), (6, 64, 1));
+    let three = Multiplexer::new(1).unwrap();
+    // cases 0 to 7, bits a0 d0 d1: the output is d0 (bit 1) if a0 is 0, else d1 (bit 2)
+    assert_eq!(three.targets(), [0b1110_0100]);
+    let tree = three.primitives().parse("not(d0)").unwrap();
+    assert_eq!(three.outputs(&tree)[0] >> 8, 0);
+}
+
+#[test]
+fn even_parity_by_hand() {
+    for inputs in [2, 3, 5, 7] {
+        let problem = EvenParity::new(inputs).unwrap();
+        let cases = 1u64 << inputs;
+        assert_eq!((problem.inputs(), problem.cases()), (inputs, cases));
+        for case in 0..cases {
+            let bit = problem.targets()[(case / 64) as usize] >> (case % 64) & 1;
+            assert_eq!(bit == 1, case.count_ones() % 2 == 0);
+        }
+        let set = problem.primitives();
+        // one input is right in half the cases, and so is its negation
+        assert_eq!(problem.errors(&set.parse("d0").unwrap()), cases / 2);
+        assert_eq!(
+            problem.errors(&set.parse("nor(d1, d1)").unwrap()),
+            cases / 2
+        );
+    }
+    let problem = EvenParity::new(2).unwrap();
+    let set = problem.primitives();
+    let even = set.parse("or(and(d0, d1), nor(d0, d1))").unwrap();
+    assert_eq!(problem.errors(&even), 0);
+    let odd = set.parse("and(or(d0, d1), nand(d0, d1))").unwrap();
+    assert_eq!(problem.errors(&odd), 4);
+}
+
+#[test]
+fn invalid_boolean_problems_are_errors() {
+    setting_error(Multiplexer::new(0), "address_bits");
+    setting_error(Multiplexer::new(5), "address_bits");
+    setting_error(EvenParity::new(1), "inputs");
+    setting_error(EvenParity::new(21), "inputs");
+}
+
+// ---- bloat control: lexicographic parsimony, double tournament, Tarpeian --------------------
+
+// individuals of the given trees and scores
+fn trees_with_scores(set: &PrimitiveSet<Op>, trees: &[(&str, f64)]) -> Population<Tree> {
+    trees
+        .iter()
+        .map(|&(text, score)| {
+            let mut individual = Individual::new(set.parse(text).unwrap());
+            individual.set_fitness(Fitness::new(score));
+            individual
+        })
+        .collect()
+}
+
+// how often each individual is selected, one call per selection or all in one call
+fn selected<S: Select>(
+    select: &S,
+    population: &Population<Tree>,
+    draws: u32,
+    one_per_call: bool,
+) -> Vec<u32> {
+    let mut rng = StreamRng::seed_from_u64(1);
+    let mut counts = vec![0; population.len()];
+    let picks = if one_per_call {
+        (0..draws)
+            .flat_map(|_| select.select(population, Objective::Maximize, 1, &mut rng))
+            .collect()
+    } else {
+        select.select(population, Objective::Maximize, draws as usize, &mut rng)
+    };
+    for index in picks {
+        counts[index] += 1;
+    }
+    counts
+}
+
+// asserts that `count` of `draws` is within 4 standard deviations of probability `p`
+fn assert_frequency(count: u32, draws: u32, p: f64) {
+    let n = f64::from(draws);
+    let deviation = (n * p * (1.0 - p)).sqrt();
+    assert!(
+        (f64::from(count) - n * p).abs() <= 4.0 * deviation.max(0.5),
+        "{count} of {draws}, expected {p}"
+    );
+}
+
+#[test]
+fn lexicographic_tournaments_give_ties_to_the_smaller() {
+    let set = koza_set();
+    let draws = 40_000;
+    // equal fitness: of two drawn, the smaller wins; the same one drawn twice half the time
+    let equal = trees_with_scores(&set, &[("add(x, x)", 1.0), ("x", 1.0)]);
+    let select = LexicographicTournament::new(2).unwrap();
+    for one_per_call in [true, false] {
+        let counts = selected(&select, &equal, draws, one_per_call);
+        assert_frequency(counts[1], draws, 0.75);
+    }
+    // fitness first: the larger, fitter one wins whenever drawn
+    let fitter = trees_with_scores(&set, &[("add(x, x)", 2.0), ("x", 1.0)]);
+    assert_frequency(selected(&select, &fitter, draws, false)[0], draws, 0.75);
+    // equal fitness and size: the first drawn wins, each half the time
+    let same = trees_with_scores(&set, &[("add(x, x)", 1.0), ("mul(x, x)", 1.0)]);
+    assert_frequency(selected(&select, &same, draws, false)[0], draws, 0.5);
+    setting_error(LexicographicTournament::new(0), "tournament_size");
+    // bucketed, near fitness values tie: 1.0 and 1.5 share the lowest bucket, where the smaller
+    // wins; both lose to the others, so each is picked only by a tournament of the two alone
+    let near = trees_with_scores(
+        &set,
+        &[("add(x, x)", 1.5), ("x", 1.0), ("x", 5.0), ("x", 6.0)],
+    );
+    let select = LexicographicTournament::new(2)
+        .unwrap()
+        .ratio_buckets(0.5)
+        .unwrap();
+    let counts = selected(&select, &near, draws, false);
+    assert_frequency(counts[0], draws, 1.0 / 16.0);
+    assert_frequency(counts[1], draws, 3.0 / 16.0);
+    let bucketed = LexicographicTournament::new(2).unwrap();
+    setting_error(bucketed.ratio_buckets(0.0), "bucket_ratio");
+    setting_error(bucketed.ratio_buckets(1.5), "bucket_ratio");
+}
+
+#[test]
+fn double_tournaments_pick_the_smaller_of_two_with_probability_d_over_2() {
+    let set = koza_set();
+    let draws = 40_000;
+    // equal fitness, so each fitness tournament of 1 is a random individual: the size
+    // tournament meets two different individuals half the time, where the smaller wins with
+    // probability D / 2, and the same one twice the other half
+    let population = trees_with_scores(&set, &[("add(x, x)", 1.0), ("x", 1.0)]);
+    for parsimony in [1.0, 1.2, 1.4, 1.7, 2.0] {
+        let p = 0.25 + 0.5 * parsimony / 2.0;
+        let fitness_first = DoubleTournament::new(1, parsimony).unwrap();
+        let size_first = fitness_first.size_first();
+        for select in [fitness_first, size_first] {
+            let counts = selected(&select, &population, draws, false);
+            assert_frequency(counts[1], draws, p);
+        }
+    }
+    // fitness first, fitness tournaments of 2: the fitter, larger one wins each fitness
+    // tournament with probability 3/4; the size tournament then meets it and the smaller one
+    // (probability 2 * 3/4 * 1/4) or two copies of either
+    let fitter = trees_with_scores(&set, &[("add(x, x)", 2.0), ("x", 1.0)]);
+    let parsimony = 1.4;
+    let select = DoubleTournament::new(2, parsimony).unwrap();
+    let p_small = 0.25 * 0.25 + 2.0 * 0.75 * 0.25 * (parsimony / 2.0);
+    assert_frequency(selected(&select, &fitter, draws, false)[1], draws, p_small);
+    setting_error(DoubleTournament::new(0, 1.4), "tournament_size");
+    setting_error(DoubleTournament::new(7, 0.9), "parsimony");
+    setting_error(DoubleTournament::new(7, 2.1), "parsimony");
+    setting_error(DoubleTournament::new(7, f64::NAN), "parsimony");
+}
+
+#[test]
+fn tarpeian_marks_genomes_above_the_mean_size_at_its_rate() {
+    let set = koza_set();
+    let draws = 20_000;
+    // the larger, fitter one is above the mean size: truncation to the best half selects it
+    // unless it's marked, with probability `rate`
+    let population = trees_with_scores(&set, &[("add(x, x)", 2.0), ("x", 1.0)]);
+    for rate in [0.1, 0.3, 0.5, 1.0] {
+        let select = Tarpeian::new(Truncation::new(0.5).unwrap(), rate).unwrap();
+        let counts = selected(&select, &population, draws, true);
+        assert_frequency(counts[1], draws, rate);
+        // marks are per call: one call selects from one marking
+        let counts = selected(&select, &population, draws, false);
+        assert!(counts.contains(&0), "{counts:?}");
+    }
+    // nothing above the mean: nothing marked
+    let equal = trees_with_scores(&set, &[("add(x, x)", 2.0), ("mul(x, x)", 1.0)]);
+    let select = Tarpeian::new(Truncation::new(0.5).unwrap(), 1.0).unwrap();
+    assert_eq!(selected(&select, &equal, 100, true), [100, 0]);
+    // above the mean by the exact mean: 3 nodes against a mean of 7/3
+    let three = trees_with_scores(&set, &[("x", 1.0), ("add(x, x)", 3.0), ("add(x, x)", 2.0)]);
+    let select = Tarpeian::new(Truncation::new(0.3).unwrap(), 1.0).unwrap();
+    assert_eq!(selected(&select, &three, 100, true), [100, 0, 0]);
+    setting_error(
+        Tarpeian::new(Tournament::new(2).unwrap(), 0.0),
+        "tarpeian_rate",
+    );
+    setting_error(
+        Tarpeian::new(Tournament::new(2).unwrap(), 1.1),
+        "tarpeian_rate",
+    );
+}
+
+// the squared error on Koza's quartic at 20 points
+fn quartic_error(tree: &Tree) -> Option<f64> {
+    thread_local! {
+        static STACK: std::cell::RefCell<Vec<f64>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let set = koza_set_cached();
+    STACK.with_borrow_mut(|stack| {
+        let mut sum = 0.0;
+        for i in 0..20 {
+            let x = f64::from(i) / 10.0 - 0.95;
+            let value = tree.evaluate(set, stack, |op, args| apply(op, args, x), |_, c| c);
+            let error = value - (x * x * x * x + x * x * x + x * x + x);
+            sum += error * error;
+        }
+        sum.is_finite().then_some(sum)
+    })
+}
+
+// the mean size of the trees after 50 generations on the quartic
+fn mean_size<S: Select>(select: S, seed: u64) -> f64 {
+    let ga = Ga::builder(Gp::builder(koza_set()).build().unwrap())
+        .population_size(100)
+        .select(select)
+        .crossover(SubtreeCrossover::new())
+        .mutate(SubtreeMutation::new())
+        .mutation_rate(0.1)
+        .minimize()
+        .seed(seed)
+        .build()
+        .unwrap();
+    let mut engine = Engine::new(ga, quartic_error).stop_when(Stop::generations(50));
+    engine.run().unwrap();
+    let population = engine.algorithm().population();
+    let total: usize = population.iter().map(|i| i.genome().len()).sum();
+    total as f64 / population.len() as f64
+}
+
+#[test]
+fn double_tournaments_keep_trees_smaller_than_tournaments() {
+    // Luke and Panait's setting, D = 1.4 with fitness tournaments of 7, against tournaments of
+    // 7, over 20 seeds: smaller on average, and on most seeds (a sign test: 15 or more of 20 has
+    // probability 0.021 if neither were smaller)
+    let (mut smaller, mut plain_sum, mut double_sum) = (0, 0.0, 0.0);
+    for seed in 1..=20 {
+        let plain = mean_size(Tournament::new(7).unwrap(), seed);
+        let double = mean_size(DoubleTournament::new(7, 1.4).unwrap(), seed);
+        smaller += usize::from(double < plain);
+        plain_sum += plain;
+        double_sum += double;
+    }
+    assert!(smaller >= 15, "{smaller} of 20");
+    assert!(double_sum < plain_sum, "{double_sum} against {plain_sum}");
+}
+
+#[cfg(feature = "parallel")]
+#[test]
+fn seeded_runs_with_bloat_control_and_mixed_mutations_are_the_same_on_any_number_of_threads() {
+    let run = |parallel: bool| {
+        let ga = Ga::builder(Gp::builder(koza_set()).build().unwrap())
+            .population_size(100)
+            .select(Tarpeian::new(DoubleTournament::new(7, 1.4).unwrap(), 0.3).unwrap())
+            .crossover(OnePointCrossover)
+            .mutate(
+                Mutations::builder()
+                    .subtree(1.0)
+                    .point(1.0)
+                    .hoist(1.0)
+                    .shrink(1.0)
+                    .with(1.0, ConstantMutation::gaussian(0.1).unwrap())
+                    .build()
+                    .unwrap(),
+            )
+            .mutation_rate(0.3)
+            .minimize()
+            .parallel_breeding(parallel)
+            .seed(3)
+            .build()
+            .unwrap();
+        let mut engine = Engine::new(ga, quartic_error)
+            .parallel(parallel)
+            .stop_when(Stop::generations(15));
+        let outcome = engine.run().unwrap();
+        (outcome.into_best(), engine.algorithm().population().clone())
+    };
+    let sequential = run(false);
+    assert_eq!(run(false), sequential);
+    let bred = run(true);
+    for threads in [1, 8] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        assert_eq!(pool.install(|| run(true)), bred);
+    }
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn mixes_and_bloat_control_deserialize_as_built() {
+    let mutations = Mutations::builder()
+        .subtree(0.5)
+        .point(0.3)
+        .with(0.2, ConstantMutation::gaussian(0.1).unwrap())
+        .build()
+        .unwrap();
+    let json = serde_json::to_string(&mutations).unwrap();
+    assert_eq!(serde_json::from_str::<Mutations>(&json).unwrap(), mutations);
+    // weights are checked as `build` checks them
+    let negative = json.replacen("0.5", "-0.5", 1);
+    assert_ne!(negative, json);
+    assert!(serde_json::from_str::<Mutations>(&negative).is_err());
+    let select = Tarpeian::new(DoubleTournament::new(7, 1.4).unwrap().size_first(), 0.3).unwrap();
+    let json = serde_json::to_string(&select).unwrap();
+    assert_eq!(
+        serde_json::from_str::<Tarpeian<DoubleTournament>>(&json).unwrap(),
+        select
+    );
+    let select = LexicographicTournament::new(2)
+        .unwrap()
+        .ratio_buckets(0.5)
+        .unwrap();
+    let json = serde_json::to_string(&select).unwrap();
+    assert_eq!(
+        serde_json::from_str::<LexicographicTournament>(&json).unwrap(),
+        select
     );
 }
