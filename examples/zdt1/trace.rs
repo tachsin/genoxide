@@ -83,7 +83,7 @@ impl Frames {
 
     fn push(&mut self, frame: Value) {
         let generation = frame["generation"].as_u64().expect("a generation");
-        if generation % self.every != 0 {
+        if !generation.is_multiple_of(self.every) {
             self.last = Some((generation, frame));
             return;
         }

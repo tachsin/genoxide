@@ -162,15 +162,17 @@ impl<G: Genome> HallOfFame<G> {
             .iter()
             .position(|individual| objective.is_better(fitness, fitness_of(individual)))
             .unwrap_or(self.individuals.len());
-        self.individuals.insert(position, candidate.clone());
-        if self.individuals.len() > self.capacity {
-            // the worst leaves, with its info
-            let worst = self
-                .individuals
-                .pop()
-                .expect("more individuals than the capacity");
+        let entering = if self.individuals.len() == self.capacity {
+            // the worst leaves, with its info, and the candidate is copied into its memory; it's
+            // better than the worst, so its position is before the worst's
+            let mut worst = self.individuals.pop().expect("a full hall of fame");
             self.infos.remove(worst.genome());
-        }
+            worst.clone_from(candidate);
+            worst
+        } else {
+            candidate.clone()
+        };
+        self.individuals.insert(position, entering);
         true
     }
 }
@@ -179,10 +181,10 @@ impl<G: Genome> Observer<G> for HallOfFame<G> {
     fn observe(&mut self, snapshot: &Snapshot<'_, G>) {
         let objective = snapshot.progress().objective();
         for individual in snapshot.population().iter().chain(snapshot.discarded()) {
-            if self.enter(individual, objective) {
-                if let Some(info) = snapshot.infos.get(individual.genome()) {
-                    self.infos.insert(individual.genome().clone(), info.clone());
-                }
+            if self.enter(individual, objective)
+                && let Some(info) = snapshot.infos.get(individual.genome())
+            {
+                self.infos.insert(individual.genome().clone(), info.clone());
             }
         }
     }

@@ -104,10 +104,17 @@ fn mean(y: &[f64]) -> f64 {
 fn r_nonsep(y: &[f64], a: usize) -> f64 {
     let n = y.len();
     let mut numerator = 0.0;
-    for j in 0..n {
-        numerator += y[j];
-        for k in 0..a - 1 {
-            numerator += (y[j] - y[(j + k + 1) % n]).abs();
+    for (j, &value) in y.iter().enumerate() {
+        numerator += value;
+        // the a − 1 values after it, wrapping around to the first: y[(j + k + 1) % n] for k
+        // from 0, in that order
+        let (after, before) = (&y[j + 1..], &y[..j]);
+        let wrapped = (a - 1).saturating_sub(after.len());
+        for &other in &after[..a - 1 - wrapped] {
+            numerator += (value - other).abs();
+        }
+        for &other in &before[..wrapped] {
+            numerator += (value - other).abs();
         }
     }
     let half = a.div_ceil(2) as f64;
@@ -223,13 +230,13 @@ const fn default_position(objectives: usize) -> usize {
 fn check<const M: usize>(name: &str, position: usize, distance: usize, even: bool) {
     assert!(M >= 2, "{name} needs at least 2 objectives");
     assert!(
-        position > 0 && position % (M - 1) == 0,
+        position > 0 && position.is_multiple_of(M - 1),
         "{name} needs a positive multiple of M − 1 = {} position parameters, not {position}",
         M - 1
     );
     assert!(distance > 0, "{name} needs at least 1 distance parameter");
     assert!(
-        !even || distance % 2 == 0,
+        !even || distance.is_multiple_of(2),
         "{name} needs an even number of distance parameters, not {distance}"
     );
 }

@@ -1,13 +1,15 @@
 //! Breeding shared by the multi-objective genetic algorithms.
 
 use super::Scores;
+use crate::engine::GenomeHashing;
 use crate::genome::Representation;
 use crate::operator::{Crossover, Mutate};
 use crate::rng::Chance;
 use crate::{Individual, Population, StreamRng};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use std::hash::{BuildHasherDefault, Hash, Hasher};
+use std::fmt;
+use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 
 // with duplicate elimination, the children rejected as copies, per child needed, before copies
 // are accepted: a population of few distinct genomes still gets its children
@@ -17,82 +19,11 @@ const REJECTIONS_PER_CHILD: usize = 100;
 // population: SMS-EMOA breeds one child at a time
 const COMPARED_CHILDREN: usize = 8;
 
-// a fast, deterministic 64-bit hash of a genome. It only finds the genomes a child may equal:
-// they are compared, so the results never depend on it, on any platform.
+// a fast, deterministic 64-bit hash of a genome, the engine's genome hasher's. It only finds the
+// genomes a child may equal: they are compared, so the results never depend on it, on any
+// platform.
 fn fingerprint<G: Hash>(genome: &G) -> u64 {
-    let mut hasher = Fingerprinter(0x243f_6a88_85a3_08d3);
-    genome.hash(&mut hasher);
-    // SplitMix64's finalizer: the low bits, which pick the map's bucket, depend on every bit
-    let mut x = hasher.0;
-    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    x ^ (x >> 31)
-}
-
-// every word is mixed in with a folded multiply (the two halves of a 128-bit product xored), so a
-// difference in any bit spreads to most bits before the next word. FxHash's rotate and multiply
-// only spread a difference upwards: bit 63 of one word, rotated to bit 4, cancelled bit 4 of the
-// next.
-struct Fingerprinter(u64);
-
-impl Hasher for Fingerprinter {
-    fn write(&mut self, bytes: &[u8]) {
-        let mut chunks = bytes.chunks_exact(8);
-        for chunk in &mut chunks {
-            let word = u64::from_le_bytes(chunk.try_into().expect("8 bytes"));
-            self.write_u64(word);
-        }
-        for &byte in chunks.remainder() {
-            self.write_u64(u64::from(byte));
-        }
-    }
-
-    fn write_u64(&mut self, word: u64) {
-        let product = u128::from(self.0 ^ word) * 0x9e37_79b9_7f4a_7c15;
-        self.0 = product as u64 ^ (product >> 64) as u64;
-    }
-
-    // every integer is a word, whatever its size, so that a length (a `usize`) hashes the same on
-    // 32 and 64 bits. A slice of `usize`, as in `Order`, still reaches `write` as 4 or 8 bytes each.
-    fn write_u8(&mut self, n: u8) {
-        self.write_u64(n.into());
-    }
-
-    fn write_u16(&mut self, n: u16) {
-        self.write_u64(n.into());
-    }
-
-    fn write_u32(&mut self, n: u32) {
-        self.write_u64(n.into());
-    }
-
-    fn write_usize(&mut self, n: usize) {
-        self.write_u64(n as u64);
-    }
-
-    fn write_i8(&mut self, n: i8) {
-        self.write_i64(n.into());
-    }
-
-    fn write_i16(&mut self, n: i16) {
-        self.write_i64(n.into());
-    }
-
-    fn write_i32(&mut self, n: i32) {
-        self.write_i64(n.into());
-    }
-
-    fn write_i64(&mut self, n: i64) {
-        self.write_u64(n as u64);
-    }
-
-    fn write_isize(&mut self, n: isize) {
-        self.write_i64(n as i64);
-    }
-
-    fn finish(&self) -> u64 {
-        self.0
-    }
+    GenomeHashing::default().hash_one(genome)
 }
 
 // a map keyed by fingerprints, which are hashes already
@@ -116,6 +47,58 @@ impl Hasher for Identity {
 // the fingerprints of the population and of the children so far, each with the index of a genome
 // that has it: the population's members, then the children
 type Fingerprints = HashMap<u64, usize, BuildHasherDefault<Identity>>;
+
+// genomes no longer in use, which breeding copies parents into rather than allocating: the
+// parents that didn't survive and the children discarded a generation before. Neither a clone nor
+// a checkpoint keeps them.
+pub(crate) struct Spares<G>(Vec<G>);
+
+impl<G> Default for Spares<G> {
+    fn default() -> Self {
+        Self(Vec::new())
+    }
+}
+
+impl<G> Clone for Spares<G> {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl<G> fmt::Debug for Spares<G> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Spares({})", self.0.len())
+    }
+}
+
+impl<G: Clone> Spares<G> {
+    // a copy of `genome`, in a spare one if there is any
+    fn copy(&mut self, genome: &G) -> G {
+        match self.0.pop() {
+            Some(mut spare) => {
+                spare.clone_from(genome);
+                spare
+            }
+            None => genome.clone(),
+        }
+    }
+
+    // keeps a genome no longer in use
+    pub(crate) fn keep(&mut self, genome: G) {
+        self.0.push(genome);
+    }
+
+    // keeps the genomes of individuals no longer in use
+    pub(crate) fn keep_all<const M: usize>(
+        &mut self,
+        individuals: impl IntoIterator<Item = Individual<G, Scores<M>>>,
+    ) where
+        G: crate::genome::Genome,
+    {
+        self.0
+            .extend(individuals.into_iter().map(Individual::into_genome));
+    }
+}
 
 // the operators and rates of a genetic algorithm
 #[derive(Clone, Debug)]
@@ -141,7 +124,8 @@ where
     // `count` children of pairs of parents chosen by `select`: recombined with the crossover
     // chance, each mutated with the mutation chance. With duplicate elimination, a child equal to
     // a member of the population or to an earlier child is dropped. A child equal to a parent
-    // (only when copies are accepted) inherits its scores.
+    // (only when copies are accepted) inherits its scores. The children's genomes are copies of
+    // their parents' in `spares`, as far as there are any, and unused ones go back there.
     pub(crate) fn breed<const M: usize>(
         &self,
         population: &Population<R::Genome, Scores<M>>,
@@ -149,6 +133,7 @@ where
         rng: &mut StreamRng,
         mut select: impl FnMut(&mut StreamRng) -> usize,
         offspring: &mut Vec<Individual<R::Genome, Scores<M>>>,
+        spares: &mut Spares<R::Genome>,
     ) {
         offspring.clear();
         // for many children, the genomes a child may equal are found by fingerprint
@@ -163,15 +148,16 @@ where
         let mut rejections = count.saturating_mul(REJECTIONS_PER_CHILD);
         while offspring.len() < count {
             let parents = [select(rng), select(rng)];
-            let mut a = population[parents[0]].genome().clone();
-            let mut b = population[parents[1]].genome().clone();
+            let mut a = spares.copy(population[parents[0]].genome());
+            let mut b = spares.copy(population[parents[1]].genome());
             if rng.chance(self.crossover_chance) {
                 self.crossover
                     .crossover(&self.representation, &mut a, &mut b, rng);
             }
             for mut genome in [a, b] {
                 if offspring.len() == count {
-                    break;
+                    spares.keep(genome);
+                    continue;
                 }
                 if rng.chance(self.mutation_chance) {
                     self.mutate.mutate(&self.representation, &mut genome, rng);
@@ -204,6 +190,7 @@ where
                     };
                     if copy {
                         rejections -= 1;
+                        spares.keep(genome);
                         continue;
                     }
                 }
@@ -225,6 +212,7 @@ where
 // the members of `population` at `indices`, each genome once: the first of its copies. A front
 // never holds copies of a genome, which MOEA/D's subproblems and a population bred without
 // duplicate elimination can.
+#[cfg(test)]
 pub(crate) fn distinct<G, const M: usize>(
     population: &Population<G, Scores<M>>,
     indices: impl IntoIterator<Item = usize>,
@@ -232,29 +220,55 @@ pub(crate) fn distinct<G, const M: usize>(
 where
     G: crate::genome::Genome,
 {
-    let mut members: Vec<Individual<G, Scores<M>>> = Vec::new();
+    let mut members = Vec::new();
+    distinct_into(&mut members, population, indices);
+    members
+}
+
+// `distinct`, in `members`: copied into the memory of its individuals (the previous front), which
+// it then holds
+pub(crate) fn distinct_into<G, const M: usize>(
+    members: &mut Vec<Individual<G, Scores<M>>>,
+    population: &Population<G, Scores<M>>,
+    indices: impl IntoIterator<Item = usize>,
+) where
+    G: crate::genome::Genome,
+{
+    let indices = indices.into_iter();
+    // room for every index: at most the population
+    let (least, most) = indices.size_hint();
+    let room = most.unwrap_or(least).min(population.len());
+    members.reserve(room.saturating_sub(members.len()));
+    // the members so far: `members[..len]`; the rest is memory to copy into
+    let mut len = 0;
     // the fingerprints of the members so far, each with the position of a member that has it
-    let mut seen = Fingerprints::default();
+    let mut seen = Fingerprints::with_capacity_and_hasher(room, Default::default());
     for index in indices {
         let individual = &population[index];
         let genome = individual.genome();
         let copy = match seen.entry(fingerprint(genome)) {
             Entry::Vacant(entry) => {
-                entry.insert(members.len());
+                entry.insert(len);
                 false
             }
             // almost always the same genome; if not, two genomes share the fingerprint, and the
             // genome is compared with every member
             Entry::Occupied(entry) => {
                 members[*entry.get()].genome() == genome
-                    || members.iter().any(|member| member.genome() == genome)
+                    || members[..len]
+                        .iter()
+                        .any(|member| member.genome() == genome)
             }
         };
         if !copy {
-            members.push(individual.clone());
+            match members.get_mut(len) {
+                Some(member) => member.clone_from(individual),
+                None => members.push(individual.clone()),
+            }
+            len += 1;
         }
     }
-    members
+    members.truncate(len);
 }
 
 // the scores of individuals, invalid if not evaluated
@@ -381,6 +395,7 @@ mod tests {
             &mut rng,
             |rng| rng.below(20),
             &mut offspring,
+            &mut Spares::default(),
         );
         let children: Vec<u64> = offspring.iter().map(|x| x.genome().0).collect();
         assert_eq!(children, (0..20).collect::<Vec<_>>());
@@ -435,5 +450,47 @@ mod tests {
         let members = distinct(&population, 0..5);
         let genomes: Vec<u64> = members.iter().map(|member| member.genome().0).collect();
         assert_eq!(genomes, [3, 1, 2]);
+    }
+
+    #[test]
+    fn spare_genomes_change_no_child() {
+        use crate::genome::Real;
+        use crate::operator::{PolynomialMutation, SimulatedBinaryCrossover};
+        use rand::Rng;
+        let representation = Real::uniform(4, -1.0..=1.0).unwrap();
+        let variation = Variation {
+            representation: representation.clone(),
+            crossover: SimulatedBinaryCrossover::new(15.0).unwrap(),
+            mutate: PolynomialMutation::per_gene(0.5, 20.0).unwrap(),
+            crossover_chance: Chance::new(0.9),
+            mutation_chance: Chance::new(1.0),
+            eliminate_duplicates: true,
+        };
+        let mut rng = StreamRng::seed_from_u64(3);
+        let population: Population<Reals, Scores<1>> = (0..10)
+            .map(|_| Individual::unevaluated(representation.random_genome(&mut rng)))
+            .collect();
+        let breed = |spares: &mut Spares<Reals>| {
+            let mut rng = StreamRng::seed_from_u64(4);
+            let mut offspring = Vec::new();
+            variation.breed(
+                &population,
+                9,
+                &mut rng,
+                |rng| rng.below(10),
+                &mut offspring,
+                spares,
+            );
+            (offspring, rng.next_u64())
+        };
+        // spares of other lengths and values, fewer than the children need
+        let mut spares = Spares::default();
+        for length in [0, 3, 9] {
+            spares.keep(Reals::from(vec![7.0; length]));
+        }
+        let (children, next) = breed(&mut Spares::default());
+        assert_eq!(breed(&mut spares), (children, next));
+        // an odd number of children: the unused second genome of the last pair is kept
+        assert_eq!(spares.0.len(), 1);
     }
 }

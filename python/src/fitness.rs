@@ -406,24 +406,24 @@ fn multi_value<const M: usize>(result: &Bound<'_, PyAny>) -> PyResult<MultiValue
     if result.is_none() {
         return Ok(MultiValue::Invalid);
     }
-    if let Ok(tuple) = result.cast::<PyTuple>() {
-        if tuple.len() == 2 {
-            let first = tuple.get_item(0)?;
-            match first.extract::<f64>() {
-                Ok(_) => {}
-                Err(error) if error.is_instance_of::<PyTypeError>(result.py()) => {
-                    let violation = tuple.get_item(1)?.extract::<f64>().map_err(|error| {
-                        not_numbers(result.py(), error, || {
-                            format!(
-                                "a multi-objective fitness function's tuple is (scores, constraint violation), the violation a number, not {}",
-                                item_types(tuple)
-                            )
-                        })
-                    })?;
-                    return Ok(MultiValue::Constrained(objectives(&first)?, violation));
-                }
-                Err(error) => return Err(error),
+    if let Ok(tuple) = result.cast::<PyTuple>()
+        && tuple.len() == 2
+    {
+        let first = tuple.get_item(0)?;
+        match first.extract::<f64>() {
+            Ok(_) => {}
+            Err(error) if error.is_instance_of::<PyTypeError>(result.py()) => {
+                let violation = tuple.get_item(1)?.extract::<f64>().map_err(|error| {
+                    not_numbers(result.py(), error, || {
+                        format!(
+                            "a multi-objective fitness function's tuple is (scores, constraint violation), the violation a number, not {}",
+                            item_types(tuple)
+                        )
+                    })
+                })?;
+                return Ok(MultiValue::Constrained(objectives(&first)?, violation));
             }
+            Err(error) => return Err(error),
         }
     }
     objectives(result).map(MultiValue::Scores)

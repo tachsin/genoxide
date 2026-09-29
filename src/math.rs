@@ -46,26 +46,27 @@ pub fn ln(x: f64) -> f64 {
     const LG5: f64 = f64::from_bits(0x3fc7_4664_96cb_03de); // 1.818357216161805012e-1
     const LG6: f64 = f64::from_bits(0x3fc3_9a09_d078_c69f); // 1.531383769920937332e-1
     const LG7: f64 = f64::from_bits(0x3fc2_f112_df3e_5244); // 1.479819860511658591e-1
-    // fdlibm's special cases
-    if x.is_nan() || x < 0.0 {
-        return f64::NAN;
-    }
-    if x == 0.0 {
-        return f64::NEG_INFINITY;
-    }
-    if x == f64::INFINITY {
-        return x;
-    }
-
+    const MIN_POSITIVE_BITS: u64 = 0x0010_0000_0000_0000;
+    const INFINITY_BITS: u64 = 0x7ff0_0000_0000_0000;
     let mut x = x;
-    let mut high = (x.to_bits() >> 32) as i32;
     let mut k: i32 = 0;
-    if high < 0x0010_0000 {
+    // one comparison for the common case, positive, normal and finite x (whose bits are from
+    // those of f64::MIN_POSITIVE up to those of infinity), and fdlibm's special cases otherwise
+    if x.to_bits().wrapping_sub(MIN_POSITIVE_BITS) >= INFINITY_BITS - MIN_POSITIVE_BITS {
+        if x.is_nan() || x < 0.0 {
+            return f64::NAN;
+        }
+        if x == 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        if x == f64::INFINITY {
+            return x;
+        }
         // subnormal: scale up
         k -= 54;
         x *= TWO54;
-        high = (x.to_bits() >> 32) as i32;
     }
+    let mut high = (x.to_bits() >> 32) as i32;
     k += (high >> 20) - 1023;
     high &= 0x000f_ffff;
     let i = (high + 0x95f64) & 0x10_0000;

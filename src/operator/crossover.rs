@@ -66,15 +66,24 @@ where
         if len < 2 {
             return;
         }
-        // points in 1..len, between genes
-        let cuts: Vec<usize> = rng
-            .sample_distinct(self.points.min(len - 1), len - 1)
-            .into_iter()
-            .map(|index| index + 1)
-            .collect();
-        for segment in cuts.chunks(2) {
-            let end = segment.get(1).copied().unwrap_or(len);
-            a.swap_range(b, segment[0]..end);
+        // points in 1..len, between genes: one more than a sample of 0..len - 1
+        match self.points.min(len - 1) {
+            // the common cases without an allocation, with the same random numbers
+            1 => {
+                let cut = rng.below(len - 1) + 1;
+                a.swap_range(b, cut..len);
+            }
+            2 => {
+                let (first, second) = rng.sample_pair(len - 1);
+                a.swap_range(b, first + 1..second + 1);
+            }
+            points => {
+                let cuts = rng.sample_distinct(points, len - 1);
+                for segment in cuts.chunks(2) {
+                    let end = segment.get(1).map_or(len, |&cut| cut + 1);
+                    a.swap_range(b, segment[0] + 1..end);
+                }
+            }
         }
     }
 }

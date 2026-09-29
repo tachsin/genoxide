@@ -109,10 +109,14 @@ pub struct Es {
     population: Population<Reals>,
     steps: Vec<Vec<f64>>,
     // for intermediate recombination, the logarithms of the parents' step sizes weighted by 1/ρ,
-    // step size by step size (`[index * μ + parent]`): taken once per generation, not once per
+    // parent by parent (`[parent * steps + index]`): taken once per generation, not once per
     // offspring. Derived from `steps` before each breeding, so not saved
     #[cfg_attr(feature = "serde", serde(skip))]
     weighted_log_steps: Vec<f64>,
+    // genomes and step sizes of earlier generations no longer in use, whose memory the next
+    // offspring reuse
+    #[cfg_attr(feature = "serde", serde(skip))]
+    spare: Spare,
     offspring: Vec<Individual<Reals>>,
     offspring_steps: Vec<Vec<f64>>,
     discarded: Vec<Individual<Reals>>,
@@ -203,12 +207,10 @@ impl Es {
         self.weighted_log_steps.clear();
         if let Recombination::Intermediate { rho: rho @ 2.. } = self.recombination {
             let weight = 1.0 / rho as f64;
-            let per_parent = self.steps.first().map_or(0, Vec::len);
-            self.weighted_log_steps.extend(
-                (0..per_parent)
-                    .flat_map(|index| self.steps.iter().map(move |steps| steps[index]))
-                    .map(|step| weight * ln(step)),
-            );
+            for steps in &self.steps {
+                self.weighted_log_steps
+                    .extend(steps.iter().map(|&step| weight * ln(step)));
+            }
         }
         let parents = Parents {
             real: &self.real,
@@ -230,7 +232,7 @@ impl Es {
                 vec![(); self.lambda],
                 &streams,
                 |_, (), rng| {
-                    let (genes, steps) = parents.offspring(rng);
+                    let (genes, steps) = parents.offspring(rng, None);
                     (Individual::new(genes), steps)
                 },
                 &mut self.offspring,
@@ -240,7 +242,8 @@ impl Es {
             self.offspring.clear();
             self.offspring_steps.clear();
             for _ in 0..self.lambda {
-                let (genes, steps) = parents.offspring(&mut self.rng);
+                let spare = self.spare.genomes.pop().zip(self.spare.steps.pop());
+                let (genes, steps) = parents.offspring(&mut self.rng, spare);
                 self.offspring.push(Individual::new(genes));
                 self.offspring_steps.push(steps);
             }
@@ -250,6 +253,9 @@ impl Es {
     // the next parents, and the offspring that didn't make it as discarded
     fn select(&mut self) {
         let objective = self.objective;
+        // the offspring discarded by the last selection have been seen with it
+        let discarded = self.discarded.drain(..).map(Individual::into_genome);
+        self.spare.genomes.extend(discarded);
         let offspring = std::mem::take(&mut self.offspring);
         let offspring_steps = std::mem::take(&mut self.offspring_steps);
         // offspring first, so that they win ties
@@ -271,7 +277,13 @@ impl Es {
         }
         // best first, stable
         pool.sort_by(|a, b| objective.compare(Self::fitness(&b.0), Self::fitness(&a.0)));
-        self.discarded.clear();
+        // with (μ,λ), the parents don't survive
+        if self.selection == Selection::Comma {
+            let parents = std::mem::replace(&mut self.population, Population::new(Vec::new()));
+            let genomes = parents.into_vec().into_iter().map(Individual::into_genome);
+            self.spare.genomes.extend(genomes);
+            self.spare.steps.append(&mut self.steps);
+        }
         let mut parents = Vec::with_capacity(self.mu);
         self.steps.clear();
         for (rank, (mut individual, steps, new)) in pool.into_iter().enumerate() {
@@ -281,10 +293,18 @@ impl Es {
                 }
                 parents.push(individual);
                 self.steps.push(steps);
-            } else if new {
-                self.discarded.push(individual);
+            } else {
+                self.spare.steps.push(steps);
+                if new {
+                    self.discarded.push(individual);
+                } else {
+                    self.spare.genomes.push(individual.into_genome());
+                }
             }
         }
+        // enough for the offspring of a generation
+        self.spare.genomes.truncate(self.lambda);
+        self.spare.steps.truncate(self.lambda);
         self.population = Population::new(parents);
     }
 }
@@ -303,18 +323,32 @@ struct Parents<'a> {
 }
 
 impl Parents<'_> {
-    // a recombined and mutated offspring, and its step sizes
+    // a recombined and mutated offspring, and its step sizes, in the memory of `spare` if given
     #[inline]
-    fn offspring(&self, rng: &mut StreamRng) -> (Reals, Vec<f64>) {
+    fn offspring(
+        &self,
+        rng: &mut StreamRng,
+        spare: Option<(Reals, Vec<f64>)>,
+    ) -> (Reals, Vec<f64>) {
         let variable = self.real.variable_genes();
         let n = variable.len();
         let (rho, dominant) = match self.recombination {
             Recombination::Intermediate { rho } => (rho, false),
             Recombination::Dominant { rho } => (rho, true),
         };
-        let parents = rng.sample_distinct(rho, self.mu);
-        let mut genes = self.population[parents[0]].genome().clone();
-        let mut steps = self.steps[parents[0]].clone();
+        let parents = rng.sample_distinct_small(rho, self.mu);
+        let (first, others) = (parents[0], &parents[1..]);
+        let (mut genes, mut steps) = match spare {
+            Some((mut genes, mut steps)) => {
+                genes.clone_from(self.population[first].genome());
+                steps.clone_from(&self.steps[first]);
+                (genes, steps)
+            }
+            None => (
+                self.population[first].genome().clone(),
+                self.steps[first].clone(),
+            ),
+        };
         if rho > 1 && dominant {
             for (index, &gene) in variable.iter().enumerate() {
                 let parent = parents[rng.below(rho)];
@@ -324,23 +358,43 @@ impl Parents<'_> {
                 }
             }
             if self.step_sizes == StepSizes::One {
-                steps = self.steps[parents[rng.below(rho)]].clone();
+                steps.clone_from(&self.steps[parents[rng.below(rho)]]);
             }
         } else if rho > 1 {
             let weight = 1.0 / rho as f64;
-            for &gene in variable {
-                genes[gene] = parents
-                    .iter()
-                    .map(|&parent| weight * self.population[parent].genome()[gene])
-                    .sum();
+            // the sums of weight · x over the parents, in their order; parent by parent when
+            // every gene is variable, as a sum adds them to -0, which leaves the first unchanged
+            if n == genes.len() {
+                let first = self.population[first].genome();
+                for (gene, &x) in genes.iter_mut().zip(first.iter()) {
+                    *gene = weight * x;
+                }
+                for &parent in others {
+                    let parent = self.population[parent].genome();
+                    for (gene, &x) in genes.iter_mut().zip(parent.iter()) {
+                        *gene += weight * x;
+                    }
+                }
+            } else {
+                for &gene in variable {
+                    genes[gene] = parents
+                        .iter()
+                        .map(|&parent| weight * self.population[parent].genome()[gene])
+                        .sum();
+                }
             }
-            // the geometric mean of the step sizes, which mutate log-normally
-            for (step, logs) in steps
-                .iter_mut()
-                .zip(self.weighted_log_steps.chunks_exact(self.mu))
-            {
-                let log_mean: f64 = parents.iter().map(|&parent| logs[parent]).sum();
-                *step = exp(log_mean);
+            // the geometric mean of the step sizes, which mutate log-normally: the sums of the
+            // weighted logarithms, parent by parent
+            let len = steps.len();
+            let logs = |parent: usize| &self.weighted_log_steps[parent * len..(parent + 1) * len];
+            steps.copy_from_slice(logs(first));
+            for &parent in others {
+                for (log_mean, &log) in steps.iter_mut().zip(logs(parent)) {
+                    *log_mean += log;
+                }
+            }
+            for step in &mut steps {
+                *step = exp(*step);
             }
         }
         // the log-normal mutation of the step sizes
@@ -380,6 +434,26 @@ impl Parents<'_> {
             };
         }
         (genes, steps)
+    }
+}
+
+// genomes and step sizes no longer in use, whose memory is reused: none in a clone, a checkpoint or
+// its debug output
+#[derive(Default)]
+struct Spare {
+    genomes: Vec<Reals>,
+    steps: Vec<Vec<f64>>,
+}
+
+impl Clone for Spare {
+    fn clone(&self) -> Self {
+        Spare::default()
+    }
+}
+
+impl std::fmt::Debug for Spare {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Spare")
     }
 }
 
@@ -723,6 +797,7 @@ impl EsBuilder {
             population: Population::from_genomes(genomes),
             steps: vec![vec![self.initial_step; steps_per_parent]; mu],
             weighted_log_steps: Vec::new(),
+            spare: Spare::default(),
             offspring: Vec::new(),
             offspring_steps: Vec::new(),
             discarded: Vec::new(),

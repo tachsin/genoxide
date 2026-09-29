@@ -1,6 +1,6 @@
 //! NSGA-III: non-dominated sorting with reference points, for many objectives.
 
-use super::breed::{Variation, distinct, scores_of};
+use super::breed::{Spares, Variation, distinct_into, scores_of};
 use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
@@ -81,6 +81,8 @@ pub struct Nsga3<R: Representation, C, X, const M: usize> {
     pending: Vec<usize>,
     front: Vec<Individual<R::Genome, Scores<M>>>,
     discarded: Vec<Individual<R::Genome, Scores<M>>>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    spares: Spares<R::Genome>,
     // the normalization, with the objectives minimized: kept over the whole run
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     ideal: [f64; M],
@@ -212,11 +214,13 @@ where
                 }
             },
             &mut self.offspring,
+            &mut self.spares,
         );
     }
 
-    // the next population from the parents and the offspring
-    fn survive(&mut self) {
+    // the next population from the parents and the offspring; returns the population's first
+    // front, its indices ascending, if the survival sorted enough to know it
+    fn survive(&mut self) -> Option<Vec<usize>> {
         let parents = std::mem::take(&mut self.population).into_vec();
         let parent_count = parents.len();
         let mut pool = parents;
@@ -225,7 +229,7 @@ where
         let size = self.population_size;
         let feasible: Vec<usize> = (0..pool.len()).filter(|&i| is_ok(&scores[i])).collect();
         let mut chosen: Vec<usize> = Vec::with_capacity(size);
-        if feasible.len() <= size {
+        let first = if feasible.len() <= size {
             // every feasible solution, then the least infeasible ones
             chosen.extend(&feasible);
             let mut others: Vec<usize> = (0..pool.len()).filter(|&i| !is_ok(&scores[i])).collect();
@@ -245,27 +249,33 @@ where
             });
             others = order.into_iter().map(|position| others[position]).collect();
             chosen.extend(others.into_iter().take(size - chosen.len()));
-            if !feasible.is_empty() {
+            if feasible.is_empty() {
+                None
+            } else {
                 let points: Vec<[f64; M]> = feasible
                     .iter()
                     .map(|&i| minimized(&scores[i], &self.objectives))
                     .collect();
-                let fronts = non_dominated_sort(
+                let mut fronts = non_dominated_sort(
                     &feasible.iter().map(|&i| scores[i]).collect::<Vec<_>>(),
                     &self.objectives,
                 );
                 self.normalize(&points, &fronts[0]);
+                // the population starts with every feasible solution, which dominate the rest
+                Some(fronts.swap_remove(0))
             }
         } else {
-            self.select_feasible(&scores, &feasible, &mut chosen);
-        }
+            // the population starts with the whole first front, or is part of it
+            let first = self.select_feasible(&scores, &feasible, &mut chosen);
+            Some((0..first).collect())
+        };
         let mut selected = vec![false; pool.len()];
         for &index in &chosen {
             selected[index] = true;
         }
         let mut slots: Vec<Option<Individual<R::Genome, Scores<M>>>> =
             pool.into_iter().map(Some).collect();
-        self.discarded.clear();
+        self.spares.keep_all(self.discarded.drain(..));
         for (index, slot) in slots.iter_mut().enumerate() {
             if !selected[index] && index >= parent_count {
                 self.discarded.push(slot.take().expect("not taken yet"));
@@ -279,17 +289,21 @@ where
             }
             population.push(individual);
         }
+        // the parents that didn't survive
+        self.spares.keep_all(slots.into_iter().flatten());
         self.population = Population::new(population);
+        first
     }
 
     // chooses `population_size` of the more numerous feasible solutions: whole fronts, then
-    // niching on the last one
+    // niching on the last one; returns how many of them, first in `chosen`, are of the first
+    // front
     fn select_feasible(
         &mut self,
         scores: &[Scores<M>],
         feasible: &[usize],
         chosen: &mut Vec<usize>,
-    ) {
+    ) -> usize {
         let size = self.population_size;
         let feasible_scores: Vec<Scores<M>> = feasible.iter().map(|&i| scores[i]).collect();
         let fronts = non_dominated_sort(&feasible_scores, &self.objectives);
@@ -314,7 +328,9 @@ where
         self.normalize(&points, &fronts[0]);
         if !last.is_empty() {
             let (ideal, nadir) = (self.ideal, self.nadir(&points, &fronts[0]));
-            let associate = |position: usize| self.associate(&points[position], &ideal, &nadir);
+            let lengths = self.lengths();
+            let associate =
+                |position: usize| self.associate(&points[position], &ideal, &nadir, &lengths);
             let mut counts = vec![0usize; self.reference.len()];
             for &position in &members {
                 counts[associate(position).0] += 1;
@@ -330,6 +346,7 @@ where
             members.extend(picked);
         }
         chosen.extend(members.into_iter().map(|position| feasible[position]));
+        fronts[0].len().min(size)
     }
 
     // updates the ideal point, the worst point and the extreme points
@@ -402,9 +419,22 @@ where
         nadir
     }
 
+    // the squared length of each reference direction
+    fn lengths(&self) -> Vec<f64> {
+        let squared = |direction: &[f64; M]| direction.iter().map(|d| d * d).sum();
+        self.reference.iter().map(squared).collect()
+    }
+
     // the reference direction nearest to a point in normalized objective space, and the
-    // perpendicular distance to it; the first one on ties
-    fn associate(&self, point: &[f64; M], ideal: &[f64; M], nadir: &[f64; M]) -> (usize, f64) {
+    // perpendicular distance to it; the first one on ties. `lengths` are the directions' squared
+    // lengths.
+    fn associate(
+        &self,
+        point: &[f64; M],
+        ideal: &[f64; M],
+        nadir: &[f64; M],
+        lengths: &[f64],
+    ) -> (usize, f64) {
         let normalized: [f64; M] = std::array::from_fn(|j| {
             let mut range = nadir[j] - ideal[j];
             if range == 0.0 {
@@ -413,22 +443,27 @@ where
             (point[j] - ideal[j]) / range
         });
         let mut best = (0, f64::INFINITY);
-        for (index, direction) in self.reference.iter().enumerate() {
-            let length: f64 = direction.iter().map(|d| d * d).sum();
+        // the square of the best distance: the square root is monotonic, so only a smaller
+        // square can have a smaller root, and only those need one
+        let mut best_squared = f64::INFINITY;
+        for (index, (direction, &length)) in self.reference.iter().zip(lengths).enumerate() {
             let projection: f64 = normalized
                 .iter()
                 .zip(direction)
                 .map(|(n, d)| n * d)
                 .sum::<f64>()
                 / length;
-            let distance = normalized
+            let squared = normalized
                 .iter()
                 .zip(direction)
                 .map(|(n, d)| (n - projection * d) * (n - projection * d))
-                .sum::<f64>()
-                .sqrt();
-            if distance < best.1 {
-                best = (index, distance);
+                .sum::<f64>();
+            if squared < best_squared {
+                let distance = squared.sqrt();
+                if distance < best.1 {
+                    best = (index, distance);
+                    best_squared = squared;
+                }
             }
         }
         best
@@ -443,29 +478,29 @@ where
         remaining: usize,
     ) -> Vec<usize> {
         let mut picked = Vec::with_capacity(remaining);
-        let mut available = vec![true; candidates.len()];
+        // the candidates left in each niche, in their order, and the niches with any, ascending
+        let mut left: Vec<Vec<usize>> = vec![Vec::new(); counts.len()];
+        for (c, candidate) in candidates.iter().enumerate() {
+            left[candidate.1].push(c);
+        }
+        let mut open: Vec<usize> = (0..left.len()).filter(|&n| !left[n].is_empty()).collect();
+        let mut members = Vec::new();
         while picked.len() < remaining {
             // the niches that still have candidates, with the smallest count
-            let mut niches: Vec<usize> = candidates
-                .iter()
-                .zip(&available)
-                .filter(|(_, available)| **available)
-                .map(|(candidate, _)| candidate.1)
-                .collect();
-            niches.sort_unstable();
-            niches.dedup();
-            let fewest = niches
+            let fewest = open
                 .iter()
                 .map(|&n| counts[n])
                 .min()
                 .expect("candidates left");
-            niches.retain(|&n| counts[n] == fewest);
+            let mut niches: Vec<usize> = open
+                .iter()
+                .copied()
+                .filter(|&n| counts[n] == fewest)
+                .collect();
             shuffle(&mut niches, &mut self.rng);
             niches.truncate(remaining - picked.len());
             for niche in niches {
-                let mut members: Vec<usize> = (0..candidates.len())
-                    .filter(|&c| available[c] && candidates[c].1 == niche)
-                    .collect();
+                members.clone_from(&left[niche]);
                 shuffle(&mut members, &mut self.rng);
                 let member = if counts[niche] == 0 {
                     // the nearest, the first after shuffling on ties
@@ -479,7 +514,11 @@ where
                 } else {
                     members[0]
                 };
-                available[member] = false;
+                let niche_left = &mut left[niche];
+                niche_left.remove(niche_left.iter().position(|&c| c == member).expect("left"));
+                if niche_left.is_empty() {
+                    open.retain(|&n| n != niche);
+                }
                 picked.push(candidates[member].0);
                 counts[niche] += 1;
             }
@@ -488,19 +527,21 @@ where
     }
 
     // the new front, and whether it improved on the previous one
-    fn update_front(&mut self) {
-        let scores = scores_of(self.population.as_slice());
-        let fronts = non_dominated_sort(&scores, &self.objectives);
-        let first = fronts.first().map(Vec::as_slice).unwrap_or_default();
-        let front = distinct(&self.population, first.iter().copied());
-        if gains(
-            &scores_of(&front),
-            &scores_of(&self.front),
-            &self.objectives,
-        ) {
+    // `first`, if known, is the population's first front
+    fn update_front(&mut self, first: Option<Vec<usize>>) {
+        let previous = scores_of(&self.front);
+        match first {
+            Some(first) => distinct_into(&mut self.front, &self.population, first),
+            None => {
+                let scores = scores_of(self.population.as_slice());
+                let fronts = non_dominated_sort(&scores, &self.objectives);
+                let first = fronts.first().map(Vec::as_slice).unwrap_or_default();
+                distinct_into(&mut self.front, &self.population, first.iter().copied());
+            }
+        }
+        if gains(&scores_of(&self.front), &previous, &self.objectives) {
             self.front_generation = self.generation;
         }
-        self.front = front;
     }
 }
 
@@ -602,13 +643,14 @@ where
                 self.offspring[index].set_fitness(score);
             }
             self.generation += 1;
-            self.survive();
+            let first = self.survive();
+            self.update_front(first);
         } else {
             for (individual, &score) in self.population.iter_mut().zip(scores) {
                 individual.set_fitness(score);
             }
+            self.update_front(None);
         }
-        self.update_front();
         self.started = true;
         Ok(())
     }
@@ -832,6 +874,7 @@ impl<R: Representation, const M: usize, C, X> Nsga3Builder<R, M, C, X> {
             generation: 0,
             evaluations: 0,
             front_generation: 0,
+            spares: Spares::default(),
         })
     }
 }
@@ -841,6 +884,7 @@ mod tests {
     use super::*;
     use crate::Objective::{Maximize, Minimize};
     use crate::genome::{Real, Reals};
+    use crate::multi::breed::distinct;
     use crate::multi::{das_dennis, dominates};
     use crate::operator::{PolynomialMutation, SimulatedBinaryCrossover};
     use proptest::prelude::*;
@@ -911,9 +955,15 @@ mod tests {
         let nsga3 = builder([Minimize; 2], 2, 0).build().unwrap();
         // the directions (0, 1), (0.5, 0.5), (1, 0)
         let (ideal, nadir) = ([0.0, 0.0], [2.0, 2.0]);
-        assert_eq!(nsga3.associate(&[1.0, 1.0], &ideal, &nadir), (1, 0.0));
-        assert_eq!(nsga3.associate(&[0.0, 2.0], &ideal, &nadir), (0, 0.0));
-        let (niche, distance) = nsga3.associate(&[2.0, 0.2], &ideal, &nadir);
+        assert_eq!(
+            nsga3.associate(&[1.0, 1.0], &ideal, &nadir, &nsga3.lengths()),
+            (1, 0.0)
+        );
+        assert_eq!(
+            nsga3.associate(&[0.0, 2.0], &ideal, &nadir, &nsga3.lengths()),
+            (0, 0.0)
+        );
+        let (niche, distance) = nsga3.associate(&[2.0, 0.2], &ideal, &nadir, &nsga3.lengths());
         assert_eq!(niche, 2);
         assert!((distance - 0.1).abs() < 1e-12);
     }
@@ -963,14 +1013,15 @@ mod tests {
             seed: u64,
             divisions in 1usize..6,
             maximize: bool,
+            infeasible in 1usize..9,
         ) {
             let objectives = if maximize { [Maximize, Minimize, Minimize] } else { [Minimize; 3] };
             let mut nsga3 = builder(objectives, divisions, seed).population_size(divisions + 4).build().unwrap();
             let mut rng = StreamRng::seed_from_u64(seed);
-            // random scores, some infeasible or invalid
+            // random scores, `infeasible` in 10 infeasible or invalid
             let mut random = |_: &Reals| match rng.below(10) {
                 0 => Scores::invalid(),
-                1 => Scores::constrained([0.0; 3], rng.below(3) as f64 + 1.0),
+                n if n < infeasible => Scores::constrained([0.0; 3], rng.below(3) as f64 + 1.0),
                 _ => Scores::new([rng.below(4) as f64, rng.below(4) as f64, rng.below(4) as f64]),
             };
             let told: Vec<Scores<3>> = nsga3.ask().iter().map(&mut random).collect();
@@ -985,6 +1036,11 @@ mod tests {
                     let scores = member.fitness().unwrap();
                     prop_assert!(!old.iter().any(|o| dominates(o, &scores, &objectives)));
                 }
+                // the front is the population's first front, mostly without sorting it again
+                let population = nsga3.population();
+                let fronts = non_dominated_sort(&scores_of(population.as_slice()), &objectives);
+                let first = distinct(population, fronts[0].iter().copied());
+                prop_assert_eq!(nsga3.front(), first.as_slice());
             }
         }
     }

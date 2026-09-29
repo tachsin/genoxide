@@ -57,7 +57,7 @@ Done means implemented, documented, tested (property tests for operators) and be
 ### 0.0: Project setup ✅
 - [x] Name, repository, dual MIT / Apache-2.0 license
 - [x] README (homepage) and this roadmap
-- [x] Crate skeleton (edition 2024, MSRV 1.86)
+- [x] Crate skeleton (edition 2024, MSRV 1.86; 1.88 since #314)
 
 ### 0.1: Foundations ✅
 

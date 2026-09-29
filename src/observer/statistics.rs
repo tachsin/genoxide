@@ -2,6 +2,7 @@
 
 use super::{Observer, Snapshot};
 use crate::Fitness;
+use crate::engine::GenomeHashing;
 use crate::genome::Genome;
 use std::collections::HashSet;
 use std::time::Duration;
@@ -89,48 +90,54 @@ impl<G: Genome> Observer<G> for Statistics {
     fn observe(&mut self, snapshot: &Snapshot<'_, G>) {
         let population = snapshot.population();
         let progress = snapshot.progress();
-        let fitness: Vec<Fitness> = population
-            .iter()
-            .filter_map(|individual| individual.fitness())
-            .collect();
-        let scores: Vec<f64> = fitness
-            .iter()
-            .filter(|fitness| fitness.is_feasible())
-            .filter_map(|fitness| fitness.score())
-            .collect();
-        let (mean, std_dev) = if scores.is_empty() {
+        // the feasible scores, in order; iterated again rather than collected
+        let scores = || {
+            population
+                .iter()
+                .filter_map(|individual| individual.fitness())
+                .filter(|fitness| fitness.is_feasible())
+                .filter_map(|fitness| fitness.score())
+        };
+        let count = scores().count();
+        let (mean, std_dev) = if count == 0 {
             (None, None)
         } else {
-            let count = scores.len() as f64;
-            let mean = scores.iter().sum::<f64>() / count;
-            let variance = scores
-                .iter()
+            let count = count as f64;
+            let mean = scores().sum::<f64>() / count;
+            let variance = scores()
                 .map(|score| (score - mean) * (score - mean))
                 .sum::<f64>()
                 / count;
             if (mean.is_finite() && variance.is_finite())
-                || !scores.iter().all(|score| score.is_finite())
+                || !scores().all(|score| score.is_finite())
             {
                 (Some(mean), Some(variance.sqrt()))
             } else {
                 // finite scores whose sum or squares overflow: scaled by the largest magnitude
-                let scale = scores
-                    .iter()
-                    .fold(0.0, |largest: f64, score| largest.max(score.abs()));
-                let mean = scores.iter().map(|score| score / scale).sum::<f64>() / count;
-                let variance = scores
-                    .iter()
+                let scale = scores().fold(0.0, |largest: f64, score| largest.max(score.abs()));
+                let mean = scores().map(|score| score / scale).sum::<f64>() / count;
+                let variance = scores()
                     .map(|score| (score / scale - mean) * (score / scale - mean))
                     .sum::<f64>()
                     / count;
                 (Some(mean * scale), Some(variance.sqrt() * scale))
             }
         };
-        let unique = population
+        let (mut invalid, mut infeasible) = (0, 0);
+        for fitness in population
             .iter()
-            .map(|individual| individual.genome())
-            .collect::<HashSet<_>>()
-            .len();
+            .filter_map(|individual| individual.fitness())
+        {
+            if !fitness.is_valid() {
+                invalid += 1;
+            } else if !fitness.is_feasible() {
+                infeasible += 1;
+            }
+        }
+        let mut genomes =
+            HashSet::with_capacity_and_hasher(population.len(), GenomeHashing::default());
+        genomes.extend(population.iter().map(|individual| individual.genome()));
+        let unique = genomes.len();
         self.records.push(GenerationStatistics {
             generation: progress.generation(),
             evaluations: progress.evaluations(),
@@ -141,11 +148,8 @@ impl<G: Genome> Observer<G> for Statistics {
                 .and_then(|individual| individual.fitness()),
             mean,
             std_dev,
-            invalid: fitness.iter().filter(|fitness| !fitness.is_valid()).count(),
-            infeasible: fitness
-                .iter()
-                .filter(|fitness| fitness.is_valid() && !fitness.is_feasible())
-                .count(),
+            invalid,
+            infeasible,
             unique,
             size: population.len(),
         });

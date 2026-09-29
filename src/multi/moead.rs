@@ -1,6 +1,6 @@
 //! MOEA/D: multi-objective optimization by decomposition into single-objective subproblems.
 
-use super::breed::{Variation, distinct, scores_of};
+use super::breed::{Variation, distinct_into, scores_of};
 use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
@@ -25,6 +25,26 @@ pub enum Decomposition {
         /// The penalty for the distance from the weight vector, 0 or more.
         theta: f64,
     },
+}
+
+// whether `a` is better than `b` for a subproblem: the smaller violation, and then the smaller
+// decomposition value, from `a_value` and `b_value` only if the violations are equal; invalid is
+// the worst
+fn improves<const M: usize>(
+    a: &Scores<M>,
+    b: &Scores<M>,
+    a_value: impl FnOnce() -> f64,
+    b_value: impl FnOnce() -> f64,
+) -> bool {
+    match (a.is_valid(), b.is_valid()) {
+        (false, _) => return false,
+        (true, false) => return true,
+        (true, true) => {}
+    }
+    if a.violation() != b.violation() {
+        return a.violation() < b.violation();
+    }
+    a_value() < b_value()
 }
 
 impl Decomposition {
@@ -217,14 +237,14 @@ where
             let neighborhood = &self.neighborhoods[subproblem];
             let from_neighborhood =
                 neighborhood.len() >= 2 && self.rng.chance(self.neighbor_chance);
+            // sample_distinct(2, n) without an allocation
             let (a, b) = if from_neighborhood {
-                let picked = self.rng.sample_distinct(2, neighborhood.len());
-                (neighborhood[picked[0]], neighborhood[picked[1]])
+                let (first, second) = self.rng.sample_pair(neighborhood.len());
+                (neighborhood[first], neighborhood[second])
             } else {
-                let picked = self.rng.sample_distinct(2, size);
-                (picked[0], picked[1])
+                self.rng.sample_pair(size)
             };
-            // sample_distinct is in ascending order: a random order for the crossover
+            // the pair is in ascending order: a random order for the crossover
             let (a, b) = if self.rng.below(2) == 0 {
                 (a, b)
             } else {
@@ -276,21 +296,20 @@ where
 
     // whether `a` is better than `b` for a subproblem: the smaller violation, and then the
     // smaller decomposition value; invalid is the worst
+    #[cfg(test)]
     fn improves(&self, a: &Scores<M>, b: &Scores<M>, subproblem: usize) -> bool {
-        match (a.is_valid(), b.is_valid()) {
-            (false, _) => return false,
-            (true, false) => return true,
-            (true, true) => {}
-        }
-        if a.violation() != b.violation() {
-            return a.violation() < b.violation();
-        }
-        let weights = &self.weights[subproblem];
-        let value = |s: &Scores<M>| {
-            self.decomposition
-                .value(&minimized(s, &self.objectives), weights, &self.ideal)
-        };
-        value(a) < value(b)
+        improves(
+            a,
+            b,
+            || self.value(a, subproblem),
+            || self.value(b, subproblem),
+        )
+    }
+
+    // the decomposition value of scores for a subproblem
+    fn value(&self, scores: &Scores<M>, subproblem: usize) -> f64 {
+        let values = minimized(scores, &self.objectives);
+        (self.decomposition).value(&values, &self.weights[subproblem], &self.ideal)
     }
 
     // the children replace the neighbors they improve on, in a random order
@@ -306,24 +325,36 @@ where
         }
         // the child in each slot, if a child replaced its solution
         let mut holders: Vec<Option<usize>> = vec![None; size];
+        // the decomposition value of each slot's solution for its subproblem, once needed: the
+        // ideal point doesn't move while children replace solutions
+        let mut values: Vec<Option<f64>> = vec![None; size];
+        let mut neighbors = Vec::new();
         for subproblem in order {
             let child = &children[subproblem];
             let scores = child.fitness().unwrap_or(Scores::invalid());
-            let mut neighbors = self.neighborhoods[subproblem].clone();
+            neighbors.clone_from(&self.neighborhoods[subproblem]);
             for i in (1..neighbors.len()).rev() {
                 neighbors.swap(i, self.rng.below(i + 1));
             }
             let mut replaced = 0;
-            for neighbor in neighbors {
+            for &neighbor in &neighbors {
                 if replaced == self.max_replacements {
                     break;
                 }
                 let current = self.population[neighbor]
                     .fitness()
                     .unwrap_or(Scores::invalid());
-                if self.improves(&scores, &current, neighbor) {
+                let mut child_value = None;
+                let better = improves(
+                    &scores,
+                    &current,
+                    || *child_value.insert(self.value(&scores, neighbor)),
+                    || *values[neighbor].get_or_insert_with(|| self.value(&current, neighbor)),
+                );
+                if better {
                     self.population[neighbor] = child.clone();
                     holders[neighbor] = Some(subproblem);
+                    values[neighbor] = child_value;
                     replaced += 1;
                 }
             }
@@ -346,15 +377,11 @@ where
         let scores = scores_of(self.population.as_slice());
         let fronts = non_dominated_sort(&scores, &self.objectives);
         let first = fronts.first().map(Vec::as_slice).unwrap_or_default();
-        let front = distinct(&self.population, first.iter().copied());
-        if gains(
-            &scores_of(&front),
-            &scores_of(&self.front),
-            &self.objectives,
-        ) {
+        let previous = scores_of(&self.front);
+        distinct_into(&mut self.front, &self.population, first.iter().copied());
+        if gains(&scores_of(&self.front), &previous, &self.objectives) {
             self.front_generation = self.generation;
         }
-        self.front = front;
     }
 }
 
@@ -608,13 +635,13 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
         if self.max_replacements == 0 {
             return invalid("max_replacements", "must be at least 1".to_string());
         }
-        if let Decomposition::Pbi { theta } = self.decomposition {
-            if !(theta >= 0.0 && theta.is_finite()) {
-                return invalid(
-                    "theta",
-                    format!("must be 0 or more and finite, got {theta}"),
-                );
-            }
+        if let Decomposition::Pbi { theta } = self.decomposition
+            && !(theta >= 0.0 && theta.is_finite())
+        {
+            return invalid(
+                "theta",
+                format!("must be 0 or more and finite, got {theta}"),
+            );
         }
         let (crossover_rate, mutation_rate) = check_rates(
             self.crossover_rate,

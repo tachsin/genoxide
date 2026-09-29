@@ -18,8 +18,7 @@ fn positions(genes: &[usize]) -> Vec<usize> {
 fn segment(len: usize, min_len: usize, rng: &mut StreamRng) -> (usize, usize) {
     debug_assert!(len > min_len, "segment of {min_len} in {len}");
     loop {
-        let cuts = rng.sample_distinct(2, len + 1);
-        let (start, end) = (cuts[0], cuts[1]);
+        let (start, end) = rng.sample_pair(len + 1);
         if end - start >= min_len && end - start < len {
             return (start, end);
         }
@@ -35,19 +34,24 @@ fn segment(len: usize, min_len: usize, rng: &mut StreamRng) -> (usize, usize) {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PartiallyMappedCrossover;
 
-// `own` with the segment `start..end` of `other`, repaired by swaps (the mapping of PMX)
-fn partially_mapped(own: &[usize], other: &[usize], start: usize, end: usize) -> Vec<usize> {
-    let mut child = own.to_vec();
-    let mut positions = positions(&child);
-    for position in start..end {
-        let gene = other[position];
+// `child` takes the segment `other_segment` from `start` on, repaired by swaps (the mapping of
+// PMX); `positions` is scratch space of the genome's length
+fn partially_mapped(
+    child: &mut [usize],
+    other_segment: &[usize],
+    start: usize,
+    positions: &mut [usize],
+) {
+    for (position, &gene) in child.iter().enumerate() {
+        positions[gene] = position;
+    }
+    for (position, &gene) in (start..).zip(other_segment) {
         let at = positions[gene];
         let displaced = child[position];
         child.swap(position, at);
         positions[gene] = position;
         positions[displaced] = at;
     }
-    child
 }
 
 impl Crossover<Permutation> for PartiallyMappedCrossover {
@@ -56,10 +60,11 @@ impl Crossover<Permutation> for PartiallyMappedCrossover {
             return;
         }
         let (start, end) = segment(a.len(), 1, rng);
-        let first = partially_mapped(a, b, start, end);
-        let second = partially_mapped(b, a, start, end);
-        *a = Order::from_permutation(first);
-        *b = Order::from_permutation(second);
+        // in place: the second child needs only the first parent's segment
+        let segment_of_a = a[start..end].to_vec();
+        let mut positions = vec![0; a.len()];
+        partially_mapped(a.genes_mut(), &b[start..end], start, &mut positions);
+        partially_mapped(b.genes_mut(), &segment_of_a, start, &mut positions);
     }
 }
 
@@ -72,24 +77,31 @@ impl Crossover<Permutation> for PartiallyMappedCrossover {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OrderCrossover;
 
-// `own`'s segment `start..end`, and the other genes in the order of `other`, from `end` on
-fn ordered(own: &[usize], other: &[usize], start: usize, end: usize) -> Vec<usize> {
-    let len = own.len();
-    let mut child = vec![0; len];
-    let mut in_segment = vec![false; len];
-    for position in start..end {
-        child[position] = own[position];
-        in_segment[own[position]] = true;
+// `child` keeps its segment `start..end`, and takes the other genes in the order of `other`, from
+// `end` on; `in_segment` is scratch space of the genome's length
+fn ordered(
+    child: &mut [usize],
+    other: &[usize],
+    start: usize,
+    end: usize,
+    in_segment: &mut [bool],
+) {
+    let len = child.len();
+    in_segment.fill(false);
+    for &gene in &child[start..end] {
+        in_segment[gene] = true;
     }
+    // the positions after the segment, wrapping around: `end..len`, then `0..start`
     let mut position = end % len;
-    for offset in 0..len {
-        let gene = other[(end + offset) % len];
+    for &gene in other[end..].iter().chain(&other[..end]) {
         if !in_segment[gene] {
             child[position] = gene;
-            position = (position + 1) % len;
+            position += 1;
+            if position == len {
+                position = 0;
+            }
         }
     }
-    child
 }
 
 impl Crossover<Permutation> for OrderCrossover {
@@ -98,10 +110,12 @@ impl Crossover<Permutation> for OrderCrossover {
             return;
         }
         let (start, end) = segment(a.len(), 1, rng);
-        let first = ordered(a, b, start, end);
-        let second = ordered(b, a, start, end);
-        *a = Order::from_permutation(first);
-        *b = Order::from_permutation(second);
+        // in place: the first child only overwrites genes outside its segment, and the second
+        // child reads the first parent
+        let first_parent = a.to_vec();
+        let mut in_segment = vec![false; a.len()];
+        ordered(a.genes_mut(), b, start, end, &mut in_segment);
+        ordered(b.genes_mut(), &first_parent, start, end, &mut in_segment);
     }
 }
 
@@ -117,27 +131,27 @@ pub struct CycleCrossover;
 
 impl Crossover<Permutation> for CycleCrossover {
     fn crossover(&self, _: &Permutation, a: &mut Order, b: &mut Order, _: &mut StreamRng) {
-        let (mut first, mut second) = (a.to_vec(), b.to_vec());
         let positions_in_a = positions(a);
         let mut visited = vec![false; a.len()];
+        let (first, second) = (a.genes_mut(), b.genes_mut());
         let mut odd = false;
-        for start in 0..a.len() {
+        for start in 0..first.len() {
             if visited[start] {
                 continue;
             }
             let mut position = start;
             while !visited[position] {
                 visited[position] = true;
+                // the next position of the cycle, from the parents' genes: a position is
+                // exchanged only once it's visited, and never read again
+                let next = positions_in_a[second[position]];
                 if odd {
-                    first[position] = b[position];
-                    second[position] = a[position];
+                    std::mem::swap(&mut first[position], &mut second[position]);
                 }
-                position = positions_in_a[b[position]];
+                position = next;
             }
             odd = !odd;
         }
-        *a = Order::from_permutation(first);
-        *b = Order::from_permutation(second);
     }
 }
 
@@ -152,55 +166,102 @@ impl Crossover<Permutation> for CycleCrossover {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EdgeRecombinationCrossover;
 
-// a tour through the edges of `a` and `b`, from `start`
-fn edge_recombination(a: &[usize], b: &[usize], start: usize, rng: &mut StreamRng) -> Vec<usize> {
+// The distinct neighbors of a gene in two tours, at most 4, in the order they were found.
+#[derive(Clone, Copy, Default)]
+struct Neighbors {
+    genes: [usize; 4],
+    len: usize,
+}
+
+impl Neighbors {
+    fn as_slice(&self) -> &[usize] {
+        &self.genes[..self.len]
+    }
+
+    fn add(&mut self, gene: usize) {
+        if !self.as_slice().contains(&gene) {
+            self.genes[self.len] = gene;
+            self.len += 1;
+        }
+    }
+
+    // removes `gene`, keeping the order of the others
+    fn remove(&mut self, gene: usize) {
+        if let Some(at) = self.as_slice().iter().position(|&other| other == gene) {
+            self.genes.copy_within(at + 1..self.len, at);
+            self.len -= 1;
+        }
+    }
+}
+
+// the neighbors of every gene in the tours `a` and `b`, without duplicates, `a`'s first
+fn edges(a: &[usize], b: &[usize]) -> Vec<Neighbors> {
     let len = a.len();
-    // the neighbors of every gene in both tours, without duplicates
-    let mut neighbors: Vec<Vec<usize>> = vec![Vec::with_capacity(4); len];
+    let mut neighbors = vec![Neighbors::default(); len];
     for tour in [a, b] {
         for position in 0..len {
             let gene = tour[position];
             for neighbor in [tour[(position + len - 1) % len], tour[(position + 1) % len]] {
-                if neighbor != gene && !neighbors[gene].contains(&neighbor) {
-                    neighbors[gene].push(neighbor);
+                if neighbor != gene {
+                    neighbors[gene].add(neighbor);
                 }
             }
         }
     }
+    neighbors
+}
+
+// writes into `child` a tour through the edges in `neighbors`, from `start`; `unvisited` and
+// `index` are scratch space
+fn edge_recombination(
+    neighbors: &mut [Neighbors],
+    start: usize,
+    child: &mut [usize],
+    unvisited: &mut Vec<usize>,
+    index: &mut Vec<usize>,
+    rng: &mut StreamRng,
+) {
+    let len = child.len();
     // the unvisited genes, for a random jump, and the position of each gene in it
-    let mut unvisited: Vec<usize> = (0..len).collect();
-    let mut index: Vec<usize> = (0..len).collect();
-    let mut child = Vec::with_capacity(len);
+    unvisited.clear();
+    unvisited.extend(0..len);
+    index.clear();
+    index.extend(0..len);
     let mut current = start;
-    loop {
-        child.push(current);
+    for slot in child.iter_mut() {
+        *slot = current;
         let at = index[current];
         unvisited.swap_remove(at);
         if at < unvisited.len() {
             index[unvisited[at]] = at;
         }
         if unvisited.is_empty() {
-            return child;
+            return;
         }
         // the current gene is visited: no longer anyone's candidate
         let candidates = std::mem::take(&mut neighbors[current]);
-        for &neighbor in &candidates {
-            neighbors[neighbor].retain(|&gene| gene != current);
+        for &neighbor in candidates.as_slice() {
+            neighbors[neighbor].remove(current);
         }
-        current = if candidates.is_empty() {
+        current = if candidates.len == 0 {
             unvisited[rng.below(unvisited.len())]
         } else {
             // the candidate with the fewest remaining neighbors, ties at random
-            let fewest = candidates.iter().map(|&gene| neighbors[gene].len()).min();
-            let tied: Vec<usize> = candidates
+            let fewest = candidates
+                .as_slice()
                 .iter()
-                .copied()
-                .filter(|&gene| Some(neighbors[gene].len()) == fewest)
-                .collect();
-            if tied.len() == 1 {
-                tied[0]
+                .map(|&gene| neighbors[gene].len)
+                .min();
+            let mut tied = Neighbors::default();
+            for &gene in candidates.as_slice() {
+                if Some(neighbors[gene].len) == fewest {
+                    tied.add(gene);
+                }
+            }
+            if tied.len == 1 {
+                tied.genes[0]
             } else {
-                tied[rng.below(tied.len())]
+                tied.genes[rng.below(tied.len)]
             }
         };
     }
@@ -211,10 +272,30 @@ impl Crossover<Permutation> for EdgeRecombinationCrossover {
         if a.len() < 3 {
             return;
         }
-        let first = edge_recombination(a, b, a[0], rng);
-        let second = edge_recombination(b, a, b[0], rng);
-        *a = Order::from_permutation(first);
-        *b = Order::from_permutation(second);
+        // both children's edges before either parent is overwritten
+        let mut first = edges(a, b);
+        let mut second = edges(b, a);
+        let (first_start, second_start) = (a[0], b[0]);
+        let mut unvisited = Vec::with_capacity(a.len());
+        let mut index = Vec::with_capacity(a.len());
+        let child = a.genes_mut();
+        edge_recombination(
+            &mut first,
+            first_start,
+            child,
+            &mut unvisited,
+            &mut index,
+            rng,
+        );
+        let child = b.genes_mut();
+        edge_recombination(
+            &mut second,
+            second_start,
+            child,
+            &mut unvisited,
+            &mut index,
+            rng,
+        );
     }
 }
 
@@ -235,9 +316,9 @@ impl Mutate<Permutation> for InversionMutation {
         }
         // reversing the whole genome changes it too, for a sequence
         let (start, end) = loop {
-            let cuts = rng.sample_distinct(2, len + 1);
-            if cuts[1] - cuts[0] >= 2 {
-                break (cuts[0], cuts[1]);
+            let (start, end) = rng.sample_pair(len + 1);
+            if end - start >= 2 {
+                break (start, end);
             }
         };
         genome.genes_mut()[start..end].reverse();
@@ -285,9 +366,9 @@ impl Mutate<Permutation> for ScrambleMutation {
             return;
         }
         let (start, end) = loop {
-            let cuts = rng.sample_distinct(2, len + 1);
-            if cuts[1] - cuts[0] >= 2 {
-                break (cuts[0], cuts[1]);
+            let (start, end) = rng.sample_pair(len + 1);
+            if end - start >= 2 {
+                break (start, end);
             }
         };
         let segment = &mut genome.genes_mut()[start..end];
@@ -319,6 +400,25 @@ mod tests {
         (permutation, a, b, rng)
     }
 
+    // the child of OX that keeps `own`'s segment
+    fn ordered_child(own: &[usize], other: &[usize], start: usize, end: usize) -> Vec<usize> {
+        let mut child = own.to_vec();
+        ordered(&mut child, other, start, end, &mut vec![false; own.len()]);
+        child
+    }
+
+    // the child of PMX that takes `other`'s segment
+    fn mapped_child(own: &[usize], other: &[usize], start: usize, end: usize) -> Vec<usize> {
+        let mut child = own.to_vec();
+        partially_mapped(
+            &mut child,
+            &other[start..end],
+            start,
+            &mut vec![0; own.len()],
+        );
+        child
+    }
+
     // the classic example, 0-based: 1 2 3 | 4 5 6 7 | 8 9 and 4 5 2 | 1 8 7 6 | 9 3
     const A: [usize; 9] = [0, 1, 2, 3, 4, 5, 6, 7, 8];
     const B: [usize; 9] = [3, 4, 1, 0, 7, 6, 5, 8, 2];
@@ -326,13 +426,13 @@ mod tests {
     #[test]
     fn order_crossover_example() {
         // 2 1 8 | 4 5 6 7 | 9 3
-        assert_eq!(ordered(&A, &B, 3, 7), [1, 0, 7, 3, 4, 5, 6, 8, 2]);
+        assert_eq!(ordered_child(&A, &B, 3, 7), [1, 0, 7, 3, 4, 5, 6, 8, 2]);
     }
 
     #[test]
     fn partially_mapped_example() {
         // 4 2 3 | 1 8 7 6 | 5 9
-        assert_eq!(partially_mapped(&A, &B, 3, 7), [3, 1, 2, 0, 7, 6, 5, 4, 8]);
+        assert_eq!(mapped_child(&A, &B, 3, 7), [3, 1, 2, 0, 7, 6, 5, 4, 8]);
     }
 
     #[test]
@@ -389,13 +489,13 @@ mod tests {
             let (start, end) = segment(len, 1, &mut rng);
             prop_assert!(start < end && end - start < len);
             // OX keeps its own segment, and the other genes in the order of the other parent
-            let child = ordered(&a, &b, start, end);
+            let child = ordered_child(&a, &b, start, end);
             prop_assert_eq!(&child[start..end], &a[start..end]);
             let rest: Vec<usize> = (end..end + len).map(|i| child[i % len]).take(len - (end - start)).collect();
             let expected: Vec<usize> = (end..end + len).map(|i| b[i % len]).filter(|gene| !a[start..end].contains(gene)).collect();
             prop_assert_eq!(rest, expected);
             // PMX takes the other segment, and keeps its own genes where they don't conflict
-            let child = partially_mapped(&a, &b, start, end);
+            let child = mapped_child(&a, &b, start, end);
             prop_assert_eq!(&child[start..end], &b[start..end]);
             for position in (0..start).chain(end..len) {
                 if !b[start..end].contains(&a[position]) {

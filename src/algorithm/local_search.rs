@@ -160,6 +160,10 @@ pub struct LocalSearch<R: Representation, M> {
     restarting: bool,
     last_restart: u64,
     restarts: u64,
+    // the genomes of the neighbors discarded before the last step, whose memory the next
+    // neighbors reuse
+    #[cfg_attr(feature = "serde", serde(skip))]
+    spare: Spare<R::Genome>,
 }
 
 impl<R: Representation> LocalSearch<R, Unset> {
@@ -292,8 +296,15 @@ impl<R: Representation, M> LocalSearch<R, M> {
         });
         self.best_generation = self.generation;
         // the neighbors of the last step have been seen with it
-        self.discarded.clear();
+        self.recycle_discarded();
         self.reevaluating = false;
+    }
+
+    // the genomes of the discarded neighbors, seen with the last step, into the spare genomes
+    fn recycle_discarded(&mut self) {
+        self.spare
+            .0
+            .extend(self.discarded.drain(..).map(Individual::into_genome));
     }
 
     // whether iterated local search restarts now: `patience` steps without a new best, since the
@@ -389,8 +400,26 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
                 let current = self.current[0].genome();
                 self.candidates.clear();
                 for _ in 0..self.neighbors {
-                    let genome =
-                        neighbor(&self.neighbor, &self.representation, current, &mut self.rng);
+                    let genome = match self.spare.0.pop() {
+                        Some(mut genome) => {
+                            // as `neighbor`, in the memory of a discarded neighbor
+                            genome.clone_from(current);
+                            for _ in 0..100 {
+                                self.neighbor.mutate(
+                                    &self.representation,
+                                    &mut genome,
+                                    &mut self.rng,
+                                );
+                                if &genome != current {
+                                    break;
+                                }
+                            }
+                            genome
+                        }
+                        None => {
+                            neighbor(&self.neighbor, &self.representation, current, &mut self.rng)
+                        }
+                    };
                     self.candidates.push(Individual::new(genome));
                 }
                 self.pending.extend(0..self.neighbors);
@@ -455,7 +484,16 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
             .and_then(Individual::fitness)
             .unwrap_or(Fitness::invalid());
         if objective.is_better(fitness[best_neighbor], best_fitness) {
-            self.best = Some(self.candidates[best_neighbor].clone());
+            let candidate = &self.candidates[best_neighbor];
+            match &mut self.best {
+                // a copy of the neighbor, new so of age 0, in the memory of the last best
+                Some(best) => {
+                    debug_assert_eq!(candidate.age(), 0);
+                    best.genome_mut().clone_from(candidate.genome());
+                    best.set_fitness(fitness[best_neighbor]);
+                }
+                None => self.best = Some(candidate.clone()),
+            }
             self.best_generation = self.generation;
         }
 
@@ -466,8 +504,8 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
             self.restarts += 1;
             let kicked = self.candidates.swap_remove(0);
             self.remember(kicked.genome());
-            self.current = Population::new(vec![kicked]);
-            self.discarded.clear();
+            self.current[0] = kicked;
+            self.recycle_discarded();
             return Ok(());
         }
 
@@ -492,12 +530,13 @@ impl<R: Representation, M: Mutate<R>> Algorithm for LocalSearch<R, M> {
         let accepted = chosen.is_some_and(|chosen| self.accepts(current_fitness, fitness[chosen]));
         let chosen = chosen.unwrap_or(best_neighbor);
 
-        self.discarded.clear();
+        self.recycle_discarded();
         let mut candidates = std::mem::take(&mut self.candidates);
         if accepted {
             let next = candidates.swap_remove(chosen);
             self.remember(next.genome());
-            self.current = Population::new(vec![next]);
+            let previous = std::mem::replace(&mut self.current[0], next);
+            self.spare.0.push(previous.into_genome());
         } else {
             self.current[0].increment_age();
         }
@@ -632,15 +671,15 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
     {
         check_neighbors(self.neighbors)?;
         self.acceptance.validate()?;
-        if let Some((patience, kicks)) = self.restart {
-            if patience == 0 || kicks == 0 || kicks > MAX_SIZE {
-                return Err(Error::InvalidSetting {
-                    setting: "restart",
-                    reason: format!(
-                        "patience must be at least 1, and kicks between 1 and {MAX_SIZE}; got {patience} and {kicks}"
-                    ),
-                });
-            }
+        if let Some((patience, kicks)) = self.restart
+            && (patience == 0 || kicks == 0 || kicks > MAX_SIZE)
+        {
+            return Err(Error::InvalidSetting {
+                setting: "restart",
+                reason: format!(
+                    "patience must be at least 1, and kicks between 1 and {MAX_SIZE}; got {patience} and {kicks}"
+                ),
+            });
         }
         if let Some(genome) = &self.initial_genome {
             self.representation.validate(genome)?;
@@ -686,7 +725,30 @@ impl<R: Representation, M> LocalSearchBuilder<R, M> {
             restarting: false,
             last_restart: 0,
             restarts: 0,
+            spare: Spare::default(),
         })
+    }
+}
+
+// genomes no longer in use, whose memory is reused: none in a clone, a checkpoint or its debug
+// output
+struct Spare<G>(Vec<G>);
+
+impl<G> Default for Spare<G> {
+    fn default() -> Self {
+        Spare(Vec::new())
+    }
+}
+
+impl<G> Clone for Spare<G> {
+    fn clone(&self) -> Self {
+        Spare::default()
+    }
+}
+
+impl<G> std::fmt::Debug for Spare<G> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Spare")
     }
 }
 

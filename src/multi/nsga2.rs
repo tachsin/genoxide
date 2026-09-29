@@ -1,6 +1,6 @@
 //! NSGA-II: the non-dominated sorting genetic algorithm.
 
-use super::breed::{Variation, distinct, scores_of};
+use super::breed::{Spares, Variation, distinct_into, scores_of};
 use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, crowding_distance, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
@@ -80,6 +80,8 @@ pub struct Nsga2<R: Representation, C, X, const M: usize> {
     pending: Vec<usize>,
     front: Vec<Individual<R::Genome, Scores<M>>>,
     discarded: Vec<Individual<R::Genome, Scores<M>>>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    spares: Spares<R::Genome>,
     started: bool,
     asked: bool,
     generation: u64,
@@ -167,6 +169,7 @@ where
             &mut self.rng,
             |rng| crowded_tournament(ranks, crowding, rng),
             &mut self.offspring,
+            &mut self.spares,
         );
     }
 
@@ -209,7 +212,7 @@ where
         }
         let mut slots: Vec<Option<Individual<R::Genome, Scores<M>>>> =
             pool.into_iter().map(Some).collect();
-        self.discarded.clear();
+        self.spares.keep_all(self.discarded.drain(..));
         for (index, slot) in slots.iter_mut().enumerate() {
             if !selected[index] && index >= parent_count {
                 self.discarded.push(slot.take().expect("not taken yet"));
@@ -227,6 +230,8 @@ where
             self.ranks.push(rank);
             self.crowding.push(distance);
         }
+        // the parents that didn't survive
+        self.spares.keep_all(slots.into_iter().flatten());
         self.population = Population::new(population);
     }
 
@@ -248,15 +253,11 @@ where
     // the new front, and whether it improved on the previous one
     fn update_front(&mut self) {
         let first = (0..self.population.len()).filter(|&i| self.ranks[i] == 0);
-        let front = distinct(&self.population, first);
-        if gains(
-            &scores_of(&front),
-            &scores_of(&self.front),
-            &self.objectives,
-        ) {
+        let previous = scores_of(&self.front);
+        distinct_into(&mut self.front, &self.population, first);
+        if gains(&scores_of(&self.front), &previous, &self.objectives) {
             self.front_generation = self.generation;
         }
-        self.front = front;
     }
 }
 
@@ -545,6 +546,7 @@ impl<R: Representation, const M: usize, C, X> Nsga2Builder<R, M, C, X> {
             generation: 0,
             evaluations: 0,
             front_generation: 0,
+            spares: Spares::default(),
         })
     }
 }

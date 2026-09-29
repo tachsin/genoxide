@@ -84,16 +84,8 @@ impl Order {
         self.genes
     }
 
-    // an ordering from genes that are known to be a permutation
-    pub(crate) fn from_permutation(genes: Vec<usize>) -> Self {
-        debug_assert!(
-            Self::new(genes.clone()).is_ok(),
-            "not a permutation: {genes:?}"
-        );
-        Self { genes }
-    }
-
-    // the genes, for changes that keep them a permutation (reverse, rotate, shuffle)
+    // the genes, for changes that keep them a permutation (reverse, rotate, shuffle, and the
+    // crossovers, which build their children in their parents' genes)
     pub(crate) fn genes_mut(&mut self) -> &mut [usize] {
         &mut self.genes
     }

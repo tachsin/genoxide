@@ -144,26 +144,30 @@ impl Bits {
 
     fn clear_unused_bits(&mut self) {
         let used = self.len % WORD_BITS;
-        if used > 0 {
-            if let Some(last) = self.words.last_mut() {
-                *last &= (1 << used) - 1;
-            }
+        if used > 0
+            && let Some(last) = self.words.last_mut()
+        {
+            *last &= (1 << used) - 1;
         }
     }
 }
 
 impl FromIterator<bool> for Bits {
     fn from_iter<I: IntoIterator<Item = bool>>(iter: I) -> Self {
-        let mut words = Vec::new();
-        let mut len = 0;
+        let iter = iter.into_iter();
+        let mut words = Vec::with_capacity(iter.size_hint().0.div_ceil(WORD_BITS));
+        // the word being filled, pushed when full, and the last one when partly filled
+        let (mut word, mut len) = (0, 0);
         for bit in iter {
-            if len % WORD_BITS == 0 {
-                words.push(0);
-            }
-            if bit {
-                *words.last_mut().expect("pushed above") |= 1 << (len % WORD_BITS);
-            }
+            word |= u64::from(bit) << (len % WORD_BITS);
             len += 1;
+            if len.is_multiple_of(WORD_BITS) {
+                words.push(word);
+                word = 0;
+            }
+        }
+        if !len.is_multiple_of(WORD_BITS) {
+            words.push(word);
         }
         Self { words, len }
     }
@@ -196,36 +200,17 @@ impl Genome for Bits {
 
 impl Bits {
     /// Exchanges the bits selected by `mask` in word `word` with `other`.
-    pub(crate) fn swap_word_bits(&mut self, other: &mut Self, word: usize, mask: u64) {
-        let difference = (self.words[word] ^ other.words[word]) & mask;
-        self.words[word] ^= difference;
-        other.words[word] ^= difference;
-    }
-
-    /// The number of words.
-    pub(crate) fn word_count(&self) -> usize {
-        self.words.len()
-    }
-
-    /// The mask of the used bits in word `word`.
-    pub(crate) fn used_bits(&self, word: usize) -> u64 {
-        let end = ((word + 1) * WORD_BITS).min(self.len);
-        mask(word * WORD_BITS, end, word)
+    fn swap_word_bits(&mut self, other: &mut Self, word: usize, mask: u64) {
+        swap_bits(&mut self.words[word], &mut other.words[word], mask);
     }
 }
 
-// the bits of word `word` that are in `start..end`
-fn mask(start: usize, end: usize, word: usize) -> u64 {
-    let word_start = word * WORD_BITS;
-    let from = start.max(word_start) - word_start;
-    let to = end.min(word_start + WORD_BITS) - word_start;
-    if from >= to {
-        0
-    } else if to - from == WORD_BITS {
-        u64::MAX
-    } else {
-        ((1u64 << (to - from)) - 1) << from
-    }
+// exchanges the bits of `a` and `b` selected by `mask`
+#[inline]
+fn swap_bits(a: &mut u64, b: &mut u64, mask: u64) {
+    let difference = (*a ^ *b) & mask;
+    *a ^= difference;
+    *b ^= difference;
 }
 
 impl SwapGenes for Bits {
@@ -239,18 +224,26 @@ impl SwapGenes for Bits {
         if range.is_empty() {
             return;
         }
-        for word in range.start / WORD_BITS..range.end.div_ceil(WORD_BITS) {
-            self.swap_word_bits(other, word, mask(range.start, range.end, word));
+        // the bits from the start in its word, and up to the last bit in its word
+        let (first, last) = (range.start / WORD_BITS, (range.end - 1) / WORD_BITS);
+        let from_start = u64::MAX << (range.start % WORD_BITS);
+        let to_end = u64::MAX >> (WORD_BITS - 1 - (range.end - 1) % WORD_BITS);
+        if first == last {
+            self.swap_word_bits(other, first, from_start & to_end);
+        } else {
+            self.swap_word_bits(other, first, from_start);
+            self.words[first + 1..last].swap_with_slice(&mut other.words[first + 1..last]);
+            self.swap_word_bits(other, last, to_end);
         }
     }
 
     fn swap_uniform(&mut self, other: &mut Self, rate: f64, rng: &mut StreamRng) {
         assert_eq!(self.len, other.len, "genomes of different lengths");
         if rate == 0.5 {
-            for word in 0..self.word_count() {
-                // every bit of a random word is 1 with probability exactly 0.5
-                let mask = rng.next_u64() & self.used_bits(word);
-                self.swap_word_bits(other, word, mask);
+            // every bit of a random word is 1 with probability exactly 0.5; the unused bits of the
+            // last word are 0 in both genomes, so exchanging them changes nothing
+            for (a, b) in self.words.iter_mut().zip(&mut other.words) {
+                swap_bits(a, b, rng.next_u64());
             }
         } else {
             let chance = crate::rng::Chance::new(rate);
@@ -383,7 +376,7 @@ mod tests {
 
     fn tail_is_clear(bits: &Bits) -> bool {
         bits.words.len() == bits.len.div_ceil(WORD_BITS)
-            && (bits.len % WORD_BITS == 0
+            && (bits.len.is_multiple_of(WORD_BITS)
                 || bits
                     .words
                     .last()
