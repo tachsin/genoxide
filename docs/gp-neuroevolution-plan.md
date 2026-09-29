@@ -111,6 +111,21 @@ McPhee, N. F. (2008). *A Field Guide to Genetic Programming.* lulu.com, gp-field
 (**Field Guide**); Montana, D. J. (1995). Strongly typed genetic programming. *Evolutionary
 Computation* 3(2): 199-230. doi:10.1162/evco.1995.3.2.199 (**Montana**).
 
+**Verified for G1** (the settings G1 relies on, read in the sources): Koza's depth limit of 17
+for trees made by crossover, the initial depth of 6, ramped half-and-half over depths 2 to 6 with
+the population divided evenly among the depths and half full, half grow, the root chosen from the
+functions, duplicates in the initial population redrawn, and crossover points at functions 90% of
+the time and at terminals (not "any point") 10%: Koza (1994), *Statistics and Computing* 4(2):
+87-112, and the text of Koza and Rice's patent US 5,343,554 (filed 1992), which restate the book;
+the book itself (lent only) wasn't read, so its section numbers aren't cited. A tree of one node
+has depth 0 (Koza; Field Guide sec. 2.2, p. 12); Montana counts it as 1. Koza aborts a crossover
+that would exceed the depth limit and copies the parents (open question 1 keeps the recommended
+alternative). The Field Guide's grow picks a terminal with probability |T| / (|T| + |F|) (Algorithm
+2.1), subtree crossover and mutation are in sec. 2.4 and the mutation cookbook in sec. 5.2.2.
+Montana (1995, sec. 2.1): types possibilities tables per depth, the second crossover point of the
+first point's type, and the parents returned when there's none. Angeline (1996): GP 1996: 21-29,
+as cited.
+
 ### 2.1 Representation
 
 **Decision: a flat array of nodes in prefix order**, one `Vec<Node>` per tree, as DEAP, gplearn
