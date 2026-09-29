@@ -282,8 +282,9 @@ where
         kept
     }
 
-    // the next population from the parents and the offspring
-    fn survive(&mut self) {
+    // the next population from the parents and the offspring; returns how many of it come from
+    // the first front of the parents and offspring, which it starts with
+    fn survive(&mut self) -> usize {
         let parents = std::mem::take(&mut self.population).into_vec();
         let parent_count = parents.len();
         let mut pool = parents;
@@ -292,6 +293,7 @@ where
         let normalization = normalization(&scores, &self.objectives);
         let fronts = non_dominated_sort(&scores, &self.objectives);
         let mut chosen: Vec<usize> = Vec::with_capacity(self.population_size);
+        let mut first = 0;
         for front in &fronts {
             let room = self.population_size - chosen.len();
             if front.len() <= room {
@@ -299,6 +301,9 @@ where
             } else {
                 let kept = self.thin(front, &scores, room, normalization);
                 chosen.extend(kept);
+            }
+            if first == 0 {
+                first = chosen.len();
             }
             if chosen.len() == self.population_size {
                 break;
@@ -325,14 +330,23 @@ where
             population.push(individual);
         }
         self.population = Population::new(population);
+        first
     }
 
-    // the new front, and whether it improved on the previous one
-    fn update_front(&mut self) {
-        let scores = scores_of(self.population.as_slice());
-        let fronts = non_dominated_sort(&scores, &self.objectives);
-        let first = fronts.first().map(Vec::as_slice).unwrap_or_default();
-        let front = distinct(&self.population, first.iter().copied());
+    // the new front, and whether it improved on the previous one. `first` is the number of
+    // members the population starts with from the first front of the parents and offspring, if
+    // it survived them: its own first front, as the survivors of a thinned first front are the
+    // whole population, and otherwise all of that front survives and dominates the rest
+    fn update_front(&mut self, first: Option<usize>) {
+        let front = match first {
+            Some(first) => distinct(&self.population, 0..first),
+            None => {
+                let scores = scores_of(self.population.as_slice());
+                let fronts = non_dominated_sort(&scores, &self.objectives);
+                let first = fronts.first().map(Vec::as_slice).unwrap_or_default();
+                distinct(&self.population, first.iter().copied())
+            }
+        };
         if gains(
             &scores_of(&front),
             &scores_of(&self.front),
@@ -394,13 +408,14 @@ where
                 self.offspring[index].set_fitness(score);
             }
             self.generation += 1;
-            self.survive();
+            let first = self.survive();
+            self.update_front(Some(first));
         } else {
             for (individual, &score) in self.population.iter_mut().zip(scores) {
                 individual.set_fitness(score);
             }
+            self.update_front(None);
         }
-        self.update_front();
         self.started = true;
         Ok(())
     }
@@ -796,6 +811,11 @@ mod tests {
                     let scores = member.fitness().unwrap();
                     prop_assert!(!old.iter().any(|o| dominates(o, &scores, &objectives)));
                 }
+                // the front is the population's first front, without sorting it again
+                let population = sms_emoa.population();
+                let fronts = non_dominated_sort(&scores_of(population.as_slice()), &objectives);
+                let first = distinct(population, fronts[0].iter().copied());
+                prop_assert_eq!(sms_emoa.front(), first.as_slice());
             }
         }
     }
