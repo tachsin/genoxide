@@ -11,7 +11,8 @@ use crate::config;
 use crate::errors::setting;
 use crate::operators::AnySelect;
 use crate::run::{de_control, de_strategy};
-use genoxide::algorithm::Reevaluate;
+use genoxide::algorithm::islands::Migrate;
+use genoxide::algorithm::{Islands, Reevaluate};
 use genoxide::genome::Representation;
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
@@ -190,6 +191,49 @@ impl Settings<Cmaes> for CmaesSettings {
 
     fn set(&self, _: &mut Cmaes, name: &str, _: &str) -> Result<()> {
         Err(unknown(name))
+    }
+}
+
+/// An evolution strategy, which adapts its own step sizes: only re-evaluation.
+pub struct EsSettings;
+
+impl Settings<Es> for EsSettings {
+    fn get(&self, _: &Es, name: &str) -> Result<Value> {
+        Err(unknown(name))
+    }
+
+    fn set(&self, _: &mut Es, name: &str, _: &str) -> Result<()> {
+        Err(unknown(name))
+    }
+}
+
+/// The settings of each island, those of its algorithm, named `index/setting`: `2/mutation_rate`
+/// is the mutation rate of the third island.
+pub struct IslandsSettings<S>(pub S);
+
+// the index of the island and its setting's name, from `index/setting`, for `count` islands
+fn island(name: &str, count: usize) -> Result<(usize, &str)> {
+    let (index, setting) = name.split_once('/').ok_or_else(|| unknown(name))?;
+    match index.parse::<usize>() {
+        Ok(index) if index < count => Ok((index, setting)),
+        _ => Err(format!("no island {index} of the {count}")),
+    }
+}
+
+impl<A, S> Settings<Islands<A>> for IslandsSettings<S>
+where
+    A: Migrate,
+    S: Settings<A>,
+{
+    fn get(&self, islands: &Islands<A>, name: &str) -> Result<Value> {
+        let (index, setting) = island(name, islands.islands().len())?;
+        self.0.get(&islands.islands()[index], setting)
+    }
+
+    fn set(&self, islands: &mut Islands<A>, name: &str, value: &str) -> Result<()> {
+        let (index, setting) = island(name, islands.islands().len())?;
+        self.0
+            .set(&mut islands.islands_mut()[index], setting, value)
     }
 }
 

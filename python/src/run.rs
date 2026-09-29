@@ -1,30 +1,35 @@
 //! Building the algorithm a run describes, and running it with a Python fitness function.
 
+use crate::checkpoint::Checkpoints;
 use crate::config;
 use crate::control::{
-    CmaesSettings, DeSettings, GaSettings, LocalSearchSettings, PsoSettings, Running, Settings,
-    Slot,
+    CmaesSettings, DeSettings, EsSettings, GaSettings, IslandsSettings, LocalSearchSettings,
+    PsoSettings, Running, Settings, Slot,
 };
 use crate::errors::{genome_setting, setting};
 use crate::fitness::{Multi, Native, Shared, Single};
 use crate::genes::{self, Genes};
 use crate::operators::{
     AnySelect, ListCrossover, OrderCrossovers, OrderMutation, RealCrossover, RealMutation,
-    bit_flip, integer_mutation,
+    bit_flip, integer_mutation, self_adaptive,
 };
 use crate::problems;
 use crate::snapshot::{Snapshot, objective_values};
-use genoxide::algorithm::{GaBuilder, Reevaluate, cmaes, pso};
+use genoxide::algorithm::islands::{Migrate, Topology};
+use genoxide::algorithm::{GaBuilder, Islands, Reevaluate, cmaes, es, pso};
 use genoxide::engine::Progress;
-use genoxide::genome::Representation;
+use genoxide::genome::{AdaptiveReal, Representation};
 use genoxide::multi::{self, Decomposition, MultiObjectiveAlgorithm, MultiSnapshot, SmsEmoa};
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2};
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyOSError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -40,9 +45,11 @@ type Result<T> = std::result::Result<T, String>;
 /// `control`, for a single-objective algorithm, is called once per generation after it (after
 /// the last one too, and not after a re-evaluation), with a [`Running`] handle to the algorithm
 /// and the same arguments as `on_generation`, to change the algorithm's settings or re-evaluate
-/// it. Returns the result as a dict.
+/// it. With `checkpoint`, the run saves a checkpoint there every `checkpoint_every` generations
+/// and when it stops; with `resume`, it continues from the checkpoint there, saved with the same
+/// settings. Returns the result as a dict.
 #[pyfunction]
-#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None, control = None))]
+#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None, control = None, checkpoint = None, checkpoint_every = None, resume = None))]
 #[allow(clippy::too_many_arguments)]
 pub fn run<'py>(
     py: Python<'py>,
@@ -53,6 +60,9 @@ pub fn run<'py>(
     on_generation: Option<Py<PyAny>>,
     problem: Option<&str>,
     control: Option<Py<PyAny>>,
+    checkpoint: Option<PathBuf>,
+    checkpoint_every: Option<u64>,
+    resume: Option<PathBuf>,
 ) -> PyResult<Bound<'py, PyDict>> {
     // the error names the setting, e.g. `stop.generations`
     let mut json = serde_json::Deserializer::from_str(config);
@@ -60,6 +70,7 @@ pub fn run<'py>(
         let (path, error) = (error.path().to_string(), error.into_inner());
         PyValueError::new_err(format!("invalid setting `{path}`: {error}"))
     })?;
+    let checkpoints = checkpoints(config, checkpoint, checkpoint_every, resume)?;
     let problem = problem.map(problems::parse).transpose()?;
     if let Some(problem) = &problem {
         check_problem(problem, &run).map_err(PyValueError::new_err)?;
@@ -78,6 +89,7 @@ pub fn run<'py>(
         parallel,
         problem,
         control,
+        checkpoints,
     };
     let result = match run.genome {
         config::Genome::Binary { length } => with_operators(
@@ -114,10 +126,62 @@ pub fn run<'py>(
             OrderCrossovers::new,
             OrderMutation::new,
         ),
+        config::Genome::AdaptiveReal {
+            bounds,
+            initial_step,
+        } => with_operators(
+            py,
+            genome_setting(
+                Real::new(bounds.iter().map(|&(low, high)| low..=high)),
+                "Real",
+            )
+            .and_then(|real| genome_setting(AdaptiveReal::new(real, initial_step), "AdaptiveReal")),
+            run.algorithm,
+            &context,
+            |crossover| ListCrossover::new(crossover, "adaptive real"),
+            self_adaptive,
+        ),
     };
     result.map_err(|error| match error {
         Failure::Setting(message) => PyValueError::new_err(message),
         Failure::Python(error) => error,
+    })
+}
+
+// the checkpoints of a run: its settings, the genome, the objectives and the algorithm's (not the
+// stop conditions, which can change), where to save and what to resume from
+fn checkpoints(
+    config: &str,
+    save: Option<PathBuf>,
+    every: Option<u64>,
+    resume: Option<PathBuf>,
+) -> PyResult<Checkpoints> {
+    let mut settings: serde_json::Value =
+        serde_json::from_str(config).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    if let Some(settings) = settings.as_object_mut() {
+        settings.remove("stop");
+    }
+    let save = match (save, every) {
+        (Some(path), Some(every)) => Some((path, every)),
+        (None, None) => None,
+        _ => {
+            return Err(PyValueError::new_err(
+                "checkpoint and checkpoint_every go together",
+            ));
+        }
+    };
+    // an OSError such as FileNotFoundError if it can't be read
+    let resume = match resume {
+        Some(path) => {
+            let bytes = std::fs::read(&path)?;
+            Some((path, bytes))
+        }
+        None => None,
+    };
+    Ok(Checkpoints {
+        settings: settings.to_string(),
+        save,
+        resume,
     })
 }
 
@@ -213,11 +277,17 @@ fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
             "{name} has {dimensions} bits, but the genome has {length}"
         )),
         _ if binary => Err(format!("{name} needs a Binary genome")),
-        config::Genome::Real { bounds } if bounds.len() == dimensions => Ok(()),
-        config::Genome::Real { bounds } => Err(format!(
-            "{name} has {dimensions} dimensions, but the genome has {} genes",
-            bounds.len()
-        )),
+        config::Genome::Real { bounds } | config::Genome::AdaptiveReal { bounds, .. }
+            if bounds.len() == dimensions =>
+        {
+            Ok(())
+        }
+        config::Genome::Real { bounds } | config::Genome::AdaptiveReal { bounds, .. } => {
+            Err(format!(
+                "{name} has {dimensions} dimensions, but the genome has {} genes",
+                bounds.len()
+            ))
+        }
         _ => Err(format!("{name} needs a Real genome")),
     }
 }
@@ -232,6 +302,7 @@ struct Context {
     problem: Option<problems::Problem>,
     // called with the running algorithm once per generation
     control: Option<Py<PyAny>>,
+    checkpoints: Checkpoints,
 }
 
 impl Context {
@@ -284,6 +355,72 @@ impl Context {
     }
 }
 
+// differential evolution, as `de` describes it
+fn build_de(real: Real, de: config::De, context: &Context) -> std::result::Result<De, Failure> {
+    let config::De {
+        population_size,
+        seed,
+        l_shade,
+        strategy,
+        control,
+        restarts,
+        parallel_breeding,
+    } = de;
+    let mut builder = match l_shade {
+        Some(evaluations) => De::l_shade(real, evaluations),
+        None => De::builder(real),
+    };
+    if let Some(size) = population_size {
+        builder = builder.population_size(size);
+    }
+    if let Some(seed) = seed {
+        builder = builder.seed(seed);
+    }
+    if let Some(strategy) = strategy {
+        builder = builder.strategy(de_strategy(strategy));
+    }
+    if let Some(control) = control {
+        builder = builder.control(de_control(control));
+    }
+    if let Some(restarts) = restarts {
+        builder = builder.restarts(de_restarts(restarts));
+    }
+    if let Some(parallel_breeding) = parallel_breeding {
+        builder = builder.parallel_breeding(parallel_breeding);
+    }
+    let builder = builder.objective(context.single_objective()?);
+    Ok(setting(builder.build())?)
+}
+
+// the island model of `islands`, with its settings
+fn build_islands<A: Migrate>(
+    islands: Vec<A>,
+    topology: Option<config::Topology>,
+    interval: Option<u64>,
+    migrants: Option<usize>,
+    seed: Option<u64>,
+) -> Result<Islands<A>> {
+    let mut builder = Islands::builder(islands);
+    if let Some(topology) = topology {
+        builder = builder.topology(match topology {
+            config::Topology::Ring => Topology::Ring,
+            config::Topology::FullyConnected => Topology::FullyConnected,
+            config::Topology::Random => Topology::Random,
+            config::Topology::Isolated => Topology::Isolated,
+        });
+    }
+    if let Some(interval) = interval {
+        builder = builder.interval(interval);
+    }
+    if let Some(migrants) = migrants {
+        builder = builder.migrants(migrants);
+    }
+    if let Some(seed) = seed {
+        builder = builder.seed(seed);
+    }
+    setting(builder.build())
+}
+
 pub fn de_strategy(strategy: config::DeStrategy) -> de::Strategy {
     match strategy {
         config::DeStrategy::Named(config::DeStrategyName::Rand1) => de::Strategy::Rand1,
@@ -331,39 +468,74 @@ fn real_algorithm<'py>(
 ) -> Returns<'py> {
     let real = real?;
     match algorithm {
-        config::Algorithm::De {
-            population_size,
-            seed,
-            l_shade,
-            strategy,
-            control,
-            restarts,
+        config::Algorithm::De(de) => {
+            generational(py, build_de(real, de, context)?, DeSettings, context)
+        }
+        config::Algorithm::Es {
+            parents,
+            offspring,
+            recombination,
+            rho,
+            selection,
+            step_sizes,
+            initial_step,
             parallel_breeding,
+            seed,
         } => {
-            let mut builder = match l_shade {
-                Some(evaluations) => De::l_shade(real, evaluations),
-                None => De::builder(real),
-            };
-            if let Some(size) = population_size {
-                builder = builder.population_size(size);
+            let mut builder = Es::builder(real)
+                .parents(parents)
+                .offspring(offspring)
+                .objective(context.single_objective()?);
+            if recombination.is_some() || rho.is_some() {
+                // all the parents by default
+                let rho = rho.unwrap_or(parents);
+                builder = builder.recombination(match recombination {
+                    Some(config::Recombination::Dominant) => es::Recombination::Dominant { rho },
+                    _ => es::Recombination::Intermediate { rho },
+                });
             }
-            if let Some(seed) = seed {
-                builder = builder.seed(seed);
+            if let Some(selection) = selection {
+                builder = builder.selection(match selection {
+                    config::EsSelection::Comma => es::Selection::Comma,
+                    config::EsSelection::Plus => es::Selection::Plus,
+                });
             }
-            if let Some(strategy) = strategy {
-                builder = builder.strategy(de_strategy(strategy));
+            if let Some(step_sizes) = step_sizes {
+                builder = builder.step_sizes(match step_sizes {
+                    config::StepSizes::One => es::StepSizes::One,
+                    config::StepSizes::PerGene => es::StepSizes::PerGene,
+                });
             }
-            if let Some(control) = control {
-                builder = builder.control(de_control(control));
-            }
-            if let Some(restarts) = restarts {
-                builder = builder.restarts(de_restarts(restarts));
+            if let Some(step) = initial_step {
+                builder = builder.initial_step(step);
             }
             if let Some(parallel_breeding) = parallel_breeding {
                 builder = builder.parallel_breeding(parallel_breeding);
             }
-            let builder = builder.objective(context.single_objective()?);
-            generational(py, setting(builder.build())?, DeSettings, context)
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            generational(py, setting(builder.build())?, EsSettings, context)
+        }
+        config::Algorithm::Islands {
+            islands,
+            topology,
+            interval,
+            migrants,
+            seed,
+        } if islands
+            .iter()
+            .all(|island| matches!(island, config::Algorithm::De(_))) =>
+        {
+            let islands = islands
+                .into_iter()
+                .map(|island| match island {
+                    config::Algorithm::De(de) => build_de(real.clone(), de, context),
+                    _ => unreachable!("checked above: all De"),
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            let islands = build_islands(islands, topology, interval, migrants, seed)?;
+            generational(py, islands, IslandsSettings(DeSettings), context)
         }
         config::Algorithm::Cmaes {
             population_size,
@@ -435,10 +607,10 @@ fn with_operators<'py, R, C, M>(
     mutate: fn(config::Mutate) -> Result<M>,
 ) -> Returns<'py>
 where
-    R: Representation + Send + 'static,
-    R::Genome: Genes,
-    C: Crossover<R> + Send + 'static,
-    M: Mutate<R> + Send + 'static,
+    R: Representation + Clone + PartialEq + Send + Serialize + DeserializeOwned + 'static,
+    R::Genome: Genes + Serialize + DeserializeOwned,
+    C: Crossover<R> + Clone + Send + Serialize + DeserializeOwned + 'static,
+    M: Mutate<R> + Clone + Send + Serialize + DeserializeOwned + 'static,
 {
     let representation = representation?;
     match algorithm {
@@ -446,6 +618,33 @@ where
             let builder = ga_builder(representation, &ga, context, crossover, mutate)?;
             let settings = GaSettings { crossover, mutate };
             generational(py, setting(builder.build())?, settings, context)
+        }
+        config::Algorithm::Islands {
+            islands,
+            topology,
+            interval,
+            migrants,
+            seed,
+        } => {
+            let islands = islands
+                .into_iter()
+                .map(|island| match island {
+                    config::Algorithm::Ga(ga) => {
+                        let builder =
+                            ga_builder(representation.clone(), &ga, context, crossover, mutate)?;
+                        Ok(setting(builder.build())?)
+                    }
+                    config::Algorithm::De(_) => {
+                        Err(Failure::from("De needs a Real genome".to_string()))
+                    }
+                    _ => Err(Failure::from(
+                        "the islands are all Ga or all De".to_string(),
+                    )),
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            let islands = build_islands(islands, topology, interval, migrants, seed)?;
+            let settings = IslandsSettings(GaSettings { crossover, mutate });
+            generational(py, islands, settings, context)
         }
         config::Algorithm::LocalSearch {
             seed,
@@ -502,7 +701,8 @@ where
                 Err(message.into())
             })
         }
-        config::Algorithm::De { .. } => Err("De needs a Real genome".to_string().into()),
+        config::Algorithm::De(_) => Err("De needs a Real genome".to_string().into()),
+        config::Algorithm::Es { .. } => Err("Es needs a Real genome".to_string().into()),
         config::Algorithm::Cmaes { .. } => Err("Cmaes needs a Real genome".to_string().into()),
         config::Algorithm::Pso { .. } => Err("Pso needs a Real genome".to_string().into()),
     }
@@ -666,10 +866,10 @@ macro_rules! duplicates {
 
 impl<'py, R, C, X> WithObjectives for MultiObjective<'_, 'py, R, C, X>
 where
-    R: Representation,
-    R::Genome: Genes,
-    C: Crossover<R>,
-    X: Mutate<R>,
+    R: Representation + Clone + Serialize + DeserializeOwned,
+    R::Genome: Genes + Serialize + DeserializeOwned,
+    C: Crossover<R> + Clone + Serialize + DeserializeOwned,
+    X: Mutate<R> + Clone + Serialize + DeserializeOwned,
 {
     type Output = Returns<'py>;
 
@@ -806,11 +1006,12 @@ fn generational<'py, A, S>(
     context: &Context,
 ) -> Returns<'py>
 where
-    A: Algorithm + Reevaluate + Clone + Send + 'static,
+    A: Algorithm + Reevaluate + Clone + Send + Serialize + DeserializeOwned + 'static,
     A::Genome: Genes,
     S: Settings<A>,
 {
     let stop = context.stop(true)?;
+    let algorithm = context.checkpoints.resume(algorithm)?;
     let shared = &context.shared;
     let parallel = context.parallel;
     let problem = match &context.problem {
@@ -873,12 +1074,15 @@ where
                 }
             });
         }
+        if let Some((path, every)) = &context.checkpoints.save {
+            engine = engine.checkpoint_every(*every, |algorithm| save(context, algorithm, path));
+        }
         engine.run()
     });
     if let Some(error) = shared.take_error() {
         return Err(error.into());
     }
-    let outcome = outcome.map_err(|error| error.to_string())?;
+    let outcome = outcome.map_err(engine_error)?;
     let fitness = outcome.best_fitness();
     let result = PyDict::new(py);
     result.set_item("best_genome", genes::array(py, outcome.best_genome()))?;
@@ -900,10 +1104,11 @@ fn multi_objective<'py, A, const N: usize>(
     context: &Context,
 ) -> Returns<'py>
 where
-    A: MultiObjectiveAlgorithm<N> + Send,
+    A: MultiObjectiveAlgorithm<N> + Clone + Send + Serialize + DeserializeOwned,
     A::Genome: Genes,
 {
     let stop = context.stop(false)?;
+    let algorithm = context.checkpoints.resume(algorithm)?;
     let shared = &context.shared;
     let parallel = context.parallel;
     let problem = match &context.problem {
@@ -915,19 +1120,22 @@ where
         problem: problem.as_ref(),
     };
     let outcome = py.detach(|| {
-        MultiEngine::new(algorithm, fitness)
+        let mut engine = MultiEngine::new(algorithm, fitness)
             .stop_when(stop)
             .abort_flag(shared.abort_flag())
             .parallel(parallel)
             .on_generation(|snapshot| {
                 shared.after_generation(snapshot.progress(), |py| multi_state(py, snapshot));
-            })
-            .run()
+            });
+        if let Some((path, every)) = &context.checkpoints.save {
+            engine = engine.checkpoint_every(*every, |algorithm| save(context, algorithm, path));
+        }
+        engine.run()
     });
     if let Some(error) = shared.take_error() {
         return Err(error.into());
     }
-    let outcome = outcome.map_err(|error| error.to_string())?;
+    let outcome = outcome.map_err(engine_error)?;
     // the front, each genome once, as in the last generation's progress
     let front = outcome.front();
     let genomes: Vec<&A::Genome> = front.iter().map(Individual::genome).collect();
@@ -941,6 +1149,29 @@ where
     result.set_item("seconds", outcome.elapsed().as_secs_f64())?;
     result.set_item("stop_reason", stop_reason(outcome.stop_reason()))?;
     Ok(result)
+}
+
+// saves a checkpoint, unless an exception stopped the run: its generation's genomes left got an
+// invalid fitness without a call, and the last good checkpoint stays
+fn save<A: Clone + Serialize>(
+    context: &Context,
+    algorithm: &A,
+    path: &Path,
+) -> genoxide::Result<()> {
+    if context.shared.failed() {
+        return Ok(());
+    }
+    context.checkpoints.save(algorithm, path)
+}
+
+// the error that stopped an engine: an OSError for a checkpoint that couldn't be saved
+fn engine_error(error: genoxide::Error) -> Failure {
+    match error {
+        genoxide::Error::Checkpoint { .. } => {
+            Failure::Python(PyOSError::new_err(error.to_string()))
+        }
+        error => Failure::Setting(error.to_string()),
+    }
 }
 
 // the arguments of the progress callback after a single-objective generation: the best score

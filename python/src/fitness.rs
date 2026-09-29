@@ -6,6 +6,15 @@
 //! An exception in the fitness function or the progress callback, or Ctrl+C, stops the run: the
 //! first exception is kept, the abort flag is set, and the genomes left get an invalid fitness
 //! without a call. The run raises the exception when it returns.
+//!
+//! A batch function's matrix is reused: after a call, the run keeps it, and the next batch of as
+//! many genomes gets it back with its genomes written into it, if its reference count shows that
+//! Python kept no reference to it (a function that keeps it gets a new matrix next time, and what
+//! it kept never changes). A large matrix is then allocated, and its memory touched for the first
+//! time, once per run instead of once per generation: with 1000 genomes of 1000 genes, a
+//! generation took a fifth less. A function of one genome gets a new array per call: writing a
+//! genome into a kept array is only safe (without unsafe code) through numpy's borrow checking,
+//! which cost as much as the new array.
 
 use crate::genes::{self, Genes};
 use crate::problems::{IntegerProblem, MultiNative};
@@ -28,6 +37,8 @@ pub struct Shared {
     on_generation: Option<Py<PyAny>>,
     error: Mutex<Option<PyErr>>,
     abort: Arc<AtomicBool>,
+    // the matrix of the last batch, to write the next batch into
+    matrix: Mutex<Option<Py<PyAny>>>,
 }
 
 impl Shared {
@@ -44,6 +55,7 @@ impl Shared {
             on_generation,
             error: Mutex::new(None),
             abort: Arc::new(AtomicBool::new(false)),
+            matrix: Mutex::new(None),
         }
     }
 
@@ -148,8 +160,8 @@ impl Shared {
         })
     }
 
-    // whether an error stops the run
-    fn failed(&self) -> bool {
+    /// Whether an error stops the run.
+    pub fn failed(&self) -> bool {
         self.error
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -182,6 +194,41 @@ impl Shared {
         let argument = Ok(genes::array(py, genome).into_any());
         self.call(py, argument, convert)
     }
+
+    // calls the batch function with `genomes`, a genome per row
+    fn call_batch<'py, G: Genes, T>(
+        &self,
+        py: Python<'py>,
+        genomes: &[&G],
+        convert: impl FnOnce(&Bound<'py, PyAny>) -> PyResult<T>,
+    ) -> Option<T> {
+        let reused = self
+            .matrix
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .map(|matrix| matrix.into_bound(py))
+            // the run's reference only: Python kept none
+            .filter(|matrix| only_reference(matrix) && genes::refill_matrix(matrix, genomes));
+        let matrix = match reused {
+            Some(matrix) => Ok(matrix),
+            None => genes::matrix(py, genomes).map(Bound::into_any),
+        };
+        let kept = matrix.as_ref().ok().cloned();
+        let result = self.call(py, matrix, convert);
+        if let Some(matrix) = kept {
+            *self.matrix.lock().unwrap_or_else(PoisonError::into_inner) = Some(matrix.unbind());
+        }
+        result
+    }
+}
+
+// whether `object` is referenced by the caller only: Python kept no reference to it. (pyo3
+// deprecates `get_refcnt` for `ffi::Py_REFCNT`, which is unsafe, and this crate has no unsafe
+// code.)
+#[allow(deprecated)]
+fn only_reference(object: &Bound<'_, PyAny>) -> bool {
+    object.get_refcnt() == 1
 }
 
 fn type_name(value: &Bound<'_, PyAny>) -> String {
@@ -354,9 +401,8 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
                     })
                     .collect();
             }
-            let argument = genes::matrix(py, genomes).map(Bound::into_any);
             shared
-                .call(py, argument, |result| values(result, genomes.len()))
+                .call_batch(py, genomes, |result| values(result, genomes.len()))
                 .unwrap_or_else(|| vec![Value::Invalid; genomes.len()])
         })
     }
@@ -515,9 +561,8 @@ impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
                     })
                     .collect();
             }
-            let argument = genes::matrix(py, genomes).map(Bound::into_any);
             shared
-                .call(py, argument, |result| multi_values(result, genomes.len()))
+                .call_batch(py, genomes, |result| multi_values(result, genomes.len()))
                 .unwrap_or_else(|| vec![MultiValue::Invalid; genomes.len()])
         })
     }

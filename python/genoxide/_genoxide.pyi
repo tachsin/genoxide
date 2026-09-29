@@ -1,3 +1,4 @@
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -13,6 +14,9 @@ def run(
     on_generation: Callable[..., bool] | None = None,
     problem: str | None = None,
     control: Callable[..., None] | None = None,
+    checkpoint: str | os.PathLike[str] | None = None,
+    checkpoint_every: int | None = None,
+    resume: str | os.PathLike[str] | None = None,
 ) -> dict[str, Any]: ...
 
 class Running:

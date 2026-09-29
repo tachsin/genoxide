@@ -11,8 +11,8 @@ pub fn setting<T>(result: genoxide::Result<T>) -> Result<T> {
     result.map_err(|error| message(error, None))
 }
 
-/// [`setting`], for the constructor of a genome: its `len` and `bounds` are `length` and `bounds`
-/// of `genome`, e.g. `Binary.length`.
+/// [`setting`], for the constructor of a genome: its `len`, `bounds` and `initial_step` are
+/// `length`, `bounds` and `initial_step` of `genome`, e.g. `Binary.length`.
 pub fn genome_setting<T>(result: genoxide::Result<T>, genome: &str) -> Result<T> {
     result.map_err(|error| message(error, Some(genome)))
 }
@@ -39,6 +39,7 @@ fn python(setting: &str, genome: Option<&str>) -> String {
     match (setting, genome) {
         ("len", Some(genome)) => format!("{genome}.length"),
         ("bounds", Some(genome)) => format!("{genome}.bounds"),
+        ("initial_step", Some(genome)) => format!("{genome}.initial_step"),
         (setting, _) => python_name(setting).to_string(),
     }
 }
@@ -64,6 +65,8 @@ fn python_name(setting: &str) -> &str {
         "polynomial_mutation_count" => "PolynomialMutation.count",
         "polynomial_eta" => "PolynomialMutation.eta",
         "swap_count" => "SwapMutation.count",
+        "learning_rate" => "SelfAdaptiveMutation.learning_rate",
+        "min_step" => "SelfAdaptiveMutation.min_step",
         "initial_temperature" => "Annealing.initial_temperature",
         "cooling" => "Annealing.cooling",
         "tenure" => "Tabu.tenure",
