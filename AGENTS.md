@@ -37,10 +37,10 @@ fn main() -> genoxide::Result<()> {
 | Reals in ranges | `Real::new([lo..=hi, ...])`, `Real::uniform(len, lo..=hi)` | `Reals` (`[f64]`) | `SimulatedBinaryCrossover` (η 15), `BlendCrossover` (α 0.5), `ArithmeticCrossover`, `UniformCrossover`, `PointCrossover` | `PolynomialMutation` (η 20), `GaussianMutation`, `UniformMutation` |
 | Reals with an adaptive step size | `AdaptiveReal::new(Real::..., initial_step)` | `AdaptiveReals` (`[f64]`, `.step()`) | `NoCrossover` (an ES), `UniformCrossover`, `PointCrossover` | `SelfAdaptiveMutation` |
 | An order of `0..n` (tours, sequencing) | `Permutation::new(n)` | `Order` (`[usize]`) | `OrderCrossover` (sequences), `EdgeRecombinationCrossover` (tours), `PartiallyMappedCrossover`, `CycleCrossover` | `InversionMutation` (tours), `SwapMutation`, `InsertionMutation`, `ScrambleMutation` |
-| Programs and formulas: trees of typed functions (genetic programming) | `gp::Gp::builder(set)` ([template](#genetic-programming)) | `gp::Tree` (nodes in prefix order) | `gp::SubtreeCrossover` | `gp::SubtreeMutation` |
+| Programs and formulas: trees of typed functions (genetic programming) | `gp::Gp::builder(set)` ([template](#genetic-programming)) | `gp::Tree` (nodes in prefix order) | `gp::SubtreeCrossover`, `gp::OnePointCrossover` | `gp::SubtreeMutation`, `gp::PointMutation`, `gp::HoistMutation`, `gp::ShrinkMutation`, `gp::ConstantMutation`, a mix: `gp::Mutations` |
 | A neural network's weights (neuroevolution) | `nn::Mlp::new([4, 8, 1], nn::Activation::Tanh)?.representation(-1.0..=1.0)?`, `nn::Elman` (recurrent) ([template](#neuroevolution-a-networks-weights-by-cma-es)) | `Reals` | none: `Cmaes` | none: `Cmaes` |
 
-Any selection fits any representation; usually `Tournament` of size 2 to 5.
+Any selection fits any representation; usually `Tournament` of size 2 to 5. For trees, a selection against bloat (growth without better fitness): `DoubleTournament::new(7, 1.4)?`, `LexicographicTournament::new(7)?` (ties in fitness to the smaller), or `Tarpeian::new(select, rate)?`; size is `genome.len()`.
 
 | Scheme (`.scheme(...)`) | When |
 |---|---|
@@ -78,6 +78,9 @@ During a run (parameter control, e.g. an annealed mutation step): `ga.set_crosso
 | `Rank::new(pressure)?`, `Rank::default()` | 1 ≤ pressure ≤ 2, default 1.5 |
 | `Truncation::new(fraction)?` | 0 < fraction ≤ 1 |
 | `Roulette`, `StochasticUniversalSampling`, `RandomSelection`, `NoCrossover` | unit structs |
+| `LexicographicTournament::new(size)?` | size ≥ 1; of equal fitness, the smaller genome wins |
+| `DoubleTournament::new(fitness_size, parsimony)?`, `.size_first()` | size ≥ 1, 1 ≤ parsimony ≤ 2: a size tournament of two fitness-tournament winners, the smaller winning with probability parsimony / 2; 7 and 1.4 against bloat |
+| `Tarpeian::new(select, rate)?` | 0 < rate ≤ 1: each call, genomes larger than the mean count as invalid with probability rate, then `select` |
 | `PointCrossover::one_point()`, `two_point()`, `k_point(k)?` | k ≥ 1 |
 | `UniformCrossover::new()`, `with_rate(p)?` | 0 < p < 1, default 0.5 |
 | `SimulatedBinaryCrossover::new(eta)?` | `Real`; eta ≥ 0 (larger: children nearer the parents), 15 to 20 common |
@@ -91,6 +94,11 @@ During a run (parameter control, e.g. an annealed mutation step): `ga.set_crosso
 | `OrderCrossover`, `PartiallyMappedCrossover`, `CycleCrossover`, `EdgeRecombinationCrossover`, `InversionMutation`, `InsertionMutation`, `ScrambleMutation` | unit structs, `Permutation` |
 | `gp::SubtreeCrossover::new()`, `with_internal_rate(p)?` | `Gp`; points at function nodes with probability p (0.9, Koza's), else at leaves; the second point of the same type, chosen so both children stay within the limits |
 | `gp::SubtreeMutation::new()`, `with_max_depth(d)?` | `Gp`; a node chosen uniformly gets a new subtree of its type, grown to depth d (default 4) within the limits; never the same subtree |
+| `gp::OnePointCrossover` | `Gp`; a point of the two trees' common region (same shape from the root), exchanged; within the limits |
+| `gp::PointMutation::per_node(rate)?`, `count(n)?` | `Gp`; a node replaced by another primitive of its signature, a leaf by another terminal or a new constant; nodes without one never picked |
+| `gp::HoistMutation`, `gp::ShrinkMutation` | `Gp`, unit structs; the tree replaced by one of its subtrees of its type, a function's subtree by a leaf: always smaller |
+| `gp::ConstantMutation::gaussian(sigma)?` | `Gp`; sigma > 0: one constant plus normal noise, sigma a fraction of its range, mirrored at the ends |
+| `gp::Mutations::builder().subtree(w).point(w).hoist(w).shrink(w).with(w, m).build()?` | `Gp`; one mutation per call by weight, another if it can't change the tree; weights ≥ 0, total > 0 |
 
 `per_gene(rate)` changes each gene with that probability (at `1 / length`, a third of the children are unevaluated copies); `count(n)` exactly `n` genes. A picked gene always changes.
 
@@ -246,7 +254,7 @@ fn main() -> genoxide::Result<()> {
 Trees of the user's primitives (an enum), strongly typed: declare types, functions (argument types, return type), terminals and ephemeral random constants, then match on the enum in the fitness function. `Gp::builder(set)`: `.max_depth(17)`, `.max_size(1024)`, `.init(gp::Init::RampedHalfAndHalf { depths: 2..=6 })` (also `Full`, `Grow`), the defaults. `set.parse("add(x, 1.0)")?` and `tree.display(&set)` read and write trees; `gp.validate(&tree)` checks types and limits. Evaluate with `tree.evaluate(&set, &mut stack, |op, args: &[f64]| ..., |ty, constant| ...)` per point, `tree.evaluate_columns(&set, &mut gp::Columns::new(points), |op, args, out| ...)` on all points at once (several times faster for data, the same bits), or walk `tree.root(&set)` top-down. Seed a population with `gp.ramped_half_and_half(n, &mut rng)?` (Koza's even division, no duplicates). Not in Python yet.
 
 ```rust
-use genoxide::gp::{Constants, Gp, PrimitiveSet, SubtreeCrossover, SubtreeMutation, Tree};
+use genoxide::gp::{Constants, Gp, Mutations, PrimitiveSet, SubtreeCrossover, Tree};
 use genoxide::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -289,19 +297,20 @@ fn main() -> genoxide::Result<()> {
         }
         sum
     };
-    let initial = gp.ramped_half_and_half(200, &mut StreamRng::seed_from_u64(1))?;
+    let initial = gp.ramped_half_and_half(500, &mut StreamRng::seed_from_u64(1))?;
     let ga = Ga::builder(gp)
-        .population_size(200)
+        .population_size(500)
         .initial_genomes(initial)
-        .select(Tournament::new(7)?)
+        .select(DoubleTournament::new(7, 1.4)?) // against bloat
         .crossover(SubtreeCrossover::new())
-        .mutate(SubtreeMutation::new())
-        .mutation_rate(0.1)
+        .mutate(Mutations::builder().subtree(0.5).point(0.5).build()?)
+        .mutation_rate(0.3)
         .minimize()
         .seed(1)
         .build()?;
     let outcome = Engine::new(ga, error)
-        .stop_when(Stop::target(0.0).or(Stop::generations(200)))
+        // not 0: the formula in another order of operations can differ by rounding
+        .stop_when(Stop::target(1e-9).or(Stop::generations(200)))
         .run()?;
     println!("{}", outcome.best_genome().display(&set));
     assert_eq!(outcome.stop_reason(), StopReason::Target);
@@ -312,6 +321,8 @@ fn main() -> genoxide::Result<()> {
 - Types: `set.new_type("bool")`, `set.function("less", Op::Less, [real, real], boolean)`; every tree genoxide makes is typed. `build` rejects a set whose types can't make a tree.
 - The primitive set is data, not closures, so a `Gp<Op>` checkpoints when `Op` derives `Serialize` and `Deserialize`.
 - For many points, `evaluate_columns` with a `thread_local!` `Columns` per thread (see `examples/koza_quartic`).
+- Bloat (trees growing without better fitness): `DoubleTournament`, `LexicographicTournament` or `Tarpeian` as the selection, and hoist and shrink in the mutations; Koza's depth limit of 17 always holds.
+- Boolean problems: `gp::boolean::Multiplexer::new(3)?` (Koza's 11-multiplexer), `EvenParity::new(n)?`, fitness functions (cases wrong, minimized) for trees of their `primitives()` (`gp::boolean::Logic`); see `examples/multiplexer_11`. A typed set (`less` returning a Boolean, `if` taking one): `examples/abs_typed`.
 
 ### Statistics, progress output, parallel evaluation and cancellation
 
@@ -807,6 +818,7 @@ every = 50
 | DE collapses far from the optimum | `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, `de::Strategy::Rand1`, or `CurrentToPBest` with an archive |
 | CMA-ES converged without restarts (`cmaes.converged()` says why) | `.restarts(cmaes::Restarts::Ipop)` or `Bipop`, or a larger `.initial_step(...)` or `.population_size(...)` |
 | PSO gathers early at a local optimum | `.topology(pso::Topology::Ring { neighbors: 1 })`, or more particles |
+| Trees grow large without getting better (bloat) | `DoubleTournament::new(7, 1.4)?` as the selection, hoist and shrink in `gp::Mutations`; a smaller `.max_size(...)` |
 | Real-valued GA stuck in a local minimum | `PolynomialMutation` with eta 20, or a larger `GaussianMutation` sigma |
 | `StopReason::Stalled`: 10 000 generations of copies only (e.g. `mutation_rate(0.0)`) | A mutation rate above 0, or add `Stop::generations(n)` or `Stop::stagnation(n)` |
 | Early stagnation (too little diversity) | A larger population, smaller tournament or higher mutation rate; or `Stop::stagnation` and restart |

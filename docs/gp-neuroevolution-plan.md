@@ -126,6 +126,53 @@ Montana (1995, sec. 2.1): types possibilities tables per depth, the second cross
 first point's type, and the parents returned when there's none. Angeline (1996): GP 1996: 21-29,
 as cited.
 
+**Verified for G2** (read in the sources unless marked):
+
+- **Koza's 11-multiplexer:** terminals A0 to A2 and D0 to D7, A0 the low-order bit of the address;
+  functions AND, OR, NOT and IF of 2, 2, 1 and 3 arguments; all 2048 cases; standardized fitness
+  the number of mismatches, hits the number of matches; M = 4000 and 51 generations; a correct
+  program of 37 points in generation 9. Koza (1990), STAN-CS-90-1314, sec. 4.1.1; Koza (1994) as
+  above. Correction: the patent that restates the multiplexer is US 5,136,686; US 5,343,554 is the
+  one on automatically defined functions, which has even parity.
+- **Even parity:** functions AND, OR, NAND and NOR (no NOT), terminals D0 to Dk-1, all 2^k cases,
+  M = 4000 (8000 for even-5 without ADFs). Koza (1994, sec. 6.1); US 5,343,554.
+- **Montana (1995):** the first crossover point uniform over all nodes, the second uniform over the
+  nodes of its type; IF-THEN-ELSE-INT: BOOLEAN, INTEGER, INTEGER → INTEGER (fig. 4); no typed
+  comparison in the paper's tables, and sec. 1.2 notes that Koza avoids predicates such as
+  LESS-THAN that return Booleans, which the `abs_typed` example has.
+- **Lexicographic parsimony pressure** (Luke and Panait 2002, GECCO): a tournament of 2, the fitter
+  wins, then the smaller, then a random one. Correction: the bucketed variants are direct bucketing
+  (b buckets) and **ratio bucketing** (the worst 1/r of the rest into each bucket, individuals equal
+  to a bucket's best into it), not "ranked"; `LexicographicTournament::ratio_buckets(ratio)` is
+  ratio bucketing, with each bucket's count rounded up (the paper doesn't say how it rounds). Luke
+  and Panait (2006) found plain lexicographic parsimony failing on symbolic regression, and ratio
+  1/2 the bucketing to use.
+- **Double tournament** (Luke and Panait 2002, PPSN): fitness tournament size S_f, parsimony size
+  S_p in [1, 2], two individuals in the parsimony tournament, the smaller winning with probability
+  S_p / 2, ties at random, and a do-fitness-first switch of no significant effect; with the depth
+  limit, S_p from 1.2 to 1.6 was as fit with trees often half the size. Luke and Panait (2006):
+  F = 7 and D = 1.4 consistently the best; their sec. 8 ran fitness first, their sec. 11.2
+  recommendation says do-fitness-first false. genoxide keeps fitness first as the default and
+  `size_first()` as the option.
+- **Tarpeian** (Poli 2003): **only the abstract read**: the fitness of a fixed proportion of the
+  offspring of above-average length zeroed. The Field Guide (p. 106) adds that they're never
+  executed; Luke and Panait (2006, sec. 4) give the probability as W, with W = 0.3 consistently
+  good. Not verified: the paper's name for the rate, and when it computes the average.
+- **Field Guide sec. 5.2.2:** point mutation replaces a node by a primitive of the same arity,
+  per node, and leaves a node without one; hoist copies a random subtree, which is smaller;
+  **shrink replaces a random subtree by a random terminal** (Angeline 1996, as cited: the plan's
+  "one of its own subtrees" was another operator), done here at function nodes so the tree always
+  shrinks; constants mutated by Gaussian noise, each change a separate mutation (Schoenauer et al.
+  1996, as cited, not read).
+- **Hoist's origin:** Kinnear (1994, WCCI) uses hoist and defers its definition to Kinnear (1993),
+  Evolving a sort: lessons in genetic programming (ICNN 1993), read: a copy of the subtree at a
+  **function** point becomes the new individual. genoxide hoists at function nodes below the root,
+  not leaves.
+- **One-point crossover** (Poli and Langdon 1997, 1998): **only the abstracts read**; the Field
+  Guide (sec. 5.3) defines the common region by the same arity from the roots. The uniform choice
+  of the point in the region is genoxide's; with types, the region follows functions with the same
+  argument types.
+
 ### 2.1 Representation
 
 **Decision: a flat array of nodes in prefix order**, one `Vec<Node>` per tree, as DEAP, gplearn
@@ -344,7 +391,7 @@ operator keeps trees typed and within the limits.
 | `SubtreeMutation::new()`, `with_max_depth(d)?` | Koza; Field Guide sec. 5.2 | A random point replaced by a grown subtree of its type (depth up to 4 by default, within the limits); redrawn while equal to the old subtree (up to 100 times, as local search's neighbors) |
 | `PointMutation::per_node(rate)?`, `count(n)?` | Field Guide sec. 5.2 | A node replaced by another primitive of the same signature (arity, argument and return types); a constant by a new draw; nodes with no alternative are never picked, so a picked node always changes |
 | `HoistMutation` | Kinnear, K. E. Jr. (1994). Fitness landscapes and difficulty in genetic programming. IEEE WCCI 1994: 142-147. doi:10.1109/ICEC.1994.350026; Field Guide sec. 5.2 | The tree replaced by one of its subtrees of the root's type; the result is always smaller |
-| `ShrinkMutation` | Field Guide sec. 5.2 (to trace to its origin) | A function's subtree replaced by one of its own subtrees of the same type |
+| `ShrinkMutation` | Field Guide sec. 5.2, after Angeline (1996) (verified: a subtree replaced by a random terminal) | A function's subtree replaced by a random terminal or constant of its type |
 | `ConstantMutation::gaussian(sigma)?` | Field Guide sec. 5.2 | A constant perturbed by N(0, σ²), σ relative to its type's range; the cheap constant tuning until least squares arrives |
 | `gp::Mutations` | | One of several tree mutations per call, by weight: `Mutations::new().subtree(0.6).point(0.2).hoist(0.1).shrink(0.1)`, validated to a positive total |
 
@@ -362,7 +409,7 @@ doi:10.1007/s10710-008-9075-9.
 | Method | Reference | Where it lives |
 |---|---|---|
 | Static depth and size limits (default: depth 17, size 1024) | Koza (depth 17) | `Gp` settings, kept by every operator (section 2.5) |
-| Lexicographic parsimony pressure: `LexicographicTournament::new(k)?` | Luke, S. and Panait, L. (2002). Lexicographic parsimony pressure. GECCO 2002: 829-836 | A `Select`: a tournament where equal fitness goes to the smaller genome; the paper's ranked-bucket variant for continuous fitness as `.buckets(n)` (to check) |
+| Lexicographic parsimony pressure: `LexicographicTournament::new(k)?` | Luke, S. and Panait, L. (2002). Lexicographic parsimony pressure. GECCO 2002: 829-836 | A `Select`: a tournament where equal fitness goes to the smaller genome; the paper's ratio bucketing for continuous fitness as `.ratio_buckets(r)?` (verified, section 2) |
 | Double tournament: `DoubleTournament::new(fitness_size, parsimony)?` | Luke, S. and Panait, L. (2002). Fighting bloat with nonparametric parsimony pressure. PPSN VII, LNCS 2439: 411-421. doi:10.1007/3-540-45712-7_40 | A `Select`: winners of fitness tournaments meet in size tournaments of two, the smaller winning with probability D / 2 (1 ≤ D ≤ 2), or the order reversed with `.size_first()` |
 | Tarpeian: `Tarpeian::new(select, rate)?` | Poli, R. (2003). A simple but theoretically-motivated method to control bloat in genetic programming. EuroGP 2003, LNCS 2610: 204-217. doi:10.1007/3-540-36599-0_19 | A `Select` wrapper: once per call, genomes larger than the population's mean size count as invalid with probability `rate`. It keeps the paper's selection effect; it doesn't save their evaluation, which would need the algorithm (documented) |
 | Covariant parsimony pressure | Poli, R. and McPhee, N. F. (2008). Parsimony pressure made easy. GECCO 2008: 1267-1274. doi:10.1145/1389095.1389340 | Later: a penalty whose coefficient is set per generation, through `control` and `reevaluate`; an example if asked for |
@@ -376,7 +423,7 @@ versions on fixed-length genomes. Nothing changes for existing operators.
 
 **Defaults.** The limits are the representation's defaults. Selection has no default in `Ga`;
 AGENTS.md's GP row recommends `DoubleTournament::new(7, 1.4)` with the static limits, the
-combination Luke and Panait 2006 found among the best (to check against the paper's tables).
+combination Luke and Panait 2006 found among the best (verified, section 2).
 
 ## 3. Symbolic regression
 

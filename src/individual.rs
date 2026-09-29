@@ -58,6 +58,17 @@ impl<G: Genome> Individual<G> {
     }
 }
 
+impl<G: Genome, F: Clone> Individual<G, F> {
+    // the individual with its genome borrowed, for a view of a population
+    pub(crate) fn borrowed(&self) -> Individual<&G, F> {
+        Individual {
+            genome: &self.genome,
+            fitness: self.fitness.clone(),
+            age: self.age,
+        }
+    }
+}
+
 impl<G: Genome, F> Individual<G, F> {
     /// A new, not yet evaluated individual, with any fitness type, e.g.
     /// [`Scores`](crate::multi::Scores) for multi-objective optimization.

@@ -47,7 +47,7 @@ fn main() -> genoxide::Result<()> {
 - **Genetic algorithms:** generational, steady-state, (μ+λ), (μ,λ) and memetic schemes, with the classic operators.
 - **Evolution strategies, CMA-ES, differential evolution, particle swarms:** with IPOP and BIPOP restarts, JADE, SHADE and L-SHADE.
 - **Local search:** hill climbing, simulated annealing, tabu search, iterated local search.
-- **Genetic programming:** strongly typed trees of your own primitives, evolved into programs and formulas, with subtree crossover and mutation and fast evaluation over data.
+- **Genetic programming:** strongly typed trees of your own primitives, evolved into programs and formulas, with subtree and one-point crossover, subtree, point, hoist, shrink and constant mutation, bloat control, and fast evaluation over data.
 - **Neuroevolution:** multilayer perceptrons and recurrent networks whose weights evolve, and pole-balancing control tasks for them to solve.
 - **Multi-objective:** NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA, with quality indicators.
 - **Test problems:** classic continuous functions such as Rastrigin, Rosenbrock and Branin, with their bounds, known optima and references; constrained ones, CEC 2006's g01-g24 and engineering designs such as the welded beam and the pressure vessel; multi-objective ones such as ZDT, DTLZ and the constrained BNH and OSY, with their optimal fronts.

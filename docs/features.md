@@ -21,7 +21,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 
 ## Genetic algorithms
 
-- **Selection:** tournament, roulette, stochastic universal sampling, rank, truncation, random.
+- **Selection:** tournament, roulette, stochastic universal sampling, rank, truncation, random; against bloat in variable-size genomes, lexicographic parsimony, double tournament and Tarpeian.
 - **Crossover:**
   - binary, integer and real genomes: one-point, two-point, k-point, uniform
   - real genomes: SBX, blend (BLX-α), arithmetic
@@ -37,7 +37,9 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 
 - **Trees** (`gp`): programs and formulas as genomes, made of your own primitives (an enum) with typed arguments and results (Montana's strongly typed GP), terminals and ephemeral random constants. Stored as flat arrays in prefix order, so copying, comparing, hashing and saving a tree never recurse; read and written as text, e.g. `add(x, mul(x, 0.5))`.
 - **Initialization:** full, grow and ramped half-and-half (Koza's default, depths 2 to 6, with duplicates redrawn), always within the limits: Koza's depth of 17 and a size of 1024 nodes.
-- **Operators:** subtree crossover with Koza's 90% bias to function nodes, whose second point keeps both children within the limits, and subtree mutation.
+- **Operators:** subtree crossover with Koza's 90% bias to function nodes, whose second point keeps both children within the limits, and one-point crossover; subtree, point, hoist, shrink and constant mutation, alone or mixed by weight. A picked node always changes.
+- **Bloat control:** Koza's depth limit and a size limit, and selections that favor smaller trees: lexicographic parsimony pressure, double tournament and Tarpeian.
+- **Problems:** Koza's Boolean multiplexer and even-parity functions.
 - **Evaluation:** a stack machine for values of any type, the same on columns of all the data's points at once (several times faster, the same results to the bit), and a top-down walk for interpreters.
 - Runs on the genetic algorithms, islands and the multi-objective algorithms, with checkpoints and parallel breeding.
 
@@ -114,6 +116,8 @@ cargo run --release --example xor_neuroevolution  # a 2-2-1 neural network's wei
 cargo run --release --example koza_quartic        # genetic programming finds x^4 + x^3 + x^2 + x exactly
 cargo run --release --example double_pole         # a network balances two poles for 100,000 steps, CMA-ES
 cargo run --release --example double_pole_no_velocities  # the same with a recurrent network, no velocities
+cargo run --release --example multiplexer_11      # Koza's 11-multiplexer, all 2048 cases, double tournament
+cargo run --release --example abs_typed           # strongly typed GP: |x| from a comparison and a conditional
 cargo run --release --example asynchronous        # a slow fitness function, asynchronous evaluation
 cargo run --release --manifest-path examples/gpu/Cargo.toml  # neuroevolution on the GPU, with wgpu
 python examples/tsp_berlin52/main.py              # the same in Python, for all but the last three

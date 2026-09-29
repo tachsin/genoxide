@@ -25,11 +25,11 @@ pub use crate::multi::{
 };
 pub use crate::observer::{HallOfFame, Observer, Report, Statistics};
 pub use crate::operator::{
-    ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, CycleCrossover,
-    EdgeRecombinationCrossover, GaussianMutation, InsertionMutation, InversionMutation, Mutate,
-    NoCrossover, OrderCrossover, PartiallyMappedCrossover, PointCrossover, PolynomialMutation,
-    RandomSelection, Rank, Roulette, ScrambleMutation, Select, SelfAdaptiveMutation,
-    SimulatedBinaryCrossover, StochasticUniversalSampling, SwapMutation, Tournament, Truncation,
-    UniformCrossover, UniformMutation,
+    ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, CycleCrossover, DoubleTournament,
+    EdgeRecombinationCrossover, GaussianMutation, InsertionMutation, InversionMutation,
+    LexicographicTournament, Mutate, NoCrossover, OrderCrossover, PartiallyMappedCrossover,
+    PointCrossover, PolynomialMutation, RandomSelection, Rank, Roulette, ScrambleMutation, Select,
+    SelfAdaptiveMutation, SimulatedBinaryCrossover, StochasticUniversalSampling, SwapMutation,
+    Tarpeian, Tournament, Truncation, UniformCrossover, UniformMutation,
 };
 pub use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};

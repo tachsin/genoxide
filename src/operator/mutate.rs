@@ -12,19 +12,19 @@ use std::ops::RangeInclusive;
 /// Which genes a mutation changes: each with a probability, or `n` (all if there are fewer).
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-enum Mode {
+pub(crate) enum Mode {
     PerGene { chance: Chance },
     Count(usize),
 }
 
 impl Mode {
-    fn per_gene(setting: &'static str, rate: f64) -> Result<Self> {
+    pub(crate) fn per_gene(setting: &'static str, rate: f64) -> Result<Self> {
         Ok(Mode::PerGene {
             chance: Chance::new(check_rate(setting, rate)?),
         })
     }
 
-    fn count(setting: &'static str, count: usize) -> Result<Self> {
+    pub(crate) fn count(setting: &'static str, count: usize) -> Result<Self> {
         if count == 0 {
             return Err(Error::InvalidSetting {
                 setting,
@@ -36,7 +36,7 @@ impl Mode {
 
     // calls `change` with the genes to change, out of `genes` candidates: each independently with
     // the chance, or `count` of them
-    fn apply(
+    pub(crate) fn apply(
         self,
         genes: usize,
         gene: impl Fn(usize) -> usize,
@@ -224,7 +224,7 @@ pub(crate) fn reflect(value: f64, range: &RangeInclusive<f64>) -> f64 {
 
 // a new value for a gene in `range`, other than `current`: `propose` until it differs (almost
 // always the first time), then a uniform value
-fn changed_gene(
+pub(crate) fn changed_gene(
     range: &RangeInclusive<f64>,
     current: f64,
     rng: &mut StreamRng,

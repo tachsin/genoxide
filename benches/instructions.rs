@@ -9,7 +9,10 @@
 //! ```
 
 use genoxide::Objective::Minimize;
-use genoxide::gp::{Columns, Gp, PrimitiveSet, SubtreeCrossover, Tree};
+use genoxide::gp::{
+    Columns, ConstantMutation, Gp, HoistMutation, Mutations, PointMutation, PrimitiveSet,
+    ShrinkMutation, SubtreeCrossover, Tree, TreeMutation,
+};
 use genoxide::multi::problems::{Dtlz2, MultiProblem, Zdt1};
 use genoxide::multi::{self, MultiFitnessFunction};
 use genoxide::nn::{Activation, Mlp};
@@ -723,6 +726,83 @@ fn double_pole_episode((mlp, weights): (Mlp, Vec<f64>)) -> f64 {
     black_box(DoublePole::new().damping_fitness(&mut network))
 }
 
+// `REPEATS` trees of 45 to 55 nodes, and a tree mutation: point, hoist, shrink, constant, or a
+// mix of subtree, point, hoist and shrink
+fn mutation_trees(kind: usize) -> (Gp<Op>, Vec<Tree>, StreamRng, TreeMutation) {
+    let (gp, trees, rng) = formula_trees(REPEATS);
+    let mutation = match kind {
+        0 => PointMutation::count(1).unwrap().into(),
+        1 => HoistMutation.into(),
+        2 => ShrinkMutation.into(),
+        3 => ConstantMutation::gaussian(0.1).unwrap().into(),
+        _ => TreeMutation::Subtree(genoxide::gp::SubtreeMutation::new()),
+    };
+    (gp, trees, rng, mutation)
+}
+
+#[library_benchmark]
+#[bench::point(setup = mutation_trees, args = (0))]
+#[bench::hoist(setup = mutation_trees, args = (1))]
+#[bench::shrink(setup = mutation_trees, args = (2))]
+#[bench::constant(setup = mutation_trees, args = (3))]
+#[bench::subtree(setup = mutation_trees, args = (4))]
+fn tree_mutation(
+    (gp, mut trees, mut rng, mutation): (Gp<Op>, Vec<Tree>, StreamRng, TreeMutation),
+) -> Vec<Tree> {
+    for tree in &mut trees {
+        mutation.mutate(&gp, tree, &mut rng);
+    }
+    black_box(trees)
+}
+
+fn mixed_mutation_trees(_: usize) -> (Gp<Op>, Vec<Tree>, StreamRng, Mutations) {
+    let (gp, trees, rng) = formula_trees(REPEATS);
+    let mutations = Mutations::builder()
+        .subtree(0.5)
+        .point(0.3)
+        .hoist(0.1)
+        .shrink(0.1)
+        .build()
+        .unwrap();
+    (gp, trees, rng, mutations)
+}
+
+#[library_benchmark]
+#[bench::trees_of_50_nodes(setup = mixed_mutation_trees, args = (0))]
+fn tree_mutations(
+    (gp, mut trees, mut rng, mutations): (Gp<Op>, Vec<Tree>, StreamRng, Mutations),
+) -> Vec<Tree> {
+    for tree in &mut trees {
+        mutations.mutate(&gp, tree, &mut rng);
+    }
+    black_box(trees)
+}
+
+// a population of 100 trees of 45 to 55 nodes with random scores
+fn evaluated_trees(size: usize) -> (Population<Tree>, StreamRng) {
+    let (_, trees, mut rng) = formula_trees(size);
+    let population = trees
+        .into_iter()
+        .map(|tree| {
+            let mut individual = Individual::new(tree);
+            individual.set_fitness(Fitness::new(rng.random_range(0.0..1.0)));
+            individual
+        })
+        .collect();
+    (population, rng)
+}
+
+#[library_benchmark]
+#[bench::of_100(setup = evaluated_trees, args = (100))]
+fn double_tournament((population, mut rng): (Population<Tree>, StreamRng)) -> Vec<usize> {
+    black_box(DoubleTournament::new(7, 1.4).unwrap().select(
+        &population,
+        Objective::Minimize,
+        100,
+        &mut rng,
+    ))
+}
+
 library_benchmark_group!(
     name = hot_paths,
     benchmarks = [
@@ -758,7 +838,10 @@ library_benchmark_group!(
         subtree_crossover,
         tree_columns,
         mlp_forward,
-        double_pole_episode
+        double_pole_episode,
+        tree_mutation,
+        tree_mutations,
+        double_tournament
     ]
 );
 
