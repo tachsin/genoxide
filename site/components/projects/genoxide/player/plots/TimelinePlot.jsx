@@ -5,7 +5,8 @@ import { categorical, extent, formatValue, linear, ticks, useEased } from "../ch
 import { Axes, Legend, PlotBox, TipRows, Tooltip, pointerIn } from "../chart-parts";
 
 const MARGIN = { left: 40, right: 14, top: 22, bottom: 38 };
-// the frames on each side whose evaluations can fill the window while the axis catches up
+// the frames on each side whose evaluations can fill the window while the axis catches up: the
+// axis lags about 4 frames behind at 4× speed
 const NEIGHBORS = 8;
 
 // a worker runs one evaluation at a time: its worker and start name it, in every frame
@@ -32,17 +33,19 @@ function shownEvents(frames, index, events, t0, t1) {
   ]) {
     for (let j = index + step, n = 0; j >= 0 && j < frames.length && n < NEIGHBORS; j += step, n++) {
       const chunk = [];
-      let inWindow = false;
+      // past the window: so are the frames further on (the nearer ones can be too, when the axis
+      // lags several frames behind at a high speed)
+      let past = true;
       for (const e of frames[j].state?.events ?? []) {
+        if (step < 0 ? e[2] >= t0 : e[1] <= t1) past = false;
         if (e[2] < t0 || e[1] > t1) continue;
-        inWindow = true;
         // ended before the frame's own, or (scrubbing back) started after the last of them ended
         if ((e[2] < ends[0] || e[1] >= ends[1]) && !seen.has(eventKey(e))) {
           seen.add(eventKey(e));
           chunk.push(e);
         }
       }
-      if (!inWindow) break;
+      if (past) break;
       chunks.push(chunk);
     }
   }
