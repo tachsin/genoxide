@@ -463,29 +463,29 @@ where
         remaining: usize,
     ) -> Vec<usize> {
         let mut picked = Vec::with_capacity(remaining);
-        let mut available = vec![true; candidates.len()];
+        // the candidates left in each niche, in their order, and the niches with any, ascending
+        let mut left: Vec<Vec<usize>> = vec![Vec::new(); counts.len()];
+        for (c, candidate) in candidates.iter().enumerate() {
+            left[candidate.1].push(c);
+        }
+        let mut open: Vec<usize> = (0..left.len()).filter(|&n| !left[n].is_empty()).collect();
+        let mut members = Vec::new();
         while picked.len() < remaining {
             // the niches that still have candidates, with the smallest count
-            let mut niches: Vec<usize> = candidates
-                .iter()
-                .zip(&available)
-                .filter(|(_, available)| **available)
-                .map(|(candidate, _)| candidate.1)
-                .collect();
-            niches.sort_unstable();
-            niches.dedup();
-            let fewest = niches
+            let fewest = open
                 .iter()
                 .map(|&n| counts[n])
                 .min()
                 .expect("candidates left");
-            niches.retain(|&n| counts[n] == fewest);
+            let mut niches: Vec<usize> = open
+                .iter()
+                .copied()
+                .filter(|&n| counts[n] == fewest)
+                .collect();
             shuffle(&mut niches, &mut self.rng);
             niches.truncate(remaining - picked.len());
             for niche in niches {
-                let mut members: Vec<usize> = (0..candidates.len())
-                    .filter(|&c| available[c] && candidates[c].1 == niche)
-                    .collect();
+                members.clone_from(&left[niche]);
                 shuffle(&mut members, &mut self.rng);
                 let member = if counts[niche] == 0 {
                     // the nearest, the first after shuffling on ties
@@ -499,7 +499,11 @@ where
                 } else {
                     members[0]
                 };
-                available[member] = false;
+                let niche_left = &mut left[niche];
+                niche_left.remove(niche_left.iter().position(|&c| c == member).expect("left"));
+                if niche_left.is_empty() {
+                    open.retain(|&n| n != niche);
+                }
                 picked.push(candidates[member].0);
                 counts[niche] += 1;
             }
