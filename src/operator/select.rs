@@ -3,10 +3,41 @@
 use super::{MAX_SIZE, Select, check_rate};
 use crate::genome::Genome;
 use crate::{Error, Fitness, Objective, Population, Result, StreamRng};
-use std::cmp::Ordering;
 
 fn fitness_of<G: Genome>(population: &Population<G>, index: usize) -> Fitness {
     population[index].fitness().unwrap_or(Fitness::invalid())
+}
+
+// A number in the order of `objective.compare`: the larger, the better, and equal for equal
+// fitness values, so comparing keys gives the same selections and ties as comparing fitness
+// values, in a few instructions. Invalid (and unevaluated) is 0. Otherwise the high half is the
+// violation's bits, inverted: a violation is 0 or more, never -0 or NaN, so its bits are in its
+// order. The low half is the score's bits in the order of `f64::total_cmp`, inverted to minimize.
+fn sort_key(fitness: Option<Fitness>, objective: Objective) -> u128 {
+    let Some((score, violation)) =
+        fitness.and_then(|fitness| Some((fitness.score()?, fitness.violation())))
+    else {
+        return 0;
+    };
+    let bits = score.to_bits();
+    let ordered = if bits >> 63 == 1 {
+        !bits
+    } else {
+        bits | 1 << 63
+    };
+    let ordered = match objective {
+        Objective::Maximize => ordered,
+        Objective::Minimize => !ordered,
+    };
+    u128::from(!violation.to_bits()) << 64 | u128::from(ordered)
+}
+
+// the sort key of every individual
+fn sort_keys<G: Genome>(population: &Population<G>, objective: Objective) -> Vec<u128> {
+    population
+        .iter()
+        .map(|individual| sort_key(individual.fitness(), objective))
+        .collect()
 }
 
 /// Tournament selection: the best of `size` individuals drawn at random (with replacement).
@@ -49,19 +80,38 @@ impl Select for Tournament {
         count: usize,
         rng: &mut StreamRng,
     ) -> Vec<usize> {
-        if population.is_empty() {
+        let len = population.len();
+        if len == 0 {
             return Vec::new();
         }
+        if count.saturating_mul(self.size - 1) < len {
+            // fewer comparisons than individuals: fitness values, compared as needed
+            return (0..count)
+                .map(|_| {
+                    let mut winner = rng.below(len);
+                    for _ in 1..self.size {
+                        let contender = rng.below(len);
+                        if objective.is_better(
+                            fitness_of(population, contender),
+                            fitness_of(population, winner),
+                        ) {
+                            winner = contender;
+                        }
+                    }
+                    winner
+                })
+                .collect();
+        }
+        // the same tournaments, with a key per individual computed once
+        let keys = sort_keys(population, objective);
         (0..count)
             .map(|_| {
-                let mut winner = rng.below(population.len());
+                let mut winner = rng.below(len);
+                let mut best = keys[winner];
                 for _ in 1..self.size {
-                    let contender = rng.below(population.len());
-                    if objective.is_better(
-                        fitness_of(population, contender),
-                        fitness_of(population, winner),
-                    ) {
-                        winner = contender;
+                    let contender = rng.below(len);
+                    if keys[contender] > best {
+                        (winner, best) = (contender, keys[contender]);
                     }
                 }
                 winner
@@ -293,20 +343,15 @@ impl Select for Rank {
             return uniform_indices(n, count, rng);
         }
         // worst first, stable
+        let keys = sort_keys(population, objective);
         let mut order: Vec<usize> = (0..n).collect();
-        order.sort_by(|&a, &b| {
-            objective.compare(fitness_of(population, a), fitness_of(population, b))
-        });
+        order.sort_by_key(|&index| keys[index]);
         // average rank (0 = worst) for ties
         let mut ranks = vec![0.0; n];
         let mut start = 0;
         while start < n {
-            let fitness = fitness_of(population, order[start]);
-            let end = (start..n)
-                .find(|&i| {
-                    objective.compare(fitness_of(population, order[i]), fitness) != Ordering::Equal
-                })
-                .unwrap_or(n);
+            let key = keys[order[start]];
+            let end = (start..n).find(|&i| keys[order[i]] != key).unwrap_or(n);
             let average = (start + end - 1) as f64 / 2.0;
             for &index in &order[start..end] {
                 ranks[index] = average;
@@ -365,10 +410,9 @@ impl Select for Truncation {
             return Vec::new();
         }
         // best first, stable
+        let keys = sort_keys(population, objective);
         let mut order: Vec<usize> = (0..n).collect();
-        order.sort_by(|&a, &b| {
-            objective.compare(fitness_of(population, b), fitness_of(population, a))
-        });
+        order.sort_by(|&a, &b| keys[b].cmp(&keys[a]));
         let top = truncation_size(self.fraction, n);
         (0..count).map(|_| order[rng.below(top)]).collect()
     }
@@ -726,7 +770,34 @@ mod tests {
         Ok(())
     }
 
+    fn any_fitness() -> impl Strategy<Value = Option<Fitness>> {
+        let score = prop_oneof![
+            any::<f64>(),
+            Just(0.0),
+            Just(-0.0),
+            Just(f64::INFINITY),
+            Just(f64::NEG_INFINITY),
+            -3.0..3.0f64,
+        ];
+        let violation = prop_oneof![Just(0.0), Just(-0.0), Just(f64::INFINITY), 0.0..2.0f64];
+        prop_oneof![
+            Just(None),
+            (score, violation)
+                .prop_map(|(score, violation)| { Some(Fitness::constrained(score, violation)) }),
+        ]
+    }
+
     proptest! {
+        #[test]
+        fn sort_keys_are_in_the_order_of_compare(a in any_fitness(), b in any_fitness(), maximize: bool) {
+            let objective = if maximize { Objective::Maximize } else { Objective::Minimize };
+            let invalid = Fitness::invalid();
+            prop_assert_eq!(
+                sort_key(a, objective).cmp(&sort_key(b, objective)),
+                objective.compare(a.unwrap_or(invalid), b.unwrap_or(invalid))
+            );
+        }
+
         #[test]
         fn selections_are_valid_and_deterministic(scores in any_scores(), count in 0usize..30, seed: u64, maximize: bool) {
             let objective = if maximize { Objective::Maximize } else { Objective::Minimize };
