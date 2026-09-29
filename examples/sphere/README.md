@@ -51,7 +51,7 @@ minimize. The function is genoxide's `problems::Sphere`, which brings its bounds
 ## Algorithm
 
 Three algorithms, one of them in two variants, each with a budget of 10,000 evaluations per
-dimension, 300,000 in all, and a target of 1e-8, as in the [function suite](../function_suite/).
+dimension, 300,000 in all, and a target of 1e-8.
 
 CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) samples a population
 from a normal distribution, and adapts its mean, its step size and its covariance matrix. It uses

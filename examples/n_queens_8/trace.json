@@ -1,0 +1,7 @@
+{"example":"n_queens_8","format":1,"log_y":false,"objective":"minimize","optimum":0.0,"plot":"board","problem":{"n":8},"x_label":"generations","y_label":"conflicts","frames":[
+{"best":2.0,"evaluations":20,"generation":0,"median":5.0,"state":{"attacks":[[3,5],[4,7]],"best":[0,7,1,4,2,6,3,5]}},
+{"best":1.0,"evaluations":40,"generation":1,"median":3.0,"state":{"attacks":[[4,5]],"best":[7,0,3,5,2,1,6,4]}},
+{"best":1.0,"evaluations":60,"generation":2,"median":2.0,"state":{"attacks":[[4,5]],"best":[7,0,3,5,2,1,6,4]}},
+{"best":1.0,"evaluations":80,"generation":3,"median":2.0,"state":{"attacks":[[4,5]],"best":[7,0,3,5,2,1,6,4]}},
+{"best":0.0,"evaluations":100,"generation":4,"median":2.0,"state":{"attacks":[],"best":[5,2,0,6,4,7,1,3]}}
+]}

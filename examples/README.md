@@ -32,7 +32,11 @@ python examples/tsp_berlin52/main.py
 |---|---|---|---|
 | [OneMax](one_max/) | binary | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/one-max) |
 | [0/1 knapsack](knapsack/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/knapsack) |
-| [N-Queens](n_queens/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/n-queens) |
+| [N-Queens 8×8](n_queens_8/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/n-queens-8) |
+| [N-Queens 16×16](n_queens_16/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/n-queens-16) |
+| [N-Queens 32×32](n_queens_32/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/n-queens-32) |
+| [N-Queens 64×64](n_queens/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/n-queens) |
+| [N-Queens 128×128](n_queens_128/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/n-queens-128) |
 | [Travelling salesman (berlin52)](tsp_berlin52/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/tsp-berlin52) |
 | [Job shop scheduling (ft06)](jobshop_ft06/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/jobshop-ft06) |
 | [Sphere](sphere/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/sphere) |
@@ -47,7 +51,6 @@ python examples/tsp_berlin52/main.py
 | [Rastrigin function](rastrigin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rastrigin) |
 | [Griewank](griewank/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/griewank) |
 | [Schwefel 2.26](schwefel_2_26/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schwefel-2-26) |
-| [Function suite](function_suite/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/function-suite) |
 | [Himmelblau's function](himmelblau/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/himmelblau) |
 | [Branin](branin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/branin) |
 | [Goldstein-Price](goldstein_price/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/goldstein-price) |

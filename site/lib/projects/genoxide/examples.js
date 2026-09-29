@@ -260,6 +260,8 @@ const FAMILY_SUMMARIES = {
   Schwefel: "Two of the problems of Schwefel's book: a rotated ellipsoid and a deceptive function.",
   Schaffer: "One variable and two objectives, from the paper of the first multi-objective genetic algorithm, VEGA.",
   Viennet: "Three objectives of two variables, with curved and split Pareto fronts.",
+  "N-Queens":
+    "N queens on an N×N chessboard with no two in a row, a column or a diagonal: the usual 8×8 board and larger ones, solved by the same search.",
 };
 
 /**
