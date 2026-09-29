@@ -1,0 +1,9 @@
+|x| from 20 points in [-1, 1], with real and Boolean types
+1000 trees, until the RMSE is at most 3.39e-11
+
+Target after 2 generations and 2600 evaluations
+RMSE on the 20 training points: 0.00e0
+RMSE on the 101 test points:    0.00e0
+
+the expression, 10 nodes of depth 2:
+if(less(x, 0.0), mul(-1.0, x), sub(x, 0.0))

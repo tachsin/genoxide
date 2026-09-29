@@ -164,6 +164,8 @@ python examples/tsp_berlin52/main.py
 | [MW14](mw14/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw14) |
 | [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neuroevolution) |
 | [Koza's quartic](koza_quartic/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/koza-quartic) |
+| [Koza's 11-multiplexer](multiplexer_11/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/multiplexer-11) |
+| [\|x\| by strongly typed GP](abs_typed/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/abs-typed) |
 | [Asynchronous evaluation](asynchronous/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/asynchronous) |
 | [Neuroevolution on the GPU](gpu/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gpu) |
 
