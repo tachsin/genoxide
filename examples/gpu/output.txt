@@ -1,5 +1,9 @@
 GPU: NVIDIA GeForce RTX 4060
-a 65-weight network fitted to 4096 samples: 512 genomes, 300 generations
+a 65-weight network fitted to 4096 samples
 
-CPU, every core:   6.30 s, error 0.0115
-GPU, batches:      1.92 s, error 0.0115 (0.0115 on the CPU in double precision)
+CMA-ES on the GPU   2.90 s,  296704 evaluations, error 9.97e-6
+                   in double precision on the CPU: error 9.97e-6
+
+a genetic algorithm, 300 generations of 512 networks:
+on the GPU          0.55 s,  151670 evaluations, error 1.15e-2
+on every CPU core   4.35 s,  151670 evaluations, error 1.15e-2

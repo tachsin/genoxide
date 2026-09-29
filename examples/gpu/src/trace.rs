@@ -66,7 +66,7 @@ impl Trace {
             "objective": "minimize",
             "x_label": "evaluations",
             "y_label": "mean squared error",
-            "log_y": false,
+            "log_y": true,
             "optimum": null,
             "plot": "timeline",
             "problem": { "workers": 1 },
