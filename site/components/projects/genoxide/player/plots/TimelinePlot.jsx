@@ -81,21 +81,27 @@ export default function TimelinePlot({ trace, frame, dark, reduced }) {
                 ) : null,
               )}
               <g>
-                {events.map((e, k) => {
+                {events.map((e) => {
                   const x0 = Math.max(area.left, x(e[1]));
                   const x1 = Math.min(area.right, x(e[2]));
                   if (x1 <= area.left || x0 >= area.right) return null;
-                  const age = events.length > 1 ? k / (events.length - 1) : 1;
+                  // an evaluation keeps its bar from frame to frame (a worker runs one at a time, so
+                  // worker and start name it), and fades with its time in the window, not its place
+                  // in the list: the bars slide with the axis instead of being drawn again
+                  const age = t1 > t0 ? Math.min(1, Math.max(0, (e[2] - t0) / (t1 - t0))) : 1;
                   return (
                     <rect
-                      key={k}
+                      key={`${e[0]}:${e[1]}`}
                       x={x0}
                       y={area.top + e[0] * row + 2}
                       width={Math.max(1, x1 - x0 - 1)}
                       height={row - 4}
                       rx={Math.min(3, (row - 4) / 3)}
                       fill={color}
-                      fillOpacity={0.3 + 0.7 * age}
+                      style={{
+                        fillOpacity: 0.3 + 0.7 * age,
+                        transition: reduced ? undefined : "fill-opacity 250ms ease-out",
+                      }}
                     />
                   );
                 })}
