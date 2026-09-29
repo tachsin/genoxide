@@ -1,10 +1,11 @@
 """WFG9: minimize two objectives whose concave front lies behind multimodal, deceptive and
-non-separable parameters, with NSGA-II and MOEA/D.
+non-separable parameters, with NSGA-II and SMS-EMOA.
 
 The Walking Fish Group's ninth problem, from genoxide's problems.Wfg9, with 2 objectives, 4
-position and 20 distance parameters; run evaluates it in Rust. Runs each algorithm for 1,000
-generations, and prints its front after 250 and after 1,000: the size, the IGD+ to 500 points of
-the optimal front, the hypervolume, and how far the solutions are from the front.
+position and 20 distance parameters; run evaluates it in Rust. Runs NSGA-II with simulated binary
+crossover for 1,000 generations, and SMS-EMOA with blend crossover for 5,000, and prints their
+fronts after 1,000 and 5,000: the size, the IGD+ to 500 points of the optimal front, the
+hypervolume, and how far the solutions are from the front.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its runs for the plot on the example's
 page, with trace.py.
@@ -21,11 +22,11 @@ from trace import Trace
 # the reference point of the hypervolume: 1.1 times the front's nadir point (2, 4)
 REFERENCE = [2.2, 4.4]
 
-# the generation of the first report: 25,000 evaluations
-FIRST = 250
+# the generation of NSGA-II's report, and of SMS-EMOA's first
+FIRST = 1_000
 
-# the generations of each run
-GENERATIONS = 1_000
+# the generation of SMS-EMOA's last report
+LAST = 5_000
 
 # 2 objectives, k = 4 position and l = 20 distance parameters
 problem = gx.problems.Wfg9(2)
@@ -45,17 +46,19 @@ def distance(f1, f2):
 
 
 def report(name, generations, front):
-    """Prints the size of a front, its IGD+ to the optimal front, its hypervolume, and the
-    distances of its points from the front."""
+    """Prints the size of a front, its IGD+ to the optimal front, also with the objectives scaled
+    to [0, 1] over the front's ranges, 2 and 4, its hypervolume, and the distances of its points
+    from the front."""
     igd = gx.indicators.igd_plus(front, optimal)
+    scaled = gx.indicators.igd_plus(front / [2.0, 4.0], optimal / [2.0, 4.0])
     volume = gx.indicators.hypervolume(front, REFERENCE)
     distances = [distance(f1, f2) for f1, f2 in front.tolist()]
     total = 0.0
     for d in distances:
         total += d
     print(
-        f"{name:<8} after {generations} generations: {len(front)} solutions, IGD+ {igd:.4f}, "
-        f"hypervolume {volume:.4f}"
+        f"{name:<8} after {generations} generations: {len(front)} solutions, IGD+ {igd:.4f} "
+        f"(scaled {scaled:.4f}), hypervolume {volume:.4f}"
     )
     print(
         f"         distance from the front {min(distances):.4f} to {max(distances):.4f}, "
@@ -63,33 +66,36 @@ def report(name, generations, front):
     )
 
 
-def run(name, algorithm):
-    """Runs ``algorithm`` for 1,000 generations, and reports its front after 250 and 1,000."""
+def run(name, algorithm, reports):
+    """Runs ``algorithm`` up to the last of ``reports``, and reports its front after each of
+    them."""
     record = trace.fronts(name)
-    first = []
+    fronts = []
 
     def on_generation(progress):
-        if progress.generation == FIRST:
-            first.append(progress.front_objectives)
+        if progress.generation in reports:
+            fronts.append(progress.front_objectives)
         if record:
             record(progress)
 
-    result = algorithm.run(problem, generations=GENERATIONS, on_generation=on_generation)
-    report(name, FIRST, first[0])
-    report(name, GENERATIONS, result.front_objectives)
+    algorithm.run(problem, generations=reports[-1], on_generation=on_generation)
+    for generations, front in zip(reports, fronts):
+        report(name, generations, front)
 
 
 # polynomial mutation at a rate of 1/24, one gene per child on average
 settings = dict(
     objectives=problem.objectives,
-    crossover=gx.SimulatedBinaryCrossover(15),
+    population_size=100,
     mutation=gx.PolynomialMutation(20, rate=1 / 24),
     seed=1,
 )
-run("NSGA-II", gx.Nsga2(problem.genome, population_size=100, **settings))
-# a subproblem per weight vector, 101 of them 0.01 apart, each scored by PBI
-weights = gx.das_dennis(2, 100)
-run("MOEA/D", gx.Moead(problem.genome, weights=weights, decomposition=gx.Pbi(5.0), **settings))
+nsga2 = gx.Nsga2(problem.genome, crossover=gx.SimulatedBinaryCrossover(15), **settings)
+run("NSGA-II", nsga2, [FIRST])
+# blend crossover: each gene of a child drawn from the parents' interval, widened by 0.3 of its
+# length on each side
+sms_emoa = gx.SmsEmoa(problem.genome, crossover=gx.BlendCrossover(0.3), **settings)
+run("SMS-EMOA", sms_emoa, [FIRST, LAST])
 
 # the box up to the reference point, less the quarter ellipse under the front, of area 2π
 whole = REFERENCE[0] * REFERENCE[1] - 2 * math.pi

@@ -1,5 +1,4 @@
-NSGA-II after 250 generations: 100 solutions (0, 20, 22, 26, 28, 0), IGD+ 0.0947, hypervolume 5.8644
-NSGA-II after 1000 generations: 100 solutions (3, 22, 25, 24, 26, 0), IGD+ 0.0862, hypervolume 5.9148
-MOEA/D  after 250 generations: 66 solutions (0, 3, 7, 17, 30, 0), IGD+ 0.1069, hypervolume 5.8027
-MOEA/D  after 1000 generations: 77 solutions (2, 5, 10, 21, 39, 0), IGD+ 0.0870, hypervolume 5.9118
+NSGA-II  after 1000 generations: 100 solutions (3, 22, 25, 24, 26, 0), IGD+ 0.0862, hypervolume 5.9148
+SMS-EMOA after 1000 generations: 100 solutions (0, 17, 20, 23, 21, 16), IGD+ 0.0125, hypervolume 6.0716
+SMS-EMOA after 5000 generations: 100 solutions (2, 16, 21, 22, 21, 18), IGD+ 0.0055, hypervolume 6.1172
 the whole front: hypervolume 6.1511

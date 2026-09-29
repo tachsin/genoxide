@@ -1,7 +1,7 @@
 ---
 title: WFG2
 category: multi-objective
-summary: Minimize two objectives over 24 variables, with a convex front in six disconnected regions and distance parameters that act in pairs, with NSGA-II and MOEA/D.
+summary: Minimize two objectives over 24 variables, with a convex front in six disconnected regions and distance parameters that act in pairs, with NSGA-II and SMS-EMOA.
 reference: "Huband, S., Hingston, P., Barone, L. and While, L. (2006). A review of multiobjective test problems and a scalable test problem toolkit. IEEE Transactions on Evolutionary Computation 10(5): 477-506."
 reference_url: https://doi.org/10.1109/TEVC.2005.861417
 optimum: "six regions of the curve f₁ = 2 (1 − cos(x₁π/2)), f₂ = 4 (1 − x₁ cos²(5πx₁)); hypervolume 6.1511 (reference point (2.2, 4.4))"
@@ -80,28 +80,33 @@ A `Real` genome of 24 genes, the i-th in [0, 2i]: the vector z. The problem is g
 
 ## Algorithm
 
-Two algorithms, with the operators of the ZDT examples: simulated binary crossover with η = 15,
-and polynomial mutation with η = 20 at a rate of 1/24 per gene, one gene per child on average.
-Each runs for 1,000 generations, and the example reports its front after 250 and after 1,000.
+Two algorithms, both with a population of 100 and simulated binary crossover with η = 15 at
+genoxide's default rate of 0.9. They differ in how they mutate and how they select.
 
 - NSGA-II (Deb, Pratap, Agarwal and Meyarivan, 2002, IEEE Transactions on Evolutionary
-  Computation 6(2): 182-197), with a population of 100 and genoxide's default crossover rate of
-  0.9, as the ZDT examples run it. It sorts solutions into non-dominated fronts, and within a
-  front prefers solutions with a larger crowding distance, a measure of the gap between their
-  neighbors. At a gap in the front, the end solutions of each region have a neighbor across it,
-  so they count as uncrowded and are kept.
-- MOEA/D (Zhang and Li, 2007, IEEE Transactions on Evolutionary Computation 11(6): 712-731), with
-  101 weight vectors, evenly spread, and genoxide's defaults: the Tchebycheff decomposition,
-  neighborhoods of 20, a crossover rate of 1 and at most 2 replacements per child. Each weight
-  vector is a single-objective subproblem, a direction in which to push the front. It shows what a
-  disconnected front does to fixed directions.
+  Computation 6(2): 182-197), as the ZDT examples run it: polynomial mutation with η = 20 at a rate
+  of 1/24 per gene, one gene per child on average, for 1,000 generations. It sorts solutions into
+  non-dominated fronts, and within a front prefers solutions with a larger crowding distance, a
+  measure of the gap between their neighbors. At a gap in the front, the end solutions of each
+  region have a neighbor across it, so they count as uncrowded and are kept.
+- SMS-EMOA (Beume, Naujoks and Emmerich, 2007, European Journal of Operational Research 181(3):
+  1653-1669), in genoxide's generational form: 100 children a generation. From the last front
+  that fits only in part, it removes the solutions that add the least hypervolume. Its mutation is
+  uniform: one gene per child, drawn anew anywhere in its range. It runs for 5,000 generations,
+  and the example reports its front after 1,000 and after 5,000.
+
+Uniform mutation is there for the last region. Polynomial mutation with η = 20 usually moves a
+gene by a few hundredths of its range, and the crossover mixes the values the population already
+has. A uniform draw can move one position parameter anywhere, and x₁ with it by up to 0.25: from
+the fifth region across the gap in one step. Such a child has the smallest f₂ of the population, so
+it isn't dominated, and it survives. The hypervolume then rewards filling the new region, which is
+the longest of the six.
 
 ## Output
 
 A line per algorithm and budget: the size of the front, how many of its solutions are on each of
 the six regions (with an f₁ within 0.01 of the region's range), its IGD+ and its hypervolume.
-A front has each solution once, though MOEA/D's subproblems can hold the same solution. The last
-line gives the whole front's hypervolume.
+The last line gives the whole front's hypervolume.
 
 IGD+ (Ishibuchi et al., 2015, EMO 2015, LNCS 9019: 110-125) is measured to 500 points of the
 optimal front, evenly spread along it, region by region. It averages, over those 500 points, the
@@ -113,32 +118,34 @@ The hypervolume (Zitzler and Thiele, 1999, IEEE Transactions on Evolutionary Com
 nadir point, as the ZDT examples use (1.1, 1.1). Larger is better. For the whole front, it is
 6.1511, found numerically from a million points of the front.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/wfg2) plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/wfg2) plays these runs back.
 
 ## Good results
 
 A good front has solutions on all six regions, an IGD+ near 0 and a hypervolume near 6.1511. No
 set of 100 points reaches that hypervolume: 100 points of the optimal front, evenly spread along
 it, give 6.1180 and an IGD+ of 0.0021. Without the last region, the most a front can have is
-5.9485, and an IGD+ of about 0.081.
+5.9485, and an IGD+ of about 0.081. The target here is an IGD+ of at most 0.01, or a hypervolume of
+at least 99% of the whole front's, 6.0896.
 
-Neither algorithm finds the last region. Both converge quickly on the other five. NSGA-II has 100
-solutions from about generation 64, and after 250 generations it has 20 to 28 on each of regions
-2 to 5, but none yet on the tiny first one. After 1,000 it has 3, 22, 25, 24 and 26 on regions 1 to
-5, an IGD+ of 0.0862 and a hypervolume of 5.9148, close to the 5.9485 of a perfect front without
-the last region. Its solution with the smallest f₂ ends at (1.39, 0.80), the end of the fifth
-region, and stays there.
+NSGA-II doesn't find the last region. It converges quickly on the other five, and after 1,000
+generations has 3, 22, 25, 24 and 26 solutions on regions 1 to 5, an IGD+ of 0.0862 and a
+hypervolume of 5.9148, close to the 5.9485 of a perfect front without the last region. Its
+solution with the smallest f₂ ends at (1.39, 0.80), the end of the fifth region, and stays there.
 
-MOEA/D spreads its solutions less evenly. After 1,000 generations, it has 77 distinct solutions,
-and 39 of them are on the fifth region: the weight vectors that point at the gap or at the last
-region find their best solutions on the fifth region, and share them out along it. Its IGD+ is
-0.0870 and its hypervolume 5.9118, close to NSGA-II's.
+SMS-EMOA with uniform mutation crosses the gap at generation 233: a child lands at (1.998, 0.279),
+on the last region. After 1,000 generations it has 16 solutions there, an IGD+ of 0.0125 and a
+hypervolume of 6.0716. After 5,000, its front has 2, 16, 21, 22, 21 and 18 solutions on the six
+regions, an IGD+ of 0.0055 and a hypervolume of 6.1172: 99.4% of the whole front's, and nearly the
+6.1180 of 100 evenly spread points.
 
-On seeds 1 to 5, after 1,000 generations, NSGA-II has an IGD+ of 0.0840 to 0.0869, and MOEA/D
-0.0858 to 0.0882. SMS-EMOA and SPEA2, with NSGA-II's settings, have 0.0829 to 0.0863. None of these
-20 runs reaches the last region, nor does any after 2,500 generations. Huband et al. count WFG2
-among the problems their NSGA-II solved easily (section IX), with other settings (SBX η = 10,
-mutation η = 50); with those settings, NSGA-II misses the last region here too, on seeds 1 to 5.
-In the runs tried for this example, only one found it: NSGA-II with mutation η = 5 at a rate of
-1/4 per gene, on seed 3, after 2,500 generations. It then has an IGD+ of 0.0322 and a
-hypervolume of 5.9573.
+On seeds 1 to 40, SMS-EMOA with uniform mutation reaches the last region in 37 runs, all 20 of
+seeds 1 to 20. Those 37 end with an IGD+ of 0.0037 to 0.0076 and a hypervolume of 6.1040 to
+6.1290, at least 99.2% of the whole front's. The other three, seeds 25, 31 and 37, end like
+NSGA-II, with an IGD+ of about 0.085.
+
+Each change alone helps less. After 5,000 generations, on seeds 1 to 20, NSGA-II with uniform
+mutation reaches the last region in 16 runs, and SMS-EMOA with polynomial mutation in none. With
+polynomial mutation, NSGA-II misses it on all 20 seeds, and so do SPEA2 and MOEA/D on seeds 1 to
+5, as does NSGA-II with the settings of Huband et al., who count WFG2 among the problems their
+NSGA-II solved easily (section IX): SBX η = 10 and mutation η = 50.

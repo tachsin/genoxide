@@ -163,3 +163,27 @@ NSGA-II on seeds 1 to 3, with IGD+ from 0.146 to 0.157 after 1,000 generations: 
 mutation with η = 5 or at a rate of 4/24, simulated binary crossover with η = 5, and blend
 crossover (α = 0.5). Arithmetic crossover is worse, at 0.235 to 0.248. The selection and the
 operators change little: the difficulty is in how the variables depend on each other.
+
+The front is out of reach of every algorithm and operator of genoxide's tried, so this example
+doesn't meet the target set for the multi-objective examples: a scaled IGD+ of at most 0.01, the
+IGD+ with f₁ divided by 2 and f₂ by 4 so that both span [0, 1] on the front, or a hypervolume of at
+least 99% of the whole front's, 3.3628. After 1,000 generations, NSGA-II's front has a scaled IGD+
+of 0.0578 and SMS-EMOA's 0.0543; after 10,000, 0.0509 and 0.0516. On seeds 1 to 5, after 5,000 to
+10,000 generations, SMS-EMOA with ten operator settings (polynomial mutation with η from 5 to 100,
+at a rate of 1/24 or 0.1 or of 2 genes a child; Gaussian mutation; simulated binary crossover with
+η = 5 or 30; uniform crossover; blend crossover with α = 0.1 or 0.3; uniform mutation) and MOEA/D
+(Tchebycheff or PBI, neighborhoods of 5 or 20) all end with a scaled IGD+ from 0.047 to 0.059, and
+a hypervolume of at most 2.77, 81.6% of the whole front's.
+
+The final populations show why. Their solutions share nearly the same values of all but the first
+few distance parameters, the values that are optimal where the mean u of the parameters before
+them is 0.3 to 0.4, near x₁ = 0.5. At every other position, the optimal values of all 20 distance
+parameters differ from those, and each depends on the ones before it: moving one towards its
+optimum changes the u, and so the optimum, of every one after it, and the solution gets worse.
+Only a move of all of them at once helps, and no operator of genoxide's makes one. Instead, near
+x₁ = 0, the solutions keep their first distance parameters near 1, far from their optima near 0,
+which holds u, and the later parameters' optima, where the shared values fit.
+
+It isn't the precision that the ends need. A front of solutions with every distance parameter at
+its optimum, but at least 10⁻⁶ (in y), has a scaled IGD+ of 0.015, and at least 10⁻⁹, 0.0065: a
+search able to move the parameters together could get well below the 0.047 that these runs reach.

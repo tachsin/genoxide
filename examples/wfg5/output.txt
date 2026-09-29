@@ -1,9 +1,7 @@
-NSGA-II after 250 generations: 100 solutions, IGD+ 0.0722, hypervolume 2.9620
-  distance 0.05085 to 0.06030; genes at the bounds 1454, near 0.35 0, of 2000
-NSGA-II after 1000 generations: 100 solutions, IGD+ 0.0704, hypervolume 2.9736
+NSGA-II after 1000 generations: 100 solutions, IGD+ 0.0704 (scaled 0.0281), hypervolume 2.9736
   distance 0.05004 to 0.06239; genes at the bounds 1866, near 0.35 0, of 2000
-SMS-EMOA after 250 generations: 100 solutions, IGD+ 0.0719, hypervolume 2.9681
-  distance 0.05017 to 0.05152; genes at the bounds 1978, near 0.35 0, of 2000
-SMS-EMOA after 1000 generations: 100 solutions, IGD+ 0.0681, hypervolume 2.9909
-  distance 0.05000 to 0.05070; genes at the bounds 1993, near 0.35 0, of 2000
+SMS-EMOA after 1000 generations: 100 solutions, IGD+ 0.0699 (scaled 0.0283), hypervolume 2.9832
+  distance 0.04731 to 0.06040; genes at the bounds 1080, near 0.35 193, of 2000
+SMS-EMOA after 20000 generations: 100 solutions, IGD+ 0.0169 (scaled 0.0072), hypervolume 3.2625
+  distance 0.00509 to 0.01829; genes at the bounds 0, near 0.35 1995, of 2000
 the whole front: hypervolume 3.3968
