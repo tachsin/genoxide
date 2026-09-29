@@ -216,6 +216,17 @@ fn order_crossover(
 
 #[library_benchmark]
 #[bench::permutation_100(setup = two_orders, args = (100))]
+fn edge_recombination_crossover(
+    (permutation, mut a, mut b, mut rng): (Permutation, Order, Order, StreamRng),
+) -> Order {
+    for _ in 0..REPEATS {
+        EdgeRecombinationCrossover.crossover(&permutation, &mut a, &mut b, &mut rng);
+    }
+    black_box(a)
+}
+
+#[library_benchmark]
+#[bench::permutation_100(setup = two_orders, args = (100))]
 fn inversion_mutation(
     (permutation, mut a, _, mut rng): (Permutation, Order, Order, StreamRng),
 ) -> Order {
@@ -290,6 +301,7 @@ library_benchmark_group!(
         polynomial_mutation,
         gaussian_mutation,
         order_crossover,
+        edge_recombination_crossover,
         inversion_mutation,
         tournament,
         rank,
