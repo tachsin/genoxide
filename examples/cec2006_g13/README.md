@@ -1,7 +1,7 @@
 ---
 title: CEC 2006 g13
 category: constrained
-summary: The exponential of a product of 5 variables under 3 nonlinear equality constraints, with a local minimum that traps most single runs, solved by CMA-ES with IPOP restarts and Deb's feasibility rules.
+summary: The exponential of a product of 5 variables under 3 nonlinear equality constraints, with a local minimum that traps most single runs, solved by SHADE with Deb's feasibility rules at an ε level that falls to 0.
 reference: "Liang, J. J., Runarsson, T. P., Mezura-Montes, E., Clerc, M., Suganthan, P. N., Coello Coello, C. A. and Deb, K. (2006). Problem Definitions and Evaluation Criteria for the CEC 2006 Special Session on Constrained Real-Parameter Optimization. Technical report, Nanyang Technological University, Singapore."
 reference_url: "https://github.com/P-N-Suganthan/CEC2006"
 optimum: "0.053941514041898 (best known, with the equalities met within 0.0001)"
@@ -70,53 +70,65 @@ ones compare by value, and two infeasible ones by violation. The rules need no p
 
 ## Algorithm
 
-CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) samples a population
-from a normal distribution, and adapts its mean, step size and covariance matrix. Its covariance
-matrix can learn the directions of the shell, so its samples spread along it rather than across it.
-It starts with genoxide's defaults: a population of 4 + ⌊3 ln 5⌋ = 8, a step size of 0.3 of each
-gene's range, and a random start. Deb's rules rank the samples.
+SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), a differential evolution that adapts its
+scale factor and crossover rate from successful trials, with genoxide's defaults: its published
+population of 100, and a restart after 200 generations without progress.
 
-A single run of CMA-ES often ends at the local minimum. IPOP restarts (Auger and Hansen, 2005, IEEE
-CEC 2005: 1769-1776) start a new run from a random point, with twice the population, whenever one
-has converged. A larger population sees more of the shell before it converges, and more runs mean
-more chances to start near the global minimum.
+SHADE compares solutions with Deb's rules at an ε level, the ε constrained method of Takahama and
+Sakai (2006, "Constrained optimization by the ε constrained differential evolution with
+gradient-based mutation and feasible elites", IEEE CEC 2006), whose εDE won the CEC 2006
+competition: a violation up to ε counts as none. Two solutions within ε compare by value, and the
+others as Deb's rules have it. ε starts at 20 and follows Takahama and Sakai's schedule,
+ε(t) = 20 (1 − t / 150,000)⁵ after t evaluations, down to 0 at 150,000. The example applies it with
+genoxide's features: the fitness function returns the violation beyond ε, and the engine's
+`control` lowers ε every 10 generations and scores the population again (`reevaluate`), since the
+old violations no longer compare with the new ones. The re-evaluations count in the budget. From
+150,000 evaluations on, the rules are Deb's, and the problem the report's.
 
-The run has the report's budget of 500,000 evaluations, and stops once its best solution is feasible
-with an error f(x) − f* of at most 1e-8, an absolute error. The report counts a run as successful
-with an error of at most 1e-4; the example asks for more.
+The run has the report's budget of 500,000 evaluations, and stops once ε is 0 and its best solution
+is feasible with an error f(x) − f* of at most 1e-8, an absolute error. The report counts a run as
+successful with an error of at most 1e-4; the example asks for more.
 
 With seeds 1 to 25, in the same budget:
 
 | Algorithm | Runs that met the target | Evaluations (median, range) |
 |---|---|---|
+| SHADE at an ε level, as here | 24 of 25 | 151,400 (150,100 to 172,800) |
 | CMA-ES with IPOP restarts | 24 of 25 | 115,312 (43,560 to 343,088) |
 | CMA-ES | 8 of 25 | 51,120 (43,560 to 80,856) |
 | L-SHADE | 0 of 25 | |
 | SHADE | 0 of 25 | |
 
-Without restarts, the other 17 runs of CMA-ES ended at the local minimum, with an error of 0.385.
-With IPOP restarts, one run, with seed 16, was still there when the budget ran out. The 24 others
-found all four twins of the minimum. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78),
-genoxide's default differential evolution, and L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014:
-1658-1665), its variant with a shrinking population, build a trial from the difference between two
-solutions. On a curved shell, that difference points off it, and the trials are infeasible. SHADE
-ended 4 runs infeasible and 21 with errors from 0.73 to 0.95; L-SHADE ended all 25 feasible, with
-errors from 0.054 to 0.69.
+With Deb's rules alone, SHADE and L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665),
+its variant with a shrinking population, build a trial from the difference between two solutions.
+On a curved shell, that difference points off it, and the trials are infeasible. SHADE ended 4 runs
+infeasible and 21 with errors from 0.73 to 0.95; L-SHADE ended all 25 feasible, with errors from
+0.054 to 0.69. At an ε level, the shell is thick while the population spreads out and converges,
+and thins as it gathers: its differences shrink with it.
+
+CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) samples a population
+from a normal distribution, and adapts its mean, step size and covariance matrix, which can learn
+the directions of the shell. A single run often ends at the local minimum: without restarts, 17 of
+the 25 runs did, with an error of 0.385. IPOP restarts (Auger and Hansen, 2005, IEEE CEC 2005:
+1769-1776) start a new run from a random point, with twice the population, whenever one has
+converged. In the table, one IPOP run, with seed 16, was still at the local minimum when the budget
+ran out; with seeds 1 to 100, 15 runs failed, 13 of them there.
 
 ## Output
 
 The first line names the run. The second gives what stopped it, after how many evaluations, the
 error f(x) − f* and whether the best solution is feasible: "< 1e-8" means the run met its target.
-The third gives the evaluations to the first feasible solution, and to an error of 1e-4, the
-report's criterion of success. The fourth compares f(x) with f*, to 6 significant digits. The fifth
-gives the solution, and the last |h| of each equality, met when it's at most 0.0001. In Python,
-`run` evaluates the problem in Rust, so both versions print the same.
+The third gives when the best solution, by the ε level, was first feasible without it, and when its
+error first met the report's criterion of success. The fourth compares f(x) with f*, to 6
+significant digits. The fifth gives the solution, and the last |h| of each equality, met when it's
+at most 0.0001. In Python, the fitness function evaluates the problem in Rust, a generation at a
+time, so both versions print the same.
 
 The page's plot shows each variable on its range, and each constraint's state from its violation,
-max(0, |h| − 0.0001): violated until the best solution reaches the shell, and met from then on. Its
-curve shows the error f − f* of the best feasible solution, and of the population's median, on a log
-scale. The median's curve has gaps: in about half of the generations, half or more of the samples
-fall outside the shell.
+max(0, |h| − 0.0001): violated while ε lets the best solution off the shell, and met from the end of
+the schedule on. Its curve shows the error f − f* of the best solution, and of the population's
+median, on a log scale, measured without the ε level: it begins once they are feasible, near the end
+of the schedule.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/cec2006-g13) plays this run back.
 
@@ -125,11 +137,12 @@ fall outside the shell.
 A good run is feasible and ends within 1e-4 of f*, the report's success. A value below f* is
 possible, since f* is only the best known, but the runs here end just above it.
 
-The recorded run finds its first feasible solution after 896 evaluations. Its first three runs, with
-8, 16 and 32 samples per generation, converge to the local minimum, with an error of 0.385. Each
-restart shows in the curve: the median jumps up, while the best stays. The fourth run, with 64
-samples, starts after 140,576 evaluations and finds the global minimum's basin: the error falls to
-0.11 after 233,500 evaluations and 0.003 after 266,300. The run meets the report's criterion after
-273,248 evaluations and its target after 277,152. The solution is x = (−1.71710, 1.59567, 1.82732,
-0.763702, 0.763627), a twin of the report's, with x4 and x5 positive. It sits on or near the edges
-of the tolerance: |h1| and |h2| are 0.0001, and |h3| is 0.000099.
+The recorded run's best, by the ε level, lies off the shell for most of the schedule, as far as ε
+allows. It is first feasible without ε after 147,500 evaluations, already within 1e-4 of f*, and
+meets its target after 151,700, once ε is 0. The solution is x = (−1.71718, 1.59576, −1.82718,
+−0.763512, 0.763799), a twin of the report's, with the signs of x3 and x5 changed, and each |h| at
+0.0001, on the edge of the tolerance.
+
+With seeds 1 to 1,000, 993 runs meet the target, after 150,100 to 203,200 evaluations (150,800 for
+half of them), and 2 more end within 1e-4 of f*. The other 5 end at or near the local minimum, one
+of them infeasible.

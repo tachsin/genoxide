@@ -3,11 +3,13 @@ equality constraints, from the CEC 2006 special session on constrained optimizat
 2006). The best known value is 193.724510070035, with the equalities met within the report's
 tolerance of 0.0001.
 
-genoxide's ``G21`` gives the value of a solution and its constraint violation, which Deb's
-feasibility rules compare: a feasible solution beats an infeasible one. SHADE, genoxide's default
-differential evolution, with a population of 50, searches the 7 variables within the report's
-budget of 500,000 evaluations, and stops once the error f(x) − f* is at most 1e-8. The example
-prints the best solution and its constraints. ``run`` evaluates the problem in Rust.
+genoxide's ``G21`` gives the value of a solution and its constraint violation. SHADE, genoxide's
+default differential evolution, with a population of 30, compares them with Deb's feasibility
+rules at an ε level (Takahama and Sakai, 2006): a violation up to ε counts as none. ε starts at
+1,000 and falls to 0 over the first 150,000 evaluations, and the population is scored again each
+time it falls. The run has the report's budget of 500,000 evaluations, and stops once ε is 0 and
+the error f(x) − f* is at most 1e-8. The example prints the best solution and its constraints.
+The fitness function evaluates the problem in Rust, a generation at a time.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
 page, with trace.py.
@@ -29,6 +31,20 @@ BUDGET = 500_000
 ERROR = 1e-8
 # the report counts a run as successful once its error is at most this
 SUCCESS = 1e-4
+# the ε level at the start: a violation up to it counts as none
+EPSILON = 1000.0
+# the evaluations after which ε is 0
+CONTROL = 150_000
+# ε falls, and the population is scored again, every this many generations
+EVERY = 10
+
+
+def epsilon(evaluations):
+    """The ε level after ``evaluations``: EPSILON (1 - evaluations / CONTROL)^5, then 0."""
+    if evaluations >= CONTROL:
+        return 0.0
+    rest = 1.0 - evaluations / CONTROL
+    return EPSILON * rest * rest * rest * rest * rest
 # a constraint within this of its boundary is active
 ACTIVE = 1e-6
 
@@ -65,8 +81,18 @@ def count(evaluations):
 problem = gx.problems.cec2006.G21()
 optimum = problem.optimum
 f_star = optimum.value
-# half the default population: see the README
-shade = gx.De(problem.genome, objective=problem.objective, population_size=50, seed=1)
+# a third of the default population: see the README
+shade = gx.De(problem.genome, objective=problem.objective, population_size=30, seed=1)
+# the ε level in use
+level = {"epsilon": EPSILON}
+
+
+def fitness(genomes):
+    """The values of a generation, and their violations beyond ε."""
+    values, violations = problem.evaluate(genomes)
+    return values, np.maximum(violations - level["epsilon"], 0.0)
+
+
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(problem)
 # the evaluations when the best is first feasible, and when its error first meets the report's
@@ -75,23 +101,40 @@ first = {"feasible": None, "success": None}
 
 
 def on_generation(progress):
-    _, violations = problem.evaluate(progress.best_genome[np.newaxis])
-    if violations[0] == 0.0:
-        error = progress.best_fitness - f_star
+    # the best by the ε level, measured without it
+    values, violations = problem.evaluate(progress.best_genome[np.newaxis])
+    feasible = violations[0] == 0.0
+    if feasible:
+        error = values[0] - f_star
         if first["feasible"] is None:
             first["feasible"] = progress.evaluations
         if first["success"] is None and error <= SUCCESS:
             first["success"] = progress.evaluations
     trace.record(progress)
+    # the run's target, once ε is 0: a feasible best within ERROR of f*
+    return not (level["epsilon"] == 0.0 and feasible and values[0] <= f_star + ERROR)
+
+
+def control(shade, progress):
+    # every EVERY generations, and once it reaches 0, ε follows its schedule
+    following = epsilon(progress.evaluations)
+    due = progress.generation % EVERY == 0 or following == 0.0
+    if progress.generation > 0 and due and following != level["epsilon"]:
+        level["epsilon"] = following
+        shade.reevaluate()
 
 
 result = shade.run(
-    problem, target=f_star + ERROR, evaluations=BUDGET, on_generation=on_generation
+    fitness,
+    batch=True,
+    evaluations=BUDGET,
+    on_generation=on_generation,
+    control=control,
 )
 
 value = result.best_fitness
-print("SHADE, a population of 50, with Deb's feasibility rules on g21, seed 1")
-if result.stop_reason == "target":
+print("SHADE, a population of 30, with Deb's rules at an epsilon level on g21, seed 1")
+if result.stop_reason == "aborted":
     stop, error = "stopped by the target", f"< {scientific(ERROR, 0)}"
 else:
     stop, error = "stopped", scientific(value - f_star, 1)

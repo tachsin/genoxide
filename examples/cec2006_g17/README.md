@@ -1,7 +1,7 @@
 ---
 title: CEC 2006 g17
 category: constrained
-summary: A discontinuous, piecewise linear function of 6 variables under 4 nonlinear equality constraints, with a local optimum that traps most runs of every algorithm, searched with SHADE and Deb's feasibility rules.
+summary: A discontinuous, piecewise linear function of 6 variables under 4 nonlinear equality constraints, with a local optimum that traps most runs of plain Deb's rules, solved with SHADE and Deb's rules at an ε level that falls to 0.
 reference: "Liang, J. J., Runarsson, T. P., Mezura-Montes, E., Clerc, M., Suganthan, P. N., Coello Coello, C. A. and Deb, K. (2006). Problem Definitions and Evaluation Criteria for the CEC 2006 Special Session on Constrained Real-Parameter Optimization. Technical report, Nanyang Technological University, Singapore."
 reference_url: "https://github.com/P-N-Suganthan/CEC2006"
 optimum: "8853.5338748065 (best known, with the equalities met within 0.0001; the report prints 8853.53967480648)"
@@ -79,8 +79,8 @@ surface in small steps.
 
 And there's a local optimum. At f = 8927.5917, 74.06 above f*, x1 ≈ 107.8 and x2 ≈ 196.3, on the
 pieces 30 x1 and 29 x2, in another region of the surface. A search that settles there stays: the
-runs of SHADE that reached it never left it within the budget. Most runs of every algorithm tried
-here end there.
+runs of SHADE that reached it never left it within the budget. With Deb's feasibility rules alone,
+most runs of every algorithm tried here end there.
 
 ## Representation
 
@@ -98,14 +98,27 @@ SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), a differential evolutio
 scale factor and crossover rate from successful trials, with genoxide's defaults: its published
 population of 100, and a restart after 200 generations without progress.
 
-The run has the report's budget of 500,000 evaluations, and stops once its best solution is
-feasible with an error f(x) − f* of at most 1e-8, an absolute error. The report counts a run as
+SHADE compares solutions with Deb's rules at an ε level, the ε constrained method of Takahama and
+Sakai (2006, "Constrained optimization by the ε constrained differential evolution with
+gradient-based mutation and feasible elites", IEEE CEC 2006), whose εDE won the CEC 2006
+competition: a violation up to ε counts as none. Two solutions within ε compare by value, and the
+others as Deb's rules have it. ε starts at 300 and follows Takahama and Sakai's schedule,
+ε(t) = 300 (1 − t / 150,000)⁵ after t evaluations, down to 0 at 150,000. The example applies it
+with genoxide's features: the fitness function returns the violation beyond ε, and the engine's
+`control` lowers ε every 10 generations and scores the population again (`reevaluate`), since
+the old violations no longer compare with the new ones. The re-evaluations count in the budget.
+From 150,000 evaluations on, the rules are Deb's, and the problem the report's.
+
+The run has the report's budget of 500,000 evaluations, and stops once ε is 0 and its best solution
+is feasible with an error f(x) − f* of at most 1e-8, an absolute error. The report counts a run as
 successful with an error of at most 1e-4; the example asks for more.
 
-No algorithm of genoxide solves g17 reliably. With seeds 1 to 25 and the same budget and target:
+With Deb's rules alone, no algorithm of genoxide solves g17 reliably. With seeds 1 to 25 and the
+same budget and target:
 
 | Algorithm | Met the target | Within 1e-4 of f* |
 |---|---|---|
+| SHADE at an ε level, as here | 25 | 25 |
 | SHADE | 7 | 7 |
 | SHADE with JADE's strategy, current-to-pbest with p = 0.1 | 9 | 9 |
 | L-SHADE | 8 | 8 |
@@ -113,30 +126,30 @@ No algorithm of genoxide solves g17 reliably. With seeds 1 to 25 and the same bu
 | CMA-ES with BIPOP restarts | 8 | 12 |
 | GA, simulated binary crossover and polynomial mutation | 0 | 0 |
 
-Every run of SHADE either met the target or ended at the local optimum, 8927.59, and so did most
-failed runs of the others, except the GA's. SHADE's successful runs took a median of 207,400
-evaluations (164,200 to 268,000). BIPOP-CMA-ES (Hansen, 2009) alternates large populations with
-small ones, and some of its runs ended between 1e-8 and 1e-4 above f*. With initial step sizes from
-0.2 to 1.0 of the ranges, it met the target on 5 to 13 of 25 runs: tuning doesn't make it reliable,
-and 25 runs can't tell these algorithms apart. The GA, with a population of 100, found no feasible
-solution. SHADE with a population of 300 met the target on none. The example shows SHADE, whose runs
-either succeed or fail clearly; seed 1 is one of its successes.
+Every run of plain SHADE either met the target or ended at the local optimum, 8927.59, and so did
+most failed runs of the others, except the GA's. With Deb's rules alone, the first feasible
+solutions decide where a run ends: the population gathers around them, and whether they lie on the
+side of x2 < 100 is a matter of luck. With a large ε, much of the box counts as feasible at first,
+and the value leads the population toward the minimum's side before the layer thins; as ε falls, the
+population follows the layer down to the surface. The start matters: in 100 to 300 runs each, with ε
+starting at 100 or 300, 97 to 100 % met the target, at 10, 90 %, and at 1,000 almost none.
 
 ## Output
 
 The first line names the run. The second gives what stopped it, after how many evaluations, the
 error f(x) − f* and whether the best solution is feasible: "< 1e-8" means the run met its target.
-The third gives when the best solution was first feasible, and when its error first met the
-report's criterion of success. The fourth compares f(x) with f*, to 6 significant digits. The fifth
-gives the solution, to 4 significant digits: x2 prints as 100.00, but lies just below 100, on the
-piece 28 x2, as the sixth line says. The last gives the four equalities. An equality met within
-the tolerance is "active", else the line gives how far |h| exceeds 0.0001. In Python, `run`
-evaluates the problem in Rust, so both versions print the same.
+The third gives when the best solution, by the ε level, was first feasible without it, and when its
+error first met the report's criterion of success. The fourth compares f(x) with f*, to 6
+significant digits. The fifth gives the solution, to 4 significant digits: x2 prints as 100.00, but
+lies just below 100, on the piece 28 x2, as the sixth line says. The last gives the four equalities.
+An equality met within the tolerance is "active", else the line gives how far |h| exceeds 0.0001. In
+Python, the fitness function evaluates the problem in Rust, a generation at a time, so both versions
+print the same.
 
 The page shows each variable on its range, and each constraint's state. Its curve shows the error
-f − f* of the best feasible solution, and of the population's median, on a log scale. The best's
-curve begins at the first feasible solution, and the median's once half the population is
-feasible.
+f − f* of the best solution, and of the population's median, on a log scale, measured without the
+ε level. The best's curve begins once the best is feasible, and the median's once half the
+population is: near the end of the ε schedule.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/cec2006-g17) plays this run back.
 
@@ -146,13 +159,13 @@ A good run is feasible and ends within 1e-4 of f*, the report's success. A value
 possible, since f* is only the best known, but the runs here end just above it. Measured against
 the report's printed value, 8853.53967, such a run would be 0.0058 below it.
 
-The recorded run needs 38,400 evaluations to find its first feasible solution, about 24 above f*,
-with x2 ≈ 89.5 on the piece 28 x2. It then raises x2 toward the jump at 100 and lowers x1: after
-64,000 evaluations, x2 is just below 100 and the error 8.0. From there it slides along the edge of
-the jump, x2 staying just below 100 while x3 and x4 rise and x5 falls, and the error falls
-steadily. Once x4 reaches 420, after about 138,000 evaluations, the run converges quickly: it
-is within 1e-4 of f* after 145,900 evaluations, and meets its target after 164,200.
+The recorded run's best, by the ε level, is infeasible for most of the schedule: it uses the
+tolerance ε allows, and while ε is large, its equalities are far from met. Its violations shrink
+with ε, and the best is first feasible without it after 147,500 evaluations, when ε is 5·10⁻⁷. It is
+within 1e-4 of f* after 151,500 evaluations, once ε is 0, and meets its target after 173,500.
 
 The solution is x = (201.8, 100.00, 383.1, 420.0, −10.91, 0.07315), the best known point to 4
-digits, with x2 below 100 and x4 at its bound. All four equalities are met: h1, h2 and h4 with |h|
-at 0.0001, on the edge of the tolerance, as at the best known point, and h3 with |h| ≈ 0.000016.
+digits, with x2 below 100 and x4 at its bound, and all four equalities met.
+
+With seeds 1 to 1,000, 999 runs meet the target, after 167,500 to 178,000 evaluations (171,500 for
+half of them). The other, seed 44, ends at the local optimum, 8927.59.

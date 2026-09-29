@@ -127,7 +127,8 @@ solution, the error f − f* has no meaning.
 ## Good results
 
 No run is feasible. A good run ends at a violation of 0.14371, a little below the 0.14375 of the
-report's solution.
+report's solution. The example's run gets there: with seeds 1 to 100, SHADE ends between 0.14371188
+and 0.14371189 every time, and L-SHADE at 0.1437118794 on all 100, the least violation found.
 
 With seed 1, the violation falls from 169 in the first random population to 0.31 after 32,100
 evaluations and 0.155 after 64,100. The run passes the report's solution after 98,700 evaluations

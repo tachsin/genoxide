@@ -1,9 +1,10 @@
-//! The trace of the run for the plot on the example's page, written to the file that
-//! `GENOXIDE_TRACE` names: the best solution so far and its constraints, in at most 100
-//! generations. The Python example writes the same file.
+//! The trace of the run on x1, x8 and x9 for the plot on the example's page, written to the file
+//! that `GENOXIDE_TRACE` names: the best solution so far, all 22 variables, and its constraints, in
+//! at most 100 generations. The Python example writes the same file.
 //!
-//! The run finds no feasible solution of g22, and the curve is the constraint violation of the
-//! best solution and of the population's median, on a log scale.
+//! The curve is the error f − 236.370313314566 of the best feasible solution and of the
+//! population's median, on a log scale, against the least value with every equality met exactly:
+//! null while they're infeasible, whose values aren't comparable to it.
 
 use genoxide::observer::Snapshot;
 use genoxide::prelude::*;
@@ -24,32 +25,32 @@ impl Trace {
         Self { path, frames }
     }
 
-    // records a generation: the violations of the best and the median, the best solution so far
-    // and its constraints, g(x) for the inequalities, satisfied at or below 0 and active at 0,
-    // and for the equalities the excess max(0, |h(x)| - 0.0001), 0 (active) when met (the page
-    // shows each one's state)
-    pub fn record(&mut self, snapshot: &Snapshot<'_, Reals>) {
+    // records a generation: the errors of the best and the median, the best solution so far, its
+    // 22 variables from `solve`, and its constraints, g(x) for the inequalities, satisfied at or
+    // below 0 and active at 0, and for the equalities the excess max(0, |h(x)| - 0.0001), 0
+    // (active) when met (the page shows each one's state)
+    pub fn record(&mut self, snapshot: &Snapshot<'_, Reals>, solve: fn(&Reals) -> Reals) {
         if self.path.is_none() {
             return;
         }
-        let best = snapshot.best().genome();
+        let best = solve(snapshot.best().genome());
         let fitness = snapshot.best().fitness().expect("evaluated");
-        let best_violation = fitness.is_valid().then(|| fitness.violation());
-        // the population in the order of Deb's rules, none of it feasible in this run: by
-        // violation, then the invalid solutions
+        let best_error = fitness.is_feasible().then(|| error(fitness));
+        // the population in the order of Deb's rules: the feasible solutions by value, then the
+        // infeasible ones
         let population: Vec<Fitness> = snapshot
             .population()
             .iter()
             .filter_map(|individual| individual.fitness())
             .collect();
-        let mut violations: Vec<f64> = population
+        let mut feasible: Vec<f64> = population
             .iter()
-            .filter(|fitness| fitness.is_valid())
-            .map(|fitness| fitness.violation())
+            .filter(|fitness| fitness.is_feasible())
+            .map(|&fitness| error(fitness))
             .collect();
-        violations.sort_by(f64::total_cmp);
-        let median = median(&violations, population.len());
-        let constraints = G22::default().constraints(best);
+        feasible.sort_by(f64::total_cmp);
+        let median = median(&feasible, population.len());
+        let constraints = G22::default().constraints(&best);
         let equalities = constraints.equalities().iter();
         let equalities = equalities.map(|h| (h.abs() - EQUALITY_TOLERANCE).max(0.0));
         let values: Vec<f64> = constraints
@@ -59,8 +60,7 @@ impl Trace {
             .chain(equalities)
             .collect();
         let state = json!({ "best": &best[..], "violations": values });
-        self.frames
-            .push(frame(snapshot, best_violation, median, state));
+        self.frames.push(frame(snapshot, best_error, median, state));
     }
 
     // writes the trace, if there's one
@@ -81,9 +81,9 @@ impl Trace {
             "example": "cec2006_g22",
             "objective": "minimize",
             "x_label": "evaluations",
-            "y_label": "constraint violation of the best solution",
+            "y_label": "error f - 236.370313314566 of the best feasible solution",
             "log_y": true,
-            "optimum": null,
+            "optimum": 0.0,
             "plot": "design",
             // the inequalities as g(x), the equalities as their excess over the tolerance: 0 when
             // met, which is active
@@ -97,21 +97,25 @@ impl Trace {
     }
 }
 
-// the median violation of a population of `size` in the order of Deb's rules, given the sorted
-// violations of its valid solutions: None if the median is invalid
-fn median(valid: &[f64], size: usize) -> Option<f64> {
+// the error f - 236.370313314566 of a feasible solution, 0 at or below it
+fn error(fitness: Fitness) -> f64 {
+    (fitness.score().expect("valid") - 236.370_313_314_566).max(0.0)
+}
+
+// the median error of a population of `size` in the order of Deb's rules, given the sorted
+// errors of its feasible solutions: None if the median is infeasible
+fn median(feasible: &[f64], size: usize) -> Option<f64> {
     let middle = size / 2;
-    if size == 0 || middle >= valid.len() {
+    if size == 0 || middle >= feasible.len() {
         None
     } else if size % 2 == 1 {
-        Some(valid[middle])
+        Some(feasible[middle])
     } else {
-        Some((valid[middle - 1] + valid[middle]) / 2.0)
+        Some((feasible[middle - 1] + feasible[middle]) / 2.0)
     }
 }
 
-// the frame of a generation: its progress, the violations of the best and the median, and
-// `state`
+// the frame of a generation: its progress, the errors of the best and the median, and `state`
 fn frame<G: Genome>(
     snapshot: &Snapshot<'_, G>,
     best: Option<f64>,

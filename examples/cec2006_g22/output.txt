@@ -1,6 +1,8 @@
-L-SHADE with Deb's feasibility rules on g22, seed 1
+L-SHADE on the 22 variables with Deb's feasibility rules, seed 1
 stopped after 500003 evaluations: infeasible, violation 53.53
-no feasible solution found
-f(x) 19926.5, f* 236.431 (best known)
-x1 19926.5, x2 13837.7, x3 5723.53, x4 61044.4, x5 13203667, x6 4000001, x7 22796332, x8 232.037, x9 272.037, x10 197.963, x11 400.000, x12 432.037, x13 7.95148, x14 8.73587, x15 9.33596, x16 167.963, x17 160.000, x18 6.20012, x19 2.42725, x20 5.98504, x21 1.40623, x22 6.25000
-g1 -18698, h1 active, h2 active, h3 active, h4 active, h5 active, h6 active, h7 active, h8 active, h9 active, h10 active, h11 active, h12 1.615, h13 1.792, h14 0.8612, h15 3.445, h16 1.175, h17 active, h18 active, h19 44.64
+SHADE on x1, x8 and x9, the other 19 variables solved from the equalities, seed 1
+stopped by the target after 25700 evaluations: feasible
+f(x) 236.370313, 9.9e-9 above 236.370313, the least with every equality met
+f(x) - f* -0.060662, where f* 236.430976 is the report's best known
+x1 236.370, x2 135.432, x3 200.428, x4 6462.55, x5 3000000, x6 4000000, x7 33000000, x8 130.000, x9 170.000, x10 300.000, x11 400.000, x12 330.000, x13 184.594, x14 249.466, x15 127.659, x16 270.000, x17 160.000, x18 5.29832, x19 5.13580, x20 5.59842, x21 5.43808, x22 5.07517
+g1 active, h1 active, h2 active, h3 active, h4 active, h5 active, h6 active, h7 active, h8 active, h9 active, h10 active, h11 active, h12 active, h13 active, h14 active, h15 active, h16 active, h17 active, h18 active, h19 active

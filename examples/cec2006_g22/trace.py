@@ -1,9 +1,10 @@
-"""The trace of the run for the plot on the example's page, written to the file that
-``GENOXIDE_TRACE`` names: the best solution so far and its constraints, in at most 100
-generations. The Rust example writes the same file.
+"""The trace of the run on x1, x8 and x9 for the plot on the example's page, written to the file
+that ``GENOXIDE_TRACE`` names: the best solution so far, all 22 variables, and its constraints, in
+at most 100 generations. The Rust example writes the same file.
 
-The run finds no feasible solution of g22, and the curve is the constraint violation of the best
-solution and of the population's median, on a log scale."""
+The curve is the error f − 236.370313314566 of the best feasible solution and of the population's
+median, on a log scale, against the least value with every equality met exactly: null while
+they're infeasible, whose values aren't comparable to it."""
 
 import json
 import math
@@ -15,10 +16,11 @@ from genoxide.problems.cec2006 import EQUALITY_TOLERANCE
 class Trace:
     """Records the run through ``on_generation`` when ``GENOXIDE_TRACE`` is set."""
 
-    def __init__(self, problem):
+    def __init__(self, problem, solve):
         self.path = os.environ.get("GENOXIDE_TRACE")
         self.frames = Frames(100)
         self.problem = problem
+        self.solve = solve
 
     @property
     def on_generation(self):
@@ -26,27 +28,27 @@ class Trace:
         return self.record if self.path else None
 
     def record(self, progress):
-        """Records a generation: the violations of the best and the median, the best solution so far
-        and its constraints, g(x) for the inequalities, satisfied at or below 0 and active at 0, and
-        for the equalities the excess max(0, |h(x)| - 0.0001), 0 (active) when met (the page shows
-        each one's state)."""
+        """Records a generation: the errors of the best and the median, the best solution so far,
+        its 22 variables from ``solve``, and its constraints, g(x) for the inequalities, satisfied
+        at or below 0 and active at 0, and for the equalities the excess max(0, |h(x)| - 0.0001), 0
+        (active) when met (the page shows each one's state)."""
         if self.path:
-            best = progress.best_genome
+            best = self.solve(progress.best_genome)
             score, violation = self.problem(best)
-            best_violation = None if math.isnan(score) else violation
-            # the population in the order of Deb's rules, none of it feasible in this run: by
-            # violation, then the invalid solutions
-            valid = sorted(
-                float(violation)
+            best_error = error(score) if violation == 0 else None
+            # the population in the order of Deb's rules: the feasible solutions by value, then
+            # the infeasible ones
+            feasible = sorted(
+                error(float(score))
                 for score, violation in zip(progress.scores, progress.violations)
-                if not math.isnan(score)
+                if violation == 0
             )
-            middle = median(valid, len(progress.scores))
+            middle = median(feasible, len(progress.scores))
             constraints = self.problem.constraints(best).tolist()
             g, h = constraints[:1], constraints[1:]
             values = g + [max(abs(hj) - EQUALITY_TOLERANCE, 0.0) for hj in h]
             state = {"best": best.tolist(), "violations": values}
-            self.frames.push(frame(progress, best_violation, middle, state))
+            self.frames.push(frame(progress, best_error, middle, state))
 
     def write(self):
         """Writes the trace, if there's one."""
@@ -56,9 +58,9 @@ class Trace:
                 "example": "cec2006_g22",
                 "objective": "minimize",
                 "x_label": "evaluations",
-                "y_label": "constraint violation of the best solution",
+                "y_label": "error f - 236.370313314566 of the best feasible solution",
                 "log_y": True,
-                "optimum": None,
+                "optimum": 0.0,
                 "plot": "design",
                 # the inequalities as g(x), the equalities as their excess over the tolerance:
                 # 0 when met, which is active
@@ -81,17 +83,22 @@ def bounds(genome):
     return genome.bounds
 
 
-def median(valid, size):
-    """The median violation of a population of ``size`` in the order of Deb's rules, given the
-    sorted violations of its valid solutions: None if the median is invalid."""
+def error(score):
+    """The error f - 236.370313314566 of a feasible solution, 0 at or below it."""
+    return max(score - 236.370313314566, 0.0)
+
+
+def median(feasible, size):
+    """The median error of a population of ``size`` in the order of Deb's rules, given the sorted
+    errors of its feasible solutions: None if the median is infeasible."""
     middle = size // 2
-    if size == 0 or middle >= len(valid):
+    if size == 0 or middle >= len(feasible):
         return None
-    return valid[middle] if size % 2 else (valid[middle - 1] + valid[middle]) / 2
+    return feasible[middle] if size % 2 else (feasible[middle - 1] + feasible[middle]) / 2
 
 
 def frame(progress, best, middle, state):
-    """The frame of a generation: its progress, the violations of the best and the median, and
+    """The frame of a generation: its progress, the errors of the best and the median, and
     ``state``."""
     return {
         "generation": progress.generation,
