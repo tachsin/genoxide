@@ -3,7 +3,7 @@
 use super::steady::SteadyGa;
 use super::{Algorithm, Candidates};
 use crate::genome::{Genome, Representation};
-use crate::operator::{Crossover, MAX_SIZE, Mutate, Select, check_rates, check_size, neighbor};
+use crate::operator::{Crossover, MAX_SIZE, Mutate, Select, check_rates, check_size};
 use crate::rng::Chance;
 use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
@@ -484,13 +484,17 @@ where
             let mut order: Vec<usize> = (0..self.population.len()).collect();
             order.sort_by(|&a, &b| objective.compare(fitness(b), fitness(a)));
             for &parent in order.iter().take(parents) {
+                let original = self.population[parent].genome();
                 for _ in 0..neighbors {
-                    let genome = neighbor(
-                        &self.mutate,
-                        &self.representation,
-                        self.population[parent].genome(),
-                        &mut self.rng,
-                    );
+                    // `operator::neighbor`, in the memory of a spare genome
+                    let mut genome = self.spare.copy(original);
+                    for _ in 0..NEIGHBOR_ATTEMPTS {
+                        self.mutate
+                            .mutate(&self.representation, &mut genome, &mut self.rng);
+                        if &genome != original {
+                            break;
+                        }
+                    }
                     self.offspring.push(Individual::new(genome));
                     self.refined.push(parent);
                 }
@@ -574,6 +578,9 @@ where
 // `generation_stream.derive(pair)`. It must never change for the same major version: it decides
 // the results of seeded runs.
 const BREEDING_STREAMS: u64 = super::breeding_streams::GA;
+
+// the draws of a memetic neighbor while it equals its parent, as `operator::neighbor`
+const NEIGHBOR_ATTEMPTS: usize = 100;
 
 // what crossing over and mutating a pair of parents needs
 struct Breeding<'a, R: Representation, C, M> {
