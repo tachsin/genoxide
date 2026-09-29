@@ -820,7 +820,10 @@ fn update_best<G: Genome>(
                 .is_none_or(|best| objective.is_better(fitness, best))
         });
         if is_better {
-            *best = Some(candidate.clone());
+            match best {
+                Some(best) => best.clone_from(candidate),
+                None => *best = Some(candidate.clone()),
+            }
             improved = true;
         }
     }
