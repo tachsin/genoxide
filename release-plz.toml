@@ -22,16 +22,16 @@ git_release_name = "v{{ version }}"
 # version too, and is listed in its CHANGELOG.md and GitHub release
 changelog_include = ["genoxide-python"]
 
-# The Python package isn't published to crates.io, and has no changelog or GitHub release of its
-# own. It takes part in releases for its commits to be found: git_only finds them since its last
-# tag, python-v<version>, which each release creates next to genoxide's v<version>. git_only reads
-# the package at that tag, so the first one, python-v0.6.0, is on the commit that made python/ a
-# member of the workspace.
+# The Python package isn't published to crates.io, and has no changelog, GitHub release or tag of
+# its own. It takes part in releases for its commits to be found: git_only finds them since its last
+# release's tag, and its version is genoxide's (the workspace's), so that tag is genoxide's
+# v<version>, which the genoxide package creates; this package creates none.
 [[package]]
 name = "genoxide-python"
 git_only = true
 publish = false
-git_tag_name = "python-v{{ version }}"
+git_tag_name = "v{{ version }}"
+git_tag_enable = false
 git_release_enable = false
 changelog_update = false
 semver_check = false
