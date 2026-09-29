@@ -127,6 +127,20 @@ python examples/tsp_berlin52/main.py
 | [Viennet 1](viennet1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/viennet1) |
 | [Viennet 2](viennet2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/viennet2) |
 | [Viennet 3](viennet3/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/viennet3) |
+| [CTP1](ctp1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/ctp1) |
+| [CTP2](ctp2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/ctp2) |
+| [CTP3](ctp3/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/ctp3) |
+| [CTP4](ctp4/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/ctp4) |
+| [CTP5](ctp5/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/ctp5) |
+| [CTP6](ctp6/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/ctp6) |
+| [CTP7](ctp7/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/ctp7) |
+| [CTP8](ctp8/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/ctp8) |
+| [C1-DTLZ1 with 3 objectives](c1_dtlz1_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/c1-dtlz1-3obj) |
+| [C1-DTLZ3 with 3 objectives](c1_dtlz3_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/c1-dtlz3-3obj) |
+| [C2-DTLZ2 with 3 objectives](c2_dtlz2_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/c2-dtlz2-3obj) |
+| [Convex C2-DTLZ2 with 3 objectives](convex_c2_dtlz2_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/convex-c2-dtlz2-3obj) |
+| [C3-DTLZ1 with 3 objectives](c3_dtlz1_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/c3-dtlz1-3obj) |
+| [C3-DTLZ4 with 3 objectives](c3_dtlz4_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/c3-dtlz4-3obj) |
 | [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neuroevolution) |
 | [Asynchronous evaluation](asynchronous/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/asynchronous) |
 | [Neuroevolution on the GPU](gpu/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gpu) |

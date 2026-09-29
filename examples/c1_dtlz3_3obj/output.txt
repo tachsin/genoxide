@@ -1,0 +1,6 @@
+NSGA-III with Deb's rules, 1500 generations: 92 solutions on the front, all feasible
+  target points reached: 0 of 91
+  IGD+ 8.00426, hypervolume 0.0000, 0.00% of the target points' 0.7449
+NSGA-III on the objectives alone, 1500 generations: 92 solutions on the front, all feasible
+  target points reached: 91 of 91
+  IGD+ 0.00076, hypervolume 0.7436, 99.83% of the target points' 0.7449

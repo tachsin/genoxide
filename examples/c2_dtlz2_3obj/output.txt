@@ -1,0 +1,3 @@
+NSGA-III, 250 generations: 92 solutions on the front, all feasible
+  target points reached: 58 of 58
+  IGD+ 0.00090, hypervolume 0.6708, 102.64% of the target points' 0.6535
