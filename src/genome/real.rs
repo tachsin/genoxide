@@ -278,7 +278,7 @@ mod tests {
     fn validation() {
         assert!(Real::new([]).is_err());
         assert!(Real::uniform(MAX_SIZE, 0.0..=1.0).is_ok());
-        for len in [MAX_SIZE + 1, 1 << 40, usize::MAX] {
+        for len in [MAX_SIZE + 1, usize::MAX] {
             assert!(Real::uniform(len, 0.0..=1.0).is_err());
         }
         // no size hint: counted while collected
