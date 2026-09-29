@@ -29,9 +29,9 @@ use std::cmp::Ordering;
 ///    worst case, so a generation that removes N solutions costs O(N³): fine for populations of
 ///    a few hundred.
 ///
-/// Dominance is constrained dominance ([`dominates`]), and distances are measured with each
-/// objective scaled to its range among the valid solutions, so objectives with different scales
-/// count equally.
+/// Dominance is constrained dominance ([`dominates`](super::dominates)), and distances are
+/// measured with each objective scaled to its range among the valid solutions, so objectives with
+/// different scales count equally.
 ///
 /// Built with [`Spea2::builder`], run with a [`MultiEngine`](super::MultiEngine).
 ///
