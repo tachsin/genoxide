@@ -1,6 +1,6 @@
 //! SPEA2: the strength Pareto evolutionary algorithm 2.
 
-use super::breed::{Variation, distinct, scores_of};
+use super::breed::{Spares, Variation, distinct, scores_of};
 use super::pareto::{dominance, gains};
 use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
@@ -77,6 +77,8 @@ pub struct Spea2<R: Representation, C, X, const M: usize> {
     pending: Vec<usize>,
     front: Vec<Individual<R::Genome, Scores<M>>>,
     discarded: Vec<Individual<R::Genome, Scores<M>>>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    spares: Spares<R::Genome>,
     started: bool,
     asked: bool,
     generation: u64,
@@ -306,6 +308,7 @@ where
                 }
             },
             &mut self.offspring,
+            &mut self.spares,
         );
     }
 
@@ -332,7 +335,7 @@ where
         }
         let mut slots: Vec<Option<Individual<R::Genome, Scores<M>>>> =
             pool.into_iter().map(Some).collect();
-        self.discarded.clear();
+        self.spares.keep_all(self.discarded.drain(..));
         for (index, slot) in slots.iter_mut().enumerate() {
             if !selected[index] && index >= parent_count {
                 self.discarded.push(slot.take().expect("not taken yet"));
@@ -348,6 +351,8 @@ where
             population.push(individual);
             self.fitness.push(fitness[index]);
         }
+        // the parents that didn't survive
+        self.spares.keep_all(slots.into_iter().flatten());
         self.population = Population::new(population);
     }
 
@@ -628,6 +633,7 @@ impl<R: Representation, const M: usize, C, X> Spea2Builder<R, M, C, X> {
             generation: 0,
             evaluations: 0,
             front_generation: 0,
+            spares: Spares::default(),
         })
     }
 }
