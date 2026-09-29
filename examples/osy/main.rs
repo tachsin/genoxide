@@ -22,9 +22,10 @@ use genoxide::prelude::*;
 
 fn main() -> Result<()> {
     let problem = Osy;
-    // the settings of the NSGA-II paper: a mutation rate of 1/n for n genes
+    // the NSGA-II paper's crossover and mutation, a mutation rate of 1/n for n genes; twice its
+    // population, which keeps all five pieces of the front, and twice its generations
     let nsga2 = Nsga2::builder(problem.representation(), [Minimize; 2])
-        .population_size(100)
+        .population_size(200)
         .crossover(SimulatedBinaryCrossover::new(20.0)?)
         .mutate(PolynomialMutation::per_gene(1.0 / 6.0, 20.0)?)
         .seed(1)
@@ -33,7 +34,7 @@ fn main() -> Result<()> {
     // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
     let mut trace = trace::Trace::from_env();
     let outcome = MultiEngine::new(nsga2, problem)
-        .stop_when(Stop::generations(250))
+        .stop_when(Stop::generations(500))
         .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 

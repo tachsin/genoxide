@@ -64,7 +64,7 @@ Deb, Pratap and Meyarivan's table 1 lists the same five pieces.
 
 ## What makes it hard
 
-The constraints. About 3% of the box is feasible: 6 of the run's first 100 random solutions are.
+The constraints. About 3% of the box is feasible: 7 of the run's first 200 random solutions are.
 Six variables must be right at once: x₄ and x₆ at 0, x₅ at an end of its range, and (x₁, x₂) on a
 corner or an edge of the quadrilateral.
 
@@ -92,13 +92,14 @@ region.
 ## Algorithm
 
 NSGA-II, which ranks solutions into non-dominated fronts and prefers the less crowded ones within a
-front, with parents and children competing for the next population. The settings are those of the
-NSGA-II paper:
+front, with parents and children competing for the next population. The crossover and the
+mutation are those of the NSGA-II paper:
 
-- a population of 100, for 250 generations;
 - simulated binary crossover with η = 20, at genoxide's default rate of 0.9;
 - polynomial mutation with η = 20, at a rate of 1/n per gene for n genes: 1/6, one of the six
-  genes per child on average.
+  genes per child on average;
+- a population of 200, for 500 generations: twice the paper's 100 and 250. With 100, NSGA-II
+  sometimes loses a piece of the front for good (see Good results).
 
 ## Output
 
@@ -125,17 +126,26 @@ population that is feasible in each recorded generation.
 ## Good results
 
 A good front is all feasible, has solutions along all five pieces, and has an IGD+ near 0 and a
-hypervolume near 16546.1. 100 points of the optimal front, spread evenly along it, give a
-hypervolume of 16477.5 and an IGD+ of 0.17.
+hypervolume near 16546.1. 200 points of the optimal front, spread evenly along it, give a
+hypervolume of 16512.1 and an IGD+ of 0.084.
 
-The run's population is all feasible by generation 3, but it finds the pieces one after another.
-At generation 16, its front lies along pieces 3 to 5, from f₁ = −235 to −96. It reaches piece 2 at
-generation 20 and piece 1 at generation 28. It comes within 2 of the end of the front, (−274, 76),
-where x₃ and x₅ are both 5, only at generation 64. The hypervolume rises with each piece found, to
-15934 at generation 48, 16195 at generation 64 and 16378 at generation 96, and slowly after that.
+The run's population is all feasible by generation 4, but it finds the pieces one after another.
+At generation 8, its front runs from f₁ = −242 to −21, along pieces 3 to 5 and not yet on the
+front. It reaches piece 2 at generation 11 and piece 1 at generation 86. It comes within 2 of the
+end of the front, (−274, 76), where x₃ and x₅ are both 5, only at generation 155. The hypervolume
+rises with each piece found, to 15904 at generation 48, 16105 at generation 96, 16370 at
+generation 128 and 16494 at generation 250, and slowly after that.
 
-The final front has 100 solutions, 23, 24, 31, 12 and 10 along the five pieces, an IGD+ of 0.40 and
-a hypervolume of 16427.8, 99.3% of the whole front's. It puts more solutions than the evenly
-spread points (11, 11, 46, 4 and 28) on the steep pieces and fewer on the flat ones: NSGA-II
+The final front has 200 solutions, 37, 42, 68, 19 and 34 along the five pieces, an IGD+ of 0.13 and
+a hypervolume of 16502.9, 99.7% of the whole front's. It puts more solutions than the evenly
+spread points (22, 22, 90, 10 and 56) on the steep pieces and fewer on the flat ones: NSGA-II
 measures crowding with each objective scaled to its range, and pieces 1 and 2 each span a third of
 f₂'s.
+
+That meets the target for this example: an IGD+ of at most 0.01 with the objectives scaled to the
+front's range, f₁ divided by 232 and f₂ by 72. The run's is 0.0013. Every seed from 1 to 200 meets
+it, the largest 0.0037; on seeds 1 to 20, the hypervolume ends between 97.9% and 99.7% of the whole
+front's. With the paper's population of 100 and 250 generations, 18 of the 200 seeds miss the
+target. More generations help only some of them: after 500 or 1,000 generations, 5 still miss it,
+with an IGD+ above 0.2 and a hypervolume below 57% of the whole front's, their front lacking a
+piece. With 200 and 250 generations, 3 miss it, the worst with 0.0104.
