@@ -1,0 +1,2 @@
+0 conflicts after 4 generations and 100 evaluations
+columns [5, 2, 0, 6, 4, 7, 1, 3]

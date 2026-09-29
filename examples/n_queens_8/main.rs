@@ -8,14 +8,14 @@
 //! page, with `trace.rs`.
 //!
 //! ```text
-//! cargo run --release --example n_queens
+//! cargo run --release --example n_queens_8
 //! ```
 
 mod trace;
 
 use genoxide::prelude::*;
 
-const N: usize = 64;
+const N: usize = 8;
 
 // the number of pairs of queens on the same diagonal
 fn conflicts(order: &Order) -> f64 {
