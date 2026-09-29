@@ -5,12 +5,55 @@ import { categorical, extent, formatValue, linear, ticks, useEased } from "../ch
 import { Axes, Legend, PlotBox, TipRows, Tooltip, pointerIn } from "../chart-parts";
 
 const MARGIN = { left: 40, right: 14, top: 22, bottom: 38 };
+// the frames on each side whose evaluations can fill the window while the axis catches up
+const NEIGHBORS = 8;
+
+// a worker runs one evaluation at a time: its worker and start name it, in every frame
+const eventKey = (e) => `${e[0]}:${e[1]}`;
+
+/**
+ * The evaluations to draw in the window [t0, t1]: the frame's own, the last ones to end, and the
+ * neighbouring frames' that ended before them or started after them. The frame's window starts where the
+ * earliest of its own started, so earlier evaluations end in it too. And while the axis eases to
+ * the next frame's window, which moves on by most of its width, the earlier frames' evaluations
+ * fill what it still shows of the last one: with the frame's own alone, the plot would empty and
+ * fill again every frame of the playback.
+ */
+function shownEvents(frames, index, events, t0, t1) {
+  if (!events.length) return events;
+  const ends = extent(events.map((e) => e[2]));
+  const seen = new Set(events.map(eventKey));
+  // in time order, as the bars already drawn are, so that React adds and removes bars only
+  const earlier = [];
+  const later = [];
+  for (const [step, chunks] of [
+    [-1, earlier],
+    [1, later],
+  ]) {
+    for (let j = index + step, n = 0; j >= 0 && j < frames.length && n < NEIGHBORS; j += step, n++) {
+      const chunk = [];
+      let inWindow = false;
+      for (const e of frames[j].state?.events ?? []) {
+        if (e[2] < t0 || e[1] > t1) continue;
+        inWindow = true;
+        // ended before the frame's own, or (scrubbing back) started after the last of them ended
+        if ((e[2] < ends[0] || e[1] >= ends[1]) && !seen.has(eventKey(e))) {
+          seen.add(eventKey(e));
+          chunk.push(e);
+        }
+      }
+      if (!inWindow) break;
+      chunks.push(chunk);
+    }
+  }
+  return [...earlier.reverse().flat(), ...events, ...later.flat()];
+}
 
 /**
  * `timeline`: each evaluation as a bar on its worker's row, over wall-clock
  * time; older evaluations fade. The time axis follows the recorded window.
  */
-export default function TimelinePlot({ trace, frame, dark, reduced }) {
+export default function TimelinePlot({ trace, frame, index, dark, reduced }) {
   const [hover, setHover] = useState(null);
   const workers = Math.max(1, trace.problem?.workers ?? 1);
   const events = frame.state?.events ?? [];
@@ -26,6 +69,7 @@ export default function TimelinePlot({ trace, frame, dark, reduced }) {
   const span = target[1] - target[0];
   const rate = span > 0 ? events.length / span : null;
   const now = target[1];
+  const shown = shownEvents(trace.frames ?? [], index ?? 0, events, t0, t1);
 
   return (
     <div>
@@ -63,6 +107,8 @@ export default function TimelinePlot({ trace, frame, dark, reduced }) {
           const area = { left: MARGIN.left, right: width - MARGIN.right, top: MARGIN.top, bottom: height - MARGIN.bottom };
           const x = linear([t0, t1], [area.left, area.right]);
           const every = Math.ceil(workers / Math.max(1, Math.floor((area.bottom - area.top) / 14)));
+          // the right edge once the axis has caught up; in the plot while it catches up
+          const nowX = Math.min(area.right, Math.max(area.left, x(now)));
           return (
             <>
               <Axes
@@ -81,33 +127,30 @@ export default function TimelinePlot({ trace, frame, dark, reduced }) {
                 ) : null,
               )}
               <g>
-                {events.map((e) => {
+                {shown.map((e) => {
                   const x0 = Math.max(area.left, x(e[1]));
                   const x1 = Math.min(area.right, x(e[2]));
                   if (x1 <= area.left || x0 >= area.right) return null;
-                  // an evaluation keeps its bar from frame to frame (a worker runs one at a time, so
-                  // worker and start name it), and fades with its time in the window, not its place
-                  // in the list: the bars slide with the axis instead of being drawn again
+                  // an evaluation keeps its bar from frame to frame, and fades with its time in the
+                  // window, not its place in the list: the bars slide with the axis instead of
+                  // being drawn again
                   const age = t1 > t0 ? Math.min(1, Math.max(0, (e[2] - t0) / (t1 - t0))) : 1;
                   return (
                     <rect
-                      key={`${e[0]}:${e[1]}`}
+                      key={eventKey(e)}
                       x={x0}
                       y={area.top + e[0] * row + 2}
                       width={Math.max(1, x1 - x0 - 1)}
                       height={row - 4}
                       rx={Math.min(3, (row - 4) / 3)}
                       fill={color}
-                      style={{
-                        fillOpacity: 0.3 + 0.7 * age,
-                        transition: reduced ? undefined : "fill-opacity 250ms ease-out",
-                      }}
+                      fillOpacity={0.3 + 0.7 * age}
                     />
                   );
                 })}
               </g>
-              <line x1={x(now)} x2={x(now)} y1={area.top - 6} y2={area.bottom} className="stroke-base-content" strokeWidth={1.5} />
-              <text x={x(now) - 4} y={area.top - 9} textAnchor="end" className="fill-base-content/70 text-[10px] tabular-nums">
+              <line x1={nowX} x2={nowX} y1={area.top - 6} y2={area.bottom} className="stroke-base-content" strokeWidth={1.5} />
+              <text x={nowX - 4} y={area.top - 9} textAnchor="end" className="fill-base-content/70 text-[10px] tabular-nums">
                 {formatValue(Number(now.toPrecision(4)))} s
               </text>
               <rect
@@ -120,7 +163,7 @@ export default function TimelinePlot({ trace, frame, dark, reduced }) {
                   const p = pointerIn(event);
                   const w = Math.floor((p.y - area.top) / row);
                   const t = x.invert(p.x);
-                  const e = events.find((ev) => ev[0] === w && t >= ev[1] && t <= ev[2]);
+                  const e = shown.find((ev) => ev[0] === w && t >= ev[1] && t <= ev[2]);
                   setHover(e ? { e, px: p.x, py: area.top + (w + 1) * row } : null);
                 }}
                 onPointerLeave={() => setHover(null)}
