@@ -21,7 +21,7 @@ pub use asynchronous::AsyncEngine;
 pub use info::Evaluated;
 #[doc(hidden)]
 pub use info::Info;
-pub(crate) use info::InfoStore;
+pub(crate) use info::{GenomeHashing, InfoStore};
 pub use stop::{STALL_GENERATIONS, Stop, StopReason};
 
 use crate::algorithm::{Algorithm, Candidates};
