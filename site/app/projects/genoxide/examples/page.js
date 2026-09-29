@@ -2,7 +2,7 @@ import Breadcrumbs from "@/components/projects/Breadcrumbs";
 import ExamplesBrowser from "@/components/projects/genoxide/ExamplesBrowser";
 import JsonLd from "@/components/projects/JsonLd";
 import SourceUnavailable from "@/components/projects/SourceUnavailable";
-import { EXAMPLES_PATH, exampleCategories, getExamples } from "@/lib/projects/genoxide/examples";
+import { EXAMPLES_PATH, exampleCategories, exampleGrid, getExamples } from "@/lib/projects/genoxide/examples";
 import { GENOXIDE_LINKS, GENOXIDE_OG_IMAGE, GENOXIDE_PATH } from "@/lib/projects/genoxide/meta";
 import { breadcrumbList } from "@/lib/projects/json-ld";
 import { projectsMetadata } from "@/lib/projects/metadata";
@@ -27,14 +27,9 @@ const CRUMBS = [
 
 export default async function ExamplesPage() {
   const { ok, examples } = await getExamples();
-  // Only what the grid shows goes to the client component.
-  const cards = examples.map(({ slug, title, category, summary, languages }) => ({
-    slug,
-    title,
-    category,
-    summary,
-    languages,
-  }));
+  // Only what the grid shows goes to the client component: a card per example, a family's problems
+  // (one paper's, e.g. WFG1 to WFG9) in one card.
+  const entries = exampleGrid(examples);
 
   const structuredData = {
     "@graph": [
@@ -73,8 +68,8 @@ export default async function ExamplesPage() {
       </header>
 
       <div className="proj-rise-1 mt-10">
-        {ok && cards.length ? (
-          <ExamplesBrowser examples={cards} categories={exampleCategories(examples)} basePath={EXAMPLES_PATH} />
+        {ok && entries.length ? (
+          <ExamplesBrowser entries={entries} categories={exampleCategories(examples)} basePath={EXAMPLES_PATH} />
         ) : (
           <SourceUnavailable href={GENOXIDE_LINKS.examplesDir} linkLabel="Examples on GitHub">
             The examples are all in the repository's examples folder, each with its README and code.
