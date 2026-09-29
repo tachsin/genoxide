@@ -47,7 +47,6 @@ python examples/tsp_berlin52/main.py
 | [Rastrigin function](rastrigin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rastrigin) |
 | [Griewank](griewank/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/griewank) |
 | [Schwefel 2.26](schwefel_2_26/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schwefel-2-26) |
-| [Function suite](function_suite/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/function-suite) |
 | [Himmelblau's function](himmelblau/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/himmelblau) |
 | [Branin](branin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/branin) |
 | [Goldstein-Price](goldstein_price/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/goldstein-price) |
