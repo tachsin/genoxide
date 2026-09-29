@@ -203,27 +203,11 @@ On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)
 - [x] Benchmarks: a matched suite of three problems, one method each ([#284](https://github.com/tachsin/genoxide/pull/284)), with every library bug it found reported upstream ([notes](docs/benchmarks/notes.md#bugs-found))
 - [x] What a fitness function computes besides the fitness, kept by the engine for the individuals it holds ([#246](https://github.com/tachsin/genoxide/issues/246))
 
-### 0.10: Rust 1.88, and local optimization
-- [ ] Rust 1.88, and small performance gains across the library ([#314](https://github.com/tachsin/genoxide/issues/314), [#315](https://github.com/tachsin/genoxide/pull/315))
-- [ ] Python: `Progress` builds its arrays only when a callback reads them
-- [ ] Linear algebra through a dependency pinned to a portable path, convergence stops, restarts, Nelder-Mead ([docs/optimization-plan.md](docs/optimization-plan.md), batch A1)
-- [ ] Gradients (supplied, or by finite differences evaluated as one batch), line searches, L-BFGS-B (batch A2)
+### 0.10: Rust 1.88
+- [x] Rust 1.88, and small performance gains across the library ([#314](https://github.com/tachsin/genoxide/issues/314), [#315](https://github.com/tachsin/genoxide/pull/315))
+- [x] Python: `Progress` builds its arrays only when a callback reads them ([#324](https://github.com/tachsin/genoxide/pull/324))
 
-### 0.11: Bayesian optimization
-- [ ] Gaussian processes; EI, log-EI, UCB and PI; batch, constrained and integer-variable Bayesian optimization, also on the asynchronous engine (batch B)
-
-### 0.12: Constrained nonlinear programming
-- [ ] SQP and the augmented Lagrangian, on the constrained test problems (batch C)
-
-### 0.13: More local methods
-- [ ] BFGS, conjugate gradient, trust region, Levenberg-Marquardt, the Adam family (batch D1)
-- [ ] BOBYQA, COBYLA, pattern search, MADS, basin hopping (batch D2)
-
-### 0.14: Advanced Bayesian optimization, surrogates and multi-fidelity
-- [ ] ParEGO, EHVI, TPE, TuRBO, mixed variables (batch E)
-- [ ] Surrogate-assisted evolution, multi-fidelity, DIRECT (batch F)
-
-### 0.15: Genetic programming and neuroevolution
+### 0.11: Genetic programming and neuroevolution
 - [ ] Tree GP, strongly typed
 - [ ] Subtree crossover; point, subtree and hoist mutation; bloat control
 - [ ] Symbolic regression examples
@@ -231,7 +215,25 @@ On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)
 - [ ] Neuroevolution with evolution strategies
 - [ ] Python: zero-copy numpy genomes, the ES, islands and checkpoints
 
-### 0.16: Frontier
+### 0.12: Local optimization
+- [ ] Linear algebra through a dependency pinned to a portable path, convergence stops, restarts, Nelder-Mead ([docs/optimization-plan.md](docs/optimization-plan.md), batch A1)
+- [ ] Gradients (supplied, or by finite differences evaluated as one batch), line searches, L-BFGS-B (batch A2)
+
+### 0.13: Bayesian optimization
+- [ ] Gaussian processes; EI, log-EI, UCB and PI; batch, constrained and integer-variable Bayesian optimization, also on the asynchronous engine (batch B)
+
+### 0.14: Constrained nonlinear programming
+- [ ] SQP and the augmented Lagrangian, on the constrained test problems (batch C)
+
+### 0.15: More local methods
+- [ ] BFGS, conjugate gradient, trust region, Levenberg-Marquardt, the Adam family (batch D1)
+- [ ] BOBYQA, COBYLA, pattern search, MADS, basin hopping (batch D2)
+
+### 0.16: Advanced Bayesian optimization, surrogates and multi-fidelity
+- [ ] ParEGO, EHVI, TPE, TuRBO, mixed variables (batch E)
+- [ ] Surrogate-assisted evolution, multi-fidelity, DIRECT (batch F)
+
+### 0.17: Frontier
 - [ ] Quality-diversity: MAP-Elites, CMA-ME, novelty search
 - [ ] LLM-guided evolution (async operators calling a language model)
 - [ ] Adaptive operator selection and automatic parameter tuning
