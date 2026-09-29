@@ -75,6 +75,11 @@ the ones above.
 
 The function isn't known to be exactly representable by this network, so there is no known optimum.
 For scale, the samples have a variance of 0.177: a network that outputs 0 everywhere has that error.
-In one run, both versions reached an error of 0.0115, which leaves 6.5% of the variance unexplained.
-On that machine, with an NVIDIA GeForce RTX 4060 and 20 CPU threads, the GPU run took 1.10 s and the
-CPU run 5.53 s.
+In the run of `output.txt`, both versions reached an error of 0.0115, which leaves 6.5% of the
+variance unexplained. On that machine, with an NVIDIA GeForce RTX 4060 and 20 CPU threads, the GPU
+run took 1.92 s and the CPU run 6.30 s; another run there gave the same errors in 1.10 s and 4.39 s.
+
+The genetic algorithm stops far from the best fit, though. Gradient descent (L-BFGS-B, with the
+weights in the same [−3, 3]) from 6 random starts reached errors of 9.0 × 10⁻⁷ to 7.2 × 10⁻⁵: the
+network can fit the function almost exactly. This example measures how fast a generation is
+evaluated, not how well 300 generations of a genetic algorithm search.
