@@ -5,10 +5,11 @@ use genoxide::engine::FitnessFunction;
 use genoxide::genome::{Bits, Integers, Order, Reals};
 use genoxide::multi::MultiFitnessFunction;
 use std::fmt::Write as _;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -85,13 +86,42 @@ impl Genes for Order {
 struct Process {
     child: Child,
     stdin: Option<BufWriter<ChildStdin>>,
-    stdout: BufReader<ChildStdout>,
+    // the lines of the program's stdout, read by a thread of their own so that a wait for an
+    // answer can end; disconnected at the end of the output
+    lines: Receiver<io::Result<String>>,
     line: String,
 }
 
-/// The fitness programs, one per worker. The first failure (a program that exits or writes
-/// something that isn't a fitness) is kept, sets the abort flag, and makes every later
-/// evaluation NaN without asking a program.
+// reads the lines of `stdout` into `lines` until its end, an error, or the pool is gone
+fn read_lines(stdout: ChildStdout, lines: &Sender<io::Result<String>>) {
+    let mut stdout = BufReader::new(stdout);
+    loop {
+        let mut line = String::new();
+        match stdout.read_line(&mut line) {
+            Ok(0) => return,
+            Ok(_) => {
+                if lines.send(Ok(line)).is_err() {
+                    return;
+                }
+            }
+            Err(error) => {
+                let _ = lines.send(Err(error));
+                return;
+            }
+        }
+    }
+}
+
+/// The longest wait for an answer, and the setting it comes from.
+#[derive(Clone, Copy, Debug)]
+pub struct Timeout {
+    pub limit: Duration,
+    pub setting: &'static str,
+}
+
+/// The fitness programs, one per worker. The first failure (a program that exits, writes
+/// something that isn't a fitness or more lines than genomes, or doesn't answer in time) is
+/// kept, sets the abort flag, and makes every later evaluation NaN without asking a program.
 pub struct Pool {
     command: String,
     processes: Vec<Mutex<Process>>,
@@ -99,15 +129,18 @@ pub struct Pool {
     available: Condvar,
     failure: Mutex<Option<String>>,
     abort: Arc<AtomicBool>,
+    timeout: Option<Timeout>,
 }
 
 impl Pool {
-    /// Starts `workers` copies of `command`, in `directory`.
+    /// Starts `workers` copies of `command`, in `directory`, each answer awaited at most
+    /// `timeout`.
     pub fn start(
         command: &[String],
         directory: &Path,
         workers: usize,
         abort: Arc<AtomicBool>,
+        timeout: Option<Timeout>,
     ) -> Result<Self, String> {
         let (program, arguments) = command.split_first().ok_or("`fitness.command` is empty")?;
         // absolute: a relative program path joined to a relative directory would be resolved
@@ -146,10 +179,15 @@ impl Pool {
             let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
                 return Err(format!("can't talk to `{}`", command.join(" ")));
             };
+            let (sender, lines) = mpsc::channel();
+            std::thread::Builder::new()
+                .name("fitness output".to_string())
+                .spawn(move || read_lines(stdout, &sender))
+                .map_err(|error| format!("can't start a thread: {error}"))?;
             processes.push(Mutex::new(Process {
                 child,
                 stdin: Some(BufWriter::new(stdin)),
-                stdout: BufReader::new(stdout),
+                lines,
                 line: String::new(),
             }));
         }
@@ -160,6 +198,7 @@ impl Pool {
             available: Condvar::new(),
             failure: Mutex::new(None),
             abort,
+            timeout,
         })
     }
 
@@ -180,14 +219,30 @@ impl Pool {
         match result {
             Ok(violation) => violation,
             Err(failure) => {
-                if let Ok(mut first) = self.failure.lock() {
-                    first.get_or_insert(failure);
-                }
-                self.abort.store(true, Ordering::Relaxed);
+                self.fail(failure);
                 values.fill(f64::NAN);
                 0.0
             }
         }
+    }
+
+    // keeps the first failure and stops the run
+    fn fail(&self, failure: String) {
+        if let Ok(mut first) = self.failure.lock() {
+            first.get_or_insert(failure);
+        }
+        self.abort.store(true, Ordering::Relaxed);
+    }
+
+    // a line one too many: each answer after the extra one would be taken for the next genome's.
+    // `line` is where it showed, not necessarily the extra one, e.g. the last answer after a
+    // banner
+    fn extra_line(&self, line: &str) -> String {
+        format!(
+            "`{}` wrote more lines than genomes (`{}` was one too many), so fitness values would belong to the wrong genomes: write one line per genome, and anything else to stderr",
+            self.command,
+            line.trim_end()
+        )
     }
 
     // writes a genome to program `index` and reads its answer
@@ -196,6 +251,14 @@ impl Pool {
             .lock()
             .map_err(|_| "a worker panicked".to_string())?;
         let process = &mut *process;
+        // a line before the genome is written answers nothing
+        match process.lines.try_recv() {
+            Ok(Ok(line)) => return Err(self.extra_line(&line)),
+            Ok(Err(error)) => {
+                return Err(format!("can't read from `{}`: {error}", self.command));
+            }
+            Err(TryRecvError::Empty | TryRecvError::Disconnected) => {}
+        }
         process.line.clear();
         genome.write_genes(&mut process.line);
         process.line.push('\n');
@@ -212,17 +275,35 @@ impl Pool {
                     self.command
                 )
             })?;
-        process.line.clear();
-        let read = process
-            .stdout
-            .read_line(&mut process.line)
-            .map_err(|error| format!("can't read from `{}`: {error}", self.command))?;
-        if read == 0 {
-            return Err(format!(
-                "`{}` exited instead of writing a fitness",
-                self.command
-            ));
-        }
+        let answer = match self.timeout {
+            Some(timeout) => process.lines.recv_timeout(timeout.limit),
+            None => process
+                .lines
+                .recv()
+                .map_err(|_| RecvTimeoutError::Disconnected),
+        };
+        process.line = match answer {
+            Ok(Ok(line)) => line,
+            Ok(Err(error)) => {
+                return Err(format!("can't read from `{}`: {error}", self.command));
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                return Err(format!(
+                    "`{}` exited instead of writing a fitness",
+                    self.command
+                ));
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                let (limit, setting) = self
+                    .timeout
+                    .map(|timeout| (timeout.limit, timeout.setting))
+                    .unwrap_or_default();
+                return Err(format!(
+                    "`{}` didn't answer a genome within {limit:?} (`{setting}`)",
+                    self.command
+                ));
+            }
+        };
         parse(&process.line, values).map_err(|reason| {
             format!(
                 "`{}` wrote `{}`: {reason}",
@@ -293,20 +374,42 @@ pub fn parse(line: &str, values: &mut [f64]) -> Result<f64, String> {
     }
 }
 
-impl Drop for Pool {
-    // closes the programs' input, gives them a second to exit, then kills them
-    fn drop(&mut self) {
-        let mut children = Vec::new();
-        for process in &mut self.processes {
-            let process = match process.get_mut() {
+impl Pool {
+    /// Closes the programs' input, gives them a second to exit, then kills them. The first
+    /// failure, if any: also a program that wrote more lines than genomes, found in what it
+    /// writes until it exits.
+    pub fn close(&self) -> Option<String> {
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let mut extra = None;
+        for process in &self.processes {
+            let mut process = match process.lock() {
                 Ok(process) => process,
                 Err(poisoned) => poisoned.into_inner(),
             };
-            process.stdin.take();
-            children.push(&mut process.child);
+            if process.stdin.take().is_none() {
+                // closed already
+                continue;
+            }
+            // the rest of the output, until the program closes it
+            loop {
+                let wait = deadline.saturating_duration_since(Instant::now());
+                match process.lines.recv_timeout(wait) {
+                    Ok(Ok(line)) => {
+                        extra.get_or_insert_with(|| self.extra_line(&line));
+                    }
+                    Ok(Err(_))
+                    | Err(RecvTimeoutError::Disconnected | RecvTimeoutError::Timeout) => {
+                        break;
+                    }
+                }
+            }
         }
-        let deadline = Instant::now() + Duration::from_secs(1);
-        for child in children {
+        for process in &self.processes {
+            let mut process = match process.lock() {
+                Ok(process) => process,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            let child = &mut process.child;
             while matches!(child.try_wait(), Ok(None)) && Instant::now() < deadline {
                 std::thread::sleep(Duration::from_millis(5));
             }
@@ -315,6 +418,16 @@ impl Drop for Pool {
             }
             let _ = child.wait();
         }
+        if let Some(extra) = extra {
+            self.fail(extra);
+        }
+        self.failure()
+    }
+}
+
+impl Drop for Pool {
+    fn drop(&mut self) {
+        self.close();
     }
 }
 

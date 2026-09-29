@@ -57,7 +57,8 @@ generation 0: 10 evaluations, best 41.28 (generation 0), 0.004 s
 
 - **Input:** genoxide writes one genome per line to the program's stdin, the genes separated by spaces. Bits are `0` and `1`. Integers and permutations are whole numbers. Reals are written so they read back exactly.
 - **Output:** the program writes one line per genome to stdout: the objective values, then optionally a constraint violation, separated by spaces. The violation is 0 for a feasible genome, otherwise how far it is from feasible. A negative violation stops the run with an error. `inf` and `-inf` are valid values. `nan`, as an objective value or the violation, marks a genome that can't be scored.
-- **Flush after each line.** genoxide waits for each answer, so output left in a buffer makes the run wait forever. Python buffers stdout when it's a pipe: use `flush=True`.
+- **One line per genome, nothing else.** A line more (a startup banner, a debug value) would make each later answer count for the next genome, so it stops the run with an error, found before the next genome is written or when the programs close. Write anything else to stderr.
+- **Flush after each line.** genoxide waits for each answer, so output left in a buffer makes the run wait: up to `fitness.timeout`, or `stop.time` without one, then it stops with an error; forever without either. Python buffers stdout when it's a pipe: use `flush=True`.
 - **stderr:** anything the program writes there shows on genoxide's stderr.
 
 A Python fitness function, minimizing the sum of squares with the first gene at least 1:
@@ -78,7 +79,7 @@ objectives = ["minimize"]
 workers = 8
 ```
 
-If the program exits, can't be started, or writes something else, the run stops with an error. The error names the program and the line it wrote. No checkpoint is saved after the failure.
+If the program exits, can't be started, writes something else or more lines than genomes, or doesn't answer in time, the run stops with an error. The error names the program and the line it wrote. No checkpoint is saved after the failure.
 
 A relative program path with a directory, like `./fitness`, is relative to the run file.
 
@@ -106,6 +107,7 @@ TOML, or JSON for files ending in `.json`, with the same structure. Unknown sett
 | `objectives` | `["maximize"]` | `"maximize"` or `"minimize"`, one per objective |
 | `workers` | the number of CPUs | programs evaluating at the same time, 1 to 4096 |
 | `nan` | `"invalid"` | a NaN makes the genome invalid (`"invalid"`), or stops the run (`"error"`) |
+| `timeout` | `stop.time` | the longest wait for one answer, e.g. `"10m"`; a program that takes longer stops the run with an error |
 
 Set exactly one of `command` and `builtin`.
 
@@ -227,7 +229,7 @@ genoxide saves the run every `every` generations and when it stops. `genoxide ru
 
 For `steady-ga`, that holds with one worker only. With more, the results depend on timing, and the evaluations in flight aren't in a checkpoint.
 
-Between runs, you can change `fitness.command`, `fitness.builtin`, `fitness.workers`, `fitness.nan`, `stop`, `report` and `checkpoint`, e.g. to run longer. A change to `genome`, `fitness.objectives` or `algorithm` is an error.
+Between runs, you can change `fitness.command`, `fitness.builtin`, `fitness.workers`, `fitness.nan`, `fitness.timeout`, `stop`, `report` and `checkpoint`, e.g. to run longer. A change to `genome`, `fitness.objectives` or `algorithm` is an error.
 
 ## The result
 

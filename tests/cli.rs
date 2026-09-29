@@ -254,6 +254,100 @@ fn runs_resume_from_checkpoints() {
     std::fs::remove_dir_all(&directory).unwrap();
 }
 
+// a script in `directory` as a fitness command: `unix` for sh, `windows` for cmd
+fn script(directory: &Path, name: &str, unix: &str, windows: &str) -> String {
+    if cfg!(windows) {
+        std::fs::write(directory.join(format!("{name}.cmd")), windows).unwrap();
+        // `.\` too: cmd needn't look in the current directory
+        format!("command = [\"cmd\", \"/c\", \".\\\\{name}.cmd\"]")
+    } else {
+        std::fs::write(directory.join(format!("{name}.sh")), unix).unwrap();
+        format!("command = [\"sh\", \"{name}.sh\"]")
+    }
+}
+
+#[test]
+fn a_fitness_program_that_writes_extra_lines_is_an_error() {
+    let directory = directory("extra");
+    // a line before its answers: each answer would be taken for the next genome's
+    let banner = script(
+        &directory,
+        "banner",
+        &format!("echo 42\nexec '{GENOXIDE}' fitness sphere\n"),
+        &format!("@echo 42\r\n@\"{GENOXIDE}\" fitness sphere\r\n"),
+    );
+    let text = CMAES.replace("builtin = \"sphere\"", &banner);
+    let error = run(&directory, "banner.toml", &text, &[]).unwrap_err();
+    assert!(error.contains("wrote more lines than genomes"), "{error}");
+    assert!(error.contains("banner"), "{error}");
+
+    // a line after every answer, from a program that answers each genome on its own
+    #[cfg(unix)]
+    {
+        let chatty = script(
+            &directory,
+            "chatty",
+            &format!(
+                "while read -r line; do echo \"$line\" | '{GENOXIDE}' fitness sphere; echo 7; done\n"
+            ),
+            "",
+        );
+        let text = CMAES
+            .replace("builtin = \"sphere\"", &chatty)
+            .replace("evaluations = 50000", "evaluations = 50");
+        let error = run(&directory, "chatty.toml", &text, &[]).unwrap_err();
+        // found before a genome is written or when the programs close: the line it names
+        // depends on which
+        assert!(error.contains("wrote more lines than genomes"), "{error}");
+    }
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn a_fitness_program_that_stops_answering_is_an_error() {
+    let directory = directory("silent");
+    // waits without answering, in the process that is killed: a child of its own would keep
+    // genoxide's stderr open after that
+    let silent = script(
+        &directory,
+        "silent",
+        "exec sleep 20 >/dev/null 2>&1\n",
+        // the second waits for a genome that never comes
+        "@set /p first=\r\n@set /p second=\r\n",
+    );
+    let text = CMAES.replace("builtin = \"sphere\"", &silent);
+    // at most `stop.time` for an answer
+    let started = std::time::Instant::now();
+    let error = run(
+        &directory,
+        "time.toml",
+        &text.replace("evaluations = 50000", "time = \"1s\""),
+        &[],
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("didn't answer a genome within 1s (`stop.time`)"),
+        "{error}"
+    );
+    assert!(error.contains("silent"), "{error}");
+    // or `fitness.timeout`, which comes first
+    let error = run(
+        &directory,
+        "timeout.toml",
+        &text
+            .replace("workers = 2", "workers = 2\ntimeout = \"500ms\"")
+            .replace("evaluations = 50000", "time = \"1h\""),
+        &[],
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("didn't answer a genome within 500ms (`fitness.timeout`)"),
+        "{error}"
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(15));
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
 #[test]
 fn a_failing_fitness_program_is_an_error() {
     let directory = directory("failing");
@@ -314,6 +408,10 @@ fn run_files_are_checked() {
     expect(
         &CMAES.replace("[stop]\ntarget = 1e-8\nevaluations = 50000", "[stop]"),
         "`stop` needs at least one",
+    );
+    expect(
+        &CMAES.replace("workers = 2", "workers = 2\ntimeout = \"0s\""),
+        "`fitness.timeout` must be longer than 0",
     );
     expect(
         &CMAES.replace("builtin = \"sphere\"", "builtin = \"nope\""),
