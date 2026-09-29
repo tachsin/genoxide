@@ -1,8 +1,8 @@
 //! SPEA2: the strength Pareto evolutionary algorithm 2.
 
 use super::breed::{Variation, distinct, scores_of};
-use super::pareto::gains;
-use super::{MultiObjectiveAlgorithm, Scores, dominates, non_dominated_sort};
+use super::pareto::{dominance, gains};
+use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
 use crate::genome::Representation;
 use crate::operator::{Crossover, Mutate, check_rates, check_size};
@@ -119,14 +119,27 @@ fn strength_fitness<const M: usize>(
 ) -> (Vec<f64>, Vec<Vec<f64>>) {
     let n = scores.len();
     let mut strength = vec![0usize; n];
-    let mut dominators: Vec<Vec<usize>> = vec![Vec::new(); n];
+    // every (dominating, dominated) pair
+    let mut dominations: Vec<(usize, usize)> = Vec::new();
     for a in 0..n {
-        for b in 0..n {
-            if a != b && dominates(&scores[a], &scores[b], objectives) {
-                strength[a] += 1;
-                dominators[b].push(a);
+        for b in a + 1..n {
+            match dominance(&scores[a], &scores[b], objectives) {
+                (true, _) => {
+                    strength[a] += 1;
+                    dominations.push((a, b));
+                }
+                (_, true) => {
+                    strength[b] += 1;
+                    dominations.push((b, a));
+                }
+                _ => {}
             }
         }
+    }
+    // the raw fitness: the sum of the strengths of the dominating solutions
+    let mut raw = vec![0usize; n];
+    for &(dominating, dominated) in &dominations {
+        raw[dominated] += strength[dominating];
     }
     let (mut low, mut high) = ([f64::INFINITY; M], [f64::NEG_INFINITY; M]);
     // over the finite values: one infinite value doesn't stop an objective being scaled
@@ -170,14 +183,18 @@ fn strength_fitness<const M: usize>(
         }
     }
     let k = ((n as f64).sqrt() as usize).clamp(1, n.saturating_sub(1).max(1));
+    let mut nearest = Vec::with_capacity(n);
     let fitness = (0..n)
         .map(|i| {
-            let raw: usize = dominators[i].iter().map(|&j| strength[j]).sum();
-            let mut nearest = distances[i].clone();
-            nearest.sort_by(f64::total_cmp);
-            let sigma = nearest.get(k - 1).copied().unwrap_or(f64::INFINITY);
+            // the k-th smallest distance: the value a sort would put there, as the order is total
+            nearest.clone_from(&distances[i]);
+            let sigma = if k - 1 < nearest.len() {
+                *nearest.select_nth_unstable_by(k - 1, f64::total_cmp).1
+            } else {
+                f64::INFINITY
+            };
             let sigma = if sigma.is_nan() { f64::INFINITY } else { sigma };
-            raw as f64 + 1.0 / (sigma + 2.0)
+            raw[i] as f64 + 1.0 / (sigma + 2.0)
         })
         .collect();
     (fitness, distances)
@@ -620,6 +637,7 @@ mod tests {
     use super::*;
     use crate::Objective::{Maximize, Minimize};
     use crate::genome::{Real, Reals};
+    use crate::multi::dominates;
     use crate::operator::{PolynomialMutation, SimulatedBinaryCrossover};
     use proptest::prelude::*;
 

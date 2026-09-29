@@ -50,6 +50,41 @@ pub fn dominates<const M: usize>(
     pareto_dominates_in(a.raw(), b.raw(), objectives)
 }
 
+// whether `a` dominates `b` and whether `b` dominates `a`: `dominates` both ways, in one pass
+// over the values
+pub(crate) fn dominance<const M: usize>(
+    a: &Scores<M>,
+    b: &Scores<M>,
+    objectives: &[Objective; M],
+) -> (bool, bool) {
+    match (a.is_valid(), b.is_valid()) {
+        (true, true) => {}
+        (a_valid, b_valid) => return (a_valid && !b_valid, b_valid && !a_valid),
+    }
+    if a.violation() != b.violation() {
+        let smaller = a.violation() < b.violation();
+        return (smaller, !smaller);
+    }
+    if a.violation() > 0.0 {
+        // equally infeasible
+        return (false, false);
+    }
+    let (a, b) = (a.raw(), b.raw());
+    let (mut a_better, mut b_better) = (false, false);
+    for j in 0..M {
+        let (x, y) = match objectives[j] {
+            Objective::Minimize => (a[j], b[j]),
+            Objective::Maximize => (b[j], a[j]),
+        };
+        a_better |= x < y;
+        b_better |= y < x;
+        if a_better && b_better {
+            return (false, false);
+        }
+    }
+    (a_better, b_better)
+}
+
 // Pareto dominance between non-NaN values in the direction of each objective: comparing the
 // values the other way round for a maximized objective is comparing their negations, without
 // building the minimized arrays
@@ -512,6 +547,16 @@ mod tests {
             let five_objectives = [Minimize, Maximize, Minimize, Minimize, Maximize];
             prop_assert_eq!(non_dominated_sort(&five, &five_objectives), reference_sort(&five, &five_objectives));
             prop_assert_eq!(non_dominated_sort(&one, &[Minimize]), reference_sort(&one, &[Minimize]));
+        }
+
+        #[test]
+        fn dominance_both_ways_matches_dominates(
+            a in any_scores::<3>(), b in any_scores::<3>(), objectives in any_objectives::<3>(),
+        ) {
+            prop_assert_eq!(
+                super::dominance(&a, &b, &objectives),
+                (dominates(&a, &b, &objectives), dominates(&b, &a, &objectives))
+            );
         }
 
         #[test]
