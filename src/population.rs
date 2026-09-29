@@ -118,7 +118,7 @@ impl<G: Genome> Population<G> {
 
     // Keeps the `count` best individuals, exactly as `sort_best_first` followed by
     // `truncate(count)`, and removes the others, which it returns in no particular order. When
-    // at most half are kept, it selects them and sorts only those.
+    // at most half are kept, it selects them and sorts only those; one it finds in a single pass.
     pub(crate) fn keep_best(
         &mut self,
         count: usize,
@@ -134,6 +134,19 @@ impl<G: Genome> Population<G> {
         if count > len / 2 {
             self.sort_best_first(objective);
             return self.individuals.drain(count..);
+        }
+        if count == 1 {
+            // an elitism of 1: the first of the best, found in one pass, to the front
+            let individuals = &self.individuals;
+            let best = (1..len).fold(0, |best, index| {
+                if best_first(objective, &individuals[index], &individuals[best]).is_lt() {
+                    index
+                } else {
+                    best
+                }
+            });
+            self.individuals.swap(0, best);
+            return self.individuals.drain(1..);
         }
         // the positions of the `count` best: those that the stable sort puts first, the order of
         // the fitness and then of the position
