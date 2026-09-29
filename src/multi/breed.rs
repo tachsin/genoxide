@@ -288,9 +288,13 @@ pub(crate) fn distinct<G, const M: usize>(
 where
     G: crate::genome::Genome,
 {
-    let mut members: Vec<Individual<G, Scores<M>>> = Vec::new();
+    let indices = indices.into_iter();
+    // room for every index: at most the population
+    let (least, most) = indices.size_hint();
+    let room = most.unwrap_or(least).min(population.len());
+    let mut members: Vec<Individual<G, Scores<M>>> = Vec::with_capacity(room);
     // the fingerprints of the members so far, each with the position of a member that has it
-    let mut seen = Fingerprints::default();
+    let mut seen = Fingerprints::with_capacity_and_hasher(room, Default::default());
     for index in indices {
         let individual = &population[index];
         let genome = individual.genome();
