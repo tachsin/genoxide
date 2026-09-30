@@ -40,7 +40,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - **Operators:** subtree crossover with Koza's 90% bias to function nodes, whose second point keeps both children within the limits, and one-point crossover; subtree, point, hoist, shrink and constant mutation, alone or mixed by weight. A picked node always changes.
 - **Bloat control:** Koza's depth limit and a size limit, and selections that favor smaller trees: lexicographic parsimony pressure, double tournament and Tarpeian.
 - **Symbolic regression** (`gp::regression`): mathematical primitives (arithmetic, the analytic quotient, Koza's protected division, logarithm and square root, `sin`, `exp` and the like, the same bits on every platform), training and test samples, and a fitness function that evaluates a tree on all the points at once in a workspace per thread: the RMSE, MSE or MAE, after Keijzer's linear scaling by default. A tree that isn't finite at a point is invalid.
-- **Problems:** Koza's Boolean multiplexer and even-parity functions, and Koza's regression problems (the quartic and two more polynomials), each with its paper's function set and sampling.
+- **Problems:** Koza's Boolean multiplexer and even-parity functions, and Koza's regression problems (the quartic and two more polynomials) and Nguyen-1 to 12 (polynomials, sines and cosines, logarithms, a square root, and four of two variables), each with its paper's function set and sampling.
 - **Evaluation:** a stack machine for values of any type, the same on columns of all the data's points at once (several times faster, the same results to the bit), and a top-down walk for interpreters.
 - Runs on the genetic algorithms, islands and the multi-objective algorithms, with checkpoints and parallel breeding.
 
@@ -119,6 +119,8 @@ cargo run --release --example double_pole         # a network balances two poles
 cargo run --release --example double_pole_no_velocities  # the same with a recurrent network, no velocities
 cargo run --release --example multiplexer_11      # Koza's 11-multiplexer, all 2048 cases, double tournament
 cargo run --release --example abs_typed           # strongly typed GP: |x| from a comparison and a conditional
+cargo run --release --example nguyen_all          # Nguyen's twelve regression problems, with and without linear scaling
+cargo run --release --example accuracy_and_size   # NSGA-II on trees: the front of error against size
 cargo run --release --example asynchronous        # a slow fitness function, asynchronous evaluation
 cargo run --release --manifest-path examples/gpu/Cargo.toml  # neuroevolution on the GPU, with wgpu
 python examples/tsp_berlin52/main.py              # the same in Python, for all but the last three

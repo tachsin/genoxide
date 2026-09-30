@@ -1,0 +1,9 @@
+Nguyen-1: x^3 + x^2 + x from 20 points in [-1, 1]
+8 islands of 500 trees, until the RMSE is at most 8.76e-11
+
+Target after 4 generations and 16671 evaluations
+RMSE on the 20 training points: 6.40e-18
+RMSE on the 100 test points:    9.06e-17
+
+the expression, 11 nodes of depth 3:
+add(mul(x, mul(x, x)), add(x, mul(x, x)))

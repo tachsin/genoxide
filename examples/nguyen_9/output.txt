@@ -1,0 +1,9 @@
+Nguyen-9: sin(x) + sin(y^2) from 100 points in [-1, 1]^2
+8 islands of 500 trees, until the RMSE is at most 5.78e-11
+
+Target after 7 generations and 25727 evaluations
+RMSE on the 100 training points: 0.00e0
+RMSE on the 500 test points:     0.00e0
+
+the expression, 7 nodes of depth 3:
+add(sin(mul(y, y)), sin(x))

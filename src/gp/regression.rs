@@ -824,7 +824,10 @@ impl fmt::Display for Metric {
 
 #[cfg(test)]
 mod tests {
-    use super::problems::{Koza1, Koza2, Koza3, RegressionProblem};
+    use super::problems::{
+        Koza1, Koza2, Koza3, Nguyen1, Nguyen2, Nguyen3, Nguyen4, Nguyen5, Nguyen6, Nguyen7,
+        Nguyen8, Nguyen9, Nguyen10, Nguyen11, Nguyen12, RegressionProblem,
+    };
     use super::*;
     use crate::gp::Gp;
     use crate::rng::StreamRng;
@@ -1057,8 +1060,11 @@ mod tests {
     #[test]
     fn the_koza_problems() {
         let problems: Vec<Box<dyn RegressionProblem>> = super::problems::all();
-        assert_eq!(problems.len(), 3);
-        for problem in &problems {
+        assert_eq!(problems.len(), 15);
+        for problem in problems
+            .iter()
+            .filter(|problem| problem.name().starts_with("Koza"))
+        {
             let dataset = problem.dataset();
             assert_eq!(dataset.training().points(), 20);
             assert_eq!(dataset.test().unwrap().points(), 101);
@@ -1102,5 +1108,86 @@ mod tests {
                 .unwrap()
                 < 1e-15
         );
+    }
+
+    #[test]
+    fn the_nguyen_problems() {
+        let problems: Vec<Box<dyn RegressionProblem>> = super::problems::all();
+        let nguyen: Vec<_> = problems
+            .iter()
+            .filter(|problem| problem.name().starts_with("Nguyen"))
+            .collect();
+        assert_eq!(nguyen.len(), 12);
+        for (number, problem) in (1..).zip(&nguyen) {
+            assert_eq!(problem.name(), format!("Nguyen-{number}"));
+            let dataset = problem.dataset();
+            let (training, test) = (dataset.training(), dataset.test().unwrap());
+            let variables = if number <= 8 { 1 } else { 2 };
+            let count = if variables == 1 { 20 } else { 100 };
+            assert_eq!(training.variables(), variables);
+            assert_eq!((training.points(), test.points()), (count, 5 * count));
+            assert_eq!(problem.primitives().primitives().len(), 8 + variables);
+            let range = match number {
+                7 => 0.0..=2.0,
+                8 => 0.0..=4.0,
+                11 => 0.0..=1.0,
+                _ => -1.0..=1.0,
+            };
+            // the targets are the target function's, at points in the range
+            for sample in [training, test] {
+                for i in 0..sample.points() {
+                    let point = sample.point(i);
+                    assert!(point.iter().all(|value| range.contains(value)));
+                    assert_eq!(sample.targets()[i], problem.target(&point));
+                }
+            }
+            // the training and test points differ
+            assert_ne!(training.point(0), test.point(0));
+        }
+        let targets = [
+            (Nguyen1::new().target(&[2.0]), 14.0),
+            (Nguyen2::new().target(&[2.0]), 30.0),
+            (Nguyen3::new().target(&[2.0]), 62.0),
+            (Nguyen4::new().target(&[2.0]), 126.0),
+            (Nguyen5::new().target(&[0.0]), -1.0),
+            (Nguyen6::new().target(&[0.0]), 0.0),
+            (Nguyen7::new().target(&[0.0]), 0.0),
+            (Nguyen8::new().target(&[4.0]), 2.0),
+            (Nguyen9::new().target(&[0.0, 0.0]), 0.0),
+            (Nguyen10::new().target(&[0.0, 1.0]), 0.0),
+            (Nguyen11::new().target(&[2.0, 3.0]), 8.0),
+            (Nguyen12::new().target(&[2.0, 2.0]), 8.0),
+        ];
+        for (number, (target, expected)) in (1..).zip(targets) {
+            assert_eq!(target, expected, "Nguyen-{number}");
+        }
+        // exact formulas in the set have no error, on the training and test points
+        let exact: [(&dyn RegressionProblem, &str); 4] = [
+            (
+                &Nguyen5::new(),
+                "sub(mul(sin(mul(x, x)), cos(x)), pdiv(x, x))",
+            ),
+            (
+                &Nguyen7::new(),
+                "add(plog(add(x, pdiv(x, x))), plog(add(mul(x, x), pdiv(x, x))))",
+            ),
+            (&Nguyen10::new(), "mul(sin(x), cos(y))"),
+            (&Nguyen11::new(), "exp(mul(y, plog(x)))"),
+        ];
+        for (problem, formula) in exact {
+            let tree = problem.primitives().parse(formula).unwrap();
+            let regression = problem.regression();
+            assert!(
+                regression.evaluate(&tree).unwrap() < 1e-14,
+                "{}",
+                problem.name()
+            );
+            let test = problem.dataset().test().unwrap();
+            assert!(
+                regression.error(&tree, test).unwrap() < 1e-14,
+                "{}",
+                problem.name()
+            );
+        }
     }
 }

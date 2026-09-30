@@ -1,0 +1,16 @@
+Nguyen-1 to 12, 8 islands of 500 trees for at most 200 generations
+recovered: the generation of exact recovery; else the best tree's test RMSE
+
+problem    target                                  tree itself     linear scaling
+Nguyen-1   x^3 + x^2 + x                        recovered at 4     recovered at 8
+Nguyen-2   x^4 + x^3 + x^2 + x                test RMSE 6.3e-2   test RMSE 3.6e-3
+Nguyen-3   x^5 + x^4 + x^3 + x^2 + x          test RMSE 2.1e-3   test RMSE 7.6e-3
+Nguyen-4   x^6 + x^5 + x^4 + x^3 + x^2 + x    test RMSE 8.9e-3   test RMSE 9.5e-4
+Nguyen-5   sin(x^2) cos(x) - 1                test RMSE 1.5e-4     recovered at 2
+Nguyen-6   sin(x) + sin(x + x^2)                recovered at 7   test RMSE 9.7e-4
+Nguyen-7   ln(x + 1) + ln(x^2 + 1)            test RMSE 3.3e-4   test RMSE 1.6e-2
+Nguyen-8   sqrt(x)                              recovered at 2     recovered at 2
+Nguyen-9   sin(x) + sin(y^2)                    recovered at 7   test RMSE 4.2e-4
+Nguyen-10  2 sin(x) cos(y)                      recovered at 7     recovered at 0
+Nguyen-11  x^y                                  recovered at 1     recovered at 1
+Nguyen-12  x^4 - x^3 + y^2/2 - y              test RMSE 1.0e-3   test RMSE 1.1e-3
