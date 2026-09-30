@@ -149,17 +149,35 @@ MULTI_PROBLEMS = [
 # on bit strings, and so not in the registry of real problems
 BINARY_PROBLEMS = [gx.problems.Zdt5]
 
+# gx.problems.multi_engineering, in the registry after MW13
+MULTI_ENGINEERING = [
+    gx.problems.multi_engineering.TwoBarTruss,
+    gx.problems.multi_engineering.WeldedBeam,
+    gx.problems.multi_engineering.DiscBrake,
+    gx.problems.multi_engineering.SpeedReducer,
+    gx.problems.multi_engineering.FourBarTruss,
+    gx.problems.multi_engineering.CarSideImpact,
+    gx.problems.multi_engineering.RocketInjector,
+    gx.problems.multi_engineering.VehicleCrashworthiness,
+    gx.problems.multi_engineering.WaterResourcePlanning,
+]
+
+# every real multi-objective problem, in the registry's order
+_AFTER_MW13 = MULTI_PROBLEMS.index(gx.problems.Mw13) + 1
+MULTI_ALL = MULTI_PROBLEMS[:_AFTER_MW13] + MULTI_ENGINEERING + MULTI_PROBLEMS[_AFTER_MW13:]
+
 
 def test_the_classes_are_the_rust_registry():
     assert [cls().name for cls in PROBLEMS + CONSTRAINED] == gx._genoxide.problem_names()
-    two = [cls().name for cls in MULTI_PROBLEMS if len(cls().objectives) == 2]
-    three = [cls().name for cls in MULTI_PROBLEMS if len(cls().objectives) == 3]
+    two = [cls().name for cls in MULTI_ALL if len(cls().objectives) == 2]
+    three = [cls().name for cls in MULTI_ALL if len(cls().objectives) == 3]
     # the problems with any number of objectives have 3 by default, and close both lists (the
     # constrained DTLZ problems with a radius for 3 objectives only in the three-objective one)
     names = gx._genoxide.multi_problem_names(2)
     assert two == names[: len(two)]
     assert set(names[len(two) :]) <= set(three)
     assert three == gx._genoxide.multi_problem_names(3)
+    assert gx._genoxide.multi_problem_names(5)[0] == "WaterResourcePlanning"
     classes = PROBLEMS + MULTI_PROBLEMS + BINARY_PROBLEMS
     assert sorted(cls.__name__ for cls in classes) == sorted(
         name for name in gx.problems.__all__ if name not in ("Problem", "MultiProblem", "Optimum")
@@ -167,6 +185,8 @@ def test_the_classes_are_the_rust_registry():
     submodules = gx.problems.cec2006.__all__ + gx.problems.engineering.__all__
     names = [cls.__name__ for cls in CONSTRAINED] + ["GearTrain", "EQUALITY_TOLERANCE"]
     assert sorted(names) == sorted(submodules)
+    names = [cls.__name__ for cls in MULTI_ENGINEERING]
+    assert names == gx.problems.multi_engineering.__all__
 
 
 def test_type_checkers_see_the_genome_of_each_problem():
@@ -543,7 +563,7 @@ def test_a_constrained_native_run_equals_a_run_with_python_calls():
 # ---- multi-objective problems ------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("cls", MULTI_PROBLEMS)
+@pytest.mark.parametrize("cls", MULTI_ALL)
 def test_every_multi_objective_problem_describes_itself(cls):
     problem = cls()
     assert isinstance(problem, gx.problems.MultiProblem)
@@ -558,9 +578,10 @@ def test_every_multi_objective_problem_describes_itself(cls):
     assert problem.constraints(genome).shape == (problem.constraint_count,)
     front = problem.optimal_front(20)
     if front is None:
-        # KUR, POL, VNT2 and VNT3 have ideal and nadir points without a known front
-        assert (problem.ideal_point is None) == (problem.nadir_point is None)
-        if problem.ideal_point is not None:
+        # KUR, POL, VNT2 and VNT3 have ideal and nadir points without a known front, and the
+        # engineering problems an ideal point, with a nadir point for two objectives
+        assert problem.nadir_point is None or problem.ideal_point is not None
+        if problem.nadir_point is not None:
             assert np.all(problem.ideal_point < problem.nadir_point)
     else:
         count = len(problem.objectives)
@@ -569,7 +590,7 @@ def test_every_multi_objective_problem_describes_itself(cls):
         assert np.all(front.max(axis=0) <= problem.nadir_point + 1e-9)
 
 
-@pytest.mark.parametrize("cls", MULTI_PROBLEMS)
+@pytest.mark.parametrize("cls", MULTI_ALL)
 def test_multi_objective_calls_and_batches_agree(cls):
     problem = cls()
     bounds = np.array(problem.genome._describe()["bounds"])
@@ -957,7 +978,59 @@ def test_ideal_and_nadir_points_without_a_known_front():
         assert np.all(front <= problem.nadir_point + 1e-12)
 
 
+def test_engineering_values_at_chosen_points():
+    engineering = gx.problems.multi_engineering
+    # the two-bar truss at (0.01, 0.01, 1): volume 0.01 (√17 + √2), stress 80√2 / 0.01 in BC
+    objectives, violation = engineering.TwoBarTruss()([0.01, 0.01, 1.0])
+    expected = [0.01 * (math.sqrt(17) + math.sqrt(2)), 8000 * math.sqrt(2)]
+    assert list(objectives) == pytest.approx(expected, rel=1e-14) and violation == 0.0
+    # its front: volume × stress = 400 at y = 2, from (0.004, 10⁵)
+    truss = engineering.TwoBarTruss()
+    front = truss.optimal_front(300)
+    assert front.shape == (300, 2)
+    assert front[0] == pytest.approx([0.004, 1e5], rel=1e-14)
+    assert front[-1] == pytest.approx(truss.nadir_point * [1, 0] + truss.ideal_point * [0, 1])
+    upper = front[:, 1] >= 4000 * math.sqrt(5)
+    assert np.allclose(front[upper].prod(axis=1), 400)
+    # the four-bar truss at its lower bounds: 200 · 7 and 0.01 · 4
+    four = engineering.FourBarTruss()
+    assert list(four([1.0, math.sqrt(2), math.sqrt(2), 1.0])) == pytest.approx([1400.0, 0.04])
+    assert four.nadir_point == pytest.approx([2200 + 600 * math.sqrt(2), 0.04])
+    # the disc brake's ends, from the definition
+    brake = engineering.DiscBrake()
+    assert brake.ideal_point == pytest.approx([0.1274, 9.82e6 * 5700 / (33_000 * 819_000)])
+    objectives, violation = brake([55.0, 75.0, 3000.0, 2.2])
+    assert list(objectives) == pytest.approx([0.1274, 9.82e6 * 2600 / (6000 * 255_500)])
+    assert violation == 0.0 and brake.design([55.0, 75.0, 3000.0, 2.2])[3] == 2.0
+    # 12 surfaces are too many for the brake's length: 2.5 (12 + 1) − 30
+    assert brake.constraints([80.0, 110.0, 3000.0, 12.0])[1] == 2.5
+    assert brake.constraint_count == 5
+    reducer = engineering.SpeedReducer()
+    assert reducer.design([3.5, 0.7, 17.4, 7.3, 7.4, 3.2, 5.0])[2] == 17.0
+    assert reducer.constraint_count == 11
+    # the rocket injector at the origin: the response surfaces' constants
+    assert list(engineering.RocketInjector()(np.zeros(4))) == [0.692, 0.370, 0.153]
+    crash = engineering.VehicleCrashworthiness()
+    assert crash.ideal_point[0] == crash(np.ones(5))[0]
+    # the car side impact shares the single-objective problem's weight and constraints
+    single = gx.problems.engineering.CarSideImpact()
+    best = single.optimum.solutions[0]
+    objectives, violation = engineering.CarSideImpact()(best)
+    assert objectives[0] == single.optimum.value and violation == 0.0
+    assert np.array_equal(engineering.CarSideImpact().constraints(best), single.constraints(best))
+    water = engineering.WaterResourcePlanning()
+    assert len(water.objectives) == 5 and water.constraint_count == 7
+    assert water.ideal_point[4] == pytest.approx(25 * (1.39 / 0.045 + 49.4 - 80))
+    assert water.nadir_point[4] == pytest.approx(25_000)
+    assert len(water.optimal_front(100)) >= 100
+    known = (engineering.TwoBarTruss, engineering.FourBarTruss, engineering.WaterResourcePlanning)
+    for cls in MULTI_ENGINEERING:
+        if cls not in known:
+            assert cls().optimal_front(10) is None
+
+
 def test_multi_objective_sizes():
+
     assert gx.problems.Zdt1().dimensions == 30
     assert gx.problems.Zdt4().dimensions == 10
     assert gx.problems.Zdt4().genome == gx.Real([(0.0, 1.0)] + [(-5.0, 5.0)] * 9)

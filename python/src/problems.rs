@@ -258,6 +258,15 @@ pub enum MultiConfig {
     Viennet1 {},
     Viennet2 {},
     Viennet3 {},
+    TwoBarTruss {},
+    MultiWeldedBeam {},
+    DiscBrake {},
+    MultiSpeedReducer {},
+    FourBarTruss {},
+    MultiCarSideImpact {},
+    RocketInjector {},
+    VehicleCrashworthiness {},
+    WaterResourcePlanning {},
     Bnh {},
     Srn {},
     Tnk {},
@@ -520,6 +529,10 @@ impl MultiConfig {
             | Self::Mw8 { objectives, .. }
             | Self::Mw14 { objectives, .. } => objectives,
             Self::Viennet1 {} | Self::Viennet2 {} | Self::Viennet3 {} => 3,
+            Self::MultiCarSideImpact {}
+            | Self::RocketInjector {}
+            | Self::VehicleCrashworthiness {} => 3,
+            Self::WaterResourcePlanning {} => 5,
             _ => 2,
         }
     }
@@ -836,6 +849,19 @@ impl MultiConfig {
             Self::Viennet1 {} => try_boxed::<_, 3, M>(multi::Viennet1),
             Self::Viennet2 {} => try_boxed::<_, 3, M>(multi::Viennet2),
             Self::Viennet3 {} => try_boxed::<_, 3, M>(multi::Viennet3),
+            Self::TwoBarTruss {} => try_boxed::<_, 2, M>(multi::engineering::TwoBarTruss),
+            Self::MultiWeldedBeam {} => try_boxed::<_, 2, M>(multi::engineering::WeldedBeam),
+            Self::DiscBrake {} => try_boxed::<_, 2, M>(multi::engineering::DiscBrake),
+            Self::MultiSpeedReducer {} => try_boxed::<_, 2, M>(multi::engineering::SpeedReducer),
+            Self::FourBarTruss {} => try_boxed::<_, 2, M>(multi::engineering::FourBarTruss),
+            Self::MultiCarSideImpact {} => try_boxed::<_, 3, M>(multi::engineering::CarSideImpact),
+            Self::RocketInjector {} => try_boxed::<_, 3, M>(multi::engineering::RocketInjector),
+            Self::VehicleCrashworthiness {} => {
+                try_boxed::<_, 3, M>(multi::engineering::VehicleCrashworthiness)
+            }
+            Self::WaterResourcePlanning {} => {
+                try_boxed::<_, 5, M>(multi::engineering::WaterResourcePlanning)
+            }
             Self::Bnh {} => try_boxed::<_, 2, M>(multi::Bnh),
             Self::Srn {} => try_boxed::<_, 2, M>(multi::Srn),
             Self::Tnk {} => try_boxed::<_, 2, M>(multi::Tnk),
@@ -1725,7 +1751,7 @@ impl<'py> WithObjectives for MultiFront<'py> {
 }
 
 /// The design variables of `genome` for a problem with discrete variables that its genome rounds:
-/// the pressure vessel and the speed reducer.
+/// the pressure vessel, the speed reducers and the disc brake.
 #[pyfunction]
 pub fn design<'py>(
     py: Python<'py>,
@@ -1747,6 +1773,17 @@ pub fn design<'py>(
             check_length(problem.name(), &problem.representation(), &genome)?;
             problem.design(&genome).to_vec()
         }
+        Config::Multi(MultiConfig::MultiSpeedReducer {}) => {
+            let problem = multi::engineering::SpeedReducer;
+            check_length(problem.name(), &problem.representation(), &genome)?;
+            problem.design(&genome).to_vec()
+        }
+        Config::Multi(MultiConfig::DiscBrake {}) => {
+            let problem = multi::engineering::DiscBrake;
+            check_length(problem.name(), &problem.representation(), &genome)?;
+            problem.design(&genome).to_vec()
+        }
+
         _ => {
             return Err(PyValueError::new_err(
                 "only the problems with discrete variables have a design",

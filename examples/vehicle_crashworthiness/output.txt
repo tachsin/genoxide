@@ -1,0 +1,3 @@
+SMS-EMOA, 500 generations: 92 solutions on the front, all feasible
+  mass from 1661.708 to 1684.299, deceleration from 6.1428 to 9.0835, intrusion from 0.0523 to 0.2640
+  hypervolume 1.0397, 98.78% of the reference front's 1.0525

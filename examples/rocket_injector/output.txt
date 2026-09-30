@@ -1,0 +1,3 @@
+SMS-EMOA, 500 generations: 92 solutions on the front, all feasible
+  TF_max from 0.0089 to 1.0020, TT_max from -0.4315 to 1.0961, X_cc from 0.0049 to 1.0604
+  hypervolume 0.8621, 95.58% of the reference front's 0.9019

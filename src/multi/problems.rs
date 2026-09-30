@@ -63,6 +63,8 @@
 //! | [`C3Dtlz1`], [`C3Dtlz4`] | M or more (M + 4) | any M ≥ 2 | M | on the constraints' boundaries |
 //! | [`Mw1`] to [`Mw3`], [`Mw5`] to [`Mw7`], [`Mw9`] to [`Mw13`] | 3 or more (15) | 2 | 1 to 4 | disconnected, points, or on constraint boundaries |
 //! | [`Mw4`], [`Mw8`], [`Mw14`] | M + 1 or more (M + 12) | any M ≥ 2 | 1 | linear; spherical in four bands; 2^(M−1) patches |
+//! | [`engineering`]: two-bar and four-bar trusses, welded beam, disc brake, speed reducer | 3 to 7 | 2 | 0 to 11 | the trusses' derived; the others not known |
+//! | [`engineering`]: car side impact, rocket injector, vehicle crashworthiness; water resource planning | 3 to 7 | 3; 5 | 0 or 10; 7 | not known |
 //!
 //! ZDT is Zitzler, Deb and Thiele's suite (2000, *Evolutionary Computation* 8(2): 173-195), and
 //! DTLZ Deb, Thiele, Laumanns and Zitzler's (2001, TIK-Report 112, ETH Zürich; and 2002,
@@ -90,6 +92,7 @@ mod classic;
 mod ctp;
 mod dtlz;
 mod dtlz_variants;
+pub mod engineering;
 mod mw;
 mod wfg;
 mod zdt;
@@ -301,8 +304,9 @@ where
 }
 
 /// Every problem of this module with `M` objectives and [`Real`] genomes, at its default size:
-/// the two-objective problems for `M = 2` and the Viennet problems for `M = 3`, in the order of
-/// the table above, then DTLZ1-7, the convex, scaled and inverted DTLZ problems, WFG1-9, MW4, MW8
+/// the two-objective problems for `M = 2`, the Viennet problems for `M = 3`, and the
+/// [`engineering`] problems with `M` objectives, in the order of the table above, then DTLZ1-7,
+/// the convex, scaled and inverted DTLZ problems, WFG1-9, MW4, MW8
 /// and MW14 for any `M` from 2 on, then the constrained DTLZ problems (C1-DTLZ3 and convex
 /// C2-DTLZ2 only for the numbers of objectives their paper gives a radius for: 3, 5, 8, 10 and
 /// 15). [`Zdt5`], on bit strings, isn't in it.
@@ -345,6 +349,15 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
         try_boxed::<_, 2, M>(Mw11::default()),
         try_boxed::<_, 2, M>(Mw12::default()),
         try_boxed::<_, 2, M>(Mw13::default()),
+        try_boxed::<_, 2, M>(engineering::TwoBarTruss),
+        try_boxed::<_, 2, M>(engineering::WeldedBeam),
+        try_boxed::<_, 2, M>(engineering::DiscBrake),
+        try_boxed::<_, 2, M>(engineering::SpeedReducer),
+        try_boxed::<_, 2, M>(engineering::FourBarTruss),
+        try_boxed::<_, 3, M>(engineering::CarSideImpact),
+        try_boxed::<_, 3, M>(engineering::RocketInjector),
+        try_boxed::<_, 3, M>(engineering::VehicleCrashworthiness),
+        try_boxed::<_, 5, M>(engineering::WaterResourcePlanning),
     ];
     let mut problems: Vec<_> = fixed.into_iter().flatten().collect();
     if M >= 2 {
@@ -674,7 +687,7 @@ mod tests {
     #[test]
     fn the_registries_describe_every_problem() {
         let two = all::<2>();
-        assert_eq!(two.len(), 61);
+        assert_eq!(two.len(), 66);
         check_registry(two);
         let three = all::<3>();
         assert_eq!(
@@ -683,6 +696,9 @@ mod tests {
                 "VNT1",
                 "VNT2",
                 "VNT3",
+                "CarSideImpact",
+                "RocketInjector",
+                "VehicleCrashworthiness",
                 "DTLZ1",
                 "DTLZ2",
                 "DTLZ3",
@@ -715,6 +731,8 @@ mod tests {
             ]
         );
         check_registry(three);
-        check_registry(all::<5>());
+        let five = all::<5>();
+        assert_eq!(five[0].name(), "WaterResourcePlanning");
+        check_registry(five);
     }
 }

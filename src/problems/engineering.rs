@@ -106,7 +106,7 @@ const SHEAR: f64 = 12e6;
 pub struct WeldedBeam;
 
 impl WeldedBeam {
-    fn value(&self, x: &Reals) -> f64 {
+    pub(crate) fn value(&self, x: &Reals) -> f64 {
         let (h, l, t, b) = (x[0], x[1], x[2], x[3]);
         1.104_71 * h * h * l + 0.048_11 * t * b * (14.0 + l)
     }
@@ -201,7 +201,7 @@ impl WeldedBeamRagsdell {
         WeldedBeam.value(x)
     }
 
-    fn values(&self, x: &Reals) -> [f64; 5] {
+    pub(crate) fn values(&self, x: &Reals) -> [f64; 5] {
         let (h, l, t, b) = (x[0], x[1], x[2], x[3]);
         let half_diagonal = (0.25 * (l * l + math::powi(h + t, 2))).sqrt();
         let shear_1 = 6000.0 / (SQRT_2 * h * l);
@@ -885,12 +885,15 @@ impl Problem for CantileverBeam {
 pub struct CarSideImpact;
 
 impl CarSideImpact {
-    fn value(&self, x: &Reals) -> f64 {
+    pub(crate) fn value(&self, x: &Reals) -> f64 {
         let (x1, x2, x3, x4, x5, x6, x7) = (x[0], x[1], x[2], x[3], x[4], x[5], x[6]);
         1.98 + 4.9 * x1 + 6.67 * x2 + 6.98 * x3 + 4.01 * x4 + 1.78 * x5 + 0.000_01 * x6 + 2.73 * x7
     }
 
-    fn values(&self, x: &Reals) -> [f64; 10] {
+    // the ten responses the constraints limit, in their order: the abdomen load, the upper,
+    // middle and lower chest velocities, the upper, middle and lower rib deflections, the pubic
+    // force, and the velocities of the B-pillar's middle point and of the front door
+    pub(crate) fn responses(&self, x: &Reals) -> [f64; 10] {
         let (x1, x2, x3, x4, x5, x6, x7) = (x[0], x[1], x[2], x[3], x[4], x[5], x[6]);
         let abdomen = 1.16 - 0.3717 * x2 * x4 - 0.009_292_8 * x3;
         let upper_chest = 0.261 - 0.0159 * x1 * x2 - 0.064_86 * x1 - 0.019 * x2 * x7
@@ -911,17 +914,24 @@ impl CarSideImpact {
         let pillar = 10.58 - 0.674 * x1 * x2 - 0.672_75 * x2;
         let door = 16.45 - 0.489 * x3 * x7 - 0.843 * x5 * x6;
         [
-            abdomen - 1.0,
-            upper_chest - 0.32,
-            middle_chest - 0.32,
-            lower_chest - 0.32,
-            upper_rib - 32.0,
-            middle_rib - 32.0,
-            lower_rib - 32.0,
-            pubic - 4.0,
-            pillar - 9.9,
-            door - 15.7,
+            abdomen,
+            upper_chest,
+            middle_chest,
+            lower_chest,
+            upper_rib,
+            middle_rib,
+            lower_rib,
+            pubic,
+            pillar,
+            door,
         ]
+    }
+
+    // each response minus its limit
+    pub(crate) fn values(&self, x: &Reals) -> [f64; 10] {
+        let limits = [1.0, 0.32, 0.32, 0.32, 32.0, 32.0, 32.0, 4.0, 9.9, 15.7];
+        let responses = self.responses(x);
+        std::array::from_fn(|i| responses[i] - limits[i])
     }
 }
 
