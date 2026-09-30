@@ -172,6 +172,7 @@ python examples/tsp_berlin52/main.py
 | [Nguyen-1](nguyen_1/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nguyen-1) |
 | [Nguyen-5](nguyen_5/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nguyen-5) |
 | [Nguyen-9](nguyen_9/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nguyen-9) |
+| [Nguyen-1 to 12](nguyen_all/) | genetic programming | Rust | |
 | [Accuracy against size](accuracy_and_size/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/accuracy-and-size) |
 | [Asynchronous evaluation](asynchronous/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/asynchronous) |
 | [Neuroevolution on the GPU](gpu/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gpu) |
