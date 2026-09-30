@@ -1,7 +1,7 @@
 ---
 title: Double pole balancing
 category: neuroevolution
-summary: Evolve the weights of a neural network that balances two poles of different lengths on one cart for 100,000 steps, by CMA-ES.
+summary: Evolve a neural network that balances two poles of different lengths on one cart for 100,000 steps, its weights by CMA-ES and, for comparison, its structure and weights by NEAT.
 reference: "Wieland, A. P. (1991). Evolving neural network controllers for unstable systems. IJCNN 1991, vol. 2: 667-673. Settings of Gomez, F., Schmidhuber, J. and Miikkulainen, R. (2008). Accelerated neural evolution through cooperatively coevolved synapses. JMLR 9: 937-965."
 reference_url: https://doi.org/10.1109/IJCNN.1991.155416
 optimum: "Balanced for 100,000 steps of 0.02 s (the success criterion of Gomez et al. 2008)"
@@ -68,11 +68,19 @@ population of 4 + ⌊3 ln 42⌋ = 15 and a step size of 0.3 of each gene's range
 case a run converges without a solution. The run stops at 100,000 steps, or after 100,000
 evaluations.
 
+Then NEAT (`neat::Neat`, Stanley and Miikkulainen 2002) solves the same task, evolving the
+network's structure with its weights, with the paper's settings: 150 feed-forward networks that
+start from the 6 inputs and a bias connected to the output, and grow hidden nodes and connections.
+Its output, the paper's steepened sigmoid in (0, 1), is the force as 2 × output − 1. The
+[XOR by NEAT](../xor_neat/) page describes the method.
+
 ## Output
 
 The first line gives the steps the best network balanced, the evaluations and the generations it
 took. The second gives how far the cart and the two poles went from the middle and the vertical
-over the 100,000 steps, and the third the network's weights.
+over the 100,000 steps, and the third the network's weights. The last two lines are NEAT's: the
+steps its best network balanced, after how many evaluations and generations, and the network's
+hidden nodes and enabled connections.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/double-pole) plays this run back.
 
@@ -92,3 +100,8 @@ Igel 2003, with this network), 954 for CoSyNE, 3,600 for NEAT, 3,800 for ESP, 12
 22,100 for CNE, 307,200 for evolutionary programming and 474,329 for random weight guessing; of the
 value-function methods only Q-MLP solved it, in 10,582. Igel's runs started the long pole at 1°,
 Stanley and Miikkulainen's (NEAT) too; Gomez et al. start it at 4°, as here.
+
+NEAT's run of `output.txt` solves it after 3,685 evaluations, in 25 generations, with 3 hidden nodes
+and 12 enabled connections. Over seeds 1 to 20, all 20 runs solved it, after 2,921 evaluations on
+average (a median of 2,893), fewer than the paper's 3,600: the paper started the long pole at 1°,
+and its networks could be recurrent.

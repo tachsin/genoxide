@@ -19,6 +19,7 @@
 
 mod trace;
 
+use genoxide::neat::{Neat, Network};
 use genoxide::nn::{Activation, Mlp};
 use genoxide::prelude::*;
 use genoxide::problems::control::{CartPole, SUCCESS_STEPS};
@@ -78,5 +79,37 @@ fn main() -> Result<()> {
     let rounded: Vec<String> = weights.iter().map(|w| format!("{w:.3}")).collect();
     println!("weights: [{}]", rounded.join(", "));
     trace.write(weights);
+    neat(&task)?;
+    Ok(())
+}
+
+// the same task by NEAT, with the paper's settings: networks that grow from the inputs and a bias
+// connected to the output, whose output, in (0, 1), is the force as 2 × output − 1
+fn neat(task: &CartPole) -> Result<()> {
+    let steps = |network: &Network| -> Option<f64> {
+        let mut evaluator = network.feed_forward().ok()?;
+        let mut policy = |observation: &[f64], action: &mut [f64]| {
+            let mut output = [0.0];
+            evaluator.activate(observation, &mut output);
+            action[0] = 2.0 * output[0] - 1.0;
+        };
+        Some(f64::from(task.run(&mut policy, SUCCESS_STEPS)))
+    };
+    let neat = Neat::builder(4, 1).seed(1).build()?;
+    let outcome = Engine::new(neat, steps)
+        .stop_when(Stop::target(f64::from(SUCCESS_STEPS)).or(Stop::evaluations(100_000)))
+        .run()?;
+    let network = outcome.best_genome();
+    println!(
+        "\nNEAT: balanced for {} steps after {} evaluations in {} generations",
+        outcome.best_fitness(),
+        outcome.evaluations(),
+        outcome.generations()
+    );
+    println!(
+        "the network: {} hidden nodes, {} enabled connections",
+        network.hidden(),
+        network.enabled()
+    );
     Ok(())
 }
