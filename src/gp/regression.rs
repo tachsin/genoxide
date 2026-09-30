@@ -10,7 +10,7 @@
 //!
 //! [`Regression`] evaluates a tree on all the points at once with
 //! [`Tree::evaluate_columns`], in a workspace kept per thread: evaluating in parallel allocates
-//! nothing once the workspaces have grown. Every function goes through [`math`](crate::math) or
+//! nothing once the workspaces have grown. Every function goes through [`math`] or
 //! IEEE operations, and every sum is taken in the order of the points, so the errors are the same
 //! to the bit on every platform.
 //!
@@ -77,7 +77,7 @@ use crate::{Error, Result, math};
 use std::cell::RefCell;
 use std::fmt;
 
-/// The primitives of symbolic regression. Each computes its value with [`math`](crate::math) or
+/// The primitives of symbolic regression. Each computes its value with [`math`] or
 /// IEEE operations, the same bits on every platform; a value that isn't finite at a training
 /// point makes the tree invalid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
