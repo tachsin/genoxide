@@ -254,6 +254,34 @@ fn runs_resume_from_checkpoints() {
     std::fs::remove_dir_all(&directory).unwrap();
 }
 
+#[test]
+fn a_checkpoint_in_a_missing_directory_is_found_by_check() {
+    let directory = directory("checkpoint-directory");
+    let text = |path: &str| format!("{CMAES}[checkpoint]\npath = \"{path}\"\nevery = 5\n");
+    let missing = text("missing/run.ckpt");
+    let error = check(&directory, &missing).unwrap_err();
+    assert!(
+        error.contains("`checkpoint.path`: the directory") && error.contains("doesn't exist"),
+        "{error}"
+    );
+    // a run stops before its first generation, not at its first save
+    let error = run(&directory, "missing.toml", &missing, &[]).unwrap_err();
+    assert!(error.contains("`checkpoint.path`"), "{error}");
+    assert!(!directory.join("missing").exists());
+    // a file isn't a directory
+    std::fs::write(directory.join("file"), "").unwrap();
+    let error = check(&directory, &text("file/run.ckpt")).unwrap_err();
+    assert!(error.contains("`checkpoint.path`"), "{error}");
+    // a directory that exists, relative to the run file, and the run file's own
+    std::fs::create_dir(directory.join("saves")).unwrap();
+    assert_eq!(check(&directory, &text("saves/run.ckpt")), Ok(()));
+    assert_eq!(check(&directory, &text("run.ckpt")), Ok(()));
+    let result = run(&directory, "saves.toml", &text("saves/run.ckpt"), &[]).unwrap();
+    assert!(result["fitness"].is_number(), "{result}");
+    assert!(directory.join("saves/run.ckpt").exists());
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
 // a script in `directory` as a fitness command: `unix` for sh, `windows` for cmd
 fn script(directory: &Path, name: &str, unix: &str, windows: &str) -> String {
     if cfg!(windows) {

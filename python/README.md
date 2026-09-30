@@ -56,7 +56,7 @@ played back with charts made for each problem on [tachsin.gr](https://tachsin.gr
 pip install genoxide
 ```
 
-Wheels for CPython 3.10 or later, with numpy:
+Wheels for CPython 3.10 or later, and for free-threaded CPython 3.14 (3.14t), with numpy:
 - Linux: x86_64 and aarch64, glibc and musl
 - macOS: Apple silicon and Intel
 - Windows: x64
@@ -96,7 +96,7 @@ With `batch=True`, the function takes a whole generation as a 2-D array, a genom
 
 It's one call per generation, and none for a generation whose children are all copies of their parents. Vectorized numpy, a GPU or a remote service pays its cost per call once per generation, not once per genome. The next call of as many genomes gets the same matrix back, written again, if the function kept no reference to it: a large matrix is allocated once per run. A function that keeps its matrix, or a view of it, gets a new one next time, and what it kept never changes.
 
-With `parallel=True`, genoxide calls a non-batch function from several threads at once. It pays off when the function releases the GIL (numpy on large arrays, waiting for I/O), or on free-threaded Python.
+With `parallel=True`, genoxide calls a non-batch function from several threads at once. It pays off when the function releases the GIL (numpy on large arrays, waiting for I/O), or on free-threaded Python (3.14t).
 
 An exception in the fitness function stops the run, and `run` raises it. So does Ctrl+C.
 

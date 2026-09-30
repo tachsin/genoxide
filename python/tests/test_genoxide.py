@@ -1036,6 +1036,11 @@ def test_common_setting_mistakes_name_the_setting():
     # a tuple that isn't (score, violation)
     with pytest.raises(TypeError, match=r"tuple is \(score, constraint violation\), two numbers, not \(float, NoneType\)"):
         onemax_ga().run(lambda x: (1.0, None), generations=1)
+    # or has another length
+    for result in [(1.0, 0.0, 2.0), (1.0,), ()]:
+        message = rf"tuple is \(score, constraint violation\), two numbers, not a tuple of length {len(result)}$"
+        with pytest.raises(TypeError, match=message):
+            onemax_ga().run(lambda x: result, generations=1)
 
 
 def test_an_infinite_time_limit_is_no_limit():

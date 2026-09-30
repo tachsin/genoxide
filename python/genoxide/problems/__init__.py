@@ -216,7 +216,7 @@ class _Described(Generic[_Genome]):
     @property
     def name(self) -> str:
         """The name, e.g. "Rastrigin" or "ZDT1"."""
-        return self._info["name"]
+        return cast(str, self._info["name"])
 
     @property
     def dimensions(self) -> int:
@@ -239,17 +239,17 @@ class _Described(Generic[_Genome]):
     @property
     def constraint_count(self) -> int:
         """The number of constraints: 0 for an unconstrained problem."""
-        return self._info["constraints"]
+        return cast(int, self._info["constraints"])
 
     @property
     def reference(self) -> str:
         """The paper, book or report that defines the problem."""
-        return self._info["reference"]
+        return cast(str, self._info["reference"])
 
     @property
     def reference_url(self) -> str | None:
         """Its DOI or URL, if any."""
-        return self._info["reference_url"]
+        return cast("str | None", self._info["reference_url"])
 
     def constraints(self, genome: Any) -> np.ndarray:
         """The constraint values of ``genome``, a 1-D array, in the paper's order: the
@@ -295,7 +295,7 @@ class Problem(_Described[_Genome]):
     @property
     def objective(self) -> ObjectiveName:
         """Whether the score is minimized or maximized: "minimize" for every problem here."""
-        return self._info["objectives"][0]
+        return cast(ObjectiveName, self._info["objectives"][0])
 
     @property
     def optimum(self) -> Optimum | None:

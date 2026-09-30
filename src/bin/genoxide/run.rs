@@ -136,6 +136,18 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
     {
         return Err("`checkpoint.every` must be at least 1 generation".to_string());
     }
+    // the directory of a checkpoint must exist before the run, not at its first save
+    if let Some(checkpoint) = &run.checkpoint {
+        let path = directory.join(&checkpoint.path);
+        // an empty parent is the current directory
+        let parent = path.parent().unwrap_or(Path::new(""));
+        if !parent.as_os_str().is_empty() && !parent.is_dir() {
+            return Err(format!(
+                "`checkpoint.path`: the directory {} doesn't exist",
+                parent.display()
+            ));
+        }
+    }
     if options.resume && run.checkpoint.is_none() {
         return Err("`--resume` needs a `[checkpoint]` in the run file".to_string());
     }

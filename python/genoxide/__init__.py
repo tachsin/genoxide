@@ -56,7 +56,7 @@ import os
 from collections.abc import Callable, Sequence
 from dataclasses import FrozenInstanceError, dataclass
 from functools import cached_property
-from typing import Any, Literal, Union
+from typing import Any, Literal, Union, cast
 
 import numpy as np
 
@@ -199,7 +199,7 @@ def _describe_setting(name: str, value: Any, what: str) -> dict[str, Any]:
         )
     if isinstance(value, type) or not callable(getattr(value, "_describe", None)):
         raise ValueError(f"{name} is {what}, not {value!r}")
-    return value._describe()
+    return cast(dict[str, Any], value._describe())
 
 
 def _number(name: str, value: Any, *, plural: bool = False) -> float:
@@ -943,6 +943,7 @@ class Progress(_ReadOnly):
     """The best score so far, or None if no valid solution was found yet."""
     best_genome: np.ndarray
     """The best genome so far."""
+    _population: _genoxide.Snapshot | _Arrays
 
     def __init__(
         self,
@@ -966,7 +967,8 @@ class Progress(_ReadOnly):
     @cached_property
     def population(self) -> np.ndarray:
         """The population after the generation, a genome per row."""
-        return self._population.genomes()
+        # a population has genomes: only a front's arrays have none
+        return cast(np.ndarray, self._population.genomes())
 
     @cached_property
     def scores(self) -> np.ndarray:
@@ -1023,6 +1025,8 @@ class MultiProgress(_ReadOnly):
     """The time since the run started."""
     front_size: int
     """The number of non-dominated individuals in the population, each genome once."""
+    _population: _genoxide.Snapshot | _Arrays
+    _front: _genoxide.Snapshot | _Arrays
 
     def __init__(
         self,
@@ -1046,7 +1050,8 @@ class MultiProgress(_ReadOnly):
     @cached_property
     def population(self) -> np.ndarray:
         """The population after the generation, a genome per row."""
-        return self._population.genomes()
+        # a population has genomes: only a front's arrays have none
+        return cast(np.ndarray, self._population.genomes())
 
     @cached_property
     def objectives(self) -> np.ndarray:
@@ -1637,8 +1642,8 @@ class _SingleObjective(_Algorithm):
             copies of their parents.
         parallel : bool, default False
             Calls a non-batch ``fitness`` from several threads at once. It pays off when the
-            function releases the GIL (numpy on large arrays, I/O), or on free-threaded Python,
-            and for a problem of :mod:`genoxide.problems`, which runs without the GIL.
+            function releases the GIL (numpy on large arrays, I/O), or on free-threaded Python
+            (3.14t), and for a problem of :mod:`genoxide.problems`, which runs without the GIL.
         on_generation : callable, optional
             Called with a :class:`Progress` after every generation, the initial population
             (generation 0) included, on the thread that called ``run``. If it returns False, the
@@ -2391,7 +2396,14 @@ def _rows(name: str, rows: Any) -> list[list[float]]:
         raise ValueError(f"{name} is a 2-D array, a row each with a value per objective")
     if not np.isfinite(array).all():
         raise ValueError(f"{name} are finite numbers, not {array[~np.isfinite(array)][0]}")
-    return array.tolist()
+    return cast(list[list[float]], array.tolist())
+
+
+def _objective_list(objectives: Sequence[ObjectiveName]) -> list[ObjectiveName]:
+    """A copy of the objectives as a list; a string as it is, for ``run`` to name it."""
+    if isinstance(objectives, str):
+        return cast(list[ObjectiveName], objectives)
+    return list(objectives)
 
 
 class _MultiObjective(_Algorithm):
@@ -2481,7 +2493,8 @@ class _MultiObjective(_Algorithm):
             copies of their parents.
         parallel : bool, default False
             Calls a non-batch ``fitness`` from several threads at once. It pays off when the
-            function releases the GIL (numpy on large arrays, I/O), or on free-threaded Python.
+            function releases the GIL (numpy on large arrays, I/O), or on free-threaded Python
+            (3.14t).
         on_generation : callable, optional
             Called with a :class:`MultiProgress` after every generation, the initial population
             (generation 0) included, on the thread that called ``run``. If it returns False, the
@@ -2609,7 +2622,7 @@ class Nsga2(_MultiObjective):
         seed: int | None = None,
     ) -> None:
         self._genome = genome
-        self.objectives = objectives if isinstance(objectives, str) else list(objectives)
+        self.objectives = _objective_list(objectives)
         self.population_size = population_size
         self.crossover = crossover
         self.mutation = mutation
@@ -2682,7 +2695,7 @@ class Nsga3(_MultiObjective):
         seed: int | None = None,
     ) -> None:
         self._genome = genome
-        self.objectives = objectives if isinstance(objectives, str) else list(objectives)
+        self.objectives = _objective_list(objectives)
         self.reference_directions = reference_directions
         self.population_size = population_size
         self.crossover = crossover
@@ -2750,7 +2763,7 @@ class Spea2(_MultiObjective):
         seed: int | None = None,
     ) -> None:
         self._genome = genome
-        self.objectives = objectives if isinstance(objectives, str) else list(objectives)
+        self.objectives = _objective_list(objectives)
         self.population_size = population_size
         self.crossover = crossover
         self.mutation = mutation
@@ -2833,7 +2846,7 @@ class Moead(_MultiObjective):
         seed: int | None = None,
     ) -> None:
         self._genome = genome
-        self.objectives = objectives if isinstance(objectives, str) else list(objectives)
+        self.objectives = _objective_list(objectives)
         self.weights = weights
         self.crossover = crossover
         self.mutation = mutation
@@ -2914,7 +2927,7 @@ class SmsEmoa(_MultiObjective):
         seed: int | None = None,
     ) -> None:
         self._genome = genome
-        self.objectives = objectives if isinstance(objectives, str) else list(objectives)
+        self.objectives = _objective_list(objectives)
         self.population_size = population_size
         self.crossover = crossover
         self.mutation = mutation
