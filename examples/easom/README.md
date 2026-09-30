@@ -78,11 +78,12 @@ is the best sample it has seen, which isn't always where it converged.
 
 ## Good results
 
-A good result reaches −1 in every run. Without restarts, 19 of the 30 runs do, after a median of 474
-evaluations. Of the other 11, 9 converge where f is exactly 0, 35 to 100 from (π, π), where all
-samples tie, and 2 into ripples: seed 8 into the local minimum at (4.978, 4.978), after one
-sample in the well's side, at −0.545, and seed 22 at (11.06, 11.06), where f is −1.4e-57. With IPOP
-restarts, all 30 runs reach −1, after a median of 1,314 evaluations and at most 2,340: the restarts
+A good result reaches −1 in every run. Without restarts, 19 of the 30 runs do, after a median of 642
+evaluations. Of the other 11, 5 converge where f is exactly 0, 53 to 108 from (π, π), where all
+samples tie, and 6 into ripples: seeds 3, 14 and 23 into the local minimum at (4.978, 4.978), and
+seed 10 into its mirror image at (4.978, 1.305), each after samples in the well's side, down to
+−0.848, and seeds 22 and 26 at (−4.776, 4.978) and (11.06, 4.978), where f is −3.4e-31. With IPOP
+restarts, all 30 runs reach −1, after a median of 1,314 evaluations and at most 2,292: the restarts
 make the difference, since a converged run can't move any more.
 
-Over seeds 1 to 1,000, 60% of the runs without restarts reach the minimum.
+Over seeds 1 to 1,000, 58% of the runs without restarts reach the minimum.

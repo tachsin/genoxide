@@ -98,15 +98,15 @@ contour.
 
 ## Good results
 
-The minimum is 0. CMA-ES reaches 1e-8 after 13,062 evaluations. Most of them go to learning the
-covariance matrix: it takes 7,098 to reach an error of 1, and then about 750 per decade, twice as
-many as on the [sphere](../sphere/).
+The minimum is 0. CMA-ES reaches 1e-8 after 12,950 evaluations. Most of them go to learning the
+covariance matrix: it takes 7,154 to reach an error of 1, and then about 720 per decade, almost
+twice as many as on the [sphere](../sphere/).
 
 PSO reaches the target too, after 171,560 evaluations: about 14,000 per decade, seven times as many
 as on the sphere and on the axis-parallel ellipsoid. The genetic algorithm never reaches an error
 of 1, and ends at 14.
 
-sep-CMA-ES, whose diagonal matrix can't follow the rotation, takes 61,810 evaluations, almost five
-times as many as the full matrix: 19,796 to reach an error of 1, and then about 5,300 per decade,
+sep-CMA-ES, whose diagonal matrix can't follow the rotation, takes 61,460 evaluations, almost five
+times as many as the full matrix: 19,026 to reach an error of 1, and then about 5,300 per decade,
 seven times as many. On the [axis-parallel ellipsoid](../axis_parallel_ellipsoid/) it was the
 faster of the two. It still beats PSO, which also steps along the axes, by almost three times.

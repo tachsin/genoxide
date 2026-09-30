@@ -104,7 +104,7 @@ Why SHADE: with 25 seeds, 24 runs ended at the same violation, 0.1437119 to 7 di
 at 0.1437121, a little below the report's 0.14375. L-SHADE, whose population shrinks over the
 budget, ended there too on all 25 seeds. CMA-ES with IPOP restarts (Hansen and Ostermeier, 2001,
 Evolutionary Computation 9(2): 159-195; Auger and Hansen, 2005, IEEE CEC 2005: 1769-1776) ended
-within 0.00014 of it, and CMA-ES without restarts between 0.17 and 0.62. That different algorithms
+within 0.00031 of it, and CMA-ES without restarts between 0.14 and 0.38. That different algorithms
 end at the same point suggests it is the least violation there is, but that isn't proven.
 
 ## Output

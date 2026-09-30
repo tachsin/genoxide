@@ -1,7 +1,7 @@
 ---
 title: CEC 2006 g18
 category: constrained
-summary: The area of a hexagon in 9 variables whose diagonals are at most 1, under 13 inequality constraints, with a local optimum that traps most runs, solved by CMA-ES with IPOP restarts and Deb's feasibility rules.
+summary: The area of a hexagon in 9 variables whose diagonals are at most 1, under 13 inequality constraints, with a local optimum that traps a third of the runs, solved by CMA-ES with IPOP restarts and Deb's feasibility rules.
 reference: "Liang, J. J., Runarsson, T. P., Mezura-Montes, E., Clerc, M., Suganthan, P. N., Coello Coello, C. A. and Deb, K. (2006). Problem Definitions and Evaluation Criteria for the CEC 2006 Special Session on Constrained Real-Parameter Optimization. Technical report, Nanyang Technological University, Singapore."
 reference_url: "https://github.com/P-N-Suganthan/CEC2006"
 optimum: "−0.866025403784439, −√3/2 (best known)"
@@ -56,10 +56,10 @@ even a disk of diameter 1 has π/4 ≈ 0.785.
 A proper hexagon competes with it. At f = −0.674981, 0.191 above f*, lies a convex hexagon whose
 sides don't cross and whose 15 distances are all at most 1. It's a local optimum, far from the best
 known solutions: x9 is 1 there, and 0.6 at the report's x*. Of 25 runs of CMA-ES without restarts,
-15 converged to it and stayed there.
+9 converged to it and stayed there.
 
 The best known solutions are also not unique. The two triangles can shift against each other: at
-the report's x*, A, B and C are 0.6 from D, E and O, and at the run's solution 0.03. The feasible
+the report's x*, A, B and C are 0.6 from D, E and O, and at the run's solution 0.83. The feasible
 region is small too: of 10 million random points in the box, none was feasible.
 
 ## Representation
@@ -87,13 +87,13 @@ successful with an error of at most 1e-4; the example asks for more.
 
 Why IPOP restarts: they let a run that converged to the local optimum start again elsewhere, with
 a larger population each time. With seeds 1 to 25, IPOP-CMA-ES met the target on all 25
-runs, after a median of 94,670 evaluations (9,580 to 280,800). Without restarts, CMA-ES met it on
-10; the other 15 stayed at the local optimum. L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014:
-1658-1665), genoxide's differential evolution with a population that shrinks over the budget, also
-met the target on all 25, after a median of 86,540 evaluations and at most 99,405: as fast, and
-more even. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78) met it on 24 of 25, after a
-median of 74,700; the other run stayed at the local optimum. The example shows CMA-ES, whose run
-meets the trap and leaves it.
+runs, after a median of 18,480 evaluations (12,050 to 192,960). Without restarts, CMA-ES met it on
+15; of the other 10, 9 stayed at the local optimum and one at −0.5, 0.366 above f*. L-SHADE (Tanabe
+and Fukunaga, 2014, IEEE CEC 2014: 1658-1665), genoxide's differential evolution with a population
+that shrinks over the budget, also met the target on all 25, after a median of 86,540 evaluations
+and at most 99,405: slower, but more even. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78)
+met it on 24 of 25, after a median of 74,700; the other run stayed at the local optimum. The
+example shows CMA-ES, whose run with seed 1 misses the trap and needs no restart.
 
 ## Output
 
@@ -117,14 +117,13 @@ is feasible.
 A good run is feasible and ends within 1e-4 of f*, the report's success. A value below f* is
 possible, since f* is only the best known, but the runs here end just above it.
 
-The recorded run finds its first feasible solution after 370 evaluations. Its first CMA-ES run, of
-10 samples, converges to the local optimum: 0.192 above f* after 5,000 evaluations, 0.191044 after
-45,000. It stays there until it restarts after 76,870 evaluations, with 20 samples, and that run
-converges to the same local optimum. The second restart, after 119,730 evaluations with 40 samples,
-finds the two triangles: it is within 1e-4 of f* after 126,330 evaluations, and meets its target
-after 135,850.
+The recorded run finds its first feasible solution after 460 evaluations. Its first CMA-ES run, of
+10 samples, finds the two triangles without coming near the local optimum, where x9 is 1: from then
+on, its best solution's x9 stays below 0.86. It is within 1e-4 of f* after 5,310 evaluations, stays
+about 5.2e-5 above f* from about 7,000 to 11,000 evaluations, and meets its target after 20,250,
+without a restart.
 
-The solution is x = (−0.5470, −0.8062, 0.4514, −0.8923, −0.5470, −0.8371, 0.4514, −0.8614,
-0.03095), another best known solution than the report's, with the same six active constraints:
-g1, g3, g4, g6, g7 and g9. A and D, B and E, C and O are 0.031 apart, so the two triangles almost
-coincide, and the hexagon goes around one triangle twice.
+The solution is x = (−0.08706, −0.1688, 0.8193, −0.5734, −0.08696, −0.9962, 0.8192, 0.2539,
+0.8274), another best known solution than the report's, with the same six active constraints: g1,
+g3, g4, g6, g7 and g9. A and D, B and E, C and O are 0.83 apart, further than at the report's x*:
+the two triangles are shifted against each other along C-O.

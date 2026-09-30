@@ -91,14 +91,15 @@ The run has the report's budget of 500,000 evaluations, and stops once its best 
 feasible with an absolute error f(x) − f* of at most 1e-8. The report counts a run as successful
 with an error of at most 1e-4; the example asks for more.
 
-Why CMA-ES: it learns the correlations between the variables, and so the directions that stay
-inside the corner of six active constraints. With 25 seeds, it met the target on every run, after
-a median of 30,760 evaluations (from 22,650 to 51,990). Why the restarts: without them, 24 of the
-25 runs are the same, but one converged at an error of 1.5e-8, just short of the target, and then
-kept sampling around that point until the budget ran out; IPOP restarts it. SHADE (Tanabe and
-Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default differential evolution, met the target
-on all 25 too, but after a median of 70,800 evaluations (at most 74,400). L-SHADE, whose
-population shrinks over the budget, met it on all 25 as well, after a median of 93,859.
+Why CMA-ES: it learns the correlations between the variables, and so the directions that stay inside
+the corner of six active constraints. With 25 seeds, it met the target on every run, after a median
+of 33,930 evaluations (from 23,220 to 59,540). The restarts are a safeguard: without them, all 25
+runs met the target too, after a median of 32,680 evaluations (at most 78,180). 19 of the 25 runs
+are the same; in the other 6, IPOP restarted a run that had converged, and the restarted run met the
+target sooner in 3 of them and later in the other 3. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC
+2013: 71-78), genoxide's default differential evolution, met the target on all 25 too, but after a
+median of 70,800 evaluations (at most 74,400). L-SHADE, whose population shrinks over the budget,
+met it on all 25 as well, after a median of 93,859.
 
 ## Output
 

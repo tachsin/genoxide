@@ -51,9 +51,9 @@ random points: 0.8560 % for g08. A sample of 10 million random points, drawn for
 The objective is multimodal. Its numerator repeats with period 1 in each variable, and its
 denominator x1³ (x1 + x2) grows with both, so the box holds a grid of peaks that shrink from the
 origin outwards. The lens contains parts of several. Besides the minimum, runs of this page ended
-at two local minima: (1.734, 4.746), where f = −0.0291, a peak inside the lens, and (1.674, 3.802),
-where f = −0.0258, on the boundary of g1, the part of a peak that lies inside it. A search that
-settles on one of them has to leave the peak to find the minimum.
+at a local minimum, (1.734, 4.746), where f = −0.0291, a peak inside the lens; another is at
+(1.674, 3.802), where f = −0.0258, on the boundary of g1, the part of a peak that lies inside it. A
+search that settles on one of them has to leave the peak to find the minimum.
 
 ## Representation
 
@@ -79,11 +79,11 @@ feasible with an absolute error f(x) − f* of at most 1e-8. The report counts a
 with an error of at most 1e-4; the example asks for more.
 
 Why the restarts: this is the problem where they matter. With 25 seeds and no restarts, CMA-ES met
-the target on 20 runs, after a median of 300 evaluations. The other 5 converged to a local minimum,
-four to (1.734, 4.746) and one to (1.674, 3.802), and sampled around it until the budget ran out;
-their best solutions, found on the way, had errors from 0.02 to 0.07. With IPOP restarts, all 25
-met the target: those 5 after one restart with a population of 12, after at most 2,046
-evaluations. The median is 312.
+the target on 22 runs, after a median of 318 evaluations. The other 3 converged to the local minimum
+at (1.734, 4.746), and sampled around it until the budget ran out; one had found a solution with an
+error of 0.006 on the way, the other two nothing better than the local minimum's 0.067. With IPOP
+restarts, all 25 met the target: those 3 after one restart with a population of 12, after at most
+1,008 evaluations. The median is 324.
 
 SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default differential
 evolution, met the target on all 25 runs too, after a median of 4,600 evaluations (at most 5,100),
@@ -114,8 +114,8 @@ once half the population is feasible.
 A good run is feasible and ends within 1e-4 of f*, the report's success. With restarts, CMA-ES
 meets the target of 1e-8 with every seed tried.
 
-Seed 1 needs no restart. Its first 6 samples already include a feasible one, with an error of
-0.14. The run climbs the minimum's peak: it meets the report's criterion after 132 evaluations and
-the target after 312, 52 generations of 6. The solution is x* to 4 decimals, x1 = 1.22798 and
-x2 = 4.24540, inside the lens: g1 = −1.737 and g2 = −0.1678. The peak is flat at its top, so an
-error of 1e-8 still leaves the solution about 3·10⁻⁵ from x* in x2.
+Seed 1 needs no restart. Its first feasible sample comes in its fifth generation, after 30
+evaluations, with an error of 0.096. The run climbs the minimum's peak: it meets the report's
+criterion after 198 evaluations and the target after 330, 55 generations of 6. The solution is x* to
+4 decimals, x1 = 1.22796 and x2 = 4.24535, inside the lens: g1 = −1.737 and g2 = −0.1678. The peak
+is flat at its top, so an error of 1e-8 still leaves the solution about 2·10⁻⁵ from x* in x2.

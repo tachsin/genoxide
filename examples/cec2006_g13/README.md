@@ -94,8 +94,8 @@ With seeds 1 to 25, in the same budget:
 | Algorithm | Runs that met the target | Evaluations (median, range) |
 |---|---|---|
 | SHADE at an ε level, as here | 25 of 25 | 150,900 (150,100 to 152,700) |
-| CMA-ES with IPOP restarts | 24 of 25 | 115,312 (43,560 to 343,088) |
-| CMA-ES | 8 of 25 | 51,120 (43,560 to 80,856) |
+| CMA-ES with IPOP restarts | 22 of 25 | 123,808 (19,984 to 443,152) |
+| CMA-ES | 7 of 25 | 57,720 (19,984 to 84,608) |
 | L-SHADE | 0 of 25 | |
 | SHADE | 0 of 25 | |
 
@@ -108,11 +108,11 @@ and thins as it gathers: its differences shrink with it.
 
 CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) samples a population
 from a normal distribution, and adapts its mean, step size and covariance matrix, which can learn
-the directions of the shell. A single run often ends at the local minimum: without restarts, 17 of
+the directions of the shell. A single run often ends at the local minimum: without restarts, 18 of
 the 25 runs did, with an error of 0.385. IPOP restarts (Auger and Hansen, 2005, IEEE CEC 2005:
 1769-1776) start a new run from a random point, with twice the population, whenever one has
-converged. In the table, one IPOP run, with seed 16, was still at the local minimum when the budget
-ran out; with seeds 1 to 100, 15 runs failed, 13 of them there.
+converged. In the table, three IPOP runs, with seeds 8, 20 and 24, were still at the local minimum
+when the budget ran out; with seeds 1 to 100, 13 runs failed, 11 of them there.
 
 ## Output
 

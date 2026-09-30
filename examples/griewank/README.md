@@ -78,19 +78,20 @@ the 10 runs without restarts and the 10 with IPOP restarts, how many met the tar
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/griewank) plays back another run:
 CMA-ES with IPOP restarts on Griewank in 2 dimensions, so that the population can be drawn on the
-function's contour. With a budget of 50,000 evaluations, it restarts 5 times, from a population of
-6 to one of 192. Its best value falls from 0.027 to 0.013 and then 0.001, and it meets the target
-after 24,768 evaluations.
+function's contour. With a budget of 50,000 evaluations, it restarts 4 times, from a population of
+6 to one of 96. Its best value falls from 0.092 to 0.0074, then 0.0028 and 0.0014, and it meets the
+target after 12,786 evaluations.
 
 ## Good results
 
-A good result is 10 of 10. Without restarts, CMA-ES never reaches the minimum in 2 and 5
-dimensions, 2 times in 10 in 10 dimensions, 8 or 9 times in 20 and 30, and every time in 50. The
-runs that fail end in a local minimum near the origin: in 30 dimensions, seed 1 ends at 0.0074, with
-x₁ = −3.14 and x₂ = −4.44, the minimum described above.
+A good result is 10 of 10. Without restarts, CMA-ES reaches the minimum once in 10 in 2
+dimensions, never in 5, 3 times in 10 in 10 dimensions, 8 times in 20 and 30, and 9 times in 50. The
+runs that fail end in a local minimum near the origin: in 30 dimensions, seed 4 ends at 0.0074, with
+x₁ = −3.14 and x₂ = 4.44, the minimum described above.
 
 With IPOP restarts, it reaches the minimum every time, in every dimension. In 2 dimensions, where
 the ripples, compared with the bowl, are the largest, it needs the most restarts: with seeds 1 to
-100, it reaches the minimum every time, after at most 64,000 evaluations, but only 56 times with
-20,000 evaluations, 10,000 per dimension, and 92 times with 50,000. In 5 dimensions, it reaches it
-every time with seeds 1 to 100, after at most 85,000 evaluations, and 98 times with 50,000.
+100, it reaches the minimum every time, after at most 105,000 evaluations, but only 64 times with
+20,000 evaluations, 10,000 per dimension, 89 times with 50,000 and 99 times with the example's
+100,000. In 5 dimensions, it reaches it every time with seeds 1 to 100, after at most 82,000
+evaluations, and 96 times with 50,000.
