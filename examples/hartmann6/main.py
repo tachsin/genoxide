@@ -46,9 +46,11 @@ print(
 columns = f"at {minimum:.5f}  at {OTHER_MINIMUM:.5f}  elsewhere"
 print(f"{'runs':<16}  {columns}  evaluations: median  largest")
 # the seed of the first run without restarts that ends at the other minimum: the trace records
-# the run with IPOP restarts from that seed
+# the run with IPOP restarts from that seed, or from seed 1 if none does
 trace_seed = None
 for name, restarts in [("CMA-ES", None), ("CMA-ES with IPOP", "ipop")]:
+    if restarts == "ipop" and trace_seed is None:
+        trace_seed = 1
     counts = {"global": 0, "other": 0, "elsewhere": 0}
     # the evaluations of the runs that reach the target
     evaluations = []

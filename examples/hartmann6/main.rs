@@ -37,9 +37,12 @@ fn main() -> Result<()> {
     let columns = format!("at {minimum:.5}  at {OTHER_MINIMUM:.5}  elsewhere");
     println!("{:<16}  {columns}  evaluations: median  largest", "runs");
     // the seed of the first run without restarts that ends at the other minimum: the trace
-    // records the run with IPOP restarts from that seed
+    // records the run with IPOP restarts from that seed, or from seed 1 if none does
     let mut trace_seed = None;
     for restarts in [cmaes::Restarts::Never, cmaes::Restarts::Ipop] {
+        if matches!(restarts, cmaes::Restarts::Ipop) {
+            trace_seed.get_or_insert(1);
+        }
         let (mut global, mut other, mut elsewhere) = (0, 0, 0);
         // the evaluations of the runs that reach the target
         let mut evaluations = Vec::new();
