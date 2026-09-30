@@ -86,17 +86,17 @@ error of 7.0e-5, below the report's criterion of success, 1e-4.
 
 Why a relative target: the error of 1e-8 that the other pages ask for is 1.4·10⁻¹² of f* here. The
 last steps toward it follow the narrow valley, and cost many evaluations. With 25 seeds and IPOP,
-CMA-ES met an absolute 1e-8 in 22 runs; the other 3 ended between 1.01e-8 and 1.05e-8. With BIPOP
-restarts (Hansen, 2009), which alternate large and small
-populations, it met it in all 25, after a median of 133,510 evaluations.
+CMA-ES met an absolute 1e-8 in all 25 runs, but after a median of 127,660 evaluations, about twice
+as many as the relative target takes. With BIPOP restarts (Hansen, 2009), which alternate large and
+small populations, it met it in all 25 too, after the same median.
 
 Why CMA-ES: it starts with a step in proportion to each variable's range, and its covariance matrix
 learns the valley. With the relative target and 25 seeds, it met the target on every run, after a
-median of 71,990 evaluations (from 44,080 to 101,510). Without restarts, 2 of the 25 runs converged
-early, at errors of 3.9e-4 and 1.2e-4, and stayed there. SHADE (Tanabe and Fukunaga, 2013, IEEE
-CEC 2013: 71-78), genoxide's default differential evolution, met the target on all 25 too, after a
-median of 66,200 evaluations, but a slow run took 405,400. L-SHADE, whose population shrinks over
-the budget, met it on 22.
+median of 65,540 evaluations (from 38,490 to 136,140). Without restarts, 3 of the 25 runs
+converged early, at errors of 1.7e-3, 3.5e-3 and 7.3e-5, and stayed there. SHADE (Tanabe and
+Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default differential evolution, met the target on
+all 25 too, after a median of 66,200 evaluations, but a slow run took 405,400. L-SHADE, whose
+population shrinks over the budget, met it on 22.
 
 ## Output
 
@@ -120,13 +120,12 @@ once half the population is feasible.
 A good run is feasible and ends within 1e-4 of f*, the report's success. With restarts, CMA-ES
 meets the relative target with every seed tried.
 
-The run finds its first feasible solution after 560 evaluations. Its first run, with a population
-of 10, brings the error to 31 after 3,850 evaluations, 0.2 after 15,370 and 1.2e-4 after 52,510,
-where it converges, just short of the report's criterion. IPOP restarts it from a random point with
-a population of 20. The second run passes the first's best, meets the report's criterion after
-72,760 evaluations and the target after 73,880, at an error of 6.9e-5.
+The run finds its first feasible solution after 410 evaluations. With its first population of 10,
+it brings the error to 110 after 3,850 evaluations, 20 after 12,810 and 0.1 after 32,010, meets the
+report's criterion after 40,930 evaluations and the target after 41,050, at an error of 6.8e-5,
+without a restart.
 
-The solution is x* to 3 or 4 digits: x1 is 579.211 against x*'s 579.307, a gap that changes f by
-less than 1e-4, since x2 and x3 make up for it. g1 to g3 are active. g4 to g6 are between −1.4e-4
-and −5e-5: not active by the 1e-6 rule, but their terms are of order 10⁵ to 10⁶, so these are
-relative slacks of 10⁻¹¹ to 10⁻⁹.
+The solution is x* to 3 or 4 digits: x2 is 1359.68 against x*'s 1359.97, a gap that changes f by
+less than 1e-4, since x3 makes up for it. g1 to g3 are active. g4 to g6 are between −2.5e-4 and
+−1.6e-4: not active by the 1e-6 rule, but their terms are of order 10⁵ to 10⁶, so these are
+relative slacks of 10⁻¹⁰ to 10⁻⁹.

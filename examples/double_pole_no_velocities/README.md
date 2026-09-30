@@ -92,11 +92,11 @@ this run back.
 
 ## Good results
 
-The goal is the task's success criteria. The run of `output.txt` meets them after 2,756
-evaluations, in 211 generations; its network balances from 238 of the 625 starts.
+The goal is the task's success criteria. The run of `output.txt` meets them after 1,677
+evaluations, in 128 generations; its network balances from 201 of the 625 starts.
 
-Over seeds 1 to 100, all 100 runs solved the task, after 2,724 evaluations on average (a median of
-2,340, at most 6,591), their networks balancing from 256 of the 625 starts on average.
+Over seeds 1 to 100, all 100 runs solved the task, after 3,043 evaluations on average (a median of
+2,405, at most 9,698), their networks balancing from 247 of the 625 starts on average.
 Without the bound on the step size, 13 of 20 runs I tried solved it within 30,000 evaluations: the
 others converged on networks that balance for about 2,000 steps.
 

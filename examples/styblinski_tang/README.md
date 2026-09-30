@@ -51,7 +51,7 @@ right. A search that contracts inside the wrong dip of a gene sees the ground ri
 direction, and stays.
 
 Each gene in the wrong dip adds exactly 14.1367 to the error, so an error is a count of wrong
-genes: 113.09 is 8 genes.
+genes: 127.23 is 9 genes.
 
 ## Representation
 
@@ -89,12 +89,12 @@ the function in Rust, so both versions print the same.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/styblinski-tang) plays back
 another run: CMA-ES with IPOP restarts on Styblinski-Tang in 2 dimensions, so that the population
-can be drawn on the function's contour. Its first run, with 6 samples a generation, puts x₁ in the
-wrong dip and stays at an error of 14.1367; the restart, with 12, finds the global minimum.
+can be drawn on the function's contour. Its first run, with 6 samples a generation, finds the global
+minimum without a restart, and meets the target after 336 evaluations.
 
 ## Good results
 
-The minimum is −1174.984971. CMA-ES without restarts ends at an error of 113.09 with the budget
-spent: 8 of its 30 genes are in the wrong dip, at 2.7468, and the other 22 at the minimum. With
-IPOP restarts, CMA-ES reaches the target after about 122,000 evaluations, and L-SHADE after about
+The minimum is −1174.984971. CMA-ES without restarts ends at an error of 127.23 with the budget
+spent: 9 of its 30 genes are in the wrong dip, at 2.7468, and the other 21 at the minimum. With
+IPOP restarts, CMA-ES reaches the target after about 123,000 evaluations, and L-SHADE after about
 169,000.

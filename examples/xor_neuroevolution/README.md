@@ -76,6 +76,6 @@ cases, and the output unit fires when either does. Its outputs are 0.007 for the
 the 1s. 3,000 local searches (L-BFGS-B) from random starts in the bounds found nothing smaller, and
 neither did any run of this example.
 
-The run of `output.txt` gets within 10⁻⁶ of it, at 0.000216926, after 81,241 evaluations. Over seeds
-1 to 100, 98 runs got within 10⁻⁶ in the 200,000 evaluations, half of them in 21,000 or fewer; the
-other two got there after 227,000 and 603,000.
+The run of `output.txt` gets within 10⁻⁶ of it, at 0.000217196, after 2,570 evaluations. Over seeds
+1 to 100, 99 runs got within 10⁻⁶ in the 200,000 evaluations, half of them in 15,000 or fewer; the
+other one got there after 215,000.

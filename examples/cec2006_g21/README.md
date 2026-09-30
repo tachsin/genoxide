@@ -118,13 +118,13 @@ median of 45,350 evaluations (from 37,500 to 196,150); the other 35 ended at the
 With the default population of 100, it met the target on 66, after a median of 93,500; L-SHADE,
 whose population shrinks over the budget, on 61. The restarts don't change this: with the default
 population, runs met the target on the same 16 of 25 seeds with and without them. CMA-ES with IPOP
-restarts (Hansen and Ostermeier, 2001; Auger and Hansen, 2005) came within 3·10⁻⁷ of f* on 14 of 25
+restarts (Hansen and Ostermeier, 2001; Auger and Hansen, 2005) came within 3·10⁻⁷ of f* on 15 of 25
 seeds, but within 1e-8 on none: it converges pressed against the bound x2 = 0 and the edges of five
 tolerances at once.
 
-At an ε level, SHADE met the target on 97 to 99 % of the runs with populations of 30 to 50 and ε
-starting at 100 or 1,000, and on 94 to 95 % with a population of 20, in 200 to 1,000 runs each. It
-needs its restarts: without them, no run met the target.
+At an ε level, SHADE met the target on 96 to 98 % of the runs with populations of 30 to 50 and ε
+starting at 100 or 1,000, and on 92 % with a population of 20, in 1,000 runs each. It needs its
+restarts: without them, no run met the target.
 
 ## Output
 
