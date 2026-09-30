@@ -33,7 +33,10 @@ algorithms. They give their ``objectives`` and, where it's known, their
     print(gx.indicators.igd_plus(result.front_objectives, front))
 
 A constrained problem gives ``(objectives, violation)``, 0 when feasible, and its
-``constraints(x)`` as ``g(x) <= 0``.
+``constraints(x)`` as ``g(x) <= 0``. :mod:`genoxide.problems.multi_engineering` holds the
+engineering design problems with several objectives, such as the two-bar truss and water resource
+planning.
+
 
 Two submodules hold constrained single-objective problems, whose fitness is ``(score,
 violation)``: :mod:`genoxide.problems.cec2006` (g01 to g24 of the CEC 2006 competition) and
@@ -2257,4 +2260,4 @@ class Mw14(_ScalableMw):
     _type: ClassVar[str] = "mw14"
 
 
-from . import cec2006, engineering  # noqa: E402
+from . import cec2006, engineering, multi_engineering  # noqa: E402

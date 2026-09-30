@@ -239,6 +239,14 @@ violation)`: `gx.problems.cec2006` has CEC 2006's `G01()` to `G24()`, and
 `ThreeBarTruss()`, `CantileverBeam()` and `CarSideImpact()`. `PressureVessel` and `SpeedReducer`
 round their discrete genes, and `design(x)` gives the rounded design.
 
+`gx.problems.multi_engineering` has the engineering design problems with several objectives:
+`TwoBarTruss()`, `WeldedBeam()`, `DiscBrake()`, `SpeedReducer()` and `FourBarTruss()` (two
+objectives), `CarSideImpact()`, `RocketInjector()` and `VehicleCrashworthiness()` (three) and
+`WaterResourcePlanning()` (five). The trusses' fronts are known; the others give their
+`ideal_point`, and for two objectives their `nadir_point`. `DiscBrake` and `SpeedReducer` round
+their integer gene, and `design(x)` gives the rounded design.
+
+
 ```python
 problem = gx.problems.engineering.WeldedBeam()
 de = gx.De(problem.genome, objective=problem.objective, seed=1)
