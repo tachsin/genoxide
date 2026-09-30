@@ -83,6 +83,8 @@ pub struct Nsga3<R: Representation, C, X, const M: usize> {
     discarded: Vec<Individual<R::Genome, Scores<M>>>,
     #[cfg_attr(feature = "serde", serde(skip))]
     spares: Spares<R::Genome>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    niching: Niching,
     // the normalization, with the objectives minimized: kept over the whole run
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     ideal: [f64; M],
@@ -511,14 +513,22 @@ where
         counts: &mut [usize],
         remaining: usize,
     ) -> Vec<usize> {
+        let Niching {
+            left,
+            open,
+            niches,
+            members,
+        } = &mut self.niching;
         let mut picked = Vec::with_capacity(remaining);
         // the candidates left in each niche, in their order, and the niches with any, ascending
-        let mut left: Vec<Vec<usize>> = vec![Vec::new(); counts.len()];
+        left.truncate(counts.len());
+        left.iter_mut().for_each(Vec::clear);
+        left.resize_with(counts.len(), Vec::new);
         for (c, candidate) in candidates.iter().enumerate() {
             left[candidate.1].push(c);
         }
-        let mut open: Vec<usize> = (0..left.len()).filter(|&n| !left[n].is_empty()).collect();
-        let mut members = Vec::new();
+        open.clear();
+        open.extend((0..left.len()).filter(|&n| !left[n].is_empty()));
         while picked.len() < remaining {
             // the niches that still have candidates, with the smallest count
             let fewest = open
@@ -526,20 +536,17 @@ where
                 .map(|&n| counts[n])
                 .min()
                 .expect("candidates left");
-            let mut niches: Vec<usize> = open
-                .iter()
-                .copied()
-                .filter(|&n| counts[n] == fewest)
-                .collect();
-            shuffle(&mut niches, &mut self.rng);
+            niches.clear();
+            niches.extend(open.iter().copied().filter(|&n| counts[n] == fewest));
+            shuffle(niches, &mut self.rng);
             niches.truncate(remaining - picked.len());
-            for niche in niches {
+            for &niche in niches.iter() {
                 members.clone_from(&left[niche]);
-                shuffle(&mut members, &mut self.rng);
+                shuffle(members, &mut self.rng);
                 let member = if counts[niche] == 0 {
                     // the nearest, the first after shuffling on ties
                     let mut nearest = members[0];
-                    for &c in &members {
+                    for &c in members.iter() {
                         if candidates[c].2 < candidates[nearest].2 {
                             nearest = c;
                         }
@@ -576,6 +583,28 @@ where
         if gains(&scores_of(&self.front), &previous, &self.objectives) {
             self.front_generation = self.generation;
         }
+    }
+}
+
+// Space for the niching, reused from generation to generation. A clone or a checkpoint starts
+// without it.
+#[derive(Default)]
+struct Niching {
+    left: Vec<Vec<usize>>,
+    open: Vec<usize>,
+    niches: Vec<usize>,
+    members: Vec<usize>,
+}
+
+impl Clone for Niching {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl std::fmt::Debug for Niching {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Niching")
     }
 }
 
@@ -909,6 +938,7 @@ impl<R: Representation, const M: usize, C, X> Nsga3Builder<R, M, C, X> {
             evaluations: 0,
             front_generation: 0,
             spares: Spares::default(),
+            niching: Niching::default(),
         })
     }
 }
