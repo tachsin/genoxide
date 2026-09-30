@@ -121,6 +121,7 @@ cargo run --release --example xor_neat            # NEAT evolves a network's str
 cargo run --release --example koza_quartic        # genetic programming finds x^4 + x^3 + x^2 + x exactly
 cargo run --release --example double_pole         # a network balances two poles for 100,000 steps, CMA-ES
 cargo run --release --example double_pole_no_velocities  # the same with a recurrent network, no velocities
+cargo run --release --example two_spirals         # 2,545 weights tell two spirals apart, OpenAI's ES
 cargo run --release --example multiplexer_11      # Koza's 11-multiplexer, all 2048 cases, double tournament
 cargo run --release --example abs_typed           # strongly typed GP: |x| from a comparison and a conditional
 cargo run --release --example nguyen_all          # Nguyen's twelve regression problems, with and without linear scaling

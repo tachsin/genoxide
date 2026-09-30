@@ -213,7 +213,7 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [x] Subtree crossover; point, subtree and hoist mutation; bloat control
 - [x] Symbolic regression examples ([#359](https://github.com/tachsin/genoxide/pull/359), [#360](https://github.com/tachsin/genoxide/pull/360))
 - [x] NEAT (speciation, innovation numbers)
-- [ ] Neuroevolution with evolution strategies
+- [x] Neuroevolution with evolution strategies
 - [x] Python: the ES, islands and checkpoints, and a batch's matrix reused ([#342](https://github.com/tachsin/genoxide/pull/342))
 
 ### 0.12: Local optimization
