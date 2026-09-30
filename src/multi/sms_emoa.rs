@@ -1,7 +1,7 @@
 //! SMS-EMOA: the S-metric (hypervolume) selection evolutionary multi-objective algorithm.
 
 use super::breed::{Spares, Variation, distinct_into, scores_of};
-use super::indicator::hypervolume_contributions;
+use super::indicator::{Shrinking, hypervolume_contributions};
 use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, dominates, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
@@ -248,20 +248,36 @@ where
                     }
                 });
                 let reference = [11.0; M];
+                let point = |i: usize| -> [f64; M] {
+                    let values = minimized(&scores[i], &self.objectives);
+                    // an infinitely bad value lies on the reference point (no contribution),
+                    // an infinitely good one beyond the ideal point
+                    std::array::from_fn(|j| match values[j] {
+                        f64::INFINITY => reference[j],
+                        f64::NEG_INFINITY => -1.0,
+                        value => (value - ideal[j]) / scale[j],
+                    })
+                };
+                if M == 2 || M == 3 {
+                    // sorted once: each removal leaves the order of the others as it is
+                    let mut shrinking =
+                        Shrinking::new(kept.iter().map(|&i| point(i)).collect(), reference);
+                    // positions in `front`
+                    let mut left: Vec<usize> = (0..kept.len()).collect();
+                    while left.len() > room {
+                        let contributions = shrinking.contributions();
+                        let mut smallest = 0;
+                        for (position, &index) in left.iter().enumerate() {
+                            if contributions[index] < contributions[left[smallest]] {
+                                smallest = position;
+                            }
+                        }
+                        shrinking.remove(left.remove(smallest));
+                    }
+                    return left.into_iter().map(|position| front[position]).collect();
+                }
                 while kept.len() > room {
-                    let points: Vec<[f64; M]> = kept
-                        .iter()
-                        .map(|&i| {
-                            let values = minimized(&scores[i], &self.objectives);
-                            // an infinitely bad value lies on the reference point (no
-                            // contribution), an infinitely good one beyond the ideal point
-                            std::array::from_fn(|j| match values[j] {
-                                f64::INFINITY => reference[j],
-                                f64::NEG_INFINITY => -1.0,
-                                value => (value - ideal[j]) / scale[j],
-                            })
-                        })
-                        .collect();
+                    let points: Vec<[f64; M]> = kept.iter().map(|&i| point(i)).collect();
                     let contributions =
                         hypervolume_contributions(&points, &reference, &[Objective::Minimize; M]);
                     let mut smallest = 0;
