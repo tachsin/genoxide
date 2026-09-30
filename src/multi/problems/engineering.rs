@@ -17,9 +17,10 @@
 //! | [`CarSideImpact`] | 7 | 3 | 10 | not known |
 //! | [`RocketInjector`] | 4 | 3 | | not known |
 //! | [`VehicleCrashworthiness`] | 5 | 3 | | not known |
-//! | [`WaterResourcePlanning`] | 3 | 5 | 7 | not known |
+//! | [`WaterResourcePlanning`] | 3 | 5 | 7 | a surface, derived |
 //!
-//! The fronts of the two trusses are derived from their definitions, and their docs say how.
+//! The fronts of the two trusses and of water resource planning are derived from their
+//! definitions, and their docs say how.
 //! The others aren't known in closed form: their [`optimal_front`](MultiProblem::optimal_front)
 //! is `None`, and their docs give their ideal point where genoxide computed it, each objective
 //! minimized alone over the feasible region, and for two objectives their nadir point, the
@@ -1136,7 +1137,20 @@ impl MultiProblem<3> for VehicleCrashworthiness {
 /// Bounds x₁ ∈ [0.01, 0.45] and x₂, x₃ ∈ [0.01, 0.1]. g₆ is printed with a product x₁x₂ where
 /// the others divide by it, in every restatement; as printed it holds everywhere in the bounds,
 /// and read as a quotient, `0.417/(x₁x₂)`, it would still hold wherever g₇ does, so the reading
-/// doesn't change the problem. The front isn't known.
+/// doesn't change the problem.
+///
+/// **The front**, derived from the definition: f₁, f₄ and f₅ grow with x₃, which the others
+/// don't depend on, and every constraint is easier to meet with a smaller x₃, so the optimal
+/// solutions have x₃ = 0.01. There, the constraints come down to a least x₁x₂, g₁'s
+/// `0.00139 / (1.08 − 0.0494) ≈ 0.0013487`. And no two such solutions dominate each other: f₂
+/// grows with x₁ and f₁ with x₂, so a solution that dominates another has neither a larger x₁
+/// nor a larger x₂; f₄ falls as x₂ grows, so it has the same x₂, and then f₅ falls as x₁ grows,
+/// so it has the same x₁. The optimal solutions are thus every (x₁, x₂, 0.01) with
+/// x₁x₂ ≥ 0.0013487, and the front is their image, a surface in five dimensions.
+/// [`optimal_front`](MultiProblem::optimal_front) samples it on a grid over x₁ and x₂ and along
+/// the curve x₁x₂ = 0.0013487, its edge. Its ideal point is (63840.2774, 40.4619, 285346.896,
+/// 183749.967, 7.2222) and its nadir point (73450.5107, 1350, 2853468.96, 6575303.1, 25000):
+/// f₅ reaches 25000 on the edge, where `1.39 / (x₁x₂) = 1030.6`.
 ///
 /// [`constraints`](MultiProblem::constraints) gives g₁…g₇ in this order, each minus its limit.
 ///
@@ -1152,16 +1166,42 @@ impl MultiProblem<3> for VehicleCrashworthiness {
 pub struct WaterResourcePlanning;
 
 impl WaterResourcePlanning {
-    // a feasible design that minimizes each objective, found with genoxide's SHADE: x₂ = x₃ =
-    // 0.01; the least x₁ that g₁ allows at x₂ = 0.1 and x₃ = 0.01; x₂ = 0.01; x₂ = 0.1 and
-    // x₃ = 0.01; and x₁ = 0.45, x₂ = 0.1 and x₃ = 0.01
-    const EXTREMES: [[f64; 3]; 5] = [
-        [0.438_483_538_453_159_1, 0.01, 0.01],
-        [0.013_487_288_957_888_815, 0.1, 0.01],
-        [0.393_824_892_261_222, 0.01, 0.036_486_536_878_249_25],
-        [0.127_707_373_692_015_15, 0.1, 0.01],
-        [0.45, 0.1, 0.01],
-    ];
+    // the least x₁x₂ of a feasible solution with x₃ = 0.01, from g₁
+    fn least_area() -> f64 {
+        0.001_39 / (1.08 - 4.94 * 0.01)
+    }
+
+    // the least x₁ of a feasible solution with x₂ and x₃ = 0.01: the least area divided by x₂,
+    // moved up to the first value that meets g₁ when evaluated
+    fn least_x1(x2: f64) -> f64 {
+        let mut x1 = Self::least_area() / x2;
+        while at_most(Self.values(&Reals::from(vec![x1, x2, 0.01]))[0], 0.0) > 0.0 {
+            x1 = x1.next_up();
+        }
+        x1
+    }
+
+    // an optimal design that minimizes (`best`) or maximizes each objective on the front
+    fn extremes(&self, best: bool) -> [[f64; 3]; 5] {
+        let (least, top) = (Self::least_x1(0.1), Self::least_x1(0.01));
+        if best {
+            [
+                [0.45, 0.01, 0.01],
+                [least, 0.1, 0.01],
+                [0.45, 0.01, 0.01],
+                [0.45, 0.1, 0.01],
+                [0.45, 0.1, 0.01],
+            ]
+        } else {
+            [
+                [0.45, 0.1, 0.01],
+                [0.45, 0.1, 0.01],
+                [0.45, 0.1, 0.01],
+                [top, 0.01, 0.01],
+                [least, 0.1, 0.01],
+            ]
+        }
+    }
 
     fn objectives(&self, x: &Reals) -> [f64; 5] {
         let (x1, x2, x3) = (x[0], x[1], x[2]);
@@ -1207,12 +1247,41 @@ impl MultiProblem<5> for WaterResourcePlanning {
         bounds([(0.01, 0.45), (0.01, 0.1), (0.01, 0.1)])
     }
 
-    fn optimal_front(&self, _points: usize) -> Option<Vec<[f64; 5]>> {
-        None
+    fn optimal_front(&self, points: usize) -> Option<Vec<[f64; 5]>> {
+        // a k × k grid over x₁ and x₂, its feasible points, and k points on the edge
+        // x₁x₂ = the least area, from x₂ = 0.1 to 0.01, until there are enough
+        let area = Self::least_area();
+        let mut k = 2;
+        loop {
+            let mut front = Vec::new();
+            for i in 0..k {
+                for j in 0..k {
+                    let x1 = 0.01 + 0.44 * i as f64 / (k - 1) as f64;
+                    let x2 = 0.01 + 0.09 * j as f64 / (k - 1) as f64;
+                    if x1 * x2 >= area {
+                        front.push(self.objectives(&Reals::from(vec![x1, x2, 0.01])));
+                    }
+                }
+            }
+            for i in 0..k {
+                let x2 = 0.1 - 0.09 * i as f64 / (k - 1) as f64;
+                front.push(self.objectives(&Reals::from(vec![Self::least_x1(x2), x2, 0.01])));
+            }
+            if front.len() >= points {
+                return Some(front);
+            }
+            k += 1;
+        }
     }
 
     fn ideal_point(&self) -> Option<[f64; 5]> {
-        Some(ideal(|x| self.objectives(x), &Self::EXTREMES))
+        Some(ideal(|x| self.objectives(x), &self.extremes(true)))
+    }
+
+    fn nadir_point(&self) -> Option<[f64; 5]> {
+        let designs = self.extremes(false);
+        let values = designs.map(|design| self.objectives(&Reals::from(design.to_vec())));
+        Some(std::array::from_fn(|j| values[j][j]))
     }
 }
 
@@ -1717,22 +1786,75 @@ mod tests {
                 assert!(quotient < 0.0, "{x:?}");
             }
         }
-        for design in WaterResourcePlanning::EXTREMES {
-            assert_eq!(
-                WaterResourcePlanning.evaluate(&at(&design)).1,
-                0.0,
-                "{design:?}"
-            );
+        // the extreme designs are feasible, and on the least area only where they must be
+        let problem = WaterResourcePlanning;
+        for best in [true, false] {
+            for design in problem.extremes(best) {
+                assert_eq!(problem.evaluate(&at(&design)).1, 0.0, "{design:?}");
+            }
         }
-        let ideal = WaterResourcePlanning.ideal_point().unwrap();
+        let area = WaterResourcePlanning::least_area();
+        assert_close(&[area], &[0.00139 / 1.0306], 1e-15);
+        let x1 = WaterResourcePlanning::least_x1(0.1);
+        assert!(x1 * 0.1 >= area * (1.0 - 1e-15) && x1 * 0.1 <= area * (1.0 + 1e-14));
+        let (ideal, nadir) = (
+            problem.ideal_point().unwrap(),
+            problem.nadir_point().unwrap(),
+        );
         assert_close(
-            &[ideal[0], ideal[4]],
+            &ideal,
             &[
                 106_780.37 * 0.02 + 61_704.67,
+                3000.0 * area / 0.1,
+                305_700.0 * 2289.0 * 0.01 / (0.06f64 * 2289.0).powf(0.65),
+                250.0 * 2289.0 * (-3.975f64 + 0.099 + 2.74).exp(),
                 25.0 * (1.39 / 0.045 + 49.4 - 80.0),
             ],
             1e-12,
         );
+        assert_close(
+            &nadir,
+            &[
+                106_780.37 * 0.11 + 61_704.67,
+                1350.0,
+                305_700.0 * 2289.0 * 0.1 / (0.06f64 * 2289.0).powf(0.65),
+                250.0 * 2289.0 * (-0.3975f64 + 0.099 + 2.74).exp(),
+                25_000.0,
+            ],
+            1e-12,
+        );
+
+        // the front: at least the points asked for, feasible, between the ideal and nadir points
+        // and reaching them, mutually non-dominated
+        let front = problem.optimal_front(500).unwrap();
+        assert!(front.len() >= 500);
+        for j in 0..5 {
+            let low = front.iter().map(|p| p[j]).fold(f64::INFINITY, f64::min);
+            let high = front.iter().map(|p| p[j]).fold(f64::NEG_INFINITY, f64::max);
+            assert_close(&[low, high], &[ideal[j], nadir[j]], 1e-12);
+        }
+        let scores: Vec<crate::multi::Scores<5>> = front
+            .iter()
+            .map(|p| crate::multi::Scores::new(*p))
+            .collect();
+        let objectives = [crate::Objective::Minimize; 5];
+        assert_eq!(
+            crate::multi::non_dominated_sort(&scores, &objectives).len(),
+            1
+        );
+        // random feasible genomes dominate no point of the front
+        let mut rng = StreamRng::seed_from_u64(11);
+        for _ in 0..20_000 {
+            let genome = real.random_genome(&mut rng);
+            let (f, violation) = problem.evaluate(&genome);
+            if violation > 0.0 {
+                continue;
+            }
+            for point in front.iter().step_by(7) {
+                let better = (0..5).all(|j| f[j] <= point[j]) && (0..5).any(|j| f[j] < point[j]);
+                assert!(!better, "{genome:?} dominates {point:?}");
+            }
+        }
         check_random(&WaterResourcePlanning, 100_000);
     }
 }

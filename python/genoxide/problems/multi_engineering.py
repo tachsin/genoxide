@@ -18,10 +18,11 @@ constraints ``g(x) <= 0``, which keep the scale of the paper that states them::
     result = nsga2.run(problem, generations=200)
     print(gx.indicators.igd_plus(result.front_objectives, problem.optimal_front(500)))
 
-The fronts of :class:`TwoBarTruss` and :class:`FourBarTruss` are derived from their definitions;
-the others aren't known, and their ``optimal_front`` is None. Their ``ideal_point`` gives each
-objective's best value, and for two objectives ``nadir_point`` the other objective's value there:
-best known values, found with genoxide's SHADE.
+The fronts of :class:`TwoBarTruss`, :class:`FourBarTruss` and :class:`WaterResourcePlanning` are
+derived from their definitions; the others aren't known, and their ``optimal_front`` is None.
+Their ``ideal_point`` gives each objective's best value, and for two objectives ``nadir_point``
+the other objective's value there: best known values, found with genoxide's SHADE.
+
 
 :class:`DiscBrake` and :class:`SpeedReducer` each have an integer variable: their genome is real,
 its integer gene is rounded to the nearest integer when it's evaluated, and ``design(x)`` gives the
@@ -259,7 +260,12 @@ class WaterResourcePlanning(MultiProblem):
     The genes are the local detention storage capacity x₁, the maximum treatment rate x₂ and the
     maximum allowable overflow rate x₃. The objectives are the drainage network's, storage
     facility's and treatment facility's costs, the expected flood damage and the expected economic
-    loss from floods. Bounds x₁ in [0.01, 0.45], x₂, x₃ in [0.01, 0.1]. The front isn't known.
+    loss from floods. Bounds x₁ in [0.01, 0.45], x₂, x₃ in [0.01, 0.1].
+
+    The front, derived from the definition: the optimal solutions are every (x₁, x₂, 0.01) with
+    x₁x₂ ≥ 0.00139 / (1.08 − 0.0494), where g₁ is the only binding constraint, and the front is
+    their image, a surface in five dimensions that ``optimal_front`` samples on a grid over x₁ and
+    x₂ and along its edge.
 
     Musselman, K. and Talavage, J. (1980). A tradeoff cut approach to multiple objective
     optimization. Operations Research 28(6): 1424-1435, not read. Definition and bounds as

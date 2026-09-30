@@ -1021,8 +1021,11 @@ def test_engineering_values_at_chosen_points():
     water = engineering.WaterResourcePlanning()
     assert len(water.objectives) == 5 and water.constraint_count == 7
     assert water.ideal_point[4] == pytest.approx(25 * (1.39 / 0.045 + 49.4 - 80))
+    assert water.nadir_point[4] == pytest.approx(25_000)
+    assert len(water.optimal_front(100)) >= 100
+    known = (engineering.TwoBarTruss, engineering.FourBarTruss, engineering.WaterResourcePlanning)
     for cls in MULTI_ENGINEERING:
-        if cls not in (engineering.TwoBarTruss, engineering.FourBarTruss):
+        if cls not in known:
             assert cls().optimal_front(10) is None
 
 
