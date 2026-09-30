@@ -76,12 +76,12 @@ step size of 0.3 of each gene's range, a random start and no restarts. It ranks 
 Deb's rules, and runs for 8,000 evaluations.
 
 CMA-ES suits a smooth problem with a single minimum, where the widths interact through the
-constraint. With seeds 1 to 5, it comes within 1e-8 of the minimum, relative to it, after 3,300 to
-4,200 evaluations, and within 1e-12 after 5,000 to 7,400. SHADE (Tanabe and Fukunaga, 2013, IEEE
-CEC 2013: 71-78), with genoxide's defaults as in the welded beam example, needs 33,700 to 35,800
-evaluations for 1e-8 and 42,000 to 47,700 for 1e-12, and after 100,000 evaluations it's within
+constraint. With seeds 1 to 5, it comes within 1e-8 of the minimum, relative to it, after 2,900 to
+4,900 evaluations, and within 1e-12 after 5,000 to 6,500. SHADE (Tanabe and Fukunaga, 2013, IEEE
+CEC 2013: 71-78), with genoxide's defaults as in the welded beam example, needs 30,200 to 34,300
+evaluations for 1e-8 and 43,300 to 46,300 for 1e-12, and after 100,000 evaluations it's within
 2e-16 of the minimum. L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665), with a
-budget of 20,000 evaluations, reaches 1e-12 after 15,700 to 16,400.
+budget of 20,000 evaluations, reaches 1e-12 after 15,200 to 16,400.
 
 ## Output
 

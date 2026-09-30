@@ -74,7 +74,7 @@ On that surface, the best known solution is a corner: x3 and x6 at their lower b
 upper bound 200, x9 at its lower bound 0.01, g2 active and each equality at the edge of its
 tolerance. The bilinear constraints make the region curved, with other corners: runs of CMA-ES
 without restarts converged at f = −100.05, 300 above f*, and in corners near the best known one, up
-to 0.006 above it.
+to 0.005 above it.
 
 ## Representation
 
@@ -101,9 +101,9 @@ The run has the report's budget of 500,000 evaluations, and stops once its best 
 with an absolute error f(x) − f* of at most 1e-8. The report counts a run as successful with an
 error of at most 1e-4; the example asks for more.
 
-Why CMA-ES with restarts: with 25 seeds, it met the target on every run, after a median of 114,780
-evaluations (from 54,080 to 182,290). Without restarts, 18 of the 25 met it; the other seven ended
-short of it, one at −100.05 and the others from 2·10⁻⁸ to 0.006 above f*. SHADE (Tanabe and
+Why CMA-ES with restarts: with 25 seeds, it met the target on every run, after a median of 132,040
+evaluations (from 64,180 to 199,350). Without restarts, 17 of the 25 met it; the other eight ended
+short of it, three at −100.05 and the others from 4·10⁻⁸ to 0.005 above f*. SHADE (Tanabe and
 Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default differential evolution, met the target on
 all 25 too, but after a median of 153,800 evaluations (at most 276,100). L-SHADE, whose population
 shrinks over the budget, met it on all 25 as well, after a median of 213,949.
@@ -132,9 +132,9 @@ begins at the first feasible solution, and the median's once half the population
 A good run is feasible and ends within 1e-4 of f*, the report's success. CMA-ES with restarts meets
 the target of 1e-8 with every seed tried.
 
-Seed 1 finds its first feasible solution after 5,430 evaluations. Its first run, with a population
-of 10, brings the error to 0.0041 after about 73,000 evaluations, in a corner near the best known
-one, and converges there. The restart, with a population of 20, starts again from a random point:
-its population is mostly infeasible at first, and then passes the first run's best, within the
-report's criterion after 108,190 evaluations, and meets the target after 111,690. The solution is
-the report's x* to 6 digits, with g2 and every equality at its limit.
+Seed 1 finds its first feasible solution after 5,210 evaluations. Its first run, with a population
+of 10, is within the report's criterion after 56,810 evaluations, and brings the error to 1.0·10⁻⁷
+after about 65,000, just short of the target, where it converges. The restart, with a population of
+20, starts again from a random point: its population is mostly infeasible at first, and then passes
+the first run's best, and meets the target after 112,810. The solution is the report's x* to 5
+digits, with g2 and every equality at its limit.

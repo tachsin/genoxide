@@ -79,7 +79,7 @@ proportion to their size. The searches that end within 2% of the bounds' width o
 both genes, are counted as one minimum.
 
 With the smallest basin at 25%, 30 searches all miss it with a probability of 0.75³⁰, about 1 in
-5,600. A population method, such as a GA or differential evolution, also finds a global minimum,
+6,000. A population method, such as a GA or differential evolution, also finds a global minimum,
 but its population usually gathers at one of the three and loses the others. Independent searches
 keep them apart.
 

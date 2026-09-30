@@ -105,8 +105,8 @@ relative to it, after 18,200 to 19,800 evaluations. SHADE, which doesn't restart
 ends 2e-11 to 9e-11 above it after 30,000 evaluations.
 
 CMA-ES, which solves the cantilever beam example, puts the other six thicknesses on their bounds and
-limits, but leaves x₆ where it happens to be: between 0.89 and 1.10 with seeds 1 to 5. After 30,000
-evaluations, it's 3e-9 to 9e-8 above the best known weight, relative to it.
+limits, but leaves x₆ where it happens to be: between 0.93 and 1.12 with seeds 1 to 5. After 30,000
+evaluations, it's 2e-8 to 1e-7 above the best known weight, relative to it.
 
 ## Output
 

@@ -104,11 +104,12 @@ successful with an error of at most 1e-4; the example asks for more.
 
 Why CMA-ES: its covariance matrix can stretch the samples along a narrow direction, such as an edge
 between active constraints, and it needs few evaluations in 5 variables. With seeds 1 to 25,
-IPOP-CMA-ES met the target on all 25 runs, after a median of 12,400 evaluations (6,008 to 24,208).
-Without restarts, CMA-ES met it on 18: the other 7 converged at nearby corners, between 2.5e-5 and
-3.2e-3 above f*, and 4 of them missed the report's 1e-4. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC
-2013: 71-78), genoxide's default differential evolution, also met the target on all 25, after a
-median of 37,500 evaluations (35,200 to 41,200), three times as many.
+IPOP-CMA-ES met the target on all 25 runs, after a median of 12,216 evaluations (5,712 to 18,712).
+Without restarts, CMA-ES met it on 17: 6 of the other 8 converged at nearby corners, between 2.1e-5
+and 3.3e-3 above f*, and 3 of them missed the report's 1e-4; the last 2 converged at the best known
+point, but stopped 3.3e-8 and 7.5e-7 above f*. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013:
+71-78), genoxide's default differential evolution, also met the target on all 25, after a median of
+37,500 evaluations (35,200 to 39,400), three times as many.
 
 ## Output
 
@@ -118,7 +119,7 @@ its target. The third gives when the best solution was first feasible, and when 
 met the report's criterion of success. The fourth compares f(x) with f*, to 6 significant digits,
 and the fifth gives the solution, to 6 digits. The last names the active constraints, those with
 |g| ≤ 1e-4, and counts the others. The threshold is larger than on other pages because of the
-scales: the run stops with g4 and g36 about 3e-5 from their boundaries. In Python, `run` evaluates
+scales: the run stops with g4 and g36 about 4e-6 and 1e-5 from their boundaries. In Python, `run` evaluates
 the problem in Rust, so both versions print the same.
 
 The page shows each variable on its range, and each of the 38 constraints' state, as a grid. Its
@@ -133,11 +134,13 @@ population is feasible.
 A good run is feasible and ends within 1e-4 of f*, the report's success. A value below f* is
 possible, since f* is only the best known, but the runs here end just above it.
 
-The recorded run finds its first feasible solution after 424 evaluations. After about 2,000, it
-reaches a corner with x2 at 68.6, x3 at 102.9 and x5 ≈ 34.13, where g2, g3, g5 and g36 are active
-but g4 has slack: 8.8e-4 above f*, a failure by the report's criterion. It stays there for about
-3,000 evaluations, and then moves on, x5 growing to about 37.58, where g4 is active too. It is
-within 1e-4 of f* after 7,496 evaluations, and meets its target after 11,824, without a restart.
+The recorded run finds its first feasible solution after 208 evaluations. After about 2,000, it
+reaches a corner with x1 and x2 at their lower bounds, 704.415 and 68.6, x3 at 102.9 and
+x5 ≈ 25.01, where g2, g3 and g5 are active but g4 has slack: 3.4e-3 above f*, a failure by the
+report's criterion. It converges there, and after 4,696 evaluations it restarts from a random point
+with a population of 16. The new run comes to the same corner after about 6,500 evaluations, and
+then moves on, x5 growing to about 37.58, where g4 is active too. It is within 1e-4 of f* after
+8,744 evaluations, and meets its target after 10,600, with one restart.
 
 The solution is x = (705.175, 68.6000, 102.900, 282.325, 37.5841), the best known point to 6
 digits, with the same five active constraints, g2, g3, g4, g5 and g36, and x2 at its lower bound.

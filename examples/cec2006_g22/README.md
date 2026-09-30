@@ -116,7 +116,7 @@ On the 22 variables, none of genoxide's algorithms found a feasible solution in 
 L-SHADE came the closest. It ended at a violation between 7.0 and 52 on 13 seeds, and between
 4,400 and 25,400 on the other 12. SHADE ended between 4,900 and 25,800, CMA-ES with IPOP restarts
 (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195; Auger and Hansen, 2005, IEEE
-CEC 2005: 1769-1776) between 72 and 301. Deb's rules add up the violations in their own units, so
+CEC 2005: 1769-1776) between 75 and 361. Deb's rules add up the violations in their own units, so
 that h1 to h6, in units of 10⁵ to 10⁷, drown the rest: the runs meet those and miss the logarithms.
 With each constraint's violation divided by its typical size, the median |g| or |h| over 1,000
 random points, SHADE and L-SHADE found a feasible solution in each of 16 runs, but ended between

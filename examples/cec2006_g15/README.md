@@ -105,11 +105,11 @@ feasible.
 A good run is feasible and ends within 1e-4 of f*, the report's success. A value below f* is
 possible, since f* is only the best known, but the runs here end just above it.
 
-The recorded run finds its first feasible solution after 525 evaluations, about 2.1 above f*, at x
-≈ (4.53, 0.37, 2.07). It then walks along the arc toward smaller x1 and larger x3, at a nearly
-steady pace in the short steps that the tube allows: x1 shrinks by about 0.1 every 2,200
-evaluations, and the error is 0.02 after 20,000. Near the minimum the steps shrink, and the error
-falls by a factor of 10 about every 1,000 evaluations. It is within 1e-4 of f* after 23,765
-evaluations, and meets its target after 26,880, without a restart. The solution is x = (3.512, 0.2170, 3.552), the
-best known point to 4 digits, and both equalities are met with |h| at 0.0001, on the edge of the
-tolerance, as at the best known point.
+The recorded run finds its first feasible solution after 525 evaluations, about 2.1 above f*, at x ≈
+(4.53, 0.37, 2.07). It then walks along the arc toward smaller x1 and larger x3, at a nearly steady
+pace in the short steps that the tube allows: x1 shrinks by about 0.1 every 2,200 evaluations, and
+the error is 0.02 after 20,000. Near the minimum the steps shrink, and the error falls by a factor
+of 10 about every 1,000 evaluations. It is within 1e-4 of f* after 23,765 evaluations, and meets its
+target after 26,880, without a restart. The solution is x = (3.512, 0.2170, 3.552), the best known
+point to 4 digits, and both equalities are met with |h| at 0.0001, on the edge of the tolerance, as
+at the best known point.

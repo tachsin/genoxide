@@ -99,13 +99,13 @@ The run has the report's budget of 500,000 evaluations, and stops once its best 
 with an absolute error f(x) − f* of at most 1e-8. The report counts a run as successful with an
 error of at most 1e-4; the example asks for more.
 
-Why SHADE: with 25 seeds, it met the target on every run, after a median of 87,200 evaluations (from
-81,600 to 96,700). Its bound handling moves a gene halfway to the bound at each step that crosses
+Why SHADE: with 25 seeds, it met the target on every run, after a median of 85,900 evaluations (from
+82,500 to 105,600). Its bound handling moves a gene halfway to the bound at each step that crosses
 it, so the seven genes that belong at 0 approach it geometrically. CMA-ES (Hansen and Ostermeier,
-2001, Evolutionary Computation 9(2): 159-195) met the target on 17 of 25 seeds; the other eight
-stopped short, at errors from 1.4e-8 to 2.7e-5, when its distribution converged in the corner. With
-IPOP restarts it met it on all 25, after a median of 149,304 evaluations; L-SHADE, whose population
-shrinks over the budget, after a median of 154,655.
+2001, Evolutionary Computation 9(2): 159-195) met the target on 15 of 25 seeds; the other ten
+stopped short, at errors from 1.3e-8 to 7.8e-5, when its distribution converged in the corner. With
+IPOP restarts it met it on all 25, after a median of 161,604 evaluations; L-SHADE, whose population
+shrinks over the budget, after a median of 153,527.
 
 ## Output
 
@@ -130,8 +130,8 @@ A good run is feasible and ends within 1e-4 of f*, the report's success. SHADE m
 1e-8 with every seed tried.
 
 With seed 1, the first 100 random solutions include feasible ones, the best of them 2,780 above f*.
-The error falls steadily, by about a factor of 10 every 5,000 evaluations once the population is
-near the corner: 136 after 4,900 evaluations, 0.14 after 43,300, and within the report's criterion
-after 66,000. The run meets the target after 87,200. The solution is the report's x* to 5 or 6
-digits, with the seven genes of the lower bound from 3·10⁻¹² to 1.7·10⁻¹⁰, and all five constraints
-active.
+The error falls steadily, by about a factor of 10 every 7,000 evaluations once the population is
+near the corner: 109 after 4,900 evaluations, 0.47 after 43,300, and within the report's criterion
+after 75,700. The run meets the target after 98,100. The solution is the report's x* to 4 to 6
+digits, with the seven genes of the lower bound from 1.3·10⁻¹¹ to 9.9·10⁻¹⁰, and all five
+constraints active.
