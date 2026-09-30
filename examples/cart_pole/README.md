@@ -1,7 +1,7 @@
 ---
 title: Cart-pole
 category: neuroevolution
-summary: Evolve the weights of a neural network that balances a pole on a cart for 100,000 steps, by CMA-ES.
+summary: Evolve a neural network that balances a pole on a cart for 100,000 steps, its weights by CMA-ES and, for comparison, its structure and weights by NEAT.
 reference: "Barto, A. G., Sutton, R. S. and Anderson, C. W. (1983). Neuronlike adaptive elements that can solve difficult learning control problems. IEEE Transactions on Systems, Man, and Cybernetics 13(5): 834-846. Equations corrected by Florian, R. V. (2007). Correct equations for the dynamics of the cart-pole system. Technical report, Coneural, Romania."
 reference_url: https://doi.org/10.1109/TSMC.1983.6313077
 optimum: "Balanced for 100,000 steps of 0.02 s (the success criterion of Gomez et al. 2008)"
@@ -70,11 +70,19 @@ recommends for continuous problems of up to a few hundred genes, with its defaul
 of 4 + ⌊3 ln 40⌋ = 15 and a step size of 0.3 of each gene's range, and IPOP restarts in case a run
 converges without a solution. The run stops at 100,000 steps, or after 100,000 evaluations.
 
+Then NEAT (`neat::Neat`, Stanley and Miikkulainen 2002) solves the same task, evolving the
+network's structure with its weights, with the paper's settings: 150 networks that start from the 4
+inputs and a bias connected to the output, and grow hidden nodes and connections. Its output, the
+paper's steepened sigmoid in (0, 1), is the force as 2 × output − 1. The [XOR by NEAT](../xor_neat/)
+page describes the method.
+
 ## Output
 
 The first line gives the steps the best network balanced, the evaluations and the generations it
 took. The second gives how far the cart and the pole went from the middle and the vertical over
-the 100,000 steps, and the third the network's weights.
+the 100,000 steps, and the third the network's weights. The last two lines are NEAT's: the steps
+its best network balanced, after how many evaluations and generations, and the network's hidden
+nodes and enabled connections.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/cart-pole) plays this run back.
 
@@ -94,3 +102,7 @@ CNE and 743 for NEAT, and thousands for the value-function methods. The setups d
 that matter at these small numbers: Igel's CMA-ES started the pole upright, without friction, and
 turned the network's output into a push of ±10 N at random with the output's probability, where
 here the force is the output itself and the pole starts at 4°.
+
+NEAT's run of `output.txt` balances the pole with a network of its initial population: 150
+evaluations, generation 0, no hidden node. Over seeds 1 to 20, all 20 runs solved it, after 187
+evaluations on average. Gomez et al.'s 743 for NEAT comes from other code and settings.

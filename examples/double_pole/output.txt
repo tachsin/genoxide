@@ -1,3 +1,6 @@
 balanced for 100000 steps (the goal: 100000) after 855 evaluations in 56 generations
 over the 100000 steps: the cart within 0.9891 m, the poles within 15.1266° and 18.6145°
 weights: [0.343, 0.266, 0.640, 0.274, -0.605, -0.302, -0.166, 0.159, -0.865, 0.546, 0.590, -0.280, -0.020, 0.612, -0.647, 0.009, 0.408, 0.166, 0.641, -0.922, 0.172, -0.083, -0.323, -0.588, 0.143, -0.154, 0.703, 0.899, -0.639, -0.677, 0.286, 0.293, 0.307, 0.769, -0.591, 0.540, -0.764, -0.035, 0.151, 0.132, -0.897, -0.759]
+
+NEAT: balanced for 100000 steps after 3685 evaluations in 25 generations
+the network: 3 hidden nodes, 12 enabled connections
