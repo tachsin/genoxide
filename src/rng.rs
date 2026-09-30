@@ -589,8 +589,10 @@ mod tests {
         // second of one draw and the first of the next
         for offset in [0, 1] {
             let pairs: Vec<(f64, f64)> = samples[offset..]
-                .chunks_exact(2)
-                .map(|pair| (pair[0], pair[1]))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|&[a, b]| (a, b))
                 .collect();
             let correlation = pairs.iter().map(|(a, b)| a * b).sum::<f64>() / pairs.len() as f64;
             assert!(correlation.abs() < 0.01, "{offset}: {correlation}");
