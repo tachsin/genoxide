@@ -3,6 +3,7 @@ fronts."""
 
 import dataclasses
 import math
+import typing
 
 import numpy as np
 import pytest
@@ -166,6 +167,20 @@ def test_the_classes_are_the_rust_registry():
     submodules = gx.problems.cec2006.__all__ + gx.problems.engineering.__all__
     names = [cls.__name__ for cls in CONSTRAINED] + ["GearTrain", "EQUALITY_TOLERANCE"]
     assert sorted(names) == sorted(submodules)
+
+
+def test_type_checkers_see_the_genome_of_each_problem():
+    # Problem[Real], Problem[Integer], MultiProblem[Binary]: the type argument of the nearest
+    # generic base is the class of the problem's genome
+    classes = PROBLEMS + CONSTRAINED + MULTI_PROBLEMS + BINARY_PROBLEMS
+    for cls in classes + [gx.problems.engineering.GearTrain]:
+        declared = next(
+            typing.get_args(base)[0]
+            for ancestor in cls.__mro__
+            for base in getattr(ancestor, "__orig_bases__", ())
+            if typing.get_origin(base) in (gx.problems.Problem, gx.problems.MultiProblem)
+        )
+        assert type(cls().genome) is declared, cls.__name__
 
 
 @pytest.mark.parametrize("cls", PROBLEMS)
