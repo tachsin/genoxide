@@ -42,7 +42,12 @@ python examples/tsp_berlin52/main.py
 | [Sphere](sphere/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/sphere) |
 | [Axis-parallel ellipsoid](axis_parallel_ellipsoid/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/axis-parallel-ellipsoid) |
 | [Schwefel 1.2](schwefel_1_2/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schwefel-1-2) |
+| [Schwefel 2.21](schwefel_2_21/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schwefel-2-21) |
+| [Schwefel 2.22](schwefel_2_22/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schwefel-2-22) |
 | [Zakharov](zakharov/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/zakharov) |
+| [Trid](trid/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/trid) |
+| [Dixon-Price](dixon_price/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dixon-price) |
+| [Powell](powell/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/powell) |
 | [Rosenbrock](rosenbrock/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rosenbrock) |
 | [Levy](levy/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/levy) |
 | [Styblinski-Tang](styblinski_tang/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/styblinski-tang) |
@@ -55,11 +60,21 @@ python examples/tsp_berlin52/main.py
 | [Branin](branin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/branin) |
 | [Goldstein-Price](goldstein_price/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/goldstein-price) |
 | [Six-hump camel](six_hump_camel/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/six-hump-camel) |
+| [Three-hump camel](three_hump_camel/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/three-hump-camel) |
+| [Beale](beale/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/beale) |
+| [Booth](booth/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/booth) |
+| [Matyas](matyas/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/matyas) |
+| [Bohachevsky 1](bohachevsky1/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bohachevsky1) |
+| [Bohachevsky 2](bohachevsky2/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bohachevsky2) |
+| [Bohachevsky 3](bohachevsky3/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bohachevsky3) |
 | [Hartmann 3-D](hartmann3/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/hartmann3) |
 | [Hartmann 6-D](hartmann6/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/hartmann6) |
 | [Shekel 5](shekel5/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/shekel5) |
 | [Shekel 7](shekel7/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/shekel7) |
 | [Shekel 10](shekel10/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/shekel10) |
+| [Shekel's foxholes](shekel_foxholes/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/shekel-foxholes) |
+| [Langermann](langermann/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/langermann) |
+| [Kowalik](kowalik/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/kowalik) |
 | [Easom](easom/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/easom) |
 | [Eggholder](eggholder/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/eggholder) |
 | [Schaffer F6](schaffer_f6/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schaffer-f6) |

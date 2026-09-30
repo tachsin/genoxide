@@ -1,0 +1,8 @@
+Schwefel 2.22 in 30 dimensions, 300000 evaluations at most
+Evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES         2170     3794     5432     7322     9044   9.5e-9
+sep-CMA-ES     1638     3094     4690     5964     7826   9.1e-9
+DE            11800    21900    31600    40600    49900   9.4e-9
+PSO            8080    15320    27200    45720    57680   9.0e-9
+GA            10404   110881        -        -        -   2.6e-3

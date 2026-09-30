@@ -1,0 +1,8 @@
+Trid in 10 dimensions, 100000 evaluations at most
+Evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES         1020     1270     1600     1900     2180   1.0e-8
+sep-CMA-ES     2440     3890     5790     7570     9050   9.2e-9
+DE            10600    17300    22800    28500    33600   9.6e-9
+PSO            6440    11680    18920    24200    29440   1.0e-8
+GA            57074        -        -        -        -   3.4e-1

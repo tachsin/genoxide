@@ -1,0 +1,6 @@
+Bohachevsky 2: minimum 0 at (0, 0), 30 seeds, 10000 evaluations at most per run
+runs              at min  elsewhere  evaluations: median  largest
+CMA-ES                28          2                  396      486
+CMA-ES with IPOP      30          0                  402     1254
+DE                    30          0                 1400     1560
+evaluations: of the runs that reach the minimum, to within 1e-8

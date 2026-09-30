@@ -1,0 +1,8 @@
+Langermann: best known minimum -4.15581, 30 seeds, 50000 evaluations at most per run
+runs              at min  elsewhere  evaluations: median  largest
+CMA-ES                 0         30                    0        0
+CMA-ES with IPOP      25          5                 5568    36708
+PSO                   21          9                 3800    39240
+PSO (ring)            30          0                 6500    39640
+DE                    30          0                 3330    16838
+evaluations: of the runs that reach the best known minimum, to within 1e-8
