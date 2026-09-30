@@ -585,14 +585,31 @@ mod tests {
         assert!((variance - 1.0).abs() < 0.01, "variance {variance}");
         // P(|X| < 1) of a standard normal
         assert!((within_one - 0.6827).abs() < 0.005, "{within_one}");
+        // the two normals of a draw (u f, v f) are independent: uncorrelated, and so are the
+        // second of one draw and the first of the next
+        for offset in [0, 1] {
+            let pairs: Vec<(f64, f64)> = samples[offset..]
+                .chunks_exact(2)
+                .map(|pair| (pair[0], pair[1]))
+                .collect();
+            let correlation = pairs.iter().map(|(a, b)| a * b).sum::<f64>() / pairs.len() as f64;
+            assert!(correlation.abs() < 0.01, "{offset}: {correlation}");
+            // and their squares too (uncorrelated but dependent pairs would fail this)
+            let squares = pairs
+                .iter()
+                .map(|(a, b)| (a * a - 1.0) * (b * b - 1.0))
+                .sum::<f64>()
+                / pairs.len() as f64;
+            assert!(squares.abs() < 0.03, "{offset}: {squares}");
+        }
         let mut rng = StreamRng::seed_from_u64(42);
         let values = [rng.normal(), rng.normal(), rng.normal()];
         assert_eq!(
             values.map(f64::to_bits),
             [
-                4593777358611831395,  // 0.12793483831474636
-                13830986477247399585, // -1.095928063849364
-                13825395772567733866, // -0.46363556300011644
+                4593777358611831395,  // 0.12793483831474636, u f of the first draw
+                4599376719253418024,  // 0.31669663200296094, v f of the same draw
+                13830986477247399585, // -1.095928063849364, u f of the second draw
             ],
             "normal numbers changed, which breaks reproducibility"
         );

@@ -54,7 +54,7 @@ def test_es_matches_rust():
         seed=3,
     ).run(problem, generations=40)
     assert result.evaluations == 804
-    assert result.best_fitness == 4.633969563787936e-05
+    assert result.best_fitness == 6.424989845860214e-05
 
 
 def test_es_settings():
@@ -170,7 +170,7 @@ def test_self_adaptation_matches_rust():
         seed=4,
     ).run(problem, generations=40)
     assert result.evaluations == 1610
-    assert result.best_fitness == 1.6145262132260095e-07
+    assert result.best_fitness == 2.5135888040149383e-08
     # the same with the problem in Python
     python = gx.Ga(
         gx.AdaptiveReal(problem.genome, 0.2),
@@ -309,7 +309,7 @@ def test_islands_match_rust():
     )
     result = des.run(problem, generations=50)
     assert result.evaluations == 3060
-    assert result.best_fitness == 6.14046463019362
+    assert result.best_fitness == 5.771504985092051
 
 
 def test_islands_are_the_same_one_at_a_time_in_batches_and_in_parallel():
