@@ -181,8 +181,10 @@ jobs:
       - run: python -m venv .venv
       - run: |
           source .venv/bin/activate 2>/dev/null || source .venv/Scripts/activate
-          pip install maturin==1.15.0 pytest
+          pip install maturin==1.15.0 pytest mypy==2.3.1
           maturin develop --release
+          # the package's own code passes strict type checking, with numpy's types
+          mypy --strict genoxide
           # the tests run the README's code blocks and the module docstring's example too
           pytest -v
           # every example in Python, examples/<name>/main.py, printing what its output.txt has, on

@@ -5,7 +5,7 @@ use crate::genome::{
     AdaptiveReal, AdaptiveReals, Binary, Bits, Integer, Integers, Order, Permutation, Real, Reals,
 };
 use crate::math::{exp, exp_m1, ln_1p};
-use crate::rng::Chance;
+use crate::rng::{Chance, Sample};
 use crate::{Error, Result, StreamRng};
 use std::ops::RangeInclusive;
 
@@ -608,7 +608,12 @@ impl Mutate<Permutation> for SwapMutation {
             genome.swap(a, if b >= a { b + 1 } else { b });
             return;
         }
-        let mut positions = rng.sample_distinct(2 * self.count.min(len / 2), len);
+        // without an allocation for up to 4 pairs
+        let mut sample = rng.sample_distinct_small(2 * self.count.min(len / 2), len);
+        let positions = match &mut sample {
+            Sample::Inline(values, k) => &mut values[..*k],
+            Sample::Heap(values) => values.as_mut_slice(),
+        };
         // random pairs: shuffle the positions (Fisher-Yates), then pair them up
         for position in (1..positions.len()).rev() {
             positions.swap(position, rng.below(position + 1));

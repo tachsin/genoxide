@@ -73,7 +73,7 @@ impl<G> fmt::Debug for Spares<G> {
 
 impl<G: Clone> Spares<G> {
     // a copy of `genome`, in a spare one if there is any
-    fn copy(&mut self, genome: &G) -> G {
+    pub(crate) fn copy(&mut self, genome: &G) -> G {
         match self.0.pop() {
             Some(mut spare) => {
                 spare.clone_from(genome);

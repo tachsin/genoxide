@@ -343,6 +343,13 @@ fn value(result: &Bound<'_, PyAny>) -> PyResult<Value> {
         return Ok(Value::Invalid);
     }
     if let Ok(tuple) = result.cast::<PyTuple>() {
+        // PyO3's error for another length is a ValueError
+        if tuple.len() != 2 {
+            return Err(PyTypeError::new_err(format!(
+                "a fitness function's tuple is (score, constraint violation), two numbers, not a tuple of length {}",
+                tuple.len()
+            )));
+        }
         let (score, violation) = tuple.extract::<(f64, f64)>().map_err(|error| {
             not_numbers(result.py(), error, || {
                 format!(

@@ -10,6 +10,7 @@ use crate::rng::Chance;
 use crate::{Error, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
 use std::cmp::Ordering;
+use std::fmt;
 
 /// SPEA2 (Zitzler, Laumanns and Thiele, 2001): a multi-objective genetic algorithm with an
 /// archive of the best solutions, as an ask / tell [`MultiObjectiveAlgorithm`].
@@ -79,6 +80,8 @@ pub struct Spea2<R: Representation, C, X, const M: usize> {
     discarded: Vec<Individual<R::Genome, Scores<M>>>,
     #[cfg_attr(feature = "serde", serde(skip))]
     spares: Spares<R::Genome>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    scratch: Scratch,
     started: bool,
     asked: bool,
     generation: u64,
@@ -104,6 +107,36 @@ impl<R: Representation, const M: usize> Spea2<R, Unset, Unset, M> {
     }
 }
 
+// Space for the SPEA2 fitness and the truncation, reused from generation to generation. A clone
+// or a checkpoint starts without it.
+#[derive(Default)]
+struct Scratch {
+    strength: Vec<usize>,
+    // every (dominating, dominated) pair
+    dominations: Vec<(usize, usize)>,
+    raw: Vec<usize>,
+    // the SPEA2 fitness of each solution
+    fitness: Vec<f64>,
+    // the distance from `a` to `b` of `n` solutions at `a * n + b`
+    distances: Vec<f64>,
+    nearest: Vec<f64>,
+    // for the truncation: the sorted distances of each survivor, a row each, and the row of each
+    sorted: Vec<f64>,
+    rows: Vec<usize>,
+}
+
+impl Clone for Scratch {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl fmt::Debug for Scratch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Scratch")
+    }
+}
+
 // the violation of a solution, infinite if it's invalid
 fn violation<const M: usize>(scores: &Scores<M>) -> f64 {
     if scores.is_valid() {
@@ -114,15 +147,26 @@ fn violation<const M: usize>(scores: &Scores<M>) -> f64 {
 }
 
 // the SPEA2 fitness of every solution, and the distances between them (infinite to itself and
-// between invalid solutions), with each objective scaled to its range among the valid ones
+// between invalid solutions), with each objective scaled to its range among the valid ones, into
+// `scratch.fitness` and `scratch.distances`
 fn strength_fitness<const M: usize>(
     scores: &[Scores<M>],
     objectives: &[Objective; M],
-) -> (Vec<f64>, Vec<Vec<f64>>) {
+    scratch: &mut Scratch,
+) {
+    let Scratch {
+        strength,
+        dominations,
+        raw,
+        fitness,
+        distances,
+        nearest,
+        ..
+    } = scratch;
     let n = scores.len();
-    let mut strength = vec![0usize; n];
-    // every (dominating, dominated) pair
-    let mut dominations: Vec<(usize, usize)> = Vec::new();
+    strength.clear();
+    strength.resize(n, 0);
+    dominations.clear();
     for a in 0..n {
         for b in a + 1..n {
             match dominance(&scores[a], &scores[b], objectives) {
@@ -139,8 +183,9 @@ fn strength_fitness<const M: usize>(
         }
     }
     // the raw fitness: the sum of the strengths of the dominating solutions
-    let mut raw = vec![0usize; n];
-    for &(dominating, dominated) in &dominations {
+    raw.clear();
+    raw.resize(n, 0);
+    for &(dominating, dominated) in dominations.iter() {
         raw[dominated] += strength[dominating];
     }
     let (mut low, mut high) = ([f64::INFINITY; M], [f64::NEG_INFINITY; M]);
@@ -162,7 +207,8 @@ fn strength_fitness<const M: usize>(
             1.0
         }
     });
-    let mut distances = vec![vec![f64::INFINITY; n]; n];
+    distances.clear();
+    distances.resize(n * n, f64::INFINITY);
     for a in 0..n {
         for b in a + 1..n {
             if scores[a].is_valid() && scores[b].is_valid() {
@@ -179,52 +225,63 @@ fn strength_fitness<const M: usize>(
                     })
                     .sum::<f64>()
                     .sqrt();
-                distances[a][b] = distance;
-                distances[b][a] = distance;
+                distances[a * n + b] = distance;
+                distances[b * n + a] = distance;
             }
         }
     }
     let k = ((n as f64).sqrt() as usize).clamp(1, n.saturating_sub(1).max(1));
-    let mut nearest = Vec::with_capacity(n);
-    let fitness = (0..n)
-        .map(|i| {
-            // the k-th smallest distance: the value a sort would put there, as the order is total
-            nearest.clone_from(&distances[i]);
-            let sigma = if k - 1 < nearest.len() {
-                *nearest.select_nth_unstable_by(k - 1, f64::total_cmp).1
-            } else {
-                f64::INFINITY
-            };
-            let sigma = if sigma.is_nan() { f64::INFINITY } else { sigma };
-            raw[i] as f64 + 1.0 / (sigma + 2.0)
-        })
-        .collect();
-    (fitness, distances)
+    fitness.clear();
+    fitness.extend((0..n).map(|i| {
+        // the k-th smallest distance: the value a sort would put there, as the order is total
+        nearest.clear();
+        nearest.extend_from_slice(&distances[i * n..(i + 1) * n]);
+        let sigma = if k - 1 < nearest.len() {
+            *nearest.select_nth_unstable_by(k - 1, f64::total_cmp).1
+        } else {
+            f64::INFINITY
+        };
+        let sigma = if sigma.is_nan() { f64::INFINITY } else { sigma };
+        raw[i] as f64 + 1.0 / (sigma + 2.0)
+    }));
 }
 
 // removes the most crowded survivor until `size` remain: the one whose sorted distances to the
 // other survivors are lexicographically smallest (the nearest neighbor first, then the second
-// nearest, ...), the first on ties; the sorted distances are kept up to date between removals
-fn truncate(survivors: &mut Vec<usize>, distances: &[Vec<f64>], size: usize) {
-    let mut sorted: Vec<Vec<f64>> = survivors
-        .iter()
-        .map(|&a| {
-            let mut row: Vec<f64> = survivors
+// nearest, ...), the first on ties; the sorted distances are kept up to date between removals.
+// `distances` are those of `n` solutions, `a * n + b`; `sorted` and `rows` are scratch space.
+fn truncate(
+    survivors: &mut Vec<usize>,
+    distances: &[f64],
+    n: usize,
+    size: usize,
+    sorted: &mut Vec<f64>,
+    rows: &mut Vec<usize>,
+) {
+    // a row of `stride` distances per survivor, of which the first `len` are in use
+    let stride = survivors.len().saturating_sub(1);
+    sorted.clear();
+    for &a in survivors.iter() {
+        let start = sorted.len();
+        sorted.extend(
+            survivors
                 .iter()
                 .filter(|&&b| b != a)
-                .map(|&b| distances[a][b])
-                .collect();
-            // equal under total_cmp means the same bits: an unstable sort gives the same row
-            row.sort_unstable_by(f64::total_cmp);
-            row
-        })
-        .collect();
+                .map(|&b| distances[a * n + b]),
+        );
+        // equal under total_cmp means the same bits: an unstable sort gives the same row
+        sorted[start..].sort_unstable_by(f64::total_cmp);
+    }
+    rows.clear();
+    rows.extend(0..survivors.len());
     while survivors.len() > size {
+        let len = survivors.len() - 1;
+        let row = |position: usize| &sorted[rows[position] * stride..][..len];
         let mut most_crowded = 0;
         for position in 1..survivors.len() {
-            let ordering = sorted[position]
+            let ordering = row(position)
                 .iter()
-                .zip(&sorted[most_crowded])
+                .zip(row(most_crowded))
                 .map(|(a, b)| a.total_cmp(b))
                 .find(|ordering| ordering.is_ne())
                 .unwrap_or(Ordering::Equal);
@@ -233,11 +290,12 @@ fn truncate(survivors: &mut Vec<usize>, distances: &[Vec<f64>], size: usize) {
             }
         }
         let removed = survivors.remove(most_crowded);
-        sorted.remove(most_crowded);
-        for (row, &survivor) in sorted.iter_mut().zip(survivors.iter()) {
-            let distance = distances[survivor][removed];
+        rows.remove(most_crowded);
+        for (&row, &survivor) in rows.iter().zip(survivors.iter()) {
+            let distance = distances[survivor * n + removed];
+            let row = &mut sorted[row * stride..][..len];
             let position = row.partition_point(|d| d.total_cmp(&distance) == Ordering::Less);
-            row.remove(position);
+            row.copy_within(position + 1.., position);
         }
     }
 }
@@ -320,7 +378,14 @@ where
         let mut pool = parents;
         pool.append(&mut self.offspring);
         let scores = scores_of(&pool);
-        let (fitness, distances) = strength_fitness(&scores, &self.objectives);
+        strength_fitness(&scores, &self.objectives, &mut self.scratch);
+        let Scratch {
+            fitness,
+            distances,
+            sorted,
+            rows,
+            ..
+        } = &mut self.scratch;
         let mut survivors: Vec<usize> = (0..pool.len()).filter(|&i| fitness[i] < 1.0).collect();
         if survivors.len() < self.population_size {
             let mut others: Vec<usize> = (0..pool.len()).filter(|&i| fitness[i] >= 1.0).collect();
@@ -328,7 +393,14 @@ where
             survivors.extend(&others[..self.population_size - survivors.len()]);
         }
         if survivors.len() > self.population_size {
-            truncate(&mut survivors, &distances, self.population_size);
+            truncate(
+                &mut survivors,
+                distances,
+                pool.len(),
+                self.population_size,
+                sorted,
+                rows,
+            );
         }
         let mut selected = vec![false; pool.len()];
         for &index in &survivors {
@@ -426,7 +498,8 @@ where
                 individual.set_fitness(score);
             }
             let scores = scores_of(self.population.as_slice());
-            self.fitness = strength_fitness(&scores, &self.objectives).0;
+            strength_fitness(&scores, &self.objectives, &mut self.scratch);
+            self.fitness.clone_from(&self.scratch.fitness);
         }
         self.update_front();
         self.started = true;
@@ -631,6 +704,7 @@ impl<R: Representation, const M: usize, C, X> Spea2Builder<R, M, C, X> {
             evaluations: 0,
             front_generation: 0,
             spares: Spares::default(),
+            scratch: Scratch::default(),
         })
     }
 }
@@ -653,17 +727,13 @@ mod tests {
             Scores::new([0.0, 0.5]),
             Scores::new([4.0, 0.2]),
         ];
-        let (fitness, distances) = strength_fitness(&scores, &[Minimize, Minimize]);
-        assert!(fitness.iter().all(|value| !value.is_nan()));
-        assert!(
-            distances
-                .iter()
-                .flatten()
-                .all(|distance| !distance.is_nan())
-        );
+        let mut scratch = Scratch::default();
+        strength_fitness(&scores, &[Minimize, Minimize], &mut scratch);
+        assert!(scratch.fitness.iter().all(|value| !value.is_nan()));
+        assert!(scratch.distances.iter().all(|distance| !distance.is_nan()));
         // the objective with infinite values is still scaled, by its finite range 0 to 4
         let expected = (1.0f64 + (0.5f64 - 0.2) * (0.5 - 0.2)).sqrt();
-        assert_eq!(distances[2][3], expected);
+        assert_eq!(scratch.distances[2 * 4 + 3], expected);
     }
 
     fn builder(
@@ -696,7 +766,9 @@ mod tests {
             Scores::new([3.0, 3.0]),
             Scores::new([5.0, 5.0]),
         ];
-        let (fitness, distances) = strength_fitness(&scores, &[Minimize, Minimize]);
+        let mut scratch = Scratch::default();
+        strength_fitness(&scores, &[Minimize, Minimize], &mut scratch);
+        let (fitness, distances) = (&scratch.fitness, &scratch.distances);
         // strengths: a 1 (e), b 2 (d, e), c 1 (e), d 1 (e), e 0; raw fitness: d 2, e 1 + 2 + 1 + 1
         let raw: Vec<f64> = fitness.iter().map(|f| f.floor()).collect();
         assert_eq!(raw, [0.0, 0.0, 0.0, 2.0, 5.0]);
@@ -706,40 +778,44 @@ mod tests {
                 .all(|f| f - f.floor() > 0.0 && f - f.floor() <= 0.5)
         );
         // distances with both objectives scaled to 0..5
-        assert!((distances[0][2] - (0.8f64 * 0.8 * 2.0).sqrt()).abs() < 1e-12);
-        assert_eq!(distances[1][1], f64::INFINITY);
+        assert!((distances[2] - (0.8f64 * 0.8 * 2.0).sqrt()).abs() < 1e-12);
+        assert_eq!(distances[5 + 1], f64::INFINITY);
         // the maximized mirror image gives the same fitness
         let mirrored: Vec<Scores<2>> = scores
             .iter()
             .map(|s| Scores::new(s.values().unwrap().map(|v| -v)))
             .collect();
-        assert_eq!(
-            strength_fitness(&mirrored, &[Maximize, Maximize]).0,
-            fitness
-        );
+        let mut mirrored_scratch = Scratch::default();
+        strength_fitness(&mirrored, &[Maximize, Maximize], &mut mirrored_scratch);
+        assert_eq!(&mirrored_scratch.fitness, fitness);
     }
 
     #[test]
     fn truncation_removes_the_most_crowded() {
         // five points on a line: 1 and 2 are the closest pair, and 2 is closer to 3
         let xs: [f64; 5] = [0.0, 1.0, 1.2, 2.0, 4.0];
-        let distances: Vec<Vec<f64>> = xs
+        let distances: Vec<f64> = xs
             .iter()
-            .map(|a| {
-                xs.iter()
-                    .map(|b| if a == b { f64::INFINITY } else { (a - b).abs() })
-                    .collect()
+            .flat_map(|a| {
+                xs.map(|b| {
+                    if *a == b {
+                        f64::INFINITY
+                    } else {
+                        (a - b).abs()
+                    }
+                })
             })
             .collect();
+        let (mut sorted, mut rows) = (Vec::new(), Vec::new());
         let mut survivors = vec![0, 1, 2, 3, 4];
-        truncate(&mut survivors, &distances, 3);
+        truncate(&mut survivors, &distances, 5, 3, &mut sorted, &mut rows);
         // 1 and 2 are nearest (0.2); 1's second nearest is 1.0 (to 0), 2's is 0.8 (to 3), so 2
         // goes first; then 1 and 3 are nearest (1.0 each), and 1's second nearest, 1.0 to 0, is
         // smaller than 3's, 2.0 to 4
         assert_eq!(survivors, [0, 3, 4]);
         // the extremes stay
         let mut survivors = vec![0, 1, 2, 3, 4];
-        truncate(&mut survivors, &distances, 2);
+        truncate(&mut survivors, &distances, 5, 2, &mut sorted, &mut rows);
         assert_eq!(survivors, [0, 4]);
     }
 

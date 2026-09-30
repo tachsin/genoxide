@@ -78,7 +78,8 @@ where
                 a.swap_range(b, first + 1..second + 1);
             }
             points => {
-                let cuts = rng.sample_distinct(points, len - 1);
+                // without an allocation for up to 8 points
+                let cuts = rng.sample_distinct_small(points, len - 1);
                 for segment in cuts.chunks(2) {
                     let end = segment.get(1).map_or(len, |&cut| cut + 1);
                     a.swap_range(b, segment[0] + 1..end);

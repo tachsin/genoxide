@@ -1,8 +1,9 @@
 name: Python wheels
 
-# The wheels of the Python package: abi3, one per platform, for CPython 3.10 and later. Built and
-# tested on pull requests that touch the package, by hand, and by the release workflow, which
-# publishes them to PyPI.
+# The wheels of the Python package: abi3, one per platform, for CPython 3.10 and later, and one per
+# platform for free-threaded CPython 3.14 (3.14t), which can't load abi3. Built and tested on pull
+# requests that touch the package, by hand, and by the release workflow, which publishes them to
+# PyPI.
 on:
   pull_request:
     paths:
@@ -45,6 +46,18 @@ jobs:
           working-directory: python
           # no --release: it would take the place of the `wheel` profile of pyproject.toml
           args: --locked --out dist
+      # free-threaded CPython: PyO3 makes a version-specific wheel for it despite the abi3 feature,
+      # and supports it from 3.14. On Linux, the manylinux and musllinux containers have it.
+      - uses: actions/setup-python@v7
+        if: runner.os != 'Linux'
+        with:
+          python-version: "3.14t"
+      - uses: PyO3/maturin-action@v1.51.0
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: ${{ matrix.platform.manylinux }}
+          working-directory: python
+          args: --locked --out dist -i python3.14t
       - uses: actions/setup-python@v7
         if: matrix.platform.test
         with:
@@ -53,8 +66,19 @@ jobs:
       - name: Test
         if: matrix.platform.test
         run: |
-          python -m pip install pytest python/dist/*.whl
+          python -m pip install pytest python/dist/*-abi3-*.whl
           cd python/tests && python -m pytest -q
+      - uses: actions/setup-python@v7
+        id: free-threaded
+        if: matrix.platform.test
+        with:
+          python-version: "3.14t"
+      - name: Test free-threaded
+        if: matrix.platform.test
+        run: |
+          python="${{ steps.free-threaded.outputs.python-path }}"
+          "$python" -m pip install pytest python/dist/*-cp314t-*.whl
+          cd python/tests && "$python" -m pytest -q
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: wheels-${{ matrix.platform.id }}
