@@ -565,8 +565,8 @@ impl MultiProblem<2> for DiscBrake {
 /// genetic algorithms. *Structural and Multidisciplinary Optimization* 23(3): 204-213, not read.
 /// Definition and bounds as restated in Tanabe, R. and Ishibuchi, H. (2020). An easy-to-use
 /// real-world multi-objective optimization problem suite. *Applied Soft Computing* 89: 106078
-/// (supplement, problem RE3-7-5 and its constrained form CRE2-7-4), and in Ahmed, Sayed and Kamel
-/// (2025, *Scientific Reports* 15: 5044, eqs. 22-23); not yet checked against the original
+/// (supplement, problem RE3-7-5 and its constrained form CRE2-7-4), and in Saad, Emam and Houssein
+/// (2025, *Scientific Reports* 15: 5126, eqs. 22-23); not yet checked against the original
 /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct SpeedReducer;
@@ -935,10 +935,11 @@ impl MultiProblem<3> for CarSideImpact {
 /// ```
 ///
 /// The paper has a fourth objective, the wall temperature three inches from the face, TW₄ (its
-/// eq. A2); later studies, from Goel et al. (2007, *Computer Methods in Applied Mechanics and
-/// Engineering* 196: 879-893), drop it for these three, since it follows TF_max closely. The
-/// order here is the paper's. There are no constraints besides the bounds [0, 1]⁴. The front
-/// isn't known.
+/// eq. A2), left out here as in the three-objective form of Goel et al. (2007, *Computer Methods
+/// in Applied Mechanics and Engineering* 196: 879-893, not read), which Tanabe and Ishibuchi
+/// (2020, problem RE3-4-7) restate. The order here is the paper's. There are no constraints
+/// besides the bounds [0, 1]⁴. The front isn't known; its ideal point, found with genoxide's
+/// SHADE, is (0.0088934, −0.4315, 0.00488).
 ///
 /// Vaidyanathan, R., Tucker, P. K., Papila, N. and Shyy, W. (2003). CFD-based design optimization
 /// for single element rocket injector. *41st AIAA Aerospace Sciences Meeting*, AIAA paper
