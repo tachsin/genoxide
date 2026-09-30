@@ -68,5 +68,5 @@ population can be drawn on the function's contour.
 
 ## Good results
 
-The minimum is 0. Both algorithms reach the target: CMA-ES after about 610,000 evaluations, and
+The minimum is 0. Both algorithms reach the target: CMA-ES after about 180,000 evaluations, and
 L-SHADE after about 410,000.

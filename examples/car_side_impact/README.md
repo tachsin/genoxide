@@ -101,12 +101,12 @@ number of genes, 126, and shrinks linearly to 4 over the budget of 20,000 evalua
 Its shrinking population gets to the best known weight sooner than SHADE (Tanabe and Fukunaga,
 2013, IEEE CEC 2013: 71-78) with genoxide's defaults, as in the welded beam example, whose
 population stays at 100. With seeds 1 to 5, L-SHADE comes within 1e-12 of the best known weight,
-relative to it, after 18,500 to 19,400 evaluations. SHADE, which doesn't restart on the way,
-ends 7e-12 to 6e-11 above it after 30,000 evaluations.
+relative to it, after 18,200 to 19,800 evaluations. SHADE, which doesn't restart on the way,
+ends 2e-11 to 9e-11 above it after 30,000 evaluations.
 
 CMA-ES, which solves the cantilever beam example, puts the other six thicknesses on their bounds and
-limits, but leaves x₆ where it happens to be: between 0.89 and 1.10 with seeds 1 to 5. After 30,000
-evaluations, it's 3e-9 to 9e-8 above the best known weight, relative to it.
+limits, but leaves x₆ where it happens to be: between 0.93 and 1.12 with seeds 1 to 5. After 30,000
+evaluations, it's 2e-8 to 1e-7 above the best known weight, relative to it.
 
 ## Output
 
@@ -122,8 +122,8 @@ both versions print the same.
 ## Good results
 
 The best known weight is 23.585657980780084, at (0.5, 1.225732, 0.5, 1.207111, 0.875, 0.884189,
-0.4). The run ends at 23.585657981, with no violation: a relative gap of 1.7e-14, 4e-13 in weight.
-The other four seeds end 3e-16 to 1.5e-13 above it.
+0.4). The run ends at 23.585657981, with no violation: a relative gap of 3.1e-13, 7e-12 in weight.
+Of the other four seeds, two end at it exactly and two 3e-16 above it.
 
 At the best known design, all seven constraints of the corner hold with equality. With x₁, x₃, x₅
 and x₇ on their lower bounds, the lower rib deflection gives

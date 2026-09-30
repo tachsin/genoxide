@@ -87,24 +87,24 @@ elsewhere, and the median and largest number of evaluations of the runs that rea
 In Python, `run` evaluates the function in Rust, so both versions print the same table.
 
 The page's plot is the run with IPOP restarts from the first seed whose run without restarts ends at
-the other minimum, seed 5: each gene of its best point so far on [0, 1], with the best known
-minimum's value marked, and a curve of the best and of the population's median value's distance
-above the best known minimum, on a logarithmic axis. Its first descent ends at the other minimum,
-where the best point's genes sit far from the marks and the curve stays at 0.119; after a restart,
-the genes move to the marks.
+the other minimum, or from seed 1 when none of the 30 does, as here: each gene of its best point so
+far on [0, 1], with the best known minimum's value marked, and a curve of the best and of the
+population's median value's distance above the best known minimum, on a logarithmic axis. Seed 1's
+run descends into the global minimum's basin from the start: the genes move to the marks, and the
+run reaches the best known minimum after 621 evaluations, without a restart.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/hartmann6) plays this run back.
 
 ## Good results
 
-A good result reaches −3.32237 every time. CMA-ES without restarts reaches it from 21 of the 30
-seeds, after a median of 648 evaluations, and the other 9 runs end at −3.20316. With IPOP restarts,
-all 30 runs reach it: the 21 do the same as without restarts, and the 9 others after one or two
-restarts.
+A good result reaches −3.32237 every time. CMA-ES without restarts reaches it from all 30 seeds,
+after a median of 697 evaluations, and no run ends at −3.20316. With IPOP restarts, the 30 runs are
+the same: none converges elsewhere, so none restarts.
 
-The share of runs that end at the other minimum isn't the seeds': over seeds 1 to 1,000, 21% of the
-runs without restarts end there (30% of seeds 1 to 30). Those that restart once use 2,889 to 3,123
-evaluations, and the two that restart twice, from seeds 23 and 28, 6,390 and 6,489.
+That's the seeds' luck, not the rule: over seeds 1 to 1,000, 21% of the runs without restarts end
+at the other minimum, the first from seed 34. With IPOP restarts, those runs start again: 175 reach
+the minimum after one restart, using 2,691 to 3,411 evaluations, 37 after two, using 5,751 to
+6,597, and one after three, using 10,764.
 
-With IPOP restarts, all the runs of seeds 1 to 1,000 reach the minimum, after at most 11,754
-evaluations. With a budget of 10,000, 7 of them didn't.
+With IPOP restarts, all the runs of seeds 1 to 1,000 reach the minimum, after at most 10,764
+evaluations. With a budget of 10,000, 1 of them didn't.

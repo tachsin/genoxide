@@ -81,11 +81,11 @@ the 100,000 steps, and the third the network's weights.
 ## Good results
 
 The goal is the task's success criterion, 100,000 steps. The run of `output.txt` reaches it after
-75 evaluations, in 4 generations, and its network keeps the cart within 15 cm of the middle and
-the pole within 4° over the 100,000 steps.
+30 evaluations, in 1 generation, and its network keeps the cart within 9 cm of the middle and the
+pole within 4° over the 100,000 steps.
 
-Over seeds 1 to 100, all 100 runs solved the task, after 40 evaluations on average (a median of 30,
-at most 120). The counts are of whole generations of 15: the engine evaluates a generation before
+Over seeds 1 to 100, all 100 runs solved the task, after 45 evaluations on average (a median of 30,
+at most 165). The counts are of whole generations of 15: the engine evaluates a generation before
 it checks the stop.
 
 Gomez et al. (2008, table 1) list the average evaluations of 50 runs for this task: 98 for CoSyNE,

@@ -86,7 +86,8 @@ contour.
 
 ## Good results
 
-The minimum is −9.66015. L-SHADE reaches the target with about 56,000 of its 100,000 evaluations
-(57,028 on Windows, 55,735 on Linux). CMA-ES with IPOP restarts ends at an error of 0.2532 with the
-budget spent. Two of its genes are in the wrong valley: x₄ at 1.114 instead of 1.923 costs 0.0418,
-and x₆ at 0.910 instead of π/2 costs 0.2114. The other eight are at the minimum.
+The minimum is −9.66015. L-SHADE reaches the target with 58,440 of its 100,000 evaluations. CMA-ES
+with IPOP restarts ends at an error of 0.3306 with the budget spent. Four of its genes are in the
+wrong valley: x₄ at 1.114 instead of 1.923 costs 0.0418, x₆ at 0.910 instead of π/2 costs 0.2114,
+x₇ at 1.877 instead of 1.454 costs 0.0398, and x₉ at 1.283 instead of 1.656 costs 0.0376. The
+other six are at the minimum.

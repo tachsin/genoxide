@@ -33,6 +33,8 @@ use std::convert::Infallible;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamRng {
     inner: ChaCha8Rng,
+    // the second normal number of the last polar-method draw, not yet returned
+    spare: Option<f64>,
 }
 
 impl StreamRng {
@@ -41,6 +43,7 @@ impl StreamRng {
     pub fn seed_from_u64(seed: u64) -> Self {
         Self {
             inner: ChaCha8Rng::seed_from_u64(seed),
+            spare: None,
         }
     }
 
@@ -48,6 +51,7 @@ impl StreamRng {
     pub fn from_entropy() -> Self {
         Self {
             inner: ChaCha8Rng::from_rng(&mut rand::rng()),
+            spare: None,
         }
     }
 
@@ -67,6 +71,7 @@ impl StreamRng {
         source.fill_bytes(&mut seed);
         Self {
             inner: ChaCha8Rng::from_seed(seed),
+            spare: None,
         }
     }
 }
@@ -106,15 +111,21 @@ impl StreamRng {
     /// A standard normal random number (mean 0, standard deviation 1).
     ///
     /// Marsaglia's polar method: only `ln` and `sqrt`, no trigonometry, so the same on every
-    /// platform.
+    /// platform. Each accepted draw gives two independent normal numbers, `u f` and `v f`: this
+    /// returns the first, and the second on the next call.
     #[inline]
     pub(crate) fn normal(&mut self) -> f64 {
+        if let Some(spare) = self.spare.take() {
+            return spare;
+        }
         loop {
             let u = 2.0 * self.unit_f64() - 1.0;
             let v = 2.0 * self.unit_f64() - 1.0;
             let s = u * u + v * v;
             if s > 0.0 && s < 1.0 {
-                return u * (-2.0 * ln(s) / s).sqrt();
+                let factor = (-2.0 * ln(s) / s).sqrt();
+                self.spare = Some(v * factor);
+                return u * factor;
             }
         }
     }
@@ -350,6 +361,7 @@ impl SeedableRng for StreamRng {
     fn from_seed(seed: Self::Seed) -> Self {
         Self {
             inner: ChaCha8Rng::from_seed(seed),
+            spare: None,
         }
     }
 }
@@ -573,14 +585,33 @@ mod tests {
         assert!((variance - 1.0).abs() < 0.01, "variance {variance}");
         // P(|X| < 1) of a standard normal
         assert!((within_one - 0.6827).abs() < 0.005, "{within_one}");
+        // the two normals of a draw (u f, v f) are independent: uncorrelated, and so are the
+        // second of one draw and the first of the next
+        for offset in [0, 1] {
+            let pairs: Vec<(f64, f64)> = samples[offset..]
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|&[a, b]| (a, b))
+                .collect();
+            let correlation = pairs.iter().map(|(a, b)| a * b).sum::<f64>() / pairs.len() as f64;
+            assert!(correlation.abs() < 0.01, "{offset}: {correlation}");
+            // and their squares too (uncorrelated but dependent pairs would fail this)
+            let squares = pairs
+                .iter()
+                .map(|(a, b)| (a * a - 1.0) * (b * b - 1.0))
+                .sum::<f64>()
+                / pairs.len() as f64;
+            assert!(squares.abs() < 0.03, "{offset}: {squares}");
+        }
         let mut rng = StreamRng::seed_from_u64(42);
         let values = [rng.normal(), rng.normal(), rng.normal()];
         assert_eq!(
             values.map(f64::to_bits),
             [
-                4593777358611831395,  // 0.12793483831474636
-                13830986477247399585, // -1.095928063849364
-                13825395772567733866, // -0.46363556300011644
+                4593777358611831395,  // 0.12793483831474636, u f of the first draw
+                4599376719253418024,  // 0.31669663200296094, v f of the same draw
+                13830986477247399585, // -1.095928063849364, u f of the second draw
             ],
             "normal numbers changed, which breaks reproducibility"
         );

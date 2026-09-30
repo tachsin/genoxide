@@ -90,16 +90,16 @@ The plot shows the two cross-sections on their ranges, and each constraint's val
 its slack, active (within 1e-6 of its limit) or violated. The best of the first 100 random designs
 is feasible, at a volume of 274.1. The median volume of that population, 201.1, is below it: the
 smallest designs are infeasible, too thin for the load. The best volume is within 0.1 of the minimum
-after about 1,700 evaluations, and within 0.01 after about 3,500; the rest of the run settles the
-last digits, while the design slides along the boundary of g1. g1 is active from about 6,500
+after about 2,500 evaluations, and within 0.01 after about 3,300; the rest of the run settles the
+last digits, while the design slides along the boundary of g1. g1 is active from about 6,700
 evaluations on; g2 and g3 keep a slack of 1.46 and 0.54 kN/cm².
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/three-bar-truss) plays this run back.
 
 ## Good results
 
-The run reaches the minimum, 263.895843, within a relative 1e-10, after 13,300 evaluations, with no
-violation: A₁ = 0.788676 and A₂ = 0.408246, against the exact 0.788675 and 0.408248. g1 is at its
+The run reaches the minimum, 263.895843, within a relative 1e-10, after 12,300 evaluations, with no
+violation: A₁ = 0.788675 and A₂ = 0.408248, the exact values to 6 decimals. g1 is at its
 limit: the first outer bar carries exactly the allowed stress. The second outer bar carries 0.54
 kN/cm² and the middle bar 1.46 kN/cm², both well below 2.
 

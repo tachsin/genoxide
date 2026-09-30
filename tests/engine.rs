@@ -632,8 +632,8 @@ fn control_schedule_as_in_python() {
         })
         .run()
         .unwrap();
-    assert_eq!(outcome.evaluations(), 757);
-    assert_eq!(outcome.best_fitness().score(), Some(312.0610000182302));
+    assert_eq!(outcome.evaluations(), 767);
+    assert_eq!(outcome.best_fitness().score(), Some(1109.9904210975287));
 }
 
 #[test]
@@ -658,7 +658,7 @@ fn evolution_strategy_as_in_python() {
         .run()
         .unwrap();
     assert_eq!(outcome.evaluations(), 804);
-    assert_eq!(outcome.best_fitness().score(), Some(4.633969563787936e-05));
+    assert_eq!(outcome.best_fitness().score(), Some(6.424989845860214e-05));
 }
 
 #[test]
@@ -688,7 +688,7 @@ fn self_adaptive_ga_as_in_python() {
         .run()
         .unwrap();
     assert_eq!(outcome.evaluations(), 1610);
-    assert_eq!(outcome.best_fitness().score(), Some(1.6145262132260095e-07));
+    assert_eq!(outcome.best_fitness().score(), Some(2.5135888040149383e-08));
 }
 
 #[test]
@@ -746,5 +746,5 @@ fn islands_as_in_python() {
         .run()
         .unwrap();
     assert_eq!(outcome.evaluations(), 3060);
-    assert_eq!(outcome.best_fitness().score(), Some(6.14046463019362));
+    assert_eq!(outcome.best_fitness().score(), Some(5.771504985092051));
 }

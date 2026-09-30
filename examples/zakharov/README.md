@@ -90,14 +90,14 @@ function's contour.
 
 ## Good results
 
-The minimum is 0. CMA-ES reaches 1e-8 after 13,874 evaluations: 7,994 to get down to an error of 1,
-then about 740 per decade, twice as many as on the [sphere](../sphere/) and about as many as on
-Schwefel's problem 1.2.
+The minimum is 0. CMA-ES reaches 1e-8 after 13,692 evaluations: 8,484 to get down to an error of 1,
+then about 650 per decade, 1.7 times as many as on the [sphere](../sphere/) and a little fewer than
+on Schwefel's problem 1.2.
 
 PSO reaches the target after 117,760 evaluations, about 9,400 per decade, almost five times as many
 as on the sphere. The genetic algorithm reaches an error of 1 after about 85,000 evaluations and
 ends at 0.025.
 
-sep-CMA-ES, whose diagonal matrix can't line up with the valley either, takes 95,158 evaluations,
-about seven times as many as the full matrix: 31,850 to reach an error of 1, and then about 7,900
-per decade, ten times as many. That is closer to PSO than to the full matrix.
+sep-CMA-ES, whose diagonal matrix can't line up with the valley either, takes 103,306 evaluations,
+about seven and a half times as many as the full matrix: 36,022 to reach an error of 1, and then
+about 8,400 per decade, 13 times as many. That is closer to PSO than to the full matrix.

@@ -489,5 +489,5 @@ def test_a_control_schedule_matches_rust():
             ga.reevaluate()
 
     result = ga.run(problem, generations=50, control=schedule)
-    assert result.evaluations == 757
-    assert result.best_fitness == 312.0610000182302
+    assert result.evaluations == 767
+    assert result.best_fitness == 1109.9904210975287

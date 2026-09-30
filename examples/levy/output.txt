@@ -1,4 +1,4 @@
 Levy in 30 dimensions: minimum 0.0000, 300000 evaluations at most
-CMA-ES: error 0.0895 after 300006 evaluations, 1 of 30 genes off by more than 0.01
-CMA-ES with IPOP: error 0.0000 after 15022 evaluations, 0 of 30 genes off by more than 0.01
-L-SHADE: error 0.0000 after 101559 evaluations, 0 of 30 genes off by more than 0.01
+CMA-ES: error 0.0000 after 5138 evaluations, 0 of 30 genes off by more than 0.01
+CMA-ES with IPOP: error 0.0000 after 5138 evaluations, 0 of 30 genes off by more than 0.01
+L-SHADE: error 0.0000 after 102990 evaluations, 0 of 30 genes off by more than 0.01

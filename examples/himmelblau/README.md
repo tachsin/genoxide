@@ -59,14 +59,14 @@ in Rust, so both versions print the same table.
 The values are small but not 0. The step size is fixed, so near a minimum few neighbors are better
 than the current point, and progress slows down to a stop. The smaller the steps, the closer to 0 a
 search gets, and the longer it takes to reach a minimum from its start: with steps of 0.01 and
-1,000 steps, a quarter of the searches stopped between 1e-6 and 5e-6.
+1,000 steps, a quarter of the searches stopped between 1e-6 and 6e-6.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/himmelblau) plays this run back.
 
 ## Good results
 
 Each minimum is worth 0. A good result finds all four, each within 1e-6 of 0. The run finds all
-four, with 3 to 6 searches each, and every search ends between 1.4e-8 and 2.1e-7.
+four, with 3 to 6 searches each, and every search ends between 3.4e-10 and 2.1e-7.
 
-With seeds 1 to 600, in 30 groups of 20 searches, every search ends within 5.1e-7 of 0, and 29 of
+With seeds 1 to 600, in 30 groups of 20 searches, every search ends within 5.3e-7 of 0, and 29 of
 the 30 groups find all four minima; the other finds three.

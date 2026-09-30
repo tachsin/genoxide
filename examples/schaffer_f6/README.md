@@ -96,7 +96,8 @@ first ring in 6, but comes within 1e-6 of 0 in only 5. Its mutation's steps are 
 gene's range, 200: with η = 20, a step smaller than 0.001 has a probability of about 1 in 10,000,
 so its points in the central basin approach the origin slowly.
 
-Over seeds 1 to 1,000, SHADE reaches the minimum in every run, after at most 48,100 evaluations;
-the swarm in 76% of the runs, and the genetic algorithm in 15%. With the earlier budget of 20,000
-evaluations, SHADE's population of 100 is too slow to close in: it reached the minimum from 1 of
-seeds 1 to 30.
+Over seeds 1 to 1,000, SHADE reaches the minimum in 997 runs, after at most 46,900 evaluations,
+and the other 3 end in the central basin, 1.2e-6 to 6.3e-5 above the minimum when the budget runs
+out; the swarm reaches it in 76% of the runs, and the genetic algorithm in 15%. With the earlier
+budget of 20,000 evaluations, SHADE's population of 100 is too slow to close in: it reached the
+minimum from 1 of seeds 1 to 30.

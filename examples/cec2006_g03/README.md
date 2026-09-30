@@ -90,20 +90,20 @@ With the same budget, in five runs each, with seeds 1 to 5:
 
 | Algorithm | Best value (the minimum: −1.0005001) |
 |---|---|
-| CMA-ES | −1.0005001 in every run, after 16,170 to 26,110 evaluations (20 runs) |
-| GA, SBX, Gaussian mutation, (μ + λ) | −1.00041 to −0.99972 |
+| CMA-ES | −1.0005001 in every run, after 13,820 to 27,860 evaluations (20 runs) |
+| GA, SBX, Gaussian mutation, (μ + λ) | −1.00044 to −1.00010 |
 | GA, arithmetic crossover, polynomial mutation | −1.00014 to −0.99866 |
 | GA, SBX, polynomial mutation, (μ + λ) | −0.9990 to −0.532 |
 | GA, SBX, polynomial mutation | −0.986 to −0.959 |
 | Particle swarm optimization, 40 particles | −1.00048 to −0.767 |
-| SHADE | −0.909 to −0.691 |
-| L-SHADE | −0.575 to −0.349 |
+| SHADE | −0.853 to −0.760 |
+| L-SHADE | −0.549 to −0.214 |
 
 The GAs have 100 individuals, tournaments of 2, simulated binary crossover (SBX) with η 15 or
 arithmetic crossover, and polynomial mutation with η 20 or Gaussian mutation with σ 0.01, each
 changing a gene with probability 0.1. Two runs besides CMA-ES's meet the report's criterion of
 success, within 0.0001 of the minimum: the swarm's with seed 1 and the GA's with Gaussian mutation
-and seed 1. The others end short of it.
+and seed 4. The others end short of it.
 
 ## Output
 
@@ -116,16 +116,16 @@ The page's plot shows each variable on its range, and the constraint's state fro
 max(0, |h1| − 0.0001): violated until the best solution reaches the shell, and met from then on.
 Its curve shows the error f − f* of the best feasible solution, and of the population's median, on
 a log scale. The best's curve begins at the first feasible solution. The median's has gaps: in
-about 60 % of the generations, half or more of the 10 samples fall outside the shell.
+about 65 % of the generations, half or more of the 10 samples fall outside the shell.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/cec2006-g03) plays this run back.
 
 ## Good results
 
-A gap of 0 to the minimum −1.0005001 is the best possible. CMA-ES reaches the shell after 730
-evaluations, with f = −0.028. It then moves along the shell slowly, with steps small enough to stay
-in it: the error falls from 0.97 to 0.09 over the next 12,700 evaluations. Near the point of
-equal genes, it converges fast, and it meets the 1e-8 target after 20,820 evaluations. All ten
+A gap of 0 to the minimum −1.0005001 is the best possible. CMA-ES reaches the shell after 800
+evaluations, with f = −0.0086. It then moves along the shell slowly, with steps small enough to
+stay in it: the error falls from 0.99 to 0.09 over the next 13,400 evaluations. Near the point of
+equal genes, it converges fast, and it meets the 1e-8 target after 21,720 evaluations. All ten
 genes are 0.3162 or 0.3163, and h1 is 0.0001: the solution sits on the outer edge of the
 tolerance, where the product is largest. With seeds 1 to 20, every run meets the target, after
-16,170 to 26,110 evaluations.
+13,820 to 27,860 evaluations.

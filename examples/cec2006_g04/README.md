@@ -77,9 +77,9 @@ error of at most 1e-4; the example asks for more.
 
 Why CMA-ES: it adapts its step size and learns the correlations between the variables, so its
 samples narrow down on the corner at a steady rate. With 25 seeds, CMA-ES met the target on every
-run, after a median of 4,264 evaluations (at most 6,064). SHADE (Tanabe and Fukunaga, 2013, IEEE
+run, after a median of 4,328 evaluations (at most 5,864). SHADE (Tanabe and Fukunaga, 2013, IEEE
 CEC 2013: 71-78), genoxide's default differential evolution, met it on all 25 too, but after a
-median of 44,700 evaluations (at most 46,000), ten times as many.
+median of 43,800 evaluations (at most 46,400), ten times as many.
 
 ## Output
 
@@ -101,6 +101,6 @@ A good run is feasible and ends within 1e-4 of f*, the report's success. CMA-ES 
 a target of 1e-10 instead of 1e-8, it still met it with all 25 seeds.
 
 The run's first samples are already feasible, as half the box is. It meets the report's criterion
-after 2,488 evaluations and its target after 3,360. The solution is the minimum's corner: x1 = 78,
+after 2,712 evaluations and its target after 4,744. The solution is the minimum's corner: x1 = 78,
 x2 = 33 and x4 = 45, with u = 92 at its upper limit (g1) and w = 20 at its lower limit (g6). v is
 98.84, inside [90, 110], so g2 to g5 have slack.

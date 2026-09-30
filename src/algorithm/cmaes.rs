@@ -139,8 +139,12 @@ impl Parameters {
         );
         let chi_n = dimensions.sqrt()
             * (1.0 - 1.0 / (4.0 * dimensions) + 1.0 / (21.0 * dimensions * dimensions));
+        // purecma's lazy update (Hansen's reference implementation): a new decomposition once
+        // more than 0.5 / (n (c_1 + c_μ)) generations have passed since the last one: with the
+        // default population, every second generation up to about 20 genes, every third at 30
+        // and every eighth at 150
         let eigen_interval = match covariance {
-            Covariance::Full => (1.0 / ((c_1 + c_mu) * dimensions * 10.0)).max(1.0) as u64,
+            Covariance::Full => (0.5 / ((c_1 + c_mu) * dimensions)).floor() as u64 + 1,
             Covariance::Diagonal => 1,
         };
         let history = 10 + (30.0 * dimensions / lambda as f64).ceil() as usize;

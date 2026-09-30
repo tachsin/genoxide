@@ -78,11 +78,10 @@ successful with an error of at most 1e-4; the example asks for more.
 
 Why CMA-ES: its covariance matrix can learn the direction of the tube, so its samples spread along
 the arc rather than across it. With seeds 1 to 25, IPOP-CMA-ES met the target on all 25 runs, after
-a median of 21,392 evaluations (5,222 to 46,102). Without restarts, CMA-ES met it on 24; the other
-run converged 1.5e-8 above f*, still a success by the report's criterion. SHADE (Tanabe and
-Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default differential evolution, met it on 16 of
-25 runs, after a median of 123,400 evaluations. The other 9 ended between 0.0013 and 1.6 above
-f*.
+a median of 31,535 evaluations (8,918 to 50,855), none of them after a restart: without restarts,
+CMA-ES met it on all 25 too. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's
+default differential evolution, met it on 18 of 25 runs, after a median of 135,700 evaluations. Of
+the other 7, 5 ended between 0.00027 and 3.0 above f*, and 2 never found a feasible solution.
 
 ## Output
 
@@ -106,11 +105,11 @@ feasible.
 A good run is feasible and ends within 1e-4 of f*, the report's success. A value below f* is
 possible, since f* is only the best known, but the runs here end just above it.
 
-The recorded run finds its first feasible solution after 497 evaluations, about 0.55 above f*, at x
-≈ (2.87, 0.32, 4.08). It then walks along the arc toward larger x1 and smaller x3, at a nearly
-steady pace in the short steps that the tube allows: x1 grows by about 0.1 every 1,300 evaluations,
-and the error is 0.03 after 8,000. Near the minimum the steps shrink, and the error falls by a
-factor of 10 about every 1,000 evaluations. It is within 1e-4 of f* after 10,955 evaluations, and
-meets its target after 14,616, without a restart. The solution is x = (3.512, 0.2170, 3.552), the
-best known point to 4 digits, and both equalities are met with |h| at 0.0001, on the edge of the
-tolerance, as at the best known point.
+The recorded run finds its first feasible solution after 525 evaluations, about 2.1 above f*, at x ≈
+(4.53, 0.37, 2.07). It then walks along the arc toward smaller x1 and larger x3, at a nearly steady
+pace in the short steps that the tube allows: x1 shrinks by about 0.1 every 2,200 evaluations, and
+the error is 0.02 after 20,000. Near the minimum the steps shrink, and the error falls by a factor
+of 10 about every 1,000 evaluations. It is within 1e-4 of f* after 23,765 evaluations, and meets its
+target after 26,880, without a restart. The solution is x = (3.512, 0.2170, 3.552), the best known
+point to 4 digits, and both equalities are met with |h| at 0.0001, on the edge of the tolerance, as
+at the best known point.

@@ -83,10 +83,10 @@ with an error of at most 1e-4; the example asks for more.
 
 Why CMA-ES: its covariance matrix learns a scale for each direction, the steep and the flat ones,
 and the correlations along the two active boundaries. With 25 seeds, it met the target on every
-run, after a median of 9,045 evaluations (from 7,857 to 11,583). None converged early, so restarts
+run, after a median of 8,613 evaluations (from 6,912 to 11,250). None converged early, so restarts
 wouldn't change a run. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default
-differential evolution, met the target on all 25 too, but after a median of 46,700 evaluations (at
-most 48,700), and L-SHADE, whose population shrinks over the budget, after a median of 43,549.
+differential evolution, met the target on all 25 too, but after a median of 46,300 evaluations (at
+most 48,500), and L-SHADE, whose population shrinks over the budget, after a median of 44,009.
 
 ## Output
 
@@ -110,8 +110,8 @@ once half the population is feasible.
 A good run is feasible and ends within 1e-4 of f*, the report's success. CMA-ES meets the target
 of 1e-8 with every seed tried.
 
-The run finds its first feasible solution after 45 evaluations, 5 generations of 9. The error is
-4.2 after 873 evaluations and 0.38 after 2,601, and from there falls, on average, by a factor of
-10 every 900 evaluations: the run meets the report's criterion
-after 6,723 evaluations and the target after 9,684. The solution is the report's x* to 4 or 5
-digits, with g1 and g4 active. g2 = −252.6 and g3 = −144.9 have slack.
+The run finds its first feasible solution after 27 evaluations, 3 generations of 9. The error is 5.7
+after 873 evaluations and 0.78 after 2,601, and from there falls, on average, by a factor of 10
+every 1,100 evaluations: the run meets the report's criterion after 6,858 evaluations and the target
+after 11,250. The solution is the report's x* to 4, 5 or 6 digits, with g1 and g4 active.
+g2 = −252.6 and g3 = −144.9 have slack.

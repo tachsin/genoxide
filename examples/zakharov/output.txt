@@ -1,7 +1,7 @@
 Zakharov in 30 dimensions, 300000 evaluations at most
 Evaluations until the error is at most
 algorithm         1     1e-2     1e-4     1e-6     1e-8     best
-CMA-ES         7994    10038    11690    12936    13874   8.7e-9
-sep-CMA-ES    31850    47320    61810    72408    95158   9.9e-9
+CMA-ES         8484    10164    11466    12488    13692   7.8e-9
+sep-CMA-ES    36022    55202    65338    80010   103306   9.6e-9
 PSO           42680    62960    80880   102680   117760   9.7e-9
 GA            85245        -        -        -        -   2.5e-2

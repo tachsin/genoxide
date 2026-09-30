@@ -50,7 +50,7 @@ only in small steps.
 
 f is also flat near the minimum. Along the band's edge, f − f* grows with the square of the distance
 from the minimum: an error of 1e-8 allows x1 and x2 to differ from the minimum by about 1e-4. The
-printed solution differs by 5e-5 and 7e-5.
+printed solution differs by 8e-6 and 1e-5.
 
 ## Representation
 
@@ -80,16 +80,16 @@ band's curvature demands. With seeds 1 to 25, in the same budget:
 
 | Algorithm | Runs that met the target | Evaluations (median, range) |
 |---|---|---|
-| CMA-ES | 25 of 25 | 3,642 (846 to 5,814) |
-| L-SHADE | 20 of 25 | 15,163 (10,578 to 234,994) |
-| SHADE | 16 of 25 | 131,199 (38,700 to 334,189) |
+| CMA-ES | 25 of 25 | 5,172 (1,338 to 7,260) |
+| SHADE | 16 of 25 | 156,296 (36,100 to 331,990) |
+| L-SHADE | 14 of 25 | 19,083 (6,480 to 26,042) |
 
 SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78) is genoxide's default differential
 evolution, and L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665) its variant with a
 population that shrinks over the budget. They build a trial from the difference of two solutions.
 Between two points of a curved band, that difference points off the band, so most trials are
-infeasible and lose to their parents. SHADE's nine other runs ended with errors up to 6.5e-5, within
-the report's success but short of the target. L-SHADE's five others ended with errors up to 0.018.
+infeasible and lose to their parents. SHADE's nine other runs ended with errors up to 7.9e-5, within
+the report's success but short of the target. L-SHADE's eleven others ended with errors up to 0.051.
 
 ## Output
 
@@ -112,10 +112,10 @@ scale.
 A good run is feasible and ends within 1e-4 of f*, the report's success. f* is proven, so no run can
 end below it.
 
-The recorded run finds its first feasible solution after 108 evaluations, near the bottom of the
-parabola: after 200 evaluations, its best is x = (−0.11, 0.01), with an error of 0.24. It then
-climbs along the parabola in small steps: the error is 0.13 after 2,300 evaluations and 0.01 after
-4,200. It meets the report's criterion after 4,776 evaluations and its target after 5,376. The
-solution is x = (−0.706988, 0.499932), 1e-4 from the minimum at (−0.707036, 0.5), with h = 0.0001:
+The recorded run finds its first feasible solution after 156 evaluations, near the bottom of the
+parabola: after 200 evaluations, its best is x = (−0.0004, −0.00005), with an error of 0.25. It then
+climbs along the parabola in small steps: the error is 0.13 after 3,400 evaluations and 0.009 after
+5,800. It meets the report's criterion after 6,360 evaluations and its target after 6,744. The
+solution is x = (−0.707028, 0.499988), 1e-5 from the minimum at (−0.707036, 0.5), with h = 0.0001:
 on the upper edge of the band, where f is least. The run ends at the minimum with x1 < 0. With seeds
-1 to 25, 16 runs end there, and 9 at the other one, with x1 > 0.
+1 to 25, 12 runs end there, and 13 at the other one, with x1 > 0.

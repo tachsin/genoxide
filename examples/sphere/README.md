@@ -92,8 +92,8 @@ contour.
 
 ## Good results
 
-The minimum is 0. CMA-ES reaches 1e-8 after 4,900 evaluations. From an error of 1 on, it needs
-about 370 evaluations per decade, 27 generations, and the same for each decade: its step size
+The minimum is 0. CMA-ES reaches 1e-8 after 4,998 evaluations. From an error of 1 on, it needs
+about 380 evaluations per decade, 27 generations, and the same for each decade: its step size
 shrinks at the rate the error does. PSO also converges at a steady rate, about 2,000 evaluations
 per decade, and reaches 1e-8 after 24,720: five times as many.
 
@@ -104,5 +104,5 @@ range, 200 wide here, and selection alone narrows the population only slowly. On
 1.6e-5: about the same precision relative to the range.
 
 A diagonal covariance matrix is enough here: the sphere has no correlations to learn. sep-CMA-ES
-reaches 1e-8 after 4,564 evaluations, 7% fewer than the full matrix: it gets to an error of 1
-sooner, and then needs about 360 evaluations per decade, against 370. The other unimodal examples show where the full matrix matters.
+reaches 1e-8 after 4,564 evaluations, 9% fewer than the full matrix: it gets to an error of 1
+sooner, and then needs about 370 evaluations per decade, against 380. The other unimodal examples show where the full matrix matters.

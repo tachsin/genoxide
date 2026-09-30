@@ -92,23 +92,26 @@ so both versions print the same.
 The plot shows each variable on its range, and each constraint's value g: satisfied with its slack,
 active (within 1e-6 of its limit) or violated. The best design is feasible from the first generation
 on: the best of the 100 random designs of the first population is feasible. The weight falls to
-0.0127 after about 9,000 evaluations and to 0.012666 after about 17,000. From about 21,000
-evaluations, g1 and g2 come within 1e-6 of their limits, first in turn and from about 28,000 on
-together; g3 and g4 keep their slack throughout. From about 32,000 evaluations, the median weight
-matches the best to the 6 digits that the plot shows, and the population stays at the minimum to
-the end of the run, without a restart.
+0.0127 after about 10,000 evaluations and to 0.012666 after about 35,000. From about 26,000
+evaluations, g1 and g2 come within 1e-6 of their limits, first in turn and from about 40,000 on
+together; g3 and g4 keep their slack throughout. From about 49,000 evaluations, the median weight
+matches the best to the 6 digits that the plot shows. The population is still moving along the
+curve of the minimum when the budget runs out, without a restart: the best weight falls by 1.3e-7
+over the last 5,000 evaluations.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/tension-compression-spring) plays this run back.
 
 ## Good results
 
-The best known weight is 0.012665, rounded. The run finds a feasible spring of weight 0.0126652
-(0.01266523 to 7 significant digits), at d = 0.051689, D = 0.356717 and N = 11.288996, close to
-the published design. It's above 0.012665 only because that value is rounded. The published
-design weighs 0.0126651, a little less, but it exceeds g2 by 2e-5: it's slightly infeasible.
+The best known weight is 0.012665, rounded. The run finds a feasible spring of weight 0.0126653
+(0.01266530 to 7 significant digits), at d = 0.051747, D = 0.358122 and N = 11.207099, close to
+the published design. It's above 0.012665 because that value is rounded, and 6e-8 above the
+lightest spring that seeds 1 to 5 find, 0.01266523, because it's still settling its last digits.
+The published design weighs 0.0126651, a little less, but it exceeds g2 by 2e-5: it's slightly
+infeasible.
 
 In the run's design, the deflection (g1) and the shear stress (g2) are at their limits. The surge
 frequency is five times its limit, and the outer diameter is 0.41 inch, far below 1.5.
 
-Runs with seeds 2 to 5 end between 0.01266523 and 0.01266532, on different points of the same
+Runs with seeds 2 to 5 end between 0.01266523 and 0.01266548, on different points of the same
 curve.

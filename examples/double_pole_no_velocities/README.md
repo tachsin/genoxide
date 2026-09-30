@@ -92,13 +92,14 @@ this run back.
 
 ## Good results
 
-The goal is the task's success criteria. The run of `output.txt` meets them after 2,756
-evaluations, in 211 generations; its network balances from 238 of the 625 starts.
+The goal is the task's success criteria. The run of `output.txt` meets them after 1,677
+evaluations, in 128 generations; its network balances from 201 of the 625 starts.
 
-Over seeds 1 to 100, all 100 runs solved the task, after 2,724 evaluations on average (a median of
-2,340, at most 6,591), their networks balancing from 256 of the 625 starts on average.
-Without the bound on the step size, 13 of 20 runs I tried solved it within 30,000 evaluations: the
-others converged on networks that balance for about 2,000 steps.
+Over seeds 1 to 100, all 100 runs solved the task, after 3,043 evaluations on average (a median of
+2,405, at most 9,698), their networks balancing from 247 of the 625 starts on average.
+Without the bound on the step size, 10 of 20 runs I tried solved it within 30,000 evaluations: of
+the others, 5 converged on networks that balance for the 100,000 steps but fail the generalization
+test, and 5 on networks that balance for 1,166 to 4,978 steps.
 
 Gomez et al. (2008, table 4) list the average evaluations to solve this task with the damping
 fitness: 3,416 for CoSyNE, 6,061 for CMA-ES (from Igel 2003, a recurrent network of 3 hidden units,

@@ -102,10 +102,10 @@ A good result reaches −959.6407 in every run. The swarm on a ring does, in all
 with the global topology reaches it in 27, and ends twice at −894.58, on the other side of the box,
 and once at −821.20.
 
-CMA-ES with IPOP restarts reaches it only once, from seed 2, in its first run. Its restarts converge
-into many different local minima, and the corner's narrow wells are rarely among them. The best
-points of its other runs near the corner, down to −957.72, are samples that fell near a deep minimum
-on the way, without the run converging there: CMA-ES's best point isn't always where it converged.
+CMA-ES with IPOP restarts reaches it in none of its 30 runs. Its restarts converge into many
+different local minima, and the corner's narrow wells are rarely among them. The best points of its
+runs near the corner, down to −940.64, are samples that fell near a deep minimum on the way, without
+the run converging there: CMA-ES's best point isn't always where it converged.
 
 Over seeds 1 to 1,000, the swarm on a ring reaches the minimum in every run, after at most 32,800
 evaluations, and with the global topology in 93% of the runs. Over seeds 1 to 300, CMA-ES with IPOP

@@ -64,7 +64,8 @@ from a normal distribution, and adapts its mean, step size and covariance matrix
 defaults: a population of 4 + ⌊3 ln 30⌋ = 14, a step size of 0.3 of each gene's range, and a random
 start. The first run has no restarts. The second has IPOP restarts (Auger and Hansen, 2005, IEEE
 CEC 2005: 1769-1776): a run that has converged starts again from a random point with twice the
-population. genoxide's docs recommend IPOP for multimodal functions, and the comparison shows why.
+population. genoxide's docs recommend IPOP for multimodal functions, and the comparison over
+seeds shows why.
 
 L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665) is a differential evolution that
 adapts its scale factor and crossover rate from successful trials. Its population starts at 18 times
@@ -84,7 +85,10 @@ L-SHADE on Levy in 2 dimensions, so that the population can be drawn on the func
 
 ## Good results
 
-The minimum is 0. CMA-ES without restarts ends at 0.0895 with the budget spent: 29 genes are at 1,
-and one, x₁₀, is at −0.093, in the nearest dip. Its step size shrank as the other genes converged,
-and it can't cross the rim, however low. With IPOP restarts, CMA-ES reaches the target after about
-15,000 evaluations. L-SHADE reaches it after about 100,000.
+The minimum is 0. With seed 1, CMA-ES without restarts reaches the target after 5,138 evaluations,
+before it converges anywhere else, so the run with IPOP restarts is the same run. That's luck: with
+seeds 1 to 25, CMA-ES without restarts reaches the target 6 times, and the other 19 runs end with
+the budget spent, with 1 to 6 genes in dips, at errors of 0.0895 to 2.73. At 0.0895, 29 genes are
+at 1, and one is at −0.093, in the nearest dip. Its step size shrank as the other genes converged,
+and it can't cross the rim, however low. With IPOP restarts, CMA-ES reaches the target with all 25
+seeds, after 4,592 to 32,508 evaluations. L-SHADE reaches it after about 100,000.

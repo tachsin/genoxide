@@ -95,10 +95,10 @@ error of at most 1e-4; the example asks for more.
 
 Why the restarts: without them, CMA-ES met the target on 22 of 25 seeds, after a median of 1,104
 evaluations. The other three converged to the two other corners, twice at f = −4.4200 and once at
-−4.0537, and stayed there. With IPOP, all 25 met the target, after a median of 1,116 evaluations
-(from 960 to 3,216). SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default
-differential evolution, met it on all 25 too, but after a median of 15,800; L-SHADE after a median
-of 6,876.
+−4.0537, and stayed there. With IPOP, all 25 met the target, after a median of 1,104 evaluations
+(from 930 to 3,306). SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default
+differential evolution, met it on all 25 too, but after a median of 15,600; L-SHADE after a median
+of 6,948.
 
 ## Output
 
@@ -124,5 +124,5 @@ A good run is feasible and ends within 1e-4 of f*, the report's success. CMA-ES 
 the target of 1e-8 with every seed tried.
 
 Seed 1 needs no restart. Its first generation of 6 samples has a feasible one. The run meets the
-report's criterion after 660 evaluations and the target after 1,134. The solution is the report's x*
+report's criterion after 522 evaluations and the target after 954. The solution is the report's x*
 to 6 digits, with both constraints active.

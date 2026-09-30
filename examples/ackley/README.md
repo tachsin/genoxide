@@ -91,5 +91,5 @@ ring topology reaches it after 84,320 evaluations. PSO with the global topology 
 1.50, where 5 genes are near ±0.91 and the others at 0. The swarm has contracted around its best
 point, and no particle is left to look elsewhere.
 
-The difference isn't the seed's. With seeds 1 to 10, CMA-ES takes 7,500 to 8,200 evaluations and
+The difference isn't the seed's. With seeds 1 to 10, CMA-ES takes 7,500 to 8,400 evaluations and
 the ring 76,000 to 85,000, while the global topology ends between 1.16 and 2.96 every time.

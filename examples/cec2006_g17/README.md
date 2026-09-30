@@ -120,10 +120,10 @@ same budget and target:
 |---|---|---|
 | SHADE at an ε level, as here | 25 | 25 |
 | SHADE | 7 | 7 |
-| SHADE with JADE's strategy, current-to-pbest with p = 0.1 | 9 | 9 |
+| SHADE with JADE's strategy, current-to-pbest with p = 0.1 | 5 | 5 |
 | L-SHADE | 8 | 8 |
-| CMA-ES with IPOP restarts | 6 | 8 |
-| CMA-ES with BIPOP restarts | 8 | 12 |
+| CMA-ES with IPOP restarts | 12 | 14 |
+| CMA-ES with BIPOP restarts | 15 | 20 |
 | GA, simulated binary crossover and polynomial mutation | 0 | 0 |
 
 Every run of plain SHADE either met the target or ended at the local optimum, 8927.59, and so did
@@ -161,11 +161,11 @@ the report's printed value, 8853.53967, such a run would be 0.0058 below it.
 
 The recorded run's best, by the ε level, is infeasible for most of the schedule: it uses the
 tolerance ε allows, and while ε is large, its equalities are far from met. Its violations shrink
-with ε, and the best is first feasible without it after 147,500 evaluations, when ε is 5·10⁻⁷. It is
-within 1e-4 of f* after 151,500 evaluations, once ε is 0, and meets its target after 173,500.
+with ε, and the best is first feasible without it after 147,400 evaluations, when ε is 3·10⁻⁶. It is
+within 1e-4 of f* after 150,900 evaluations, once ε is 0, and meets its target after 169,300.
 
 The solution is x = (201.8, 100.00, 383.1, 420.0, −10.91, 0.07315), the best known point to 4
 digits, with x2 below 100 and x4 at its bound, and all four equalities met.
 
-With seeds 1 to 1,000, 999 runs meet the target, after 167,500 to 178,000 evaluations (171,500 for
-half of them). The other, seed 44, ends at the local optimum, 8927.59.
+With seeds 1 to 1,000, every run meets the target, after 167,200 to 178,600 evaluations (at most
+171,600 for half of them).

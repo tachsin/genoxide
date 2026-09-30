@@ -69,7 +69,7 @@ t = 1 (B = 35). Every combination is a stationary point of f:
 These nine are all its stationary points, so the paper's list of minima is complete. A search that
 goes only downhill and falls into the basin of 30, 84 or 840 stays there. The basin of the global
 minimum is not the largest. In 1,000 searches with this example's settings (seeds 1 to 1,000), 32%
-end at the global minimum, 40% at 30, 9% at 84 and 19% at 840.
+end at the global minimum, 41% at 30, 9% at 84 and 18% at 840.
 
 ## Representation
 
@@ -113,7 +113,7 @@ back.
 ## Good results
 
 A good result reaches the global minimum, 3 at (0, −1), with a value close to 3. The run finds it
-with 15 of its 30 searches, within 1e-7. The other 15 end in the paper's three local minima: 10 at
+with 15 of its 30 searches, within 2e-7. The other 15 end in the paper's three local minima: 10 at
 30, 3 at 84 and 2 at 840, at the paper's points to 3 decimals and its values to 5 digits. Together,
 the searches reach all four minima of the function.
 

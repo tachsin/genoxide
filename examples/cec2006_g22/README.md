@@ -113,10 +113,10 @@ It stops once its best solution is feasible and within 1e-8 of 236.370313314566,
 with every equality met exactly, or after 500,000 evaluations.
 
 On the 22 variables, none of genoxide's algorithms found a feasible solution in 25 seeds each, and
-L-SHADE came the closest. It ended at a violation between 8.5 and 53 on 12 seeds, and between
-4,100 and 19,300 on the other 13. SHADE ended between 4,800 and 27,000, CMA-ES with IPOP restarts
+L-SHADE came the closest. It ended at a violation between 7.0 and 52 on 13 seeds, and between
+4,400 and 25,400 on the other 12. SHADE ended between 4,900 and 25,800, CMA-ES with IPOP restarts
 (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195; Auger and Hansen, 2005, IEEE
-CEC 2005: 1769-1776) between 72 and 301. Deb's rules add up the violations in their own units, so
+CEC 2005: 1769-1776) between 75 and 361. Deb's rules add up the violations in their own units, so
 that h1 to h6, in units of 10⁵ to 10⁷, drown the rest: the runs meet those and miss the logarithms.
 With each constraint's violation divided by its typical size, the median |g| or |h| over 1,000
 random points, SHADE and L-SHADE found a feasible solution in each of 16 runs, but ended between
@@ -146,15 +146,15 @@ population's median, on a log scale.
 A good run is feasible and ends within 1e-4 of f*, the report's success. f* is only the best known,
 and a value below it is possible: 236.370313, with every equality met exactly, is 0.0607 below it.
 
-L-SHADE on the 22 variables, with seed 1, ends at a violation of 53.53, after 500,003 evaluations.
+L-SHADE on the 22 variables, with seed 1, ends at a violation of 44.76, after 500,003 evaluations.
 Its solution meets the linear equalities h1 to h11, and h17 and h18, within the tolerance, but not
 the five logarithms h12 to h16, nor h19: it has met the equalities of the large variables, and not
-those of the small ones. With seeds 1 to 1,000, no run is feasible: the violations end between 2.2
-and 40,400, 6,870 for half of them.
+those of the small ones. With seeds 1 to 1,000, no run is feasible: the violations end between 3.3
+and 31,500, 5,830 for half of them.
 
 SHADE on x1, x8 and x9, with seed 1, starts with feasible solutions in its first random population,
-the best at f = 437.5, and meets its target after 25,700 evaluations: f = 236.370313, 9.9·10⁻⁹
+the best at f = 437.5, and meets its target after 25,100 evaluations: f = 236.370313, 7.4·10⁻⁹
 above the least value with every equality met, and 0.060662 below the report's best known. Its
 solution is the corner x8 = 130, x9 = 170, where x10 and x11 are at their upper bounds, 300 and 400,
 with every equality met and g1 active. With seeds 1 to 1,000, every run meets the target, after
-23,400 to 27,500 evaluations (25,800 for half of them).
+22,300 to 28,200 evaluations (25,700 for half of them).

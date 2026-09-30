@@ -1,4 +1,4 @@
-squared error 0.000216926 after 81241 evaluations (the smallest known: 0.000216214)
+squared error 0.000217196 after 2570 evaluations (the smallest known: 0.000216214)
 0 xor 0 = 0: 0.007
 0 xor 1 = 1: 0.993
 1 xor 0 = 1: 0.993

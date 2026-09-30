@@ -57,7 +57,7 @@ evolution strategies, CEC 2003: 2588-2595) got his best results on this task, 42
 genome in [−1, 1] each. The inputs are the cart's position and velocity and each pole's angle and
 angular velocity, scaled to about [−1, 1]; the output, in (−1, 1), is the force in units of 10 N.
 Without biases the network is an odd function of the state, as the task is symmetric; Igel found
-that with biases CMA-ES needs about three times the evaluations, and here it's 13 times as many.
+that with biases CMA-ES needs about three times the evaluations, and here it's 10 times as many.
 
 The fitness is the number of steps the network balances both poles, up to 100,000, maximized.
 
@@ -79,12 +79,12 @@ over the 100,000 steps, and the third the network's weights.
 ## Good results
 
 The goal is the task's success criterion, 100,000 steps. The run of `output.txt` reaches it after
-585 evaluations, in 38 generations; its network keeps the cart within 0.67 m of the middle, the
-long pole within 5.4° and the short one within 10.9°.
+855 evaluations, in 56 generations; its network keeps the cart within 0.99 m of the middle, the
+long pole within 15.1° and the short one within 18.6°.
 
-Over seeds 1 to 100, all 100 runs solved the task, after 683 evaluations on average (a median of
-675, at most 1,575). The counts are of whole generations of 15: the engine evaluates a generation
-before it checks the stop. With biases (49 weights), 99 of 100 runs solved it, after 8,711
+Over seeds 1 to 100, all 100 runs solved the task, after 637 evaluations on average (a median of
+645, at most 1,425). The counts are of whole generations of 15: the engine evaluates a generation
+before it checks the stop. With biases (49 weights), 96 of 100 runs solved it, after 6,242
 evaluations on average.
 
 Gomez et al. (2008, table 3) list the average evaluations to solve this task: 895 for CMA-ES (from

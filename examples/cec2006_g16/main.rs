@@ -28,7 +28,7 @@ const ERROR: f64 = 1e-8;
 // the report counts a run as successful once its error is at most this
 const SUCCESS: f64 = 1e-4;
 // a constraint within this of its boundary is active: the scales differ, g36 bounds y16, which
-// is about 140,000 there, and the run stops with the active constraints within about 3e-5
+// is about 140,000 there, and the run stops with the active constraints within about 1e-5
 const ACTIVE: f64 = 1e-4;
 
 fn main() -> Result<()> {

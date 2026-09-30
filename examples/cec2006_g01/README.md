@@ -78,9 +78,9 @@ The run has the report's budget of 500,000 evaluations, and seed 1. It stops ear
 solution is feasible and within 1e-8 of the minimum, relative to its size: at f ≤ −15 + 1.5e-7.
 
 Other algorithms of genoxide do worse, in four runs each with the same budget and target. CMA-ES
-without restarts ends at local minima, between −12.7 and −11.3. With restarts from a growing
-population (IPOP), it meets the target after 90,000 to 235,000 evaluations, and L-SHADE, whose
-population shrinks over the budget, after 80,000 to 88,000. A GA with simulated binary crossover
+without restarts ends at local minima, between −13.8 and −12.6. With restarts from a growing
+population (IPOP), it meets the target after 70,000 to 166,000 evaluations, and L-SHADE, whose
+population shrinks over the budget, after 81,000 to 89,000. A GA with simulated binary crossover
 and polynomial mutation ends between −14.998 and −14.996, and particle swarm optimization between
 −12 and −7.
 
@@ -101,7 +101,7 @@ once half the population is feasible.
 ## Good results
 
 A gap of 0 to the minimum −15 is the best possible. SHADE finds its first feasible solution after
-1,000 evaluations, with f = −2.65, and meets the 1e-8 target after 36,200. Its solution is the
+1,100 evaluations, with f = −2.93, and meets the 1e-8 target after 36,000. Its solution is the
 report's, to 4 decimals, with the same six active constraints: g1, g2, g3, g7, g8 and g9. The error
 falls by about a factor of 10 every 4,000 evaluations. With seeds 2 to 10, every run meets the
-target, after 34,700 to 37,900 evaluations.
+target, after 35,600 to 38,400 evaluations.

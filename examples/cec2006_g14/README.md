@@ -91,17 +91,17 @@ budget:
 
 | Algorithm | Runs that met the target | Evaluations (median, range) |
 |---|---|---|
-| CMA-ES | 25 of 25 | 17,290 (15,180 to 19,580) |
-| SHADE | 25 of 25 | 54,500 (50,600 to 62,900) |
-| L-SHADE | 24 of 25 | 78,595 (73,845 to 82,235) |
+| CMA-ES | 25 of 25 | 17,940 (15,970 to 19,210) |
+| SHADE | 25 of 25 | 55,700 (50,400 to 63,300) |
+| L-SHADE | 23 of 25 | 77,986 (72,149 to 83,141) |
 
 SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78) is genoxide's default differential
 evolution. It misses the target in 9 of 25 runs on g11 and in all on g13, whose equalities are
 curved, but solves g14: the slabs are flat, so the difference between two feasible solutions points
 along them, not off them. It takes three times as many evaluations as CMA-ES. L-SHADE (Tanabe and
 Fukunaga, 2014, IEEE CEC 2014: 1658-1665), its variant with a population that shrinks over the
-budget, starts with 18 × 10 = 180 solutions and is slower still; one of its runs ended feasible
-but 2.0 above f*.
+budget, starts with 18 × 10 = 180 solutions and is slower still; two of its runs ended feasible
+but 1.9 and 2.5 above f*.
 
 ## Output
 
@@ -125,10 +125,11 @@ fall outside the slabs.
 A good run is feasible and ends within 1e-4 of f*, the report's success. A value below f* is
 possible, since f* is only the best known, but the runs here end just above it.
 
-The recorded run finds its first feasible solution after 1,920 evaluations, with an error of 4.9. It
-then descends in stages. From 3,700 to 5,500 evaluations, the error stays between 2.3 and 2.8, while
-x4 and then x6 dip far below their optimal values, to 0.00006 and 0.00005, and come back. It falls
-to 1.0 after 7,000 evaluations and to 0.001 after 10,900. The run meets the report's criterion after
-11,330 evaluations and its target after 15,650. The solution is x = (0.04067, 0.1477, 0.7832,
-0.001413, 0.4853, 0.0006958, 0.02740, 0.01796, 0.03733, 0.09689), within 1.1e-5 of the report's x*
-in every gene, with each |h| at 0.0001, on the edges of the tolerance.
+The recorded run finds its first feasible solution after 1,580 evaluations, with an error of 3.1. It
+then descends in stages. From 3,900 to 4,800 evaluations, the error stays between 2.0 and 2.3, while
+x6 dips below its optimal value, to 0.0003; from 5,500 to 6,100, it stays between 1.1 and 1.4, while
+x4 dips far below its optimal value, to 0.00001. Both come back. The error falls to 1.0 after 6,400
+evaluations and to 0.001 after 10,500. The run meets the report's criterion after 11,030
+evaluations and its target after 17,980. The solution is x = (0.04068, 0.1477, 0.7832, 0.001416,
+0.4853, 0.0006906, 0.02741, 0.01796, 0.03733, 0.09687), within 1.4e-5 of the report's x* in every
+gene, with each |h| at 0.0001, on the edges of the tolerance.
