@@ -1,3 +1,4 @@
+import _thread
 import dataclasses
 import importlib.metadata
 import json
@@ -9,6 +10,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 import weakref
 
 import numpy as np
@@ -915,6 +917,29 @@ def test_ctrl_c_stops_the_run():
             onemax_ga().run(lambda bits: 1.0, time=30)
     finally:
         timer.cancel()
+
+
+def test_ctrl_c_stops_a_parallel_run_within_the_generation():
+    # the function runs on rayon's threads, where Python runs no signal handlers: the thread that
+    # called run notices Ctrl+C while they call, and the calls not yet started are skipped
+    calls = []
+
+    def slow(bits):
+        calls.append(1)
+        time.sleep(0.2)
+        return 1.0
+
+    # 256 calls of 0.2 s: a generation takes 3.2 s on 16 threads
+    timer = threading.Timer(0.3, _thread.interrupt_main)
+    started = time.perf_counter()
+    timer.start()
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            onemax_ga(population_size=256).run(slow, generations=5, parallel=True)
+    finally:
+        timer.cancel()
+    assert time.perf_counter() - started < 1.5
+    assert len(calls) < 256
 
 
 def test_other_threads_run_during_a_run():

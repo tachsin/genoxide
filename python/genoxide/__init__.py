@@ -1698,7 +1698,8 @@ class _SingleObjective(_Algorithm):
         Exception
             An exception raised by ``fitness``, ``on_generation`` or ``control`` stops the run,
             and ``run`` raises it, e.g. the ``ValueError`` of a wrong setting in ``control``. So
-            does ``KeyboardInterrupt`` on Ctrl+C.
+            does ``KeyboardInterrupt`` on Ctrl+C: with ``parallel``, once the calls of
+            ``fitness`` under way return.
         """
         _check_callable(fitness)
         if isinstance(fitness, problems.MultiProblem):
@@ -2535,7 +2536,8 @@ class _MultiObjective(_Algorithm):
             ``OverflowError`` for an int too large for a float, is raised as it is.
         Exception
             An exception raised by ``fitness`` or ``on_generation`` stops the run, and ``run``
-            raises it. So does ``KeyboardInterrupt`` on Ctrl+C.
+            raises it. So does ``KeyboardInterrupt`` on Ctrl+C: with ``parallel``, once the calls
+            of ``fitness`` under way return.
         """
         _check_callable(fitness)
         if isinstance(fitness, problems.Problem):
