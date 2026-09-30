@@ -73,6 +73,33 @@ pub enum Config {
     Easom {},
     Eggholder {},
     SchafferF6 {},
+    #[serde(rename = "schwefel_2_21")]
+    Schwefel221 {
+        dimensions: usize,
+    },
+    #[serde(rename = "schwefel_2_22")]
+    Schwefel222 {
+        dimensions: usize,
+    },
+    DixonPrice {
+        dimensions: usize,
+    },
+    Trid {
+        dimensions: usize,
+    },
+    Powell {
+        dimensions: usize,
+    },
+    Beale {},
+    Booth {},
+    Matyas {},
+    Bohachevsky1 {},
+    Bohachevsky2 {},
+    Bohachevsky3 {},
+    ThreeHumpCamel {},
+    Langermann {},
+    ShekelFoxholes {},
+    Kowalik {},
     G01 {},
     G02 {},
     G03 {
@@ -1202,6 +1229,39 @@ fn build(config: Config) -> Result<Problem, String> {
         Config::Easom {} => problems::boxed(problems::Easom),
         Config::Eggholder {} => problems::boxed(problems::Eggholder),
         Config::SchafferF6 {} => problems::boxed(problems::SchafferF6),
+        Config::Schwefel221 { dimensions } => problems::boxed(problems::Schwefel2_21::new(
+            at_least(dimensions, 1, "Schwefel2_21")?,
+        )),
+        Config::Schwefel222 { dimensions } => problems::boxed(problems::Schwefel2_22::new(
+            at_least(dimensions, 1, "Schwefel2_22")?,
+        )),
+        Config::DixonPrice { dimensions } => problems::boxed(problems::DixonPrice::new(at_least(
+            dimensions,
+            2,
+            "DixonPrice",
+        )?)),
+        Config::Trid { dimensions } => {
+            problems::boxed(problems::Trid::new(at_least(dimensions, 2, "Trid")?))
+        }
+        Config::Powell { dimensions } => {
+            let dimensions = at_least(dimensions, 4, "Powell")?;
+            if !dimensions.is_multiple_of(4) {
+                return Err(format!(
+                    "Powell needs a multiple of 4 dimensions, not {dimensions}"
+                ));
+            }
+            problems::boxed(problems::Powell::new(dimensions))
+        }
+        Config::Beale {} => problems::boxed(problems::Beale),
+        Config::Booth {} => problems::boxed(problems::Booth),
+        Config::Matyas {} => problems::boxed(problems::Matyas),
+        Config::Bohachevsky1 {} => problems::boxed(problems::Bohachevsky1),
+        Config::Bohachevsky2 {} => problems::boxed(problems::Bohachevsky2),
+        Config::Bohachevsky3 {} => problems::boxed(problems::Bohachevsky3),
+        Config::ThreeHumpCamel {} => problems::boxed(problems::ThreeHumpCamel),
+        Config::Langermann {} => problems::boxed(problems::Langermann),
+        Config::ShekelFoxholes {} => problems::boxed(problems::ShekelFoxholes),
+        Config::Kowalik {} => problems::boxed(problems::Kowalik),
         Config::G01 {} => problems::boxed(cec2006::G01),
         Config::G02 {} => problems::boxed(cec2006::G02),
         Config::G03 { tolerance } => {

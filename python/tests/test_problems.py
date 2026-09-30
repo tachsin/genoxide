@@ -35,10 +35,35 @@ PROBLEMS = [
     gx.problems.Easom,
     gx.problems.Eggholder,
     gx.problems.SchafferF6,
+    gx.problems.Schwefel2_21,
+    gx.problems.Schwefel2_22,
+    gx.problems.DixonPrice,
+    gx.problems.Trid,
+    gx.problems.Powell,
+    gx.problems.Beale,
+    gx.problems.Booth,
+    gx.problems.Matyas,
+    gx.problems.Bohachevsky1,
+    gx.problems.Bohachevsky2,
+    gx.problems.Bohachevsky3,
+    gx.problems.ThreeHumpCamel,
+    gx.problems.Langermann,
+    gx.problems.ShekelFoxholes,
+    gx.problems.Kowalik,
 ]
 
 # the problems whose minimum is known numerically, not proven
-NUMERICAL = {"Hartmann3", "Hartmann6", "Shekel5", "Shekel7", "Shekel10", "Eggholder"}
+NUMERICAL = {
+    "Hartmann3",
+    "Hartmann6",
+    "Shekel5",
+    "Shekel7",
+    "Shekel10",
+    "Eggholder",
+    "Langermann",
+    "ShekelFoxholes",
+    "Kowalik",
+}
 
 
 CONSTRAINED = [
@@ -269,6 +294,39 @@ def test_values_of_the_functions_with_tables():
     assert gx.problems.Shekel10().genome == gx.Real((0.0, 10.0), length=4)
 
 
+def test_values_of_the_functions_of_batch_10():
+    # the largest absolute value; the sum plus the product
+    assert gx.problems.Schwefel2_21(3)([1, -7.5, 3]) == 7.5
+    assert gx.problems.Schwefel2_22(3)([1, -2, 3]) == 12
+    # Dixon-Price's two minima, the last gene of either sign
+    solutions = gx.problems.DixonPrice(3).optimum.solutions
+    assert solutions.shape == (2, 3)
+    assert solutions[0][1] == pytest.approx(2**-0.5)
+    assert solutions[1][2] == -solutions[0][2]
+    # Trid's minimum depends on n: −50 for 6, −210 for 10, at i (n + 1 − i)
+    assert gx.problems.Trid(6).optimum.value == -50
+    assert gx.problems.Trid().optimum.value == -210
+    assert list(gx.problems.Trid(6).optimum.solutions[0]) == [6, 10, 12, 12, 10, 6]
+    assert gx.problems.Trid(6).genome == gx.Real((-36.0, 36.0), length=6)
+    # Powell's start, and blocks of four
+    assert gx.problems.Powell(4)([3, -1, 0, 1]) == 215
+    assert gx.problems.Powell(8)([3, -1, 0, 1] * 2) == 430
+    assert gx.problems.Beale()([0, 0]) == 14.203125
+    assert gx.problems.Booth()([0, 0]) == 74
+    assert gx.problems.Matyas()([1, 1]) == pytest.approx(0.04)
+    assert gx.problems.Bohachevsky1()([1, 0]) == pytest.approx(1.6)
+    assert gx.problems.Bohachevsky2()([1 / 3, 0.25]) == pytest.approx(1 / 9 + 1 / 8)
+    assert gx.problems.Bohachevsky3()([1 / 3, 0.25]) == pytest.approx(1 / 9 + 1 / 8)
+    assert gx.problems.ThreeHumpCamel()([1.747552345830289, -0.8737761729151445]) == (
+        pytest.approx(0.2986384422368594)
+    )
+    assert round(gx.problems.Langermann().optimum.value, 5) == -4.15581
+    assert round(gx.problems.ShekelFoxholes().optimum.value, 3) == 0.998
+    assert gx.problems.ShekelFoxholes()([-32, -32]) > gx.problems.ShekelFoxholes().optimum.value
+    assert round(gx.problems.Kowalik().optimum.value, 7) == 0.0003075
+    assert gx.problems.Kowalik().genome == gx.Real((-5.0, 5.0), length=4)
+
+
 def test_sizes():
     assert gx.problems.Rastrigin().dimensions == 30
     assert gx.problems.Michalewicz().dimensions == 10
@@ -285,6 +343,10 @@ def test_sizes():
     [
         (gx.problems.Rosenbrock(1), "Rosenbrock.dimensions is at least 2, not 1"),
         (gx.problems.Sphere(0), "Sphere.dimensions is at least 1, not 0"),
+        (gx.problems.DixonPrice(1), "DixonPrice.dimensions is at least 2, not 1"),
+        (gx.problems.Trid(1), "Trid.dimensions is at least 2, not 1"),
+        (gx.problems.Powell(2), "Powell.dimensions is at least 4, not 2"),
+        (gx.problems.Powell(6), "Powell.dimensions is a multiple of 4, not 6"),
         (gx.problems.Sphere(2.0), "Sphere.dimensions is a whole number"),
         (gx.problems.Sphere(2**40), "Sphere.dimensions is at most 16777216, not 1099511627776"),
     ],
