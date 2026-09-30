@@ -33,6 +33,7 @@ pub mod es;
 pub mod ga;
 pub mod islands;
 pub mod local_search;
+pub mod open_es;
 pub mod pso;
 pub mod steady;
 
@@ -42,6 +43,7 @@ pub use es::{Es, EsBuilder};
 pub use ga::{Ga, GaBuilder, Scheme, Unset};
 pub use islands::{Islands, IslandsBuilder, Migrate};
 pub use local_search::{Acceptance, LocalSearch, LocalSearchBuilder};
+pub use open_es::{OpenEs, OpenEsBuilder};
 pub use pso::{Pso, PsoBuilder, Topology};
 pub use steady::{Incremental, SteadyGa};
 
@@ -60,6 +62,8 @@ pub(crate) mod breeding_streams {
     pub(crate) const DE: u64 = 1;
     // `EsBuilder::parallel_breeding`
     pub(crate) const ES: u64 = 2;
+    // `OpenEsBuilder::parallel_breeding`
+    pub(crate) const OPEN_ES: u64 = 3;
 }
 
 // `make(position, input, rng)` for each of `inputs`, in order into `made` and `other`, each with

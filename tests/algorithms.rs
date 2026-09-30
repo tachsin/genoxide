@@ -301,8 +301,18 @@ fn portable_runs() {
                 .build()
                 .unwrap(),
         ),
+        portable_run(
+            OpenEs::builder(real())
+                .population_size(20)
+                .sigma(0.01)
+                .evaluate_mean(true)
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
     ];
-    let expected: [[f64; 4]; 6] = [
+    let expected: [[f64; 4]; 7] = [
         // L-SHADE
         [
             0.5886518163542276,
@@ -344,6 +354,13 @@ fn portable_runs() {
             0.24876448694741246,
             0.04545026095464834,
             -0.016979733128666127,
+        ],
+        // OpenAI's ES, Adam, the mean evaluated
+        [
+            -0.4723413661463646,
+            -1.2524725186772865,
+            0.7656393855501439,
+            -2.217604529838133,
         ],
     ];
     for (run, expected) in runs.iter().zip(expected) {
