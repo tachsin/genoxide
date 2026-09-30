@@ -146,10 +146,17 @@ fn results_in_flight_count_when_stopping() {
 #[test]
 fn a_panic_in_the_fitness_function_ends_the_run() {
     let evaluations = AtomicUsize::new(0);
+    let panicking = AtomicBool::new(false);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         AsyncEngine::new(steady(16, 10, 6), |genome: &Bits| {
             if evaluations.fetch_add(1, Ordering::SeqCst) == 25 {
+                panicking.store(true, Ordering::SeqCst);
                 panic!("the simulation crashed");
+            }
+            // the panic hook (a backtrace with RUST_BACKTRACE=1) can take longer than the whole
+            // budget of evaluations this cheap: the others slow down once the panic has started
+            if panicking.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(50));
             }
             genome.count_ones() as f64
         })
