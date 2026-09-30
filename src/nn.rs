@@ -86,6 +86,9 @@ pub enum Activation {
     Sigmoid,
     /// `max(0, x)`, a rectified linear unit.
     Relu,
+    /// The NEAT paper's steepened sigmoid `1 / (1 + e^−4.9x)`, in (0, 1): close to linear near
+    /// 0 over most of the range of [−1, 1] (Stanley and Miikkulainen 2002).
+    SteepSigmoid,
 }
 
 impl Activation {
@@ -97,6 +100,7 @@ impl Activation {
             Activation::Identity => x,
             Activation::Tanh => math::tanh(x),
             Activation::Sigmoid => 1.0 / (1.0 + math::exp(-x)),
+            Activation::SteepSigmoid => 1.0 / (1.0 + math::exp(-4.9 * x)),
             // NaN stays NaN
             Activation::Relu => {
                 if x < 0.0 {
@@ -344,9 +348,18 @@ impl MlpNetwork<'_> {
             let activation = if last { mlp.output } else { mlp.hidden };
             let target: &mut [f64] = if last { output } else { &mut next[..units] };
             let per_unit = inputs + bias;
-            for (unit, value) in target.iter_mut().enumerate() {
-                let unit_weights = &weights[unit * per_unit..(unit + 1) * per_unit];
-                *value = activation.apply(weighted_sum(unit_weights, values, mlp.bias));
+            // tanh, the usual activation, in a loop of its own: without choosing the function
+            // for each unit
+            if activation == Activation::Tanh {
+                for (unit, value) in target.iter_mut().enumerate() {
+                    let unit_weights = &weights[unit * per_unit..(unit + 1) * per_unit];
+                    *value = math::tanh(weighted_sum(unit_weights, values, mlp.bias));
+                }
+            } else {
+                for (unit, value) in target.iter_mut().enumerate() {
+                    let unit_weights = &weights[unit * per_unit..(unit + 1) * per_unit];
+                    *value = activation.apply(weighted_sum(unit_weights, values, mlp.bias));
+                }
             }
             weights = &weights[units * per_unit..];
             std::mem::swap(&mut previous, &mut next);
@@ -570,11 +583,12 @@ mod tests {
     use crate::StreamRng;
     use rand::RngExt;
 
-    const ACTIVATIONS: [Activation; 4] = [
+    const ACTIVATIONS: [Activation; 5] = [
         Activation::Identity,
         Activation::Tanh,
         Activation::Sigmoid,
         Activation::Relu,
+        Activation::SteepSigmoid,
     ];
 
     fn random_values(n: usize, rng: &mut StreamRng) -> Vec<f64> {
@@ -639,6 +653,11 @@ mod tests {
         assert_eq!(Activation::Relu.apply(-2.0), 0.0);
         assert_eq!(Activation::Relu.apply(3.0), 3.0);
         assert!(Activation::Relu.apply(f64::NAN).is_nan());
+        assert_eq!(Activation::SteepSigmoid.apply(0.0), 0.5);
+        assert_eq!(
+            Activation::SteepSigmoid.apply(0.5).to_bits(),
+            Activation::Sigmoid.apply(2.45).to_bits()
+        );
     }
 
     #[test]

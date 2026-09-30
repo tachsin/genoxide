@@ -7,6 +7,8 @@ reference_url: https://doi.org/10.1162/106365602320169811
 optimum: "0.000216214 (squared error, with the weights in [−10, 10]; best known)"
 languages: [rust, python]
 order: 250
+family: XOR
+tab: Fixed network, CMA-ES
 ---
 
 # XOR neuroevolution
