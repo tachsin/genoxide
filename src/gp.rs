@@ -16,6 +16,7 @@
 //! | [`Mutations`] | A mix of the mutations, one per call, by weight |
 //! | [`OnePointCrossover`] | Exchanges subtrees at a point of the two trees' common region (Poli and Langdon 1998) |
 //! | [`boolean`] | Koza's multiplexer and even-parity problems |
+//! | [`regression`] | Symbolic regression: mathematical primitives, datasets, the error after linear scaling, and test problems |
 //!
 //! Against bloat, the growth of trees without better fitness, [`operator::select`](crate::operator::select)
 //! has [`DoubleTournament`](crate::operator::DoubleTournament),
@@ -139,6 +140,7 @@ mod evaluate;
 mod mutations;
 mod operators;
 mod primitives;
+pub mod regression;
 mod representation;
 mod tree;
 
