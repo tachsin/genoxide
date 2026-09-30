@@ -1430,7 +1430,12 @@ fn mixes_and_bloat_control_deserialize_as_built() {
 // constant mutation and drawn anew by point mutation
 #[test]
 fn normal_constants() {
-    for (mean, deviation) in [(0.0, 0.0), (f64::NAN, 1.0), (0.0, f64::INFINITY), (0.0, -1.0)] {
+    for (mean, deviation) in [
+        (0.0, 0.0),
+        (f64::NAN, 1.0),
+        (0.0, f64::INFINITY),
+        (0.0, -1.0),
+    ] {
         setting_error(Constants::normal(mean, deviation), "constants");
     }
     let constants = Constants::normal(2.0, 5.0).unwrap();
@@ -1453,11 +1458,17 @@ fn normal_constants() {
     for seed in 0..50 {
         let mut rng = StreamRng::seed_from_u64(seed);
         let mut moved = tree.clone();
-        ConstantMutation::gaussian(0.1).unwrap().mutate(&gp, &mut moved, &mut rng);
-        let Node::Constant { value, .. } = moved.nodes()[2] else { panic!("a constant") };
+        ConstantMutation::gaussian(0.1)
+            .unwrap()
+            .mutate(&gp, &mut moved, &mut rng);
+        let Node::Constant { value, .. } = moved.nodes()[2] else {
+            panic!("a constant")
+        };
         assert!(value != 0.5 && value.is_finite() && gp.validate(&moved).is_ok());
         let mut redrawn = tree.clone();
-        PointMutation::count(1).unwrap().mutate(&gp, &mut redrawn, &mut rng);
+        PointMutation::count(1)
+            .unwrap()
+            .mutate(&gp, &mut redrawn, &mut rng);
         assert!(redrawn != tree && gp.validate(&redrawn).is_ok());
     }
     #[cfg(feature = "serde")]
