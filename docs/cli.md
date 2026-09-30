@@ -12,7 +12,7 @@ genoxide --help | -h             this usage, also with no arguments
 genoxide --version | -V          the version: genoxide <version>
 ```
 
-`genoxide check` prints `<file>: ok` for a valid run file. It builds the algorithm but doesn't start the fitness program.
+`genoxide check` prints `<file>: ok` for a valid run file. It builds the algorithm and checks that the checkpoint's directory exists, but doesn't start the fitness program.
 
 ## A first run
 
@@ -221,7 +221,7 @@ Progress lines on stderr. Put `report` before the first table.
 
 ```toml
 [checkpoint]
-path = "run.ckpt"   # relative to the run file
+path = "run.ckpt"   # relative to the run file, in a directory that exists
 every = 50          # generations, at least 1
 ```
 
