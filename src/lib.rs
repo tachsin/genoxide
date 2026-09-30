@@ -90,6 +90,7 @@ pub mod gp;
 pub mod individual;
 pub mod math;
 pub mod multi;
+pub mod neat;
 pub mod nn;
 pub mod observer;
 pub mod operator;
