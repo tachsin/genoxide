@@ -1,6 +1,6 @@
 SHADE with Deb's feasibility rules on g19, seed 1
-stopped by the target after 87200 evaluations: f(x) - f* < 1e-8, feasible
-first feasible after 100 evaluations, f(x) - f* <= 1e-4 after 66000
+stopped by the target after 98100 evaluations: f(x) - f* < 1e-8, feasible
+first feasible after 100 evaluations, f(x) - f* <= 1e-4 after 75700
 f(x) 32.6556, f* 32.6556 (best known)
-x1 3.0e-12, x2 6.0e-11, x3 3.94598, x4 8.4e-11, x5 3.28318, x6 10.00000, x7 1.0e-11, x8 2.1e-11, x9 1.7e-10, x10 9.8e-12, x11 0.370766, x12 0.278455, x13 0.523838, x14 0.388618, x15 0.298157
+x1 1.3e-11, x2 1.3e-11, x3 3.94594, x4 9.9e-10, x5 3.28318, x6 10.00000, x7 2.1e-11, x8 3.0e-11, x9 6.7e-10, x10 5.4e-11, x11 0.370771, x12 0.278456, x13 0.523837, x14 0.388615, x15 0.298155
 g1 active, g2 active, g3 active, g4 active, g5 active

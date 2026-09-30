@@ -1,6 +1,6 @@
 SHADE with Deb's feasibility rules at an epsilon level on g17, seed 1
-stopped by the target after 173500 evaluations: f(x) - f* < 1e-8, feasible
-first feasible after 147500 evaluations, f(x) - f* <= 1e-4 after 151500
+stopped by the target after 169300 evaluations: f(x) - f* < 1e-8, feasible
+first feasible after 147400 evaluations, f(x) - f* <= 1e-4 after 150900
 f(x) 8853.53, f* 8853.53 (best known)
 x1 201.8, x2 100.00, x3 383.1, x4 420.0, x5 -10.91, x6 0.07315
 pieces: f1(x1) = 30 x1, f2(x2) = 28 x2

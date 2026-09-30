@@ -1,3 +1,3 @@
-CMA-ES: 0.000000 after 7812 evaluations
+CMA-ES: 0.000000 after 7994 evaluations
 PSO, global: 1.501747 after 300000 evaluations
 PSO, ring: 0.000000 after 84320 evaluations

@@ -1,4 +1,4 @@
 WeldedBeam: cost 1.724852, violation 0.000000 (the best known: 1.724852)
   h 0.205730, l 3.470489, t 9.036624, b 0.205730
 WeldedBeamRagsdell: cost 2.381134, violation 0.000000 (the best known: 2.3811341181527284)
-  h 0.244369, l 6.218608, t 8.291472, b 0.244369
+  h 0.244369, l 6.218607, t 8.291472, b 0.244369
