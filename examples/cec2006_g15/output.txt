@@ -1,6 +1,6 @@
 IPOP-CMA-ES with Deb's feasibility rules on g15, seed 1
-stopped by the target after 27664 evaluations and 0 restarts: f(x) - f* < 1e-8, feasible
-first feasible after 469 evaluations, f(x) - f* <= 1e-4 after 23646
+stopped by the target after 26880 evaluations and 0 restarts: f(x) - f* < 1e-8, feasible
+first feasible after 525 evaluations, f(x) - f* <= 1e-4 after 23765
 f(x) 961.715, f* 961.715 (best known)
 x1 3.512, x2 0.2170, x3 3.552
 h1 active, h2 active

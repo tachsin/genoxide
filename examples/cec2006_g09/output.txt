@@ -1,6 +1,6 @@
 CMA-ES with Deb's feasibility rules on g09, seed 1
-stopped by the target after 8469 evaluations: f(x) - f* < 1e-8, feasible
-first feasible after 27 evaluations, f(x) - f* <= 1e-4 after 5967
+stopped by the target after 11250 evaluations: f(x) - f* < 1e-8, feasible
+first feasible after 27 evaluations, f(x) - f* <= 1e-4 after 6858
 f(x) 680.630, f* 680.630 (proven)
-x1 2.33051, x2 1.95137, x3 -0.477530, x4 4.36572, x5 -0.624500, x6 1.03812, x7 1.59424
+x1 2.33050, x2 1.95137, x3 -0.477547, x4 4.36574, x5 -0.624477, x6 1.03813, x7 1.59423
 g1 active, g2 -252.6, g3 -144.9, g4 active

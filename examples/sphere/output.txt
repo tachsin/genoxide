@@ -1,7 +1,7 @@
 Sphere in 30 dimensions, 300000 evaluations at most
 Evaluations until the error is at most
 algorithm         1     1e-2     1e-4     1e-6     1e-8     best
-CMA-ES         1694     2520     3178     3920     4648   9.2e-9
+CMA-ES         1946     2744     3500     4284     4998   6.5e-9
 sep-CMA-ES     1624     2380     3024     3780     4564   8.3e-9
 PSO            9040    12000    15200    20640    24720   9.2e-9
 GA            26680    90861        -        -        -   1.8e-4

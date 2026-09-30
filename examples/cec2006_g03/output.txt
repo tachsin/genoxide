@@ -1,4 +1,4 @@
 CEC 2006 g03 with CMA-ES, seed 1: at most 500000 evaluations
-f -1.0005001, feasible, after 19630 evaluations (the minimum: -1.0005001, proven)
-x 0.3162 0.3163 0.3162 0.3162 0.3163 0.3162 0.3163 0.3162 0.3162 0.3162
+f -1.0005001, feasible, after 21720 evaluations (the minimum: -1.0005001, proven)
+x 0.3162 0.3163 0.3163 0.3162 0.3163 0.3163 0.3162 0.3162 0.3162 0.3162
 h1 = x1^2 + ... + x10^2 - 1: 0.000100 (met when |h1| <= 0.0001)
