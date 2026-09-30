@@ -113,6 +113,21 @@ __all__ = [
     "Easom",
     "Eggholder",
     "SchafferF6",
+    "Schwefel2_21",
+    "Schwefel2_22",
+    "DixonPrice",
+    "Trid",
+    "Powell",
+    "Beale",
+    "Booth",
+    "Matyas",
+    "Bohachevsky1",
+    "Bohachevsky2",
+    "Bohachevsky3",
+    "ThreeHumpCamel",
+    "Langermann",
+    "ShekelFoxholes",
+    "Kowalik",
     # multi-objective
     "Zdt1",
     "Zdt2",
@@ -858,6 +873,263 @@ class SchafferF6(Problem[Real]):
 
     _type: ClassVar[str] = "schaffer_f6"
 
+
+@dataclass(frozen=True)
+class Schwefel2_21(_Scalable):
+    """Schwefel's problem 2.21, ``maxᵢ |xᵢ|``: unimodal, but only the largest gene counts.
+
+    Bounds [-100, 100]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 1.
+
+    Schwefel, H.-P. (1981). Numerical Optimization of Computer Models. Wiley, problem 2.21.
+    Definition, bounds and dimensions as restated in Yao, Liu and Lin (1999, f4); not yet checked
+    against Schwefel's book (#168).
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "schwefel_2_21"
+
+
+@dataclass(frozen=True)
+class Schwefel2_22(_Scalable):
+    """Schwefel's problem 2.22, ``Σ |xᵢ| + Π |xᵢ|``: unimodal, with a kink along every axis.
+
+    Bounds [-10, 10]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 1.
+
+    Schwefel, H.-P. (1981). Numerical Optimization of Computer Models. Wiley, problem 2.22.
+    Definition, bounds and dimensions as restated in Yao, Liu and Lin (1999, f2); Jamil and Yang
+    (2013, function 124) give [-100, 100]. Not yet checked against Schwefel's book (#168).
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "schwefel_2_22"
+
+
+@dataclass(frozen=True)
+class DixonPrice(_Scalable):
+    """The Dixon-Price function, ``(x₁ − 1)² + Σᵢ₌₂ⁿ i (2xᵢ² − xᵢ₋₁)²``: a chain of curved
+    valleys.
+
+    Bounds [-10, 10]ⁿ; minimum 0 at xᵢ = 2^(−(2ⁱ − 2) / 2ⁱ), and at the same point with the last
+    gene negated: ``optimum.solutions`` has both. ``dimensions`` is at least 2. In 3 dimensions or
+    more, (1/3, 0, …, 0) is a stationary point with the value 2/3, not a local minimum, but one
+    where searches stall: the valley floor that joins it to the minimum is a cusp near it.
+
+    Dixon, L. C. W. and Price, R. C. (1989). Truncated Newton method for sparse unconstrained
+    optimization using automatic differentiation. Journal of Optimization Theory and Applications
+    60(2): 261-275, which couldn't be read. Definition and bounds as restated in Jamil and Yang
+    (2013, function 48) and Laguna and Martí (2005, function 37); not yet checked against the
+    original (#168).
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "dixon_price"
+    _minimum: ClassVar[int] = 2
+
+
+@dataclass(frozen=True)
+class Trid(_Scalable):
+    """The Trid function, ``Σᵢ₌₁ⁿ (xᵢ − 1)² − Σᵢ₌₂ⁿ xᵢ xᵢ₋₁``: a convex quadratic whose genes are
+    coupled in a chain.
+
+    Bounds [-n², n²]ⁿ; minimum −n (n + 4) (n − 1) / 6 at xᵢ = i (n + 1 − i): −50 for n = 6 and
+    −210 for n = 10, the only minimum. ``dimensions`` is at least 2, 10 by default.
+
+    Its origin is unknown: Jamil and Yang (2013, functions 150 and 151) credit Hedar's collection
+    of test problems, and give −200 for n = 10. Definition and bounds as in Laguna and Martí
+    (2005, functions 24 and 25); not yet checked against an original (#168).
+    """
+
+    dimensions: int = 10
+    _type: ClassVar[str] = "trid"
+    _minimum: ClassVar[int] = 2
+
+
+@dataclass(frozen=True)
+class Powell(_Scalable):
+    """Powell's singular function, extended to blocks of four genes:
+    ``(x₁ + 10x₂)² + 5 (x₃ − x₄)² + (x₂ − 2x₃)⁴ + 10 (x₁ − x₄)⁴`` over each block.
+
+    Bounds [-4, 5]ⁿ; minimum 0 at the origin, where the Hessian is singular. ``dimensions`` is a
+    positive multiple of 4, 24 by default.
+
+    Powell, M. J. D. (1962). An iterative method for finding stationary values of a function of
+    several variables. The Computer Journal 5(2): 147-151, in 4 dimensions, which couldn't be
+    read; the formula as Steihaug and Suleiman (2013, Journal of Global Optimization 56(3):
+    845-853) restate it, and the extension and bounds as in Laguna and Martí (2005, function 36).
+    """
+
+    dimensions: int = 24
+    _type: ClassVar[str] = "powell"
+    _minimum: ClassVar[int] = 4
+
+    def _describe(self) -> dict[str, Any]:
+        description = super()._describe()
+        if description["dimensions"] % 4:
+            raise ValueError(f"Powell.dimensions is a multiple of 4, not {self.dimensions}")
+        return description
+
+
+@dataclass(frozen=True)
+class Beale(Problem[Real]):
+    """Beale's function, ``(1.5 − x₁ + x₁x₂)² + (2.25 − x₁ + x₁x₂²)² + (2.625 − x₁ + x₁x₂³)²``: a
+    flat curved valley between steep walls.
+
+    Bounds [-4.5, 4.5]²; minimum 0 at (3, 0.5), the only zero of the three terms.
+
+    Beale, E. M. L. (1958). On an Iterative Method for Finding a Local Minimum of a Function of
+    More than One Variable. Technical Report 25, Statistical Techniques Research Group, Princeton
+    University, which couldn't be read. Definition and bounds as restated in Jamil and Yang (2013,
+    function 10) and Laguna and Martí (2005, function 6); not yet checked against the original
+    (#168).
+    """
+
+    _type: ClassVar[str] = "beale"
+
+
+@dataclass(frozen=True)
+class Booth(Problem[Real]):
+    """Booth's function, ``(x₁ + 2x₂ − 7)² + (2x₁ + x₂ − 5)²``: a convex quadratic.
+
+    Bounds [-10, 10]²; minimum 0 at (1, 3).
+
+    Its origin is unknown: definition and bounds as restated in Jamil and Yang (2013, function 20)
+    and Laguna and Martí (2005, function 7); not yet checked against an original (#168).
+    """
+
+    _type: ClassVar[str] = "booth"
+
+
+@dataclass(frozen=True)
+class Matyas(Problem[Real]):
+    """Matyas' function, ``0.26 (x₁² + x₂²) − 0.48 x₁x₂``: a convex quadratic, a valley along
+    the diagonal 25 times flatter than its sides.
+
+    Bounds [-10, 10]²; minimum 0 at the origin.
+
+    Its origin is unknown: Jamil and Yang (2013, function 71) credit Hedar's collection of test
+    problems. Definition and bounds as in Jamil and Yang; Laguna and Martí (2005, function 8) use
+    [-5, 10]. Not yet checked against an original (#168).
+    """
+
+    _type: ClassVar[str] = "matyas"
+
+
+@dataclass(frozen=True)
+class Bohachevsky1(Problem[Real]):
+    """Bohachevsky's first function, ``x₁² + 2x₂² − 0.3 cos(3πx₁) − 0.4 cos(4πx₂) + 0.7``.
+
+    Bounds [-100, 100]²; minimum 0 at the origin, the global minimum.
+
+    Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized simulated annealing
+    for function optimization. Technometrics 28(3): 209-217, which couldn't be read. Definition
+    and bounds as restated in Jamil and Yang (2013, function 17); Adorio (2005, MVF library) gives
+    the same function on [-50, 50]. Not yet checked against the original (#168).
+    """
+
+    _type: ClassVar[str] = "bohachevsky1"
+
+
+@dataclass(frozen=True)
+class Bohachevsky2(Problem[Real]):
+    """Bohachevsky's second function, ``x₁² + 2x₂² − 0.3 cos(3πx₁) cos(4πx₂) + 0.3``.
+
+    Bounds [-100, 100]²; minimum 0 at the origin, the global minimum.
+
+    Bohachevsky, Johnson and Stein (1986), which couldn't be read. Definition and bounds as
+    restated in Jamil and Yang (2013, function 18), whose product of cosines is misprinted;
+    Adorio (2005, MVF library) gives this form, on [-50, 50]. Not yet checked against the
+    original (#168).
+    """
+
+    _type: ClassVar[str] = "bohachevsky2"
+
+
+@dataclass(frozen=True)
+class Bohachevsky3(Problem[Real]):
+    """Bohachevsky's third function, ``x₁² + 2x₂² − 0.3 cos(3πx₁ + 4πx₂) + 0.3``.
+
+    Bounds [-100, 100]²; minimum 0 at the origin, the global minimum.
+
+    Bohachevsky, Johnson and Stein (1986), which couldn't be read. Definition and bounds as
+    restated in Jamil and Yang (2013, function 19); not yet checked against the original (#168).
+    """
+
+    _type: ClassVar[str] = "bohachevsky3"
+
+
+@dataclass(frozen=True)
+class ThreeHumpCamel(Problem[Real]):
+    """The three-hump camel function, ``2x₁² − 1.05x₁⁴ + x₁⁶ / 6 + x₁x₂ + x₂²``: a global
+    minimum between two local ones.
+
+    Bounds [-5, 5]²; minimum 0 at the origin, the global minimum; the local minima are
+    ±(1.7475523, −0.8737761), with 0.2986384.
+
+    Its origin is unknown: definition and bounds as restated in Jamil and Yang (2013, function 29)
+    and Adorio (2005, MVF library); not yet checked against an original (#168).
+    """
+
+    _type: ClassVar[str] = "three_hump_camel"
+
+
+@dataclass(frozen=True)
+class Langermann(Problem[Real]):
+    """Langermann's function in two dimensions, ``Σᵢ cᵢ exp(−dᵢ / π) cos(π dᵢ)`` with
+    dᵢ = (x₁ − aᵢ₁)² + (x₂ − aᵢ₂)², c = (1, 2, 5, 2, 3) and the centers a = (3, 5), (5, 2),
+    (2, 1), (1, 4), (7, 9).
+
+    Bounds [0, 10]²; minimum −4.155809291847785 at (2.7934022086450367, 1.5972325013283601), computed
+    by Newton's method from the lowest points of a grid; not proven global (``optimum.proven`` is
+    False).
+
+    Bersini, H., Dorigo, M., Langerman, S., Seront, G. and Gambardella, L. (1996). Results of the
+    first international contest on evolutionary optimisation (1st ICEO). Proceedings of IEEE
+    International Conference on Evolutionary Computation: 611-615, which couldn't be read; the
+    contests' functions have 5 and 10 dimensions and a minus sign. This two-dimensional form, its
+    sign and its constants are Molga and Smutnicki's (2005, section 2.10), and the bounds are
+    Surjanovic and Bingham's.
+    """
+
+    _type: ClassVar[str] = "langermann"
+
+
+@dataclass(frozen=True)
+class ShekelFoxholes(Problem[Real]):
+    """Shekel's foxholes, De Jong's F5,
+    ``1 / (1/500 + Σⱼ₌₁²⁵ 1 / (j + (x₁ − a₁ⱼ)⁶ + (x₂ − a₂ⱼ)⁶))``: a plane near 500 with 25
+    narrow holes on the grid (−32, −16, 0, 16, 32)², the j-th about j deep.
+
+    Bounds [-65.536, 65.536]²; minimum 0.9980038377944502 at (−31.97833483565697,
+    −31.978334837300796), in the first hole, computed by Newton's method; not proven global
+    (``optimum.proven`` is False).
+
+    De Jong, K. A. (1975). An Analysis of the Behavior of a Class of Genetic Adaptive Systems. PhD
+    thesis, University of Michigan, appendix A.6 (function F5, after Shekel 1971), which gives
+    this function, grid and bounds; Yao, Liu and Lin (1999, f14) restate it the same.
+    """
+
+    _type: ClassVar[str] = "shekel_foxholes"
+
+
+@dataclass(frozen=True)
+class Kowalik(Problem[Real]):
+    """Kowalik's function, ``Σᵢ₌₁¹¹ (aᵢ − x₁ (bᵢ² + bᵢx₂) / (bᵢ² + bᵢx₃ + x₄))²``: the least
+    squares fit of a rational model to Kowalik and Osborne's 11 data points.
+
+    a = (0.1957, 0.1947, 0.1735, 0.1600, 0.0844, 0.0627, 0.0456, 0.0342, 0.0323, 0.0235, 0.0246)
+    and 1/b = (0.25, 0.5, 1, 2, 4, 6, 8, 10, 12, 14, 16).
+
+    Bounds [-5, 5]⁴; minimum 3.0748598780560606e-4 at (0.1928334529825086, 0.19083623878262915,
+    0.12311729627785713, 0.13576598998153702), computed by Newton's method; not proven global
+    (``optimum.proven`` is False).
+
+    Kowalik, J. S. and Osborne, M. R. (1968). Methods for Unconstrained Optimization Problems.
+    American Elsevier, which couldn't be read. The function, data and bounds as Yao, Liu and Lin
+    (1999, f15, table XI) restate them; NIST's reference dataset MGH09 rounds 1/6, 1/12 and 1/14
+    to three digits, and so has the minimum 3.0750560385e-4.
+    """
+
+    _type: ClassVar[str] = "kowalik"
 
 # ---- multi-objective problems -------------------------------------------------------------------
 

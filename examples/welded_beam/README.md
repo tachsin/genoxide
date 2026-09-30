@@ -6,7 +6,7 @@ reference: "Ragsdell, K. M. and Phillips, D. T. (1976). Optimal design of a clas
 reference_url: https://doi.org/10.1115/1.3438995
 optimum: "1.724852 (seven constraints) and 2.3811341 (five constraints), best known"
 languages: [rust, python]
-order: 71
+order: 91
 trace_note: "Recorded from the seeded run below, on the first form, WeldedBeam."
 ---
 

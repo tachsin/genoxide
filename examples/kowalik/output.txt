@@ -1,0 +1,7 @@
+Kowalik: best known minimum 3.07486e-4, 30 seeds, 20000 evaluations at most per run
+runs              at min  elsewhere  evaluations: median  largest
+CMA-ES                19         11                 1976     2376
+CMA-ES with IPOP      30          0                 2124     8888
+DE                    25          5                 4280    14719
+PSO                    1         29                17560    17560
+evaluations: of the runs that reach the best known minimum, to within 1e-8

@@ -59,7 +59,43 @@ export const FUNCTIONS = {
   shekel5: (x, y) => shekel(5, [x, y, x, y]),
   shekel7: (x, y) => shekel(7, [x, y, x, y]),
   shekel10: (x, y) => shekel(10, [x, y, x, y]),
+  // the functions of batch 10a; the scalable ones in 2 dimensions
+  beale: (x, y) => (1.5 - x + x * y) ** 2 + (2.25 - x + x * y * y) ** 2 + (2.625 - x + x * y ** 3) ** 2,
+  booth: (x, y) => (x + 2 * y - 7) ** 2 + (2 * x + y - 5) ** 2,
+  matyas: (x, y) => 0.26 * (x * x + y * y) - 0.48 * x * y,
+  bohachevsky1: (x, y) => x * x + 2 * y * y - 0.3 * Math.cos(3 * Math.PI * x) - 0.4 * Math.cos(4 * Math.PI * y) + 0.7,
+  bohachevsky2: (x, y) => x * x + 2 * y * y - 0.3 * Math.cos(3 * Math.PI * x) * Math.cos(4 * Math.PI * y) + 0.3,
+  bohachevsky3: (x, y) => x * x + 2 * y * y - 0.3 * Math.cos(3 * Math.PI * x + 4 * Math.PI * y) + 0.3,
+  three_hump_camel: (x, y) => 2 * x * x - 1.05 * x ** 4 + x ** 6 / 6 + x * y + y * y,
+  langermann: (x, y) => {
+    let sum = 0;
+    for (let i = 0; i < 5; i++) {
+      const d = (x - LANGERMANN_A[i][0]) ** 2 + (y - LANGERMANN_A[i][1]) ** 2;
+      sum += LANGERMANN_C[i] * Math.exp(-d / Math.PI) * Math.cos(Math.PI * d);
+    }
+    return sum;
+  },
+  shekel_foxholes: (x, y) => {
+    let sum = 1 / 500;
+    for (let j = 0; j < 25; j++) sum += 1 / (j + 1 + (x - FOXHOLES[j % 5]) ** 6 + (y - FOXHOLES[Math.floor(j / 5)]) ** 6);
+    return 1 / sum;
+  },
+  schwefel_2_21: (x, y) => Math.max(Math.abs(x), Math.abs(y)),
+  schwefel_2_22: (x, y) => Math.abs(x) + Math.abs(y) + Math.abs(x * y),
+  trid: (x, y) => (x - 1) ** 2 + (y - 1) ** 2 - x * y,
 };
+
+// Langermann's function in 2 dimensions (Molga and Smutnicki's constants), and the centers of
+// Shekel's foxholes (De Jong's F5), x₁ varying first
+const LANGERMANN_A = [
+  [3, 5],
+  [5, 2],
+  [2, 1],
+  [1, 4],
+  [7, 9],
+];
+const LANGERMANN_C = [1, 2, 5, 2, 3];
+const FOXHOLES = [-32, -16, 0, 16, 32];
 
 // Hartmann's function in 3 dimensions (Hartman 1973, with Dixon and Szegö's constants), and the
 // points of x₃ in [0, 1] over which the contour takes its lowest value

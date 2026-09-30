@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "f₂ = 1 − 0.64 f₁² for f₁ in [0, 0.5868], then f₂ = 1.15² − (f₁ + 0.15)² to (1, 0); hypervolume 0.4934 (normalized objectives, reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 192
+order: 212
 family: MW
 ---
 

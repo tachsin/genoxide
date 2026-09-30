@@ -1,0 +1,7 @@
+Booth: minimum 0 at (1, 3), 30 seeds, 10000 evaluations at most per run
+runs              at min  elsewhere  evaluations: median  largest
+CMA-ES                30          0                  312      414
+DE                    30          0                 1150     1340
+PSO                   30          0                 3080     3680
+GA                     1         29                 1982     1982
+evaluations: of the runs that reach the minimum, to within 1e-8

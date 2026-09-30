@@ -1,0 +1,8 @@
+Powell in 24 dimensions, 240000 evaluations at most
+Evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES         1716     4004     7943    13546    19864   9.9e-9
+sep-CMA-ES     1404     2665    11427   104260        -   1.7e-7
+DE             9300    14800    44100    60900    79400   9.7e-9
+PSO            6520    13520    59640        -        -   4.7e-6
+GA            10901   119908        -        -        -   3.3e-3

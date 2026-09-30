@@ -51,6 +51,19 @@
 //! | [`Easom`] | 2 | [−100, 100] | −1 at (π, π) |
 //! | [`Eggholder`] | 2 | [−512, 512] | −959.64066 at (512, 404.23181), best known |
 //! | [`SchafferF6`] | 2 | [−100, 100] | 0 at the origin |
+//! | [`Schwefel2_21`] | any (30) | [−100, 100] | 0 at the origin |
+//! | [`Schwefel2_22`] | any (30) | [−10, 10] | 0 at the origin |
+//! | [`DixonPrice`] | 2 or more (30) | [−10, 10] | 0 at xᵢ = 2^(−(2ⁱ − 2) / 2ⁱ), and with xₙ negated |
+//! | [`Trid`] | 2 or more (10) | [−n², n²] | −n (n + 4) (n − 1) / 6 at xᵢ = i (n + 1 − i) |
+//! | [`Powell`] | a multiple of 4 (24) | [−4, 5] | 0 at the origin |
+//! | [`Beale`] | 2 | [−4.5, 4.5] | 0 at (3, 0.5) |
+//! | [`Booth`] | 2 | [−10, 10] | 0 at (1, 3) |
+//! | [`Matyas`] | 2 | [−10, 10] | 0 at the origin |
+//! | [`Bohachevsky1`], [`Bohachevsky2`], [`Bohachevsky3`] | 2 | [−100, 100] | 0 at the origin |
+//! | [`ThreeHumpCamel`] | 2 | [−5, 5] | 0 at the origin |
+//! | [`Langermann`] | 2 | [0, 10] | −4.15581 at (2.79340, 1.59723), best known |
+//! | [`ShekelFoxholes`] | 2 | [−65.536, 65.536] | 0.99800 near (−32, −32), best known |
+//! | [`Kowalik`] | 4 | [−5, 5] | 3.07486e-4 at (0.19283, 0.19084, 0.12312, 0.13577), best known |
 //!
 //! Two submodules hold constrained problems, whose fitness is `(score, violation)`:
 //!
@@ -81,6 +94,8 @@
 //!   global optimization of multimodal functions. *Journal of Global Optimization* 33(2):
 //!   235-255. doi:10.1007/s10898-004-1936-z (the appendix)
 //! - Molga, M. and Smutnicki, C. (2005). *Test functions for optimization needs.*
+//! - Adorio, E. P. (2005). *MVF - Multivariate Test Functions Library in C for Unconstrained
+//!   Global Optimization.* University of the Philippines Diliman
 //! - Jamil, M. and Yang, X.-S. (2013). A literature survey of benchmark functions for global
 //!   optimisation problems. *International Journal of Mathematical Modelling and Numerical
 //!   Optimisation* 4(2): 150-194. arXiv:1308.4008
@@ -102,6 +117,10 @@ pub use classic::{
     Ackley, AxisParallelEllipsoid, Branin, GoldsteinPrice, Griewank, Himmelblau, Levy, Michalewicz,
     Rastrigin, Rosenbrock, Schwefel1_2, Schwefel2_26, SixHumpCamel, Sphere, StyblinskiTang,
     Zakharov,
+};
+pub use classic::{
+    Beale, Bohachevsky1, Bohachevsky2, Bohachevsky3, Booth, DixonPrice, Kowalik, Langermann,
+    Matyas, Powell, Schwefel2_21, Schwefel2_22, ShekelFoxholes, ThreeHumpCamel, Trid,
 };
 pub use classic::{Easom, Eggholder, Hartmann3, Hartmann6, SchafferF6, Shekel5, Shekel7, Shekel10};
 
@@ -392,6 +411,21 @@ pub fn all() -> Vec<Box<dyn DynProblem>> {
         boxed(Easom),
         boxed(Eggholder),
         boxed(SchafferF6),
+        boxed(Schwefel2_21::default()),
+        boxed(Schwefel2_22::default()),
+        boxed(DixonPrice::default()),
+        boxed(Trid::default()),
+        boxed(Powell::default()),
+        boxed(Beale),
+        boxed(Booth),
+        boxed(Matyas),
+        boxed(Bohachevsky1),
+        boxed(Bohachevsky2),
+        boxed(Bohachevsky3),
+        boxed(ThreeHumpCamel),
+        boxed(Langermann),
+        boxed(ShekelFoxholes),
+        boxed(Kowalik),
         boxed(cec2006::G01),
         boxed(cec2006::G02),
         boxed(cec2006::G03::default()),
@@ -436,7 +470,7 @@ mod tests {
     #[test]
     fn the_registry_describes_every_problem() {
         let problems = all();
-        assert_eq!(problems.len(), 56);
+        assert_eq!(problems.len(), 71);
         let names: HashSet<_> = problems.iter().map(|problem| problem.name()).collect();
         assert_eq!(names.len(), problems.len(), "names are unique");
         let mut rng = StreamRng::seed_from_u64(0);
@@ -463,6 +497,9 @@ mod tests {
                 "Shekel7",
                 "Shekel10",
                 "Eggholder",
+                "Langermann",
+                "ShekelFoxholes",
+                "Kowalik",
             ];
             let numerically = numerical.contains(&problem.name());
             assert!(

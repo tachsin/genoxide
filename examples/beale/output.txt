@@ -1,0 +1,7 @@
+Beale: minimum 0 at (3, 0.5), 30 seeds, 10000 evaluations at most per run
+runs              at min  elsewhere  evaluations: median  largest
+CMA-ES                29          1                  360      456
+CMA-ES with IPOP      30          0                  363     1866
+PSO                   30          0                 3180     3800
+GA                     2         28                 6605     7278
+evaluations: of the runs that reach the minimum, to within 1e-8

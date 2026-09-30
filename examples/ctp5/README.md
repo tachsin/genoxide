@@ -6,7 +6,7 @@ reference: "Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test probl
 reference_url: https://doi.org/10.1007/3-540-44719-9_20
 optimum: "a piece of the constraint's boundary from (0, 1) to f₁ = 0.2558, and 15 points on the line f₂ = 1 − tan(0.2π) f₁ at √(k/10) along it, the last at (0.9908, 0.2801); hypervolume 0.6613 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 149
+order: 169
 family: CTP
 ---
 

@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "three pieces, of the unconstrained front and of the boundary T₁ = 0, from (0, 4) to (1.5, 0.0183); hypervolume 0.5819 (normalized objectives, reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 196
+order: 216
 family: MW
 ---
 

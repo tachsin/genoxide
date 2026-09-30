@@ -6,7 +6,7 @@ reference: "Jain, H. and Deb, K. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281534
 optimum: "the parts of the unit sphere within 0.4 of (1, 0, 0), (0, 1, 0), (0, 0, 1) and (1, 1, 1)/√3; the 58 feasible target points' hypervolume is 0.6535 (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 155
+order: 175
 family: C-DTLZ
 tab: C2-DTLZ2
 ---

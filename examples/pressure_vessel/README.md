@@ -6,7 +6,7 @@ reference: "Sandgren, E. (1990). Nonlinear integer and discrete programming in m
 reference_url: https://doi.org/10.1115/1.2912596
 optimum: "6059.714335 (cost)"
 languages: [rust, python]
-order: 70
+order: 90
 ---
 
 # Pressure vessel design

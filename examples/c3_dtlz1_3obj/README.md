@@ -6,7 +6,7 @@ reference: "Jain, H. and Deb, K. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281534
 optimum: "the front f₁ + f₂ + f₃ + min fⱼ = 1, three planes from the unit vectors to (1/4, 1/4, 1/4); the 91 target points' hypervolume is 1.1624 (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 157
+order: 177
 family: C-DTLZ
 tab: C3-DTLZ1
 ---

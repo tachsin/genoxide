@@ -6,7 +6,7 @@ reference: "Jain, H. and Deb, K. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281534
 optimum: "the front minⱼ [fⱼ²/4 + Σ_{i≠j} fᵢ²] = 1, three ellipsoids from 2 × the unit vectors to (2/3, 2/3, 2/3); the 91 target points' hypervolume is 1.0598 in objectives scaled by the nadir point (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 158
+order: 178
 family: C-DTLZ
 tab: C3-DTLZ4
 ---
