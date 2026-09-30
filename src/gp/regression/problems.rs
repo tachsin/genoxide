@@ -26,6 +26,7 @@
 use super::{Dataset, Math, Regression, Sample, primitives};
 use crate::engine::FitnessFunction;
 use crate::gp::{PrimitiveSet, Tree};
+use crate::math;
 use crate::rng::StreamRng;
 use rand::RngExt;
 
@@ -70,26 +71,44 @@ pub fn all() -> Vec<Box<dyn RegressionProblem>> {
         Box::new(Koza1::new()),
         Box::new(Koza2::new()),
         Box::new(Koza3::new()),
+        Box::new(Nguyen1::new()),
+        Box::new(Nguyen2::new()),
+        Box::new(Nguyen3::new()),
+        Box::new(Nguyen4::new()),
+        Box::new(Nguyen5::new()),
+        Box::new(Nguyen6::new()),
+        Box::new(Nguyen7::new()),
+        Box::new(Nguyen8::new()),
+        Box::new(Nguyen9::new()),
+        Box::new(Nguyen10::new()),
+        Box::new(Nguyen11::new()),
+        Box::new(Nguyen12::new()),
     ]
 }
 
-// `count` points uniform in [low, high] from `seed`, one variable
-fn uniform(seed: u64, count: usize, low: f64, high: f64) -> Vec<[f64; 1]> {
+// `count` points uniform in [low, high] from `seed`, `variables` values each
+fn uniform(seed: u64, count: usize, variables: usize, low: f64, high: f64) -> Vec<Vec<f64>> {
     let mut rng = StreamRng::seed_from_u64(seed);
-    (0..count).map(|_| [rng.random_range(low..=high)]).collect()
+    (0..count)
+        .map(|_| {
+            (0..variables)
+                .map(|_| rng.random_range(low..=high))
+                .collect()
+        })
+        .collect()
 }
 
 // `count` points evenly spaced from `low` to `high`, both included, one variable
-fn grid(count: usize, low: f64, high: f64) -> Vec<[f64; 1]> {
+fn grid(count: usize, low: f64, high: f64) -> Vec<Vec<f64>> {
     let last = (count - 1) as f64;
     (0..count)
-        .map(|i| [low + (high - low) * (i as f64 / last)])
+        .map(|i| vec![low + (high - low) * (i as f64 / last)])
         .collect()
 }
 
 // the dataset of `target` at the training and test points
-fn dataset(training: &[[f64; 1]], test: &[[f64; 1]], target: fn(&[f64]) -> f64) -> Dataset {
-    let sample = |points: &[[f64; 1]]| {
+fn dataset(training: &[Vec<f64>], test: &[Vec<f64>], target: fn(&[f64]) -> f64) -> Dataset {
+    let sample = |points: &[Vec<f64>]| {
         Sample::from_points(points, target).expect("finite targets at the problem's points")
     };
     Dataset::new(sample(training))
@@ -165,7 +184,11 @@ fn koza_primitives() -> PrimitiveSet<Math> {
 // Koza's sampling: 20 training points uniform in [−1, 1] (from seed 20), and 101 evenly spaced
 // test points
 fn koza_regression(target: fn(&[f64]) -> f64) -> Regression {
-    let dataset = dataset(&uniform(20, 20, -1.0, 1.0), &grid(101, -1.0, 1.0), target);
+    let dataset = dataset(
+        &uniform(20, 20, 1, -1.0, 1.0),
+        &grid(101, -1.0, 1.0),
+        target,
+    );
     Regression::new(koza_primitives(), dataset).expect("the dataset's variable")
 }
 
@@ -265,3 +288,395 @@ impl Koza3 {
 }
 
 regression_problem!(Koza3, "Koza-3", "x^6 - 2x^4 + x^2", KOZA_1994, None);
+
+// Nguyen's function set: Koza's, with the protected division and logarithm, and x (and y)
+fn nguyen_primitives(variables: usize) -> PrimitiveSet<Math> {
+    let names: &[&str] = if variables == 1 { &["x"] } else { &["x", "y"] };
+    primitives(
+        [
+            Math::Add,
+            Math::Sub,
+            Math::Mul,
+            Math::ProtectedDiv,
+            Math::Sin,
+            Math::Cos,
+            Math::Exp,
+            Math::ProtectedLog,
+        ],
+        names.iter().copied(),
+        None,
+    )
+    .expect("Nguyen's primitive set")
+}
+
+// Nguyen's sampling: 20 training points uniform in [low, high] (100 in [low, high]² for two
+// variables), from seed 1000 + 2 × the problem's number; five times as many test points, uniform
+// in the same range, from the next seed
+fn nguyen_regression(
+    number: u64,
+    variables: usize,
+    low: f64,
+    high: f64,
+    target: fn(&[f64]) -> f64,
+) -> Regression {
+    let count = if variables == 1 { 20 } else { 100 };
+    let seed = 1000 + 2 * number;
+    let dataset = dataset(
+        &uniform(seed, count, variables, low, high),
+        &uniform(seed + 1, 5 * count, variables, low, high),
+        target,
+    );
+    Regression::new(nguyen_primitives(variables), dataset).expect("the dataset's variables")
+}
+
+const NGUYEN: &str = "Uy, N. Q., Hoai, N. X., O'Neill, M., McKay, R. I. and Galván-López, E. \
+                      (2011). Semantically-based crossover in genetic programming: application \
+                      to real-valued symbolic regression. Genetic Programming and Evolvable \
+                      Machines 12(2): 91-119";
+const NGUYEN_URL: Option<&str> = Some("https://doi.org/10.1007/s10710-010-9121-2");
+
+/// Nguyen-1: x³ + x² + x, from 20 points uniform in [−1, 1] (Uy et al. 2011).
+///
+/// Nguyen's function set is Koza's: `add`, `sub`, `mul`, the protected division `pdiv`, `sin`,
+/// `cos`, `exp` and the protected logarithm `plog`, and the variable `x` (and `y` for the
+/// problems of two variables), without constants. The training points are drawn from a fixed
+/// seed; the test points, five times as many from another seed in the same range, are genoxide's
+/// choice.
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen1 {
+    regression: Regression,
+}
+
+impl Nguyen1 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(1, 1, -1.0, 1.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        let x = point[0];
+        x * x * x + x * x + x
+    }
+}
+
+regression_problem!(Nguyen1, "Nguyen-1", "x^3 + x^2 + x", NGUYEN, NGUYEN_URL);
+
+/// Nguyen-2: x⁴ + x³ + x² + x, from 20 points uniform in [−1, 1] (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen2 {
+    regression: Regression,
+}
+
+impl Nguyen2 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(2, 1, -1.0, 1.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        let x = point[0];
+        x * x * x * x + x * x * x + x * x + x
+    }
+}
+
+regression_problem!(
+    Nguyen2,
+    "Nguyen-2",
+    "x^4 + x^3 + x^2 + x",
+    NGUYEN,
+    NGUYEN_URL
+);
+
+/// Nguyen-3: x⁵ + x⁴ + x³ + x² + x, from 20 points uniform in [−1, 1] (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen3 {
+    regression: Regression,
+}
+
+impl Nguyen3 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(3, 1, -1.0, 1.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        let x = point[0];
+        x * x * x * x * x + x * x * x * x + x * x * x + x * x + x
+    }
+}
+
+regression_problem!(
+    Nguyen3,
+    "Nguyen-3",
+    "x^5 + x^4 + x^3 + x^2 + x",
+    NGUYEN,
+    NGUYEN_URL
+);
+
+/// Nguyen-4: x⁶ + x⁵ + x⁴ + x³ + x² + x, from 20 points uniform in [−1, 1] (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen4 {
+    regression: Regression,
+}
+
+impl Nguyen4 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(4, 1, -1.0, 1.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        let x = point[0];
+        x * x * x * x * x * x + x * x * x * x * x + x * x * x * x + x * x * x + x * x + x
+    }
+}
+
+regression_problem!(
+    Nguyen4,
+    "Nguyen-4",
+    "x^6 + x^5 + x^4 + x^3 + x^2 + x",
+    NGUYEN,
+    NGUYEN_URL
+);
+
+/// Nguyen-5: sin(x²) cos(x) − 1, from 20 points uniform in [−1, 1] (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen5 {
+    regression: Regression,
+}
+
+impl Nguyen5 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(5, 1, -1.0, 1.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        let x = point[0];
+        math::sin(x * x) * math::cos(x) - 1.0
+    }
+}
+
+regression_problem!(
+    Nguyen5,
+    "Nguyen-5",
+    "sin(x^2) cos(x) - 1",
+    NGUYEN,
+    NGUYEN_URL
+);
+
+/// Nguyen-6: sin(x) + sin(x + x²), from 20 points uniform in [−1, 1] (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen6 {
+    regression: Regression,
+}
+
+impl Nguyen6 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(6, 1, -1.0, 1.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        let x = point[0];
+        math::sin(x) + math::sin(x + x * x)
+    }
+}
+
+regression_problem!(
+    Nguyen6,
+    "Nguyen-6",
+    "sin(x) + sin(x + x^2)",
+    NGUYEN,
+    NGUYEN_URL
+);
+
+/// Nguyen-7: ln(x + 1) + ln(x² + 1), from 20 points uniform in [0, 2] (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen7 {
+    regression: Regression,
+}
+
+impl Nguyen7 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(7, 1, 0.0, 2.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        let x = point[0];
+        math::ln(x + 1.0) + math::ln(x * x + 1.0)
+    }
+}
+
+regression_problem!(
+    Nguyen7,
+    "Nguyen-7",
+    "ln(x + 1) + ln(x^2 + 1)",
+    NGUYEN,
+    NGUYEN_URL
+);
+
+/// Nguyen-8: √x, from 20 points uniform in [0, 4] (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen8 {
+    regression: Regression,
+}
+
+impl Nguyen8 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(8, 1, 0.0, 4.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        point[0].sqrt()
+    }
+}
+
+regression_problem!(Nguyen8, "Nguyen-8", "sqrt(x)", NGUYEN, NGUYEN_URL);
+
+/// Nguyen-9: sin(x) + sin(y²), from 100 points uniform in [−1, 1]² (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen9 {
+    regression: Regression,
+}
+
+impl Nguyen9 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(9, 2, -1.0, 1.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        let (x, y) = (point[0], point[1]);
+        math::sin(x) + math::sin(y * y)
+    }
+}
+
+regression_problem!(Nguyen9, "Nguyen-9", "sin(x) + sin(y^2)", NGUYEN, NGUYEN_URL);
+
+/// Nguyen-10: 2 sin(x) cos(y), from 100 points uniform in [−1, 1]² (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen10 {
+    regression: Regression,
+}
+
+impl Nguyen10 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(10, 2, -1.0, 1.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        let (x, y) = (point[0], point[1]);
+        2.0 * math::sin(x) * math::cos(y)
+    }
+}
+
+regression_problem!(Nguyen10, "Nguyen-10", "2 sin(x) cos(y)", NGUYEN, NGUYEN_URL);
+
+/// Nguyen-11: xʸ, from 100 points uniform in [0, 1]² (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen11 {
+    regression: Regression,
+}
+
+impl Nguyen11 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(11, 2, 0.0, 1.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        math::powf(point[0], point[1])
+    }
+}
+
+regression_problem!(Nguyen11, "Nguyen-11", "x^y", NGUYEN, NGUYEN_URL);
+
+/// Nguyen-12: x⁴ − x³ + y²/2 − y, from 100 points uniform in [−1, 1]² (Uy et al. 2011).
+///
+/// The name, target, sampling and set as McDermott et al. (2012) restate them; not yet checked
+/// against the paper ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Debug)]
+pub struct Nguyen12 {
+    regression: Regression,
+}
+
+impl Nguyen12 {
+    /// The problem, with its data.
+    pub fn new() -> Self {
+        Self {
+            regression: nguyen_regression(12, 2, -1.0, 1.0, Self::target_of),
+        }
+    }
+
+    fn target_of(point: &[f64]) -> f64 {
+        let (x, y) = (point[0], point[1]);
+        x * x * x * x - x * x * x + 0.5 * y * y - y
+    }
+}
+
+regression_problem!(
+    Nguyen12,
+    "Nguyen-12",
+    "x^4 - x^3 + y^2/2 - y",
+    NGUYEN,
+    NGUYEN_URL
+);
