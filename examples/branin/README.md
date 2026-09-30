@@ -53,7 +53,7 @@ and x₁ = 2π, between the minima. So the valley is split into three basins, on
 one minimum is easy: a search that goes downhill falls into the valley and follows it to the nearest
 of the three. Finding all three takes several searches, or a method that keeps several points
 apart. The basins are not the same size. In 1,000 searches with this example's settings (seeds 1 to
-1,000), 34% end at (−π, 12.275), 40% at (π, 2.275) and 26% at (3π, 2.475).
+1,000), 34% end at (−π, 12.275), 41% at (π, 2.275) and 25% at (3π, 2.475).
 
 ## Representation
 
@@ -78,8 +78,8 @@ simplest way to find several minima: each start lands in some basin, and basins 
 proportion to their size. The searches that end within 2% of the bounds' width of each other, in
 both genes, are counted as one minimum.
 
-With the smallest basin at 26%, 30 searches all miss it with a probability of 0.74³⁰, about 1 in
-10,000. A population method, such as a GA or differential evolution, also finds a global minimum,
+With the smallest basin at 25%, 30 searches all miss it with a probability of 0.75³⁰, about 1 in
+5,600. A population method, such as a GA or differential evolution, also finds a global minimum,
 but its population usually gathers at one of the three and loses the others. Independent searches
 keep them apart.
 
