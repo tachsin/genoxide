@@ -348,9 +348,18 @@ impl MlpNetwork<'_> {
             let activation = if last { mlp.output } else { mlp.hidden };
             let target: &mut [f64] = if last { output } else { &mut next[..units] };
             let per_unit = inputs + bias;
-            for (unit, value) in target.iter_mut().enumerate() {
-                let unit_weights = &weights[unit * per_unit..(unit + 1) * per_unit];
-                *value = activation.apply(weighted_sum(unit_weights, values, mlp.bias));
+            // tanh, the usual activation, in a loop of its own: without choosing the function
+            // for each unit
+            if activation == Activation::Tanh {
+                for (unit, value) in target.iter_mut().enumerate() {
+                    let unit_weights = &weights[unit * per_unit..(unit + 1) * per_unit];
+                    *value = math::tanh(weighted_sum(unit_weights, values, mlp.bias));
+                }
+            } else {
+                for (unit, value) in target.iter_mut().enumerate() {
+                    let unit_weights = &weights[unit * per_unit..(unit + 1) * per_unit];
+                    *value = activation.apply(weighted_sum(unit_weights, values, mlp.bias));
+                }
             }
             weights = &weights[units * per_unit..];
             std::mem::swap(&mut previous, &mut next);
