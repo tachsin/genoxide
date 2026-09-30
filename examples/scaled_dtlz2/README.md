@@ -6,7 +6,7 @@ reference: "Deb, K. and Jain, H. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281535
 optimum: "the ellipsoid f₁² + (f₂/10)² + (f₃/100)² = 1 with every fᵢ ≥ 0; hypervolume 0.7971 (objectives divided by the nadir point (1, 10, 100), reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 182
+order: 202
 family: DTLZ
 tab: Scaled DTLZ2
 ---

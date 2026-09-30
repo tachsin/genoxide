@@ -6,7 +6,7 @@ reference: "Liang, J. J., Runarsson, T. P., Mezura-Montes, E., Clerc, M., Sugant
 reference_url: "https://github.com/P-N-Suganthan/CEC2006"
 optimum: "none feasible; the report's best known, 0.2049794002, violates a constraint by 0.1438"
 languages: [rust, python]
-order: 96
+order: 116
 family: "CEC 2006"
 tab: g20
 ---

@@ -6,7 +6,7 @@ reference: "Griewank, A. O. (1981). Generalized descent for global optimization.
 reference_url: "https://doi.org/10.1007/BF00933356"
 optimum: "0 (at the origin)"
 languages: [rust, python]
-order: 51
+order: 56
 trace_note: "Recorded from another run: CMA-ES with IPOP restarts in 2 dimensions, with a budget of 50,000 evaluations, so that the population can be drawn on the function's contour."
 ---
 

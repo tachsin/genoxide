@@ -6,7 +6,7 @@ reference: "Jain, H. and Deb, K. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281534
 optimum: "the triangle f₁ + f₂ + f₃ = 1 with every fᵢ in [0, 0.5]; hypervolume 0.3392 (objectives divided by the nadir point (0.5, 0.5, 0.5), reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 183
+order: 203
 family: DTLZ
 tab: Inverted DTLZ1
 ---

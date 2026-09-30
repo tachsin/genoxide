@@ -6,7 +6,7 @@ reference: "Belegundu, A. D. (1982). A Study of Mathematical Programming Methods
 reference_url: ""
 optimum: "0.012665 (weight), best known"
 languages: [rust, python]
-order: 72
+order: 92
 ---
 
 # Tension/compression spring

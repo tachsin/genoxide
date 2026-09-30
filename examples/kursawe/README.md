@@ -6,7 +6,7 @@ reference: "Kursawe, F. (1991). A variant of evolution strategies for vector opt
 reference_url: https://doi.org/10.1007/BFb0029752
 optimum: "not known in closed form; a reference front from much longer runs has hypervolume 37.3489 (reference point (−14, 1))"
 languages: [rust, python]
-order: 119
+order: 139
 ---
 
 # Kursawe's disconnected front

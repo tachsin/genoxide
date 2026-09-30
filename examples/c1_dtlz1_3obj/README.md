@@ -6,7 +6,7 @@ reference: "Jain, H. and Deb, K. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281534
 optimum: "DTLZ1's front, the plane f₁ + f₂ + f₃ = 1/2, all feasible; the 91 target points' hypervolume is 1.1204 in objectives scaled by the nadir point (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 153
+order: 173
 family: C-DTLZ
 tab: C1-DTLZ1
 ---

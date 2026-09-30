@@ -6,7 +6,7 @@ reference: "Nowacki, H. (1974). Optimization in pre-contract ship design. In Com
 reference_url: ""
 optimum: "263.895843 (volume, cm³)"
 languages: [rust, python]
-order: 74
+order: 94
 ---
 
 # Three-bar truss

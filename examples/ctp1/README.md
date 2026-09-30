@@ -6,7 +6,7 @@ reference: "Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test probl
 reference_url: https://doi.org/10.1007/3-540-44719-9_20
 optimum: "the front f₂ = max(e^−f₁, 0.858 e^−0.541f₁, 0.728 e^−0.295f₁) for f₁ in [0, 1]; hypervolume 0.8829 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 145
+order: 165
 family: CTP
 ---
 

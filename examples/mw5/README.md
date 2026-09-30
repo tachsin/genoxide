@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "sixteen points of the unit circle and two short curves near the axes; hypervolume 0.3930 (normalized objectives, reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 188
+order: 208
 family: MW
 ---
 

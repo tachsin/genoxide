@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "twelve pieces of the circle f₁² + f₂² = 1.21, from f₁ = 0.0163 to (1.1, 0); hypervolume 0.4043 (normalized objectives, reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 189
+order: 209
 family: MW
 ---
 

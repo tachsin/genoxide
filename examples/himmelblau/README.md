@@ -6,7 +6,7 @@ reference: "Himmelblau, D. M. (1972). Applied Nonlinear Programming. McGraw-Hill
 reference_url: ""
 optimum: "0 (at four points)"
 languages: [rust, python]
-order: 54
+order: 58
 ---
 
 # Himmelblau's function

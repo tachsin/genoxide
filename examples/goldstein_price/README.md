@@ -6,7 +6,7 @@ reference: "Goldstein, A. A. and Price, J. F. (1971). On descent from local mini
 reference_url: "https://doi.org/10.1090/S0025-5718-1971-0312365-X"
 optimum: "3 (at (0, −1))"
 languages: [rust, python]
-order: 56
+order: 60
 ---
 
 # Goldstein-Price

@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "the triangle f₁ + f₂ + f₃ = 1 with every fᵢ ≥ 0; hypervolume 1.1577 (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 187
+order: 207
 family: MW
 ---
 

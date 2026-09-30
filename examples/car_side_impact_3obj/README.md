@@ -6,7 +6,7 @@ reference: "Jain, H. and Deb, K. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281534
 optimum: "not known in closed form; ideal point (23.585658, 3.58525, 10.610644); genoxide's reference front has a hypervolume of 0.8687 in objectives scaled by the ideal point and its estimated nadir point (42.768, 4.0, 12.5212) (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 205
+order: 225
 ---
 
 # Car side impact, three objectives

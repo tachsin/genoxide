@@ -6,7 +6,7 @@ reference: "Whitley, D., Mathias, K., Rana, S. and Dzubera, J. (1996). Evaluatin
 reference_url: "https://doi.org/10.1016/0004-3702(95)00124-7"
 optimum: "−959.6407 at (512, 404.2318) (best known)"
 languages: [rust, python]
-order: 64
+order: 78
 ---
 
 # Eggholder

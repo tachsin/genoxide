@@ -6,7 +6,7 @@ reference: "Fonseca, C. M. and Fleming, P. J. (1995). An overview of evolutionar
 reference_url: https://doi.org/10.1162/evco.1995.3.1.1
 optimum: "the front (1 − exp(−(s − 1)²), 1 − exp(−(s + 1)²)) for s in [−1, 1]; hypervolume 0.5521 (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 118
+order: 138
 ---
 
 # Fonseca-Fleming

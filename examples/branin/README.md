@@ -6,7 +6,7 @@ reference: "Branin, F. H. (1972). Widely convergent method for finding multiple 
 reference_url: "https://doi.org/10.1147/rd.165.0504"
 optimum: "0.397887 (at three points)"
 languages: [rust, python]
-order: 55
+order: 59
 ---
 
 # Branin

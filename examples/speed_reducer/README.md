@@ -6,7 +6,7 @@ reference: "Golinski, J. (1973). An adaptive optimization system applied to mach
 reference_url: https://doi.org/10.1016/0094-114X(73)90018-9
 optimum: "2996.348165 (weight), best known"
 languages: [rust, python]
-order: 73
+order: 93
 ---
 
 # Speed reducer
