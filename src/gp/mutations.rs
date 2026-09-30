@@ -303,7 +303,8 @@ impl<P: Copy + Debug + Send + Sync> Mutate<Gp<P>> for ShrinkMutation {
 /// constant, as each change is a separate mutation there.
 ///
 /// It applies to constants of [`Constants::uniform`] and [`Constants::integers`] with more than
-/// one value (integers are rounded); the constants of a [`Constants::choice`] have no range, and
+/// one value (integers are rounded), and of [`Constants::normal`], whose noise is `sigma` times
+/// the deviation, without ends to mirror at; the constants of a [`Constants::choice`] have no range, and
 /// [`PointMutation`] draws them anew. The constant always changes: the noise is drawn again
 /// while it leaves the value as it is (for integers, while it rounds to the same value), up to 64
 /// times, then the value is drawn uniformly from the others. A tree without such a constant is
@@ -340,7 +341,7 @@ pub struct ConstantMutation {
 
 impl ConstantMutation {
     /// Normal noise of standard deviation `sigma` (positive and finite) times the width of the
-    /// constant's range, e.g. 0.1.
+    /// constant's range, or the deviation of [`Constants::normal`] constants, e.g. 0.1.
     ///
     /// # Errors
     ///
@@ -372,7 +373,7 @@ impl ConstantMutation {
                 ) || matches!(
                     set.constants(ty),
                     Some(Constants::Integers { low, high }) if low < high
-                )
+                ) || matches!(set.constants(ty), Some(Constants::Normal { .. }))
             }
             Node::Primitive(_) => false,
         };
@@ -414,6 +415,17 @@ impl ConstantMutation {
                 changed.unwrap_or_else(|| {
                     crate::genome::integer::random_other_in(&(low..=high), value as i64, rng) as f64
                 })
+            }
+            Constants::Normal { deviation, .. } => {
+                let mut changed = None;
+                for _ in 0..64 {
+                    let proposal = value + sigma * deviation * rng.normal();
+                    if proposal != value && proposal.is_finite() {
+                        changed = Some(proposal);
+                        break;
+                    }
+                }
+                changed.unwrap_or_else(|| set.constants(ty).expect("constants").other(value, rng))
             }
             Constants::Choice(_) => unreachable!("a constant with a range"),
         };

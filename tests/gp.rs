@@ -1425,3 +1425,47 @@ fn mixes_and_bloat_control_deserialize_as_built() {
         select
     );
 }
+
+// Keijzer's normal constants: drawn with the mean and deviation, any finite value, moved by
+// constant mutation and drawn anew by point mutation
+#[test]
+fn normal_constants() {
+    for (mean, deviation) in [(0.0, 0.0), (f64::NAN, 1.0), (0.0, f64::INFINITY), (0.0, -1.0)] {
+        setting_error(Constants::normal(mean, deviation), "constants");
+    }
+    let constants = Constants::normal(2.0, 5.0).unwrap();
+    let mut rng = StreamRng::seed_from_u64(1);
+    let values: Vec<f64> = (0..20_000).map(|_| constants.sample(&mut rng)).collect();
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    let deviation =
+        (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64).sqrt();
+    assert!((mean - 2.0).abs() < 0.1, "{mean}");
+    assert!((deviation - 5.0).abs() < 0.1, "{deviation}");
+    assert!(constants.contains(1e300) && !constants.contains(f64::INFINITY));
+
+    let mut set = PrimitiveSet::builder();
+    let real = set.new_type("real");
+    set.function("mul", Op::Mul, [real, real], real)
+        .terminal("x", Op::X, real)
+        .constants(real, constants);
+    let gp = Gp::builder(set.build(real).unwrap()).build().unwrap();
+    let tree = gp.primitives().parse("mul(x, 0.5)").unwrap();
+    for seed in 0..50 {
+        let mut rng = StreamRng::seed_from_u64(seed);
+        let mut moved = tree.clone();
+        ConstantMutation::gaussian(0.1).unwrap().mutate(&gp, &mut moved, &mut rng);
+        let Node::Constant { value, .. } = moved.nodes()[2] else { panic!("a constant") };
+        assert!(value != 0.5 && value.is_finite() && gp.validate(&moved).is_ok());
+        let mut redrawn = tree.clone();
+        PointMutation::count(1).unwrap().mutate(&gp, &mut redrawn, &mut rng);
+        assert!(redrawn != tree && gp.validate(&redrawn).is_ok());
+    }
+    #[cfg(feature = "serde")]
+    {
+        let json = serde_json::to_string(&gp).unwrap();
+        assert_eq!(serde_json::from_str::<Gp<Op>>(&json).unwrap(), gp);
+        let invalid = json.replacen("\"deviation\":5.0", "\"deviation\":0.0", 1);
+        assert_ne!(invalid, json);
+        assert!(serde_json::from_str::<Gp<Op>>(&invalid).is_err());
+    }
+}
