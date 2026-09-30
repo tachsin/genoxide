@@ -211,7 +211,7 @@ On main, in the release PR ([#280](https://github.com/tachsin/genoxide/pull/280)
 The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [x] Tree GP, strongly typed
 - [x] Subtree crossover; point, subtree and hoist mutation; bloat control
-- [ ] Symbolic regression examples
+- [x] Symbolic regression examples ([#359](https://github.com/tachsin/genoxide/pull/359), [#360](https://github.com/tachsin/genoxide/pull/360))
 - [ ] NEAT (speciation, innovation numbers)
 - [ ] Neuroevolution with evolution strategies
 - [x] Python: the ES, islands and checkpoints, and a batch's matrix reused ([#342](https://github.com/tachsin/genoxide/pull/342))
