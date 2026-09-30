@@ -4,9 +4,9 @@
 //! best known weight is 23.585658.
 //!
 //! The constraints are response surfaces fitted to crash simulations. The fitness is the weight
-//! and the constraint violation, which Deb's feasibility rules compare. SHADE, a differential
-//! evolution, searches the thicknesses, and the example prints the best design and each response
-//! next to its limit.
+//! and the constraint violation, which Deb's feasibility rules compare. L-SHADE, a differential
+//! evolution whose population shrinks over its budget, searches the thicknesses, and the example
+//! prints the best design and each response next to its limit.
 //!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
 //! page, with `trace.rs`.
