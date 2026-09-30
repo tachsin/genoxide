@@ -401,6 +401,41 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+
+### Neuroevolution: a network's structure by NEAT
+
+`neat::Neat::builder(inputs, outputs)` evolves `neat::Network`s (a bias input is added) from minimal networks up, with the NEAT paper's settings: population 150, speciation (`.compatibility(c1, c2, c3, threshold)`, 1, 1, 0.4, 3), `.structural_mutation(add_node, add_connection)` (0.03, 0.05), `.weight_mutation(rate, replace)` (0.8, 0.1), stagnation 15. Maximized by default; `.sharing(neat::Sharing::Raw)` is the paper's fitness sharing (maximized, non-negative scores), `Normalized` (default) any objective. Networks stay feed-forward (`.feed_forward(false)` for recurrent ones); evaluate with `network.feed_forward()?` and `activate(&input, &mut output)`, no allocation. `neat.species()`, `network.hidden()`, `network.enabled()`. Not in Python yet.
+
+```rust
+use genoxide::neat::{Neat, Network, Sharing};
+use genoxide::prelude::*;
+
+const CASES: [([f64; 2], f64); 4] =
+    [([0.0, 0.0], 0.0), ([0.0, 1.0], 1.0), ([1.0, 0.0], 1.0), ([1.0, 1.0], 0.0)];
+
+fn main() -> genoxide::Result<()> {
+    // the paper's XOR fitness: (4 - sum of |error|)^2, 16 for a perfect network
+    let xor = |network: &Network| {
+        let mut evaluator = network.feed_forward().expect("feed-forward");
+        let mut output = [0.0];
+        let error: f64 = CASES
+            .iter()
+            .map(|(input, target)| {
+                evaluator.activate(input, &mut output);
+                (output[0] - target).abs()
+            })
+            .sum();
+        (4.0 - error).powi(2)
+    };
+    let neat = Neat::builder(2, 1).sharing(Sharing::Raw).seed(1).build()?;
+    let outcome = Engine::new(neat, xor)
+        .stop_when(Stop::target(15.0).or(Stop::generations(500)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    assert!(outcome.best_genome().hidden() >= 1); // XOR needs a hidden node
+    Ok(())
+}
+```
 ### Evolution strategy with self-adaptation
 
 For smooth real-valued problems that need precise answers: step sizes evolve with each solution, one per gene by default.

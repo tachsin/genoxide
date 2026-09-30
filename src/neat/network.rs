@@ -318,34 +318,42 @@ impl Network {
     /// # Errors
     ///
     /// [`Error::InvalidGenome`] if the enabled connections form a cycle (a network of a run with
-    /// recurrent connections).
+    /// recurrent connections), or if a connection, an input, the bias or an output names a node
+    /// the network doesn't have (a network deserialized from a crafted file).
     pub fn feed_forward(&self) -> Result<FeedForward> {
         let index_of = |id: u32| {
             self.nodes
                 .binary_search_by_key(&id, |node| node.id)
-                .expect("a connection's nodes are the network's")
+                .map_err(|_| Error::InvalidGenome {
+                    reason: format!("the network has no node {id}"),
+                })
         };
+        // the enabled connections as node positions, in innovation order
+        let enabled = self
+            .connections
+            .iter()
+            .filter(|c| c.enabled)
+            .map(|c| Ok((index_of(c.from)?, index_of(c.to)?, c.weight)))
+            .collect::<Result<Vec<(usize, usize, f64)>>>()?;
+        let bias = index_of(self.inputs)?;
+        let outputs = (0..self.outputs)
+            .map(|k| index_of(self.inputs + 1 + k).map(|index| index as u32))
+            .collect::<Result<Vec<u32>>>()?;
         let n = self.nodes.len();
         // Kahn's algorithm over the enabled connections, the ready nodes taken in id order
         let mut incoming = vec![0usize; n];
-        for c in self.connections.iter().filter(|c| c.enabled) {
-            incoming[index_of(c.to)] += 1;
+        for &(_, to, _) in &enabled {
+            incoming[to] += 1;
         }
         let mut ready: std::collections::BTreeSet<usize> =
             (0..n).filter(|&i| incoming[i] == 0).collect();
         let mut order = Vec::with_capacity(n);
         while let Some(i) = ready.pop_first() {
             order.push(i);
-            let id = self.nodes[i].id;
-            for c in self
-                .connections
-                .iter()
-                .filter(|c| c.enabled && c.from == id)
-            {
-                let j = index_of(c.to);
-                incoming[j] -= 1;
-                if incoming[j] == 0 {
-                    ready.insert(j);
+            for &(_, to, _) in enabled.iter().filter(|&&(from, _, _)| from == i) {
+                incoming[to] -= 1;
+                if incoming[to] == 0 {
+                    ready.insert(to);
                 }
             }
         }
@@ -364,12 +372,8 @@ impl Network {
                 continue;
             }
             let start = links.len();
-            for c in self
-                .connections
-                .iter()
-                .filter(|c| c.enabled && c.to == node.id)
-            {
-                links.push((index_of(c.from) as u32, c.weight));
+            for &(from, _, weight) in enabled.iter().filter(|&&(_, to, _)| to == i) {
+                links.push((from as u32, weight));
             }
             steps.push(Step {
                 node: i as u32,
@@ -377,12 +381,9 @@ impl Network {
                 activation: node.activation,
             });
         }
-        let outputs = (0..self.outputs)
-            .map(|k| index_of(self.inputs + 1 + k) as u32)
-            .collect();
         Ok(FeedForward {
             inputs: self.inputs as usize,
-            bias: index_of(self.inputs) as u32,
+            bias: bias as u32,
             steps,
             links,
             outputs,

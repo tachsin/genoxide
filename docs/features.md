@@ -48,6 +48,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 
 - **Networks** (`nn`): a multilayer perceptron and an Elman recurrent network whose weights are a `Real` genome, for CMA-ES or any real-valued method; tanh, logistic, ReLU and linear units, with or without biases; forward passes without allocation, the same bits on every platform.
 - **Control tasks** (`problems::control`): the cart-pole and the double pole, with and without velocities, with Florian's corrected equations and the settings of Gomez et al. (2008), integrated by Runge-Kutta with portable `sin` and `cos`; their success criteria, and Gruau et al.'s damping fitness and generalization test. Driven by a `Policy`: a network or a closure.
+- **NEAT** (`neat`): networks whose structure evolves with their weights (Stanley and Miikkulainen 2002), from minimal networks up: innovation numbers that align genes in crossover, speciation by compatibility distance, explicit fitness sharing (normalized for any objective, or the paper's raw form), species champions and stagnation, and new nodes and connections. The paper's settings by default; feed-forward networks compiled once for evaluation without allocation. Seeded runs and checkpoints are reproducible.
 - CMA-ES's step size can be bounded below (Igel 2003), for fitness functions that stop pointing at the goal near their best.
 
 ## Other single-objective methods
@@ -114,6 +115,7 @@ cargo run --release --example bnh                 # two objectives and two const
 cargo run --release --example kursawe             # a disconnected front, SPEA2 and NSGA-II
 cargo run --release --example dtlz2_3obj          # three objectives, NSGA-III, hypervolume
 cargo run --release --example xor_neuroevolution  # a 2-2-1 neural network's weights, CMA-ES
+cargo run --release --example xor_neat            # NEAT evolves a network's structure and weights for XOR
 cargo run --release --example koza_quartic        # genetic programming finds x^4 + x^3 + x^2 + x exactly
 cargo run --release --example double_pole         # a network balances two poles for 100,000 steps, CMA-ES
 cargo run --release --example double_pole_no_velocities  # the same with a recurrent network, no velocities

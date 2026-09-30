@@ -1,0 +1,21 @@
+XOR by NEAT: 150 networks, from 2 inputs and a bias connected to the output
+solved in generation 68 after 9539 evaluations
+
+the network: 3 hidden nodes, 12 enabled connections of 13
+   in0 -> out    -0.028
+   in1 -> out     0.027
+   in0 -> h4      6.451
+    h4 -> out    17.523
+  bias -> h6      1.516
+    h6 -> out   -10.422
+   in1 -> h6     -3.136
+  bias -> h4     -4.170
+   in1 -> h4     -5.762
+   in0 -> h27     0.728
+   h27 -> h4      0.840
+   h27 -> h6     -1.397
+
+0 xor 0 = 0: 0.000
+0 xor 1 = 1: 0.532
+1 xor 0 = 1: 1.000
+1 xor 1 = 0: 0.498
