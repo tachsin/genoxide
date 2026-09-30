@@ -111,8 +111,8 @@ The page shows each variable on its range, and each constraint's state.
 A good run is feasible and ends within 1e-4 of f*, the report's success. A value below f* is
 possible, since f* is only the best known, but the runs here end just above it.
 
-The recorded run finds its first feasible solution after about 750 evaluations, at f ≈ 5379, 250
-above f*. It then follows the tube down, in steps that the tube keeps small: f is about 5200 after
-20,000 evaluations, and within 1e-4 of f* after about 41,000. It meets its target soon after. The
+The recorded run finds its first feasible solution after 1,040 evaluations, at f ≈ 5708, 580 above
+f*. It then follows the tube down, in steps that the tube keeps small: f is about 5400 after 20,000
+evaluations, and within 1e-4 of f* after about 60,000. It meets its target soon after. The
 solution is x = (679.9, 1026, 0.1189, −0.3962), the best known point to 4 digits. g1 and g2 have
 slack, and the three equalities are met, each with |h| at 0.0001, on the edge of the tolerance.

@@ -123,10 +123,10 @@ once half the population is feasible.
 A good run is feasible and ends within 1e-4 of f*, the report's success. CMA-ES meets the target
 of 1e-8 with every seed tried.
 
-Seed 1 needs no restart. The run finds its first feasible solution after 350 evaluations, 35
-generations of 10. It then follows the boundaries toward the corner: the error is 0.18 after 3,850
-evaluations and 0.0024 after 15,370. The run meets the report's criterion after 18,550 evaluations
-and the target after 33,540. The solution is the report's x* to 5 or 6 digits, with the same six
+Seed 1 needs no restart. The run finds its first feasible solution after 280 evaluations, 28
+generations of 10. It then follows the boundaries toward the corner: the error is 0.10 after 4,490
+evaluations and 0.0019 after 9,610. The run meets the report's criterion after 20,300 evaluations
+and the target after 33,930. The solution is the report's x* to 4, 5 or 6 digits, with the same six
 active constraints, g1 to g6. g7 = −6.148 and g8 = −50.02 have slack.
 
 The median's curve has gaps: in some generations, fewer than half the samples are feasible, as

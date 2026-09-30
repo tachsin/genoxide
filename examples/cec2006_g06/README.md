@@ -74,7 +74,7 @@ error of at most 1e-4; the example asks for more.
 
 Why CMA-ES: its covariance matrix can stretch the samples along the crescent, and its step size
 shrinks as the crescent narrows. With 25 seeds, CMA-ES met the target on every run, after a median
-of 2,058 evaluations (at most 2,466). SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78),
+of 2,046 evaluations (at most 2,478). SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78),
 genoxide's default differential evolution, met it on all 25 too, but after a median of 35,600
 evaluations (at most 38,700).
 
@@ -97,6 +97,6 @@ The page shows each variable on its range, and each constraint's state.
 A good run is feasible and ends within 1e-4 of f*, the report's success. CMA-ES goes further: with
 a target of 1e-10 instead of 1e-8, it still met it with all 25 seeds.
 
-The run's first solution in the crescent comes after 90 evaluations. The run then follows the
-crescent down to its tip: it meets the report's criterion after 1,248 evaluations and its target
-after 1,806. The solution is the tip, x1 = 14.0950 and x2 = 0.842961, with both constraints active.
+The run's first solution in the crescent comes after 102 evaluations. The run then follows the
+crescent down to its tip: it meets the report's criterion after 1,260 evaluations and its target
+after 1,842. The solution is the tip, x1 = 14.0950 and x2 = 0.842961, with both constraints active.

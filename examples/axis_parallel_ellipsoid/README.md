@@ -93,8 +93,8 @@ population can be drawn on the function's contour.
 
 ## Good results
 
-The minimum is 0. CMA-ES reaches 1e-8 after 6,622 evaluations, against 4,900 on the sphere. From an
-error of 1 on, it needs about 590 evaluations per decade, against 370 on the sphere: its covariance
+The minimum is 0. CMA-ES reaches 1e-8 after 5,852 evaluations, against 4,998 on the sphere. From an
+error of 1 on, it needs about 540 evaluations per decade, against 380 on the sphere: its covariance
 matrix takes time to learn 30 scales, and the error falls faster once it has.
 
 PSO reaches 1e-8 after 21,800 evaluations, about 2,000 per decade, as on the sphere: the scaling
@@ -102,7 +102,7 @@ doesn't slow it. The genetic algorithm reaches 1e-4 after about 186,000 evaluati
 1.6e-5, short of the target, as its steps don't shrink.
 
 Here a diagonal covariance matrix is all the problem needs, and it learns faster. sep-CMA-ES
-reaches 1e-8 after 4,018 evaluations, 40% fewer than the full matrix: from an error of 1 on, about
-340 evaluations per decade, as on the sphere, so the scaling costs it nothing once it has learned
+reaches 1e-8 after 4,256 evaluations, 27% fewer than the full matrix: from an error of 1 on, about
+360 evaluations per decade, as on the sphere, so the scaling costs it nothing once it has learned
 the scales. On [Schwefel's problem 1.2](../schwefel_1_2/), where the axes are rotated, the diagonal
 matrix is far slower.
