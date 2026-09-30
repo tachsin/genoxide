@@ -82,11 +82,9 @@ Why CMA-ES: its covariance matrix can learn the direction of the tube, so its sa
 the curve rather than across it. With 25 seeds, CMA-ES met the target on every run, after a median
 of 22,976 evaluations (at most 63,496), and it did with IPOP restarts (Auger and Hansen, 2005, IEEE
 CEC 2005: 1769-1776) too, which changed only one run. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC
-2013: 71-78), genoxide's default differential evolution, met it on 24 of 25 runs, after a median of
-148,000 evaluations (at most 246,100). The other run found a feasible solution 45 above f*, and then
-restarted every 200 generations without finding a better one. Without restarts
-(`de::Restarts::Never`, or `restarts="never"` in Python), SHADE met the target on all 25, after a
-median of 150,600 evaluations.
+2013: 71-78), genoxide's default differential evolution, met it on all 25 runs too, but after a
+median of 127,100 evaluations (at most 269,500). Without restarts (`de::Restarts::Never`, or
+`restarts="never"` in Python), the runs are the same: none of them restarted.
 
 ## Output
 
