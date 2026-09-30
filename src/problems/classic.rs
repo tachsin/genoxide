@@ -1114,9 +1114,10 @@ impl FitnessFunction<Reals> for Powell {
 
     /// The value at `x`, over its whole blocks of four genes.
     fn evaluate(&self, x: &Reals) -> f64 {
-        x.chunks_exact(4)
-            .map(|block| {
-                let (x1, x2, x3, x4) = (block[0], block[1], block[2], block[3]);
+        x.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&[x1, x2, x3, x4]| {
                 math::powi(x1 + 10.0 * x2, 2)
                     + 5.0 * math::powi(x3 - x4, 2)
                     + math::powi(x2 - 2.0 * x3, 4)
