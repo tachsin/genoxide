@@ -62,6 +62,17 @@ name = "asynchronous"
 path = "examples/asynchronous/main.rs"
 required-features = ["parallel"]
 
+# parallel evaluation, for the same results sooner
+[[example]]
+name = "nguyen_all"
+path = "examples/nguyen_all/main.rs"
+required-features = ["parallel"]
+
+[[example]]
+name = "accuracy_and_size"
+path = "examples/accuracy_and_size/main.rs"
+required-features = ["parallel"]
+
 [[bin]]
 name = "genoxide"
 required-features = ["cli"]
