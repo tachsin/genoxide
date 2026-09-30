@@ -265,7 +265,7 @@ mod tests {
         assert!(Integer::new([0..=1, empty]).is_err());
         assert!(Integer::uniform(0, 0..=1).is_err());
         assert!(Integer::uniform(MAX_SIZE, 0..=1).is_ok());
-        for len in [MAX_SIZE + 1, usize::MAX] {
+        for len in [MAX_SIZE + 1, 1 << 40, usize::MAX] {
             assert!(Integer::uniform(len, 0..=1).is_err());
         }
         let integer = Integer::new([0..=1, 5..=5]).unwrap();
