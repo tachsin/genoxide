@@ -121,6 +121,10 @@ impl<R: Representation, const M: usize> Nsga3<R, Unset, Unset, M> {
     }
 }
 
+// the smallest squared length of a point or a reference direction, and the inverse of the
+// largest direction's, for which `Nsga3::associate` uses its lower bound
+const SMALLEST: f64 = 1e-120;
+
 // the values with every objective turned into one to minimize
 fn minimized<const M: usize>(scores: &Scores<M>, objectives: &[Objective; M]) -> [f64; M] {
     let values = scores.raw();
@@ -419,21 +423,30 @@ where
         nadir
     }
 
-    // the squared length of each reference direction
-    fn lengths(&self) -> Vec<f64> {
-        let squared = |direction: &[f64; M]| direction.iter().map(|d| d * d).sum();
-        self.reference.iter().map(squared).collect()
+    // the squared length of each reference direction, and its inverse for `associate`'s lower
+    // bound: ∞ (never skipping) outside [SMALLEST, 1 / SMALLEST]
+    fn lengths(&self) -> Vec<(f64, f64)> {
+        let lengths = |direction: &[f64; M]| {
+            let squared: f64 = direction.iter().map(|d| d * d).sum();
+            let inverse = if (SMALLEST..=1.0 / SMALLEST).contains(&squared) {
+                1.0 / squared
+            } else {
+                f64::INFINITY
+            };
+            (squared, inverse)
+        };
+        self.reference.iter().map(lengths).collect()
     }
 
     // the reference direction nearest to a point in normalized objective space, and the
     // perpendicular distance to it; the first one on ties. `lengths` are the directions' squared
-    // lengths.
+    // lengths and their inverses.
     fn associate(
         &self,
         point: &[f64; M],
         ideal: &[f64; M],
         nadir: &[f64; M],
-        lengths: &[f64],
+        lengths: &[(f64, f64)],
     ) -> (usize, f64) {
         let normalized: [f64; M] = std::array::from_fn(|j| {
             let mut range = nadir[j] - ideal[j];
@@ -446,13 +459,33 @@ where
         // the square of the best distance: the square root is monotonic, so only a smaller
         // square can have a smaller root, and only those need one
         let mut best_squared = f64::INFINITY;
-        for (index, (direction, &length)) in self.reference.iter().zip(lengths).enumerate() {
-            let projection: f64 = normalized
-                .iter()
-                .zip(direction)
-                .map(|(n, d)| n * d)
-                .sum::<f64>()
-                / length;
+        // A lower bound skips the projection and the second pass over the objectives for most
+        // directions. The squared distance is |n|² − (n·d)²/|d|², and Σ (n − t d)² is at least
+        // that for any t. With u = ε/2, and to first order in u, the squared distance computed
+        // below is short of it by at most (M + 6) u |n|², and a direction is skipped when
+        // (dot · dot) · inverse < (|n|² − margin) − best_squared, as computed, only if
+        // |n|² − (n·d)²/|d|² > best_squared − (4M + 5) u |n|² + margin. The margin of
+        // 8 (M + 2) u |n|² covers both: a skipped direction's squared distance is above
+        // `best_squared`, and wouldn't be chosen. Only |n|² and |d|² in [SMALLEST, 1 / SMALLEST]
+        // skip (a margin or an inverse of ∞ otherwise), where underflow is far below the margin;
+        // overflow gives ∞ or NaN, which skips nothing. Every other direction is computed as
+        // without the bound, in the same order: the same direction and distance to the bit.
+        let squared_norm: f64 = normalized.iter().map(|n| n * n).sum();
+        let margin = if squared_norm >= SMALLEST {
+            (4 * (M + 2)) as f64 * f64::EPSILON * squared_norm
+        } else {
+            f64::INFINITY
+        };
+        let reach = squared_norm - margin;
+        let mut limit = reach - best_squared;
+        for (index, (direction, &(length, inverse))) in
+            self.reference.iter().zip(lengths).enumerate()
+        {
+            let dot: f64 = normalized.iter().zip(direction).map(|(n, d)| n * d).sum();
+            if dot * dot * inverse < limit {
+                continue;
+            }
+            let projection = dot / length;
             let squared = normalized
                 .iter()
                 .zip(direction)
@@ -463,6 +496,7 @@ where
                 if distance < best.1 {
                     best = (index, distance);
                     best_squared = squared;
+                    limit = reach - best_squared;
                 }
             }
         }
@@ -888,6 +922,7 @@ mod tests {
     use crate::multi::{das_dennis, dominates};
     use crate::operator::{PolynomialMutation, SimulatedBinaryCrossover};
     use proptest::prelude::*;
+    use rand::RngExt;
 
     fn builder<const M: usize>(
         objectives: [Objective; M],
@@ -966,6 +1001,177 @@ mod tests {
         let (niche, distance) = nsga3.associate(&[2.0, 0.2], &ideal, &nadir, &nsga3.lengths());
         assert_eq!(niche, 2);
         assert!((distance - 0.1).abs() < 1e-12);
+    }
+
+    // the association without the lower bound: every direction's squared distance
+    fn exact_association<const M: usize>(
+        reference: &[[f64; M]],
+        point: &[f64; M],
+        ideal: &[f64; M],
+        nadir: &[f64; M],
+        lengths: &[(f64, f64)],
+    ) -> (usize, f64) {
+        let normalized: [f64; M] = std::array::from_fn(|j| {
+            let mut range = nadir[j] - ideal[j];
+            if range == 0.0 {
+                range = 1e-12;
+            }
+            (point[j] - ideal[j]) / range
+        });
+        let mut best = (0, f64::INFINITY);
+        let mut best_squared = f64::INFINITY;
+        for (index, (direction, &(length, _))) in reference.iter().zip(lengths).enumerate() {
+            let projection: f64 = normalized
+                .iter()
+                .zip(direction)
+                .map(|(n, d)| n * d)
+                .sum::<f64>()
+                / length;
+            let squared = normalized
+                .iter()
+                .zip(direction)
+                .map(|(n, d)| (n - projection * d) * (n - projection * d))
+                .sum::<f64>();
+            if squared < best_squared {
+                let distance = squared.sqrt();
+                if distance < best.1 {
+                    best = (index, distance);
+                    best_squared = squared;
+                }
+            }
+        }
+        best
+    }
+
+    // a value in normalized objective space: mostly in [-0.5, 2), sometimes 0, tiny, huge or not
+    // finite
+    fn coordinate(rng: &mut StreamRng) -> f64 {
+        let x: f64 = rng.random();
+        match rng.below(40) {
+            0 => 0.0,
+            1 => -0.0,
+            2 => x * 1e-310,
+            3 => x * 1e-100,
+            4 => x * 1e-60,
+            5 => x * 1e160,
+            6 => f64::INFINITY,
+            7 => f64::NAN,
+            _ => x * 2.5 - 0.5,
+        }
+    }
+
+    // `value` moved by up to 4 ulps
+    fn nudge(value: f64, rng: &mut StreamRng) -> f64 {
+        let mut value = value;
+        for _ in 0..rng.below(5) {
+            value = if rng.random() {
+                value.next_up()
+            } else {
+                value.next_down()
+            };
+        }
+        value
+    }
+
+    // reference directions: Das-Dennis points or random ones, with zeros, scaled by up to
+    // 1e±200 (squared lengths from subnormal to infinite)
+    fn directions<const M: usize>(rng: &mut StreamRng) -> Vec<[f64; M]> {
+        let mut directions = if M > 1 && rng.random() {
+            das_dennis::<M>(rng.below(if M > 4 { 3 } else { 6 }) + 1)
+        } else {
+            (0..rng.below(20) + 2)
+                .map(|_| {
+                    let mut direction: [f64; M] =
+                        std::array::from_fn(|_| if rng.random() { rng.random() } else { 0.0 });
+                    if direction.iter().all(|&d| d == 0.0) {
+                        direction[rng.below(M)] = 1.0;
+                    }
+                    direction
+                })
+                .collect()
+        };
+        let scales = [
+            1.0, 3.0, 0.1, 1e-50, 1e-58, 1e-70, 1e-160, 1e55, 1e62, 1e150, 1e200,
+        ];
+        for direction in &mut directions {
+            let scale = if rng.below(3) == 0 {
+                scales[rng.below(scales.len())]
+            } else {
+                1.0
+            };
+            for d in direction.iter_mut() {
+                *d *= scale;
+            }
+        }
+        directions
+    }
+
+    // a point: random, or near a tie between two directions (on the bisector of the angle
+    // between them), or near a direction
+    fn point<const M: usize>(directions: &[[f64; M]], rng: &mut StreamRng) -> [f64; M] {
+        let unit = |direction: &[f64; M]| {
+            let length = direction.iter().map(|d| d * d).sum::<f64>().sqrt();
+            direction.map(|d| d / length)
+        };
+        let a = unit(&directions[rng.below(directions.len())]);
+        let b = unit(&directions[rng.below(directions.len())]);
+        let scale = [1.0, 0.3, 2.0, 1e-5, 1e-58, 1e5][rng.below(6)];
+        let point: [f64; M] = match rng.below(4) {
+            0 => std::array::from_fn(|_| coordinate(rng)),
+            1 => [coordinate(rng); M],
+            2 => std::array::from_fn(|j| (a[j] + b[j]) * scale),
+            _ => a.map(|x| x * scale),
+        };
+        point.map(|x| nudge(x, rng))
+    }
+
+    fn check_association<const M: usize>(seed: u64) {
+        let mut rng = StreamRng::seed_from_u64(seed);
+        for _ in 0..100 {
+            let reference = directions::<M>(&mut rng);
+            let nsga3 = Nsga3::builder(
+                Real::uniform(2, 0.0..=1.0).unwrap(),
+                [Minimize; M],
+                reference.clone(),
+            )
+            .crossover(SimulatedBinaryCrossover::new(30.0).unwrap())
+            .mutate(PolynomialMutation::per_gene(0.5, 20.0).unwrap())
+            .build()
+            .unwrap();
+            let lengths = nsga3.lengths();
+            for _ in 0..200 {
+                let point = point(&reference, &mut rng);
+                // mostly the identity: `point` is the normalized point, bit for bit
+                let (ideal, nadir) = if rng.below(4) == 0 {
+                    let ideal: [f64; M] = std::array::from_fn(|_| rng.random_range(-1.0..0.0));
+                    // a range of 0 sometimes
+                    let nadir = ideal.map(|i| i + [0.0, 0.5, 3.0][rng.below(3)]);
+                    (ideal, nadir)
+                } else {
+                    ([0.0; M], [1.0; M])
+                };
+                let (index, distance) = nsga3.associate(&point, &ideal, &nadir, &lengths);
+                let (exact_index, exact_distance) =
+                    exact_association(&reference, &point, &ideal, &nadir, &lengths);
+                assert_eq!(index, exact_index, "{point:?} {reference:?}");
+                assert_eq!(
+                    distance.to_bits(),
+                    exact_distance.to_bits(),
+                    "{point:?} {reference:?}"
+                );
+            }
+        }
+    }
+
+    // the lower bound skips directions without changing the association
+    #[test]
+    fn association_as_without_the_bound() {
+        check_association::<1>(1);
+        check_association::<2>(2);
+        check_association::<3>(3);
+        check_association::<4>(4);
+        check_association::<6>(6);
+        check_association::<10>(10);
     }
 
     #[test]
