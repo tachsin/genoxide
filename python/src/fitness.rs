@@ -7,6 +7,11 @@
 //! first exception is kept, the abort flag is set, and the genomes left get an invalid fitness
 //! without a call. The run raises the exception when it returns.
 //!
+//! Python runs signal handlers on the main thread only, the one that called `run` and runs the
+//! engine. A parallel run's function runs on rayon's threads while that thread checks for Ctrl+C
+//! every `SIGNAL_CHECK`, so Ctrl+C stops the run after the calls under way, not after the
+//! generation.
+//!
 //! A batch function's matrix is reused: after a call, the run keeps it, and the next batch of as
 //! many genomes gets it back with its genomes written into it, if its reference count shows that
 //! Python kept no reference to it (a function that keeps it gets a new matrix next time, and what
@@ -26,8 +31,14 @@ use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
+use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
+
+// how often the thread that called `run` checks for Ctrl+C while a parallel run's calls go on
+const SIGNAL_CHECK: Duration = Duration::from_millis(50);
 
 /// The fitness function and progress callback of a run, and what went wrong in them.
 pub struct Shared {
@@ -66,14 +77,6 @@ impl Shared {
 
     fn aborted(&self) -> bool {
         self.abort.load(Ordering::Relaxed)
-    }
-
-    // whether the engine hands the function a generation at a time (`evaluate_batch`): a batch
-    // function, and a function of one genome called on the engine's thread, which attaches to
-    // Python once per generation rather than once per genome. The genomes, their order and the
-    // calls are the same either way.
-    fn by_generation(&self) -> bool {
-        self.batch || !self.parallel
     }
 
     // keeps the first error and stops the run
@@ -220,6 +223,52 @@ impl Shared {
             *self.matrix.lock().unwrap_or_else(PoisonError::into_inner) = Some(matrix.unbind());
         }
         result
+    }
+
+    // a generation's values from the function of one genome: called on this thread, the engine's,
+    // attached to Python once; or with `parallel`, on rayon's threads, while this thread checks
+    // for Ctrl+C. `invalid` for a genome not called, after an error or Ctrl+C.
+    fn call_genomes<G: Genes, T: Copy + Send + Sync>(
+        &self,
+        genomes: &[&G],
+        convert: for<'py> fn(&Bound<'py, PyAny>) -> PyResult<T>,
+        invalid: T,
+    ) -> Vec<T> {
+        if !self.parallel {
+            return Python::attach(|py| {
+                genomes
+                    .iter()
+                    .map(|genome| self.call_genome(py, *genome, convert).unwrap_or(invalid))
+                    .collect()
+            });
+        }
+        std::thread::scope(|scope| {
+            let (done, finished) = mpsc::channel();
+            let calls = scope.spawn(move || {
+                // in order, whatever the thread count
+                let values: Vec<T> = genomes
+                    .par_iter()
+                    .map(|genome| {
+                        Python::attach(|py| self.call_genome(py, *genome, convert))
+                            .unwrap_or(invalid)
+                    })
+                    .collect();
+                let _ = done.send(());
+                values
+            });
+            // until the calls are done: Ctrl+C sets the abort flag, and the calls not yet started
+            // are skipped
+            while let Err(RecvTimeoutError::Timeout) = finished.recv_timeout(SIGNAL_CHECK) {
+                Python::attach(|py| {
+                    if let Err(error) = py.check_signals() {
+                        self.fail(error);
+                    }
+                });
+            }
+            calls
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+        })
     }
 }
 
@@ -374,8 +423,10 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
         Python::attach(|py| shared.call_genome(py, genome, value)).unwrap_or(Value::Invalid)
     }
 
+    // a Python function gets a generation at a time (`Shared::call_genomes`); a test problem is
+    // evaluated a genome at a time, by the engine, in parallel if asked
     fn is_batch(&self) -> bool {
-        self.shared.by_generation() && self.problem.is_none()
+        self.problem.is_none()
     }
 
     fn evaluate_batch(&self, genomes: &[&G]) -> Vec<Value> {
@@ -390,17 +441,10 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
         if shared.aborted() || genomes.is_empty() {
             return vec![Value::Invalid; genomes.len()];
         }
+        if !shared.batch {
+            return shared.call_genomes(genomes, value, Value::Invalid);
+        }
         Python::attach(|py| {
-            if !shared.batch {
-                return genomes
-                    .iter()
-                    .map(|genome| {
-                        shared
-                            .call_genome(py, *genome, value)
-                            .unwrap_or(Value::Invalid)
-                    })
-                    .collect();
-            }
             shared
                 .call_batch(py, genomes, |result| values(result, genomes.len()))
                 .unwrap_or_else(|| vec![Value::Invalid; genomes.len()])
@@ -534,8 +578,9 @@ impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
             .unwrap_or(MultiValue::Invalid)
     }
 
+    // as for `Single`
     fn is_batch(&self) -> bool {
-        self.shared.by_generation() && self.problem.is_none()
+        self.problem.is_none()
     }
 
     fn evaluate_batch(&self, genomes: &[&G]) -> Vec<MultiValue<M>> {
@@ -550,17 +595,10 @@ impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
         if shared.aborted() || genomes.is_empty() {
             return vec![MultiValue::Invalid; genomes.len()];
         }
+        if !shared.batch {
+            return shared.call_genomes(genomes, multi_value::<M>, MultiValue::Invalid);
+        }
         Python::attach(|py| {
-            if !shared.batch {
-                return genomes
-                    .iter()
-                    .map(|genome| {
-                        shared
-                            .call_genome(py, *genome, multi_value)
-                            .unwrap_or(MultiValue::Invalid)
-                    })
-                    .collect();
-            }
             shared
                 .call_batch(py, genomes, |result| multi_values(result, genomes.len()))
                 .unwrap_or_else(|| vec![MultiValue::Invalid; genomes.len()])

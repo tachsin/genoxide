@@ -98,7 +98,7 @@ It's one call per generation, and none for a generation whose children are all c
 
 With `parallel=True`, genoxide calls a non-batch function from several threads at once. It pays off when the function releases the GIL (numpy on large arrays, waiting for I/O), or on free-threaded Python.
 
-An exception in the fitness function stops the run, and `run` raises it. So does Ctrl+C.
+An exception in the fitness function stops the run, and `run` raises it. So does Ctrl+C: with `parallel=True`, once the calls under way return, without starting the others.
 
 ## Choosing an algorithm
 
