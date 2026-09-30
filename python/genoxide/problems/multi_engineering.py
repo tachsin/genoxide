@@ -41,7 +41,7 @@ from typing import Any, ClassVar
 
 import numpy as np
 
-from .. import _genoxide
+from .. import Real, _genoxide
 from . import MultiProblem
 
 __all__ = [
@@ -57,7 +57,7 @@ __all__ = [
 ]
 
 
-class _Mixed(MultiProblem):
+class _Mixed(MultiProblem[Real]):
     """A problem whose genome rounds its discrete genes."""
 
     def design(self, genome: Any) -> np.ndarray:
@@ -75,7 +75,7 @@ class _Mixed(MultiProblem):
 
 
 @dataclass(frozen=True)
-class TwoBarTruss(MultiProblem):
+class TwoBarTruss(MultiProblem[Real]):
     """The two-bar truss: the lightest truss of two bars that carries 100 kN, and the one whose
     bars are least stressed.
 
@@ -100,7 +100,7 @@ class TwoBarTruss(MultiProblem):
 
 
 @dataclass(frozen=True)
-class WeldedBeam(MultiProblem):
+class WeldedBeam(MultiProblem[Real]):
     """The welded beam with two objectives: the cheapest beam welded to a support that carries
     6000 lb at 14 in, and the one whose end deflects least.
 
@@ -173,7 +173,7 @@ class SpeedReducer(_Mixed):
 
 
 @dataclass(frozen=True)
-class FourBarTruss(MultiProblem):
+class FourBarTruss(MultiProblem[Real]):
     """The four-bar truss: the truss of four bars with the least volume, and the one whose loaded
     joint moves least.
 
@@ -196,7 +196,7 @@ class FourBarTruss(MultiProblem):
 
 
 @dataclass(frozen=True)
-class CarSideImpact(MultiProblem):
+class CarSideImpact(MultiProblem[Real]):
     """The car side impact with three objectives: the car's weight, the pubic force a passenger
     feels, and the mean velocity of the B-pillar and the front door.
 
@@ -215,7 +215,7 @@ class CarSideImpact(MultiProblem):
 
 
 @dataclass(frozen=True)
-class RocketInjector(MultiProblem):
+class RocketInjector(MultiProblem[Real]):
     """The rocket injector: the design of a single-element hydrogen-oxygen injector, through
     response surfaces fitted to CFD simulations.
 
@@ -234,7 +234,7 @@ class RocketInjector(MultiProblem):
 
 
 @dataclass(frozen=True)
-class VehicleCrashworthiness(MultiProblem):
+class VehicleCrashworthiness(MultiProblem[Real]):
     """Vehicle crashworthiness: the lightest car front that best protects its occupants in frontal
     crashes, through response surfaces fitted to crash simulations.
 
@@ -253,7 +253,7 @@ class VehicleCrashworthiness(MultiProblem):
 
 
 @dataclass(frozen=True)
-class WaterResourcePlanning(MultiProblem):
+class WaterResourcePlanning(MultiProblem[Real]):
     """Water resource planning (WATER): a storm drainage system with five costs and losses to
     minimize under seven constraints.
 
