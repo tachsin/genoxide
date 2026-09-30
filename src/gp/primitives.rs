@@ -36,6 +36,7 @@ impl Type {
 /// assert!(Constants::uniform(-1.0..=1.0).is_ok());
 /// assert!(Constants::integers(-5..=5).is_ok());
 /// assert!(Constants::choice([0.5, 1.0, 2.0]).is_ok());
+/// assert!(Constants::normal(0.0, 5.0).is_ok());
 /// assert!(Constants::uniform(1.0..=0.0).is_err());
 /// assert!(Constants::choice([]).is_err());
 /// ```
@@ -58,6 +59,13 @@ pub enum Constants {
     },
     /// One of the values, each with the same probability.
     Choice(Vec<f64>),
+    /// Normal, of this mean and standard deviation: any finite value.
+    Normal {
+        /// The mean.
+        mean: f64,
+        /// The standard deviation.
+        deviation: f64,
+    },
 }
 
 // the largest integer constant: every integer up to it is an exact `f64`
@@ -115,6 +123,27 @@ impl Constants {
         Ok(Constants::Choice(values))
     }
 
+    /// Values normal with this `mean` and standard `deviation`, e.g. Keijzer's (2003) constants,
+    /// N(0, 5): any finite value, with the mean finite and the deviation positive and finite.
+    /// A draw that isn't finite (beyond ±1.8 × 10^308) is drawn again.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for a mean that isn't finite, or a deviation that isn't positive
+    /// and finite.
+    pub fn normal(mean: f64, deviation: f64) -> Result<Self> {
+        if !(mean.is_finite() && deviation > 0.0 && deviation.is_finite()) {
+            return Err(Error::InvalidSetting {
+                setting: "constants",
+                reason: format!(
+                    "the mean must be finite and the deviation positive and finite, got {mean} \
+                     and {deviation}"
+                ),
+            });
+        }
+        Ok(Constants::Normal { mean, deviation })
+    }
+
     /// A random value.
     pub fn sample(&self, rng: &mut StreamRng) -> f64 {
         match self {
@@ -128,6 +157,12 @@ impl Constants {
                 (low + rng.below_u64(width) as i64) as f64
             }
             Constants::Choice(values) => values[rng.below(values.len())],
+            Constants::Normal { mean, deviation } => loop {
+                let value = mean + deviation * rng.normal();
+                if value.is_finite() {
+                    break value;
+                }
+            },
         }
     }
 
@@ -139,6 +174,7 @@ impl Constants {
                 value.fract() == 0.0 && (*low as f64..=*high as f64).contains(&value)
             }
             Constants::Choice(values) => values.iter().any(|v| v.to_bits() == value.to_bits()),
+            Constants::Normal { .. } => value.is_finite(),
         }
     }
 
@@ -148,6 +184,7 @@ impl Constants {
             Constants::Uniform { low, high } => low < high || value.to_bits() != low.to_bits(),
             Constants::Integers { low, high } => low < high || value != *low as f64,
             Constants::Choice(values) => values.iter().any(|v| v.to_bits() != value.to_bits()),
+            Constants::Normal { .. } => true,
         }
     }
 
@@ -169,6 +206,12 @@ impl Constants {
                     .nth(rng.below(count))
                     .expect("another value")
             }
+            Constants::Normal { .. } => loop {
+                let other = self.sample(rng);
+                if other.to_bits() != value.to_bits() {
+                    break other;
+                }
+            },
             // a single value, other than `value`
             _ => self.sample(rng),
         }
@@ -181,6 +224,7 @@ impl Constants {
             Constants::Uniform { low, high } => Constants::uniform(low..=high),
             Constants::Integers { low, high } => Constants::integers(low..=high),
             Constants::Choice(values) => Constants::choice(values),
+            Constants::Normal { mean, deviation } => Constants::normal(mean, deviation),
         }
     }
 }
@@ -867,11 +911,13 @@ impl<'de> serde::Deserialize<'de> for Constants {
             Uniform { low: f64, high: f64 },
             Integers { low: i64, high: i64 },
             Choice(Vec<f64>),
+            Normal { mean: f64, deviation: f64 },
         }
         let constants = match Raw::deserialize(deserializer)? {
             Raw::Uniform { low, high } => Constants::Uniform { low, high },
             Raw::Integers { low, high } => Constants::Integers { low, high },
             Raw::Choice(values) => Constants::Choice(values),
+            Raw::Normal { mean, deviation } => Constants::Normal { mean, deviation },
         };
         constants.checked().map_err(serde::de::Error::custom)
     }

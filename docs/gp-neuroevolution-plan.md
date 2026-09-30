@@ -916,6 +916,16 @@ printed. For Boolean problems, all cases correct.
 | N1 | `xor_neat`, in a `family: xor` with the existing `xor_neuroevolution` (fixed topology), the paper's success criterion |
 | N2 | NEAT added to the three pole-balancing pages (as the Rastrigin page shows two methods) |
 
+**G4's outcome (2026-09-30).** With linear scaling, Keijzer's set (add, mul, inv, neg, sqrt) and
+normal constants N(0, 5), and the Nguyen pages' search with constant mutation added, 20 runs each:
+Keijzer-12 recovered in 3 (3 again with 500 generations) and Keijzer-14 in 4 on both the training
+points and the test grid of step 0.01 across [−3, 3]². Keijzer-14 fit its training points in 15 of the 20 runs, but 11 of those built
+their constants as x · (1/x), which isn't finite at x = 0 on the test grid. Keijzer-15 and Pagie-1
+weren't recovered in 5 runs each; Keijzer-8 (√x) and Vladislavleva-6 (6 sin x cos y) were, from
+the first generations, too easily for pages of their own. No problem of G4 reached exact recovery
+reliably, so, by the rule of section 3.3, none was added: they wait for constant fitting in 0.15,
+with `Constants::normal` and `Math::Inv`, which G4 added for them.
+
 Per batch, AGENTS.md gains the rows and a template (a GP and a NEAT program, doctested),
 `docs/features.md` and README's "What's in it" the features, the Python README the classes.
 

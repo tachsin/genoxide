@@ -96,6 +96,8 @@ pub enum Math {
     Aq,
     /// −a.
     Neg,
+    /// 1 / a: ±∞ at ±0, making the tree invalid.
+    Inv,
     /// a².
     Square,
     /// a³.
@@ -126,13 +128,14 @@ pub enum Math {
 
 impl Math {
     /// The functions, in the order of the enum: every variant but [`Variable`](Math::Variable).
-    pub const FUNCTIONS: [Math; 18] = [
+    pub const FUNCTIONS: [Math; 19] = [
         Math::Add,
         Math::Sub,
         Math::Mul,
         Math::Div,
         Math::Aq,
         Math::Neg,
+        Math::Inv,
         Math::Square,
         Math::Cube,
         Math::Sin,
@@ -157,6 +160,7 @@ impl Math {
             Math::Div => "div",
             Math::Aq => "aq",
             Math::Neg => "neg",
+            Math::Inv => "inv",
             Math::Square => "square",
             Math::Cube => "cube",
             Math::Sin => "sin",
@@ -217,6 +221,7 @@ impl Math {
             Math::Aq => binary_columns(args, output, aq),
             Math::ProtectedDiv => binary_columns(args, output, protected_div),
             Math::Neg => unary_columns(args, output, |a| -a),
+            Math::Inv => unary_columns(args, output, |a| 1.0 / a),
             Math::Square => unary_columns(args, output, |a| a * a),
             Math::Cube => unary_columns(args, output, |a| a * a * a),
             Math::Sin => unary_columns(args, output, math::sin),
@@ -250,6 +255,7 @@ impl Math {
     fn unary(self, a: f64) -> f64 {
         match self {
             Math::Neg => -a,
+            Math::Inv => 1.0 / a,
             Math::Square => a * a,
             Math::Cube => a * a * a,
             Math::Sin => math::sin(a),
@@ -895,6 +901,8 @@ mod tests {
         assert_eq!(at(Math::Cube, -2.0, 0.0), -8.0);
         assert_eq!(at(Math::Square, -3.0, 0.0), 9.0);
         assert_eq!(at(Math::Neg, 3.0, 0.0), -3.0);
+        assert_eq!(at(Math::Inv, 4.0, 0.0), 0.25);
+        assert_eq!(at(Math::Inv, 0.0, 0.0), f64::INFINITY);
         assert_eq!(at(Math::Abs, -3.0, 0.0), 3.0);
         for f in Math::FUNCTIONS {
             assert!(matches!(f.arity(), 1 | 2));
