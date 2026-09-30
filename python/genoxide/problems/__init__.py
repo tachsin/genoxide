@@ -394,7 +394,7 @@ class _Scalable(Problem):
 
     def _describe(self) -> dict[str, Any]:
         name = f"{type(self).__name__}.dimensions"
-        dimensions = _whole(name, self.dimensions, minimum=self._minimum)
+        dimensions = _whole(name, self.dimensions, minimum=self._minimum, maximum=2**24)
         return {"type": self._type, "dimensions": dimensions}
 
 
@@ -860,7 +860,7 @@ class _Sized(MultiProblem):
 
     def _describe(self) -> dict[str, Any]:
         name = f"{type(self).__name__}.variables"
-        variables = _whole(name, self.variables, minimum=self._minimum)
+        variables = _whole(name, self.variables, minimum=self._minimum, maximum=2**24)
         return {"type": self._type, "variables": variables}
 
 
@@ -982,7 +982,7 @@ class _Dtlz(MultiProblem):
             raise ValueError(f"{name}.objectives is at most 6, not {objectives}")
         variables = self.variables
         if variables is not None:
-            variables = _whole(f"{name}.variables", variables, minimum=objectives)
+            variables = _whole(f"{name}.variables", variables, minimum=objectives, maximum=2**24)
         return {"type": self._type, "objectives": objectives, "variables": variables}
 
 
@@ -1856,7 +1856,7 @@ class _ConstrainedDtlz(MultiProblem):
             raise ValueError(f"{name}.objectives is at most 6, not {objectives}")
         variables = self.variables
         if variables is not None:
-            variables = _whole(f"{name}.variables", variables, minimum=objectives)
+            variables = _whole(f"{name}.variables", variables, minimum=objectives, maximum=2**24)
         return {"type": self._type, "objectives": objectives, "variables": variables}
 
 
@@ -2009,7 +2009,9 @@ class _ScalableMw(MultiProblem):
             raise ValueError(f"{name}.objectives is at most 6, not {objectives}")
         variables = self.variables
         if variables is not None:
-            variables = _whole(f"{name}.variables", variables, minimum=objectives + 1)
+            variables = _whole(
+                f"{name}.variables", variables, minimum=objectives + 1, maximum=2**24
+            )
         return {"type": self._type, "objectives": objectives, "variables": variables}
 
 

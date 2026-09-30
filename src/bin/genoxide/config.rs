@@ -80,15 +80,23 @@ impl<'de, T: Deserialize<'de> + Bound> Deserialize<'de> for Bounds<T> {
 }
 
 impl<T: Copy> Bounds<T> {
-    // the bounds of each gene
-    pub fn per_gene(&self, length: Option<usize>) -> Result<Vec<[T; 2]>, String> {
+    // the bounds of each gene, made as they are read: `Real` and `Integer` reject too many genes
+    // before they are collected
+    pub fn per_gene(
+        &self,
+        length: Option<usize>,
+    ) -> Result<Box<dyn Iterator<Item = [T; 2]> + '_>, String> {
         match (self, length) {
-            (Bounds::Same(bounds), Some(length)) => Ok(vec![*bounds; length]),
+            (Bounds::Same(bounds), Some(length)) => {
+                Ok(Box::new(std::iter::repeat_n(*bounds, length)))
+            }
             (Bounds::Same(_), None) => {
                 Err("`genome.length` is needed with one pair of bounds for every gene".to_string())
             }
-            (Bounds::PerGene(bounds), None) => Ok(bounds.clone()),
-            (Bounds::PerGene(bounds), Some(length)) if bounds.len() == length => Ok(bounds.clone()),
+            (Bounds::PerGene(bounds), None) => Ok(Box::new(bounds.iter().copied())),
+            (Bounds::PerGene(bounds), Some(length)) if bounds.len() == length => {
+                Ok(Box::new(bounds.iter().copied()))
+            }
             (Bounds::PerGene(bounds), Some(length)) => Err(format!(
                 "`genome.length` is {length}, but there are bounds for {} genes",
                 bounds.len()

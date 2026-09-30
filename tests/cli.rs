@@ -418,6 +418,21 @@ fn run_files_are_checked() {
         &CMAES.replace("builtin = \"sphere\"", "builtin = \"nope\""),
         "no built-in fitness `nope`",
     );
+    // lengths above 2^24 are an error, not a failed allocation
+    for kind in ["real", "integer"] {
+        let text = CMAES
+            .replace("type = \"real\"", &format!("type = \"{kind}\""))
+            .replace("bounds = [-5.0, 5.0]", "bounds = [-5, 5]")
+            .replace("type = \"cmaes\"", "type = \"de\"");
+        expect(
+            &text.replace("length = 5", "length = 1099511627776"),
+            "at most 16777216 (2^24) genes, got 1099511627776",
+        );
+        expect(
+            &text.replace("length = 5", "length = 33554432"),
+            "at most 16777216 (2^24) genes",
+        );
+    }
     // bounds of the wrong kind say what bounds are
     expect(
         &CMAES.replace("bounds = [-5.0, 5.0]", "bounds = [\"a\", 5.0]"),

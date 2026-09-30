@@ -238,7 +238,8 @@ def _bounds(
     """One ``[low, high]`` per gene, from one pair for every gene (with ``length``) or a pair per
     gene. ``cast`` checks each bound, with the setting's name."""
     if length is not None:
-        length = _whole(f"{name}.length", length)
+        # at most 2^24 genes, checked before the list is made
+        length = _whole(f"{name}.length", length, maximum=2**24)
     pairs = np.asarray(bounds, dtype=object)
     bound = f"{name}.bounds"
     if pairs.ndim == 1 and len(pairs) == 2:
