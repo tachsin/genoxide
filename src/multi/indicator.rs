@@ -172,6 +172,13 @@ pub fn hypervolume_contributions<const M: usize>(
     objectives: &[Objective; M],
 ) -> Vec<f64> {
     let reference = minimized(reference, objectives);
+    if M == 2 || M == 3 {
+        let points = front
+            .iter()
+            .map(|point| minimized(point, objectives))
+            .collect();
+        return Shrinking::new(points, reference).contributions().to_vec();
+    }
     let inside: Vec<usize> = (0..front.len())
         .filter(|&i| {
             minimized(&front[i], objectives)
@@ -191,6 +198,117 @@ pub fn hypervolume_contributions<const M: usize>(
         }
     }
     contributions
+}
+
+/// The exclusive hypervolume contributions of the points of a front of 2 or 3 minimized
+/// objectives, as [`hypervolume_contributions`] gives them, kept up to date as points are removed:
+/// SMS-EMOA removes the smallest contributor again and again. The points are sorted once, and a
+/// removed point leaves the sorted order: a stable sort of the points left would give the same
+/// order, so each contribution is the same to the bit, every sum being taken in the same order,
+/// without a sort or an allocation per removal.
+pub(crate) struct Shrinking<const M: usize> {
+    points: Vec<[f64; M]>,
+    reference: [f64; M],
+    // the points left that dominate the reference point, by the first objective and then the
+    // second for 2 objectives, by the third for 3; ties in the order of `points`
+    order: Vec<usize>,
+    // 2 objectives: the points of `order`
+    sorted: Vec<[f64; 2]>,
+    // 3 objectives: the points below the current slab, sorted in the first two objectives, and
+    // their indices
+    below: Vec<[f64; 2]>,
+    members: Vec<usize>,
+    slab: Vec<f64>,
+    // by index into `points`; 0 for a point removed or outside the reference point
+    contributions: Vec<f64>,
+}
+
+impl<const M: usize> Shrinking<M> {
+    // M is 2 or 3
+    pub(crate) fn new(points: Vec<[f64; M]>, reference: [f64; M]) -> Self {
+        debug_assert!(M == 2 || M == 3);
+        let mut order: Vec<usize> = (0..points.len())
+            .filter(|&i| points[i].iter().zip(&reference).all(|(x, r)| x < r))
+            .collect();
+        // stable: equal points keep their order, as in `contributions_of`
+        if M == 2 {
+            order.sort_by(|&a, &b| {
+                lexicographic(&[points[a][0], points[a][1]], &[points[b][0], points[b][1]])
+            });
+        } else {
+            order.sort_by(|&a, &b| points[a][2].total_cmp(&points[b][2]));
+        }
+        let sorted = if M == 2 {
+            order
+                .iter()
+                .map(|&i| [points[i][0], points[i][1]])
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let n = order.len();
+        Self {
+            contributions: vec![0.0; points.len()],
+            points,
+            reference,
+            order,
+            sorted,
+            below: Vec::with_capacity(n),
+            members: Vec::with_capacity(n),
+            slab: vec![0.0; n],
+        }
+    }
+
+    /// The contribution of each point, by its index; 0 for a removed point.
+    pub(crate) fn contributions(&mut self) -> &[f64] {
+        self.contributions.fill(0.0);
+        let reference = [self.reference[0], self.reference[1]];
+        if M == 2 {
+            let slab = &mut self.slab[..self.order.len()];
+            staircase_contributions(&self.sorted, reference, slab);
+            for (&i, &contribution) in self.order.iter().zip(slab.iter()) {
+                self.contributions[i] = contribution;
+            }
+            return &self.contributions;
+        }
+        // slabs along the third objective, as `contributions_of` takes them
+        self.below.clear();
+        self.members.clear();
+        for (position, &i) in self.order.iter().enumerate() {
+            let point = [self.points[i][0], self.points[i][1]];
+            let at = self
+                .below
+                .partition_point(|other| lexicographic(other, &point).is_le());
+            self.below.insert(at, point);
+            self.members.insert(at, i);
+            let top = self
+                .order
+                .get(position + 1)
+                .map_or(self.reference[2], |&next| self.points[next][2]);
+            let thickness = top - self.points[i][2];
+            if thickness > 0.0 {
+                let slab = &mut self.slab[..self.below.len()];
+                staircase_contributions(&self.below, reference, slab);
+                for (&member, &contribution) in self.members.iter().zip(slab.iter()) {
+                    // a zero contribution adds nothing, even to an infinite slab
+                    if contribution > 0.0 {
+                        self.contributions[member] += thickness * contribution;
+                    }
+                }
+            }
+        }
+        &self.contributions
+    }
+
+    /// Removes the point at `index`.
+    pub(crate) fn remove(&mut self, index: usize) {
+        if let Some(position) = self.order.iter().position(|&i| i == index) {
+            self.order.remove(position);
+            if M == 2 {
+                self.sorted.remove(position);
+            }
+        }
+    }
 }
 
 // the exclusive contributions of minimized points that all dominate the reference point
@@ -751,7 +869,97 @@ mod tests {
         hypervolume(front, &[reference; M], &[Minimize; M]).to_bits() == expected.to_bits()
     }
 
+    // removes the points of `front` in the order of `removals` (indices into the points left), and
+    // checks after each removal that `Shrinking` gives every point left the contribution that
+    // `contributions_of` gives it from scratch, as SMS-EMOA computed it before, to the bit
+    fn shrinks_as_from_scratch<const M: usize>(
+        front: &[[f64; M]],
+        removals: &[usize],
+    ) -> Result<(), TestCaseError> {
+        let reference = [4.0; M];
+        let mut shrinking = Shrinking::new(front.to_vec(), reference);
+        let mut left: Vec<usize> = (0..front.len()).collect();
+        let mut removals = removals.iter();
+        loop {
+            let inside: Vec<usize> = left
+                .iter()
+                .copied()
+                .filter(|&i| front[i].iter().zip(&reference).all(|(x, r)| x < r))
+                .collect();
+            let points: Vec<Vec<f64>> = inside.iter().map(|&i| front[i].to_vec()).collect();
+            let mut expected = vec![0.0; front.len()];
+            if !points.is_empty() {
+                for (&i, contribution) in inside.iter().zip(contributions_of(&points, &reference)) {
+                    expected[i] = contribution;
+                }
+            }
+            let got = shrinking.contributions();
+            for &i in &left {
+                prop_assert_eq!(
+                    got[i].to_bits(),
+                    expected[i].to_bits(),
+                    "point {} of {:?}",
+                    i,
+                    front
+                );
+            }
+            match removals.next() {
+                Some(&removal) if !left.is_empty() => {
+                    shrinking.remove(left.remove(removal % left.len()));
+                }
+                _ => return Ok(()),
+            }
+        }
+    }
+
+    // values with ties, and infinities and NaN, which lie outside the reference point or beyond
+    // the ideal one
+    fn any_value() -> impl Strategy<Value = f64> {
+        prop_oneof![
+            8 => (0..8).prop_map(|v| f64::from(v) / 2.0),
+            8 => 0.0..4.0,
+            1 => Just(f64::NEG_INFINITY),
+            1 => Just(f64::INFINITY),
+            1 => Just(f64::NAN),
+        ]
+    }
+
+    #[test]
+    fn contributions_of_2_and_3_objectives_are_as_before() {
+        // the public function, now through `Shrinking`, on the doc example and a 3-objective one
+        let two = [[1.0, 3.0], [2.0, 2.0], [3.0, 1.0], [3.0, 3.0]];
+        let three = [
+            [1.0, 2.0, 3.0],
+            [2.0, 1.0, 2.0],
+            [1.0, 2.0, 3.0],
+            [3.0, 3.0, 1.0],
+        ];
+        for (got, expected) in [
+            (
+                hypervolume_contributions(&two, &[4.0; 2], &[Minimize; 2]),
+                contributions_of(&two.map(|p| p.to_vec()), &[4.0; 2]),
+            ),
+            (
+                hypervolume_contributions(&three, &[4.0; 3], &[Minimize; 3]),
+                contributions_of(&three.map(|p| p.to_vec()), &[4.0; 3]),
+            ),
+        ] {
+            let bits = |values: &[f64]| values.iter().map(|v| v.to_bits()).collect::<Vec<_>>();
+            assert_eq!(bits(&got), bits(&expected));
+        }
+    }
+
     proptest! {
+        #[test]
+        fn shrinking_contributions_are_the_ones_from_scratch_to_the_bit(
+            two in prop::collection::vec(prop::array::uniform::<_, 2>(any_value()), 0..40),
+            three in prop::collection::vec(prop::array::uniform::<_, 3>(any_value()), 0..25),
+            removals in prop::collection::vec(0usize..100, 0..40),
+        ) {
+            shrinks_as_from_scratch(&two, &removals)?;
+            shrinks_as_from_scratch(&three, &removals)?;
+        }
+
         #[test]
         fn hypervolume_is_the_sliced_one_to_the_bit(
             three in prop::collection::vec(prop::array::uniform::<_, 3>(prop_oneof![(0..6).prop_map(f64::from), 0.0..4.0]), 0..60),

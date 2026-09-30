@@ -527,6 +527,57 @@ where
     algorithm.tell(&scores).unwrap();
 }
 
+type ZdtSmsEmoa = SmsEmoa<Real, SimulatedBinaryCrossover, PolynomialMutation, 2>;
+type DtlzSmsEmoa = SmsEmoa<Real, SimulatedBinaryCrossover, PolynomialMutation, 3>;
+
+// SMS-EMOA after 50 generations, with a population of 100 and as many children, most of them in
+// the first front: a generation then removes up to 100 of the smallest hypervolume contributors
+fn evolved_sms_emoa<const M: usize, F>(
+    representation: Real,
+    problem: F,
+) -> SmsEmoa<Real, SimulatedBinaryCrossover, PolynomialMutation, M>
+where
+    F: MultiFitnessFunction<Reals, M, Output = [f64; M]> + Copy,
+{
+    let len = representation.bounds().len() as f64;
+    let mut sms_emoa = SmsEmoa::builder(representation, [Minimize; M])
+        .population_size(100)
+        .crossover(SimulatedBinaryCrossover::new(15.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / len, 20.0).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    for _ in 0..50 {
+        tell_multi(&mut sms_emoa, problem);
+    }
+    sms_emoa
+}
+
+fn evolved_sms_emoa_zdt1(len: usize) -> ZdtSmsEmoa {
+    evolved_sms_emoa(Real::uniform(len, 0.0..=1.0).unwrap(), Zdt1::new(len))
+}
+
+fn evolved_sms_emoa_dtlz2(len: usize) -> DtlzSmsEmoa {
+    let problem = Dtlz2::<3>::new(len);
+    evolved_sms_emoa(problem.representation(), problem)
+}
+
+// one generation of SMS-EMOA: breeding, evaluation, sorting, and the removal of the smallest
+// hypervolume contributors from the last front, one at a time
+#[library_benchmark]
+#[bench::zdt1_30(setup = evolved_sms_emoa_zdt1, args = (30))]
+fn sms_emoa_generation(mut sms_emoa: ZdtSmsEmoa) -> ZdtSmsEmoa {
+    tell_multi(&mut sms_emoa, Zdt1::new(30));
+    black_box(sms_emoa)
+}
+
+#[library_benchmark]
+#[bench::dtlz2_12(setup = evolved_sms_emoa_dtlz2, args = (12))]
+fn sms_emoa_generation_3_objectives(mut sms_emoa: DtlzSmsEmoa) -> DtlzSmsEmoa {
+    tell_multi(&mut sms_emoa, Dtlz2::<3>::new(12));
+    black_box(sms_emoa)
+}
+
 // the scores of `size` random points on and behind the positive eighth of the unit sphere
 fn sphere_scores(size: usize) -> Vec<multi::Scores<3>> {
     let problem = Dtlz2::<3>::new(12);
@@ -833,6 +884,8 @@ library_benchmark_group!(
         run_observed,
         nsga2_generation,
         nsga3_generation,
+        sms_emoa_generation,
+        sms_emoa_generation_3_objectives,
         non_dominated_sort,
         hypervolume,
         subtree_crossover,
