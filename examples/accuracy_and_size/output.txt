@@ -1,0 +1,32 @@
+Nguyen-7: ln(x + 1) + ln(x^2 + 1) from 20 points in [0, 2]
+NSGA-II, 1000 trees for 200 generations, minimizing the RMSE and the size
+
+the Pareto front after 201000 evaluations: 27 points
+ size      RMSE test RMSE  a + b * (expression), up to 25 nodes
+    1   2.15e-2   2.52e-2  -0.0667 + 1.4324 * (x)
+    3   2.15e-2   2.52e-2  -0.0667 + 1.4324 * (plog(exp(x)))
+    5   1.98e-2   2.47e-2  1.8355 + 0.6416 * (sub(x, exp(cos(x))))
+    6   1.36e-2   1.64e-2  0.0280 + 0.8741 * (mul(x, add(cos(x), x)))
+    7   7.44e-3   1.10e-2  -0.8709 + 1.2597 * (add(cos(cos(cos(cos(x)))), x))
+    8   6.63e-3   8.61e-3  -0.0338 - 1.2885 * (sub(sin(sin(x)), add(x, sin(x))))
+    9   6.35e-3   9.97e-3  0.3603 + 1.2770 * (add(x, plog(cos(sin(cos(cos(cos(x))))))))
+   10   2.39e-3   2.42e-2  1.0392 - 1.2709 * (sub(cos(sin(cos(cos(exp(sin(plog(x))))))), x))
+   13   1.95e-3   2.71e-3  -0.8051 + 1.5876 * (add(x, sin(pdiv(cos(cos(x)), add(pdiv(x, sin(x)), x)))))
+   14   1.73e-3   1.80e-3  -0.7760 + 1.5764 * (add(x, sin(sin(pdiv(cos(cos(x)), add(pdiv(x, sin(x)), x))))))
+   16   1.10e-3   1.27e-3  1.0307 + 0.5021 * (add(add(sub(x, exp(pdiv(sin(sin(x)), x))), cos(sin(cos(sin(x))))), x))
+   17   1.07e-3   1.49e-3  -0.6796 + 1.4806 * (add(pdiv(cos(cos(x)), add(pdiv(x, mul(cos(cos(pdiv(x, x))), x)), x)), x))
+   18   1.03e-3   1.14e-3  -0.6613 + 1.4773 * (add(x, sin(pdiv(cos(cos(x)), add(pdiv(x, mul(cos(cos(pdiv(x, x))), x)), x)))))
+   20   9.01e-4   1.49e-3  -0.6836 + 1.4878 * (add(pdiv(cos(cos(x)), add(pdiv(x, mul(cos(cos(cos(plog(cos(sin(sin(x))))))), x)), x)), x))
+   21   4.87e-4   1.23e-3  -0.6814 + 1.4846 * (add(pdiv(cos(cos(x)), add(pdiv(x, mul(cos(cos(cos(plog(cos(sin(sin(sin(x)))))))), x)), x)), x))
+   22   4.74e-4   1.16e-3  -0.6776 + 1.4828 * (add(pdiv(cos(cos(x)), add(pdiv(x, mul(cos(cos(cos(plog(cos(sin(cos(cos(sin(x))))))))), x)), x)), x))
+   24   4.68e-4   1.12e-3  -0.6772 + 1.4828 * (add(pdiv(cos(cos(x)), add(pdiv(x, mul(cos(cos(cos(mul(plog(cos(cos(cos(x)))), cos(sin(x)))))), x)), x)), x))
+   25   4.23e-4   6.70e-4  -0.6572 + 1.4752 * (add(sin(pdiv(cos(cos(x)), add(pdiv(x, mul(cos(cos(cos(mul(plog(cos(cos(x))), mul(cos(x), x))))), x)), x))), x))
+   26   4.23e-4   6.65e-4  
+   30   4.19e-4   1.20e-3  
+   31   3.96e-4   1.20e-3  
+   42   3.11e-4   2.20e-3  
+   44   2.92e-4   2.15e-3  
+   45   2.80e-4   2.09e-3  
+   48   2.78e-4   2.10e-3  
+   49   2.67e-4   2.25e-3  
+   50   1.09e-4   2.12e-3  

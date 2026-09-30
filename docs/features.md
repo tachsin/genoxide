@@ -119,6 +119,8 @@ cargo run --release --example double_pole         # a network balances two poles
 cargo run --release --example double_pole_no_velocities  # the same with a recurrent network, no velocities
 cargo run --release --example multiplexer_11      # Koza's 11-multiplexer, all 2048 cases, double tournament
 cargo run --release --example abs_typed           # strongly typed GP: |x| from a comparison and a conditional
+cargo run --release --example nguyen_all          # Nguyen's twelve regression problems, with and without linear scaling
+cargo run --release --example accuracy_and_size   # NSGA-II on trees: the front of error against size
 cargo run --release --example asynchronous        # a slow fitness function, asynchronous evaluation
 cargo run --release --manifest-path examples/gpu/Cargo.toml  # neuroevolution on the GPU, with wgpu
 python examples/tsp_berlin52/main.py              # the same in Python, for all but the last three
