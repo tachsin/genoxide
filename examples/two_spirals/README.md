@@ -82,4 +82,19 @@ the network's decision over the plane as it learns.
 The goal is every point classified. The run of `output.txt` reaches it after 135,744 evaluations,
 in 1,343 generations.
 
-RESULTS
+Over seeds 1 to 20, all 20 runs classified every point, after 165,413 evaluations on average (a
+median of 165,186, from 111,100 to 236,340) and 1,637 generations, about 35 seconds on 4 cores.
+
+For contrast, sep-CMA-ES (`Cmaes` with `cmaes::Covariance::Diagonal`, CMA-ES's variant for
+thousands of genes, with its default population of 4 + ⌊3 ln 2545⌋ = 27) from the same initial
+weights, with the same fitness and stop, and an initial step of 0.01 or 0.05 of the range, three
+seeds each: 5 of the 6 runs classified every point, after 251,829 to 435,375 evaluations; the
+sixth stopped at its budget of 1,080,000 evaluations with 193 points of 194. It works, at this size,
+but needs half again to twice the evaluations of `OpenEs` and learns only one variance per weight;
+full CMA-ES isn't practical here (its matrix alone has 6.5 million entries, updated every
+generation).
+
+Backpropagation, which Lang and Witbrock used, computes the gradient exactly from one pass over
+the points; `OpenEs` estimates it from about 100 evaluations per generation, each a pass over the
+points. That is the price of not needing gradients, and what lets the same method evolve
+controllers and other networks whose fitness has none, such as the pole-balancing pages'.
