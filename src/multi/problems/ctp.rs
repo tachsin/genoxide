@@ -44,26 +44,39 @@ fn violation(values: &[f64]) -> f64 {
 // ---- the constraint of CTP2-CTP8 -----------------------------------------------------------------
 
 // the constraint of the report's eq. 5, `cos θ (f₂ − e) − sin θ f₁ ≥ a |sin(bπ (sin θ (f₂ − e) +
-// cos θ f₁)^c)|^d`, with θ in multiples of π
+// cos θ f₁)^c)|^d`, with sin θ and cos θ computed once
 #[derive(Clone, Copy, Debug)]
 struct Wave {
-    theta: f64,
+    sin: f64,
+    cos: f64,
     a: f64,
     b: f64,
     c: i32,
-    d: f64,
+    d: Power,
     e: f64,
+}
+
+// the exponent d: a whole number takes a few multiplications, not the general `powf`
+#[derive(Clone, Copy, Debug)]
+enum Power {
+    Integer(i32),
+    Real(f64),
 }
 
 impl Wave {
     // sin θ and cos θ
     fn angle(&self) -> (f64, f64) {
-        (math::sin(self.theta * PI), math::cos(self.theta * PI))
+        (self.sin, self.cos)
     }
 
     // the right-hand side at v, the coordinate along the line (f₂ − e) cos θ = f₁ sin θ
     fn height(&self, v: f64) -> f64 {
-        self.a * math::powf(math::sin(self.b * PI * math::powi(v, self.c)).abs(), self.d)
+        let wave = math::sin(self.b * PI * math::powi(v, self.c)).abs();
+        self.a
+            * match self.d {
+                Power::Integer(d) => math::powi(wave, d),
+                Power::Real(d) => math::powf(wave, d),
+            }
     }
 
     // the constraint as g <= 0: the right-hand side minus the left-hand side, u, the coordinate
@@ -459,9 +472,13 @@ macro_rules! ctp {
 
         impl $name {
             /// The number of constraints.
-            pub const CONSTRAINTS: usize = [$($wave),+].len();
+            pub const CONSTRAINTS: usize = [$(stringify!($wave)),+].len();
 
-            const WAVES: [Wave; Self::CONSTRAINTS] = [$($wave),+];
+            // the constraints, built once
+            fn waves() -> &'static [Wave; Self::CONSTRAINTS] {
+                static WAVES: OnceLock<[Wave; $name::CONSTRAINTS]> = OnceLock::new();
+                WAVES.get_or_init(|| [$($wave),+])
+            }
 
             fn objectives(&self, x: &Reals) -> [f64; 2] {
                 let (f1, g) = (x[0], 1.0 + x[1]);
@@ -470,13 +487,13 @@ macro_rules! ctp {
 
             fn values(&self, x: &Reals) -> [f64; Self::CONSTRAINTS] {
                 let [f1, f2] = self.objectives(x);
-                Self::WAVES.map(|wave| wave.value(f1, f2))
+                Self::waves().map(|wave| wave.value(f1, f2))
             }
 
             // the optimal front, dense, computed once
             fn front() -> &'static [[f64; 2]] {
                 static FRONT: OnceLock<Vec<[f64; 2]>> = OnceLock::new();
-                FRONT.get_or_init(|| sampled_front(&Self::WAVES, 1.0 + $top))
+                FRONT.get_or_init(|| sampled_front(Self::waves(), 1.0 + $top))
             }
         }
 
@@ -535,9 +552,16 @@ macro_rules! ctp {
     };
 }
 
-const fn wave(theta: f64, a: f64, b: f64, c: i32, d: f64, e: f64) -> Wave {
+// the constraint with θ in multiples of π
+fn wave(theta: f64, a: f64, b: f64, c: i32, d: f64, e: f64) -> Wave {
+    let d = if d.fract() == 0.0 && d.abs() <= f64::from(i32::MAX) {
+        Power::Integer(d as i32)
+    } else {
+        Power::Real(d)
+    };
     Wave {
-        theta,
+        sin: math::sin(theta * PI),
+        cos: math::cos(theta * PI),
         a,
         b,
         c,
@@ -795,7 +819,7 @@ mod tests {
     // (f₂ − e) cos θ = f₁ sin θ, where the constraint's right-hand side is 0: v = k/b
     #[test]
     fn the_points_on_the_line_are_on_the_boundary() {
-        let wave = Ctp3::WAVES[0];
+        let wave = Ctp3::waves()[0];
         let slope = math::sin(0.2 * PI) / math::cos(0.2 * PI);
         for k in 0..=12 {
             let point = wave.on_line(k as f64 / 10.0);
@@ -882,9 +906,9 @@ mod tests {
         // CTP3's and CTP4's are the 13 points of the line, from (0, 1) to v = 1.2
         assert_eq!(Ctp3::front(), Ctp4::front());
         assert_eq!(Ctp3::front().len(), 13);
-        assert_eq!(Ctp3::front()[12], Ctp3::WAVES[0].on_line(1.2));
+        assert_eq!(Ctp3::front()[12], Ctp3::waves()[0].on_line(1.2));
         // CTP6's lies where 1 ≤ (f₂ − e) sin θ + f₁ cos θ ≤ 2, as the report says: 1.76 to 1.84
-        let (sin, cos) = Ctp6::WAVES[0].angle();
+        let (sin, cos) = Ctp6::waves()[0].angle();
         for [f1, f2] in Ctp6::front() {
             let v = sin * (f2 + 2.0) + cos * f1;
             assert!((1.76..1.845).contains(&v), "{v}");
@@ -894,7 +918,7 @@ mod tests {
             assert!((f2 - (1.0 - f1.sqrt())).abs() < 1e-12, "{f1}");
         }
         // CTP8's lie on CTP6's
-        let on_ctp6 = |p: &[f64; 2]| Ctp6::WAVES[0].value(p[0], p[1]).abs() < 1e-9;
+        let on_ctp6 = |p: &[f64; 2]| Ctp6::waves()[0].value(p[0], p[1]).abs() < 1e-9;
         assert!(Ctp8::front().iter().all(on_ctp6));
         // the ends
         let last = Ctp2::front()[Ctp2::front().len() - 1];
