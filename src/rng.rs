@@ -153,6 +153,10 @@ impl StreamRng {
     /// - Other chances draw one random number per index.
     ///
     /// `chosen` gets the generator back, to draw random numbers of its own.
+    // inline: into the mutation operators' loops, whichever codegen unit the compiler puts them
+    // in (without it, adding code elsewhere in the crate moved it out of reach, and Gaussian
+    // mutation took 10% more instructions)
+    #[inline]
     pub(crate) fn chosen(
         &mut self,
         chance: Chance,

@@ -35,7 +35,8 @@ impl Mode {
     }
 
     // calls `change` with the genes to change, out of `genes` candidates: each independently with
-    // the chance, or `count` of them
+    // the chance, or `count` of them. Inline, as `StreamRng::chosen`
+    #[inline]
     pub(crate) fn apply(
         self,
         genes: usize,
@@ -223,7 +224,8 @@ pub(crate) fn reflect(value: f64, range: &RangeInclusive<f64>) -> f64 {
 }
 
 // a new value for a gene in `range`, other than `current`: `propose` until it differs (almost
-// always the first time), then a uniform value
+// always the first time), then a uniform value. Inline, as `StreamRng::chosen`
+#[inline]
 pub(crate) fn changed_gene(
     range: &RangeInclusive<f64>,
     current: f64,
