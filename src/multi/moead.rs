@@ -1,6 +1,6 @@
 //! MOEA/D: multi-objective optimization by decomposition into single-objective subproblems.
 
-use super::breed::{Variation, distinct_into, scores_of};
+use super::breed::{Spares, Variation, distinct_into, scores_of};
 use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
@@ -142,6 +142,8 @@ pub struct Moead<R: Representation, C, X, const M: usize> {
     pending: Vec<usize>,
     front: Vec<Individual<R::Genome, Scores<M>>>,
     discarded: Vec<Individual<R::Genome, Scores<M>>>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    spares: Spares<R::Genome>,
     // the best feasible value of each objective so far, minimized
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     ideal: [f64; M],
@@ -251,20 +253,26 @@ where
                 (b, a)
             };
             let variation = &self.variation;
-            let mut first = self.population[a].genome().clone();
-            let mut second = self.population[b].genome().clone();
-            if self.rng.chance(variation.crossover_chance) {
+            let mut genome = if self.rng.chance(variation.crossover_chance) {
+                let mut first = self.spares.copy(self.population[a].genome());
+                let mut second = self.spares.copy(self.population[b].genome());
                 variation.crossover.crossover(
                     &variation.representation,
                     &mut first,
                     &mut second,
                     &mut self.rng,
                 );
-            }
-            let mut genome = if self.rng.below(2) == 0 {
-                first
+                let (child, other) = if self.rng.below(2) == 0 {
+                    (first, second)
+                } else {
+                    (second, first)
+                };
+                self.spares.keep(other);
+                child
             } else {
-                second
+                // a copy of one of the parents: only that one is copied
+                let parent = if self.rng.below(2) == 0 { a } else { b };
+                self.spares.copy(self.population[parent].genome())
             };
             if self.rng.chance(variation.mutation_chance) {
                 variation
@@ -314,7 +322,7 @@ where
 
     // the children replace the neighbors they improve on, in a random order
     fn replace(&mut self) {
-        let children = std::mem::take(&mut self.offspring);
+        let mut children = std::mem::take(&mut self.offspring);
         let size = self.population.len();
         let mut order: Vec<usize> = (0..size).collect();
         for i in (1..size).rev() {
@@ -352,7 +360,7 @@ where
                     || *values[neighbor].get_or_insert_with(|| self.value(&current, neighbor)),
                 );
                 if better {
-                    self.population[neighbor] = child.clone();
+                    self.population[neighbor].clone_from(child);
                     holders[neighbor] = Some(subproblem);
                     values[neighbor] = child_value;
                     replaced += 1;
@@ -364,12 +372,16 @@ where
         for holder in holders.into_iter().flatten() {
             kept[holder] = true;
         }
-        self.discarded = children
-            .into_iter()
-            .zip(kept)
-            .filter(|(_, kept)| !kept)
-            .map(|(child, _)| child)
-            .collect();
+        self.spares.keep_all(self.discarded.drain(..));
+        for (child, kept) in children.drain(..).zip(kept) {
+            if kept {
+                // the population has a copy
+                self.spares.keep(child.into_genome());
+            } else {
+                self.discarded.push(child);
+            }
+        }
+        self.offspring = children;
     }
 
     // the new front, and whether it improved on the previous one
@@ -717,6 +729,7 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
             pending: Vec::new(),
             front: Vec::new(),
             discarded: Vec::new(),
+            spares: Spares::default(),
             ideal: [f64::INFINITY; M],
             started: false,
             asked: false,
