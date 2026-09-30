@@ -62,7 +62,7 @@
 
 mod network;
 
-pub use network::{ConnectionGene, FeedForward, Network, NodeGene, NodeKind};
+pub use network::{ConnectionGene, FeedForward, Network, NodeGene, NodeKind, Recurrent};
 
 use crate::algorithm::{Algorithm, Candidates, Reevaluate};
 use crate::nn::Activation;

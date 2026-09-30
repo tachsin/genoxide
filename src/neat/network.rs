@@ -392,6 +392,66 @@ impl Network {
     }
 }
 
+impl Network {
+    /// The enabled connections compiled into a recurrent evaluator: at each
+    /// [`activate`](Recurrent::activate), every node takes the activation of the weighted sum of
+    /// the previous step's values of its inputs, loops and cycles included, all at once. A signal
+    /// takes one step per connection to reach the outputs. [`reset`](Recurrent::reset) sets every
+    /// node back to 0, between episodes.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidGenome`] if a connection, an input, the bias or an output names a node the
+    /// network doesn't have (a network deserialized from a crafted file).
+    pub fn recurrent(&self) -> Result<Recurrent> {
+        let index_of = |id: u32| {
+            self.nodes
+                .binary_search_by_key(&id, |node| node.id)
+                .map_err(|_| Error::InvalidGenome {
+                    reason: format!("the network has no node {id}"),
+                })
+        };
+        let enabled = self
+            .connections
+            .iter()
+            .filter(|c| c.enabled)
+            .map(|c| Ok((index_of(c.from)?, index_of(c.to)?, c.weight)))
+            .collect::<Result<Vec<(usize, usize, f64)>>>()?;
+        let bias = index_of(self.inputs)?;
+        let outputs = (0..self.outputs)
+            .map(|k| index_of(self.inputs + 1 + k).map(|index| index as u32))
+            .collect::<Result<Vec<u32>>>()?;
+        // every node but the inputs and the bias, in id order, with its incoming links in
+        // innovation order
+        let mut steps = Vec::new();
+        let mut links = Vec::new();
+        for (i, node) in self.nodes.iter().enumerate() {
+            if matches!(node.kind, NodeKind::Input | NodeKind::Bias) {
+                continue;
+            }
+            let start = links.len();
+            for &(from, _, weight) in enabled.iter().filter(|&&(_, to, _)| to == i) {
+                links.push((from as u32, weight));
+            }
+            steps.push(Step {
+                node: i as u32,
+                links: start as u32..links.len() as u32,
+                activation: node.activation,
+            });
+        }
+        let n = self.nodes.len();
+        Ok(Recurrent {
+            inputs: self.inputs as usize,
+            bias: bias as u32,
+            steps,
+            links,
+            outputs,
+            values: vec![0.0; n],
+            next: vec![0.0; n],
+        })
+    }
+}
+
 impl Genome for Network {
     /// The number of connection genes, enabled or not.
     fn len(&self) -> usize {
@@ -447,5 +507,58 @@ impl FeedForward {
         for (value, &node) in output.iter_mut().zip(&self.outputs) {
             *value = self.values[node as usize];
         }
+    }
+}
+
+/// A [`Network`] compiled for recurrent evaluation, from [`Network::recurrent`]: each
+/// [`activate`](Recurrent::activate) is one step of time, every node computed from the previous
+/// step's values. [`reset`](Recurrent::reset) forgets the past.
+///
+/// [`activate`](Recurrent::activate) doesn't allocate.
+#[derive(Clone, Debug)]
+pub struct Recurrent {
+    inputs: usize,
+    bias: u32,
+    steps: Vec<Step>,
+    links: Vec<(u32, f64)>,
+    outputs: Vec<u32>,
+    values: Vec<f64>,
+    next: Vec<f64>,
+}
+
+impl Recurrent {
+    /// One step: the outputs for `input`, the same bits on every platform.
+    ///
+    /// # Panics
+    ///
+    /// If `input` or `output` has another length than the network's inputs or outputs.
+    pub fn activate(&mut self, input: &[f64], output: &mut [f64]) {
+        assert_eq!(input.len(), self.inputs, "an input value per input");
+        assert_eq!(
+            output.len(),
+            self.outputs.len(),
+            "an output value per output"
+        );
+        self.values[..self.inputs].copy_from_slice(input);
+        self.values[self.bias as usize] = 1.0;
+        for step in &self.steps {
+            let mut sum = 0.0;
+            for &(from, weight) in &self.links[step.links.start as usize..step.links.end as usize] {
+                sum += weight * self.values[from as usize];
+            }
+            self.next[step.node as usize] = step.activation.apply(sum);
+        }
+        for step in &self.steps {
+            self.values[step.node as usize] = self.next[step.node as usize];
+        }
+        for (value, &node) in output.iter_mut().zip(&self.outputs) {
+            *value = self.values[node as usize];
+        }
+    }
+
+    /// Sets every node back to 0, as before the first step.
+    pub fn reset(&mut self) {
+        self.values.fill(0.0);
+        self.next.fill(0.0);
     }
 }

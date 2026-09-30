@@ -325,3 +325,72 @@ fn the_distance_by_hand() {
     // no excess or disjoint genes, N = 1 below 20 genes: c3 × 1/3
     assert!((neat.distance(&a, &b) - 0.4 / 3.0).abs() < 1e-15);
 }
+
+// networks of a run: `feed_forward` false allows cycles
+fn evolved(seed: u64, feed_forward: bool) -> Vec<Network> {
+    let mut neat = Neat::builder(3, 2)
+        .population_size(30)
+        .structural_mutation(0.2, 0.5)
+        .feed_forward(feed_forward)
+        .seed(seed)
+        .build()
+        .unwrap();
+    for _ in 0..20 {
+        let fitness: Vec<Fitness> = neat
+            .ask()
+            .iter()
+            .map(|n| Fitness::new(n.enabled() as f64))
+            .collect();
+        neat.tell(&fitness).unwrap();
+    }
+    neat.population()
+        .iter()
+        .map(|i| i.genome().clone())
+        .collect()
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(8))]
+
+    // on an acyclic network, the recurrent evaluator reaches the feed-forward outputs, to the bit,
+    // once a signal had time to cross every node, and repeats itself after a reset
+    #[test]
+    fn recurrent_evaluation_settles_on_feed_forward_networks(seed: u64) {
+        for network in evolved(seed, true) {
+            let mut feed_forward = network.feed_forward().unwrap();
+            let mut recurrent = network.recurrent().unwrap();
+            let input = [0.3, -0.7, 1.1];
+            let (mut expected, mut output) = ([0.0; 2], [0.0; 2]);
+            feed_forward.activate(&input, &mut expected);
+            let mut first = Vec::new();
+            for _ in 0..network.nodes().len() {
+                recurrent.activate(&input, &mut output);
+                first.push(output);
+            }
+            prop_assert_eq!(output.map(f64::to_bits), expected.map(f64::to_bits));
+            recurrent.reset();
+            for &step in &first {
+                recurrent.activate(&input, &mut output);
+                prop_assert_eq!(output.map(f64::to_bits), step.map(f64::to_bits));
+            }
+        }
+    }
+}
+
+// a run allowing cycles makes some: feed-forward evaluation refuses them, recurrent evaluation
+// takes them
+#[test]
+fn recurrent_runs_make_cycles() {
+    let networks = evolved(2, false);
+    let cyclic: Vec<&Network> = networks
+        .iter()
+        .filter(|n| n.feed_forward().is_err())
+        .collect();
+    assert!(!cyclic.is_empty());
+    for network in cyclic {
+        let mut recurrent = network.recurrent().unwrap();
+        let mut output = [0.0; 2];
+        recurrent.activate(&[1.0, 0.0, -1.0], &mut output);
+        assert!(output.iter().all(|value| value.is_finite()));
+    }
+}

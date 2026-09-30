@@ -196,6 +196,26 @@ impl Policy for MlpNetwork<'_> {
     }
 }
 
+/// A NEAT network's outputs are the actions: with NEAT's sigmoid, in (0, 1), only pushes one way;
+/// map them to [−1, 1] in a closure, or use a symmetric activation such as tanh.
+impl Policy for crate::neat::FeedForward {
+    fn act(&mut self, observation: &[f64], action: &mut [f64]) {
+        self.activate(observation, action);
+    }
+}
+
+/// As for [`FeedForward`](crate::neat::FeedForward); [`reset`](Policy::reset) clears the
+/// network's state between episodes.
+impl Policy for crate::neat::Recurrent {
+    fn act(&mut self, observation: &[f64], action: &mut [f64]) {
+        self.activate(observation, action);
+    }
+
+    fn reset(&mut self) {
+        crate::neat::Recurrent::reset(self);
+    }
+}
+
 impl Policy for ElmanNetwork<'_> {
     fn act(&mut self, observation: &[f64], action: &mut [f64]) {
         self.forward(observation, action);
