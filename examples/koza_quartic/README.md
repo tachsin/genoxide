@@ -44,13 +44,16 @@ arrangement, has an error at rounding level.
 ## Representation
 
 A tree of a genetic program (`gp::Tree`): the functions at the inner nodes, x at the leaves, stored
-as a flat array in prefix order. The primitives are an enum, `Op`, in a `gp::PrimitiveSet` of one
-type. `gp::Gp` sets Koza's limits and initialization: trees of depth at most 17 (the root at depth
+as a flat array in prefix order. The problem is `gp::regression::problems::Koza1`: its primitives
+are `gp::regression::Math` values in a `gp::PrimitiveSet` of one type (`add`, `sub`, `mul`, the
+protected division `pdiv`, `sin`, `cos`, `exp` and the protected logarithm `plog`), and its data
+the 20 training and 101 test points. `gp::Gp` sets Koza's limits and initialization: trees of depth at most 17 (the root at depth
 0) and at most 1024 nodes, and ramped half-and-half with depths 2 to 6. The initial population
 of each island is `Gp::ramped_half_and_half`: Koza's even division, the same number of trees of each
 depth, half by the full method and half by grow, without duplicates.
 
-The fitness is the root mean squared error on the 20 points, minimized. The trees are evaluated on
+The fitness is the root mean squared error on the 20 points, minimized: `gp::regression::Regression`
+without linear scaling, so the tree itself has to fit the points. The trees are evaluated on
 all 20 points at once, a column of values per node (`Tree::evaluate_columns`), with genoxide's
 `math` functions, so the values are the same bits on every platform. A tree with a value that isn't
 finite (an exponential that overflows) is invalid.

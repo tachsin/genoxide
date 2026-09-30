@@ -3,8 +3,9 @@
 //! its curve over [−1, 1] at 41 points beside the training points, in at most 64 generations.
 //! (A plot of the tree and its curve is for the site to add: the page shows the error curve.)
 
-use crate::{Data, Op, quartic};
-use genoxide::gp::{PrimitiveSet, Tree};
+use genoxide::gp::Tree;
+use genoxide::gp::regression::problems::{Koza1, RegressionProblem};
+use genoxide::gp::regression::{Regression, Sample};
 use genoxide::observer::Snapshot;
 use genoxide::prelude::*;
 use serde_json::{Value, json};
@@ -15,25 +16,20 @@ const GRID: usize = 41;
 pub struct Trace {
     path: Option<String>,
     frames: Frames,
-    set: PrimitiveSet<Op>,
-    training: (Vec<f64>, Vec<f64>),
-    grid: Data,
+    regression: Regression,
+    grid: Sample,
 }
 
 impl Trace {
     // a trace for the file that GENOXIDE_TRACE names, or nothing to record if it isn't set
-    pub fn from_env(training: &Data, set: &PrimitiveSet<Op>) -> Self {
+    pub fn from_env(problem: &Koza1, regression: &Regression) -> Self {
         let path = std::env::var("GENOXIDE_TRACE").ok();
-        let xs = (0..GRID)
-            .map(|i| i as f64 / (GRID - 1) as f64 * 2.0 - 1.0)
-            .collect();
-        let ys = (0..GRID).map(|_| 0.0).collect();
+        let grid = (0..GRID).map(|i| [i as f64 / (GRID - 1) as f64 * 2.0 - 1.0]);
         Self {
             path,
             frames: Frames::new(64),
-            set: set.clone(),
-            training: (training.xs.clone(), training.ys.clone()),
-            grid: Data { xs, ys },
+            regression: regression.clone(),
+            grid: Sample::from_points(grid, |point| problem.target(point)).expect("the grid"),
         }
     }
 
@@ -43,11 +39,12 @@ impl Trace {
             return;
         }
         let tree = snapshot.best().genome();
+        let set = self.regression.primitives();
         let state = json!({
-            "expression": tree.display(&self.set).to_string(),
+            "expression": tree.display(set).to_string(),
             "size": tree.len(),
-            "depth": tree.depth(&self.set),
-            "curve": self.grid.predict(&self.set, tree),
+            "depth": tree.depth(set),
+            "curve": self.regression.values(tree, &self.grid),
         });
         self.frames.push(frame(snapshot, state));
     }
@@ -55,6 +52,7 @@ impl Trace {
     // writes the trace, if there's one
     pub fn write(self) {
         let Some(path) = self.path else { return };
+        let training = self.regression.dataset().training();
         let settings = json!({
             "format": 1,
             "example": "koza_quartic",
@@ -65,10 +63,10 @@ impl Trace {
             "optimum": 0.0,
             "plot": "expression",
             "problem": {
-                "points": self.training.0,
-                "targets": self.training.1,
-                "grid": self.grid.xs,
-                "target_curve": self.grid.xs.iter().map(|&x| quartic(x)).collect::<Vec<_>>(),
+                "points": training.columns()[0],
+                "targets": training.targets(),
+                "grid": self.grid.columns()[0],
+                "target_curve": self.grid.targets(),
             },
         });
         write(&path, settings, self.frames.into_vec());
