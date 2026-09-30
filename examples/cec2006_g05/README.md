@@ -79,14 +79,14 @@ feasible with an error f(x) − f* of at most 1e-8. The report counts a run as s
 error of at most 1e-4; the example asks for more.
 
 Why CMA-ES: its covariance matrix can learn the direction of the tube, so its samples spread along
-the curve rather than across it. With 25 seeds, CMA-ES met the target on 24 runs, after a median of
-21,728 evaluations (at most 82,880). The other run converged 8.7e-8 above f*, still a success by the
-report's criterion; with IPOP restarts (Auger and Hansen, 2005, IEEE CEC 2005: 1769-1776), all 25
-met the target. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default
-differential evolution, met it on 24 of 25 runs, after a median of 148,000 evaluations (at most
-246,100). The other run found a feasible solution 45 above f*, and then restarted every 200
-generations without finding a better one. Without restarts (`de::Restarts::Never`, or `restarts="never"` in Python), SHADE
-met the target on all 25, after a median of 150,600 evaluations.
+the curve rather than across it. With 25 seeds, CMA-ES met the target on every run, after a median
+of 22,976 evaluations (at most 63,496), and it did with IPOP restarts (Auger and Hansen, 2005, IEEE
+CEC 2005: 1769-1776) too, which changed only one run. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC
+2013: 71-78), genoxide's default differential evolution, met it on 24 of 25 runs, after a median of
+148,000 evaluations (at most 246,100). The other run found a feasible solution 45 above f*, and then
+restarted every 200 generations without finding a better one. Without restarts
+(`de::Restarts::Never`, or `restarts="never"` in Python), SHADE met the target on all 25, after a
+median of 150,600 evaluations.
 
 ## Output
 
@@ -100,7 +100,7 @@ print the same.
 
 Runs with other seeds stop after a different number of evaluations, at a slightly different point
 of the tube. The example prints what they agree on: no evaluation counts, and the solution to 4
-digits. With seeds 1 to 12, x1 ended between 679.944 and 679.946.
+digits. With seeds 1 to 12, x1 ended between 679.944 and 679.947.
 
 The page shows each variable on its range, and each constraint's state.
 

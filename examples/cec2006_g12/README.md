@@ -81,15 +81,14 @@ seeds 1 to 25, in the same budget:
 |---|---|---|
 | SHADE | 25 of 25 | 8,800 (7,400 to 9,400) |
 | L-SHADE | 25 of 25 | 5,552 (4,536 to 6,506) |
-| CMA-ES with IPOP restarts | 25 of 25 | 23,499 (6,468 to 83,363) |
+| CMA-ES with IPOP restarts | 25 of 25 | 25,123 (3,801 to 86,590) |
 | CMA-ES | 0 of 25 | |
 
 CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) converged in a sphere
-other than the center's in every run. With seed 2, it ended at (4.18, 4.18, 5), on the edge of the
-sphere around (4, 4, 5), 1.16 from (5, 5, 5), with an error of 0.0135. In 21 runs, its best ended in
-another sphere, with errors of 0.0063 to 0.116. In the other 4, a single sample landed in the
-center's sphere, with an error of 0.0002 to 0.0005, but the distribution stayed where it was: its
-mean follows the weighted average of its best samples, not one of them. IPOP restarts (Auger and
+other than the center's in every run. With seed 17, it ended at (5.82, 5.82, 5), on the edge of the
+sphere around (6, 6, 5), 1.16 from (5, 5, 5), with an error of 0.0135. In all 25 runs, its best
+ended in another sphere, with errors of 0.0056 to 0.094: not a single sample landed in the center's
+sphere. IPOP restarts (Auger and
 Hansen, 2005, IEEE CEC 2005: 1769-1776) start a new run from a random point, with twice the
 population, whenever one has converged; with enough of them, one run lands in the center's sphere.
 L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665) starts with 18 × 3 = 54 solutions and

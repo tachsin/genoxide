@@ -113,5 +113,5 @@ of 1e-8 with every seed tried.
 The run finds its first feasible solution after 27 evaluations, 3 generations of 9. The error is 5.7
 after 873 evaluations and 0.78 after 2,601, and from there falls, on average, by a factor of 10
 every 1,100 evaluations: the run meets the report's criterion after 6,858 evaluations and the target
-after 11,250. The solution is the report's x* to 4, 5 or 6 digits, with g1 and g4 active. g2 =
-−252.6 and g3 = −144.9 have slack.
+after 11,250. The solution is the report's x* to 4, 5 or 6 digits, with g1 and g4 active.
+g2 = −252.6 and g3 = −144.9 have slack.
