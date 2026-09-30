@@ -99,6 +99,12 @@ jobs:
   instructions:
     name: Instruction counts
     runs-on: ubuntu-latest
+    env:
+      # one codegen unit, for the baseline and the pull request alike: which functions are inlined
+      # then depends on the code, not on how the compiler splits the crate into units, which
+      # unrelated code moves (#357's new problems made the mutation benchmarks 4 to 10% slower
+      # that way, without a change to their code)
+      CARGO_PROFILE_BENCH_CODEGEN_UNITS: "1"
     steps:
       - uses: actions/checkout@v7
         with:
