@@ -58,7 +58,7 @@ The full list is in [docs/features.md](docs/features.md).
 
 ## Python
 
-`pip install genoxide`: wheels for Linux, macOS and Windows, CPython 3.10 and later.
+`pip install genoxide`: wheels for 64-bit Linux, macOS and Windows, CPython 3.10 and later. genoxide is built and tested on 64-bit platforms only.
 
 ```python
 import genoxide as gx
