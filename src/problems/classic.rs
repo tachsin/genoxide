@@ -325,6 +325,12 @@ scalable!(
     /// (x₁, …, xₙ₋₁, ±xₙ); every other gene must be positive, since the next one's term needs
     /// 2xᵢ₊₁² = xᵢ. At least 2 dimensions, 30 by default.
     ///
+    /// In 3 dimensions or more, (1/3, 0, …, 0) is a stationary point with the value 2/3, where the
+    /// Hessian is positive semidefinite (singular only along xₙ). It isn't a local minimum: the
+    /// valley floor x₁ = (1 + 4x₂²) / 3, xᵢ₊₁ = √(xᵢ / 2), where the value is
+    /// (2/3) (1 − 2x₂²)², joins it to the minimum. But near it, that floor is a cusp, with xₙ
+    /// growing as x₂^(1/2ⁿ⁻²): searches stall there, the more often the more dimensions.
+    ///
     /// Dixon, L. C. W. and Price, R. C. (1989). Truncated Newton method for sparse unconstrained
     /// optimization using automatic differentiation. *Journal of Optimization Theory and
     /// Applications* 60(2): 261-275, which couldn't be read. Definition and bounds as restated in
@@ -2148,9 +2154,9 @@ const LANGERMANN_C: [f64; 5] = [1.0, 2.0, 5.0, 2.0, 3.0];
 ///
 /// With c = (1, 2, 5, 2, 3) and the centers a = (3, 5), (5, 2), (2, 1), (1, 4), (7, 9).
 ///
-/// Bounds [0, 10]²; minimum −4.155809291847785 at (2.793402208645037, 1.59723250132836), where
+/// Bounds [0, 10]²; minimum −4.155809291847785 at (2.7934022086450367, 1.5972325013283601), where
 /// the gradient is 0, computed to 40 digits by Newton's method and rounded, from the lowest points
-/// of a 2001 × 2001 grid; the next is −4.127576741310137 at (1.991205862734151, 1.988619801947841).
+/// of a 2001 × 2001 grid; the next is −4.127576741310136 at (1.991205862734151, 1.9886198019478405).
 /// Not proven global.
 ///
 /// Langermann's function is from the first ICEO: Bersini, H., Dorigo, M., Langerman, S.,
@@ -2201,7 +2207,7 @@ impl Problem for Langermann {
     fn optimum(&self) -> Option<Optimum<Reals>> {
         Some(Optimum::best_known(
             -4.155_809_291_847_785,
-            vec![reals(&[2.793_402_208_645_037, 1.597_232_501_328_36])],
+            vec![reals(&[2.793_402_208_645_036_7, 1.597_232_501_328_360_1])],
         ))
     }
 
@@ -2227,14 +2233,14 @@ const FOXHOLES: [f64; 5] = [-32.0, -16.0, 0.0, 16.0, 32.0];
 ///
 /// The holes are a₁ⱼ = −32, −16, 0, 16, 32, −32, …, and a₂ⱼ = −32 five times, −16 five times, ….
 ///
-/// Bounds [−65.536, 65.536]²; minimum 0.9980038377944503 at (−31.97833483565697,
-/// −31.978334837300795), in the first hole, where the gradient is 0, computed to 40 digits by
+/// Bounds [−65.536, 65.536]²; minimum 0.9980038377944502 at (−31.97833483565697,
+/// −31.978334837300796), in the first hole, where the gradient is 0, computed to 40 digits by
 /// Newton's method and rounded: the other holes pull it a little towards the middle, and the value
 /// at (−32, −32) is 0.9980038388186489. The deepest of the 25 holes, but not proven global.
 ///
 /// De Jong, K. A. (1975). *An Analysis of the Behavior of a Class of Genetic Adaptive Systems.*
-/// PhD thesis, University of Michigan, appendix A.6 (read in the scan of the University of
-/// Michigan's copy): test function F5, "synthesized as suggested by Shekel (1971)", with
+/// PhD thesis, University of Michigan, appendix A.6 (read in the scan that George Mason
+/// University's EC lab published): test function F5, "synthesized as suggested by Shekel (1971)", with
 /// `cⱼ = j`, K = 500, this grid and these bounds, and its minimum as ≅ 1. Yao, Liu and Lin (1999,
 /// f14) restate it the same.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -2275,8 +2281,8 @@ impl Problem for ShekelFoxholes {
 
     fn optimum(&self) -> Option<Optimum<Reals>> {
         Some(Optimum::best_known(
-            0.998_003_837_794_450_3,
-            vec![reals(&[-31.978_334_835_656_97, -31.978_334_837_300_795])],
+            0.998_003_837_794_450_2,
+            vec![reals(&[-31.978_334_835_656_97, -31.978_334_837_300_796])],
         ))
     }
 
@@ -2304,8 +2310,8 @@ const KOWALIK_B_INVERSE: [f64; 11] = [0.25, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0, 
 /// With a = (0.1957, 0.1947, 0.1735, 0.1600, 0.0844, 0.0627, 0.0456, 0.0342, 0.0323, 0.0235,
 /// 0.0246) and 1/b = (0.25, 0.5, 1, 2, 4, 6, 8, 10, 12, 14, 16).
 ///
-/// Bounds [−5, 5]⁴; minimum 3.0748598780560608e-4 at (0.19283345298250858, 0.19083623878262915,
-/// 0.12311729627785712, 0.13576598998153703), where the gradient is 0, computed to 40 digits by
+/// Bounds [−5, 5]⁴; minimum 3.0748598780560606e-4 at (0.1928334529825086, 0.19083623878262915,
+/// 0.12311729627785713, 0.13576598998153702), where the gradient is 0, computed to 40 digits by
 /// Newton's method and rounded: the best of the local minima that 3,000 local searches from random
 /// points reach, and where 15% of them end; not proven global. Yao, Liu and Lin give ≈ 3.075e-4
 /// at (0.1928, 0.1908, 0.1231, 0.1358), and Adorio (2005, MVF library) 3.0748610e-4.
@@ -2354,12 +2360,12 @@ impl Problem for Kowalik {
 
     fn optimum(&self) -> Option<Optimum<Reals>> {
         Some(Optimum::best_known(
-            3.074_859_878_056_060_8e-4,
+            3.074_859_878_056_060_6e-4,
             vec![reals(&[
-                0.192_833_452_982_508_58,
+                0.192_833_452_982_508_6,
                 0.190_836_238_782_629_15,
-                0.123_117_296_277_857_12,
-                0.135_765_989_981_537_03,
+                0.123_117_296_277_857_13,
+                0.135_765_989_981_537_02,
             ])],
         ))
     }
@@ -2933,6 +2939,35 @@ mod tests {
         assert_eq!(DixonPrice::new(3).evaluate(&at(&[1.0; 3])), 5.0);
     }
 
+    // (1/3, 0, …, 0) is a stationary point with 2/3, joined to the minimum by the valley floor
+    // x₁ = (1 + 4x₂²) / 3, xᵢ₊₁ = √(xᵢ / 2), where the value is (2/3) (1 − 2x₂²)²
+    #[test]
+    fn dixon_price_stationary_point() {
+        let problem = DixonPrice::new(10);
+        let f = |x: &Reals| problem.evaluate(x);
+        let mut point = vec![0.0; 10];
+        point[0] = 1.0 / 3.0;
+        assert_close(f(&at(&point)), 2.0 / 3.0, 1e-15);
+        assert!(gradient(f, &point, 1e-6).iter().all(|g| g.abs() < 1e-9));
+        for x2 in [1e-3, 0.1, 0.5, 0.7] {
+            let mut floor: Vec<f64> = vec![(1.0 + 4.0 * x2 * x2) / 3.0, x2];
+            for i in 2..10 {
+                let next = (floor[i - 1] / 2.0).sqrt();
+                floor.push(next);
+            }
+            let expected = 2.0 / 3.0 * math::powi(1.0 - 2.0 * x2 * x2, 2);
+            assert_close(f(&at(&floor)), expected, 1e-12);
+            assert!(f(&at(&floor)) < 2.0 / 3.0);
+        }
+        // near the stationary point, the floor's last gene is far from 0: x₂^(1/256), times a
+        // constant
+        let mut floor = [1e-6_f64, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        for i in 1..9 {
+            floor[i] = (floor[i - 1] / 2.0).sqrt();
+        }
+        assert!(floor[8] > 0.4);
+    }
+
     #[test]
     #[should_panic(expected = "DixonPrice needs at least 2 dimensions")]
     fn dixon_price_needs_two_dimensions() {
@@ -3073,8 +3108,8 @@ mod tests {
         assert!(!optimum.is_proven());
         let f = |x: &Reals| Langermann.evaluate(x);
         // the gradient is 0 at the minimum, and at the next one, which is worse
-        let next = [1.991_205_862_734_151, 1.988_619_801_947_841];
-        assert_close(f(&at(&next)), -4.127_576_741_310_137, 1e-12);
+        let next = [1.991_205_862_734_151, 1.988_619_801_947_840_5];
+        assert_close(f(&at(&next)), -4.127_576_741_310_136, 1e-12);
         for x in [&optimum.solutions()[0][..], &next] {
             assert!(gradient(f, x, 1e-6).iter().all(|g| g.abs() < 1e-7));
         }

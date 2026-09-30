@@ -910,7 +910,9 @@ class DixonPrice(_Scalable):
     valleys.
 
     Bounds [-10, 10]ⁿ; minimum 0 at xᵢ = 2^(−(2ⁱ − 2) / 2ⁱ), and at the same point with the last
-    gene negated: ``optimum.solutions`` has both. ``dimensions`` is at least 2.
+    gene negated: ``optimum.solutions`` has both. ``dimensions`` is at least 2. In 3 dimensions or
+    more, (1/3, 0, …, 0) is a stationary point with the value 2/3, not a local minimum, but one
+    where searches stall: the valley floor that joins it to the minimum is a cusp near it.
 
     Dixon, L. C. W. and Price, R. C. (1989). Truncated Newton method for sparse unconstrained
     optimization using automatic differentiation. Journal of Optimization Theory and Applications
@@ -1076,7 +1078,7 @@ class Langermann(Problem[Real]):
     dᵢ = (x₁ − aᵢ₁)² + (x₂ − aᵢ₂)², c = (1, 2, 5, 2, 3) and the centers a = (3, 5), (5, 2),
     (2, 1), (1, 4), (7, 9).
 
-    Bounds [0, 10]²; minimum −4.155809291847785 at (2.793402208645037, 1.59723250132836), computed
+    Bounds [0, 10]²; minimum −4.155809291847785 at (2.7934022086450367, 1.5972325013283601), computed
     by Newton's method from the lowest points of a grid; not proven global (``optimum.proven`` is
     False).
 
@@ -1097,8 +1099,8 @@ class ShekelFoxholes(Problem[Real]):
     ``1 / (1/500 + Σⱼ₌₁²⁵ 1 / (j + (x₁ − a₁ⱼ)⁶ + (x₂ − a₂ⱼ)⁶))``: a plane near 500 with 25
     narrow holes on the grid (−32, −16, 0, 16, 32)², the j-th about j deep.
 
-    Bounds [-65.536, 65.536]²; minimum 0.9980038377944503 at (−31.97833483565697,
-    −31.978334837300795), in the first hole, computed by Newton's method; not proven global
+    Bounds [-65.536, 65.536]²; minimum 0.9980038377944502 at (−31.97833483565697,
+    −31.978334837300796), in the first hole, computed by Newton's method; not proven global
     (``optimum.proven`` is False).
 
     De Jong, K. A. (1975). An Analysis of the Behavior of a Class of Genetic Adaptive Systems. PhD
@@ -1117,8 +1119,8 @@ class Kowalik(Problem[Real]):
     a = (0.1957, 0.1947, 0.1735, 0.1600, 0.0844, 0.0627, 0.0456, 0.0342, 0.0323, 0.0235, 0.0246)
     and 1/b = (0.25, 0.5, 1, 2, 4, 6, 8, 10, 12, 14, 16).
 
-    Bounds [-5, 5]⁴; minimum 3.0748598780560608e-4 at (0.19283345298250858, 0.19083623878262915,
-    0.12311729627785712, 0.13576598998153703), computed by Newton's method; not proven global
+    Bounds [-5, 5]⁴; minimum 3.0748598780560606e-4 at (0.1928334529825086, 0.19083623878262915,
+    0.12311729627785713, 0.13576598998153702), computed by Newton's method; not proven global
     (``optimum.proven`` is False).
 
     Kowalik, J. S. and Osborne, M. R. (1968). Methods for Unconstrained Optimization Problems.
