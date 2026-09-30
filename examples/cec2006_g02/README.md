@@ -84,12 +84,12 @@ size:
 
 | Algorithm | Runs within 1e-8 | Evaluations to get there |
 |---|---|---|
-| SHADE, population 300 | 20 | 291,600 to 463,800 |
-| L-SHADE, a population shrinking from 360 to 4 over the budget | 15 | 278,700 to 322,600 |
+| SHADE, population 300 | 20 | 298,800 to 477,300 |
+| L-SHADE, a population shrinking from 360 to 4 over the budget | 16 | 287,100 to 342,500 |
 
-The five L-SHADE runs that miss end between −0.8022 and −0.7981, in other valleys. SHADE with its
-published population of 100 reaches a relative gap of 1e-4 with seed 1, and four runs with seeds 1
-to 4 end between −0.80362 and −0.80306. In four runs each, the others end further away: a GA with
+The four L-SHADE runs that miss end between −0.8026 and −0.7996, in other valleys. SHADE with its
+published population of 100 gets within 1e-8 with seed 1, and four runs with seeds 1 to 4 end
+between −0.80362 and −0.79466. In four runs each, the others end further away: a GA with
 simulated binary crossover and polynomial mutation between −0.802 and −0.769, CMA-ES with restarts
 (IPOP or BIPOP) between −0.793 and −0.765, and particle swarm optimization between −0.736 and
 −0.379.
@@ -112,7 +112,7 @@ median, on a log scale, where f* is the best known value.
 ## Good results
 
 A gap of 0 to the best known value, −0.803619, is as good as anyone has found. The run gets within
-1e-8 of it after about 310,000 evaluations, and ends about 1e-15 above it, at the report's solution
+1e-8 of it after about 335,000 evaluations, and ends about 1e-15 above it, at the report's solution
 to 3 decimals. g1 is active there, and g2 far from its limit: the sum of the variables is 30, not
 150.
 

@@ -114,11 +114,11 @@ both versions print the same.
 
 The plot shows each variable on its range, and each constraint's value g: satisfied with its slack,
 active (within 1e-6 of its limit) or violated. The best of the first 100 random designs exceeds g5,
-the stress in shaft 1; within 400 evaluations, the best design is feasible. Between about 11,000 and
-13,000 evaluations, g6, g8 and then g5 reach their limits. After about 15,000 evaluations, the
-design matches the best known one to the 6 digits that the plot shows; the median weight has
-matched it since about 13,000. The population goes on refining the design to the end of the run,
-without a restart.
+the stress in shaft 1; within 300 evaluations, the best design is feasible. Between about 10,500 and
+13,000 evaluations, g8, then g5 and g6, reach their limits, where all three stay from about 13,000
+on. After about 16,000 evaluations, the design matches the best known one to the 6 digits that the
+plot shows; the median weight has matched it since about 13,000. The population goes on refining
+the design to the end of the run, without a restart.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/speed-reducer) plays this run back.
 

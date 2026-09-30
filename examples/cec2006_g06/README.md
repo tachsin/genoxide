@@ -75,8 +75,8 @@ error of at most 1e-4; the example asks for more.
 Why CMA-ES: its covariance matrix can stretch the samples along the crescent, and its step size
 shrinks as the crescent narrows. With 25 seeds, CMA-ES met the target on every run, after a median
 of 2,058 evaluations (at most 2,466). SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78),
-genoxide's default differential evolution, met it on all 25 too, but after a median of 35,900
-evaluations (at most 37,600).
+genoxide's default differential evolution, met it on all 25 too, but after a median of 35,600
+evaluations (at most 38,700).
 
 ## Output
 

@@ -97,8 +97,8 @@ a median of 30,760 evaluations (from 22,650 to 51,990). Why the restarts: withou
 25 runs are the same, but one converged at an error of 1.5e-8, just short of the target, and then
 kept sampling around that point until the budget ran out; IPOP restarts it. SHADE (Tanabe and
 Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default differential evolution, met the target
-on all 25 too, but after a median of 71,300 evaluations (at most 75,800). L-SHADE, whose
-population shrinks over the budget, met it on 24, after a median of 94,741.
+on all 25 too, but after a median of 70,800 evaluations (at most 74,400). L-SHADE, whose
+population shrinks over the budget, met it on all 25 as well, after a median of 93,859.
 
 ## Output
 

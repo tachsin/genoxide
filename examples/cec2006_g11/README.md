@@ -81,15 +81,15 @@ band's curvature demands. With seeds 1 to 25, in the same budget:
 | Algorithm | Runs that met the target | Evaluations (median, range) |
 |---|---|---|
 | CMA-ES | 25 of 25 | 3,642 (846 to 5,814) |
-| L-SHADE | 20 of 25 | 15,163 (10,578 to 234,994) |
-| SHADE | 16 of 25 | 131,199 (38,700 to 334,189) |
+| SHADE | 16 of 25 | 156,296 (36,100 to 331,990) |
+| L-SHADE | 14 of 25 | 19,083 (6,480 to 26,042) |
 
 SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78) is genoxide's default differential
 evolution, and L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665) its variant with a
 population that shrinks over the budget. They build a trial from the difference of two solutions.
 Between two points of a curved band, that difference points off the band, so most trials are
-infeasible and lose to their parents. SHADE's nine other runs ended with errors up to 6.5e-5, within
-the report's success but short of the target. L-SHADE's five others ended with errors up to 0.018.
+infeasible and lose to their parents. SHADE's nine other runs ended with errors up to 7.9e-5, within
+the report's success but short of the target. L-SHADE's eleven others ended with errors up to 0.051.
 
 ## Output
 

@@ -80,9 +80,9 @@ Why CMA-ES: its covariance matrix can learn the direction of the tube, so its sa
 the arc rather than across it. With seeds 1 to 25, IPOP-CMA-ES met the target on all 25 runs, after
 a median of 21,392 evaluations (5,222 to 46,102). Without restarts, CMA-ES met it on 24; the other
 run converged 1.5e-8 above f*, still a success by the report's criterion. SHADE (Tanabe and
-Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default differential evolution, met it on 16 of
-25 runs, after a median of 123,400 evaluations. The other 9 ended between 0.0013 and 1.6 above
-f*.
+Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default differential evolution, met it on 18 of
+25 runs, after a median of 135,700 evaluations. Of the other 7, 5 ended between 0.00027 and 3.0
+above f*, and 2 never found a feasible solution.
 
 ## Output
 

@@ -85,8 +85,8 @@ Why CMA-ES: its covariance matrix learns a scale for each direction, the steep a
 and the correlations along the two active boundaries. With 25 seeds, it met the target on every
 run, after a median of 9,045 evaluations (from 7,857 to 11,583). None converged early, so restarts
 wouldn't change a run. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default
-differential evolution, met the target on all 25 too, but after a median of 46,700 evaluations (at
-most 48,700), and L-SHADE, whose population shrinks over the budget, after a median of 43,549.
+differential evolution, met the target on all 25 too, but after a median of 46,300 evaluations (at
+most 48,500), and L-SHADE, whose population shrinks over the budget, after a median of 44,009.
 
 ## Output
 

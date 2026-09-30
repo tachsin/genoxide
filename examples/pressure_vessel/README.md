@@ -63,9 +63,9 @@ population of 100, and a restart after 200 generations without progress. It stop
 within 1e-10 of the minimum, relative to its size, or after 200,000 evaluations.
 
 The discrete thicknesses leave local minima: designs with other plates, whose best radius and
-length cost more. With 50,000 evaluations, a third of the runs ended in one of them, 6090.526 with
-seeds 2, 4 and 7, or 6370.780 with seeds 20 and 21. Restarts get them out, given time: with 200,000
-evaluations, every seed tried ends at the minimum (see Good results).
+length cost more. With 50,000 evaluations, two fifths of the runs ended in one of them, 6090.526
+with seeds 1, 6 and 7, or 6370.780 with seeds 2, 4, 14 and 20. Restarts get them out, given time:
+with 200,000 evaluations, every seed tried ends at the minimum (see Good results).
 
 ## Output
 
@@ -80,9 +80,12 @@ Python, `run` evaluates the problem in Rust, so both versions print the same.
 
 The minimum cost is 6059.714335, at T_s = 0.8125 (13 plates), T_h = 0.4375 (7 plates), R = 42.098446
 and L = 176.636596. Yang et al. (2013, International Journal of Bio-Inspired Computation 5(6):
-329-335) proved it globally optimal. The run finds it to the six printed decimals, with no
-violation, and meets the 1e-10 target after 48,200 evaluations.
+329-335) proved it globally optimal. The run finds it, 5·10⁻⁷ above it, with no violation, and
+meets the 1e-10 target after 140,998 evaluations. It first settles in a local minimum, 6090.526,
+with a shell of 14 plates: its best design is there from about 32,000 evaluations. The population
+restarts twice, and after the second restart, at about 110,000 evaluations, the best design moves
+to the minimum's plates.
 
-With seeds 1 to 500, every run ends on the minimum's plates, 13 and 7. 497 meet the target, after
-34,400 to 184,100 evaluations, half of them within 46,200. The other three stop at the budget,
-3·10⁻⁵ to 0.0013 above the minimum: a relative gap of at most 2·10⁻⁷.
+With seeds 1 to 500, every run ends on the minimum's plates, 13 and 7. 498 meet the target, after
+33,600 to 199,000 evaluations, half of them within 46,500. The other two stop at the budget,
+5·10⁻⁶ and 0.00014 above the minimum: a relative gap of at most 2·10⁻⁸.

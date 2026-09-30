@@ -92,16 +92,16 @@ budget:
 | Algorithm | Runs that met the target | Evaluations (median, range) |
 |---|---|---|
 | CMA-ES | 25 of 25 | 17,290 (15,180 to 19,580) |
-| SHADE | 25 of 25 | 54,500 (50,600 to 62,900) |
-| L-SHADE | 24 of 25 | 78,595 (73,845 to 82,235) |
+| SHADE | 25 of 25 | 55,700 (50,400 to 63,300) |
+| L-SHADE | 23 of 25 | 77,986 (72,149 to 83,141) |
 
 SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78) is genoxide's default differential
 evolution. It misses the target in 9 of 25 runs on g11 and in all on g13, whose equalities are
 curved, but solves g14: the slabs are flat, so the difference between two feasible solutions points
 along them, not off them. It takes three times as many evaluations as CMA-ES. L-SHADE (Tanabe and
 Fukunaga, 2014, IEEE CEC 2014: 1658-1665), its variant with a population that shrinks over the
-budget, starts with 18 × 10 = 180 solutions and is slower still; one of its runs ended feasible
-but 2.0 above f*.
+budget, starts with 18 × 10 = 180 solutions and is slower still; two of its runs ended feasible
+but 1.9 and 2.5 above f*.
 
 ## Output
 

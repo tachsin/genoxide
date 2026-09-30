@@ -60,8 +60,8 @@ origin, the function grows fast, as x₁⁶ / 3 and 4x₂⁴: it is about 6,400 
 549 on half of the box. The six minima lie within |x₁| < 1.8 and |x₂| < 0.8, about 6% of the box;
 the rest is steep walls around their basins.
 
-In 1,000 searches with this example's settings (seeds 1 to 1,000), 24% end at a global minimum,
-12% at each, 42% at the second pair, and 34% at the third, shallow pair.
+In 1,000 searches with this example's settings (seeds 1 to 1,000), 25% end at a global minimum,
+12% or 13% at each, 42% at the second pair, and 33% at the third, shallow pair.
 
 ## Representation
 
@@ -83,8 +83,8 @@ third of their steps:
 With steps that small, a search follows its basin down to the minimum at the bottom: first down the
 steep walls towards the origin, then into one of the six basins. Restarting from random points is
 the simplest way to find several minima: each start lands in some basin, and basins are found about
-in proportion to their size. With 24% of the starts in a global basin, 30 searches all miss both
-global minima with a probability of 0.76³⁰, about 1 in 4,000. The searches that end within 2% of
+in proportion to their size. With 25% of the starts in a global basin, 30 searches all miss both
+global minima with a probability of 0.75³⁰, about 1 in 6,000. The searches that end within 2% of
 the bounds' width of each other, in both genes, are counted as one minimum.
 
 ## Output
@@ -105,10 +105,11 @@ back.
 
 A good result reaches both global minima, each with a value close to −1.0316285, and shows which
 other minima catch the searches. The run finds all six minima: both global ones, with 2 and 8
-searches; the second pair, −0.21546, with 6 and 7; and the third pair, 2.1043, with 3 and 4. Each
-pair's points are the opposites of each other, to the 3 decimals printed.
+searches; the second pair, −0.21546, with 6 and 6; and the third pair, 2.1043, with 4 and 4. The
+first two pairs' points are the opposites of each other, to the 3 decimals printed; the third
+pair's, (−1.607, −0.569) and (1.607, 0.568), differ in the last digit of x₂.
 
 At the start, the best of the 30 random points is 2.9 above the global minimum, and the median one
-about 640 above it. The best search is within 1e-5 of the minimum by step 50, and within 1e-9 after
+about 640 above it. The best search is within 1e-5 of the minimum by step 50, and within 1e-11 after
 1,000 steps. By step 250, the median has settled at −0.21546, a search in the second pair, 0.816
 above the global minimum on the plot.

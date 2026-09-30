@@ -105,8 +105,8 @@ Why CMA-ES with restarts: with 25 seeds, it met the target on every run, after a
 evaluations (from 54,080 to 182,290). Without restarts, 18 of the 25 met it; the other seven ended
 short of it, one at −100.05 and the others from 2·10⁻⁸ to 0.006 above f*. SHADE (Tanabe and
 Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default differential evolution, met the target on
-all 25 too, but after a median of 145,200 evaluations (at most 298,300). L-SHADE, whose population
-shrinks over the budget, met it on 24, after a median of 243,107.
+all 25 too, but after a median of 153,800 evaluations (at most 276,100). L-SHADE, whose population
+shrinks over the budget, met it on all 25 as well, after a median of 213,949.
 
 ## Output
 

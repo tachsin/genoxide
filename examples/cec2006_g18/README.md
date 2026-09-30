@@ -90,9 +90,9 @@ a larger population each time. With seeds 1 to 25, IPOP-CMA-ES met the target on
 runs, after a median of 94,670 evaluations (9,580 to 280,800). Without restarts, CMA-ES met it on
 10; the other 15 stayed at the local optimum. L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014:
 1658-1665), genoxide's differential evolution with a population that shrinks over the budget, also
-met the target on all 25, after a median of 85,595 evaluations and at most 110,357: as fast, and
+met the target on all 25, after a median of 86,540 evaluations and at most 99,405: as fast, and
 more even. SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78) met it on 24 of 25, after a
-median of 72,300; the other run stayed at the local optimum. The example shows CMA-ES, whose run
+median of 74,700; the other run stayed at the local optimum. The example shows CMA-ES, whose run
 meets the trap and leaves it.
 
 ## Output

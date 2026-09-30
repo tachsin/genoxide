@@ -97,4 +97,4 @@ wrong dip and stays at an error of 14.1367; the restart, with 12, finds the glob
 The minimum is −1174.984971. CMA-ES without restarts ends at an error of 113.09 with the budget
 spent: 8 of its 30 genes are in the wrong dip, at 2.7468, and the other 22 at the minimum. With
 IPOP restarts, CMA-ES reaches the target after about 122,000 evaluations, and L-SHADE after about
-168,000.
+169,000.

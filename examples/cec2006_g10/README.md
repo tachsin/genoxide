@@ -95,8 +95,8 @@ learns the valley. With the relative target and 25 seeds, it met the target on e
 median of 71,990 evaluations (from 44,080 to 101,510). Without restarts, 2 of the 25 runs converged
 early, at errors of 3.9e-4 and 1.2e-4, and stayed there. SHADE (Tanabe and Fukunaga, 2013, IEEE
 CEC 2013: 71-78), genoxide's default differential evolution, met the target on all 25 too, after a
-median of 64,200 evaluations, but a slow run took 286,500. L-SHADE, whose population shrinks over
-the budget, met it on 23.
+median of 66,200 evaluations, but a slow run took 405,400. L-SHADE, whose population shrinks over
+the budget, met it on 22.
 
 ## Output
 

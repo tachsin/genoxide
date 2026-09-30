@@ -100,12 +100,12 @@ its parent and the bound. Deb's rules decide between a trial and its parent.
 
 The run has the report's budget of 500,000 evaluations, and no target: it runs to the end.
 
-Why SHADE: with 25 seeds, every run ended at the same violation, 0.1437119 to 7 digits, a little
-below the report's 0.14375. L-SHADE, whose population shrinks over the budget, ended there too on
-all 25 seeds. CMA-ES with IPOP restarts (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2):
-159-195; Auger and Hansen, 2005, IEEE CEC 2005: 1769-1776) ended within 0.00014 of it, and CMA-ES
-without restarts between 0.17 and 0.62. That different algorithms end at the same point suggests it
-is the least violation there is, but that isn't proven.
+Why SHADE: with 25 seeds, 24 runs ended at the same violation, 0.1437119 to 7 digits, and the other
+at 0.1437121, a little below the report's 0.14375. L-SHADE, whose population shrinks over the
+budget, ended there too on all 25 seeds. CMA-ES with IPOP restarts (Hansen and Ostermeier, 2001,
+Evolutionary Computation 9(2): 159-195; Auger and Hansen, 2005, IEEE CEC 2005: 1769-1776) ended
+within 0.00014 of it, and CMA-ES without restarts between 0.17 and 0.62. That different algorithms
+end at the same point suggests it is the least violation there is, but that isn't proven.
 
 ## Output
 
@@ -128,12 +128,13 @@ solution, the error f − f* has no meaning.
 
 No run is feasible. A good run ends at a violation of 0.14371, a little below the 0.14375 of the
 report's solution. The example's run gets there: with seeds 1 to 100, SHADE ends between 0.14371188
-and 0.14371189 every time, and L-SHADE at 0.1437118794 on all 100, the least violation found.
+and 0.14371293 every time, at 0.14371188 in 96 runs, and L-SHADE at 0.1437118794 on all 100, the
+least violation found.
 
-With seed 1, the violation falls from 169 in the first random population to 0.31 after 32,100
-evaluations and 0.155 after 64,100. The run passes the report's solution after 98,700 evaluations
-and settles at 0.14371 after about 130,000. The rest of the budget goes to restarts, which bring new
+With seed 1, the violation falls from 169 in the first random population to 0.33 after 32,100
+evaluations and 0.150 after 64,100. The run passes the report's solution after 91,200 evaluations
+and settles at 0.14371 after about 115,000. The rest of the budget goes to restarts, which bring new
 random solutions into the population and don't find anything better. The solution is the report's,
 to 3 or 4 digits: x13 = 0.1581, x17 = 0.5309, x22 = 0.3110, x23 and x24 near 6·10⁻⁵, x1 to x12 below
-3·10⁻¹², g1 = 0.1437 and every other constraint met. Its value is 0.204975, just below the report's
+1·10⁻¹², g1 = 0.1437 and every other constraint met. Its value is 0.204975, just below the report's
 0.204979, which doesn't count under Deb's rules.

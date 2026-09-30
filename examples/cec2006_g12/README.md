@@ -79,8 +79,8 @@ seeds 1 to 25, in the same budget:
 
 | Algorithm | Runs that met the target | Evaluations (median, range) |
 |---|---|---|
-| SHADE | 25 of 25 | 8,700 (7,300 to 9,300) |
-| L-SHADE | 25 of 25 | 5,711 (4,428 to 7,142) |
+| SHADE | 25 of 25 | 8,800 (7,400 to 9,400) |
+| L-SHADE | 25 of 25 | 5,552 (4,536 to 6,506) |
 | CMA-ES with IPOP restarts | 25 of 25 | 23,499 (6,468 to 83,363) |
 | CMA-ES | 0 of 25 | |
 
@@ -119,10 +119,9 @@ error is the squared distance from (5, 5, 5), divided by 100: an error of 1e-8 a
 0.001.
 
 The recorded run's first population already holds feasible solutions, with a best error of 0.19. Its
-best moves from sphere to sphere, each nearer the center: to the sphere around (4, 5, 5) after 500
-evaluations, with an error of 0.011, then to (5, 5, 6)'s after 800, with 0.0074. After 1,500
-evaluations, a trial moves x3 from 5.86 to 5.08, a step of almost one grid unit, into the center's
-sphere: the error drops to 0.00011. The population follows: its median is feasible from 1,000
-evaluations on, and falls from 0.24 to 8e-7 by the end. The run meets the report's criterion after
-2,700 evaluations and its target after 8,100. The solution is x = (5.00064, 4.99951, 5.00059), 0.001
-from the center, with g = −0.062499, well inside the sphere.
+best moves to the sphere around (5, 6, 5) after 200 evaluations, with an error of 0.0062, and stays
+there. After 2,300 evaluations, a trial moves x2 from 5.78 to 4.94, a step of almost one grid unit,
+into the center's sphere: the error drops to 0.00027. The population follows: its median is feasible
+from 900 evaluations on, and falls from 0.25 to 3e-7 by the end. The run meets the report's
+criterion after 2,900 evaluations and its target after 9,300. The solution is x = (4.99930, 5.00010,
+4.99940), 0.001 from the center, with g = −0.062499, well inside the sphere.

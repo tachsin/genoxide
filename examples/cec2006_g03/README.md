@@ -91,19 +91,19 @@ With the same budget, in five runs each, with seeds 1 to 5:
 | Algorithm | Best value (the minimum: −1.0005001) |
 |---|---|
 | CMA-ES | −1.0005001 in every run, after 16,170 to 26,110 evaluations (20 runs) |
-| GA, SBX, Gaussian mutation, (μ + λ) | −1.00041 to −0.99972 |
+| GA, SBX, Gaussian mutation, (μ + λ) | −1.00044 to −1.00010 |
 | GA, arithmetic crossover, polynomial mutation | −1.00014 to −0.99866 |
 | GA, SBX, polynomial mutation, (μ + λ) | −0.9990 to −0.532 |
 | GA, SBX, polynomial mutation | −0.986 to −0.959 |
 | Particle swarm optimization, 40 particles | −1.00048 to −0.767 |
-| SHADE | −0.909 to −0.691 |
-| L-SHADE | −0.575 to −0.349 |
+| SHADE | −0.853 to −0.760 |
+| L-SHADE | −0.549 to −0.214 |
 
 The GAs have 100 individuals, tournaments of 2, simulated binary crossover (SBX) with η 15 or
 arithmetic crossover, and polynomial mutation with η 20 or Gaussian mutation with σ 0.01, each
 changing a gene with probability 0.1. Two runs besides CMA-ES's meet the report's criterion of
 success, within 0.0001 of the minimum: the swarm's with seed 1 and the GA's with Gaussian mutation
-and seed 1. The others end short of it.
+and seed 4. The others end short of it.
 
 ## Output
 

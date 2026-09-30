@@ -93,7 +93,7 @@ With seeds 1 to 25, in the same budget:
 
 | Algorithm | Runs that met the target | Evaluations (median, range) |
 |---|---|---|
-| SHADE at an ε level, as here | 24 of 25 | 151,400 (150,100 to 172,800) |
+| SHADE at an ε level, as here | 25 of 25 | 150,900 (150,100 to 152,700) |
 | CMA-ES with IPOP restarts | 24 of 25 | 115,312 (43,560 to 343,088) |
 | CMA-ES | 8 of 25 | 51,120 (43,560 to 80,856) |
 | L-SHADE | 0 of 25 | |
@@ -101,9 +101,9 @@ With seeds 1 to 25, in the same budget:
 
 With Deb's rules alone, SHADE and L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665),
 its variant with a shrinking population, build a trial from the difference between two solutions.
-On a curved shell, that difference points off it, and the trials are infeasible. SHADE ended 4 runs
-infeasible and 21 with errors from 0.73 to 0.95; L-SHADE ended all 25 feasible, with errors from
-0.054 to 0.69. At an ε level, the shell is thick while the population spreads out and converges,
+On a curved shell, that difference points off it, and the trials are infeasible. SHADE ended 12 runs
+infeasible and 13 with errors from 0.79 to 0.95; L-SHADE ended all 25 feasible, with errors from
+0.22 to 0.63. At an ε level, the shell is thick while the population spreads out and converges,
 and thins as it gathers: its differences shrink with it.
 
 CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) samples a population
@@ -139,10 +139,9 @@ possible, since f* is only the best known, but the runs here end just above it.
 
 The recorded run's best, by the ε level, lies off the shell for most of the schedule, as far as ε
 allows. It is first feasible without ε after 147,500 evaluations, already within 1e-4 of f*, and
-meets its target after 151,700, once ε is 0. The solution is x = (−1.71718, 1.59576, −1.82718,
-−0.763512, 0.763799), a twin of the report's, with the signs of x3 and x5 changed, and each |h| at
+meets its target after 150,200, once ε is 0. The solution is x = (−1.71702, 1.59558, −1.82747,
+−0.763721, 0.763625), a twin of the report's, with the signs of x3 and x5 changed, and each |h| at
 0.0001, on the edge of the tolerance.
 
-With seeds 1 to 1,000, 993 runs meet the target, after 150,100 to 203,200 evaluations (150,800 for
-half of them), and 2 more end within 1e-4 of f*. The other 5 end at or near the local minimum, one
-of them infeasible.
+With seeds 1 to 1,000, 998 runs meet the target, after 150,100 to 179,800 evaluations (150,900 for
+half of them). The other 2 end at the local minimum.

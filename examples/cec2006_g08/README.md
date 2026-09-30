@@ -86,8 +86,8 @@ met the target: those 5 after one restart with a population of 12, after at most
 evaluations. The median is 312.
 
 SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), genoxide's default differential
-evolution, met the target on all 25 runs too, after a median of 4,600 evaluations (at most 5,300),
-and L-SHADE, whose population shrinks over the budget, after a median of 2,772. SHADE's 100
+evolution, met the target on all 25 runs too, after a median of 4,600 evaluations (at most 5,100),
+and L-SHADE, whose population shrinks over the budget, after a median of 2,700. SHADE's 100
 individuals spread over the whole lens; CMA-ES's 6 samples follow one peak, which is faster when
 it's the right one.
 

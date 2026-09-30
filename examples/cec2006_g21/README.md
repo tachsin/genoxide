@@ -113,11 +113,11 @@ is feasible with an absolute error f(x) − f* of at most 1e-8. The report count
 with an error of at most 1e-4; the example asks for more.
 
 With Deb's rules alone, no algorithm of genoxide solves g21 every time: each run reaches one end of
-the curve or the other. With 100 seeds, SHADE with a population of 50 met the target on 68, after a
-median of 44,700 evaluations (from 37,900 to 211,750); the other 32 ended at the minimum of 324.70.
-With the default population of 100, it met the target on 58, after a median of 96,000; L-SHADE,
-whose population shrinks over the budget, on 66. The restarts don't change this: with the default
-population, runs met the target on the same 15 of 25 seeds with and without them. CMA-ES with IPOP
+the curve or the other. With 100 seeds, SHADE with a population of 50 met the target on 65, after a
+median of 45,350 evaluations (from 37,500 to 196,150); the other 35 ended at the minimum of 324.70.
+With the default population of 100, it met the target on 66, after a median of 93,500; L-SHADE,
+whose population shrinks over the budget, on 61. The restarts don't change this: with the default
+population, runs met the target on the same 16 of 25 seeds with and without them. CMA-ES with IPOP
 restarts (Hansen and Ostermeier, 2001; Auger and Hansen, 2005) came within 3·10⁻⁷ of f* on 14 of 25
 seeds, but within 1e-8 on none: it converges pressed against the bound x2 = 0 and the edges of five
 tolerances at once.
@@ -152,10 +152,11 @@ A good run is feasible and ends within 1e-4 of f*, the report's success. The run
 the other minimum, f = 324.70, 131 above f*, or on their way along the curve.
 
 The recorded run's best, by the ε level, uses the tolerance ε allows until the end of the schedule.
-It is first feasible without ε after 167,399 evaluations, within the report's criterion after
-180,299, and meets its target after 185,909. The solution is the report's x* to 6 digits, with
-x2 = 8.0·10⁻¹⁸, g1 active and every equality met.
+It is first feasible without ε after 166,259 evaluations, within the report's criterion after
+187,289, and meets its target after 193,229. The solution is the report's x* to 6 digits, with
+x2 = 7.8·10⁻¹⁸, g1 active and every equality met.
 
-With seeds 1 to 1,000, 981 runs meet the target, after 162,599 to 485,819 evaluations (184,168 for
-half of them), and one more ends within 1e-4 of f*. Of the other 18, 11 end at the other minimum,
-and 7 between 193.75 and 274.49, still moving along the curve when the budget runs out.
+With seeds 1 to 1,000, 973 runs meet the target, after 175,919 to 486,899 evaluations (183,809 for
+half of them), and one more ends within 1e-4 of f*. Of the other 26, 17 end at the other minimum,
+8 between 204.24 and 298.26, still moving along the curve when the budget runs out, and one at
+322.77, near the other minimum but still infeasible.
