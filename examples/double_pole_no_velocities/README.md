@@ -1,7 +1,7 @@
 ---
 title: Double pole balancing without velocities
 category: neuroevolution
-summary: Evolve a recurrent neural network that balances two poles on a cart seeing only their angles and the cart's position, by CMA-ES, and passes Gruau's generalization test.
+summary: Evolve a recurrent neural network that balances two poles on a cart seeing only their angles and the cart's position, and passes Gruau's generalization test, its weights by CMA-ES and, for comparison, its structure and weights by NEAT.
 reference: "Gruau, F., Whitley, D. and Pyeatt, L. (1996). A comparison between cellular encoding and direct encoding for genetic neural networks. Genetic Programming 1996: 81-89. On Wieland's (1991) double pole, with the settings of Gomez, F., Schmidhuber, J. and Miikkulainen, R. (2008). Accelerated neural evolution through cooperatively coevolved synapses. JMLR 9: 937-965."
 reference_url: https://www.jmlr.org/papers/v9/gomez08a.html
 optimum: "Balanced for 100,000 steps, and for 1000 steps from at least 200 of 625 other starts (Gruau et al.'s success criteria)"
@@ -80,12 +80,22 @@ tests: 100,000 steps from the start, and the 625 starts of the generalization te
 when one passes both, or after 100,000 evaluations; the tests aren't counted as evaluations, as
 in the papers.
 
+Then NEAT (`neat::Neat`, Stanley and Miikkulainen 2002) solves the same task, evolving recurrent
+networks (`.feed_forward(false)`, evaluated by `Network::recurrent`, one step of time per control
+step) with the paper's settings for it: 1000 networks that start from the 3 inputs and a bias
+connected to the output, a compatibility coefficient c₃ of 3 and threshold of 4, and new
+connections with probability 0.3. Its output, the paper's steepened sigmoid in (0, 1), is the force
+as 2 × output − 1. It maximizes the same damping fitness, with the same tests, up to 400,000
+evaluations. The [XOR by NEAT](../xor_neat/) page describes the method.
+
 ## Output
 
 The first line gives the evaluations and generations until a network passed the tests, the
 second how many of the 625 starts it balanced, the third its damping fitness. The fourth gives how
 far the cart and the two poles went from the middle and the vertical over the 100,000 steps, and
-the fifth the network's weights.
+the fifth the network's weights. The last three lines are NEAT's: the evaluations and generations
+until its network passed the tests, how many of the 625 starts it balanced, and the network's
+hidden nodes and enabled connections.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/double-pole-no-velocities) plays
 this run back.
@@ -111,3 +121,10 @@ encoding; Igel reports 250 for CMA-ES. The setups differ in the network (Igel's 
 its output fed back too), the start (Igel started the long pole at 4.5°) and the sum of the damping
 fitness (Stanley and Miikkulainen and Gomez et al. print a sum from `t − 100` to `t`, 101 steps;
 here, as in Igel, 100).
+
+NEAT's run of `output.txt` meets the criteria after 33,488 evaluations, in 33 generations, with a
+network of 4 hidden nodes and 18 enabled connections balancing from 212 of the 625 starts. Over seeds
+1 to 20, 17 runs solved it within 400,000 evaluations, after 92,115 evaluations on average (a
+median of 77,282), their networks balancing from 273 of the 625 starts on average; the
+other 3 hadn't. That is slower than Stanley and Miikkulainen's 33,184, in a setup that differs as
+described above.
