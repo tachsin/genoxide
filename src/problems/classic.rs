@@ -285,6 +285,127 @@ scalable!(
     10
 );
 
+scalable!(
+    /// Schwefel's problem 2.21, `maxᵢ |xᵢ|`: unimodal, but only the largest gene counts, so a
+    /// step that improves any other gene changes nothing.
+    ///
+    /// Bounds [−100, 100]ⁿ; minimum 0 at the origin; 30 dimensions by default.
+    ///
+    /// Schwefel, H.-P. (1981). *Numerical Optimization of Computer Models.* Wiley, problem 2.21.
+    /// Definition, bounds and dimensions as restated in Yao, Liu and Lin (1999, f4, table I); not
+    /// yet checked against Schwefel's book
+    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    Schwefel2_21,
+    "Schwefel2_21",
+    1,
+    30
+);
+
+scalable!(
+    /// Schwefel's problem 2.22, `Σ |xᵢ| + Π |xᵢ|`: unimodal, with a kink along every axis.
+    ///
+    /// Bounds [−10, 10]ⁿ; minimum 0 at the origin; 30 dimensions by default.
+    ///
+    /// Schwefel, H.-P. (1981). *Numerical Optimization of Computer Models.* Wiley, problem 2.22.
+    /// Definition, bounds and dimensions as restated in Yao, Liu and Lin (1999, f2, table I);
+    /// Jamil and Yang (2013, function 124) give [−100, 100]. Not yet checked against Schwefel's
+    /// book ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    Schwefel2_22,
+    "Schwefel2_22",
+    1,
+    30
+);
+
+scalable!(
+    /// The Dixon-Price function, `(x₁ − 1)² + Σᵢ₌₂ⁿ i (2xᵢ² − xᵢ₋₁)²`: a chain of curved valleys,
+    /// each gene tied to the one before it.
+    ///
+    /// Bounds [−10, 10]ⁿ; minimum 0 at xᵢ = 2^(−(2ⁱ − 2) / 2ⁱ) (i from 1): x₁ = 1, and each term
+    /// is 0 where xᵢ² = xᵢ₋₁ / 2. The last gene can take either sign, so there are two minima,
+    /// (x₁, …, xₙ₋₁, ±xₙ); every other gene must be positive, since the next one's term needs
+    /// 2xᵢ₊₁² = xᵢ. At least 2 dimensions, 30 by default.
+    ///
+    /// Dixon, L. C. W. and Price, R. C. (1989). Truncated Newton method for sparse unconstrained
+    /// optimization using automatic differentiation. *Journal of Optimization Theory and
+    /// Applications* 60(2): 261-275, which couldn't be read. Definition and bounds as restated in
+    /// Jamil and Yang (2013, function 48), whose minimizer drops the exponent's minus sign, and
+    /// Laguna and Martí (2005, function 37), whose sum starts at i = 1; the sum here starts at
+    /// i = 2, as in both minimizers. Not yet checked against the original
+    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    DixonPrice,
+    "DixonPrice",
+    2,
+    30
+);
+
+scalable!(
+    /// The Trid function, `Σᵢ₌₁ⁿ (xᵢ − 1)² − Σᵢ₌₂ⁿ xᵢ xᵢ₋₁`: a convex quadratic whose genes are
+    /// coupled in a chain, and whose bounds and minimum grow with n.
+    ///
+    /// Bounds [−n², n²]ⁿ; minimum −n (n + 4) (n − 1) / 6 at xᵢ = i (n + 1 − i) (i from 1): −50 for
+    /// n = 6 and −210 for n = 10. It's the only minimum: the Hessian is tridiagonal with 2 on the
+    /// diagonal and −1 beside it, positive definite, and the gradient,
+    /// `2 (xᵢ − 1) − xᵢ₋₁ − xᵢ₊₁`, is 0 at that point. At least 2 dimensions, 10 by default.
+    ///
+    /// Its origin is unknown: the earliest source found is Hedar's collection of global
+    /// optimization test problems, which Jamil and Yang (2013, functions 150 and 151, as Trid 6
+    /// and Trid 10) credit; they give −200 for n = 10, and Laguna and Martí (2005, functions 24
+    /// and 25) give −210. Definition and bounds as in Laguna and Martí, whose second sum prints
+    /// `xᵢ xⱼ` for `xᵢ xᵢ₋₁`. Not yet checked against an original
+    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    Trid,
+    "Trid",
+    2,
+    10
+);
+
+/// Powell's singular function, extended to n = 4k dimensions: over each block of four genes,
+/// `(x₁ + 10x₂)² + 5 (x₃ − x₄)² + (x₂ − 2x₃)⁴ + 10 (x₁ − x₄)⁴`.
+///
+/// Bounds [−4, 5]ⁿ; minimum 0 at the origin, the only point where every term is 0. The function
+/// is convex, but its Hessian is singular there (twice in each block), which slows methods that
+/// rely on a quadratic model. The number of dimensions is a multiple of 4, 24 by default.
+///
+/// Powell, M. J. D. (1962). An iterative method for finding stationary values of a function of
+/// several variables. *The Computer Journal* 5(2): 147-151, which defines it in 4 dimensions
+/// with the start (3, −1, 0, 1), where f = 215, and no bounds; it couldn't be read. The formula
+/// as Steihaug, T. and Suleiman, S. (2013). Global convergence and the Powell singular function.
+/// *Journal of Global Optimization* 56(3): 845-853 (equation 1) restate it from Powell; the
+/// extension to blocks of four and the bounds as in Laguna and Martí (2005, function 36, with
+/// n = 24). Jamil and Yang (2013, function 91) print `(x₂ − x₃)⁴` for `(x₂ − 2x₃)⁴`, and give
+/// the start as the minimizer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Powell {
+    dimensions: usize,
+}
+
+impl Powell {
+    /// The function in `dimensions` dimensions, a multiple of 4.
+    ///
+    /// # Panics
+    ///
+    /// If `dimensions` is 0 or not a multiple of 4.
+    pub fn new(dimensions: usize) -> Self {
+        assert!(
+            dimensions >= 4 && dimensions.is_multiple_of(4),
+            "Powell needs a positive multiple of 4 dimensions, got {dimensions}"
+        );
+        Self { dimensions }
+    }
+
+    /// The number of dimensions.
+    pub fn dimensions(&self) -> usize {
+        self.dimensions
+    }
+}
+
+impl Default for Powell {
+    /// The function in 24 dimensions.
+    fn default() -> Self {
+        Self::new(24)
+    }
+}
+
 // ---- the scalable functions ----------------------------------------------------------------------
 
 impl FitnessFunction<Reals> for Sphere {
@@ -817,6 +938,210 @@ impl Problem for Michalewicz {
     fn reference(&self) -> &'static str {
         "Michalewicz, Z. (1992). Genetic Algorithms + Data Structures = Evolution Programs. \
          Springer."
+    }
+}
+
+impl FitnessFunction<Reals> for Schwefel2_21 {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        x.iter().fold(0.0, |largest, xi| largest.max(xi.abs()))
+    }
+}
+
+impl Problem for Schwefel2_21 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Schwefel2_21"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(self.dimensions, -100.0, 100.0)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::proven(0.0, vec![repeated(self.dimensions, 0.0)]))
+    }
+
+    fn reference(&self) -> &'static str {
+        "Schwefel, H.-P. (1981). Numerical Optimization of Computer Models. Wiley. Problem 2.21."
+    }
+}
+
+impl FitnessFunction<Reals> for Schwefel2_22 {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let sum: f64 = x.iter().map(|xi| xi.abs()).sum();
+        let product: f64 = x.iter().map(|xi| xi.abs()).product();
+        sum + product
+    }
+}
+
+impl Problem for Schwefel2_22 {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Schwefel2_22"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(self.dimensions, -10.0, 10.0)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::proven(0.0, vec![repeated(self.dimensions, 0.0)]))
+    }
+
+    fn reference(&self) -> &'static str {
+        "Schwefel, H.-P. (1981). Numerical Optimization of Computer Models. Wiley. Problem 2.22."
+    }
+}
+
+// the minimizer of the Dixon-Price function in `dimensions` dimensions with a positive last gene:
+// x₁ = 1 and xᵢ = √(xᵢ₋₁ / 2), which is 2^(−(2ⁱ − 2) / 2ⁱ)
+fn dixon_price_minimizer(dimensions: usize) -> Vec<f64> {
+    let mut x = vec![1.0_f64; dimensions];
+    for i in 1..dimensions {
+        x[i] = (x[i - 1] / 2.0).sqrt();
+    }
+    x
+}
+
+impl FitnessFunction<Reals> for DixonPrice {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let Some(&first) = x.first() else {
+            return 0.0;
+        };
+        let chain: f64 = x
+            .windows(2)
+            .enumerate()
+            .map(|(k, pair)| (k + 2) as f64 * math::powi(2.0 * pair[1] * pair[1] - pair[0], 2))
+            .sum();
+        math::powi(first - 1.0, 2) + chain
+    }
+}
+
+impl Problem for DixonPrice {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "DixonPrice"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(self.dimensions, -10.0, 10.0)
+    }
+
+    /// Its two minima: the last gene of either sign.
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        let positive = dixon_price_minimizer(self.dimensions);
+        let mut negative = positive.clone();
+        let last = negative.len() - 1;
+        negative[last] = -negative[last];
+        Some(Optimum::proven(
+            0.0,
+            vec![Reals::from(positive), Reals::from(negative)],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        "Dixon, L. C. W. and Price, R. C. (1989). Truncated Newton method for sparse \
+         unconstrained optimization using automatic differentiation. Journal of Optimization \
+         Theory and Applications 60(2): 261-275."
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some("https://doi.org/10.1007/BF00940007")
+    }
+}
+
+impl FitnessFunction<Reals> for Trid {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let squares: f64 = x.iter().map(|xi| math::powi(xi - 1.0, 2)).sum();
+        let products: f64 = x.windows(2).map(|pair| pair[0] * pair[1]).sum();
+        squares - products
+    }
+}
+
+impl Problem for Trid {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Trid"
+    }
+
+    fn representation(&self) -> Real {
+        let bound = (self.dimensions * self.dimensions) as f64;
+        uniform(self.dimensions, -bound, bound)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        let n = self.dimensions as f64;
+        let solution: Reals = (1..=self.dimensions)
+            .map(|i| (i * (self.dimensions + 1 - i)) as f64)
+            .collect();
+        Some(Optimum::proven(
+            -n * (n + 4.0) * (n - 1.0) / 6.0,
+            vec![solution],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        "Laguna, M. and Martí, R. (2005). Experimental testing of advanced scatter search designs \
+         for global optimization of multimodal functions. Journal of Global Optimization 33(2): \
+         235-255."
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some("https://doi.org/10.1007/s10898-004-1936-z")
+    }
+}
+
+impl FitnessFunction<Reals> for Powell {
+    type Output = f64;
+
+    /// The value at `x`, over its whole blocks of four genes.
+    fn evaluate(&self, x: &Reals) -> f64 {
+        x.chunks_exact(4)
+            .map(|block| {
+                let (x1, x2, x3, x4) = (block[0], block[1], block[2], block[3]);
+                math::powi(x1 + 10.0 * x2, 2)
+                    + 5.0 * math::powi(x3 - x4, 2)
+                    + math::powi(x2 - 2.0 * x3, 4)
+                    + 10.0 * math::powi(x1 - x4, 4)
+            })
+            .sum()
+    }
+}
+
+impl Problem for Powell {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Powell"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(self.dimensions, -4.0, 5.0)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::proven(0.0, vec![repeated(self.dimensions, 0.0)]))
+    }
+
+    fn reference(&self) -> &'static str {
+        "Powell, M. J. D. (1962). An iterative method for finding stationary values of a function \
+         of several variables. The Computer Journal 5(2): 147-151."
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some("https://doi.org/10.1093/comjnl/5.2.147")
     }
 }
 
@@ -1594,6 +1919,463 @@ impl Problem for SchafferF6 {
     }
 }
 
+// ---- the two-dimensional functions of batch 10 --------------------------------------------------
+
+// a two-dimensional function with proven minimum: its struct, its evaluation from (x₁, x₂), and
+// its problem
+macro_rules! two_dimensional {
+    (
+        $(#[$doc:meta])* $name:ident,
+        |$x1:ident, $x2:ident| $value:expr,
+        bounds: $low:literal ..= $high:literal,
+        minimum: $minimum:expr, at: [$($solution:expr),+ $(,)?],
+        reference: $reference:literal $(, url: $url:literal)? $(,)?
+    ) => {
+        $(#[$doc])*
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+        pub struct $name;
+
+        impl FitnessFunction<Reals> for $name {
+            type Output = f64;
+
+            /// The value at `x`.
+            ///
+            /// # Panics
+            ///
+            /// If `x` has fewer than 2 genes.
+            fn evaluate(&self, x: &Reals) -> f64 {
+                let ($x1, $x2) = (x[0], x[1]);
+                $value
+            }
+        }
+
+        impl Problem for $name {
+            type Representation = Real;
+
+            fn name(&self) -> &'static str {
+                stringify!($name)
+            }
+
+            fn representation(&self) -> Real {
+                uniform(2, $low, $high)
+            }
+
+            fn optimum(&self) -> Option<Optimum<Reals>> {
+                Some(Optimum::proven($minimum, vec![$(reals(&$solution)),+]))
+            }
+
+            fn reference(&self) -> &'static str {
+                $reference
+            }
+
+            $(
+                fn reference_url(&self) -> Option<&'static str> {
+                    Some($url)
+                }
+            )?
+        }
+    };
+}
+
+two_dimensional!(
+    /// Beale's function, `(1.5 − x₁ + x₁x₂)² + (2.25 − x₁ + x₁x₂²)² + (2.625 − x₁ + x₁x₂³)²`: a
+    /// flat valley that curves towards the minimum, between walls that rise to 1.8·10⁵ at the
+    /// corners.
+    ///
+    /// Bounds [−4.5, 4.5]²; minimum 0 at (3, 0.5). It's the only zero: the three terms are 0
+    /// where x₁ (1 − x₂ᵏ) = 1.5, 2.25 and 2.625 for k = 1, 2, 3, and the ratios of the last two
+    /// to the first, 1 + x₂ = 1.5 and 1 + x₂ + x₂² = 1.75, give x₂ = 0.5 and x₁ = 3.
+    ///
+    /// Beale, E. M. L. (1958). *On an Iterative Method for Finding a Local Minimum of a Function
+    /// of More than One Variable.* Technical Report 25, Statistical Techniques Research Group,
+    /// Princeton University, which couldn't be read. Definition and bounds as restated in Jamil
+    /// and Yang (2013, function 10) and Laguna and Martí (2005, function 6), who agree; not yet
+    /// checked against the original ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    Beale,
+    |x1, x2| math::powi(1.5 - x1 + x1 * x2, 2)
+        + math::powi(2.25 - x1 + x1 * x2 * x2, 2)
+        + math::powi(2.625 - x1 + x1 * math::powi(x2, 3), 2),
+    bounds: -4.5..=4.5,
+    minimum: 0.0, at: [[3.0, 0.5]],
+    reference: "Beale, E. M. L. (1958). On an Iterative Method for Finding a Local Minimum of a \
+        Function of More than One Variable. Technical Report 25, Statistical Techniques Research \
+        Group, Princeton University.",
+);
+
+two_dimensional!(
+    /// Booth's function, `(x₁ + 2x₂ − 7)² + (2x₁ + x₂ − 5)²`: a convex quadratic, a bowl with
+    /// elliptic level sets whose axes are tilted by 45°.
+    ///
+    /// Bounds [−10, 10]²; minimum 0 at (1, 3), the solution of x₁ + 2x₂ = 7 and 2x₁ + x₂ = 5.
+    /// The Hessian has the eigenvalues 2 and 18.
+    ///
+    /// Its origin is unknown: definition and bounds as restated in Jamil and Yang (2013, function
+    /// 20) and Laguna and Martí (2005, function 7), who agree; not yet checked against an original
+    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    Booth,
+    |x1, x2| math::powi(x1 + 2.0 * x2 - 7.0, 2) + math::powi(2.0 * x1 + x2 - 5.0, 2),
+    bounds: -10.0..=10.0,
+    minimum: 0.0, at: [[1.0, 3.0]],
+    reference: "Jamil, M. and Yang, X.-S. (2013). A literature survey of benchmark functions for \
+        global optimisation problems. International Journal of Mathematical Modelling and \
+        Numerical Optimisation 4(2): 150-194.",
+    url: "https://doi.org/10.1504/IJMMNO.2013.055204",
+);
+
+two_dimensional!(
+    /// Matyas' function, `0.26 (x₁² + x₂²) − 0.48 x₁x₂`: a convex quadratic, a long flat valley
+    /// along the diagonal.
+    ///
+    /// Bounds [−10, 10]²; minimum 0 at the origin. The Hessian has the eigenvalues 1 (across the
+    /// diagonal) and 0.04 (along it): the valley is 25 times flatter than its sides.
+    ///
+    /// Its origin is unknown: Jamil and Yang (2013, function 71) credit Hedar's collection of
+    /// global optimization test problems, and the name may refer to Matyas' random optimization
+    /// (1965), which couldn't be checked. Definition and bounds as in Jamil and Yang; Laguna and
+    /// Martí (2005, function 8) have the same function on [−5, 10]. Not yet checked against an
+    /// original ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    Matyas,
+    |x1, x2| 0.26 * (x1 * x1 + x2 * x2) - 0.48 * x1 * x2,
+    bounds: -10.0..=10.0,
+    minimum: 0.0, at: [[0.0, 0.0]],
+    reference: "Jamil, M. and Yang, X.-S. (2013). A literature survey of benchmark functions for \
+        global optimisation problems. International Journal of Mathematical Modelling and \
+        Numerical Optimisation 4(2): 150-194.",
+    url: "https://doi.org/10.1504/IJMMNO.2013.055204",
+);
+
+two_dimensional!(
+    /// Bohachevsky's first function, `x₁² + 2x₂² − 0.3 cos(3πx₁) − 0.4 cos(4πx₂) + 0.7`: a bowl
+    /// with a ripple of cosines, separable.
+    ///
+    /// Bounds [−100, 100]²; minimum 0 at the origin. It's the global minimum: the cosine terms
+    /// add at least 0 to x₁² + 2x₂², and all are 0 only at the origin.
+    ///
+    /// Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized simulated annealing
+    /// for function optimization. *Technometrics* 28(3): 209-217, which couldn't be read.
+    /// Definition and bounds as restated in Jamil and Yang (2013, function 17); Adorio (2005, MVF
+    /// library, section 2.3) gives the same function on [−50, 50]. Not yet checked against the
+    /// original ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    Bohachevsky1,
+    |x1, x2| x1 * x1 + 2.0 * x2 * x2 - 0.3 * math::cos(3.0 * PI * x1)
+        - 0.4 * math::cos(4.0 * PI * x2)
+        + 0.7,
+    bounds: -100.0..=100.0,
+    minimum: 0.0, at: [[0.0, 0.0]],
+    reference: "Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized \
+        simulated annealing for function optimization. Technometrics 28(3): 209-217.",
+    url: "https://doi.org/10.1080/00401706.1986.10488128",
+);
+
+two_dimensional!(
+    /// Bohachevsky's second function, `x₁² + 2x₂² − 0.3 cos(3πx₁) cos(4πx₂) + 0.3`: the bowl of
+    /// the first, with a product of cosines that couples the genes.
+    ///
+    /// Bounds [−100, 100]²; minimum 0 at the origin. It's the global minimum: 0.3 − 0.3 cos cos
+    /// is at least 0, and x₁² + 2x₂² is 0 only at the origin.
+    ///
+    /// Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized simulated annealing
+    /// for function optimization. *Technometrics* 28(3): 209-217, which couldn't be read; whether
+    /// it has this function is unconfirmed. Definition and bounds as restated in Jamil and Yang
+    /// (2013, function 18), who print `0.3 cos(3πx₁) · 0.4 cos(4πx₂)` for the product; Adorio
+    /// (2005, MVF library, section 2.3) gives this form, on [−50, 50]. Not yet checked against
+    /// the original ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    Bohachevsky2,
+    |x1, x2| x1 * x1 + 2.0 * x2 * x2
+        - 0.3 * math::cos(3.0 * PI * x1) * math::cos(4.0 * PI * x2)
+        + 0.3,
+    bounds: -100.0..=100.0,
+    minimum: 0.0, at: [[0.0, 0.0]],
+    reference: "Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized \
+        simulated annealing for function optimization. Technometrics 28(3): 209-217.",
+    url: "https://doi.org/10.1080/00401706.1986.10488128",
+);
+
+two_dimensional!(
+    /// Bohachevsky's third function, `x₁² + 2x₂² − 0.3 cos(3πx₁ + 4πx₂) + 0.3`: the bowl of the
+    /// first, with a cosine of a sum, whose ripples run obliquely.
+    ///
+    /// Bounds [−100, 100]²; minimum 0 at the origin. It's the global minimum: 0.3 − 0.3 cos is
+    /// at least 0, and x₁² + 2x₂² is 0 only at the origin.
+    ///
+    /// Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized simulated annealing
+    /// for function optimization. *Technometrics* 28(3): 209-217, which couldn't be read; whether
+    /// it has this function is unconfirmed. Definition and bounds as restated in Jamil and Yang
+    /// (2013, function 19); Adorio (2005, MVF library) has only the first two. Not yet checked
+    /// against the original ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    Bohachevsky3,
+    |x1, x2| x1 * x1 + 2.0 * x2 * x2 - 0.3 * math::cos(3.0 * PI * x1 + 4.0 * PI * x2) + 0.3,
+    bounds: -100.0..=100.0,
+    minimum: 0.0, at: [[0.0, 0.0]],
+    reference: "Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized \
+        simulated annealing for function optimization. Technometrics 28(3): 209-217.",
+    url: "https://doi.org/10.1080/00401706.1986.10488128",
+);
+
+two_dimensional!(
+    /// The three-hump camel function, `2x₁² − 1.05x₁⁴ + x₁⁶ / 6 + x₁x₂ + x₂²`: a global minimum
+    /// between two local ones.
+    ///
+    /// Bounds [−5, 5]²; minimum 0 at the origin. It's the global minimum: the lowest value over x₂
+    /// for a given x₁, at x₂ = −x₁ / 2, is `x₁² (1.75 − 1.05x₁² + x₁⁴ / 6)`, and the quadratic
+    /// in x₁² has no real root (1.05² < 4 · 1.75 / 6), so it's positive but at x₁ = 0. The local
+    /// minima are ±(1.7475523, −0.8737761), with 0.2986384.
+    ///
+    /// Its origin is unknown: usually credited to Dixon and Szegö (1978) or to Branin (1972),
+    /// neither of which could be checked. Definition and bounds as restated in Jamil and Yang
+    /// (2013, function 29) and Adorio (2005, MVF library, section 2.7), who agree. Not yet checked
+    /// against an original ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    ThreeHumpCamel,
+    |x1, x2| {
+        let x1_squared = x1 * x1;
+        (2.0 - 1.05 * x1_squared + x1_squared * x1_squared / 6.0) * x1_squared + x1 * x2 + x2 * x2
+    },
+    bounds: -5.0..=5.0,
+    minimum: 0.0, at: [[0.0, 0.0]],
+    reference: "Jamil, M. and Yang, X.-S. (2013). A literature survey of benchmark functions for \
+        global optimisation problems. International Journal of Mathematical Modelling and \
+        Numerical Optimisation 4(2): 150-194.",
+    url: "https://doi.org/10.1504/IJMMNO.2013.055204",
+);
+
+// Langermann's centers aᵢ and weights cᵢ, in two dimensions
+const LANGERMANN_A: [[f64; 2]; 5] = [[3.0, 5.0], [5.0, 2.0], [2.0, 1.0], [1.0, 4.0], [7.0, 9.0]];
+const LANGERMANN_C: [f64; 5] = [1.0, 2.0, 5.0, 2.0, 3.0];
+
+/// Langermann's function in two dimensions, with m = 5 terms:
+/// `Σᵢ cᵢ exp(−dᵢ / π) cos(π dᵢ)`, where dᵢ = (x₁ − aᵢ₁)² + (x₂ − aᵢ₂)²: rings of ripples
+/// around five centers, which interfere.
+///
+/// With c = (1, 2, 5, 2, 3) and the centers a = (3, 5), (5, 2), (2, 1), (1, 4), (7, 9).
+///
+/// Bounds [0, 10]²; minimum −4.155809291847785 at (2.793402208645037, 1.59723250132836), where
+/// the gradient is 0, computed to 40 digits by Newton's method and rounded, from the lowest points
+/// of a 2001 × 2001 grid; the next is −4.127576741310137 at (1.991205862734151, 1.988619801947841).
+/// Not proven global.
+///
+/// Langermann's function is from the first ICEO: Bersini, H., Dorigo, M., Langerman, S.,
+/// Seront, G. and Gambardella, L. (1996). Results of the first international contest on
+/// evolutionary optimisation (1st ICEO). *Proceedings of IEEE International Conference on
+/// Evolutionary Computation*: 611-615, which couldn't be read. The contests' Langermann functions
+/// have 5 and 10 dimensions, a minus sign in front of the sum, and centers in the organizers' code,
+/// as the second contest's pages (read through the Internet Archive) and Jamil and Yang (2013,
+/// function 68, with five 10-dimensional centers) restate them. This two-dimensional form, its
+/// sign and its constants are those of Molga, M. and Smutnicki, C. (2005). *Test functions for
+/// optimization needs*, section 2.10, which gives no bounds; the bounds are those of Surjanovic
+/// and Bingham's Virtual Library of Simulation Experiments. With the contests' minus sign, the
+/// minimum would be −5.1621262 at (2.00299, 1.00610), the maximum of this form.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Langermann;
+
+impl FitnessFunction<Reals> for Langermann {
+    type Output = f64;
+
+    /// The value at `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than 2 genes.
+    fn evaluate(&self, x: &Reals) -> f64 {
+        LANGERMANN_A
+            .iter()
+            .zip(LANGERMANN_C)
+            .map(|(a, c)| {
+                let distance = math::powi(x[0] - a[0], 2) + math::powi(x[1] - a[1], 2);
+                c * math::exp(-distance / PI) * math::cos(PI * distance)
+            })
+            .sum()
+    }
+}
+
+impl Problem for Langermann {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Langermann"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(2, 0.0, 10.0)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::best_known(
+            -4.155_809_291_847_785,
+            vec![reals(&[2.793_402_208_645_037, 1.597_232_501_328_36])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        "Bersini, H., Dorigo, M., Langerman, S., Seront, G. and Gambardella, L. (1996). Results \
+         of the first international contest on evolutionary optimisation (1st ICEO). Proceedings \
+         of IEEE International Conference on Evolutionary Computation: 611-615. Two-dimensional \
+         form and constants as in Molga, M. and Smutnicki, C. (2005). Test functions for \
+         optimization needs."
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some("https://doi.org/10.1109/ICEC.1996.542670")
+    }
+}
+
+// the centers of Shekel's foxholes: the 5 × 5 grid of (−32, −16, 0, 16, 32)², x₁ varying first
+const FOXHOLES: [f64; 5] = [-32.0, -16.0, 0.0, 16.0, 32.0];
+
+/// Shekel's foxholes, De Jong's F5: `1 / (1/500 + Σⱼ₌₁²⁵ 1 / (j + (x₁ − a₁ⱼ)⁶ + (x₂ − a₂ⱼ)⁶))`,
+/// a plane at nearly 500 with 25 narrow holes, one at each point of the grid
+/// (−32, −16, 0, 16, 32)², the j-th as deep as about j.
+///
+/// The holes are a₁ⱼ = −32, −16, 0, 16, 32, −32, …, and a₂ⱼ = −32 five times, −16 five times, ….
+///
+/// Bounds [−65.536, 65.536]²; minimum 0.9980038377944503 at (−31.97833483565697,
+/// −31.978334837300795), in the first hole, where the gradient is 0, computed to 40 digits by
+/// Newton's method and rounded: the other holes pull it a little towards the middle, and the value
+/// at (−32, −32) is 0.9980038388186489. The deepest of the 25 holes, but not proven global.
+///
+/// De Jong, K. A. (1975). *An Analysis of the Behavior of a Class of Genetic Adaptive Systems.*
+/// PhD thesis, University of Michigan, appendix A.6 (read in the scan of the University of
+/// Michigan's copy): test function F5, "synthesized as suggested by Shekel (1971)", with
+/// `cⱼ = j`, K = 500, this grid and these bounds, and its minimum as ≅ 1. Yao, Liu and Lin (1999,
+/// f14) restate it the same.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct ShekelFoxholes;
+
+impl FitnessFunction<Reals> for ShekelFoxholes {
+    type Output = f64;
+
+    /// The value at `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than 2 genes.
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let mut sum = 1.0 / 500.0;
+        for (j, (a2, a1)) in FOXHOLES
+            .iter()
+            .flat_map(|a2| FOXHOLES.iter().map(move |a1| (a2, a1)))
+            .enumerate()
+        {
+            let depth = (j + 1) as f64;
+            sum += 1.0 / (depth + math::powi(x[0] - a1, 6) + math::powi(x[1] - a2, 6));
+        }
+        1.0 / sum
+    }
+}
+
+impl Problem for ShekelFoxholes {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "ShekelFoxholes"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(2, -65.536, 65.536)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::best_known(
+            0.998_003_837_794_450_3,
+            vec![reals(&[-31.978_334_835_656_97, -31.978_334_837_300_795])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        "De Jong, K. A. (1975). An Analysis of the Behavior of a Class of Genetic Adaptive \
+         Systems. PhD thesis, University of Michigan. Function F5, after Shekel, J. (1971). Test \
+         functions for multimodal search techniques. Proceedings of the 5th Annual Princeton \
+         Conference on Information Sciences and Systems, Princeton University."
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some("https://hdl.handle.net/2027.42/4507")
+    }
+}
+
+// Kowalik and Osborne's data: the responses aᵢ, and the reciprocals of the predictors bᵢ
+const KOWALIK_A: [f64; 11] = [
+    0.1957, 0.1947, 0.1735, 0.1600, 0.0844, 0.0627, 0.0456, 0.0342, 0.0323, 0.0235, 0.0246,
+];
+const KOWALIK_B_INVERSE: [f64; 11] = [0.25, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0];
+
+/// Kowalik's function, `Σᵢ₌₁¹¹ (aᵢ − x₁ (bᵢ² + bᵢx₂) / (bᵢ² + bᵢx₃ + x₄))²`: the least squares
+/// fit of a rational model to 11 data points, with poles where a denominator is 0.
+///
+/// With a = (0.1957, 0.1947, 0.1735, 0.1600, 0.0844, 0.0627, 0.0456, 0.0342, 0.0323, 0.0235,
+/// 0.0246) and 1/b = (0.25, 0.5, 1, 2, 4, 6, 8, 10, 12, 14, 16).
+///
+/// Bounds [−5, 5]⁴; minimum 3.0748598780560608e-4 at (0.19283345298250858, 0.19083623878262915,
+/// 0.12311729627785712, 0.13576598998153703), where the gradient is 0, computed to 40 digits by
+/// Newton's method and rounded: the best of the local minima that 3,000 local searches from random
+/// points reach, and where 15% of them end; not proven global. Yao, Liu and Lin give ≈ 3.075e-4
+/// at (0.1928, 0.1908, 0.1231, 0.1358), and Adorio (2005, MVF library) 3.0748610e-4.
+///
+/// The data are Kowalik and Osborne's: Kowalik, J. S. and Osborne, M. R. (1968). *Methods for
+/// Unconstrained Optimization Problems.* American Elsevier, which couldn't be read. The function,
+/// the data and the bounds as Yao, Liu and Lin (1999, f15, table XI) restate them, with bᵢ = 1/6,
+/// 1/12 and 1/14 exact; NIST's Statistical Reference Datasets (MGH09, which cite the book as
+/// Elsevier North-Holland, 1978, and Moré, Garbow and Hillstrom, 1981) round them to 0.167, 0.0833
+/// and 0.0714, with which the minimum is 3.0750560385e-4, NIST's certified value.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Kowalik;
+
+impl FitnessFunction<Reals> for Kowalik {
+    type Output = f64;
+
+    /// The value at `x`.
+    ///
+    /// # Panics
+    ///
+    /// If `x` has fewer than 4 genes.
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let x = &x[..4];
+        KOWALIK_A
+            .iter()
+            .zip(KOWALIK_B_INVERSE)
+            .map(|(a, b_inverse)| {
+                let b = 1.0 / b_inverse;
+                let model = x[0] * (b * b + b * x[1]) / (b * b + b * x[2] + x[3]);
+                math::powi(a - model, 2)
+            })
+            .sum()
+    }
+}
+
+impl Problem for Kowalik {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Kowalik"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(4, -5.0, 5.0)
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        Some(Optimum::best_known(
+            3.074_859_878_056_060_8e-4,
+            vec![reals(&[
+                0.192_833_452_982_508_58,
+                0.190_836_238_782_629_15,
+                0.123_117_296_277_857_12,
+                0.135_765_989_981_537_03,
+            ])],
+        ))
+    }
+
+    fn reference(&self) -> &'static str {
+        "Kowalik, J. S. and Osborne, M. R. (1968). Methods for Unconstrained Optimization \
+         Problems. American Elsevier. As restated in Yao, X., Liu, Y. and Lin, G. (1999). \
+         Evolutionary programming made faster. IEEE Transactions on Evolutionary Computation \
+         3(2): 82-102."
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some("https://doi.org/10.1109/4235.771163")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2104,6 +2886,275 @@ mod tests {
         );
     }
 
+    #[test]
+    fn schwefel_2_21() {
+        check_optimum(&Schwefel2_21::new(5));
+        let problem = Schwefel2_21::new(3);
+        // the largest absolute value, whatever its sign or place
+        assert_eq!(problem.evaluate(&at(&[1.0, -7.5, 3.0])), 7.5);
+        assert_eq!(problem.evaluate(&at(&[-2.0, 0.5, 0.25])), 2.0);
+        assert_eq!(Schwefel2_21::default().dimensions(), 30);
+        assert_eq!(problem.representation().bounds()[0], -100.0..=100.0);
+    }
+
+    #[test]
+    fn schwefel_2_22() {
+        check_optimum(&Schwefel2_22::new(5));
+        let problem = Schwefel2_22::new(3);
+        // (1 + 2 + 3) + 1 · 2 · 3
+        assert_eq!(problem.evaluate(&at(&[1.0, -2.0, 3.0])), 12.0);
+        // a zero gene zeroes the product only
+        assert_eq!(problem.evaluate(&at(&[0.0, -2.0, 3.0])), 5.0);
+        assert_eq!(Schwefel2_22::default().dimensions(), 30);
+        assert_eq!(problem.representation().bounds()[1], -10.0..=10.0);
+    }
+
+    #[test]
+    fn dixon_price() {
+        check_optimum(&DixonPrice::new(5));
+        let optimum = DixonPrice::new(4).optimum().expect("known");
+        assert_eq!(optimum.solutions().len(), 2);
+        // the minimizer 2^(−(2ⁱ − 2) / 2ⁱ): 1, 2^(−1/2), 2^(−3/4), 2^(−7/8)
+        let solution = &optimum.solutions()[0];
+        for (i, x) in solution.iter().enumerate() {
+            let power = 2f64.powi(i as i32 + 1);
+            assert_close(*x, 2f64.powf(-(power - 2.0) / power), 1e-15);
+        }
+        // the other one negates the last gene only
+        let other = &optimum.solutions()[1];
+        assert_eq!(other[..3], solution[..3]);
+        assert_eq!(other[3], -solution[3]);
+        // negating another gene breaks the next term: with 2x₃² = x₂, 3 (2x₃² + x₂)² = 12x₂² = 6
+        let mut negated = solution.to_vec();
+        negated[1] = -negated[1];
+        assert_close(DixonPrice::new(4).evaluate(&at(&negated)), 6.0, 1e-12);
+        // at the origin: (0 − 1)² and nothing else; at (1, 1, 1): 0 + 2 · 1 + 3 · 1
+        assert_eq!(DixonPrice::new(3).evaluate(&at(&[0.0; 3])), 1.0);
+        assert_eq!(DixonPrice::new(3).evaluate(&at(&[1.0; 3])), 5.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "DixonPrice needs at least 2 dimensions")]
+    fn dixon_price_needs_two_dimensions() {
+        let _ = DixonPrice::new(1);
+    }
+
+    #[test]
+    fn trid() {
+        check_optimum(&Trid::new(5));
+        // the minima that Laguna and Martí give, and not Jamil and Yang's −200 for n = 10
+        assert_eq!(Trid::new(6).optimum().expect("known").value(), -50.0);
+        assert_eq!(Trid::new(10).optimum().expect("known").value(), -210.0);
+        check_optimum(&Trid::new(6));
+        check_optimum(&Trid::new(10));
+        // the solution for n = 6, i (7 − i)
+        let solution = Trid::new(6).optimum().expect("known").solutions()[0].to_vec();
+        assert_eq!(solution, [6.0, 10.0, 12.0, 12.0, 10.0, 6.0]);
+        // the gradient 2 (xᵢ − 1) − xᵢ₋₁ − xᵢ₊₁ is 0 there
+        for i in 0..6 {
+            let before = if i > 0 { solution[i - 1] } else { 0.0 };
+            let after = solution.get(i + 1).copied().unwrap_or(0.0);
+            assert_eq!(2.0 * (solution[i] - 1.0) - before - after, 0.0);
+        }
+        // at the origin, n; at (1, …, 1), −(n − 1)
+        assert_eq!(Trid::new(4).evaluate(&at(&[0.0; 4])), 4.0);
+        assert_eq!(Trid::new(4).evaluate(&at(&[1.0; 4])), -3.0);
+        // the bounds grow with n
+        assert_eq!(Trid::new(6).representation().bounds()[0], -36.0..=36.0);
+        assert_eq!(Trid::default().dimensions(), 10);
+    }
+
+    #[test]
+    fn powell() {
+        check_optimum(&Powell::new(8));
+        // Powell's start: (3 − 10)² + 5 (0 − 1)² + (−1 − 0)⁴ + 10 (3 − 1)⁴ = 49 + 5 + 1 + 160
+        assert_eq!(Powell::new(4).evaluate(&at(&[3.0, -1.0, 0.0, 1.0])), 215.0);
+        // each block counts on its own
+        let twice = at(&[3.0, -1.0, 0.0, 1.0, 3.0, -1.0, 0.0, 1.0]);
+        assert_eq!(Powell::new(8).evaluate(&twice), 430.0);
+        // (x₂ − 2x₃)⁴, not Jamil and Yang's (x₂ − x₃)⁴: at (0, 1, 1, 0), 100 + 5 + 1 + 0
+        assert_eq!(Powell::new(4).evaluate(&at(&[0.0, 1.0, 1.0, 0.0])), 106.0);
+        assert_eq!(Powell::default().dimensions(), 24);
+        assert_eq!(Powell::default().representation().bounds()[0], -4.0..=5.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Powell needs a positive multiple of 4 dimensions, got 6")]
+    fn powell_needs_a_multiple_of_four() {
+        let _ = Powell::new(6);
+    }
+
+    #[test]
+    #[should_panic(expected = "Powell needs a positive multiple of 4 dimensions, got 0")]
+    fn powell_needs_a_dimension() {
+        let _ = Powell::new(0);
+    }
+
+    #[test]
+    fn beale() {
+        check_optimum(&Beale);
+        // at the origin: 1.5² + 2.25² + 2.625²
+        assert_eq!(Beale.evaluate(&at(&[0.0, 0.0])), 14.203_125);
+        // at (1, 1), each x₁ (1 − x₂ᵏ) is 0: the same
+        assert_eq!(Beale.evaluate(&at(&[1.0, 1.0])), 14.203_125);
+        // the highest corner: 1.8·10⁵
+        let corner = Beale.evaluate(&at(&[-4.5, -4.5]));
+        assert!((181_000.0..182_000.0).contains(&corner));
+        assert_eq!(Beale.representation().bounds(), vec![-4.5..=4.5; 2]);
+    }
+
+    #[test]
+    fn booth() {
+        check_optimum(&Booth);
+        // (−7)² + (−5)²
+        assert_eq!(Booth.evaluate(&at(&[0.0, 0.0])), 74.0);
+        // (3 + 6 − 7)² + (6 + 3 − 5)²
+        assert_eq!(Booth.evaluate(&at(&[3.0, 3.0])), 20.0);
+    }
+
+    #[test]
+    fn matyas() {
+        check_optimum(&Matyas);
+        // along the diagonal, 0.04 x²; across it, x²: the valley is 25 times flatter
+        assert_close(Matyas.evaluate(&at(&[1.0, 1.0])), 0.04, 1e-15);
+        assert_close(Matyas.evaluate(&at(&[1.0, -1.0])), 1.0, 1e-15);
+        assert_eq!(Matyas.representation().bounds(), vec![-10.0..=10.0; 2]);
+    }
+
+    #[test]
+    fn bohachevsky() {
+        check_optimum(&Bohachevsky1);
+        check_optimum(&Bohachevsky2);
+        check_optimum(&Bohachevsky3);
+        // at (1, 0): 1 − 0.3 cos 3π − 0.4 + 0.7 = 1.6 and 1 − 0.3 cos 3π + 0.3 = 1.6
+        assert_close(Bohachevsky1.evaluate(&at(&[1.0, 0.0])), 1.6, 1e-12);
+        assert_close(Bohachevsky2.evaluate(&at(&[1.0, 0.0])), 1.6, 1e-12);
+        assert_close(Bohachevsky3.evaluate(&at(&[1.0, 0.0])), 1.6, 1e-12);
+        // at (1/3, 1/4): the cosines are cos π = −1 and cos π = −1, so the three differ
+        let x = at(&[1.0 / 3.0, 0.25]);
+        let bowl = 1.0 / 9.0 + 2.0 / 16.0;
+        assert_close(Bohachevsky1.evaluate(&x), bowl + 1.4, 1e-12);
+        assert_close(Bohachevsky2.evaluate(&x), bowl, 1e-12);
+        // cos(π + π) = 1
+        assert_close(Bohachevsky3.evaluate(&x), bowl, 1e-12);
+        // the nearest local minima of the first, 0.41293 and 0.46988, are worse
+        let near = Bohachevsky1.evaluate(&at(&[0.618_612_067_827_950_1, 0.0]));
+        assert_close(near, 0.412_926_830_275_815, 1e-12);
+        assert_eq!(
+            Bohachevsky2.representation().bounds(),
+            vec![-100.0..=100.0; 2]
+        );
+    }
+
+    #[test]
+    fn three_hump_camel() {
+        check_optimum(&ThreeHumpCamel);
+        // 2 − 1.05 + 1/6 + 1 + 1
+        let expected = 2.0 - 1.05 + 1.0 / 6.0 + 2.0;
+        assert_close(ThreeHumpCamel.evaluate(&at(&[1.0, 1.0])), expected, 1e-12);
+        // the two local minima, where the gradient is 0
+        let f = |x: &Reals| ThreeHumpCamel.evaluate(x);
+        let (x1, x2) = (1.747_552_345_830_289, -0.873_776_172_915_144_5);
+        for local in [[x1, x2], [-x1, -x2]] {
+            assert_close(f(&at(&local)), 0.298_638_442_236_859_4, 1e-12);
+            assert!(gradient(f, &local, 1e-6).iter().all(|g| g.abs() < 1e-8));
+        }
+        // the lowest value over x₂ is x₁² (1.75 − 1.05x₁² + x₁⁴/6), positive but at 0
+        for k in 1..=500 {
+            let x1 = k as f64 / 100.0;
+            assert!(f(&at(&[x1, -x1 / 2.0])) > 0.0);
+        }
+    }
+
+    #[test]
+    fn langermann() {
+        check_optimum(&Langermann);
+        let optimum = Langermann.optimum().expect("known");
+        assert!(!optimum.is_proven());
+        let f = |x: &Reals| Langermann.evaluate(x);
+        // the gradient is 0 at the minimum, and at the next one, which is worse
+        let next = [1.991_205_862_734_151, 1.988_619_801_947_841];
+        assert_close(f(&at(&next)), -4.127_576_741_310_137, 1e-12);
+        for x in [&optimum.solutions()[0][..], &next] {
+            assert!(gradient(f, x, 1e-6).iter().all(|g| g.abs() < 1e-7));
+        }
+        // at a center the terms of the others: at (2, 1), 5 plus the rest
+        let rest: f64 = [
+            (3.0, 5.0, 1.0),
+            (5.0, 2.0, 2.0),
+            (1.0, 4.0, 2.0),
+            (7.0, 9.0, 3.0),
+        ]
+        .iter()
+        .map(|&(a1, a2, c)| {
+            let d = math::powi(2.0 - a1, 2) + math::powi(1.0 - a2, 2);
+            c * math::exp(-d / PI) * math::cos(PI * d)
+        })
+        .sum();
+        assert_close(f(&at(&[2.0, 1.0])), 5.0 + rest, 1e-12);
+        // with the contests' minus sign, the minimum is at this form's maximum, 5.16213
+        let maximum = f(&at(&[2.002_992_119_934_465, 1.006_095_940_292_188]));
+        assert_eq!(rounded(maximum, 5), 5.16213);
+        assert_eq!(Langermann.representation().bounds(), vec![0.0..=10.0; 2]);
+    }
+
+    #[test]
+    fn shekel_foxholes() {
+        check_optimum(&ShekelFoxholes);
+        let optimum = ShekelFoxholes.optimum().expect("known");
+        assert!(!optimum.is_proven());
+        let f = |x: &Reals| ShekelFoxholes.evaluate(x);
+        // near (−32, −32), and below the value there, which De Jong gives as ≅ 1
+        let corner = f(&at(&[-32.0, -32.0]));
+        assert_close(corner, 0.998_003_838_818_648_9, 1e-12);
+        assert!(optimum.value() < corner);
+        assert_eq!(rounded(optimum.value(), 3), 0.998);
+        assert!(
+            gradient(f, &optimum.solutions()[0], 1e-6)
+                .iter()
+                .all(|g| g.abs() < 1e-8)
+        );
+        // the j-th hole is about j deep: the second, at (−16, −32), and the last, at (32, 32)
+        assert!((f(&at(&[-16.0, -32.0])) - 2.0).abs() < 0.02);
+        assert!((f(&at(&[32.0, 32.0])) - 25.0).abs() < 1.5);
+        // between the holes, the plane is near 500
+        assert!(f(&at(&[65.0, -65.0])) > 499.0);
+        assert_eq!(
+            ShekelFoxholes.representation().bounds(),
+            vec![-65.536..=65.536; 2]
+        );
+    }
+
+    #[test]
+    fn kowalik() {
+        check_optimum(&Kowalik);
+        let optimum = Kowalik.optimum().expect("known");
+        assert!(!optimum.is_proven());
+        let f = |x: &Reals| Kowalik.evaluate(x);
+        // Yao, Liu and Lin's minimum, ≈ 0.0003075 at (0.1928, 0.1908, 0.1231, 0.1358), to its
+        // digits
+        assert_eq!(rounded(optimum.value(), 7), 0.000_307_5);
+        let solution = &optimum.solutions()[0];
+        for (x, reported) in solution.iter().zip([0.1928, 0.1908, 0.1231, 0.1358]) {
+            assert_eq!(rounded(*x, 4), reported);
+        }
+        assert!(gradient(f, solution, 1e-7).iter().all(|g| g.abs() < 1e-9));
+        // with x₁ = 0 the model is 0: the sum of the squares of the data
+        let squares: f64 = KOWALIK_A.iter().map(|a| a * a).sum();
+        assert_close(f(&at(&[0.0, 1.0, 1.0, 1.0])), squares, 1e-12);
+        // NIST's certified solution, with its rounded predictors 0.167, 0.0833 and 0.0714, is
+        // 3.0750560385e-4; with the exact ones, a little higher than the minimum here
+        let certified = at(&[
+            1.928_069_345_8e-1,
+            1.912_823_287_3e-1,
+            1.230_565_069_3e-1,
+            1.360_623_306_8e-1,
+        ]);
+        assert!(f(&certified) > optimum.value());
+        assert!(f(&certified) < 3.08e-4);
+        assert_eq!(Kowalik.representation().bounds(), vec![-5.0..=5.0; 4]);
+    }
+
     // sign changes and permutations of the genes don't change the functions that are symmetric
     #[test]
     fn symmetric_functions_are_symmetric() {
@@ -2121,6 +3172,10 @@ mod tests {
             sign(&|x| Ackley::new(n).evaluate(x));
             sign(&|x| Griewank::new(n).evaluate(x));
             sign(&|x| AxisParallelEllipsoid::new(n).evaluate(x));
+            sign(&|x| Schwefel2_21::new(n).evaluate(x));
+            sign(&|x| Schwefel2_22::new(n).evaluate(x));
+            order(&|x| Schwefel2_21::new(n).evaluate(x));
+            order(&|x| Schwefel2_22::new(n).evaluate(x));
             order(&|x| Sphere::new(n).evaluate(x));
             order(&|x| Rastrigin::new(n).evaluate(x));
             order(&|x| Ackley::new(n).evaluate(x));
@@ -2128,11 +3183,17 @@ mod tests {
             order(&|x| Schwefel2_26::new(n).evaluate(x));
             let pair = at(&[x[0], x[1]]);
             let opposite = at(&[-x[0], -x[1]]);
-            assert_close(
-                SixHumpCamel.evaluate(&pair),
-                SixHumpCamel.evaluate(&opposite),
-                1e-12,
-            );
+            let point_symmetric: [&dyn Fn(&Reals) -> f64; 6] = [
+                &|x| SixHumpCamel.evaluate(x),
+                &|x| ThreeHumpCamel.evaluate(x),
+                &|x| Matyas.evaluate(x),
+                &|x| Bohachevsky1.evaluate(x),
+                &|x| Bohachevsky2.evaluate(x),
+                &|x| Bohachevsky3.evaluate(x),
+            ];
+            for f in point_symmetric {
+                assert_close(f(&pair), f(&opposite), 1e-12);
+            }
         }
     }
 }
