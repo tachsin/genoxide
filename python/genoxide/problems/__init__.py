@@ -75,11 +75,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Generic, TypeVar, cast
 
 import numpy as np
 
-from .. import Binary, Integer, Real, _genoxide, _whole
+from .. import Binary, Integer, ObjectiveName, Real, _genoxide, _whole
 
 __all__ = [
     "Problem",
@@ -194,7 +194,11 @@ class Optimum:
     known."""
 
 
-class _Described:
+# the genome of a problem: Real for most, Integer for the gear train, Binary for ZDT5
+_Genome = TypeVar("_Genome", bound="Real | Integer | Binary", covariant=True)
+
+
+class _Described(Generic[_Genome]):
     """What every problem has: a description in JSON, from which Rust gives the rest."""
 
     _type: ClassVar[str]
@@ -220,17 +224,17 @@ class _Described:
         return len(self._info["bounds"])
 
     @property
-    def genome(self) -> Real | Integer | Binary:
+    def genome(self) -> _Genome:
         """The search space, e.g. ``Real((-5.12, 5.12), length=10)``; ``Integer`` bounds for a
         problem of whole numbers, such as :class:`genoxide.problems.engineering.GearTrain`, and
         a ``Binary`` length for one of bit strings, such as :class:`Zdt5`."""
         if self._info["genome"] == "binary":
-            return Binary(len(self._info["bounds"]))
+            return cast(_Genome, Binary(len(self._info["bounds"])))
         kind = Integer if self._info["genome"] == "integer" else Real
         bounds = [tuple(pair) for pair in self._info["bounds"]]
         if all(pair == bounds[0] for pair in bounds):
-            return kind(bounds[0], length=len(bounds))
-        return kind(bounds)
+            return cast(_Genome, kind(bounds[0], length=len(bounds)))
+        return cast(_Genome, kind(bounds))
 
     @property
     def constraint_count(self) -> int:
@@ -278,16 +282,18 @@ class _Described:
         return self._evaluate(genome[np.newaxis, :])
 
 
-class Problem(_Described):
+class Problem(_Described[_Genome]):
     """A single-objective test problem: a fitness function with its genome, objective, optimum
     and reference.
 
     The single-objective problem classes derive from it; ``isinstance(x, Problem)`` tells such a
-    problem from a Python fitness function.
+    problem from a Python fitness function. It's generic in the class of its ``genome``, for
+    type checkers: ``Problem[Real]``, or ``Problem[Integer]`` for
+    :class:`genoxide.problems.engineering.GearTrain`.
     """
 
     @property
-    def objective(self) -> str:
+    def objective(self) -> ObjectiveName:
         """Whether the score is minimized or maximized: "minimize" for every problem here."""
         return self._info["objectives"][0]
 
@@ -325,18 +331,19 @@ class Problem(_Described):
         return float(result[0])
 
 
-class MultiProblem(_Described):
+class MultiProblem(_Described[_Genome]):
     """A multi-objective test problem, all objectives minimized: a fitness function with its
     genome, objectives, optimal front where it's known, and reference.
 
     The multi-objective problem classes derive from it; ``isinstance(x, MultiProblem)`` tells
     such a problem from a Python fitness function. ``run`` of :class:`genoxide.Nsga2`,
     :class:`genoxide.Nsga3`, :class:`genoxide.Spea2`, :class:`genoxide.Moead` and
-    :class:`genoxide.SmsEmoa` evaluates it in Rust.
+    :class:`genoxide.SmsEmoa` evaluates it in Rust. It's generic in the class of its ``genome``,
+    for type checkers: ``MultiProblem[Real]``, or ``MultiProblem[Binary]`` for :class:`Zdt5`.
     """
 
     @property
-    def objectives(self) -> list[str]:
+    def objectives(self) -> list[ObjectiveName]:
         """"minimize" for each objective, for the ``objectives`` of an algorithm."""
         return list(self._info["objectives"])
 
@@ -386,7 +393,7 @@ class MultiProblem(_Described):
         return result[0]
 
 
-class _Scalable(Problem):
+class _Scalable(Problem[Real]):
     """A problem in any number of dimensions, from ``_minimum``."""
 
     dimensions: int
@@ -608,7 +615,7 @@ class Michalewicz(_Scalable):
 
 
 @dataclass(frozen=True)
-class Himmelblau(Problem):
+class Himmelblau(Problem[Real]):
     """Himmelblau's function, ``(x₁² + x₂ − 11)² + (x₁ + x₂² − 7)²``: four global minima.
 
     Bounds [-5, 5]²; minimum 0 at (3, 2) and three other points, the solutions of x₁² + x₂ = 11
@@ -622,7 +629,7 @@ class Himmelblau(Problem):
 
 
 @dataclass(frozen=True)
-class Branin(Problem):
+class Branin(Problem[Real]):
     """Branin's function (RCOS),
     ``(x₂ − 5.1 x₁² / (4π²) + 5 x₁ / π − 6)² + 10 (1 − 1 / (8π)) cos x₁ + 10``: three global
     minima.
@@ -640,7 +647,7 @@ class Branin(Problem):
 
 
 @dataclass(frozen=True)
-class GoldsteinPrice(Problem):
+class GoldsteinPrice(Problem[Real]):
     """The Goldstein-Price function.
 
     Bounds [-2, 2]²; minimum 3 at (0, −1); local minima (1.2, 0.8) with 840, (1.8, 0.2) with 84
@@ -657,7 +664,7 @@ class GoldsteinPrice(Problem):
 
 
 @dataclass(frozen=True)
-class SixHumpCamel(Problem):
+class SixHumpCamel(Problem[Real]):
     """The six-hump camel-back function, ``(4 − 2.1x₁² + x₁⁴ / 3) x₁² + x₁x₂ + (−4 + 4x₂²) x₂²``:
     two global minima among six.
 
@@ -674,7 +681,7 @@ class SixHumpCamel(Problem):
 
 
 @dataclass(frozen=True)
-class Hartmann3(Problem):
+class Hartmann3(Problem[Real]):
     """Hartmann's function in 3 dimensions, ``−Σᵢ₌₁⁴ cᵢ exp(−Σⱼ aᵢⱼ (xⱼ − pᵢⱼ)²)``: four
     Gaussian wells of different widths and depths.
 
@@ -698,7 +705,7 @@ class Hartmann3(Problem):
 
 
 @dataclass(frozen=True)
-class Hartmann6(Problem):
+class Hartmann6(Problem[Real]):
     """Hartmann's function in 6 dimensions, ``−Σᵢ₌₁⁴ cᵢ exp(−Σⱼ aᵢⱼ (xⱼ − pᵢⱼ)²)``: four
     Gaussian wells of different widths and depths, in two basins of nearly the same depth.
 
@@ -723,7 +730,7 @@ class Hartmann6(Problem):
 
 
 @dataclass(frozen=True)
-class Shekel5(Problem):
+class Shekel5(Problem[Real]):
     """Shekel's function with m = 5 wells, in 4 dimensions (SQRIN5).
 
     Minimum −10.153199679058227 at (4.000037152819676, 4.00013327659156, 4.000037152819676,
@@ -747,7 +754,7 @@ class Shekel5(Problem):
 
 
 @dataclass(frozen=True)
-class Shekel7(Problem):
+class Shekel7(Problem[Real]):
     """Shekel's function with m = 7 wells, in 4 dimensions (SQRIN7).
 
     Minimum −10.40294056681866 at (4.000572916185823, 4.000689366185305, 3.9994897088591506,
@@ -771,7 +778,7 @@ class Shekel7(Problem):
 
 
 @dataclass(frozen=True)
-class Shekel10(Problem):
+class Shekel10(Problem[Real]):
     """Shekel's function with m = 10 wells, in 4 dimensions (SQRIN10).
 
     Minimum −10.536409816692043 at (4.000746531592046, 4.000592934138532, 3.9996633980403224,
@@ -795,7 +802,7 @@ class Shekel10(Problem):
 
 
 @dataclass(frozen=True)
-class Easom(Problem):
+class Easom(Problem[Real]):
     """Easom's function, ``−cos x₁ cos x₂ exp(−((x₁ − π)² + (x₂ − π)²))``: a single narrow well
     in a flat plane.
 
@@ -812,7 +819,7 @@ class Easom(Problem):
 
 
 @dataclass(frozen=True)
-class Eggholder(Problem):
+class Eggholder(Problem[Real]):
     """The eggholder function,
     ``−(x₂ + 47) sin √|x₂ + x₁ / 2 + 47| − x₁ sin √|x₁ − (x₂ + 47)|``: deep local minima all
     over, the deepest at the edge of the box.
@@ -831,7 +838,7 @@ class Eggholder(Problem):
 
 
 @dataclass(frozen=True)
-class SchafferF6(Problem):
+class SchafferF6(Problem[Real]):
     """Schaffer's F6, ``0.5 + (sin² √(x₁² + x₂²) − 0.5) / (1 + 0.001 (x₁² + x₂²))²``: rings of
     local minima around the global one.
 
@@ -852,7 +859,7 @@ class SchafferF6(Problem):
 # ---- multi-objective problems -------------------------------------------------------------------
 
 
-class _Sized(MultiProblem):
+class _Sized(MultiProblem[Real]):
     """A multi-objective problem in any number of variables, from ``_minimum``."""
 
     variables: int
@@ -933,7 +940,7 @@ class Zdt6(_Sized):
 
 
 @dataclass(frozen=True)
-class Zdt5(MultiProblem):
+class Zdt5(MultiProblem[Binary]):
     """ZDT5: a deceptive problem on bit strings, whose front is 31 points, ``f₂ = 10 / f₁`` for
     f₁ from 1 to 31.
 
@@ -963,7 +970,7 @@ class Zdt5(MultiProblem):
 
 
 @dataclass(frozen=True, init=False)
-class _Dtlz(MultiProblem):
+class _Dtlz(MultiProblem[Real]):
     """DTLZ with ``objectives`` objectives, 2 to 6, and ``variables`` variables, at least
     ``objectives``; None is the standard ``objectives + k − 1``. The field ``objective_count``
     keeps the number, as the ``objectives`` property lists the objectives."""
@@ -1210,7 +1217,7 @@ class InvertedDtlz1(_Dtlz):
 
 
 @dataclass(frozen=True, init=False)
-class _Wfg(MultiProblem):
+class _Wfg(MultiProblem[Real]):
     """WFG with ``objectives`` objectives, 2 to 6, ``position`` position parameters k (None for
     the recommended 4 with 2 objectives and 2 (objectives − 1) with more; a positive multiple of
     objectives − 1) and ``distance`` distance parameters l (20 by default): k + l variables, the
@@ -1422,7 +1429,7 @@ class Wfg9(_Wfg):
 
 
 @dataclass(frozen=True)
-class Schaffer1(MultiProblem):
+class Schaffer1(MultiProblem[Real]):
     """Schaffer's first problem (SCH1): ``f₁ = x²``, ``f₂ = (x − 2)²``, on one variable.
 
     Bounds [−1000, 1000]. The optimal solutions are x in [0, 2], and the front is
@@ -1438,7 +1445,7 @@ class Schaffer1(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Schaffer2(MultiProblem):
+class Schaffer2(MultiProblem[Real]):
     """Schaffer's second problem (SCH2), on one variable: ``f₁ = −x`` for x ≤ 1, ``x − 2`` for
     1 < x ≤ 3, ``4 − x`` for 3 < x ≤ 4 and ``x − 4`` for x > 4; ``f₂ = (x − 5)²``.
 
@@ -1508,7 +1515,7 @@ class Kursawe(_Sized):
 
 
 @dataclass(frozen=True)
-class Poloni(MultiProblem):
+class Poloni(MultiProblem[Real]):
     """Poloni's problem (POL): ``f₁ = 1 + (A₁ − B₁)² + (A₂ − B₂)²``,
     ``f₂ = (x₁ + 3)² + (x₂ + 1)²``, with ``A₁ = 0.5 sin 1 − 2 cos 1 + sin 2 − 1.5 cos 2``,
     ``A₂ = 1.5 sin 1 − cos 1 + 2 sin 2 − 0.5 cos 2``, ``B₁ = 0.5 sin x₁ − 2 cos x₁ + sin x₂ −
@@ -1541,7 +1548,7 @@ class Poloni(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Viennet1(MultiProblem):
+class Viennet1(MultiProblem[Real]):
     """Viennet's first problem (VNT1), with three objectives: ``f₁ = x₁² + (x₂ − 1)²``,
     ``f₂ = x₁² + (x₂ + 1)² + 1``, ``f₃ = (x₁ − 1)² + x₂² + 2``.
 
@@ -1559,7 +1566,7 @@ class Viennet1(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Viennet2(MultiProblem):
+class Viennet2(MultiProblem[Real]):
     """Viennet's second problem (VNT2), with three objectives:
     ``f₁ = (x₁ − 2)²/2 + (x₂ + 1)²/13 + 3``, ``f₂ = (x₁ + x₂ − 3)²/36 + (−x₁ + x₂ + 2)²/8 − 17``,
     ``f₃ = (x₁ + 2x₂ − 1)²/175 + (2x₂ − x₁)²/17 − 13``.
@@ -1585,7 +1592,7 @@ class Viennet2(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Viennet3(MultiProblem):
+class Viennet3(MultiProblem[Real]):
     """Viennet's third problem (VNT3), with three objectives:
     ``f₁ = 0.5 (x₁² + x₂²) + sin(x₁² + x₂²)``,
     ``f₂ = (3x₁ − 2x₂ + 4)²/8 + (x₁ − x₂ + 1)²/27 + 15``,
@@ -1614,7 +1621,7 @@ class Viennet3(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Bnh(MultiProblem):
+class Bnh(MultiProblem[Real]):
     """Binh and Korn's problem (BNH): ``f₁ = 4x₁² + 4x₂²``, ``f₂ = (x₁ − 5)² + (x₂ − 5)²``,
     subject to ``(x₁ − 5)² + x₂² ≤ 25`` and ``(x₁ − 8)² + (x₂ + 3)² ≥ 7.7``.
 
@@ -1632,7 +1639,7 @@ class Bnh(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Srn(MultiProblem):
+class Srn(MultiProblem[Real]):
     """Srinivas and Deb's problem (SRN): ``f₁ = (x₁ − 2)² + (x₂ − 1)² + 2``,
     ``f₂ = 9x₁ − (x₂ − 1)²``, subject to ``x₁² + x₂² ≤ 225`` and ``x₁ − 3x₂ ≤ −10``.
 
@@ -1651,7 +1658,7 @@ class Srn(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Tnk(MultiProblem):
+class Tnk(MultiProblem[Real]):
     """Tanaka's problem (TNK): ``f₁ = x₁``, ``f₂ = x₂``, subject to
     ``x₁² + x₂² − 1 − 0.1 cos(16 arctan(x₁/x₂)) ≥ 0`` and ``(x₁ − 0.5)² + (x₂ − 0.5)² ≤ 0.5``.
 
@@ -1668,7 +1675,7 @@ class Tnk(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Osy(MultiProblem):
+class Osy(MultiProblem[Real]):
     """Osyczka and Kundu's problem (OSY), in six variables:
     ``f₁ = −[25 (x₁ − 2)² + (x₂ − 2)² + (x₃ − 1)² + (x₄ − 4)² + (x₅ − 1)²]``, ``f₂ = Σ xᵢ²``,
     subject to ``x₁ + x₂ ≥ 2``, ``x₁ + x₂ ≤ 6``, ``x₂ − x₁ ≤ 2``, ``x₁ − 3x₂ ≤ 2``,
@@ -1689,7 +1696,7 @@ class Osy(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Constr(MultiProblem):
+class Constr(MultiProblem[Real]):
     """Deb's CONSTR: ``f₁ = x₁``, ``f₂ = (1 + x₂)/x₁``, subject to ``x₂ + 9x₁ ≥ 6`` and
     ``−x₂ + 9x₁ ≥ 1``.
 
@@ -1705,7 +1712,7 @@ class Constr(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Ctp1(MultiProblem):
+class Ctp1(MultiProblem[Real]):
     """CTP1: ``f₁ = x₁``, ``f₂ = g exp(−f₁/g)`` with ``g = 1 + x₂``, subject to
     ``f₂ − aⱼ exp(−bⱼ f₁) ≥ 0`` for j = 1, 2, with a = (0.858, 0.728) and b = (0.541, 0.295).
 
@@ -1724,7 +1731,7 @@ class Ctp1(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Ctp2(MultiProblem):
+class Ctp2(MultiProblem[Real]):
     """CTP2: ``f₁ = x₁``, ``f₂ = g (1 − √(f₁/g))`` with ``g = 1 + x₂``, subject to
     ``cos θ (f₂ − e) − sin θ f₁ ≥ a |sin(bπ (sin θ (f₂ − e) + cos θ f₁)^c)|^d`` with θ = −0.2π,
     a = 0.2, b = 10, c = 1, d = 6 and e = 1.
@@ -1743,7 +1750,7 @@ class Ctp2(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Ctp3(MultiProblem):
+class Ctp3(MultiProblem[Real]):
     """CTP3: :class:`Ctp2` with a = 0.1 and d = 0.5: the front shrinks to 13 points on the line
     ``f₂ = 1 − tan(0.2π) f₁``, from (0, 1) to (0.9708, 0.2947). Bounds [0, 1]².
 
@@ -1758,7 +1765,7 @@ class Ctp3(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Ctp4(MultiProblem):
+class Ctp4(MultiProblem[Real]):
     """CTP4: :class:`Ctp3` with a = 0.75: the same 13 points, each at the end of a long, narrow
     feasible tunnel. Bounds [0, 1]².
 
@@ -1773,7 +1780,7 @@ class Ctp4(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Ctp5(MultiProblem):
+class Ctp5(MultiProblem[Real]):
     """CTP5: :class:`Ctp3` with c = 2: the optimal points crowd towards larger f₁; the front is a
     continuous piece from (0, 1) to f₁ ≈ 0.2558 and 15 points, the last at about
     (0.9908, 0.2801). Bounds [0, 1]².
@@ -1789,7 +1796,7 @@ class Ctp5(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Ctp6(MultiProblem):
+class Ctp6(MultiProblem[Real]):
     """CTP6: the constraint of :class:`Ctp2` with θ = 0.1π, a = 40, b = 0.5, c = 1, d = 2 and
     e = −2: infeasible bands parallel to the front across the whole objective space. Bounds
     x₁ in [0, 1], x₂ in [0, 10]. The front is one piece of a boundary, from about (0, 3.6958) to
@@ -1806,7 +1813,7 @@ class Ctp6(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Ctp7(MultiProblem):
+class Ctp7(MultiProblem[Real]):
     """CTP7: the constraint of :class:`Ctp2` with θ = −0.05π, a = 40, b = 5, c = 1, d = 6 and
     e = 0: infeasible bands across the front. Bounds x₁ in [0, 1], x₂ in [0, 10]. The front is
     six disconnected pieces of the unconstrained front ``f₂ = 1 − √f₁``, the last ending at
@@ -1823,7 +1830,7 @@ class Ctp7(MultiProblem):
 
 
 @dataclass(frozen=True)
-class Ctp8(MultiProblem):
+class Ctp8(MultiProblem[Real]):
     """CTP8: the constraints of :class:`Ctp6` and of :class:`Ctp7` with b = 2, together. Bounds
     x₁ in [0, 1], x₂ in [0, 10]. The front is three disconnected pieces of CTP6's, from about
     (0, 3.6958) to (0.8229, 1.3727).
@@ -1837,7 +1844,7 @@ class Ctp8(MultiProblem):
 
 
 @dataclass(frozen=True, init=False)
-class _ConstrainedDtlz(MultiProblem):
+class _ConstrainedDtlz(MultiProblem[Real]):
     """A constrained DTLZ problem with ``objectives`` objectives, 2 to 6, and ``variables``
     variables, at least ``objectives``; None is the paper's size. The field ``objective_count``
     keeps the number, as the ``objectives`` property lists the objectives."""
@@ -1990,7 +1997,7 @@ class _Mw(_Sized):
 
 
 @dataclass(frozen=True, init=False)
-class _ScalableMw(MultiProblem):
+class _ScalableMw(MultiProblem[Real]):
     """An MW problem with ``objectives`` objectives, 2 to 6, and ``variables`` variables, more
     than ``objectives``; None is the paper's ``objectives + 12`` (15 for 3 objectives). The field
     ``objective_count`` keeps the number, as the ``objectives`` property lists the objectives."""

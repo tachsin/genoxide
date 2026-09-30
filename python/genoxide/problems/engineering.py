@@ -26,7 +26,7 @@ from typing import Any, ClassVar
 
 import numpy as np
 
-from .. import _genoxide
+from .. import Integer, Real, _genoxide
 from . import Problem
 
 __all__ = [
@@ -42,7 +42,7 @@ __all__ = [
 ]
 
 
-class _Mixed(Problem):
+class _Mixed(Problem[Real]):
     """A problem whose genome rounds its discrete genes."""
 
     def design(self, genome: Any) -> np.ndarray:
@@ -60,7 +60,7 @@ class _Mixed(Problem):
 
 
 @dataclass(frozen=True)
-class WeldedBeam(Problem):
+class WeldedBeam(Problem[Real]):
     """The welded beam, in the form with seven constraints: the cheapest beam welded to a support
     that carries 6000 lb at 14 in.
 
@@ -90,7 +90,7 @@ class WeldedBeam(Problem):
 
 
 @dataclass(frozen=True)
-class WeldedBeamRagsdell(Problem):
+class WeldedBeamRagsdell(Problem[Real]):
     """The welded beam in the form with five constraints, after Ragsdell and Phillips.
 
     The genes are x = (h, l, t, b), in inches, with :class:`WeldedBeam`'s cost, subject to the
@@ -147,7 +147,7 @@ class PressureVessel(_Mixed):
 
 
 @dataclass(frozen=True)
-class TensionCompressionSpring(Problem):
+class TensionCompressionSpring(Problem[Real]):
     """The tension/compression spring: the lightest coil spring under constraints on its
     deflection, shear stress, surge frequency and outer diameter.
 
@@ -196,7 +196,7 @@ class SpeedReducer(_Mixed):
 
 
 @dataclass(frozen=True)
-class GearTrain(Problem):
+class GearTrain(Problem[Integer]):
     """The gear train: the numbers of teeth of four gears whose ratio is closest to 1/6.931, on
     an :class:`genoxide.Integer` genome.
 
@@ -216,7 +216,7 @@ class GearTrain(Problem):
 
 
 @dataclass(frozen=True)
-class ThreeBarTruss(Problem):
+class ThreeBarTruss(Problem[Real]):
     """The three-bar truss: the least volume of a planar truss of three bars, subject to their
     stresses.
 
@@ -237,7 +237,7 @@ class ThreeBarTruss(Problem):
 
 
 @dataclass(frozen=True)
-class CantileverBeam(Problem):
+class CantileverBeam(Problem[Real]):
     """The cantilever beam: the lightest beam of five square segments, subject to its
     deflection, ``61/x₁³ + 37/x₂³ + 19/x₃³ + 7/x₄³ + 1/x₅³ <= 1``.
 
@@ -255,7 +255,7 @@ class CantileverBeam(Problem):
 
 
 @dataclass(frozen=True)
-class CarSideImpact(Problem):
+class CarSideImpact(Problem[Real]):
     """The car side impact: the lightest car body whose side withstands the European side-impact
     test, through response surfaces fitted to crash simulations.
 

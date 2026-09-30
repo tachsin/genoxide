@@ -26,6 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+from .. import Real
 from . import Problem
 
 __all__ = [
@@ -60,7 +61,7 @@ EQUALITY_TOLERANCE = 0.0001
 """The report's tolerance δ of an equality constraint: ``|h(x)| <= 0.0001`` counts as met."""
 
 
-class _WithTolerance(Problem):
+class _WithTolerance(Problem[Real]):
     """A problem with equality constraints and their tolerance δ."""
 
     tolerance: float | None
@@ -73,7 +74,7 @@ class _WithTolerance(Problem):
 
 
 @dataclass(frozen=True)
-class G01(Problem):
+class G01(Problem[Real]):
     """g01: ``5 Σᵢ₌₁⁴ xᵢ − 5 Σᵢ₌₁⁴ xᵢ² − Σᵢ₌₅¹³ xᵢ``, a quadratic in 13 dimensions with 9 linear
     inequalities.
 
@@ -88,7 +89,7 @@ class G01(Problem):
 
 
 @dataclass(frozen=True)
-class G02(Problem):
+class G02(Problem[Real]):
     """g02: ``−|Σ cos⁴ xᵢ − 2 Π cos² xᵢ| / √(Σ i xᵢ²)`` in 20 dimensions, subject to
     ``Π xᵢ >= 0.75`` and ``Σ xᵢ <= 7.5n``: a maximization, negated.
 
@@ -120,7 +121,7 @@ class G03(_WithTolerance):
 
 
 @dataclass(frozen=True)
-class G04(Problem):
+class G04(Problem[Real]):
     """g04: ``5.3578547x₃² + 0.8356891x₁x₅ + 37.293239x₁ − 40792.141``, a quadratic in 5
     dimensions with 6 nonlinear inequalities.
 
@@ -153,7 +154,7 @@ class G05(_WithTolerance):
 
 
 @dataclass(frozen=True)
-class G06(Problem):
+class G06(Problem[Real]):
     """g06: ``(x₁ − 10)³ + (x₂ − 20)³`` in 2 dimensions, inside a thin crescent between two
     circles.
 
@@ -167,7 +168,7 @@ class G06(Problem):
 
 
 @dataclass(frozen=True)
-class G07(Problem):
+class G07(Problem[Real]):
     """g07: a quadratic in 10 dimensions with 3 linear and 5 nonlinear inequalities,
     ``x₁² + x₂² + x₁x₂ − 14x₁ − 16x₂ + (x₃ − 10)² + 4(x₄ − 5)² + (x₅ − 3)² + 2(x₆ − 1)² + 5x₇²
     + 7(x₈ − 11)² + 2(x₉ − 10)² + (x₁₀ − 7)² + 45``.
@@ -183,7 +184,7 @@ class G07(Problem):
 
 
 @dataclass(frozen=True)
-class G08(Problem):
+class G08(Problem[Real]):
     """g08: ``−sin³(2πx₁) sin(2πx₂) / (x₁³(x₁ + x₂))`` in 2 dimensions, with 2 nonlinear
     inequalities: a maximization, negated.
 
@@ -197,7 +198,7 @@ class G08(Problem):
 
 
 @dataclass(frozen=True)
-class G09(Problem):
+class G09(Problem[Real]):
     """g09: ``(x₁ − 10)² + 5(x₂ − 12)² + x₃⁴ + 3(x₄ − 11)² + 10x₅⁶ + 7x₆² + x₇⁴ − 4x₆x₇ − 10x₆
     − 8x₇``, a polynomial in 7 dimensions with 4 nonlinear inequalities.
 
@@ -210,7 +211,7 @@ class G09(Problem):
 
 
 @dataclass(frozen=True)
-class G10(Problem):
+class G10(Problem[Real]):
     """g10: ``x₁ + x₂ + x₃``, linear in 8 dimensions, with 3 linear and 3 bilinear inequalities.
 
     Bounds x₁ in [100, 10000], x₂, x₃ in [1000, 10000], x₄…x₈ in [10, 1000]; minimum
@@ -238,7 +239,7 @@ class G11(_WithTolerance):
 
 
 @dataclass(frozen=True)
-class G12(Problem):
+class G12(Problem[Real]):
     """g12: ``−(100 − (x₁ − 5)² − (x₂ − 5)² − (x₃ − 5)²)/100`` in 3 dimensions, feasible inside
     any of 9³ = 729 disjoint spheres of radius 0.25 centered on (p, q, r), p, q, r in 1…9: a
     maximization, negated.
@@ -299,7 +300,7 @@ class G15(_WithTolerance):
 
 
 @dataclass(frozen=True)
-class G16(Problem):
+class G16(Problem[Real]):
     """g16: a nonlinear function of 5 variables through a chain of 17 intermediate quantities,
     with 38 inequalities, most of them limits on those quantities.
 
@@ -334,7 +335,7 @@ class G17(_WithTolerance):
 
 
 @dataclass(frozen=True)
-class G18(Problem):
+class G18(Problem[Real]):
     """g18: ``−0.5(x₁x₄ − x₂x₃ + x₃x₉ − x₅x₉ + x₅x₈ − x₆x₇)``, a quadratic in 9 dimensions with 13
     nonlinear inequalities: a maximization, negated.
 
@@ -348,7 +349,7 @@ class G18(Problem):
 
 
 @dataclass(frozen=True)
-class G19(Problem):
+class G19(Problem[Real]):
     """g19: ``Σⱼ Σᵢ cᵢⱼ x₁₀₊ᵢ x₁₀₊ⱼ + 2 Σⱼ dⱼ x₁₀₊ⱼ³ − Σᵢ bᵢ xᵢ``, a cubic in 15 dimensions with 5
     nonlinear inequalities ``−2 Σᵢ cᵢⱼ x₁₀₊ᵢ − 3dⱼ x₁₀₊ⱼ² − eⱼ + Σᵢ aᵢⱼ xᵢ <= 0``, with the data of
     the report's table 1.
@@ -437,7 +438,7 @@ class G23(_WithTolerance):
 
 
 @dataclass(frozen=True)
-class G24(Problem):
+class G24(Problem[Real]):
     """g24: ``−x₁ − x₂`` in 2 dimensions, subject to ``x₂ <= 2x₁⁴ − 8x₁³ + 8x₁² + 2`` and
     ``x₂ <= 4x₁⁴ − 32x₁³ + 88x₁² − 96x₁ + 36``.
 
