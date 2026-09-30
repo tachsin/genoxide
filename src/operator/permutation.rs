@@ -3,14 +3,45 @@
 use super::{Crossover, Mutate};
 use crate::StreamRng;
 use crate::genome::{Order, Permutation};
+use std::cell::Cell;
 
-// the position of every gene
-fn positions(genes: &[usize]) -> Vec<usize> {
-    let mut positions = vec![0; genes.len()];
+// Scratch space of the genome's length for the operators, reused instead of allocated on every
+// call. Each thread has its own, so breeding in parallel shares nothing.
+#[derive(Default)]
+struct Scratch {
+    genes: Vec<usize>,
+    positions: Vec<usize>,
+    flags: Vec<bool>,
+    edges: [Vec<Neighbors>; 2],
+}
+
+thread_local! {
+    static SCRATCH: Cell<Scratch> = const {
+        Cell::new(Scratch {
+            genes: Vec::new(),
+            positions: Vec::new(),
+            flags: Vec::new(),
+            edges: [Vec::new(), Vec::new()],
+        })
+    };
+}
+
+// `f` with this thread's scratch space, taken out of the cell meanwhile
+fn with_scratch<T>(f: impl FnOnce(&mut Scratch) -> T) -> T {
+    SCRATCH.with(|cell| {
+        let mut scratch = cell.take();
+        let result = f(&mut scratch);
+        cell.set(scratch);
+        result
+    })
+}
+
+// the position of every gene, into `positions`
+fn positions(genes: &[usize], positions: &mut Vec<usize>) {
+    positions.resize(genes.len(), 0);
     for (position, &gene) in genes.iter().enumerate() {
         positions[gene] = position;
     }
-    positions
 }
 
 // a random segment `start..end` of at least `min_len` genes that isn't the whole genome, for
@@ -60,11 +91,16 @@ impl Crossover<Permutation> for PartiallyMappedCrossover {
             return;
         }
         let (start, end) = segment(a.len(), 1, rng);
-        // in place: the second child needs only the first parent's segment
-        let segment_of_a = a[start..end].to_vec();
-        let mut positions = vec![0; a.len()];
-        partially_mapped(a.genes_mut(), &b[start..end], start, &mut positions);
-        partially_mapped(b.genes_mut(), &segment_of_a, start, &mut positions);
+        with_scratch(|scratch| {
+            // in place: the second child needs only the first parent's segment
+            let segment_of_a = &mut scratch.genes;
+            segment_of_a.clear();
+            segment_of_a.extend_from_slice(&a[start..end]);
+            let positions = &mut scratch.positions;
+            positions.resize(a.len(), 0);
+            partially_mapped(a.genes_mut(), &b[start..end], start, positions);
+            partially_mapped(b.genes_mut(), segment_of_a, start, positions);
+        });
     }
 }
 
@@ -110,12 +146,17 @@ impl Crossover<Permutation> for OrderCrossover {
             return;
         }
         let (start, end) = segment(a.len(), 1, rng);
-        // in place: the first child only overwrites genes outside its segment, and the second
-        // child reads the first parent
-        let first_parent = a.to_vec();
-        let mut in_segment = vec![false; a.len()];
-        ordered(a.genes_mut(), b, start, end, &mut in_segment);
-        ordered(b.genes_mut(), &first_parent, start, end, &mut in_segment);
+        with_scratch(|scratch| {
+            // in place: the first child only overwrites genes outside its segment, and the
+            // second child reads the first parent
+            let first_parent = &mut scratch.genes;
+            first_parent.clear();
+            first_parent.extend_from_slice(a);
+            let in_segment = &mut scratch.flags;
+            in_segment.resize(a.len(), false);
+            ordered(a.genes_mut(), b, start, end, in_segment);
+            ordered(b.genes_mut(), first_parent, start, end, in_segment);
+        });
     }
 }
 
@@ -131,27 +172,31 @@ pub struct CycleCrossover;
 
 impl Crossover<Permutation> for CycleCrossover {
     fn crossover(&self, _: &Permutation, a: &mut Order, b: &mut Order, _: &mut StreamRng) {
-        let positions_in_a = positions(a);
-        let mut visited = vec![false; a.len()];
-        let (first, second) = (a.genes_mut(), b.genes_mut());
-        let mut odd = false;
-        for start in 0..first.len() {
-            if visited[start] {
-                continue;
-            }
-            let mut position = start;
-            while !visited[position] {
-                visited[position] = true;
-                // the next position of the cycle, from the parents' genes: a position is
-                // exchanged only once it's visited, and never read again
-                let next = positions_in_a[second[position]];
-                if odd {
-                    std::mem::swap(&mut first[position], &mut second[position]);
+        with_scratch(|scratch| {
+            positions(a, &mut scratch.positions);
+            scratch.flags.clear();
+            scratch.flags.resize(a.len(), false);
+            let (positions_in_a, visited) = (&scratch.positions[..], &mut scratch.flags[..]);
+            let (first, second) = (a.genes_mut(), b.genes_mut());
+            let mut odd = false;
+            for start in 0..first.len() {
+                if visited[start] {
+                    continue;
                 }
-                position = next;
+                let mut position = start;
+                while !visited[position] {
+                    visited[position] = true;
+                    // the next position of the cycle, from the parents' genes: a position is
+                    // exchanged only once it's visited, and never read again
+                    let next = positions_in_a[second[position]];
+                    if odd {
+                        std::mem::swap(&mut first[position], &mut second[position]);
+                    }
+                    position = next;
+                }
+                odd = !odd;
             }
-            odd = !odd;
-        }
+        });
     }
 }
 
@@ -194,10 +239,12 @@ impl Neighbors {
     }
 }
 
-// the neighbors of every gene in the tours `a` and `b`, without duplicates, `a`'s first
-fn edges(a: &[usize], b: &[usize]) -> Vec<Neighbors> {
+// the neighbors of every gene in the tours `a` and `b`, without duplicates, `a`'s first, into
+// `neighbors`
+fn edges(a: &[usize], b: &[usize], neighbors: &mut Vec<Neighbors>) {
     let len = a.len();
-    let mut neighbors = vec![Neighbors::default(); len];
+    neighbors.clear();
+    neighbors.resize(len, Neighbors::default());
     for tour in [a, b] {
         for position in 0..len {
             let gene = tour[position];
@@ -208,7 +255,6 @@ fn edges(a: &[usize], b: &[usize]) -> Vec<Neighbors> {
             }
         }
     }
-    neighbors
 }
 
 // writes into `child` a tour through the edges in `neighbors`, from `start`; `unvisited` and
@@ -272,30 +318,16 @@ impl Crossover<Permutation> for EdgeRecombinationCrossover {
         if a.len() < 3 {
             return;
         }
-        // both children's edges before either parent is overwritten
-        let mut first = edges(a, b);
-        let mut second = edges(b, a);
-        let (first_start, second_start) = (a[0], b[0]);
-        let mut unvisited = Vec::with_capacity(a.len());
-        let mut index = Vec::with_capacity(a.len());
-        let child = a.genes_mut();
-        edge_recombination(
-            &mut first,
-            first_start,
-            child,
-            &mut unvisited,
-            &mut index,
-            rng,
-        );
-        let child = b.genes_mut();
-        edge_recombination(
-            &mut second,
-            second_start,
-            child,
-            &mut unvisited,
-            &mut index,
-            rng,
-        );
+        with_scratch(|scratch| {
+            // both children's edges before either parent is overwritten
+            let [first, second] = &mut scratch.edges;
+            edges(a, b, first);
+            edges(b, a, second);
+            let (first_start, second_start) = (a[0], b[0]);
+            let (unvisited, index) = (&mut scratch.genes, &mut scratch.positions);
+            edge_recombination(first, first_start, a.genes_mut(), unvisited, index, rng);
+            edge_recombination(second, second_start, b.genes_mut(), unvisited, index, rng);
+        });
     }
 }
 
@@ -372,13 +404,17 @@ impl Mutate<Permutation> for ScrambleMutation {
             }
         };
         let segment = &mut genome.genes_mut()[start..end];
-        let original = segment.to_vec();
-        while segment == original.as_slice() {
-            // Fisher-Yates
-            for position in (1..segment.len()).rev() {
-                segment.swap(position, rng.below(position + 1));
+        with_scratch(|scratch| {
+            let original = &mut scratch.genes;
+            original.clear();
+            original.extend_from_slice(segment);
+            while segment == original.as_slice() {
+                // Fisher-Yates
+                for position in (1..segment.len()).rev() {
+                    segment.swap(position, rng.below(position + 1));
+                }
             }
-        }
+        });
     }
 }
 
@@ -454,6 +490,39 @@ mod tests {
 
     // a crossover of two genomes, whatever its type
     type Recombine<'a> = &'a dyn Fn(&mut Order, &mut Order, &mut StreamRng);
+
+    #[test]
+    fn scratch_space_of_earlier_calls_changes_nothing() {
+        // every operator on a pair of genomes, on a new thread, after `before` genes if any
+        let children = |before: Option<usize>| {
+            std::thread::spawn(move || {
+                let mut children = Vec::new();
+                for len in before.into_iter().chain([20]) {
+                    let (permutation, a, b, mut rng) = parents(len, 1);
+                    let crossovers: [Recombine; 4] = [
+                        &|x, y, rng| PartiallyMappedCrossover.crossover(&permutation, x, y, rng),
+                        &|x, y, rng| OrderCrossover.crossover(&permutation, x, y, rng),
+                        &|x, y, rng| CycleCrossover.crossover(&permutation, x, y, rng),
+                        &|x, y, rng| EdgeRecombinationCrossover.crossover(&permutation, x, y, rng),
+                    ];
+                    for crossover in crossovers {
+                        let (mut x, mut y) = (a.clone(), b.clone());
+                        crossover(&mut x, &mut y, &mut rng);
+                        children.extend([x, y]);
+                    }
+                    let mut genome = a.clone();
+                    ScrambleMutation.mutate(&permutation, &mut genome, &mut rng);
+                    children.push(genome);
+                }
+                children.split_off(children.len() - 9)
+            })
+            .join()
+            .unwrap()
+        };
+        let fresh = children(None);
+        assert_eq!(children(Some(50)), fresh);
+        assert_eq!(children(Some(5)), fresh);
+    }
 
     fn edges(tour: &[usize]) -> Vec<(usize, usize)> {
         let len = tour.len();
