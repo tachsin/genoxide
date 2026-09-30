@@ -162,6 +162,15 @@ python examples/tsp_berlin52/main.py
 | [MW12](mw12/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw12) |
 | [MW13](mw13/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw13) |
 | [MW14](mw14/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mw14) |
+| [Two-bar truss](two_bar_truss/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/two-bar-truss) |
+| [Welded beam, two objectives](welded_beam_2obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/welded-beam-2obj) |
+| [Disc brake](disc_brake/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/disc-brake) |
+| [Speed reducer, two objectives](speed_reducer_2obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/speed-reducer-2obj) |
+| [Four-bar truss](four_bar_truss/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/four-bar-truss) |
+| [Car side impact, three objectives](car_side_impact_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/car-side-impact-3obj) |
+| [Rocket injector](rocket_injector/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rocket-injector) |
+| [Vehicle crashworthiness](vehicle_crashworthiness/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/vehicle-crashworthiness) |
+| [Water resource planning](water_resource_planning/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/water-resource-planning) |
 | [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neuroevolution) |
 | [XOR by NEAT](xor_neat/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neat) |
 | [Cart-pole](cart_pole/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cart-pole) |

@@ -1,0 +1,3 @@
+NSGA-III, 500 generations: 156 solutions on the front, all feasible
+  weight from 23.665 to 42.766, pubic force from 3.5853 to 4.0000, mean velocity from 10.6108 to 12.5129
+  hypervolume 0.8160, 93.94% of the reference front's 0.8687

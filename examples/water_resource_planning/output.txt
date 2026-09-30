@@ -1,0 +1,3 @@
+SPEA2, 500 generations: 212 solutions on the front, all feasible
+  x₃ at most 0.03954, where the optimal solutions have 0.01
+  IGD+ 0.02994 to 5067 points of the optimal front
