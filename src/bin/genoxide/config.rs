@@ -113,6 +113,9 @@ pub struct Fitness {
     /// What a NaN from the program means.
     #[serde(default)]
     pub nan: Nan,
+    /// The longest wait for an answer; `stop.time` if unset.
+    #[serde(default, with = "duration")]
+    pub timeout: Option<Duration>,
 }
 
 fn maximize() -> Vec<Objective> {

@@ -5,7 +5,7 @@ use crate::operators::{
     AnySelect, ListCrossover, OrderCrossovers, OrderMutation, RealCrossover, RealMutation,
     bit_flip, integer_mutation,
 };
-use crate::process::{Genes, Multi, Pool, Single};
+use crate::process::{Genes, Multi, Pool, Single, Timeout};
 use genoxide::algorithm::{Incremental, cmaes, pso};
 use genoxide::checkpoint;
 use genoxide::engine::asynchronous::MAX_WORKERS;
@@ -48,6 +48,7 @@ struct Context {
     workers: usize,
     objectives: Vec<Objective>,
     nan: NanPolicy,
+    timeout: Option<Timeout>,
     stop: config::Stop,
     report: config::Report,
     checkpoint: Option<(PathBuf, u64)>,
@@ -138,6 +139,9 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
     if options.resume && run.checkpoint.is_none() {
         return Err("`--resume` needs a `[checkpoint]` in the run file".to_string());
     }
+    if run.fitness.timeout == Some(Duration::ZERO) {
+        return Err("`fitness.timeout` must be longer than 0".to_string());
+    }
     let settings = serde_json::to_string(&(&run.genome, &run.fitness.objectives, &run.algorithm))
         .map_err(|error| error.to_string())?;
     let context = Context {
@@ -145,6 +149,22 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
         settings,
         workers,
         objectives,
+        // a program that doesn't answer ends the run: at most `stop.time` without a timeout (a
+        // time of 0 ends the run after its first generation, however long that takes)
+        timeout: match (
+            run.fitness.timeout,
+            run.stop.time.filter(|time| !time.is_zero()),
+        ) {
+            (Some(limit), _) => Some(Timeout {
+                limit,
+                setting: "fitness.timeout",
+            }),
+            (None, Some(limit)) => Some(Timeout {
+                limit,
+                setting: "stop.time",
+            }),
+            (None, None) => None,
+        },
         nan: match run.fitness.nan {
             config::Nan::Invalid => NanPolicy::Invalid,
             config::Nan::Error => NanPolicy::Error,
@@ -592,7 +612,13 @@ impl Context {
 
     fn start(&self) -> Result<(Pool, Arc<AtomicBool>)> {
         let abort = Arc::new(AtomicBool::new(false));
-        let pool = Pool::start(&self.command, &self.directory, self.workers, abort.clone())?;
+        let pool = Pool::start(
+            &self.command,
+            &self.directory,
+            self.workers,
+            abort.clone(),
+            self.timeout,
+        )?;
         Ok((pool, abort))
     }
 }
@@ -665,7 +691,7 @@ fn finish<G: Genes + genoxide::genome::Genome>(
     outcome: genoxide::Result<Outcome<G>>,
     elapsed: Duration,
 ) -> Result<Value> {
-    if let Some(failure) = pool.failure() {
+    if let Some(failure) = pool.close() {
         return Err(failure);
     }
     let outcome = setting(outcome)?;
@@ -713,7 +739,7 @@ where
     let start = Instant::now();
     let outcome = engine.run();
     drop(engine);
-    if let Some(failure) = pool.failure() {
+    if let Some(failure) = pool.close() {
         return Err(failure);
     }
     let outcome = setting(outcome)?;
