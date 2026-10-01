@@ -1,0 +1,8 @@
+Katsuura in 10 dimensions, 10 seeds, 100000 evaluations at most per run
+algorithm         at min  evaluations  median error
+CMA-ES              0/10            -        1.0e-1
+CMA-ES with IPOP    1/10        41990        1.3e-2
+DE                  0/10            -        5.8e-6
+PSO                10/10          380         0.0e0
+GA                  0/10            -        3.7e-4
+evaluations: the median of the runs that reach the minimum

@@ -1,0 +1,15 @@
+High-conditioned elliptic in 30 dimensions, 300000 evaluations at most
+High-conditioned elliptic: evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES        36036    36778    37688    38444    39242   9.6e-9
+sep-CMA-ES     6076     6902     7644     8302     9016   8.3e-9
+DE            22300    26900    31600    36000    40100   9.7e-9
+PSO           18920    23240    26760    30520    35320   9.8e-9
+GA           273848        -        -        -        -   9.2e-1
+Shifted and rotated (seed 1): evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES        34076    37156    37982    38696    39550   9.6e-9
+sep-CMA-ES        -        -        -        -        -    5.6e4
+DE                -        -        -        -        -    2.7e3
+PSO               -        -        -        -        -    1.2e6
+GA                -        -        -        -        -    4.8e6

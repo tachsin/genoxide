@@ -1,0 +1,8 @@
+Step in 30 dimensions, 300000 evaluations at most
+Step: evaluations until the error is at most
+algorithm      1000      100       10        1        0     best
+CMA-ES          728     1148     1610     1848     1862    0.0e0
+sep-CMA-ES      686      980     1330     1582     1848    0.0e0
+DE             3900     6700     9100    11400    11600    0.0e0
+PSO            3400     5400     7800        -        -    4.0e0
+GA             3805     5797    12977    18372    25390    0.0e0

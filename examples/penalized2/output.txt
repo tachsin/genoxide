@@ -1,0 +1,8 @@
+Penalized 2 in 30 dimensions, 10 seeds, 300000 evaluations at most per run
+algorithm         at min  evaluations  median error
+CMA-ES              9/10         6762        9.0e-9
+CMA-ES with IPOP   10/10         6776        8.8e-9
+DE                 10/10        30250        9.4e-9
+PSO                 7/10        26840        9.8e-9
+GA                  0/10            -        1.1e-5
+evaluations: the median of the runs that reach the minimum

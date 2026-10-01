@@ -1,0 +1,15 @@
+Sum of different powers in 30 dimensions, 300000 evaluations at most
+Sum of different powers: evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES           28      294     1624     5306    13006   9.1e-9
+sep-CMA-ES       28      252      742     1540     2464   9.2e-9
+DE              100     1100     3100     4800     6500  7.4e-10
+PSO              40      760     1680     3120     4880   7.2e-9
+GA              100     1517     3781     6915    15922   8.7e-9
+Shifted and rotated (seed 1): evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES          168      476     1666     4718    12334   9.0e-9
+sep-CMA-ES      182      322      784    10220        -   1.4e-8
+DE              600     2100     5100    16200    32200   7.5e-9
+PSO             280      920     2560    14280   243400   9.9e-9
+GA              293     1609     3316    27087        -   5.9e-8
