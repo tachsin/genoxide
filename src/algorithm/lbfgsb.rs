@@ -1173,6 +1173,3 @@ impl LbfgsbBuilder {
         Ok(lbfgsb)
     }
 }
-
-#[cfg(test)]
-mod tests;

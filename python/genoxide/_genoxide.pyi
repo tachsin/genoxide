@@ -18,6 +18,8 @@ def run(
     checkpoint: str | os.PathLike[str] | None = None,
     checkpoint_every: int | None = None,
     resume: str | os.PathLike[str] | None = None,
+    gradient: Callable[[Any], Any] | None = None,
+    combined_gradient: bool = False,
 ) -> dict[str, Any]: ...
 
 class Running:

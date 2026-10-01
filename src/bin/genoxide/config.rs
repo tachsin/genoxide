@@ -124,6 +124,10 @@ pub struct Fitness {
     /// The longest wait for an answer; `stop.time` if unset.
     #[serde(default, with = "duration")]
     pub timeout: Option<Duration>,
+    /// Whether the program writes the gradient after the value: a value and then a derivative
+    /// per gene on each line.
+    #[serde(default)]
+    pub gradient: bool,
 }
 
 fn maximize() -> Vec<Objective> {
@@ -186,6 +190,20 @@ pub enum Algorithm {
         acceptance: Option<Acceptance>,
         /// Iterated local search: `[patience, kicks]`.
         restart: Option<(u64, usize)>,
+    },
+    Lbfgsb {
+        seed: Option<u64>,
+        /// The correction pairs kept.
+        memory: Option<usize>,
+        /// Where the gradients come from: `auto` by default.
+        gradients: Option<GradientSource>,
+        /// The relative step of finite differences.
+        difference_step: Option<f64>,
+        gradient_tolerance: Option<f64>,
+        function_tolerance: Option<f64>,
+        max_line_search: Option<usize>,
+        /// Random restarts after convergence; none if unset.
+        restarts: Option<u64>,
     },
     NelderMead {
         seed: Option<u64>,
@@ -352,6 +370,16 @@ pub enum DeRestartsName {
 pub struct OnStagnation {
     pub tolerance: f64,
     pub patience: u64,
+}
+
+/// Where L-BFGS-B's gradients come from.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum GradientSource {
+    Auto,
+    Supplied,
+    Forward,
+    Central,
 }
 
 /// Nelder-Mead's coefficients: `"adaptive"`, `"standard"` or

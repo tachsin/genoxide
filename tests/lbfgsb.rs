@@ -688,3 +688,20 @@ fn settings_are_validated() {
         Err(Error::InvalidGenome { .. })
     ));
 }
+
+#[test]
+fn a_run_as_in_python() {
+    // python/tests/test_lbfgsb.py has the same run, evaluated in Rust, with the same results
+    let problem = Rosenbrock::new(4);
+    let lbfgsb = Lbfgsb::builder(problem.representation())
+        .memory(5)
+        .restarts(local::Restarts::Random { times: 2 })
+        .minimize()
+        .seed(5)
+        .build()
+        .unwrap();
+    let (outcome, _) = run(lbfgsb, problem, 20_000);
+    assert_eq!(outcome.stop_reason(), StopReason::Converged);
+    assert_eq!((outcome.evaluations(), outcome.generations()), (271, 270));
+    assert_eq!(outcome.best_fitness(), Fitness::new(2.059739817072154e-12));
+}

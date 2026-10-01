@@ -959,3 +959,130 @@ fn nelder_mead_settings_are_checked() {
     );
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+const LBFGSB: &str = r#"
+report = "off"
+[genome]
+type = "real"
+length = 6
+bounds = [-5.0, 5.0]
+[fitness]
+builtin = "rosenbrock"
+objectives = ["minimize"]
+workers = 2
+[algorithm]
+type = "lbfgsb"
+seed = 1
+[stop]
+evaluations = 100000
+"#;
+
+// a run file of `LBFGSB` with these settings
+fn lbfgsb(settings: &str) -> String {
+    LBFGSB.replace(
+        "type = \"lbfgsb\"",
+        &format!("type = \"lbfgsb\"\n{settings}"),
+    )
+}
+
+#[test]
+fn lbfgsb_runs_with_finite_differences_or_the_programs_gradient() {
+    let directory = directory("lbfgsb");
+    let run = |text: &str| run(&directory, "lbfgsb.toml", text, &[]).unwrap();
+    // forward differences: the program writes values only
+    let forward = run(LBFGSB);
+    assert_eq!(forward["stop_reason"], "converged");
+    assert!(forward["fitness"].as_f64().unwrap() < 1e-8, "{forward}");
+    // the gradient protocol: the value, then a derivative per gene, from the built-in's
+    // analytic gradient
+    let gradient = LBFGSB.replace(
+        "objectives = [\"minimize\"]",
+        "objectives = [\"minimize\"]\ngradient = true",
+    );
+    let supplied = run(&gradient);
+    assert_eq!(supplied["stop_reason"], "converged");
+    assert!(supplied["fitness"].as_f64().unwrap() < 1e-8, "{supplied}");
+    assert!(
+        supplied["evaluations"].as_u64().unwrap() * 4 < forward["evaluations"].as_u64().unwrap()
+    );
+    // a program of the protocol, and the same run as the built-in
+    let command = gradient.replace(
+        "builtin = \"rosenbrock\"",
+        &format!("command = [{GENOXIDE:?}, \"fitness\", \"rosenbrock\", \"--gradient\"]"),
+    );
+    assert_eq!(untimed(run(&command)), untimed(supplied.clone()));
+    // central differences although the program writes the gradient, more settings, restarts
+    let central = run(&lbfgsb(
+        "gradients = \"central\"\nmemory = 5\ngradient_tolerance = 1e-6\nfunction_tolerance = 0.0\nmax_line_search = 10\nrestarts = 1",
+    ).replace("objectives = [\"minimize\"]", "objectives = [\"minimize\"]\ngradient = true"));
+    assert_eq!(central["stop_reason"], "converged");
+    assert!(central["fitness"].as_f64().unwrap() < 1e-10, "{central}");
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn lbfgsb_settings_are_checked() {
+    let directory = directory("lbfgsb-check");
+    let expect = |text: &str, message: &str| {
+        let error = check(&directory, text).unwrap_err();
+        assert!(error.contains(message), "{message}: {error}");
+    };
+    assert_eq!(
+        check(
+            &directory,
+            &lbfgsb("memory = 4\ngradients = \"forward\"\ndifference_step = 1e-7\nrestarts = 2")
+        ),
+        Ok(())
+    );
+    expect(
+        &lbfgsb("gradients = \"supplied\""),
+        "`algorithm.gradients = \"supplied\"` needs `fitness.gradient = true`",
+    );
+    expect(
+        &lbfgsb("difference_step = 1e-7"),
+        "`algorithm.difference_step` needs",
+    );
+    expect(&lbfgsb("memory = 0"), "invalid setting `memory`");
+    expect(
+        &lbfgsb("gradient_tolerance = -1.0"),
+        "invalid setting `gradient_tolerance`",
+    );
+    expect(
+        &lbfgsb("restarts = 0"),
+        "`algorithm.restarts` must be at least 1; leave it out for none",
+    );
+    expect(&lbfgsb("gradients = \"exact\""), "unknown variant `exact`");
+    expect(
+        &LBFGSB
+            .replace("type = \"real\"", "type = \"binary\"")
+            .replace("bounds = [-5.0, 5.0]\n", ""),
+        "`lbfgsb` needs a real genome",
+    );
+    // the gradient protocol: a built-in with a gradient, one objective
+    expect(
+        &LBFGSB.replace(
+            "builtin = \"rosenbrock\"",
+            "builtin = \"zdt1\"\ngradient = true",
+        ),
+        "has no gradient",
+    );
+    expect(
+        &LBFGSB.replace(
+            "objectives = [\"minimize\"]",
+            "objectives = [\"minimize\", \"minimize\"]\ngradient = true",
+        ),
+        "`fitness.gradient` needs a single objective",
+    );
+    // a program writing too few numbers
+    let short = LBFGSB.replace(
+        "builtin = \"rosenbrock\"",
+        "builtin = \"rosenbrock\"\ngradient = true",
+    );
+    let short = short.replace(
+        "builtin = \"rosenbrock\"",
+        &format!("command = [{GENOXIDE:?}, \"fitness\", \"rosenbrock\"]"),
+    );
+    let error = run(&directory, "short.toml", &short, &[]).unwrap_err();
+    assert!(error.contains("expected 7 numbers"), "{error}");
+    std::fs::remove_dir_all(&directory).unwrap();
+}
