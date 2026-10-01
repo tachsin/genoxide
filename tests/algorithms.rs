@@ -311,8 +311,15 @@ fn portable_runs() {
                 .build()
                 .unwrap(),
         ),
+        portable_run(
+            NelderMead::builder(real())
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
     ];
-    let expected: [[f64; 4]; 7] = [
+    let expected: [[f64; 4]; 8] = [
         // L-SHADE
         [
             0.5886518163542276,
@@ -361,6 +368,13 @@ fn portable_runs() {
             -1.2524725186772865,
             0.7656393855501439,
             -2.217604529838133,
+        ],
+        // Nelder-Mead, adaptive coefficients
+        [
+            -0.6425949189348894,
+            -0.867373269448164,
+            -0.27176836817948113,
+            -1.087568298282683,
         ],
     ];
     for (run, expected) in runs.iter().zip(expected) {

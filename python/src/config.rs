@@ -138,6 +138,21 @@ pub enum Algorithm {
         /// Iterated local search: `[patience, kicks]`.
         restart: Option<(u64, usize)>,
     },
+    NelderMead {
+        coefficients: Option<NelderMeadCoefficients>,
+        /// The size of the first simplex, as a fraction of each gene's range.
+        initial_step: Option<f64>,
+        /// The size of the first simplex as a distance, instead.
+        initial_step_absolute: Option<f64>,
+        /// The simplex size at which a run has converged, as a fraction of the initial step.
+        tolerance: Option<f64>,
+        /// The number of random restarts; none by default.
+        restarts: Option<u64>,
+        /// The reflection, expansion and both contractions evaluated in one round.
+        speculative: Option<bool>,
+        initial_genome: Option<Vec<f64>>,
+        seed: Option<u64>,
+    },
     Nsga2 {
         population_size: usize,
         seed: Option<u64>,
@@ -457,6 +472,31 @@ pub enum Restarts {
 pub enum Covariance {
     Full,
     Diagonal,
+}
+
+/// Nelder-Mead's coefficients: `"adaptive"` (Gao and Han's), `"standard"` (Nelder and Mead's) or
+/// `{reflection, expansion, contraction, shrink}`.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum NelderMeadCoefficients {
+    Named(NelderMeadCoefficientsName),
+    Custom(CustomCoefficients),
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NelderMeadCoefficientsName {
+    Adaptive,
+    Standard,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CustomCoefficients {
+    pub reflection: f64,
+    pub expansion: f64,
+    pub contraction: f64,
+    pub shrink: f64,
 }
 
 /// How differential evolution builds its mutant vectors: `"rand1"`, `"best1"`, `{p, archive}`

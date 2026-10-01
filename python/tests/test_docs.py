@@ -1,6 +1,7 @@
 """The code in the documentation runs: the README's Python blocks and the examples in the
-docstrings of the package and its submodules."""
+docstrings of the package, its classes and its submodules."""
 
+import inspect
 import pathlib
 import re
 import textwrap
@@ -19,11 +20,11 @@ def test_the_readme_code_runs():
         exec(compile(block, str(README), "exec"), namespace)
 
 
-def docstring_examples(module):
-    """The literal blocks after "::" in the module's docstring, each up to the first line that
-    isn't indented."""
+def docstring_examples(documented):
+    """The literal blocks after "::" in the docstring of a module or a class, each up to the first
+    line that isn't indented."""
     examples = []
-    for after in module.__doc__.split("::\n")[1:]:
+    for after in inspect.cleandoc(documented.__doc__).split("::\n")[1:]:
         lines = []
         for line in after.splitlines():
             if line and not line.startswith(" "):
@@ -48,3 +49,15 @@ def test_the_submodule_docstring_examples_run():
         for example in docstring_examples(module):
             assert "gx." in example
             exec(compile(example, f"{module.__name__}.__doc__", "exec"), namespace)
+
+
+def test_the_class_docstring_examples_run():
+    classes = [getattr(gx, name) for name in gx.__all__]
+    documented = [
+        cls for cls in classes if isinstance(cls, type) and "::\n" in (inspect.getdoc(cls) or "")
+    ]
+    assert gx.NelderMead in documented
+    for cls in documented:
+        for example in docstring_examples(cls):
+            assert "gx." in example
+            exec(compile(example, f"{cls.__name__}.__doc__", "exec"), {})

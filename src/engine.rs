@@ -421,6 +421,10 @@ impl<G: Genome> Outcome<G> {
 /// evaluate in [`STALL_GENERATIONS`] generations in a row, e.g. a genetic algorithm whose children
 /// are all copies of their parents.
 ///
+/// A run whose algorithm has converged with nothing more to do, such as a
+/// [`NelderMead`](crate::algorithm::NelderMead) without restarts left, stops with
+/// [`StopReason::Converged`] (see [`Algorithm::is_finished`]).
+///
 /// ```
 /// use genoxide::prelude::*;
 ///
@@ -484,6 +488,11 @@ pub(crate) fn checkpoint<A>(
 pub(crate) fn stalled(stop: Option<&Stop>, idle: u64) -> Option<StopReason> {
     (idle >= STALL_GENERATIONS && stop.is_some_and(Stop::needs_evaluations))
         .then_some(StopReason::Stalled)
+}
+
+// `StopReason::Converged` once the algorithm has nothing more to do
+fn converged<A: Algorithm>(algorithm: &A) -> Option<StopReason> {
+    algorithm.is_finished().then_some(StopReason::Converged)
 }
 
 // the error for checkpoints every 0 generations
@@ -704,7 +713,8 @@ where
     /// If the algorithm has run before and a stop condition is already met, it returns that
     /// outcome without another generation. A run whose stop conditions need new evaluations stops
     /// with [`StopReason::Stalled`] after [`STALL_GENERATIONS`] generations in a row without a
-    /// genome to evaluate.
+    /// genome to evaluate, and a run whose algorithm [has finished](Algorithm::is_finished) with
+    /// [`StopReason::Converged`].
     ///
     /// # Panics
     ///
@@ -740,6 +750,7 @@ where
             } else {
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
             }
+            .or_else(|| converged(&self.algorithm))
             .or_else(|| stalled(self.stop.as_ref(), self.idle));
             if let Some(stop_reason) = reason {
                 return Ok(Outcome {
@@ -812,6 +823,7 @@ where
             } else {
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
             }
+            .or_else(|| converged(&self.algorithm))
             .or_else(|| stalled(self.stop.as_ref(), self.idle));
             let outcome = reason.map(|stop_reason| Outcome {
                 best: best.clone(),

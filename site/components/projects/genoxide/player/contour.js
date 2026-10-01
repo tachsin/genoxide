@@ -153,9 +153,10 @@ function shekel(m, x) {
  * The contour plot's legend items; a grid of contours shows them once, for all its panels.
  * `minimaLabel` names the marked minima when they aren't proven global ("best known minimum").
  */
-export function contourLegend({ best, minima, palette, minimaLabel }) {
+export function contourLegend({ best, minima, palette, minimaLabel, populationLabel, ends = false }) {
   return [
-    { label: "population", color: palette[1], shape: "dot" },
+    { label: populationLabel ?? "population", color: palette[1], shape: "dot" },
+    ...(ends ? [{ label: "converged runs", color: palette[2], shape: "ring" }] : []),
     ...(best ? [{ label: "best", color: palette[0], shape: "diamond" }] : []),
     ...(minima ? [{ label: minimaLabel ?? (minima > 1 ? "global minima" : "global minimum"), shape: "ring", className: "text-base-content" }] : []),
     { label: "shading: higher f (log)", shape: "square", className: "text-base-content/30" },

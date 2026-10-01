@@ -282,6 +282,19 @@ fn other_algorithms_resume_exactly() {
             .unwrap()
     };
     resumes(diagonal, rastrigin, 20, 60);
+    // the simplex, an iteration under way and random restarts, one point a round or four
+    for speculative in [false, true] {
+        let nelder_mead = || {
+            NelderMead::builder(Real::uniform(4, -5.12..=5.12).unwrap())
+                .restarts(local::Restarts::Random { times: 1_000 })
+                .speculative(speculative)
+                .minimize()
+                .seed(11)
+                .build()
+                .unwrap()
+        };
+        resumes(nelder_mead, rastrigin, 150, 400);
+    }
     // the mean and Adam's moments, with the mean evaluated and parallel breeding
     for parallel in [false, true] {
         let open_es = || {

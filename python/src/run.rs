@@ -4,7 +4,7 @@ use crate::checkpoint::Checkpoints;
 use crate::config;
 use crate::control::{
     CmaesSettings, DeSettings, EsSettings, GaSettings, IslandsSettings, LocalSearchSettings,
-    NeatSettings, OpenEsSettings, PsoSettings, Running, Settings, Slot,
+    NeatSettings, NelderMeadSettings, OpenEsSettings, PsoSettings, Running, Settings, Slot,
 };
 use crate::errors::{genome_setting, setting};
 use crate::fitness::{Multi, Native, Shared, Single};
@@ -19,6 +19,7 @@ use crate::tasks::Balance;
 use crate::tree_problems::TreeFitness;
 use crate::trees::tree_algorithm;
 use genoxide::algorithm::islands::{Migrate, Topology};
+use genoxide::algorithm::nelder_mead::Coefficients;
 use genoxide::algorithm::{GaBuilder, Islands, Reevaluate, cmaes, es, pso};
 use genoxide::engine::Progress;
 use genoxide::genome::{AdaptiveReal, Representation};
@@ -480,6 +481,28 @@ pub fn de_control(control: config::DeControl) -> de::Control {
     }
 }
 
+fn nelder_mead_coefficients(coefficients: config::NelderMeadCoefficients) -> Coefficients {
+    match coefficients {
+        config::NelderMeadCoefficients::Named(config::NelderMeadCoefficientsName::Adaptive) => {
+            Coefficients::Adaptive
+        }
+        config::NelderMeadCoefficients::Named(config::NelderMeadCoefficientsName::Standard) => {
+            Coefficients::Standard
+        }
+        config::NelderMeadCoefficients::Custom(config::CustomCoefficients {
+            reflection,
+            expansion,
+            contraction,
+            shrink,
+        }) => Coefficients::Custom {
+            reflection,
+            expansion,
+            contraction,
+            shrink,
+        },
+    }
+}
+
 fn de_restarts(restarts: config::DeRestarts) -> de::Restarts {
     match restarts {
         config::DeRestarts::Named(config::DeRestartsName::Never) => de::Restarts::Never,
@@ -715,6 +738,51 @@ fn real_algorithm<'py>(
             )?;
             generational(py, open_es, OpenEsSettings, context)
         }
+        config::Algorithm::NelderMead {
+            coefficients,
+            initial_step,
+            initial_step_absolute,
+            tolerance,
+            restarts,
+            speculative,
+            initial_genome,
+            seed,
+        } => {
+            let mut builder = NelderMead::builder(real).objective(context.single_objective()?);
+            if let Some(coefficients) = coefficients {
+                builder = builder.coefficients(nelder_mead_coefficients(coefficients));
+            }
+            if let Some(step) = initial_step {
+                builder = builder.initial_step(step);
+            }
+            if let Some(distance) = initial_step_absolute {
+                builder = builder.initial_step_absolute(distance);
+            }
+            if let Some(tolerance) = tolerance {
+                builder = builder.tolerance(tolerance);
+            }
+            if let Some(times) = restarts {
+                builder = builder.restarts(local::Restarts::Random { times });
+            }
+            if let Some(speculative) = speculative {
+                builder = builder.speculative(speculative);
+            }
+            if let Some(genome) = initial_genome {
+                builder = builder.initial_genome(Reals::from(genome));
+            }
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            // the only genome the builder checks is the initial one
+            let nelder_mead = setting(builder.build().map_err(|error| match error {
+                genoxide::Error::InvalidGenome { reason } => genoxide::Error::InvalidSetting {
+                    setting: "initial_genome",
+                    reason,
+                },
+                error => error,
+            }))?;
+            generational(py, nelder_mead, NelderMeadSettings, context)
+        }
         algorithm => with_operators(
             py,
             Ok(real),
@@ -896,6 +964,9 @@ where
         config::Algorithm::Pso { .. } => Err("Pso needs a Real genome".to_string().into()),
         config::Algorithm::OpenEs { .. } => Err("OpenEs needs a Real genome".to_string().into()),
         config::Algorithm::Neat(_) => Err(NEAT_GENOME.to_string().into()),
+        config::Algorithm::NelderMead { .. } => {
+            Err("NelderMead needs a Real genome".to_string().into())
+        }
     }
 }
 
@@ -1438,6 +1509,7 @@ fn stop_reason(reason: StopReason) -> &'static str {
         StopReason::Stagnation => "stagnation",
         StopReason::Aborted => "aborted",
         StopReason::Stalled => "stalled",
+        StopReason::Converged => "converged",
         _ => "other",
     }
 }

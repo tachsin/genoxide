@@ -1,0 +1,18 @@
+Rosenbrock's function in two dimensions, from (-1.2, 1) where f = 24.2
+Nelder-Mead with Gao and Han's coefficients, a first simplex of 0.1 of each range
+round  evaluations  best value  simplex size
+    0            3       5.0e0        1.0e-1
+   20           23       2.3e0        8.7e-2
+   40           43       1.1e0        3.1e-2
+   60           63      5.5e-1        1.2e-2
+   80           83      7.4e-2        4.6e-2
+  100          103      6.1e-3        2.4e-2
+  120          123      6.5e-5        5.0e-3
+  140          143      5.7e-8        4.6e-4
+  160          163     3.8e-10        2.1e-5
+  180          183     7.2e-13        8.4e-7
+  200          203     1.3e-15        1.9e-8
+  220          223     1.2e-18        1.0e-9
+  231          234     1.7e-20       8.3e-11
+converged after 231 rounds and 234 evaluations, at (1.0000000000, 1.0000000000), f = 1.7e-20
+speculative asks: the same end after 126 rounds and 507 evaluations

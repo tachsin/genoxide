@@ -29,6 +29,7 @@ CATEGORIES = {
     "permutation",
     "integer",
     "continuous",
+    "local",
     "multi-objective",
     "constrained",
     "neuroevolution",

@@ -85,6 +85,11 @@ impl<G: Genome, F> Population<G, F> {
         &self.individuals
     }
 
+    // the individuals, to insert and remove some in place
+    pub(crate) fn individuals_mut(&mut self) -> &mut Vec<Individual<G, F>> {
+        &mut self.individuals
+    }
+
     /// The individuals, consuming the population.
     pub fn into_vec(self) -> Vec<Individual<G, F>> {
         self.individuals

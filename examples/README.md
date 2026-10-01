@@ -202,6 +202,8 @@ python examples/tsp_berlin52/main.py
 | [Accuracy against size](accuracy_and_size/) | genetic programming | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/accuracy-and-size) |
 | [Asynchronous evaluation](asynchronous/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/asynchronous) |
 | [Neuroevolution on the GPU](gpu/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gpu) |
+| [Nelder-Mead on Rosenbrock](nelder_mead/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nelder-mead) |
+| [Nelder-Mead with restarts on Himmelblau](nelder_mead_himmelblau/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nelder-mead-himmelblau) |
 
 The GPU example is a crate of its own, with wgpu as a dependency:
 `cargo run --release --manifest-path examples/gpu/Cargo.toml`.

@@ -59,6 +59,10 @@ ALGORITHMS = {
     "local search": lambda: gx.LocalSearch(
         real, neighbor=gx.GaussianMutation(0.1, rate=0.5), neighbors=3, objective="minimize", seed=1
     ),
+    "nelder mead": lambda: gx.NelderMead(real, restarts=3, objective="minimize", seed=1),
+    "speculative nelder mead": lambda: gx.NelderMead(
+        real, speculative=True, objective="minimize", seed=1
+    ),
     "islands": lambda: gx.Islands(
         [ga(seed=seed) for seed in range(3)], topology="random", interval=3, seed=5
     ),

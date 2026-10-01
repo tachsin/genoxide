@@ -35,6 +35,7 @@ def algorithms():
         "local_search": gx.LocalSearch(
             genome, neighbor=gx.GaussianMutation(0.05, rate=0.5), objective="minimize", seed=1
         ),
+        "nelder_mead": gx.NelderMead(genome, objective="minimize", seed=1),
     }
 
 
@@ -44,6 +45,7 @@ RUNNING = {
     "cmaes": gx.RunningCmaes,
     "pso": gx.RunningPso,
     "local_search": gx.RunningLocalSearch,
+    "nelder_mead": gx.RunningNelderMead,
 }
 
 
@@ -170,6 +172,13 @@ def test_the_settings_in_use_are_read_back():
     assert seen["local_search"] == {
         "neighbor": gx.GaussianMutation(0.05, rate=0.5),
         "neighbors": 1,
+    }
+    # the first simplex: one initial step in each gene
+    assert seen["nelder_mead"] == {
+        "converged": False,
+        "size": pytest.approx(1.0),
+        "iterations": 0,
+        "restart_count": 0,
     }
 
     de = gx.De(
@@ -419,7 +428,8 @@ def test_reevaluate_scores_the_algorithm_again(name):
     assert result.best_fitness == pytest.approx(moving(result.best_genome))
     # then it moves toward the new optimum
     assert result.best_fitness < rescored.best_fitness
-    if name != "local_search":
+    # the local methods evaluate a point or two per generation: they move, but don't get there
+    if name not in ("local_search", "nelder_mead"):
         assert np.allclose(result.best_genome, 1.0, atol=0.3)
 
 
