@@ -844,3 +844,26 @@ fn many_genes_need_supplied_gradients() {
         })
     ));
 }
+
+#[test]
+fn a_run_as_in_python() {
+    // python/tests/test_first_order.py has the same run, evaluated in Rust, with the same results
+    let problem = Rosenbrock::new(4);
+    let adam = FirstOrder::builder(problem.representation())
+        .step(Step::adam(0.02))
+        .restarts(local::Restarts::Random { times: 2 })
+        .minimize()
+        .seed(5)
+        .build()
+        .unwrap();
+    let outcome = Engine::new(adam, problem)
+        .stop_when(Stop::evaluations(200_000))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Converged);
+    assert_eq!(outcome.evaluations(), 85_572);
+    assert_eq!(
+        outcome.best_fitness(),
+        Fitness::new(4.017_523_816_634_646e-13)
+    );
+}

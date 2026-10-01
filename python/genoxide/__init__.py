@@ -1,6 +1,7 @@
 """Evolutionary computation in Rust, for Python.
 
-Genetic algorithms, local search, the Nelder-Mead simplex method, differential evolution,
+Genetic algorithms, local search, the Nelder-Mead simplex method, L-BFGS-B and first-order
+gradient methods (gradient descent, momentum, Nesterov, Adam and AdamW), differential evolution,
 evolution strategies, CMA-ES, OpenAI's evolution strategy, NEAT, particle swarm optimization, the
 island model, and NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives, from
 `genoxide <https://github.com/tachsin/genoxide>`_, with Python fitness functions::
@@ -133,6 +134,7 @@ __all__ = [
     "Pso",
     "LocalSearch",
     "NelderMead",
+    "FirstOrder",
     "Lbfgsb",
     "Islands",
     "Nsga2",
@@ -159,6 +161,7 @@ __all__ = [
     "RunningPso",
     "RunningLocalSearch",
     "RunningNelderMead",
+    "RunningFirstOrder",
     "RunningLbfgsb",
     "RunningIslands",
     # submodules
@@ -957,7 +960,8 @@ class Result:
     - "target", "generations", "evaluations", "time" or "stagnation": that stop condition;
     - "aborted": ``on_generation`` returned False;
     - "converged": the algorithm converged with nothing more to do, e.g. a :class:`NelderMead`
-      whose simplex shrank within its tolerance, an :class:`Lbfgsb` at a minimum, with no restart
+      whose simplex shrank within its tolerance, an :class:`Lbfgsb` or :class:`FirstOrder` at a
+      minimum, with no restart
       left, or a :class:`Cmaes` with ``restarts="stop"`` whose run met a stop criterion;
     - "stalled": nothing new to evaluate for 10,000 generations in a row (e.g. every child was a
       copy of a parent), while only ``target`` or ``evaluations`` could stop the run;
@@ -1327,8 +1331,8 @@ class Running:
     Each algorithm has a class of its own, with its settings as properties: :class:`RunningGa`,
     :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`, :class:`RunningOpenEs`,
     :class:`RunningNeat`, :class:`RunningPso`, :class:`RunningLocalSearch`,
-    :class:`RunningNelderMead`, :class:`RunningLbfgsb` and :class:`RunningIslands`. A new value is checked as in the
-    algorithm's constructor: a wrong one raises a ``ValueError`` and changes nothing. The handle
+    :class:`RunningNelderMead`, :class:`RunningLbfgsb`, :class:`RunningFirstOrder` and
+    :class:`RunningIslands`. A new value is checked as in the algorithm's constructor: a wrong one raises a ``ValueError`` and changes nothing. The handle
     works only during the callback; afterwards it raises a ``RuntimeError``.
 
     A control that changes nothing leaves the run as it is: with a seed, the same result as
@@ -1346,7 +1350,8 @@ class Running:
 
         Instead of the next generation's children, the population is evaluated again (a particle
         swarm's positions and personal bests, a local search's current and best solution, a
-        Nelder-Mead simplex, whose iteration under way is dropped), without breeding and without
+        Nelder-Mead simplex, whose iteration under way is dropped, a first-order method's point
+        and its gradient, with the velocity or Adam's averages kept), without breeding and without
         a new generation: ``on_generation`` is then called again with the same generation number,
         and ``control`` isn't. The best solution is then the best of the new values, as old and
         new values aren't comparable. The evaluations count, and no random numbers are drawn, so
@@ -1716,6 +1721,78 @@ class RunningLbfgsb(Running):
     def restart_count(self) -> int:
         """The restarts so far."""
         return int(self._get("restart_count"))
+
+
+class RunningFirstOrder(Running):
+    """A running :class:`FirstOrder` method, for ``control``: its learning rate and schedule
+    multiplier, e.g. lowered over the run (a learning-rate schedule), and its state, read-only.
+    A change applies from the next step; the velocity and Adam's averages are kept.
+    ``reevaluate()`` scores the point again, with its gradient, and keeps them too."""
+
+    __slots__ = ()
+
+    @property
+    def learning_rate(self) -> float:
+        """The learning rate alpha, greater than 0."""
+        return float(self._get("learning_rate"))
+
+    @learning_rate.setter
+    def learning_rate(self, learning_rate: float) -> None:
+        self._set("learning_rate", _number("learning_rate", learning_rate))
+
+    @property
+    def multiplier(self) -> float:
+        """The schedule multiplier eta of Loshchilov and Hutter, greater than 0, 1 unless
+        changed: it multiplies every step, AdamW's weight decay included, where the learning rate
+        doesn't change the decay."""
+        return float(self._get("multiplier"))
+
+    @multiplier.setter
+    def multiplier(self, multiplier: float) -> None:
+        self._set("multiplier", _number("multiplier", multiplier))
+
+    @property
+    def converged(self) -> str | None:
+        """Whether the current run has converged, and why: "gradient" (the projected gradient
+        within its tolerance), "step" (the last step within its tolerance) or "invalid" (an
+        invalid point with no valid one to step back to); None if not. With restarts left, the
+        next generation starts a new run from a random point."""
+        converged = self._get("converged")
+        return None if converged is None else str(converged)
+
+    @property
+    def gradient_norm(self) -> float | None:
+        """The largest component of the projected gradient at the point (0 for a gene at a bound
+        it points out of): what the gradient tolerance measures. None before the first
+        evaluation."""
+        norm = self._get("gradient_norm")
+        return None if norm is None else float(norm)
+
+    @property
+    def gradient(self) -> np.ndarray:
+        """The gradient of the last evaluation, a copy: at the point, or at an invalid point
+        the method steps back from."""
+        return np.asarray(self._get("gradient"), dtype=np.float64)
+
+    @property
+    def iterations(self) -> int:
+        """The steps of every run; a step back from an invalid point isn't one."""
+        return int(self._get("iterations"))
+
+    @property
+    def steps(self) -> int:
+        """The steps t of the current run, the exponent of Adam's bias corrections."""
+        return int(self._get("steps"))
+
+    @property
+    def restart_count(self) -> int:
+        """The restarts so far."""
+        return int(self._get("restart_count"))
+
+    @property
+    def gradients(self) -> str:
+        """Where the gradients come from in this run: "supplied", "forward" or "central"."""
+        return str(self._get("gradients"))
 
 
 class _Island:
@@ -2122,7 +2199,8 @@ class _SingleObjective(_Single):
             ``on_generation``, on the same thread, with the running algorithm (a
             :class:`RunningGa`, :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`,
             :class:`RunningOpenEs`, :class:`RunningPso`, :class:`RunningLocalSearch`,
-            :class:`RunningNelderMead`, :class:`RunningLbfgsb` or :class:`RunningIslands`) and a
+            :class:`RunningNelderMead`, :class:`RunningLbfgsb`, :class:`RunningFirstOrder` or
+            :class:`RunningIslands`) and a
             :class:`Progress`: to change the algorithm's
             settings for the next generation, or to re-evaluate it after the fitness function
             changed. See :class:`Running`.
@@ -3361,7 +3439,116 @@ class NelderMead(_SingleObjective):
         }
 
 
-class Lbfgsb(_SingleObjective):
+class _GradientMethod(_SingleObjective):
+    """A gradient-based method: its ``run`` takes the gradient of the fitness function."""
+
+    def run(
+        self,
+        fitness: Callable[[np.ndarray], Any],
+        *,
+        gradient: Callable[[np.ndarray], Any] | bool | None = None,
+        generations: int | None = None,
+        evaluations: int | None = None,
+        target: float | None = None,
+        time: float | None = None,
+        stagnation: int | None = None,
+        batch: bool = False,
+        parallel: bool = False,
+        on_generation: Callable[[Progress], bool | None] | None = None,
+        control: Callable[[Any, Progress], Any] | None = None,
+        checkpoint: str | os.PathLike[str] | None = None,
+        checkpoint_every: int | None = None,
+        resume: str | os.PathLike[str] | None = None,
+    ) -> Result:
+        """Runs the method until the first stop condition, as :meth:`Ga.run`, with the
+        gradient.
+
+        Parameters
+        ----------
+        fitness : callable or problems.Problem
+            As for :meth:`Ga.run`. A smooth problem of :mod:`genoxide.problems` gives its
+            analytic gradient, computed in Rust.
+        gradient : callable or True, optional
+            The gradient of the score as ``fitness`` returns it, whatever the objective:
+            ``gradient(x)`` returns an array of a derivative per gene; with ``batch=True``, it
+            takes the 2-D array of genomes and returns a row of derivatives per genome. True
+            means ``fitness`` returns both, ``(value, gradient)`` (with ``batch=True``,
+            ``(values, gradients)``), computed together. None is no gradient: forward
+            differences, unless ``gradients`` says otherwise. With a gradient, the function is
+            called on the thread that called ``run``, ``parallel`` or not.
+
+        The other parameters are those of :meth:`Ga.run`.
+
+        Returns
+        -------
+        Result
+            The best solution found, and what the run took.
+
+        Raises
+        ------
+        ValueError
+            As :meth:`Ga.run`; and for a gradient with a problem of :mod:`genoxide.problems`,
+            which has its own, or a gradient of the wrong length.
+        TypeError
+            As :meth:`Ga.run`; and if ``gradient`` isn't callable, True or None, or a function
+            with ``gradient=True`` doesn't return a pair.
+        """
+        if gradient is None:
+            return super().run(
+                fitness,
+                generations=generations,
+                evaluations=evaluations,
+                target=target,
+                time=time,
+                stagnation=stagnation,
+                batch=batch,
+                parallel=parallel,
+                on_generation=on_generation,
+                control=control,
+                checkpoint=checkpoint,
+                checkpoint_every=checkpoint_every,
+                resume=resume,
+            )
+        if gradient is not True:
+            _check_callable(gradient, "the gradient")
+        _check_callable(fitness)
+        if isinstance(fitness, (problems.Problem, problems.MultiProblem, problems.control.Balance)):
+            raise ValueError(
+                f"{type(fitness).__name__} is evaluated in Rust, with its own gradient: leave "
+                "gradient out"
+            )
+        stop = _stop(generations, evaluations, target, time, stagnation)
+        callback = _on_generation(on_generation, Progress)
+        controls = _control(control, self)
+        saving = _checkpoints(checkpoint, checkpoint_every, resume)
+        combined = gradient is True
+        function: Callable[[np.ndarray], Any]
+        derivative: Callable[[np.ndarray], Any] | None = None
+        if batch:
+            function = _batch_with_gradients(fitness) if combined else _batch_scores(fitness)
+            if not combined:
+                derivative = _batch_gradient_rows(gradient)  # type: ignore[arg-type]
+        else:
+            function = _with_gradient(fitness) if combined else fitness
+            if not combined:
+                derivative = _gradient_array(gradient)  # type: ignore[arg-type]
+        return Result(
+            **self._run(
+                function,
+                stop,
+                batch,
+                parallel,
+                callback,
+                None,
+                controls,
+                saving,
+                gradient=derivative,
+                combined_gradient=combined,
+            )
+        )
+
+
+class Lbfgsb(_GradientMethod):
     """L-BFGS-B, the limited-memory BFGS method with bounds. Real genomes.
 
     A local method for smooth functions with a gradient, from a few genes to millions. Each
@@ -3512,109 +3699,227 @@ class Lbfgsb(_SingleObjective):
             "seed": _optional_whole("seed", self.seed),
         }
 
-    def run(
-        self,
-        fitness: Callable[[np.ndarray], Any],
-        *,
-        gradient: Callable[[np.ndarray], Any] | bool | None = None,
-        generations: int | None = None,
-        evaluations: int | None = None,
-        target: float | None = None,
-        time: float | None = None,
-        stagnation: int | None = None,
-        batch: bool = False,
-        parallel: bool = False,
-        on_generation: Callable[[Progress], bool | None] | None = None,
-        control: Callable[[Any, Progress], Any] | None = None,
-        checkpoint: str | os.PathLike[str] | None = None,
-        checkpoint_every: int | None = None,
-        resume: str | os.PathLike[str] | None = None,
-    ) -> Result:
-        """Runs L-BFGS-B until the first stop condition, as :meth:`Ga.run`, with the gradient.
 
-        Parameters
-        ----------
-        fitness : callable or problems.Problem
-            As for :meth:`Ga.run`. A smooth problem of :mod:`genoxide.problems` gives its
-            analytic gradient, computed in Rust.
-        gradient : callable or True, optional
-            The gradient of the score as ``fitness`` returns it, whatever the objective:
-            ``gradient(x)`` returns an array of a derivative per gene; with ``batch=True``, it
-            takes the 2-D array of genomes and returns a row of derivatives per genome. True
-            means ``fitness`` returns both, ``(value, gradient)`` (with ``batch=True``,
-            ``(values, gradients)``), computed together. None is no gradient: forward
-            differences, unless ``gradients`` says otherwise. With a gradient, the function is
-            called on the thread that called ``run``, ``parallel`` or not.
+_STEPS = ("gradient", "momentum", "nesterov", "adam", "adamw")
+_GRADIENTS = ("auto", "supplied", "forward", "central")
 
-        The other parameters are those of :meth:`Ga.run`.
 
-        Returns
-        -------
-        Result
-            The best solution found, and what the run took.
+class FirstOrder(_GradientMethod):
+    """A first-order method: gradient descent, momentum, Nesterov, Adam or AdamW. Real genomes.
 
-        Raises
-        ------
-        ValueError
-            As :meth:`Ga.run`; and for a gradient with a problem of :mod:`genoxide.problems`,
-            which has its own, or a gradient of the wrong length.
-        TypeError
-            As :meth:`Ga.run`; and if ``gradient`` isn't callable, True or None, or a function
-            with ``gradient=True`` doesn't return a pair.
-        """
-        if gradient is None:
-            return super().run(
-                fitness,
-                generations=generations,
-                evaluations=evaluations,
-                target=target,
-                time=time,
-                stagnation=stagnation,
-                batch=batch,
-                parallel=parallel,
-                on_generation=on_generation,
-                control=control,
-                checkpoint=checkpoint,
-                checkpoint_every=checkpoint_every,
-                resume=resume,
-            )
-        if gradient is not True:
-            _check_callable(gradient, "the gradient")
-        _check_callable(fitness)
-        if isinstance(fitness, (problems.Problem, problems.MultiProblem, problems.control.Balance)):
-            raise ValueError(
-                f"{type(fitness).__name__} is evaluated in Rust, with its own gradient: leave "
-                "gradient out"
-            )
-        stop = _stop(generations, evaluations, target, time, stagnation)
-        callback = _on_generation(on_generation, Progress)
-        controls = _control(control, self)
-        saving = _checkpoints(checkpoint, checkpoint_every, resume)
-        combined = gradient is True
-        function: Callable[[np.ndarray], Any]
-        derivative: Callable[[np.ndarray], Any] | None = None
-        if batch:
-            function = _batch_with_gradients(fitness) if combined else _batch_scores(fitness)
-            if not combined:
-                derivative = _batch_gradient_rows(gradient)  # type: ignore[arg-type]
-        else:
-            function = _with_gradient(fitness) if combined else fitness
-            if not combined:
-                derivative = _gradient_array(gradient)  # type: ignore[arg-type]
-        return Result(
-            **self._run(
-                function,
-                stop,
-                batch,
-                parallel,
-                callback,
-                None,
-                controls,
-                saving,
-                gradient=derivative,
-                combined_gradient=combined,
-            )
+    Steps along the gradient of the score, with the step's size a setting rather than found by a
+    line search: for smooth problems with many variables, up to millions, where a line search
+    costs too much, such as fitting a model's parameters. Memory and work per step are linear in
+    the genes. Each generation evaluates the point and its gradient: supplied by ``run``'s
+    ``gradient``, or by a problem of :mod:`genoxide.problems` in Rust, one evaluation each; or by
+    finite differences, ``n`` more evaluations forward (``2n`` central) in the same generation, up
+    to 10,000 genes with ``gradients="auto"``. The gradient is of the score as returned: with the
+    objective "maximize", the method climbs it.
+
+    The step rules, with ``g`` the gradient (its sign turned when maximizing), ``alpha`` the
+    learning rate and ``eta`` the schedule multiplier (1 unless a ``control`` changes it), per
+    gene:
+
+    - "gradient": ``x -= eta alpha g``.
+    - "momentum", Polyak's heavy ball: ``v = momentum v - eta alpha g``, ``x += v``.
+    - "nesterov", Nesterov's accelerated gradient in Sutskever et al.'s form: the same, with the
+      gradient taken at the look-ahead point ``x + momentum v``, which is the point evaluated.
+    - "adam", Kingma and Ba's Algorithm 1: averages ``m`` and ``v`` of the gradient and of its
+      square with the decays ``beta1`` and ``beta2``, corrected for their start at 0 (``m_hat``,
+      ``v_hat``), and ``x -= eta alpha m_hat / (sqrt(v_hat) + epsilon)``: steps of about
+      ``alpha`` per gene whatever the size of the gradient.
+    - "adamw", Loshchilov and Hutter's Algorithm 2: Adam with decoupled weight decay,
+      ``x -= eta (alpha m_hat / (sqrt(v_hat) + epsilon) + weight_decay x)``. Adam with the decay
+      in the gradient (L2 regularization) is another method: its decay shrinks where the
+      gradient is large.
+
+    Each new point is projected onto the bounds, gene by gene (a projected gradient method: a
+    minimum on a bound is landed on, and kept while the gradient points out). A run has
+    converged when the projected gradient's largest component is within ``gradient_tolerance``,
+    or the last step moved no gene by more than ``step_tolerance`` (relative to ``max(1,
+    |x|)``); without restarts, ``run`` then stops with the stop reason "converged". An invalid
+    point (an invalid fitness, or a gradient that isn't finite) moves the method halfway back to
+    the last valid one. A ``control`` changes the learning rate and the multiplier between steps
+    (:class:`RunningFirstOrder`), for a learning-rate schedule.
+
+    A least-squares fit, with its gradient::
+
+        import numpy as np
+        import genoxide as gx
+
+        t = np.linspace(0, 1, 50)
+        y = 2 * t - 1
+
+        def loss(p):
+            return float(np.sum((p[0] * t + p[1] - y) ** 2))
+
+        def gradient(p):
+            r = p[0] * t + p[1] - y
+            return np.array([2 * np.sum(r * t), 2 * np.sum(r)])
+
+        adam = gx.FirstOrder(
+            gx.Real((-5, 5), length=2), step="adam", learning_rate=0.05, objective="minimize"
         )
+        result = adam.run(loss, gradient=gradient, generations=20_000)
+        print(result.stop_reason, result.best_genome)  # converged, near [2, -1]
+
+    Parameters
+    ----------
+    genome : Real
+        The search space; the rules are sensitive to the scale of the genes and of the score, so
+        scale the genes alike.
+    step : {"gradient", "momentum", "nesterov", "adam", "adamw"}, default "adam"
+        The step rule.
+    learning_rate : float, optional
+        alpha, greater than 0, in the units of the genes: required for "gradient", "momentum"
+        and "nesterov"; Kingma and Ba's 0.001 by default for "adam" and "adamw".
+    momentum : float, optional
+        mu, how much of the velocity each step keeps, in [0, 1): required for "momentum" and
+        "nesterov", and only for them. 0.9 is common.
+    beta1, beta2, epsilon : float, optional
+        Adam's decays, in [0, 1), and its epsilon, greater than 0: Kingma and Ba's 0.9, 0.999 and
+        1e-8 by default. Only for "adam" and "adamw".
+    weight_decay : float, optional
+        AdamW's decay lambda per step, 0 or more: required for "adamw", and only for it.
+    gradients : {"auto", "supplied", "forward", "central"}, default "auto"
+        Where the gradients come from: "auto" is the supplied gradient if there is one (``run``'s
+        ``gradient``, or a problem's), forward differences otherwise; "supplied" requires one;
+        "forward" and "central" are finite differences even with a supplied gradient.
+    difference_step : float, optional
+        The relative step of finite differences, greater than 0: about 1.5e-8 forward and 6.1e-6
+        central by default. Only with "forward" or "central".
+    gradient_tolerance : float, default 1e-6
+        The largest component of the projected gradient at which a run has converged, 0 or
+        more. Forward differences can't bring it much below about 1e-8 times the score.
+    step_tolerance : float, default 1e-12
+        The step at which a run has converged, 0 or more: the largest change of a gene in the
+        last step, relative to ``max(1, |x|)``.
+    restarts : int, optional
+        Random restarts after a run converges, at least 1, each from a random point with the
+        velocity and Adam's averages reset. None is no restarts.
+    initial_genome : array-like of float, optional
+        The point to start from, a number per gene within the bounds. None is a random point.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers (the random start and the restarts), 0 to 2^64 - 1. None
+        is a random seed. The same seed repeats the run.
+
+    References: Polyak, B. T. (1964). Some methods of speeding up the convergence of iteration
+    methods. *USSR Computational Mathematics and Mathematical Physics* 4(5): 1-17. Nesterov, Y.
+    (1983). A method for solving the convex programming problem with convergence rate O(1/k^2).
+    *Soviet Mathematics Doklady* 27: 372-376. Sutskever, I., Martens, J., Dahl, G. and Hinton,
+    G. (2013). On the importance of initialization and momentum in deep learning. *ICML 2013*,
+    eqs. 1-4. Kingma, D. P. and Ba, J. (2015). Adam: a method for stochastic optimization.
+    *ICLR 2015*, arXiv:1412.6980. Loshchilov, I. and Hutter, F. (2019). Decoupled weight decay
+    regularization. *ICLR 2019*, arXiv:1711.05101.
+    """
+
+    _running = RunningFirstOrder
+
+    def __init__(
+        self,
+        genome: Real,
+        *,
+        step: Literal["gradient", "momentum", "nesterov", "adam", "adamw"] = "adam",
+        learning_rate: float | None = None,
+        momentum: float | None = None,
+        beta1: float | None = None,
+        beta2: float | None = None,
+        epsilon: float | None = None,
+        weight_decay: float | None = None,
+        gradients: Literal["auto", "supplied", "forward", "central"] = "auto",
+        difference_step: float | None = None,
+        gradient_tolerance: float = 1e-6,
+        step_tolerance: float = 1e-12,
+        restarts: int | None = None,
+        initial_genome: Sequence[float] | np.ndarray | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.step = step
+        self.learning_rate = learning_rate
+        self.momentum = momentum
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.epsilon = epsilon
+        self.weight_decay = weight_decay
+        self.gradients = gradients
+        self.difference_step = difference_step
+        self.gradient_tolerance = gradient_tolerance
+        self.step_tolerance = step_tolerance
+        self.restarts = restarts
+        self.initial_genome = initial_genome
+        self.seed = seed
+
+    def _step(self) -> dict[str, Any]:
+        step = self.step
+        if step not in _STEPS:
+            raise ValueError(
+                'step is "gradient", "momentum", "nesterov", "adam" or "adamw", not ' f"{step!r}"
+            )
+        adam = step in ("adam", "adamw")
+        given = {
+            "momentum": self.momentum,
+            "beta1": self.beta1,
+            "beta2": self.beta2,
+            "epsilon": self.epsilon,
+            "weight_decay": self.weight_decay,
+        }
+        allowed = {
+            "gradient": (),
+            "momentum": ("momentum",),
+            "nesterov": ("momentum",),
+            "adam": ("beta1", "beta2", "epsilon"),
+            "adamw": ("beta1", "beta2", "epsilon", "weight_decay"),
+        }[step]
+        for name, value in given.items():
+            if value is not None and name not in allowed:
+                raise ValueError(f'{name} doesn\'t go with step="{step}"')
+        required = [] if adam else ["learning_rate"]
+        required += [name for name in ("momentum", "weight_decay") if name in allowed]
+        for name in required:
+            if getattr(self, name) is None:
+                raise ValueError(f'step="{step}" needs {name}')
+        description: dict[str, Any] = {"type": step}
+        description["learning_rate"] = _optional_number("learning_rate", self.learning_rate)
+        for name in allowed:
+            description[name] = _optional_number(name, given[name])
+        return description
+
+    def _describe(self) -> dict[str, Any]:
+        if self.gradients not in _GRADIENTS:
+            raise ValueError(
+                'gradients is "auto", "supplied", "forward" or "central", not '
+                f"{self.gradients!r}"
+            )
+        restarts = None
+        if self.restarts is not None:
+            restarts = _whole("restarts", self.restarts, minimum=None)
+            if restarts < 1:
+                raise ValueError(f"restarts is at least 1, or None for no restarts, not {restarts}")
+        initial_genome = None
+        if self.initial_genome is not None:
+            genes = np.asarray(self.initial_genome, dtype=object)
+            if genes.ndim != 1:
+                raise ValueError(
+                    "initial_genome is a sequence of numbers, one per gene, not "
+                    f"{self.initial_genome!r}"
+                )
+            initial_genome = [_number("initial_genome", gene, plural=True) for gene in genes]
+        return {
+            "type": "first_order",
+            "step": self._step(),
+            "gradients": self.gradients,
+            "difference_step": _optional_number("difference_step", self.difference_step),
+            "gradient_tolerance": _number("gradient_tolerance", self.gradient_tolerance),
+            "step_tolerance": _number("step_tolerance", self.step_tolerance),
+            "restarts": restarts,
+            "initial_genome": initial_genome,
+            "seed": _optional_whole("seed", self.seed),
+        }
 
 
 class Islands(_SingleObjective):

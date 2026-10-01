@@ -64,6 +64,13 @@ ALGORITHMS = {
     "speculative nelder mead": lambda: gx.NelderMead(
         real, speculative=True, objective="minimize", seed=1
     ),
+    "first order": lambda: gx.FirstOrder(
+        real, step="nesterov", learning_rate=0.01, momentum=0.9, restarts=3, objective="minimize",
+        seed=1,
+    ),
+    "adamw": lambda: gx.FirstOrder(
+        real, step="adamw", learning_rate=0.05, weight_decay=0.01, objective="minimize", seed=1
+    ),
     "islands": lambda: gx.Islands(
         [ga(seed=seed) for seed in range(3)], topology="random", interval=3, seed=5
     ),

@@ -314,6 +314,47 @@ fn gradient_source(gradients: genoxide::gradient::Gradients) -> &'static str {
     }
 }
 
+/// A first-order method: its learning rate and schedule multiplier, and its state, read-only.
+pub struct FirstOrderSettings;
+
+impl Settings<FirstOrder> for FirstOrderSettings {
+    fn get(&self, first_order: &FirstOrder, name: &str) -> Result<Value> {
+        match name {
+            "learning_rate" => Ok(json!(first_order.step().learning_rate())),
+            "multiplier" => Ok(json!(first_order.multiplier())),
+            "converged" => Ok(json!(first_order.converged().map(convergence))),
+            // infinite before the first tell, which JSON can't hold
+            "gradient_norm" => Ok(json!(
+                Some(first_order.gradient_norm()).filter(|norm| norm.is_finite())
+            )),
+            "gradient" => Ok(json!(first_order.gradient())),
+            "iterations" => Ok(json!(first_order.iterations())),
+            "steps" => Ok(json!(first_order.steps())),
+            "restart_count" => Ok(json!(first_order.restart_count())),
+            "gradients" => Ok(json!(gradient_source(first_order.gradients()))),
+            _ => Err(unknown(name)),
+        }
+    }
+
+    fn set(&self, first_order: &mut FirstOrder, name: &str, value: &str) -> Result<()> {
+        match name {
+            "learning_rate" => setting(first_order.set_learning_rate(parse(name, value)?)),
+            "multiplier" => setting(first_order.set_multiplier(parse(name, value)?)),
+            _ => Err(unknown(name)),
+        }
+    }
+}
+
+// why a first-order method converged, by its Python name
+fn convergence(convergence: first_order::Convergence) -> &'static str {
+    match convergence {
+        first_order::Convergence::Gradient => "gradient",
+        first_order::Convergence::Step => "step",
+        first_order::Convergence::Invalid => "invalid",
+        _ => "other",
+    }
+}
+
 /// OpenAI's evolution strategy's step: σ and the learning rate.
 pub struct OpenEsSettings;
 
