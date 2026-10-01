@@ -45,7 +45,10 @@
 //! ones, and adds the points where each variable is at the ends of its feasible values (its least,
 //! 0, and its largest), where each objective is least and largest; for 2 objectives, it spreads
 //! exactly the requested points by length along a dense sample of feasible x₁. Every point is
-//! evaluated from a genome, the position variables with the distance variables at 0.5.
+//! evaluated from a genome, the position variables with the distance variables at 0.5. They agree
+//! with the sampled fronts that EMOC ships for 2 and 3 objectives (`pf_data/dc*dtlz`, compared
+//! only): the mean distance from each point of either to the nearest of the other is at most
+//! 0.011.
 
 use super::dtlz::{rastrigin_g, simplex_points, spherical_front};
 use super::mw::spread_by_length;

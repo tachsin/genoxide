@@ -62,19 +62,22 @@
 //! divisions, mapped to x₁ and x₂, for three; for three objectives `optimal_front` takes the rays
 //! of fewer divisions, a divisor of 288, and the points of the dense front where each objective
 //! is least and largest, the ideal and nadir points. The fronts depend on the triplet, not on the
-//! number of variables, as long as g reaches the values they need (up to 3.5; the default 30
-//! variables reach far more).
+//! number of variables, as long as g reaches the values they need (under 1 for the paper's
+//! triplets; the default 30 variables reach far more).
 //!
 //! Compared with the fronts the authors published (`pf_data.zip`, the 16 triplets of each problem;
 //! compared only), the fronts here agree to within their sampling: the mean distance from each
-//! of their points to the nearest point here is under 0.01 for 140 of the 144 files. The rest
-//! are points of theirs that break the constraints as the paper and the code write them: points
-//! with g other than 0.5 under ζ = 1, and with x₁ outside the type I intervals, on DAS-CMOP2 with
-//! the triplets 12, 15 and 16; the isolated point x₁ = 1, feasible at η = 0.5 only in exact
-//! arithmetic (`sin 20π` is −2.4 × 10⁻¹⁵ in floating point); and, for three objectives, the parts
-//! of the front that the type III spheres push out along the diagonal, near the corners, which
-//! the authors' files leave out (the unit sphere's points there are infeasible, and these points,
-//! further out, aren't dominated by any feasible point).
+//! of their points to the nearest point here is under 0.01 for 130 of the 144 files, and from
+//! each point here to the nearest of theirs under 0.01 for 140. The rest are points of theirs
+//! that break the constraints as the paper and the code write them, and points here that they
+//! leave out: on DAS-CMOP2 and DAS-CMOP5 with the triplets 12, 15 and 16, their points with g
+//! other than 0.5 under ζ = 1, or with x₁ outside the type I intervals; on DAS-CMOP3 and
+//! DAS-CMOP6 with η = 0.5 (triplets 5, 8, 14 and 16), the isolated point x₁ = 1, feasible only in
+//! exact arithmetic (`sin 20π` is −2.4 × 10⁻¹⁵ in floating point); and on DAS-CMOP8 and
+//! DAS-CMOP9 with the triplets 7 and 11 (γ alone), the parts of the front near the corners that
+//! the type III spheres push out along the diagonal, which their files leave out (the unit
+//! sphere's points there are infeasible, and these, further out, aren't dominated by any
+//! feasible point).
 
 use super::mw::spread_by_length;
 use super::{MultiProblem, das_dennis, divisions_for, non_dominated};
