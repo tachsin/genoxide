@@ -1280,13 +1280,17 @@ mod tests {
         }
     }
 
+    // a two-objective shape, and the front of a problem with it for a triplet
+    type Shape = fn(f64) -> [f64; 2];
+    type Front = fn(Difficulty) -> Vec<[f64; 2]>;
+
     // no feasible point is better than the front: random x₁ and g, every feasible point weakly
     // dominated by a point of the front, up to its spacing, and dominating none
     #[test]
     fn random_points_agree_with_the_two_objective_fronts() {
         let mut rng = StreamRng::seed_from_u64(9);
         let unit = Real::uniform(2, 0.0..=1.0).expect("valid bounds");
-        let shapes: [(fn(f64) -> [f64; 2], fn(Difficulty) -> Vec<[f64; 2]>); 3] = [
+        let shapes: [(Shape, Front); 3] = [
             (concave, |d| {
                 DasCmop1::with_difficulty(d).optimal_front(4_000).unwrap()
             }),
