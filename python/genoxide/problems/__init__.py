@@ -2774,7 +2774,7 @@ class Dc3Dtlz3(_DcDtlz):
     variables.
 
     The front: the parts of the unit sphere where every position variable is in [0, 1/9] or
-    [5/9, 7/9], 2^(M−1) patches. Ideal point the origin, nadir point
+    [5/9, 7/9], 2^(M−1) patches. Ideal point (cos(7π/18)^(M−1), 0, …, 0), nadir point
     (1, sin(7π/18), …, sin(7π/18)).
 
     Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionary algorithm for

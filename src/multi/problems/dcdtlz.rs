@@ -660,9 +660,10 @@ dc_dtlz!(
     /// With `M` objectives and `n` variables in [0, 1], `M + 9` by default: M constraints. With
     /// a = 3 and b = 0.5, every position variable is feasible in [0, 1/9] and [5/9, 7/9], and the
     /// front is the parts of DTLZ3's, the unit sphere, where all of them are: 2^(M−1) patches.
-    /// The ideal point is the origin and the nadir point (1, sin(7π/18), …, sin(7π/18)): f₁, a
-    /// product of cosines, reaches 1 with every position variable at 0, and each other objective
-    /// has a sine factor, of a variable at most 7/9.
+    /// The ideal point is (cos(7π/18)^(M−1), 0, …, 0) and the nadir point
+    /// (1, sin(7π/18), …, sin(7π/18)): f₁, a product of cosines, is 1 with every position variable
+    /// at 0 and least with all of them at 7/9, and each other objective has a sine factor, of a
+    /// variable at most 7/9.
     ///
     /// [`constraints`](MultiProblem::constraints) gives `b − cos(aπxⱼ)` for j < M, then
     /// `b − cos(aπg)`.
