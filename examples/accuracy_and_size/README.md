@@ -5,7 +5,7 @@ summary: The trade-off between a formula's error and its size on Nguyen-7, ln(x 
 reference: "Uy, N. Q., Hoai, N. X., O'Neill, M., McKay, R. I. and Galván-López, E. (2011). Semantically-based crossover in genetic programming: application to real-valued symbolic regression. Genetic Programming and Evolvable Machines 12(2): 91-119."
 reference_url: https://doi.org/10.1007/s10710-010-9121-2
 optimum: "The formula, ln(x + 1) + ln(x² + 1), is a tree of 13 nodes; this run's front doesn't reach it, and shows the best error found for each size instead"
-languages: [rust]
+languages: [rust, python]
 order: 259
 ---
 
@@ -30,7 +30,8 @@ formula, but which trade-off. Minimizing the error and the size together, as two
 it in one run: the Pareto front, the smallest error found for each size, from the single variable x
 to trees of 50 nodes, where the small ones are formulas a person can read.
 
-There's no Python version: the Python package has no genetic programming yet.
+The Python version runs the same NSGA-II with `gx.gp`, both objectives evaluated in Rust
+(`gx.gp.WithSize(regression)`): it prints the same output and writes the same trace.
 
 ## What makes it hard
 
