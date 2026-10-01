@@ -30,6 +30,7 @@
 pub mod cmaes;
 pub mod de;
 pub mod es;
+pub mod first_order;
 pub mod ga;
 pub mod islands;
 pub mod lbfgsb;
@@ -44,6 +45,7 @@ pub mod steady;
 pub use cmaes::{Cmaes, CmaesBuilder, Covariance, Restarts};
 pub use de::{De, DeBuilder};
 pub use es::{Es, EsBuilder};
+pub use first_order::{FirstOrder, FirstOrderBuilder};
 pub use ga::{Ga, GaBuilder, Scheme, Unset};
 pub use islands::{Islands, IslandsBuilder, Migrate};
 pub use lbfgsb::{Lbfgsb, LbfgsbBuilder};

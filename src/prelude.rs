@@ -7,6 +7,7 @@
 pub use crate::algorithm::cmaes::{self, Cmaes};
 pub use crate::algorithm::de::{self, De};
 pub use crate::algorithm::es::{self, Es};
+pub use crate::algorithm::first_order::{self, FirstOrder};
 pub use crate::algorithm::lbfgsb::{self, Lbfgsb};
 pub use crate::algorithm::local;
 pub use crate::algorithm::nelder_mead::{self, NelderMead};

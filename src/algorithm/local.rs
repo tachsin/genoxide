@@ -1,5 +1,6 @@
 //! Settings shared by the local methods, which improve one point until it converges:
-//! [`NelderMead`](super::NelderMead) and [`Lbfgsb`](super::Lbfgsb).
+//! [`NelderMead`](super::NelderMead), [`Lbfgsb`](super::Lbfgsb) and
+//! [`FirstOrder`](super::FirstOrder).
 
 use crate::{Error, Result};
 
