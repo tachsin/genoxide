@@ -1,5 +1,6 @@
 //! The Nelder-Mead simplex method, with Gao and Han's adaptive coefficients and random restarts.
 
+use super::continuation::{Continue, Keep};
 use super::local::Restarts;
 use super::{Algorithm, Candidates, Reevaluate};
 use crate::genome::{Real, Reals, Representation};
@@ -552,6 +553,30 @@ impl Reevaluate for NelderMead {
     /// As [`NelderMead::reevaluate`]: the next ask gives the simplex.
     fn reevaluate(&mut self) -> Result<()> {
         NelderMead::reevaluate(self)
+    }
+}
+
+impl Continue for NelderMead {
+    /// The simplex evaluated again and reordered, as [`NelderMead::reevaluate`] does, and the
+    /// iterations go on from it: with [`Keep::State`], from the same simplex, which is small if
+    /// the stage converged (expansions can grow it again); with [`Keep::Point`], from a new
+    /// simplex of the [initial steps](NelderMeadBuilder::initial_step) around the best vertex, as
+    /// at a start. The convergence is decided again after the next iteration, and a restart that
+    /// was due is dropped.
+    fn next_stage(&mut self, keep: Keep) -> Result<()> {
+        self.reevaluate()?;
+        if !self.started {
+            return Ok(());
+        }
+        if keep == Keep::Point {
+            let best = self.simplex[0].genome().clone();
+            self.simplex =
+                Population::new(simplex_around(&self.real, &self.free, &self.steps, best));
+        }
+        self.trials.clear();
+        self.converged = false;
+        self.step = Step::Reflect;
+        Ok(())
     }
 }
 

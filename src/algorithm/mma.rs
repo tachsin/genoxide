@@ -1,6 +1,7 @@
 //! The method of moving asymptotes (MMA) and its globally convergent form (GCMMA): Svanberg's
 //! methods for smooth problems with very many variables and few inequality constraints.
 
+use super::continuation::{Continue, Keep};
 use super::{Algorithm, Candidates, Reevaluate};
 use crate::engine::{Evaluations, Provided, Wanted};
 use crate::genome::{Real, Reals, Representation};
@@ -1433,6 +1434,26 @@ impl Reevaluate for Mma {
     }
 }
 
+impl Continue for Mma {
+    /// The current point evaluated again, with its gradient and Jacobian, as [`Mma::reevaluate`]
+    /// does, and the iterations go on from it: with [`Keep::State`], with the asymptotes, the
+    /// last iterates their rule reads (Svanberg 2007, eqs. 3.11-3.14) and the move limit's
+    /// fraction; with [`Keep::Point`], with the asymptotes at their initial distance from the
+    /// point and the whole move limit, as at a start. The convergence is decided again by the new
+    /// function.
+    fn next_stage(&mut self, keep: Keep) -> Result<()> {
+        self.reevaluate()?;
+        if keep == Keep::Point && self.reevaluating {
+            // eq. 3.11's first iterations: the initial distance, and no trend read until two
+            // iterates more
+            self.asymptotes.iteration = 1;
+            self.update_asymptotes();
+            self.move_fraction = 1.0;
+        }
+        Ok(())
+    }
+}
+
 impl Algorithm for Mma {
     type Genome = Reals;
 
@@ -1532,10 +1553,10 @@ impl Algorithm for Mma {
             self.current[0].set_fitness(fitness);
             self.store(score, evaluations);
             self.reset_rho();
-            let current = self.current[0].clone();
+            // in the memory of the best: no allocation
             match &mut self.best {
-                Some(best) => best.clone_from(&current),
-                None => self.best = Some(current),
+                Some(best) => best.clone_from(&self.current[0]),
+                None => self.best = Some(self.current[0].clone()),
             }
             self.best_generation = self.generation;
             self.phase = Phase::Trial;

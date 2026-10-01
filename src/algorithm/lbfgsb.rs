@@ -4,6 +4,7 @@
 
 mod model;
 
+use super::continuation::{Continue, Keep};
 use super::line_search::{MoreThuente, Settings, Status};
 use super::local::Restarts;
 use super::{Algorithm, Candidates, Reevaluate};
@@ -156,6 +157,9 @@ pub struct Lbfgsb {
     function_tolerance: f64,
     max_line_search: usize,
     restarts: Restarts,
+    // whether a continuation's next stage that keeps the state keeps the pairs
+    #[cfg_attr(feature = "serde", serde(default))]
+    keep_pairs: bool,
     objective: Objective,
     seed: u64,
     rng: StreamRng,
@@ -228,6 +232,7 @@ impl Lbfgsb {
             function_tolerance: 1e7 * f64::EPSILON,
             max_line_search: 20,
             restarts: Restarts::Never,
+            keep_pairs: false,
             initial_genome: None,
             objective: Objective::default(),
             seed: None,
@@ -839,6 +844,25 @@ impl Reevaluate for Lbfgsb {
     }
 }
 
+impl Continue for Lbfgsb {
+    /// The current point evaluated again, as [`Lbfgsb::reevaluate`] does, and the search goes on
+    /// from it along steepest descent, as at a start: the curvature pairs are dropped, unless the
+    /// method was built with [`keep_pairs`](LbfgsbBuilder::keep_pairs) and `keep` is
+    /// [`Keep::State`] ([`Lbfgsb::reevaluate_keeping_pairs`]). The convergence is decided again at
+    /// the new values, and a restart that was due is dropped.
+    fn next_stage(&mut self, keep: Keep) -> Result<()> {
+        if keep == Keep::State && self.keep_pairs {
+            self.reevaluate_keeping_pairs()?;
+        } else {
+            self.reevaluate()?;
+        }
+        if self.reevaluating {
+            self.converged = None;
+        }
+        Ok(())
+    }
+}
+
 impl Algorithm for Lbfgsb {
     type Genome = Reals;
 
@@ -970,6 +994,7 @@ pub struct LbfgsbBuilder {
     function_tolerance: f64,
     max_line_search: usize,
     restarts: Restarts,
+    keep_pairs: bool,
     initial_genome: Option<Reals>,
     objective: Objective,
     seed: Option<u64>,
@@ -1025,6 +1050,15 @@ impl LbfgsbBuilder {
     /// [`Restarts::Never`] by default.
     pub fn restarts(mut self, restarts: Restarts) -> Self {
         self.restarts = restarts;
+        self
+    }
+
+    /// Whether the next stage of a [`Continuation`](super::Continuation) that keeps the state
+    /// ([`Keep::State`]) keeps the correction pairs: false by default, as the pairs describe the
+    /// old function's curvature. Keep them for stages whose functions differ little, where the
+    /// old curvature still serves.
+    pub fn keep_pairs(mut self, keep: bool) -> Self {
+        self.keep_pairs = keep;
         self
     }
 
@@ -1125,6 +1159,7 @@ impl LbfgsbBuilder {
             gradient_tolerance: self.gradient_tolerance,
             function_tolerance: self.function_tolerance,
             max_line_search: self.max_line_search,
+            keep_pairs: self.keep_pairs,
             restarts: self.restarts,
             objective: self.objective,
             seed,

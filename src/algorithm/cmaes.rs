@@ -1,5 +1,6 @@
 //! The covariance matrix adaptation evolution strategy (CMA-ES), with IPOP and BIPOP restarts.
 
+use super::continuation::{Continue, Keep};
 use super::{Algorithm, Candidates, Reevaluate};
 use crate::genome::{Real, Reals, Representation};
 use crate::linalg::eigen::{eigen_transposed, transpose_into};
@@ -790,6 +791,30 @@ impl Reevaluate for Cmaes {
     /// As [`Cmaes::reevaluate`]: the next ask gives the last samples.
     fn reevaluate(&mut self) -> Result<()> {
         Cmaes::reevaluate(self)
+    }
+}
+
+impl Continue for Cmaes {
+    /// The population, the last samples, evaluated again, as [`Cmaes::reevaluate`] does, and the
+    /// run goes on: with [`Keep::State`], with the distribution (its mean, step size, covariance
+    /// matrix and evolution paths); with [`Keep::Point`], with a new distribution around the
+    /// mean, of the run's initial step size, as at the start of a run (the population size, the
+    /// restarts and their budgets carry on). Whatever the run had converged by, it hasn't any
+    /// more: a restart that was due is dropped, and with [`Restarts::Stop`] the CMA-ES goes on
+    /// until the criteria hold again.
+    fn next_stage(&mut self, keep: Keep) -> Result<()> {
+        self.reevaluate()?;
+        if !self.started {
+            return Ok(());
+        }
+        if keep == Keep::Point {
+            let evaluations = self.run_evaluations;
+            let mean = std::mem::take(&mut self.mean);
+            self.start_run(self.parameters.lambda, self.run_sigma, mean);
+            self.run_evaluations = evaluations;
+        }
+        self.converged = None;
+        Ok(())
     }
 }
 

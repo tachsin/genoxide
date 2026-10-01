@@ -5,6 +5,7 @@
 //! ```
 
 pub use crate::algorithm::cmaes::{self, Cmaes};
+pub use crate::algorithm::continuation::{self, Continuation, Continue};
 pub use crate::algorithm::de::{self, De};
 pub use crate::algorithm::es::{self, Es};
 pub use crate::algorithm::first_order::{self, FirstOrder};
