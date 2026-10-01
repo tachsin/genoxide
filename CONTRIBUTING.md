@@ -18,6 +18,7 @@ genoxide is alpha, pre-1.0: ideas and API feedback are as welcome as code. Open 
 
   Add `!` after the type for a breaking change, e.g. `feat!: rename Ga::run to Ga::solve`. Explain the migration in the PR description.
 - **Link the issue:** `Fixes #123` or `Part of #123` in the description.
+- **No AI attribution, anywhere.** Commits, PR and issue descriptions, comments and files carry no attribution to AI tools: no `Co-Authored-By` trailers naming an assistant, no "Generated with …" lines or footers, and no links to assistant sessions. Remove any that a tool adds, before pushing or posting.
 - **Before pushing, run:** `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo test`.
 
 ## Versioning
