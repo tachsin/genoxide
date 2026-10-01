@@ -1,7 +1,21 @@
 //! # genoxide
 //!
-//! Evolutionary computation for Rust: genetic algorithms, evolution strategies, multi-objective
-//! optimization and more.
+//! Optimization for Rust (and Python): evolutionary, local, gradient-based and multi-objective
+//! methods in one library. A seed gives the same results, to the bit, on every platform and
+//! thread count, parallel or not.
+//!
+//! | Problem | Method |
+//! |---|---|
+//! | Yes / no choices, integers, orders (subsets, schedules, tours) | the genetic algorithm [`Ga`], [`LocalSearch`](algorithm::LocalSearch) |
+//! | Real numbers in a box, no gradient | [`Cmaes`](algorithm::Cmaes), [`De`](algorithm::De), [`Pso`](algorithm::Pso), [`Es`](algorithm::Es), [`NelderMead`](algorithm::NelderMead) |
+//! | Smooth functions with a gradient | [`Lbfgsb`](algorithm::Lbfgsb), and [`FirstOrder`](algorithm::FirstOrder) (Adam, momentum) for millions of variables |
+//! | Many variables, few inequality constraints, with gradients | [`Mma`](algorithm::Mma) (MMA and GCMMA) |
+//! | Several objectives at once | [`Nsga2`](multi::Nsga2), [`Nsga3`](multi::Nsga3), [`Moead`](multi::Moead), [`SmsEmoa`](multi::SmsEmoa) |
+//! | Programs and formulas | [`gp`]: tree genetic programming |
+//! | A neural network's weights | [`nn`] with [`Cmaes`](algorithm::Cmaes) |
+//!
+//! For AI coding assistants, [AGENTS.md](https://github.com/tachsin/genoxide/blob/main/AGENTS.md)
+//! is a complete guide in one page, with a program for every method, each run in CI.
 //!
 //! **Alpha, pre-1.0:** the API changes between 0.x versions. See the
 //! [roadmap](https://github.com/tachsin/genoxide/blob/main/ROADMAP.md) for what is planned.

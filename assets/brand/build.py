@@ -207,7 +207,7 @@ def main():
     _, width = wordmark(p, PAPER, 112, 0, 0)
     left = (W - (200 + 28 + width)) / 2
     word, _ = wordmark(p, PAPER, 112, left + 228, 170)
-    tagline, _ = text_path("Evolutionary computation for Rust and Python", 500, 30, left + 232, 226)
+    tagline, _ = text_path("Optimization for Rust and Python", 500, 30, left + 232, 226)
     banner = (
         card(p, W, H, 28, left + 100, 160)
         + f'<g clip-path="url(#{p}-clip)">{contours(1190, 70, 8, 22, W, H)}{population(1190, 70, 48, 120, 7, W, H)}'
@@ -216,17 +216,17 @@ def main():
         + word
         + f'<path d="{tagline}" fill="{MUTED}"/>'
     )
-    write("banner.svg", svg(W, H, banner, "genoxide: evolutionary computation for Rust and Python"))
+    write("banner.svg", svg(W, H, banner, "genoxide: optimization for Rust and Python"))
 
     # the social preview, 2:1 (exported to PNG for GitHub)
     W, H, p = 1280, 640, "gx-social"
     _, width = wordmark(p, PAPER, 132, 0, 0)
     left = (W - (236 + 32 + width)) / 2
     word, _ = wordmark(p, PAPER, 132, left + 268, 285)
-    line = "Evolutionary computation for Rust and Python"
+    line = "Optimization for Rust and Python"
     _, tagline_width = text_path(line, 500, 36, 0, 0)
     tagline, _ = text_path(line, 500, 36, (W - tagline_width) / 2, 440)
-    line = "genetic algorithms · evolution strategies · CMA-ES · differential evolution · multi-objective"
+    line = "genetic algorithms · CMA-ES · differential evolution · multi-objective · L-BFGS-B · Adam · MMA"
     _, details_width = text_path(line, 400, 22, 0, 0)
     details, _ = text_path(line, 400, 22, (W - details_width) / 2, 490)
     social = (
@@ -238,7 +238,7 @@ def main():
         + f'<path d="{tagline}" fill="{MUTED}"/>'
         + f'<path d="{details}" fill="{MUTED}" opacity="0.7"/>'
     )
-    write("social-preview.svg", svg(W, H, social, "genoxide: evolutionary computation for Rust and Python"))
+    write("social-preview.svg", svg(W, H, social, "genoxide: optimization for Rust and Python"))
 
 
 if __name__ == "__main__":

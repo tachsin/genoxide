@@ -1,0 +1,28 @@
+# genoxide
+
+> Optimization for Rust and Python, in one library: genetic algorithms, evolution strategies, CMA-ES, differential evolution, particle swarms, local search, Nelder-Mead, genetic programming, neuroevolution, multi-objective optimization (NSGA-II, NSGA-III, MOEA/D, SPEA2, SMS-EMOA) and gradient-based methods (L-BFGS-B, Adam and momentum, MMA and GCMMA). A seed gives the same results, to the bit, on every platform and thread count. Invalid settings are errors, not panics. Each method is checked against its source paper.
+
+Install: `cargo add genoxide` (Rust), `pip install genoxide` (Python), or `cargo install genoxide --features cli` for a program that runs an optimization described in TOML with any program as the fitness function. genoxide is pre-1.0: check the version and use the guide below, which matches the latest release.
+
+## Guide
+
+- [AGENTS.md](https://github.com/tachsin/genoxide/blob/main/AGENTS.md): the complete guide in one page, for people and AI coding assistants: which method for which problem, every setting and its valid range, a complete program for every method (each run in CI), and troubleshooting. Plain text: https://raw.githubusercontent.com/tachsin/genoxide/main/AGENTS.md
+- [README](https://github.com/tachsin/genoxide/blob/main/README.md): overview and quick start
+
+## API reference
+
+- [Rust API on docs.rs](https://docs.rs/genoxide)
+- [Python API](https://tachsin.github.io/genoxide/api/python/)
+- [The genoxide program (CLI)](https://github.com/tachsin/genoxide/blob/main/docs/cli.md)
+
+## Examples and benchmarks
+
+- [Examples](https://tachsin.gr/projects/genoxide/examples): each with its explanation, Rust and Python code, output and a recorded run
+- [Benchmarks](https://tachsin.gr/projects/genoxide/benchmarks): genoxide against 16 libraries, the same algorithms on the same problems
+- [Docs site](https://tachsin.github.io/genoxide/)
+
+## Optional
+
+- [Roadmap](https://github.com/tachsin/genoxide/blob/main/ROADMAP.md)
+- [Changelog](https://github.com/tachsin/genoxide/blob/main/CHANGELOG.md)
+- [Source on GitHub](https://github.com/tachsin/genoxide)
