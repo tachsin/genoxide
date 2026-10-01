@@ -1,8 +1,8 @@
 """Evolutionary computation in Rust, for Python.
 
-Genetic algorithms, local search, differential evolution, evolution strategies, CMA-ES, OpenAI's
-evolution strategy, NEAT, particle swarm optimization, the island model, and NSGA-II, NSGA-III,
-SPEA2, MOEA/D and SMS-EMOA for several objectives, from
+Genetic algorithms, local search, the Nelder-Mead simplex method, differential evolution,
+evolution strategies, CMA-ES, OpenAI's evolution strategy, NEAT, particle swarm optimization, the
+island model, and NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives, from
 `genoxide <https://github.com/tachsin/genoxide>`_, with Python fitness functions::
 
     import genoxide as gx
@@ -132,6 +132,7 @@ __all__ = [
     "Sgd",
     "Pso",
     "LocalSearch",
+    "NelderMead",
     "Islands",
     "Nsga2",
     "Nsga3",
@@ -156,6 +157,7 @@ __all__ = [
     "RunningNeat",
     "RunningPso",
     "RunningLocalSearch",
+    "RunningNelderMead",
     "RunningIslands",
     # submodules
     "problems",
@@ -952,6 +954,8 @@ class Result:
 
     - "target", "generations", "evaluations", "time" or "stagnation": that stop condition;
     - "aborted": ``on_generation`` returned False;
+    - "converged": the algorithm converged with nothing more to do, e.g. a :class:`NelderMead`
+      whose simplex shrank within its tolerance, with no restart left;
     - "stalled": nothing new to evaluate for 10,000 generations in a row (e.g. every child was a
       copy of a parent), while only ``target`` or ``evaluations`` could stop the run;
     - "other": a reason that the stop conditions of the package don't produce.
@@ -1319,9 +1323,9 @@ class Running:
 
     Each algorithm has a class of its own, with its settings as properties: :class:`RunningGa`,
     :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`, :class:`RunningOpenEs`,
-    :class:`RunningNeat`, :class:`RunningPso`, :class:`RunningLocalSearch` and
-    :class:`RunningIslands`. A new value is checked as in the algorithm's constructor: a wrong one
-    raises a ``ValueError`` and changes nothing. The handle
+    :class:`RunningNeat`, :class:`RunningPso`, :class:`RunningLocalSearch`,
+    :class:`RunningNelderMead` and :class:`RunningIslands`. A new value is checked as in the
+    algorithm's constructor: a wrong one raises a ``ValueError`` and changes nothing. The handle
     works only during the callback; afterwards it raises a ``RuntimeError``.
 
     A control that changes nothing leaves the run as it is: with a seed, the same result as
@@ -1338,12 +1342,12 @@ class Running:
         run: adaptive penalty weights, a retrained surrogate model, a moving optimum.
 
         Instead of the next generation's children, the population is evaluated again (a particle
-        swarm's positions and personal bests, a local search's current and best solution),
-        without breeding and without a new generation: ``on_generation`` is then called again
-        with the same generation number, and ``control`` isn't. The best solution is then the
-        best of the new values, as old and new values aren't comparable. The evaluations count,
-        and no random numbers are drawn, so a seeded run that re-evaluates at the same
-        generations repeats.
+        swarm's positions and personal bests, a local search's current and best solution, a
+        Nelder-Mead simplex, whose iteration under way is dropped), without breeding and without
+        a new generation: ``on_generation`` is then called again with the same generation number,
+        and ``control`` isn't. The best solution is then the best of the new values, as old and
+        new values aren't comparable. The evaluations count, and no random numbers are drawn, so
+        a seeded run that re-evaluates at the same generations repeats.
         """
         self._native.reevaluate()
 
@@ -1599,6 +1603,38 @@ class RunningLocalSearch(Running):
     @neighbors.setter
     def neighbors(self, neighbors: int) -> None:
         self._set("neighbors", _whole("neighbors", neighbors))
+
+
+class RunningNelderMead(Running):
+    """A running :class:`NelderMead`, for ``control``: the state of its simplex, read-only. The
+    method's steps follow from its simplex, so it has no settings to change; ``reevaluate()``
+    scores the simplex again, and the next iteration starts from it, reordered."""
+
+    __slots__ = ()
+
+    @property
+    def converged(self) -> bool:
+        """Whether the current run has converged: its simplex is within the tolerance. With
+        restarts left, the next generation starts a new run from a random point."""
+        return bool(self._get("converged"))
+
+    @property
+    def size(self) -> float:
+        """The size of the simplex: the largest difference between a vertex and the best vertex
+        in any searched gene, as a fraction of the gene's range. The run has converged once it's
+        within the tolerance."""
+        return float(self._get("size"))
+
+    @property
+    def iterations(self) -> int:
+        """The completed iterations, of every run: those that replaced the worst vertex, and the
+        shrinks. An iteration takes one to three generations."""
+        return int(self._get("iterations"))
+
+    @property
+    def restart_count(self) -> int:
+        """The restarts so far."""
+        return int(self._get("restart_count"))
 
 
 class _Island:
@@ -1946,8 +1982,8 @@ class _SingleObjective(_Single):
             Called as ``control(algorithm, progress)`` once per generation, after
             ``on_generation``, on the same thread, with the running algorithm (a
             :class:`RunningGa`, :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`,
-            :class:`RunningOpenEs`, :class:`RunningPso`, :class:`RunningLocalSearch` or
-            :class:`RunningIslands`) and a
+            :class:`RunningOpenEs`, :class:`RunningPso`, :class:`RunningLocalSearch`,
+            :class:`RunningNelderMead` or :class:`RunningIslands`) and a
             :class:`Progress`: to change the algorithm's
             settings for the next generation, or to re-evaluate it after the fitness function
             changed. See :class:`Running`.
@@ -3005,6 +3041,161 @@ class LocalSearch(_SingleObjective):
                 else _describe_setting("acceptance", self.acceptance, _ACCEPTANCE)
             ),
             "restart": restart,
+        }
+
+
+class NelderMead(_SingleObjective):
+    """The Nelder-Mead simplex method. Real genomes.
+
+    A local method without derivatives, for low dimensions (up to about 10 genes, more with the
+    adaptive coefficients) and for functions that are non-smooth or noisy in their last digits. It
+    keeps a simplex of ``n + 1`` points for the ``n`` genes with ``low < high`` (the others stay
+    fixed). Each iteration replaces the worst point by its reflection through the centroid of the
+    others, by an expansion further out, or by a contraction nearer; when none of them is better,
+    the simplex shrinks towards its best point. The steps, their conditions and the order of tied
+    points are those of Lagarias, Reeds, Wright and Wright (1998), and the coefficients by default
+    Gao and Han's (2012), which adapt to the number of genes and keep the simplex from flattening
+    from about 5 genes up. Points outside the bounds are moved to the nearest point inside, gene
+    by gene. A run has converged when every vertex is within ``tolerance`` of the best one, in
+    every gene, as a fraction of the gene's range: without restarts, ``run`` then stops with the
+    stop reason "converged"; with them, the search starts again from a random point, and the
+    result is the best of all the runs. A generation is one round of evaluations: a new simplex,
+    one trial point, or the points of a shrink. With ``speculative``, the reflection, the
+    expansion and both contractions are evaluated in one round, for a slow fitness function
+    evaluated in parallel. The method only compares scores, so invalid and constrained solutions
+    rank as everywhere in the package.
+
+    Rosenbrock's valley from the classic start ``(-1.2, 1)``, to convergence::
+
+        import genoxide as gx
+
+        def rosenbrock(x):
+            return 100 * (x[1] - x[0] * x[0]) ** 2 + (1 - x[0]) ** 2
+
+        nelder_mead = gx.NelderMead(
+            gx.Real((-5, 5), length=2), initial_genome=[-1.2, 1], objective="minimize"
+        )
+        result = nelder_mead.run(rosenbrock, evaluations=1_000)
+        print(result.stop_reason, result.best_genome)  # converged [1. 1.]
+
+    A run still needs a stop condition, here ``evaluations``, which it may not reach.
+
+    Parameters
+    ----------
+    genome : Real
+        The search space. At least one gene needs ``low < high``.
+    coefficients : "adaptive", "standard" or tuple of 4 floats, default "adaptive"
+        How far the simplex reflects, expands, contracts and shrinks. "adaptive" is Gao and
+        Han's for ``n`` searched genes: reflection 1, expansion ``1 + 2/n``, contraction
+        ``0.75 - 1/(2n)`` and shrink ``1 - 1/n`` (the standard ones for 1 or 2 genes).
+        "standard" is Nelder and Mead's (1965): 1, 2, 1/2 and 1/2. A tuple
+        ``(reflection, expansion, contraction, shrink)`` sets them, with ``reflection > 0``,
+        ``expansion > 1`` and greater than ``reflection``, and ``contraction`` and ``shrink``
+        between 0 and 1 (exclusive).
+    initial_step : float, default 0.1
+        The size of the first simplex of every run, as a fraction of each gene's range, greater
+        than 0 and at most 1: each other vertex is the start moved up by it in one gene, or down
+        if up leaves the bounds.
+    tolerance : float, default 1e-10
+        The simplex size at which a run has converged, as a fraction of each gene's range,
+        greater than 0 and smaller than ``initial_step``.
+    restarts : int, optional
+        Random restarts after a run converges, at least 1, each from a new random point in the
+        bounds: for multimodal functions, or to make sure of a minimum. None is no restarts.
+    speculative : bool, default False
+        Whether the reflection, the expansion and both contractions of an iteration are
+        evaluated in one round: the same simplexes in fewer generations, for 4 evaluations per
+        iteration. It pays off with a slow fitness function evaluated in parallel
+        (``parallel=True`` or ``batch=True``).
+    initial_genome : array-like of float, optional
+        The point to start from, a number per gene within the bounds, e.g. a known good solution
+        or the best of a global method. None is a random point. Restarts start from random
+        points.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers (the random start and the restarts), 0 to 2^64 - 1. None
+        is a random seed. The same seed repeats the run.
+
+    References: Nelder, J. A. and Mead, R. (1965). A simplex method for function minimization.
+    *The Computer Journal* 7(4): 308-313. Lagarias, J. C., Reeds, J. A., Wright, M. H. and
+    Wright, P. E. (1998). Convergence properties of the Nelder-Mead simplex method in low
+    dimensions. *SIAM Journal on Optimization* 9(1): 112-147. Gao, F. and Han, L. (2012).
+    Implementing the Nelder-Mead simplex algorithm with adaptive parameters. *Computational
+    Optimization and Applications* 51(1): 259-277.
+    """
+
+    _running = RunningNelderMead
+
+    def __init__(
+        self,
+        genome: Real,
+        *,
+        coefficients: Literal["adaptive", "standard"] | tuple[float, float, float, float] = (
+            "adaptive"
+        ),
+        initial_step: float = 0.1,
+        tolerance: float = 1e-10,
+        restarts: int | None = None,
+        speculative: bool = False,
+        initial_genome: Sequence[float] | np.ndarray | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.coefficients = coefficients
+        self.initial_step = initial_step
+        self.tolerance = tolerance
+        self.restarts = restarts
+        self.speculative = speculative
+        self.initial_genome = initial_genome
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        wrong = (
+            'coefficients is "adaptive", "standard" or a tuple (reflection, expansion, '
+            f"contraction, shrink), not {self.coefficients!r}"
+        )
+        coefficients: str | dict[str, float]
+        if isinstance(self.coefficients, str):
+            if self.coefficients not in ("adaptive", "standard"):
+                raise ValueError(wrong)
+            coefficients = self.coefficients
+        else:
+            try:
+                values = tuple(self.coefficients)
+            except TypeError:
+                raise ValueError(wrong) from None
+            if len(values) != 4:
+                raise ValueError(wrong)
+            names = ("reflection", "expansion", "contraction", "shrink")
+            coefficients = {
+                name: _number(f"coefficients.{name}", value) for name, value in zip(names, values)
+            }
+        restarts = None
+        if self.restarts is not None:
+            restarts = _whole("restarts", self.restarts, minimum=None)
+            if restarts < 1:
+                raise ValueError(f"restarts is at least 1, or None for no restarts, not {restarts}")
+        initial_genome = None
+        if self.initial_genome is not None:
+            genes = np.asarray(self.initial_genome, dtype=object)
+            if genes.ndim != 1:
+                raise ValueError(
+                    "initial_genome is a sequence of numbers, one per gene, not "
+                    f"{self.initial_genome!r}"
+                )
+            initial_genome = [_number("initial_genome", gene, plural=True) for gene in genes]
+        return {
+            "type": "nelder_mead",
+            "coefficients": coefficients,
+            "initial_step": _number("initial_step", self.initial_step),
+            "tolerance": _number("tolerance", self.tolerance),
+            "restarts": restarts,
+            "speculative": _flag("speculative", self.speculative),
+            "initial_genome": initial_genome,
+            "seed": _optional_whole("seed", self.seed),
         }
 
 

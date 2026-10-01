@@ -243,6 +243,26 @@ impl Settings<Neat> for NeatSettings {
     }
 }
 
+/// Nelder-Mead, whose steps follow from its simplex: the state of the simplex, read-only, and
+/// re-evaluation.
+pub struct NelderMeadSettings;
+
+impl Settings<NelderMead> for NelderMeadSettings {
+    fn get(&self, nelder_mead: &NelderMead, name: &str) -> Result<Value> {
+        match name {
+            "converged" => Ok(json!(nelder_mead.converged())),
+            "size" => Ok(json!(nelder_mead.size())),
+            "iterations" => Ok(json!(nelder_mead.iterations())),
+            "restart_count" => Ok(json!(nelder_mead.restart_count())),
+            _ => Err(unknown(name)),
+        }
+    }
+
+    fn set(&self, _: &mut NelderMead, name: &str, _: &str) -> Result<()> {
+        Err(unknown(name))
+    }
+}
+
 /// OpenAI's evolution strategy's step: σ and the learning rate.
 pub struct OpenEsSettings;
 

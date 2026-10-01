@@ -6,7 +6,7 @@
 
 The algorithms of [genoxide](https://github.com/tachsin/genoxide), a Rust library, with fitness functions in Python and numpy:
 
-- genetic algorithms and local search
+- genetic algorithms, local search and the Nelder-Mead simplex method
 - differential evolution, evolution strategies, CMA-ES and particle swarm optimization
 - NEAT, OpenAI's evolution strategy, neural networks and pole-balancing tasks, for neuroevolution
 - genetic programming: formulas and Boolean functions as trees, with symbolic regression and Koza's problems evaluated in Rust
@@ -109,7 +109,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 |---|---|---|
 | Yes / no choices (subsets) | `Binary` | `Ga` with `UniformCrossover()` or `PointCrossover(points)`, and `BitFlip` |
 | An order (tours, sequencing) | `Permutation` | `LocalSearch`, which often beats a GA on permutations; `Ga` with `OrderCrossover()` (sequences) or `EdgeRecombinationCrossover()` (tours) |
-| Reals in ranges | `Real` | `Cmaes`; `De`; `Es`; `Ga` with `SimulatedBinaryCrossover(eta)` and `PolynomialMutation(eta)` |
+| Reals in ranges | `Real` | `Cmaes`; `De`; `Es`; `Ga` with `SimulatedBinaryCrossover(eta)` and `PolynomialMutation(eta)`; `NelderMead` for a local minimum in a few dimensions |
 | A neural network's weights | `Real`, from `network.representation(bounds)` | `Cmaes` up to a few hundred weights; `OpenEs` for thousands and more |
 | A neural network's structure and weights | `gx.neat.Network`, NEAT's own | `Neat` |
 | A formula or a Boolean function (genetic programming) | `gx.gp.Gp`, trees | `Ga` with `gx.gp.SubtreeCrossover()` and `gx.gp.SubtreeMutation()`, or `Islands` of them; `Nsga2` for accuracy against size |
@@ -120,6 +120,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 - `Pso` with `ring=1` explores longer than the default global topology, for multimodal functions.
 - `Es`, an evolution strategy whose step sizes evolve with its solutions, suits smooth problems that need precise answers. A `Ga` on an `AdaptiveReal` genome with `SelfAdaptiveMutation()` is one too.
 - `OpenEs`, OpenAI's evolution strategy, follows a gradient estimated from mirrored samples, at a cost per sample linear in the genes: for thousands of genes and more, such as a network's weights.
+- `NelderMead` is a local method without derivatives: it converges to the minimum of the basin it starts in, from `initial_genome` or a random point, and stops there (the stop reason `"converged"`). It suits up to about 10 genes, and functions that are non-smooth or noisy in their last digits. `restarts=n` starts again `n` times from random points, for multimodal functions; `speculative=True` evaluates the steps of an iteration in one round, for a slow function evaluated in parallel.
 - `Islands` of `Ga`s or `De`s evolve apart and exchange their best: more diverse than one large population, and often faster on multimodal problems.
 
 ## Algorithms
@@ -134,6 +135,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | `OpenEs` | real | `population_size` (even, needed), `sigma` (0.02 of each range), `optimizer` (`Adam(0.01)`; `Adam(learning_rate, beta1, beta2)`, `Sgd(learning_rate, momentum)`), `weight_decay` (0), `evaluate_mean` (False), `initial_mean` (random), `parallel_breeding` (False) |
 | `Neat` | its networks | `inputs`, `outputs` (needed), `population_size` (150), `compatibility` (`(1.0, 1.0, 0.4, 3.0)`: c1, c2, c3, threshold), `weight_mutation` (`(0.8, 0.1)`: rate, replace), `weight_deviations` (`(1.0, 1.0)`), `structural_mutation` (`(0.03, 0.05)`: add node, add connection), `reproduction` (`(0.25, 0.001, 0.75)`), `selection` (`(5, 0.2)`: elitism size, survival), `stagnation` (15), `activation` (`"steep_sigmoid"`), `feed_forward` (True), `initial` (`"fully_connected"`; `"unconnected"`), `sharing` (`"normalized"`; `"raw"`, the paper's) |
 | `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
+| `NelderMead` | real | `coefficients` (`"adaptive"`, Gao and Han's; `"standard"`; `(reflection, expansion, contraction, shrink)`), `initial_step` (0.1 of each range), `tolerance` (1e-10 of each range), `restarts` (none; random restarts), `speculative` (False), `initial_genome` (a random point) |
 | `Islands` | those of its islands | `islands` (a list of `Ga` or of `De`, with the same genome and objective, and seeds of their own), `topology` (`"ring"`; `"fully_connected"`, `"random"`, `"isolated"`), `interval` (10 generations between migrations), `migrants` (2 copies of each island's best), `seed` (of the random topology) |
 | `Nsga2` | all | `objectives`, `population_size`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1), `initial_genomes` (trees of a `gx.gp.Gp`) |
 | `Nsga3` | all | `objectives`, `reference_directions`, `crossover`, `mutation`, `population_size` (the number of reference directions), `crossover_rate` (1), `mutation_rate` (1) |
@@ -486,7 +488,16 @@ print(result.best_genome)  # |x| at every point, by a comparison and a condition
 - `time`: seconds (`math.inf` for no limit)
 - `stagnation`: generations without improvement
 
-The result has the condition that stopped it, `stop_reason`, and the `generations`, `evaluations` and `seconds` it took.
+The result has the condition that stopped it, `stop_reason`, and the `generations`, `evaluations` and `seconds` it took. A `NelderMead` also stops on its own once it has converged, with no restart left: its stop reason is then `"converged"`. It still needs a stop condition, in case it doesn't converge within it:
+
+```python
+def rosenbrock(x):
+    return 100 * (x[1] - x[0] * x[0]) ** 2 + (1 - x[0]) ** 2
+
+nelder_mead = gx.NelderMead(gx.Real((-5, 5), length=2), initial_genome=[-1.2, 1], objective="minimize")
+result = nelder_mead.run(rosenbrock, evaluations=1_000)
+print(result.stop_reason, result.best_genome, result.evaluations)  # converged [1. 1.] 250
+```
 
 ## Progress
 
@@ -516,6 +527,7 @@ result = ga.run(lambda bits: bits.sum(), generations=1_000, on_generation=report
 | `De` | `RunningDe` | `strategy`, `control` (F and CR), in the forms of `De`'s settings |
 | `Pso` | `RunningPso` | `inertia`, `acceleration` (`(cognitive, social)`) |
 | `LocalSearch` | `RunningLocalSearch` | `neighbor`, `neighbors` |
+| `NelderMead` | `RunningNelderMead` | none: its steps follow from its simplex. It reads `converged`, `size` (of the simplex, a fraction of each range), `iterations` and `restart_count` |
 | `Cmaes` | `RunningCmaes` | none: CMA-ES adapts its own |
 | `Es` | `RunningEs` | none: an evolution strategy adapts its own step sizes |
 | `OpenEs` | `RunningOpenEs` | `sigma`, `learning_rate`, e.g. both decayed over the run |
@@ -553,7 +565,7 @@ result = ga.run(sphere, generations=300, control=anneal)
 print(result.best_fitness)
 ```
 
-`algorithm.reevaluate()` scores again what the algorithm keeps, for a fitness function that changed during the run: adaptive penalty weights, a retrained surrogate, a moving optimum. The next generation evaluates the population again instead of breeding: `on_generation` is called again with the same generation number, `control` isn't, and the best solution is then the best by the new function. Every single-objective algorithm has it: a particle swarm also scores its personal bests again, and a local search its current and best solution.
+`algorithm.reevaluate()` scores again what the algorithm keeps, for a fitness function that changed during the run: adaptive penalty weights, a retrained surrogate, a moving optimum. The next generation evaluates the population again instead of breeding: `on_generation` is called again with the same generation number, `control` isn't, and the best solution is then the best by the new function. Every single-objective algorithm has it: a particle swarm also scores its personal bests again, a local search its current and best solution, and Nelder-Mead its simplex.
 
 ```python
 # maximize the ones, with at most 10 of them allowed: the penalty's weight rises while the best
@@ -659,6 +671,9 @@ Some names differ:
 | `Cmaes(restarts="ipop")` | `.restarts(cmaes::Restarts::Ipop)` |
 | `Cmaes(covariance="diagonal")` | `.covariance(cmaes::Covariance::Diagonal)` |
 | `Pso(ring=k)` | `.topology(pso::Topology::Ring { neighbors: k })` |
+| `NelderMead(coefficients="standard")`, `NelderMead(coefficients=(1.0, 2.0, 0.5, 0.5))` | `.coefficients(nelder_mead::Coefficients::Standard)`, `.coefficients(nelder_mead::Coefficients::Custom { reflection: 1.0, expansion: 2.0, contraction: 0.5, shrink: 0.5 })` |
+| `NelderMead(restarts=n)` | `.restarts(local::Restarts::Random { times: n })` |
+| `NelderMead(initial_genome=[...])` | `.initial_genome(Reals::from(vec![...]))` |
 | `De(l_shade=n)` | `De::l_shade(real, n)` |
 | `De(strategy="rand1")`, `De(strategy={"p": 0.1, "archive": 1.0})` | `.strategy(de::Strategy::Rand1)`, `.strategy(de::Strategy::CurrentToPBest { p: 0.1, archive: 1.0 })`, and `{"max_p", "archive"}` for `CurrentToPBestRandomP` |
 | `De(control={"f": 0.5, "cr": 0.9})` | `.control(de::Control::Fixed { f: 0.5, cr: 0.9 })`; `{"min_f", "max_f", "cr"}` for `Dither`, `{"c"}` for `Jade`, `{"memory"}` for `Shade` |

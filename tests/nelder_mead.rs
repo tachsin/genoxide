@@ -554,3 +554,36 @@ fn invalid_settings_are_errors() {
     };
     assert!(builder().coefficients(custom).build().is_ok());
 }
+
+#[test]
+fn a_run_as_in_python() {
+    // python/tests/test_nelder_mead.py has the same runs through the Python package, with the
+    // same results: every setting of the builder, on a problem evaluated in Rust
+    use genoxide::problems::Rosenbrock;
+    let problem = Rosenbrock::new(4);
+    for (speculative, evaluations, generations) in [(false, 1946, 1933), (true, 4715, 1177)] {
+        let nelder_mead = NelderMead::builder(problem.representation())
+            .coefficients(Coefficients::Custom {
+                reflection: 1.0,
+                expansion: 2.5,
+                contraction: 0.4,
+                shrink: 0.6,
+            })
+            .initial_step(0.2)
+            .tolerance(1e-8)
+            .restarts(local::Restarts::Random { times: 2 })
+            .speculative(speculative)
+            .minimize()
+            .seed(5)
+            .build()
+            .unwrap();
+        let outcome = Engine::new(nelder_mead, problem)
+            .stop_when(Stop::evaluations(20_000))
+            .run()
+            .unwrap();
+        assert_eq!(outcome.stop_reason(), StopReason::Converged);
+        assert_eq!(outcome.evaluations(), evaluations);
+        assert_eq!(outcome.generations(), generations);
+        assert_eq!(outcome.best_fitness().score(), Some(8.555975764172048e-15));
+    }
+}
