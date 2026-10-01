@@ -83,7 +83,93 @@ export const FUNCTIONS = {
   schwefel_2_21: (x, y) => Math.max(Math.abs(x), Math.abs(y)),
   schwefel_2_22: (x, y) => Math.abs(x) + Math.abs(y) + Math.abs(x * y),
   trid: (x, y) => (x - 1) ** 2 + (y - 1) ** 2 - x * y,
+  // the functions of batch 10b, in 2 dimensions
+  sum_of_different_powers: (x, y) => Math.abs(x) ** 2 + Math.abs(y) ** 3,
+  step: (x, y) => Math.floor(x + 0.5) ** 2 + Math.floor(y + 0.5) ** 2,
+  quartic: (x, y) => x ** 4 + 2 * y ** 4,
+  penalized1: (x, y) => {
+    const [y1, y2] = [1 + (x + 1) / 4, 1 + (y + 1) / 4];
+    const levy = 10 * Math.sin(Math.PI * y1) ** 2 + (y1 - 1) ** 2 * (1 + 10 * Math.sin(Math.PI * y2) ** 2) + (y2 - 1) ** 2;
+    return (Math.PI / 2) * levy + penalty(x, 10, 100, 4) + penalty(y, 10, 100, 4);
+  },
+  penalized2: (x, y) =>
+    0.1 * (Math.sin(3 * Math.PI * x) ** 2 + (x - 1) ** 2 * (1 + Math.sin(3 * Math.PI * y) ** 2) + (y - 1) ** 2 * (1 + Math.sin(2 * Math.PI * y) ** 2)) +
+    penalty(x, 5, 100, 4) +
+    penalty(y, 5, 100, 4),
+  high_conditioned_elliptic: (x, y) => x * x + 1e6 * y * y,
+  bent_cigar: (x, y) => x * x + 1e6 * y * y,
+  discus: (x, y) => 1e6 * x * x + y * y,
+  different_powers: (x, y) => Math.sqrt(Math.abs(x) ** 2 + Math.abs(y) ** 6),
+  buche_rastrigin: (x, y) => {
+    // the first gene's scale is 10 on its positive side; the second's is √10
+    const z1 = (oscillation(x) > 0 ? 10 : 1) * oscillation(x);
+    const z2 = Math.sqrt(10) * oscillation(y);
+    const outside = Math.max(0, Math.abs(x) - 5) ** 2 + Math.max(0, Math.abs(y) - 5) ** 2;
+    return 10 * (2 - Math.cos(2 * Math.PI * z1) - Math.cos(2 * Math.PI * z2)) + z1 * z1 + z2 * z2 + 100 * outside;
+  },
+  non_continuous_rastrigin: (x, y) => {
+    const step = (v) => (Math.abs(v) < 0.5 ? v : Math.sign(v) * Math.round(Math.abs(2 * v)) / 2);
+    const [a, b] = [step(x), step(y)];
+    return 20 + a * a - 10 * Math.cos(2 * Math.PI * a) + b * b - 10 * Math.cos(2 * Math.PI * b);
+  },
+  weierstrass: (x, y) => weierstrass(x) + weierstrass(y) - 2 * weierstrass(0),
+  katsuura: (x, y) => {
+    const factor = (v, i) => {
+      let sum = 0;
+      for (let j = 1; j <= 32; j++) {
+        const scaled = 2 ** j * v;
+        sum += Math.abs(scaled - Math.sign(scaled) * Math.round(Math.abs(scaled))) / 2 ** j;
+      }
+      return (1 + i * sum) ** (10 / 2 ** 1.2);
+    };
+    return 2.5 * factor(x, 1) * factor(y, 2) - 2.5;
+  },
+  happy_cat: (x, y) => {
+    const squares = x * x + y * y;
+    return Math.abs(squares - 2) ** 0.25 + (0.5 * squares + x + y) / 2 + 0.5;
+  },
+  hg_bat: (x, y) => {
+    const squares = x * x + y * y;
+    return Math.sqrt(Math.abs(squares * squares - (x + y) ** 2)) + (0.5 * squares + x + y) / 2 + 0.5;
+  },
+  schaffer_f7: (x, y) => {
+    const s = Math.sqrt(x * x + y * y);
+    return (Math.sqrt(s) * (1 + Math.sin(50 * s ** 0.2) ** 2)) ** 2;
+  },
+  rotated_hyper_ellipsoid: (x, y) => 2 * x * x + y * y,
 };
+
+/**
+ * `f` rotated as genoxide's `problems::Rotated` rotates it: at `c + M (p − c)`, for the
+ * `rotation` of a trace's problem (`{ matrix, center }`, a 2 × 2 matrix by rows); `f` itself
+ * without one.
+ */
+export function rotated(f, rotation) {
+  if (!f || !rotation) return f;
+  const [[a, b], [c, d]] = rotation.matrix;
+  const [cx, cy] = rotation.center;
+  return (x, y) => f(cx + a * (x - cx) + b * (y - cy), cy + c * (x - cx) + d * (y - cy));
+}
+
+// Yao, Liu and Lin's penalty u(x, a, k, m)
+function penalty(x, a, k, m) {
+  return Math.abs(x) > a ? k * (Math.abs(x) - a) ** m : 0;
+}
+
+// BBOB's oscillation T_osz of one value
+function oscillation(x) {
+  if (x === 0) return 0;
+  const logarithm = Math.log(Math.abs(x));
+  const [c1, c2] = x > 0 ? [10, 7.9] : [5.5, 3.1];
+  return Math.sign(x) * Math.exp(logarithm + 0.049 * (Math.sin(c1 * logarithm) + Math.sin(c2 * logarithm)));
+}
+
+// a gene's part of the Weierstrass function, a = 0.5, b = 3, k from 0 to 20
+function weierstrass(x) {
+  let sum = 0;
+  for (let k = 0; k <= 20; k++) sum += 0.5 ** k * Math.cos(2 * Math.PI * 3 ** k * (x + 0.5));
+  return sum;
+}
 
 // Langermann's function in 2 dimensions (Molga and Smutnicki's constants), and the centers of
 // Shekel's foxholes (De Jong's F5), x₁ varying first
