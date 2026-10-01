@@ -171,6 +171,19 @@ enum ConstantsConfig {
     Normal { mean: f64, deviation: f64 },
 }
 
+/// Ephemeral random constants of their JSON description, as `gx.gp.Constants` gives it.
+pub fn parse_constants(description: &str) -> PyResult<Constants> {
+    let config: ConstantsConfig = serde_json::from_str(description)
+        .map_err(|error| value_error(format!("invalid setting `constants`: {error}")))?;
+    setting(match config {
+        ConstantsConfig::Uniform { low, high } => Constants::uniform(low..=high),
+        ConstantsConfig::Integers { low, high } => Constants::integers(low..=high),
+        ConstantsConfig::Choice { values } => Constants::choice(values),
+        ConstantsConfig::Normal { mean, deviation } => Constants::normal(mean, deviation),
+    })
+    .map_err(value_error)
+}
+
 /// A primitive set of symbolic regression: the functions by name, the variables, and the
 /// constants (JSON, as `gx.gp.Constants` describes them) or none.
 #[pyfunction]
@@ -195,24 +208,7 @@ pub fn regression_primitives(
                 })
         })
         .collect::<PyResult<Vec<Math>>>()?;
-    let constants = match constants {
-        Some(description) => {
-            let config: ConstantsConfig = serde_json::from_str(description)
-                .map_err(|error| value_error(format!("invalid setting `constants`: {error}")))?;
-            Some(
-                setting(match config {
-                    ConstantsConfig::Uniform { low, high } => Constants::uniform(low..=high),
-                    ConstantsConfig::Integers { low, high } => Constants::integers(low..=high),
-                    ConstantsConfig::Choice { values } => Constants::choice(values),
-                    ConstantsConfig::Normal { mean, deviation } => {
-                        Constants::normal(mean, deviation)
-                    }
-                })
-                .map_err(value_error)?,
-            )
-        }
-        None => None,
-    };
+    let constants = constants.map(parse_constants).transpose()?;
     let set =
         setting(regression::primitives(functions, variables, constants)).map_err(value_error)?;
     Ok(PyPrimitiveSet::new(from_math(&set)))

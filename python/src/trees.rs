@@ -1,8 +1,9 @@
 //! Genetic programming: trees of genoxide's built-in primitives, those of symbolic regression
-//! (`gp::regression::Math`) and of the Boolean problems (`gp::boolean::Logic`), in one primitive
-//! type, [`Op`], so that a tree genome is one Rust type whichever set it uses. The primitive set
-//! and the trees as Python objects ([`PyPrimitiveSet`], [`PyTree`]), the representation `Gp`, the
-//! tree operators, and the algorithms that run trees: a GA, islands of GAs and NSGA-II with two
+//! (`gp::regression::Math`) and of the Boolean problems (`gp::boolean::Logic`), and of the user's
+//! own primitives, evaluated by Python functions, in one primitive type, [`Op`], so that a tree
+//! genome is one Rust type whichever set it uses. The primitive set and the trees as Python
+//! objects ([`PyPrimitiveSet`], [`PyTree`], [`PyNode`]), the representation `Gp`, the tree
+//! operators, and the algorithms that run trees: a GA, islands of GAs and NSGA-II with two
 //! objectives.
 
 use crate::config;
@@ -18,7 +19,7 @@ use genoxide::genome::Representation;
 use genoxide::gp::boolean::Logic;
 use genoxide::gp::regression::Math;
 use genoxide::gp::{
-    Columns, ConstantMutation, Gp, HoistMutation, Init, Mutations, MutationsBuilder,
+    Columns, ConstantMutation, Gp, HoistMutation, Init, Mutations, MutationsBuilder, Node,
     OnePointCrossover, PointMutation, PrimitiveSet, ShrinkMutation, SubtreeCrossover,
     SubtreeMutation, Tree, TreeMutation, Type,
 };
@@ -27,19 +28,21 @@ use genoxide::prelude::*;
 use numpy::{AllowTypeChange, PyArray1, PyArrayLikeDyn, PyUntypedArrayMethods};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyTuple;
+use pyo3::types::{PyFloat, PyMapping, PyTuple};
 use serde::{Deserialize, Serialize};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 
 type Result<T> = std::result::Result<T, String>;
 
-/// A primitive of the package's trees: a function or variable of symbolic regression, or a
-/// function or input of the Boolean problems.
+/// A primitive of the package's trees: a function or variable of symbolic regression, a
+/// function or input of the Boolean problems, or a primitive of the user's own, by its position
+/// in its set, which Python functions evaluate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Op {
     Math(Math),
     Logic(Logic),
+    User(u32),
 }
 
 /// A primitive set of the package.
@@ -52,11 +55,7 @@ pub fn map_set<P: Copy, Q: Copy>(
     set: &PrimitiveSet<P>,
     map: impl Fn(P) -> Option<Q>,
 ) -> Option<PrimitiveSet<Q>> {
-    // the handles of the set's types, in order
-    let mut handles = PrimitiveSet::<Q>::builder();
-    let types: Vec<Type> = (0..set.type_count())
-        .map(|_| handles.new_type(""))
-        .collect();
+    let types = type_handles(set.type_count());
     let mut builder = PrimitiveSet::builder();
     for &ty in &types {
         builder.new_type(set.type_name(ty));
@@ -77,6 +76,12 @@ pub fn map_set<P: Copy, Q: Copy>(
     builder.build(set.root()).ok()
 }
 
+/// The handles of the first `count` types of a set, in order.
+fn type_handles(count: usize) -> Vec<Type> {
+    let mut handles = PrimitiveSet::<()>::builder();
+    (0..count).map(|_| handles.new_type("")).collect()
+}
+
 /// A set of regression's primitives as a set of the package.
 pub fn from_math(set: &PrimitiveSet<Math>) -> Set {
     map_set(set, |math| Some(Op::Math(math))).expect("the same set")
@@ -91,8 +96,51 @@ pub fn from_logic(set: &PrimitiveSet<Logic>) -> Set {
 pub fn to_math(set: &Set) -> Option<PrimitiveSet<Math>> {
     map_set(set, |op| match op {
         Op::Math(math) => Some(math),
-        Op::Logic(_) => None,
+        _ => None,
     })
+}
+
+// whether a set has a primitive of the user's own (`user`), or one of genoxide's
+fn has_user(set: &Set, user: bool) -> bool {
+    set.primitives()
+        .iter()
+        .any(|primitive| matches!(primitive.value(), Op::User(_)) == user)
+}
+
+/// A set of the user's own primitives: the types by name, the functions and terminals as
+/// `(name, argument types, return type)`, with types by position in `types`, the constants of
+/// types as `(type, JSON description of gx.gp.Constants)`, and the root type.
+#[pyfunction]
+pub fn user_primitives(
+    types: Vec<String>,
+    functions: Vec<(String, Vec<usize>, usize)>,
+    constants: Vec<(usize, String)>,
+    root: usize,
+) -> PyResult<PyPrimitiveSet> {
+    let mut builder = PrimitiveSet::builder();
+    let handles: Vec<Type> = types
+        .into_iter()
+        .map(|name| builder.new_type(name))
+        .collect();
+    let ty = |index: usize| {
+        handles.get(index).copied().ok_or_else(|| {
+            PyValueError::new_err(format!("invalid setting `primitives`: no type {index}"))
+        })
+    };
+    for (position, (name, args, returns)) in functions.into_iter().enumerate() {
+        let args = args.into_iter().map(ty).collect::<PyResult<Vec<Type>>>()?;
+        let position = u32::try_from(position)
+            .map_err(|_| PyValueError::new_err("invalid setting `primitives`: too many"))?;
+        builder.function(name, Op::User(position), args, ty(returns)?);
+    }
+    for (index, description) in constants {
+        builder.constants(
+            ty(index)?,
+            crate::tree_problems::parse_constants(&description)?,
+        );
+    }
+    let set = setting(builder.build(ty(root)?)).map_err(PyValueError::new_err)?;
+    Ok(PyPrimitiveSet::new(set))
 }
 
 // whether two sets are the same: the same set object, or equal
@@ -150,7 +198,22 @@ impl PyPrimitiveSet {
         self.names(true)
     }
 
-    /// The ephemeral random constants, as text, or None.
+    /// The names of the types, in order.
+    #[getter]
+    fn types(&self) -> Vec<String> {
+        type_handles(self.set.type_count())
+            .into_iter()
+            .map(|ty| self.set.type_name(ty).to_string())
+            .collect()
+    }
+
+    /// The name of the type that trees return.
+    #[getter]
+    fn root_type(&self) -> String {
+        self.set.type_name(self.set.root()).to_string()
+    }
+
+    /// The ephemeral random constants of the root type, as text, or None.
     #[getter]
     fn constants(&self) -> Option<String> {
         let root = self.set.root();
@@ -187,8 +250,13 @@ impl PyPrimitiveSet {
             Some(constants) => format!(", constants={constants}"),
             None => String::new(),
         };
+        let types = if has_user(&self.set, true) {
+            format!("types=[{}], ", self.types().join(", "))
+        } else {
+            String::new()
+        };
         format!(
-            "PrimitiveSet(functions=[{}], terminals=[{}]{constants})",
+            "PrimitiveSet({types}functions=[{}], terminals=[{}]{constants})",
             self.names(false).join(", "),
             self.names(true).join(", ")
         )
@@ -210,6 +278,35 @@ fn constants_text(constants: &genoxide::gp::Constants) -> String {
         Constants::Normal { mean, deviation } => {
             format!("Constants.normal({mean:?}, {deviation:?})")
         }
+    }
+}
+
+/// A node of a tree, as `Tree.nodes` gives it: its kind ("function", "terminal" or "constant"),
+/// its name (a constant's value as the tree's text writes it), its number of children, its type
+/// and a constant's value (None for a function or terminal).
+#[pyclass(
+    frozen,
+    get_all,
+    skip_from_py_object,
+    module = "genoxide.gp",
+    name = "Node"
+)]
+pub struct PyNode {
+    kind: &'static str,
+    name: String,
+    arity: usize,
+    #[pyo3(name = "type")]
+    ty: String,
+    value: Option<f64>,
+}
+
+#[pymethods]
+impl PyNode {
+    fn __repr__(&self) -> String {
+        format!(
+            "Node(kind='{}', name='{}', arity={}, type='{}')",
+            self.kind, self.name, self.arity, self.ty
+        )
     }
 }
 
@@ -290,6 +387,34 @@ impl PyTree {
         self.display()
     }
 
+    /// The nodes in prefix order: each function followed by its children's subtrees, in order.
+    fn nodes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let nodes = self.tree.nodes().iter().map(|node| match *node {
+            Node::Primitive(index) => {
+                let primitive = &self.set.primitives()[index as usize];
+                PyNode {
+                    kind: if primitive.arity() > 0 {
+                        "function"
+                    } else {
+                        "terminal"
+                    },
+                    name: primitive.name().to_string(),
+                    arity: primitive.arity(),
+                    ty: self.set.type_name(primitive.returns()).to_string(),
+                    value: None,
+                }
+            }
+            Node::Constant { ty, value } => PyNode {
+                kind: "constant",
+                name: format!("{value:?}"),
+                arity: 0,
+                ty: self.set.type_name(ty).to_string(),
+                value: Some(value),
+            },
+        });
+        PyTuple::new(py, nodes)
+    }
+
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let text = pyo3::types::PyString::new(py, &self.display()).repr()?;
         Ok(format!("Tree({text})"))
@@ -319,11 +444,33 @@ impl PyTree {
     /// The tree's values at points, on all of them at once: `x` holds a point per row, a value
     /// per variable (or input) in the order of the set's terminals, or for one variable a 1-D
     /// array of its values. Numbers for regression's primitives, bools for the Boolean ones.
+    ///
+    /// With `functions`, a tree of the user's own primitives: each function's callable, by
+    /// name, called once per node, its children's values before it; the terminals' values from
+    /// `x`, a mapping by name or an array as above, a column per terminal.
+    #[pyo3(signature = (x, functions = None))]
     fn evaluate<'py>(
         &self,
         py: Python<'py>,
-        x: PyArrayLikeDyn<'py, f64, AllowTypeChange>,
+        x: &Bound<'py, PyAny>,
+        functions: Option<&Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(functions) = functions {
+            if has_user(&self.set, false) {
+                return Err(PyValueError::new_err(
+                    "functions are for trees of your own primitives: genoxide evaluates its \
+                     own, with evaluate(x)",
+                ));
+            }
+            return self.evaluate_user(py, x, functions);
+        }
+        if has_user(&self.set, true) {
+            return Err(PyValueError::new_err(
+                "a tree of your own primitives is evaluated with evaluate(x, functions), \
+                 functions mapping each function's name to a callable",
+            ));
+        }
+        let x: PyArrayLikeDyn<'py, f64, AllowTypeChange> = x.extract()?;
         let columns = columns(&x)?;
         let variables = self
             .set
@@ -359,6 +506,84 @@ impl PyTree {
     }
 }
 
+impl PyTree {
+    // the value of a tree of the user's primitives, bottom-up as Rust's `Tree::evaluate`: the
+    // prefix order read backwards, each function called with its children's values in order
+    fn evaluate_user<'py>(
+        &self,
+        py: Python<'py>,
+        x: &Bound<'py, PyAny>,
+        functions: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let functions = functions.cast::<PyMapping>().map_err(|_| {
+            PyValueError::new_err("functions is a mapping of each function's name to a callable")
+        })?;
+        let primitives = self.set.primitives();
+        let terminals = primitives.iter().filter(|p| p.arity() == 0).count();
+        // the terminals' values: by name, or the columns of an array, in order
+        let mut columns = match x.cast::<PyMapping>() {
+            Ok(_) => None,
+            Err(_) => {
+                let array = py.import("numpy")?.call_method1("asarray", (x,))?;
+                let columns: Vec<Bound<'py, PyAny>> = match array.getattr("ndim")?.extract()? {
+                    1usize => vec![array],
+                    2 => array.getattr("T")?.try_iter()?.collect::<PyResult<_>>()?,
+                    _ => {
+                        return Err(PyValueError::new_err(
+                            "x is a mapping of each terminal's name to its values, a 2-D array \
+                             with a column per terminal, or a 1-D array of one terminal",
+                        ));
+                    }
+                };
+                if columns.len() != terminals {
+                    return Err(PyValueError::new_err(format!(
+                        "the tree's set has {terminals} terminals, but x has {} columns",
+                        columns.len()
+                    )));
+                }
+                Some(columns.into_iter())
+            }
+        };
+        // each primitive's callable or value
+        let mut meanings = Vec::with_capacity(primitives.len());
+        for primitive in primitives {
+            let name = primitive.name();
+            let meaning = if primitive.arity() > 0 {
+                functions.get_item(name).map_err(|_| {
+                    PyValueError::new_err(format!("functions has no function `{name}`"))
+                })?
+            } else if let Some(columns) = &mut columns {
+                columns.next().expect("a column per terminal")
+            } else {
+                x.get_item(name).map_err(|_| {
+                    PyValueError::new_err(format!("x has no value for the terminal `{name}`"))
+                })?
+            };
+            meanings.push(meaning);
+        }
+        let mut stack: Vec<Bound<'py, PyAny>> = Vec::new();
+        for node in self.tree.nodes().iter().rev() {
+            let value = match *node {
+                Node::Constant { value, .. } => PyFloat::new(py, value).into_any(),
+                Node::Primitive(index) => {
+                    let index = index as usize;
+                    let arity = primitives[index].arity();
+                    if arity == 0 {
+                        meanings[index].clone()
+                    } else {
+                        // the first child is on top
+                        let start = stack.len() - arity;
+                        let args = PyTuple::new(py, stack.drain(start..).rev())?;
+                        meanings[index].call1(args)?
+                    }
+                }
+            };
+            stack.push(value);
+        }
+        Ok(stack.pop().expect("a tree has a root"))
+    }
+}
+
 // the columns of a point per row, or of a 1-D array of one variable
 fn columns(x: &PyArrayLikeDyn<'_, f64, AllowTypeChange>) -> PyResult<Vec<Vec<f64>>> {
     let array = x.as_array();
@@ -383,6 +608,8 @@ pub fn values(tree: &Tree, set: &Set, columns: &[Vec<f64>], points: usize) -> Ve
     tree.evaluate_columns(set, &mut workspace, |op, args, output| match op {
         Op::Math(math) => math.apply_columns(args, columns, output),
         Op::Logic(logic) => logic_columns(logic, args, columns, output),
+        // evaluated by Python: not here
+        Op::User(_) => output.fill(f64::NAN),
     })
     .to_vec()
 }

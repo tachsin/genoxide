@@ -68,10 +68,34 @@ ALGORITHMS = {
         gx.gp.SubtreeCrossover(),
         mutation_rate=0.2,
     ),
+    "gp of your own primitives": lambda: ga(
+        gx.gp.Gp(user_primitives()),
+        gx.gp.Mutations([(0.7, gx.gp.SubtreeMutation()), (0.3, gx.gp.PointMutation(count=1))]),
+        gx.gp.SubtreeCrossover(),
+        mutation_rate=0.2,
+    ),
 }
 
 # symbolic regression, evaluated in Rust
 KOZA = gx.gp.regression.problems.Koza1()
+
+
+def user_primitives():
+    """A typed set of your own: the checkpoint keeps it, the fitness function gives its meaning."""
+    builder = gx.gp.PrimitiveSetBuilder()
+    real, boolean = builder.new_type("real"), builder.new_type("bool")
+    builder.function("add", [real, real], real).function("mul", [real, real], real)
+    builder.function("less", [real, real], boolean).function("if", [boolean, real, real], real)
+    builder.terminal("x", real).constants(real, gx.gp.Constants.uniform(-1.0, 1.0))
+    return builder.build(real)
+
+
+X = np.linspace(-1.0, 1.0, 20)
+FUNCTIONS = {"add": np.add, "mul": np.multiply, "less": np.less, "if": np.where}
+
+
+def user_error(tree):
+    return float(np.mean(np.abs(tree.evaluate({"x": X}, FUNCTIONS) - np.abs(X))))
 
 
 def xor(network):
@@ -85,7 +109,7 @@ def fitness_for(algorithm):
         return xor
     genome = algorithm._genome
     if isinstance(genome, gx.gp.Gp):
-        return KOZA
+        return KOZA if genome.primitives == KOZA.primitives() else user_error
     if isinstance(genome, gx.Permutation):
         return lambda order: float(np.sum(np.abs(np.diff(order))))
     if isinstance(genome, gx.Binary):

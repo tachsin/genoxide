@@ -375,11 +375,11 @@ measures such as the largest angle; `examples/xor_neat`, `cart_pole`, `double_po
 
 ## Genetic programming
 
-`gx.gp` evolves trees of primitives: functions (`add`, `if`) whose children are their arguments, and terminals (inputs such as `x`) and constants at the leaves (Koza 1992). The primitives are genoxide's built-in ones, and the trees and the fitness functions below run in Rust; primitives of your own come in a later version.
+`gx.gp` evolves trees of primitives: functions (`add`, `if`) whose children are their arguments, and terminals (inputs such as `x`) and constants at the leaves (Koza 1992). The primitives are genoxide's built-in ones, whose trees and fitness functions below run in Rust, or your own, evaluated by numpy ([Your own primitives](#your-own-primitives)); trees are evolved in Rust either way.
 
 - `gx.gp.regression.primitives(functions, variables, constants=None)`: a set of mathematical functions by name (`"add"`, `"sub"`, `"mul"`, `"div"`, the analytic quotient `"aq"`, `"neg"`, `"inv"`, `"square"`, `"cube"`, `"sin"`, `"cos"`, `"exp"`, `"log"`, `"sqrt"`, `"tanh"`, `"abs"`, and Koza's protected `"pdiv"`, `"plog"`, `"psqrt"`) and named variables, with ephemeral random constants `gx.gp.Constants.uniform(low, high)`, `integers(low, high)`, `choice(values)` or `normal(mean, deviation)`.
 - `gx.gp.Gp(primitives, max_depth=17, max_size=1024, init=gx.gp.RampedHalfAndHalf((2, 6)))`: the genome (also `gx.gp.Full(depths)`, `gx.gp.Grow(depths)`). `gp.ramped_half_and_half(n, seed)` gives Koza's even division among the depths and methods, for `Ga(initial_genomes=...)`; `gp.parse(text)` and `gp.validate(tree)` check a tree against the set and the limits.
-- `gx.gp.Tree`, what a fitness function gets: `len(tree)` nodes, `tree.depth`, `str(tree)` (`add(x, mul(x, 0.5))`, read back by `primitives.parse`), and `tree.evaluate(x)`, its values at points, a row each, on numpy arrays in Rust. Trees compare, hash and pickle.
+- `gx.gp.Tree`, what a fitness function gets: `len(tree)` nodes, `tree.depth`, `str(tree)` (`add(x, mul(x, 0.5))`, read back by `primitives.parse`), `tree.nodes()` (`gx.gp.Node`s in prefix order), and `tree.evaluate(x)`, its values at points, a row each, on numpy arrays in Rust. Trees compare, hash and pickle.
 - `gx.gp.regression.Regression(primitives, Dataset(Sample(x, y), test), metric="rmse", linear_scaling=True)`: the error of a tree on the training sample, after Keijzer's linear scaling `a + b f(x)` by default; `error(tree, sample)`, `predict`, `scaling`, `display`. `gx.gp.regression.problems` has Koza-1 to 3 and Nguyen-1 to 12, each with its paper's data and set: `primitives()`, `dataset()`, `regression(...)`.
 - `gx.gp.boolean.Multiplexer(address_bits)` and `EvenParity(inputs)`: Koza's Boolean problems, the cases of the truth table a tree gets wrong.
 - Operators: `gx.gp.SubtreeCrossover(internal_rate=0.9)`, `gx.gp.OnePointCrossover()`; `gx.gp.SubtreeMutation(max_depth=4)`, `gx.gp.PointMutation(rate=... | count=...)`, `gx.gp.HoistMutation()`, `gx.gp.ShrinkMutation()`, `gx.gp.ConstantMutation(sigma)` and a mix of them by weight, `gx.gp.Mutations([(0.5, gx.gp.SubtreeMutation()), (0.5, gx.gp.PointMutation(count=1))])`. Every child is within the limits.
@@ -423,6 +423,59 @@ for tree, (error, size) in sorted(
 ```
 
 `examples/koza_quartic`, `nguyen_1`, `nguyen_5`, `nguyen_9`, `nguyen_all`, `multiplexer_11` and `accuracy_and_size` repeat the Rust examples exactly.
+
+### Your own primitives
+
+`gx.gp.PrimitiveSetBuilder` makes a set of your own primitives, strongly typed as in Rust (Montana 1995): declare the types with `new_type(name)`, which returns the name to refer to it by, then add functions with `function(name, argument_types, return_type)`, terminals (inputs) with `terminal(name, type)` and ephemeral random constants of a type with `constants(type, gx.gp.Constants...)`, and `build(root_type)`. Every tree that generation, crossover and mutation make puts a value of the right type in each place, with the same operators, selections and algorithms as the built-in sets. `build` raises a `ValueError` naming the problem: a type that isn't declared, a name used twice or that isn't a name, constants given twice, or a type the trees need that no tree can be made of. `parse` and `str(tree)` work as for any set; `primitives.types` and `root_type` give the types.
+
+The set holds names and types only; what the primitives mean is given when a tree is evaluated, as Rust's fitness function matches on its enum:
+
+- `tree.evaluate(x, functions)`: `functions` maps each function's name to a callable, called once per node with its children's values in order, bottom-up; `x` gives the terminals' values, by name (`{"x": xs}`) or as an array with a column per terminal. With numpy columns and numpy functions, a tree is evaluated on all the points at once, one call per node: the way to evaluate data (calling Python per node and point is over ten times slower). Constants are `float`s, which numpy broadcasts, so a tree that is a single constant evaluates to a `float`.
+- Per point, the same call with numbers and plain functions: `tree.evaluate({"x": 0.5}, {"add": operator.add, ...})`.
+- Your own interpreter: `tree.nodes()` gives the nodes in prefix order, each a `gx.gp.Node` with its `kind` (`"function"`, `"terminal"` or `"constant"`), `name`, `arity`, `type` and a constant's `value`; a function's children follow it, each taking its subtree's nodes.
+
+The arithmetic of numpy's `add`, `subtract`, `multiply` and `divide`, comparisons and `where` is IEEE's, the same bits as Rust's; use `gx.math` for transcendental functions, as numpy's can differ by platform. The set is data, so a run checkpoints and resumes; the functions are the fitness function's, given again to `run(..., resume=...)`.
+
+```python
+import numpy as np
+
+# |x| from a comparison and a conditional: two types, real and bool
+builder = gx.gp.PrimitiveSetBuilder()
+real, boolean = builder.new_type("real"), builder.new_type("bool")
+builder.function("sub", [real, real], real)
+builder.function("mul", [real, real], real)
+builder.function("less", [real, real], boolean)
+builder.function("if", [boolean, real, real], real)
+builder.terminal("x", real)
+builder.constants(real, gx.gp.Constants.integers(-2, 2))
+primitives = builder.build(real)
+
+FUNCTIONS = {"sub": np.subtract, "mul": np.multiply, "less": np.less, "if": np.where}
+x = np.linspace(-1.0, 1.0, 21)
+
+
+def error(tree):
+    values = tree.evaluate({"x": x}, FUNCTIONS)  # one numpy call per node
+    return float(np.max(np.abs(values - np.abs(x))))
+
+
+gp = gx.gp.Gp(primitives)
+search = gx.Ga(
+    gp,
+    population_size=500,
+    initial_genomes=gp.ramped_half_and_half(500, seed=1),
+    select=gx.DoubleTournament(7, 1.4),
+    crossover=gx.gp.SubtreeCrossover(),
+    mutation=gx.gp.Mutations([(0.5, gx.gp.SubtreeMutation()), (0.5, gx.gp.PointMutation(count=1))]),
+    mutation_rate=0.1,
+    objective="minimize",
+    seed=1,
+)
+result = search.run(error, target=0.0, generations=50)
+print(result.best_genome)  # |x| at every point, by a comparison and a conditional
+```
+
+`examples/abs_typed` is this problem, with the Rust example's output and trace.
 
 ## Stopping
 
@@ -582,7 +635,7 @@ The package covers a subset of the Rust library. These parts are only in Rust:
 - memetic search in `Ga`, and initial genomes for a population other than trees
 - operators of your own
 - islands of algorithms other than `Ga` and `De`, or of both kinds together
-- genetic programming with primitives of your own, typed or not (the package has genoxide's built-in ones), and the typed evaluators of `gp`
+- the stack and column evaluators of `gp` for values of any type (the package evaluates your own primitives on Python values, a call per node)
 - checkpoints in other formats, e.g. JSON through serde
 - observers: statistics, a hall of fame and reports
 - stop conditions combined with `and`, and custom ones

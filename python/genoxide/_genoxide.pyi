@@ -1,6 +1,6 @@
 import os
-from collections.abc import Callable, Sequence
-from typing import Any, Literal
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, Literal, overload
 
 import numpy as np
 from typing_extensions import Self
@@ -191,9 +191,17 @@ class Recurrent:
 def neat_network(json: str) -> NeatNetwork: ...
 
 class PrimitiveSet:
-    """The functions, terminals and ephemeral random constants of a genetic program's trees, of
-    genoxide's built-in primitives: from ``gx.gp.regression.primitives(...)`` or a problem's
-    ``primitives()``. Sets compare equal by their primitives, and pickle."""
+    """The functions, terminals and ephemeral random constants of a genetic program's trees,
+    strongly typed: of genoxide's built-in primitives, from ``gx.gp.regression.primitives(...)``
+    or a problem's ``primitives()``, or of your own, from ``gx.gp.PrimitiveSetBuilder``. Sets
+    compare equal by their types, primitives and constants, and pickle."""
+
+    @property
+    def types(self) -> list[str]:
+        """The names of the types, in order: one for the built-in sets."""
+    @property
+    def root_type(self) -> str:
+        """The name of the type that trees return."""
 
     @property
     def functions(self) -> list[str]:
@@ -203,7 +211,8 @@ class PrimitiveSet:
         """The names of the terminals (the variables or inputs), in order."""
     @property
     def constants(self) -> str | None:
-        """The ephemeral random constants, e.g. ``"Constants.normal(0.0, 5.0)"``, or None."""
+        """The ephemeral random constants of the root type, e.g.
+        ``"Constants.normal(0.0, 5.0)"``, or None."""
     def parse(self, text: str) -> Tree:
         """The tree written in ``text`` as ``str(tree)`` writes it, e.g. ``add(mul(x, x), 0.5)``:
         a primitive's name and its arguments in parentheses, separated by commas, or a number
@@ -232,6 +241,7 @@ class Tree:
     def display(self) -> str:
         """The tree as text, e.g. ``add(mul(x, x), 0.5)``, as ``str(tree)``: the set's
         ``parse`` reads it back."""
+    @overload
     def evaluate(self, x: Any) -> np.ndarray:
         """The tree's values at points, on all of them at once in Rust, without the GIL: ``x``
         holds a point per row, a value per variable (or input) in the order of the set's
@@ -239,12 +249,58 @@ class Tree:
         regression's primitives, computed as ``Regression`` computes them (before linear
         scaling); a ``bool`` array for the Boolean problems' (an input is true where it isn't
         0). A ``ValueError`` for fewer columns than variables."""
+    @overload
+    def evaluate(
+        self, x: Mapping[str, Any] | Any, functions: Mapping[str, Callable[..., Any]]
+    ) -> Any:
+        """The value of a tree of your own primitives (``gx.gp.PrimitiveSetBuilder``), with
+        what they mean: ``functions`` maps each function's name to a callable, called with its
+        children's values, in order, and returning the node's value; ``x`` gives the terminals'
+        values, a mapping by name, or an array: a column per terminal, in the order of the
+        set's terminals (a 1-D array for one terminal). A constant's value is a ``float``.
+
+        Each function is called once per node, its children before it (bottom-up, as Rust's
+        ``Tree::evaluate``: the prefix order read backwards), on whatever the values are. With
+        numpy columns and numpy functions (``{"add": np.add, "if": np.where, ...}``), a tree is
+        evaluated on all its points with one call per node, and constants broadcast; with
+        numbers and plain functions, at one point. Returns the root's value. A ``ValueError``
+        for a function or terminal missing, or a tree of genoxide's built-in primitives; an
+        exception of a function propagates."""
+    def nodes(self) -> tuple[Node, ...]:
+        """The nodes in prefix order, each function followed by its children's subtrees, in
+        order: for your own interpreter, e.g. recursive, a node's children starting right after
+        it and each taking its subtree's nodes."""
     def __eq__(self, other: object) -> bool: ...
     def __hash__(self) -> int: ...
     @staticmethod
     def _from_json(set: str, tree: str) -> Tree: ...
     def _json(self) -> str: ...
 
+class Node:
+    """A node of a tree, from ``Tree.nodes()``."""
+
+    @property
+    def kind(self) -> Literal["function", "terminal", "constant"]:
+        """What the node is."""
+    @property
+    def name(self) -> str:
+        """The primitive's name, or a constant's value as the tree's text writes it."""
+    @property
+    def arity(self) -> int:
+        """The number of children: 0 for a terminal or a constant."""
+    @property
+    def type(self) -> str:
+        """The name of the node's type, the one its value has."""
+    @property
+    def value(self) -> float | None:
+        """A constant's value; None for a function or terminal."""
+
+def user_primitives(
+    types: list[str],
+    functions: list[tuple[str, list[int], int]],
+    constants: list[tuple[int, str]],
+    root: int,
+) -> PrimitiveSet: ...
 def gp_check(description: str) -> None: ...
 def gp_ramped_half_and_half(description: str, count: int, seed: int) -> list[Tree]: ...
 def gp_random_genome(description: str, seed: int) -> Tree: ...
