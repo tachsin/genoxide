@@ -8,7 +8,6 @@ use genoxide::gradient::Differentiable;
 use genoxide::prelude::*;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::RefCell;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 // the system allocator, counting the allocations and reallocations, and the bytes in use and
@@ -18,9 +17,6 @@ struct Counting;
 static ALLOCATIONS: AtomicU64 = AtomicU64::new(0);
 static IN_USE: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
-
-// the counts are global: the tests of this binary run one at a time
-static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
 fn allocated(size: usize) {
     ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
@@ -65,11 +61,7 @@ static GLOBAL: Counting = Counting;
 
 const N: usize = 1_000_000;
 
-#[test]
 fn lbfgsb_steps_allocate_nothing_after_the_first() {
-    let _one = ONE_AT_A_TIME
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     // Σ wᵢ (xᵢ − cᵢ)² with weights from 1 to 10 and centers beyond the box for every tenth gene:
     // the steps keep bounds active, so the Cauchy point passes breakpoints and the subspace
     // step works on both the free and the bound genes
@@ -111,11 +103,7 @@ fn lbfgsb_steps_allocate_nothing_after_the_first() {
     assert_eq!(counts[1..], [counts[1]; 8], "{counts:?}");
 }
 
-#[test]
 fn first_order_steps_allocate_nothing_after_the_first() {
-    let _one = ONE_AT_A_TIME
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     const GENERATIONS: u64 = 8;
     // the sphere, its gradient supplied
     let sphere = Differentiable(|x: &Reals, gradient: &mut [f64]| {
@@ -174,11 +162,7 @@ fn first_order_steps_allocate_nothing_after_the_first() {
     }
 }
 
-#[test]
 fn mma_iterations_allocate_nothing_after_the_first() {
-    let _one = ONE_AT_A_TIME
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     const GENERATIONS: u64 = 6;
     // minimize Σ cⱼ / xⱼ subject to Σ xⱼ ≤ n, with cⱼ from 1 to 9: one constraint, active
     let c: Vec<f64> = (0..N).map(|j| 1.0 + (j % 9) as f64).collect();
@@ -238,11 +222,7 @@ fn mma_iterations_allocate_nothing_after_the_first() {
     }
 }
 
-#[test]
 fn continuations_allocate_nothing_after_the_first_step() {
-    let _one = ONE_AT_A_TIME
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     // 3 stages of 4 generations, each from the last: generations 4 and 8 end a stage, and the
     // next ones start with a re-evaluation of the point on the changed function
     const STAGES: usize = 3;
@@ -349,4 +329,14 @@ fn continuations_allocate_nothing_after_the_first_step() {
             "{method:?}: allocations {counts:?}"
         );
     }
+}
+
+// one test, so that only these runs allocate while counting: with several, the test harness
+// records and prints a finished test's result while the next one counts
+#[test]
+fn steps_allocate_nothing_after_the_first() {
+    lbfgsb_steps_allocate_nothing_after_the_first();
+    first_order_steps_allocate_nothing_after_the_first();
+    mma_iterations_allocate_nothing_after_the_first();
+    continuations_allocate_nothing_after_the_first_step();
 }
