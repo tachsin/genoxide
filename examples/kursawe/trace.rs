@@ -138,7 +138,7 @@ impl Frames {
 
 // the index of the frame after which nothing the page plots changes. To 3 significant digits, as
 // a plot shows them: the best, the median and, for a single objective (a numeric best), the state;
-// to within a thousandth of their range over the run: a front's hypervolumes, in the state or in a
+// to within a hundredth of their range over the run: a front's hypervolumes, in the state or in a
 // grid's series
 fn last_change(frames: &[Value]) -> usize {
     let Some(last) = frames.len().checked_sub(1) else {
@@ -164,7 +164,7 @@ fn last_change(frames: &[Value]) -> usize {
             let (low, high) = values.fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), v| {
                 (low.min(v), high.max(v))
             });
-            (high - low) / 1000.0
+            (high - low) / 100.0
         })
         .collect();
     let settled = |i: usize| {

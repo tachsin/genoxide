@@ -206,7 +206,7 @@ class Frames:
 def last_change(frames):
     """The index of the frame after which nothing the page plots changes. To 3 significant
     digits, as a plot shows them: the best, the median and, for a single objective (a numeric
-    best), the state; to within a thousandth of their range over the run: a front's
+    best), the state; to within a hundredth of their range over the run: a front's
     hypervolumes, in the state or in a grid's series."""
     if not frames:
         return 0
@@ -230,7 +230,7 @@ def last_change(frames):
     tolerance = []
     for k in range(len(end)):
         values = [values[k] for values in measured if k < len(values)]
-        tolerance.append((max(values) - min(values)) / 1000.0)
+        tolerance.append((max(values) - min(values)) / 100.0)
 
     def same(frame, final, key, flush=False):
         return coarse(frame.get(key), flush) == coarse(final.get(key), flush)
