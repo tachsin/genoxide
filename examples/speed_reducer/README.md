@@ -2,8 +2,8 @@
 title: Speed reducer
 category: constrained
 summary: Golinski's lightest gearbox, whose gear teeth and shafts stay within their stress and deflection limits, a mixed discrete-continuous design.
-reference: "Golinski, J. (1973). An adaptive optimization system applied to machine synthesis. Mechanism and Machine Theory 8(4): 419-436."
-reference_url: https://doi.org/10.1016/0094-114X(73)90018-9
+reference: "Golinski, J. (1970). Optimal synthesis problems solved by means of nonlinear programming and random methods. Journal of Mechanisms 5(3): 287-309, where the problem is first posed. Also Golinski, J. (1973). An adaptive optimization system applied to machine synthesis. Mechanism and Machine Theory 8(4): 419-436."
+reference_url: https://doi.org/10.1016/0022-2569(70)90064-9
 optimum: "2996.348165 (weight), best known"
 languages: [rust, python]
 order: 93

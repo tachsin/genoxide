@@ -2,7 +2,7 @@
 title: Rastrigin function
 category: continuous
 summary: Minimize a 30-dimensional function with a local minimum near every integer point.
-reference: "Mühlenbein, H., Schomisch, M. and Born, J. (1991). The parallel genetic algorithm as function optimizer. Parallel Computing 17(6-7): 619-632."
+reference: "Rastrigin, L. A. (1974). Systems of Extremal Control. Nauka, Moscow, in two dimensions (no DOI). The n-dimensional form as given by Mühlenbein, H., Schomisch, M. and Born, J. (1991). The parallel genetic algorithm as function optimizer. Parallel Computing 17(6-7): 619-632, function F6, to which the link points; first generalized by Rudolph, G. (1990). Globale Optimierung mit parallelen Evolutionsstrategien. Diplomarbeit, Universität Dortmund."
 reference_url: "https://doi.org/10.1016/S0167-8191(05)80052-3"
 optimum: "0 (at the origin)"
 languages: [rust, python]
@@ -20,8 +20,9 @@ Rastrigin's function adds a cosine to a sphere:
 f(x) = 10n + Σ (xᵢ² − 10 cos 2πxᵢ),   each xᵢ in [−5.12, 5.12]
 ```
 
-Rastrigin (1974, Systems of Extremal Control, Nauka) defined it in two dimensions, and Mühlenbein,
-Schomisch and Born (1991) generalized it to n. Its minimum is 0, at the origin. Here n = 30.
+Rastrigin (1974, Systems of Extremal Control, Nauka) defined it in two dimensions. Rudolph (1990,
+a Diplomarbeit at the University of Dortmund) generalized it to n dimensions, and this is the form
+of Mühlenbein, Schomisch and Born (1991, F6). Its minimum is 0, at the origin. Here n = 30.
 
 In one dimension, f(0) = 0. Near x = 1 there is a local minimum of about 1, and between them, at x =
 0.5, a ridge of 20.25. Each integer from −5 to 5 has such a dip, deeper the nearer it is to 0.

@@ -24,8 +24,10 @@ pub enum Restarts {
     /// Larger populations smooth out local optima, which suits multimodal functions with a global
     /// structure, like Rastrigin.
     Ipop,
-    /// BIPOP-CMA-ES (Hansen, 2009): restarts alternate between a large population regime, which
-    /// doubles the population like IPOP (up to 1024 times the initial one and 2^24), and a small one with
+    /// BIPOP-CMA-ES (Hansen, N. (2009). Benchmarking a BI-population CMA-ES on the BBOB-2009
+    /// function testbed. *GECCO 2009 companion*: 2389-2396): restarts alternate between a large
+    /// population regime, which doubles the population like IPOP (up to 1024 times the initial
+    /// one and 2^24), and a small one with
     /// a random population between the initial size and half the last large one, and a random
     /// step size down to 1/100 of the initial one. The regime that has used fewer evaluations
     /// goes next; the first run counts as a small one, as in Hansen's reference code, so the first
@@ -55,8 +57,11 @@ pub enum Restarts {
     Stop,
 }
 
-/// Why a run of a [`Cmaes`] has converged: the stop criteria of Hansen (2009), with the
-/// population's fitness and the search distribution in coordinates scaled to `0..=1` per gene.
+/// Why a run of a [`Cmaes`] has converged: the stop criteria of Hansen's BBOB 2009 paper (the one
+/// that introduces [BIPOP](Restarts::Bipop), section 2.2: TolHistFun, EqualFunVals, TolX,
+/// ConditionCov, NoEffectAxis, NoEffectCoor), and TolUpX as in Hansen's C reference code
+/// (c-cmaes, `stopTolUpXFactor` 1e3; the paper has TolUpSigma instead), with the population's
+/// fitness and the search distribution in coordinates scaled to `0..=1` per gene.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

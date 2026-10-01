@@ -453,12 +453,14 @@ const KURSAWE_DECAY: f64 = 0.721_773_177_451_931_9;
 /// Poloni, C., Giurgevich, A., Onesti, L. and Pediroda, V. (2000). Hybridization of a
 /// multi-objective genetic algorithm, a neural network and a classical optimizer for a complex
 /// design problem in fluid dynamics. *Computer Methods in Applied Mechanics and Engineering*
-/// 186(2-4): 403-420. It first appeared in Poloni et al. (1996, ECCOMAS '96, Wiley: 258-264)
-/// and Poloni (1997, in *Genetic Algorithms in Engineering and Computer Science*, Wiley:
-/// 397-414), which, as Van Veldhuizen (1999, PhD thesis, table B.1) notes, print it mistyped.
-/// Definition and bounds as restated in Deb, Pratap, Agarwal and Meyarivan (2002, NSGA-II, table
-/// I), minimized; Van Veldhuizen restates it as the maximization of the negated objectives, and
-/// Rigoni and Poles (2005, Dagstuhl Seminar Proceedings 04461) minimize it with the same
+/// 186(2-4): 403-420. It first appeared in Poloni, Mosetti and Contessi (1996, "Multi objective
+/// optimization by GAs: application to system and component design", ECCOMAS '96, Wiley:
+/// 258-264) and Poloni (1997, in *Genetic Algorithms in Engineering and Computer Science*,
+/// Wiley: 397-414), which, as Van Veldhuizen (1999, PhD thesis, table B.1) notes, print it
+/// mistyped. Definition and bounds as restated in Deb, Pratap, Agarwal and Meyarivan (2002,
+/// NSGA-II, table I), minimized; Van Veldhuizen restates it as the maximization of the negated
+/// objectives, and Rigoni and Poles (2005, "NBI and MOGA-II, two complementary algorithms for
+/// multi-objective optimizations", Dagstuhl Seminar Proceedings 04461) minimize it with the same
 /// constants. Not yet checked against the originals
 /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -1075,7 +1077,7 @@ const OSY_FOURTH_END: f64 = 3.731_684_756_057_475;
 /// problems using the simple genetic algorithm. *Structural Optimization* 10(2): 94-99. Definition
 /// and bounds as restated in Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test
 /// problems for multi-objective evolutionary optimization. *Evolutionary Multi-Criterion
-/// Optimization (EMO 2001)*, LNCS 1993: 284-298 (KanGAL report 200002, eq. 3), whose table 1 lists
+/// Optimization (EMO 2001)*, LNCS 1993: 284-298 (KanGAL report 200005, eq. 3), whose table 1 lists
 /// the same five pieces, with the ends 4.056 and 3.732; not yet checked against the original
 /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

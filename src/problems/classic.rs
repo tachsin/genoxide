@@ -155,12 +155,14 @@ scalable!(
     ///
     /// Rastrigin, L. A. (1974). *Systems of Extremal Control.* Nauka, Moscow, whose function is a
     /// related one in two dimensions with other constants, as Törn and Žilinskas (1989) restate
-    /// it. The n-dimensional form is credited to Rudolph (1990), and was spread by Hoffmeister and
-    /// Bäck (1991) and Mühlenbein, H., Schomisch, M. and Born, J. (1991). The parallel genetic
-    /// algorithm as function optimizer. *Parallel Computing* 17(6-7): 619-632.
-    /// doi:10.1016/S0167-8191(05)80052-3, whose F6 this is (as their 1993 paper restates it, with
-    /// A = 10). Definition and bounds as in Yao, Liu and Lin (1999, f9); not yet checked against
-    /// Rastrigin's book ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    /// it. The n-dimensional form is first in Rudolph, G. (1990). *Globale Optimierung mit
+    /// parallelen Evolutionsstrategien.* Diplomarbeit, Universität Dortmund (problems 2-4, with
+    /// A = 50), and was spread by Hoffmeister and Bäck (1991) and Mühlenbein, H., Schomisch, M.
+    /// and Born, J. (1991). The parallel genetic algorithm as function optimizer. *Parallel
+    /// Computing* 17(6-7): 619-632. doi:10.1016/S0167-8191(05)80052-3, whose F6 this is (as their
+    /// 1993 paper restates it, with A = 10). Definition and bounds as in Yao, Liu and Lin (1999,
+    /// f9); not yet checked against Rastrigin's book
+    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
     Rastrigin,
     "Rastrigin",
     1,
@@ -208,7 +210,9 @@ scalable!(
     ///
     /// Griewank, A. O. (1981). Generalized descent for global optimization. *Journal of
     /// Optimization Theory and Applications* 34(1): 11-39, whose function, as Bosse and Bücker
-    /// (2024) restate it, is two-dimensional with the divisor 200:
+    /// (2024, A piecewise smooth version of the Griewank function, *Optimization Methods and
+    /// Software*, doi:10.1080/10556788.2024.2414186) restate it, is two-dimensional with the
+    /// divisor 200:
     /// `1 + (x₁² + x₂²) / 200 − cos x₁ cos(x₂ / √2)`. The n-dimensional form with the divisor 4000
     /// and the bounds are those of Mühlenbein, Schomisch and Born (1991, F8) and Yao, Liu and Lin
     /// (1999, f11). Not yet checked against the original
@@ -573,9 +577,11 @@ impl Problem for Rastrigin {
     }
 
     fn reference(&self) -> &'static str {
-        "Rastrigin, L. A. (1974). Systems of Extremal Control. Nauka, Moscow. Generalized by \
-         Mühlenbein, H., Schomisch, M. and Born, J. (1991). The parallel genetic algorithm as \
-         function optimizer. Parallel Computing 17(6-7): 619-632."
+        "Rastrigin, L. A. (1974). Systems of Extremal Control. Nauka, Moscow, in two dimensions. \
+         The n-dimensional form as given by Mühlenbein, H., Schomisch, M. and Born, J. (1991). \
+         The parallel genetic algorithm as function optimizer. Parallel Computing 17(6-7): \
+         619-632, function F6; first generalized by Rudolph, G. (1990). Globale Optimierung mit \
+         parallelen Evolutionsstrategien. Diplomarbeit, Universität Dortmund."
     }
 
     fn reference_url(&self) -> Option<&'static str> {
@@ -1887,7 +1893,7 @@ impl Problem for Easom {
 /// 4097 × 4097 grid reach, the next −956.9182316246655 at (482.3533104647884,
 /// 432.87899894548343); not proven global.
 ///
-/// Whitley, D., Mathias, K., Rana, S. and Dzubera, J. (1996). Evaluating evolutionary
+/// Whitley, D., Rana, S., Dzubera, J. and Mathias, K. (1996). Evaluating evolutionary
 /// algorithms. *Artificial Intelligence* 85(1-2): 245-276, section 4.2 (read in the authors'
 /// copy), where it is F101, this formula on [−512, 511] with 10 bits per variable, with no
 /// minimum given in 2 dimensions: on [−512, 511]², x₁ = 512 is outside the box, and the minimum
@@ -1932,7 +1938,7 @@ impl Problem for Eggholder {
     }
 
     fn reference(&self) -> &'static str {
-        "Whitley, D., Mathias, K., Rana, S. and Dzubera, J. (1996). Evaluating evolutionary \
+        "Whitley, D., Rana, S., Dzubera, J. and Mathias, K. (1996). Evaluating evolutionary \
          algorithms. Artificial Intelligence 85(1-2): 245-276."
     }
 
@@ -1952,7 +1958,7 @@ impl Problem for Eggholder {
 /// Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control
 /// parameters affecting online performance of genetic algorithms for function optimization.
 /// *Proceedings of the Third International Conference on Genetic Algorithms*, Morgan Kaufmann:
-/// 51-60, which couldn't be read. Definition and bounds as Whitley, Mathias, Rana and Dzubera
+/// 51-60, which couldn't be read. Definition and bounds as Whitley, Rana, Dzubera and Mathias
 /// (1996, table 1, F9, "the sine envelope sine wave") restate it, crediting Schaffer et al.; the
 /// CEC 2005 report (Suganthan et al. 2005, section 2.3.2) has the same function, and expands it
 /// to n dimensions as its function 14. Not yet checked against the original

@@ -37,7 +37,7 @@ optimal front is the lower edge of the first feasible band, one continuous piece
 to (1, 0.8813), found by sampling the boundaries of the feasible region. On it, v runs from 1.76
 to 1.84; the report puts the front where v is between 1 and 2.
 
-The definitions come from the authors' KanGAL report 200002 (October 2000), the paper's preprint:
+The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
 eq. 5 on p. 7 and CTP6's parameters on p. 10. The report leaves g, the number of variables and
 their bounds open, and prints f₂ as g (1 − f₁/g); its figures draw the unconstrained front as the
 curve 1 − √f₁, and the authors' NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g))

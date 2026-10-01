@@ -158,8 +158,9 @@ dtlz!(
     /// curve `f₁ = f₂ = cos θ₁ / √2`, `f₃ = sin θ₁`, from (1/√2, 1/√2, 0) to (0, 0, 1), which
     /// [`optimal_front`] spreads evenly in θ₁, and so in length. With 4 or more, some solutions
     /// with g > 0 aren't dominated by any point of the curve, as Huband, Hingston, Barone and
-    /// While (2006, *IEEE Transactions on Evolutionary Computation* 10(5): 477-506) report
-    /// (their paper wasn't checked; the tests show such a solution): `optimal_front` and
+    /// While (2006, *IEEE Transactions on Evolutionary Computation* 10(5): 477-506, section
+    /// VI-A3) report (checked in their paper, the copy read for WFG; the tests show such a
+    /// solution, not the paper's four-objective example): `optimal_front` and
     /// `nadir_point` are `None` then. `ideal_point` is the origin for every M: every objective is
     /// at least 0, and it's 0 at (0, …, 0, 1) for all but the last, and at the curve's other end
     /// for the last, both optimal.

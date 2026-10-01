@@ -2,11 +2,13 @@
 //! two constraints each, whose constraints make the optimal front disconnected, a set of points,
 //! or hidden behind infeasible bands.
 //!
-//! The definitions were checked in the authors' KanGAL report 200002 (October 2000), the preprint
-//! of the EMO 2001 paper: CTP1 is its eq. 4 (p. 6) with the table of a and b on p. 6, and CTP2 to
-//! CTP7 its eq. 5 (p. 7) with the parameters on pp. 7-11. The report leaves the function g, the
-//! number of variables and their bounds open (its experiments use "Rastrigin's function as the g
-//! functional" and five variables, without the formula); genoxide takes them from the authors'
+//! The definitions were checked in the authors' KanGAL report 200005 (October 2000), the preprint
+//! of the EMO 2001 paper (the number in KanGAL's list of reports; the file's title page misprints
+//! 200002, the number of Deb, Pratap and Moitra's report of the same year): CTP1 is its eq. 4
+//! (p. 6) with the table of a and b on p. 6, and CTP2 to CTP7 its eq. 5 (p. 7) with the
+//! parameters on pp. 7-11. The report leaves the function g, the number of variables and their
+//! bounds open (its experiments use "Rastrigin's function as the g functional" and five
+//! variables, without the formula); genoxide takes them from the authors'
 //! NSGA-II code (version 1.1.6, KanGAL), which defines every CTP problem with two variables,
 //! `g = 1 + x₂`, x₁ in [0, 1] and x₂ in [0, 1] (CTP1-CTP5) or [0, 10] (CTP6-CTP8). The report's
 //! eq. 5 prints `f₂ = g (1 − f₁/g)`; its figures 6-11 draw the unconstrained front as the curve
@@ -336,12 +338,13 @@ const CTP1_B: [f64; 2] = [0.541, 0.295];
 ///
 /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
 /// evolutionary optimization. *Evolutionary Multi-Criterion Optimization (EMO 2001)*, LNCS 1993:
-/// 284-298, eq. 4 and its table of a and b, checked in the authors' KanGAL report 200002
+/// 284-298, eq. 4 and its table of a and b, checked in the authors' KanGAL report 200005
 /// (p. 6). The report builds a and b by a procedure for J constraints, and prints them to three
 /// digits, the values the authors' code uses and genoxide too.
 ///
 /// What was checked where, for all the CTP problems: the definitions in the authors' KanGAL
-/// report 200002 (October 2000, the EMO paper's preprint; the published paper wasn't compared):
+/// report 200005 (October 2000, the EMO paper's preprint, whose title page misprints 200002; the
+/// published paper wasn't compared):
 /// CTP1 is its eq. 4 with the table of a and b (p. 6), and CTP2-CTP7 its eq. 5 (p. 7) with the
 /// parameters on pp. 7-11. The report leaves g, the number of variables and their bounds open
 /// (its experiments use "Rastrigin's function as the g functional" and five variables, without
@@ -588,7 +591,7 @@ ctp!(
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
     /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5 and the parameters that follow it, checked in the
-    /// authors' KanGAL report 200002 (p. 7); f₂'s square root, g, the variables and their bounds
+    /// authors' KanGAL report 200005 (p. 7); f₂'s square root, g, the variables and their bounds
     /// as in the authors' code (see [`Ctp1`]'s notes).
     Ctp2, "CTP2", REFERENCE, x2 in [0, 1.0],
     [wave(-0.2, 0.2, 10.0, 1, 6.0, 1.0)]
@@ -607,7 +610,7 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200002
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200005
     /// (p. 8: d = 0.5 and a = 0.1, the rest as CTP2); f₂'s square root, g, the variables and
     /// their bounds as in the authors' code (see [`Ctp1`]'s notes).
     Ctp3, "CTP3", REFERENCE, x2 in [0, 1.0],
@@ -622,7 +625,7 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200002
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200005
     /// (p. 8: a = 0.75, the rest as CTP3); f₂'s square root, g, the variables and their bounds as
     /// in the authors' code (see [`Ctp1`]'s notes).
     Ctp4, "CTP4", REFERENCE, x2 in [0, 1.0],
@@ -641,7 +644,7 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200002
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200005
     /// (p. 9: c = 2, the rest as CTP3); f₂'s square root, g, the variables and their bounds as in
     /// the authors' code (see [`Ctp1`]'s notes).
     Ctp5, "CTP5", REFERENCE, x2 in [0, 1.0],
@@ -659,7 +662,7 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200002
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200005
     /// (p. 10); f₂'s square root, g, the variables and their bounds as in the authors' code (see
     /// [`Ctp1`]'s notes). The report says the front is where
     /// `1 ≤ (f₂ − e) sin θ + f₁ cos θ ≤ 2`; on the front found here, that coordinate runs from
@@ -681,7 +684,7 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200002
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200005
     /// (pp. 10-11); f₂'s square root, g, the variables and their bounds as in the authors' code
     /// (see [`Ctp1`]'s notes).
     Ctp7, "CTP7", REFERENCE, x2 in [0, 10.0],

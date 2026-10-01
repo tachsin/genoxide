@@ -21,7 +21,8 @@ f(x) = 1 + Σ xᵢ² / 4000 − Π cos(xᵢ / √i),   i from 1 to n, each xᵢ 
 ```
 
 Its minimum is 0, at the origin, where the bowl is 1 and every cosine is 1. Griewank's own function
-(1981), as Bosse and Bücker (2024) restate it, is two-dimensional with the divisor 200. This
+(1981), as Bosse and Bücker (2024, A piecewise smooth version of the Griewank function,
+Optimization Methods and Software) restate it, is two-dimensional with the divisor 200. This
 n-dimensional form, with the divisor 4000 and the bounds, is that of Mühlenbein, Schomisch and Born
 (1991, F8) and of Yao, Liu and Lin (1999, f11). genoxide hasn't checked it against Griewank's paper
 yet (issue #168).

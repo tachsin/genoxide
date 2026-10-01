@@ -87,8 +87,9 @@ error of 7.0e-5, below the report's criterion of success, 1e-4.
 Why a relative target: the error of 1e-8 that the other pages ask for is 1.4·10⁻¹² of f* here. The
 last steps toward it follow the narrow valley, and cost many evaluations. With 25 seeds and IPOP,
 CMA-ES met an absolute 1e-8 in all 25 runs, but after a median of 127,660 evaluations, about twice
-as many as the relative target takes. With BIPOP restarts (Hansen, 2009), which alternate large and
-small populations, it met it in all 25 too, after the same median.
+as many as the relative target takes. With BIPOP restarts (Hansen, 2009, GECCO '09 companion:
+2389-2396), which alternate large and small populations, it met it in all 25 too, after the same
+median.
 
 Why CMA-ES: it starts with a step in proportion to each variable's range, and its covariance matrix
 learns the valley. With the relative target and 25 seeds, it met the target on every run, after a

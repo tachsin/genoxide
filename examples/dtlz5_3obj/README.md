@@ -48,9 +48,9 @@ a quarter circle in the plane f₁ = f₂, from (0.7071, 0.7071, 0) to (0, 0, 1)
 g = 0, the solution is on the front at (0.5, 0.5, 0.7071).
 
 With 4 or more objectives, the front isn't a curve. genoxide's docs cite Huband, Hingston, Barone
-and While (2006, IEEE Transactions on Evolutionary Computation 10(5): 477-506) for this, note that
-their paper wasn't checked, and show a solution that no point of the curve dominates. With 3
-objectives, every solution is on the curve or dominated by it.
+and While (2006, IEEE Transactions on Evolutionary Computation 10(5): 477-506, section VI-A3) for
+this, checked in their paper, and its tests show a solution that no point of the curve dominates.
+With 3 objectives, every solution is on the curve or dominated by it.
 
 ## What makes it hard
 

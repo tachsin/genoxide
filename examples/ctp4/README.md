@@ -36,7 +36,7 @@ The optimal front is the same as CTP3's: 13 points, (cos θ v, 1 + sin θ v) for
 is exactly 0; in floating point, sin(kπ) is about 1e-15 and its square root 3e-8, so the best
 feasible solutions sit next to them.
 
-The definitions come from the authors' KanGAL report 200002 (October 2000), the paper's preprint:
+The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
 eq. 5 on p. 7 and CTP4's parameters on p. 8. The report leaves g, the number of variables and their
 bounds open, and prints f₂ as g (1 − f₁/g); its figures draw the unconstrained front as the curve
 1 − √f₁, and the authors' NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with

@@ -36,7 +36,7 @@ is 13 pieces of the wave, each starting on the line and ending where the next pi
 from (0, 1) to about (0.9845, 0.2872). genoxide's `optimal_front` samples the boundaries of the
 feasible region densely and keeps the feasible non-dominated points.
 
-The definitions come from the authors' KanGAL report 200002 (October 2000), the paper's preprint:
+The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
 eq. 5 and the parameters that follow it on p. 7. The report leaves g, the number of variables and
 their bounds open, and prints f₂ as g (1 − f₁/g); its figures draw the unconstrained front as the
 curve 1 − √f₁, and the authors' NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with

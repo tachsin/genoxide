@@ -2,7 +2,7 @@
 title: Double pole balancing without velocities
 category: neuroevolution
 summary: Evolve a recurrent neural network that balances two poles on a cart seeing only their angles and the cart's position, and passes Gruau's generalization test, its weights by CMA-ES and, for comparison, its structure and weights by NEAT.
-reference: "Gruau, F., Whitley, D. and Pyeatt, L. (1996). A comparison between cellular encoding and direct encoding for genetic neural networks. Genetic Programming 1996: 81-89. On Wieland's (1991) double pole, with the settings of Gomez, F., Schmidhuber, J. and Miikkulainen, R. (2008). Accelerated neural evolution through cooperatively coevolved synapses. JMLR 9: 937-965."
+reference: "Gruau, F., Whitley, D. and Pyeatt, L. (1996). A comparison between cellular encoding and direct encoding for genetic neural networks. Genetic Programming 1996: 81-89, who posed this task (no DOI). On Wieland's (1991) double pole, as set up by Gomez, F., Schmidhuber, J. and Miikkulainen, R. (2008). Accelerated neural evolution through cooperatively coevolved synapses. JMLR 9: 937-965, whose settings genoxide follows and to which the link points."
 reference_url: https://www.jmlr.org/papers/v9/gomez08a.html
 optimum: "Balanced for 100,000 steps, and for 1000 steps from at least 200 of 625 other starts (Gruau et al.'s success criteria)"
 languages: [rust, python]

@@ -39,7 +39,7 @@ are optimal, as in CTP3. The report's own figure 16 shows NSGA-II's solutions sp
 first stretch. genoxide's `optimal_front` samples the boundaries of the feasible region densely and
 keeps the feasible non-dominated points.
 
-The definitions come from the authors' KanGAL report 200002 (October 2000), the paper's preprint:
+The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
 eq. 5 on p. 7 and CTP5's parameters on p. 9. The report leaves g, the number of variables and their
 bounds open, and prints f₂ as g (1 − f₁/g); its figures draw the unconstrained front as the curve
 1 − √f₁, and the authors' NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with

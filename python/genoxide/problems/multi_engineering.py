@@ -187,7 +187,7 @@ class FourBarTruss(MultiProblem[Real]):
     x₃ = √2 and three pieces, from (1400, 0.04) to (2200 + 600√2, (2√2 − 2)/300) ≈ (3048.53,
     0.0027614).
 
-    Stadler, W. and Dauer, J. (1992). Multicriteria optimization in engineering: a tutorial and
+    Stadler, W. and Dauer, J. (1993). Multicriteria optimization in engineering: a tutorial and
     survey. In Structural Optimization: Status and Promise, AIAA: 209-249, not read. Definition,
     constants and bounds as restated in Costa, M. F. P. and Fernandes, E. M. G. P. (2009). 8th
     World Congress on Structural and Multidisciplinary Optimization, Lisbon, problem (4-truss);
