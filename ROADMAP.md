@@ -217,10 +217,11 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [x] Python: the ES, islands and checkpoints, and a batch's matrix reused ([#342](https://github.com/tachsin/genoxide/pull/342))
 - [x] Python: OpenAI's ES, the networks and control tasks, NEAT, and genetic programming with built-in primitives and your own, evaluated by numpy ([#385](https://github.com/tachsin/genoxide/pull/385), [#387](https://github.com/tachsin/genoxide/pull/387), [#389](https://github.com/tachsin/genoxide/pull/389))
 
-### 0.12: Local optimization
+### 0.12: Local and large-scale optimization
 - [x] Convergence as a stop reason (`StopReason::Converged`), random restarts for local methods, Nelder-Mead with adaptive coefficients and speculative asks ([#371](https://github.com/tachsin/genoxide/pull/371); [docs/optimization-plan.md](docs/optimization-plan.md), batch A1)
-- [ ] Linear algebra through a dependency pinned to a portable path (batch A1)
+- [ ] Linear algebra in the crate, the same bits on every platform and thread count ([#373](https://github.com/tachsin/genoxide/issues/373); batch A1)
 - [ ] Gradients (supplied, or by finite differences evaluated as one batch), line searches, L-BFGS-B (batch A2)
+- [ ] For up to millions of variables, with O(n) memory and work per step: momentum, Nesterov, Adam and AdamW; MMA and GCMMA for many variables with few constraints; continuation in stages that keeps the optimizer's state (batch A3)
 
 ### 0.13: Bayesian optimization
 - [ ] Gaussian processes; EI, log-EI, UCB and PI; batch, constrained and integer-variable Bayesian optimization, also on the asynchronous engine (batch B)
@@ -229,7 +230,7 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [ ] SQP and the augmented Lagrangian, on the constrained test problems (batch C)
 
 ### 0.15: More local methods
-- [ ] BFGS, conjugate gradient, trust region, Levenberg-Marquardt, the Adam family (batch D1)
+- [ ] BFGS, conjugate gradient, trust region, Levenberg-Marquardt (batch D1)
 - [ ] BOBYQA, COBYLA, pattern search, MADS, basin hopping (batch D2)
 
 ### 0.16: Advanced Bayesian optimization, surrogates and multi-fidelity
