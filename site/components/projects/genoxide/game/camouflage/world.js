@@ -20,8 +20,8 @@ export const LEVELS = [
     title: "Natural selection",
     habitats: ["birch"],
     population: 20,
-    catches: 8,
-    goal: 0.75,
+    catches: 10,
+    goal: 0.72,
     maxGenerations: 40,
     intro:
       "You're a bird. Catch the moths you can see: the ones you miss live on and have the next generation's moths, which inherit their genes. Watch the moths come to match the bark.",
@@ -33,8 +33,8 @@ export const LEVELS = [
     title: "The world changes",
     habitats: ["birch", "soot"],
     population: 20,
-    catches: 8,
-    goal: 0.75,
+    catches: 10,
+    goal: 0.72,
     maxGenerations: 40,
     intro:
       "The moths match their pale birch. Then soot darkens the bark, a little more each generation. What hid them now gives them away: keep hunting, and the population follows the change.",
@@ -48,7 +48,7 @@ export const LEVELS = [
     split: true,
     population: 12,
     catches: 8,
-    goal: 0.72,
+    goal: 0.7,
     maxGenerations: 40,
     migration: 3,
     intro:
@@ -61,7 +61,7 @@ export const LEVELS = [
     title: "Hide or be seen",
     habitats: ["birch"],
     population: 20,
-    catches: 8,
+    catches: 10,
     generations: 14,
     maxGenerations: 14,
     mates: true,
@@ -75,14 +75,14 @@ export const LEVELS = [
     title: "genoxide hunts",
     habitats: ["lichen"],
     population: 20,
-    catches: 8,
-    goal: 0.75,
+    catches: 10,
+    goal: 0.72,
     maxGenerations: 80,
     auto: true,
     intro:
       "New bark, and this time genoxide is the bird: it takes the most visible of 3 random moths, again and again. A fitness function, a selection and a stop condition: the whole loop, at machine speed.",
     concept: "The engine: a fitness function, tournament selection and a stop condition.",
-    code: "Engine::new(ga, camouflage)\n    .stop_when(Stop::target(0.75))\n    .run()?",
+    code: "Engine::new(ga, camouflage)\n    .stop_when(Stop::target(0.72))\n    .run()?",
   },
 ];
 
