@@ -537,3 +537,23 @@ impl Running {
         self.slot.reevaluate()
     }
 }
+
+/// A continuation: the wrapped method's settings, and the current stage, read-only.
+pub struct ContinuationSettings<S>(pub S);
+
+impl<A, S> Settings<Continuation<A>> for ContinuationSettings<S>
+where
+    A: Continue,
+    S: Settings<A>,
+{
+    fn get(&self, continuation: &Continuation<A>, name: &str) -> Result<Value> {
+        match name {
+            "stage" => Ok(json!(continuation.stage())),
+            _ => self.0.get(continuation.algorithm(), name),
+        }
+    }
+
+    fn set(&self, continuation: &mut Continuation<A>, name: &str, value: &str) -> Result<()> {
+        self.0.set(continuation.algorithm_mut(), name, value)
+    }
+}
