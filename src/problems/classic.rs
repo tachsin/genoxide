@@ -2481,6 +2481,930 @@ impl Problem for Kowalik {
     }
 }
 
+// ---- the CEC and BBOB functions, and the other scalable functions of batch 10b ----------------
+
+const YAO_LIU_LIN: &str = "Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made \
+                           faster. IEEE Transactions on Evolutionary Computation 3(2): 82-102.";
+const YAO_LIU_LIN_URL: &str = "https://doi.org/10.1109/4235.771163";
+const MOLGA_SMUTNICKI: &str =
+    "Molga, M. and Smutnicki, C. (2005). Test functions for optimization needs.";
+const CEC_2005: &str = "Suganthan, P. N., Hansen, N., Liang, J. J., Deb, K., Chen, Y.-P., Auger, \
+                        A. and Tiwari, S. (2005). Problem Definitions and Evaluation Criteria for \
+                        the CEC 2005 Special Session on Real-Parameter Optimization. Technical \
+                        report, Nanyang Technological University, Singapore, and KanGAL report \
+                        2005005, IIT Kanpur.";
+const CEC_2005_URL: &str = "https://github.com/P-N-Suganthan/CEC2005";
+const CEC_2014: &str = "Liang, J. J., Qu, B. Y. and Suganthan, P. N. (2013). Problem Definitions \
+                        and Evaluation Criteria for the CEC 2014 Special Session and Competition \
+                        on Single Objective Real-Parameter Numerical Optimization. Technical \
+                        report 201311, Computational Intelligence Laboratory, Zhengzhou \
+                        University, and Nanyang Technological University, Singapore.";
+const CEC_2014_URL: &str = "https://github.com/P-N-Suganthan/CEC2014";
+const BBOB: &str = "Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). Real-Parameter \
+                    Black-Box Optimization Benchmarking 2009: Noiseless Functions Definitions. \
+                    Research report RR-6829, INRIA.";
+const BBOB_URL: &str = "https://hal.inria.fr/inria-00362633";
+
+// the Problem of a scalable function with uniform bounds and a proven minimum 0 at `at` in every
+// gene
+macro_rules! scalable_problem {
+    (
+        $name:ident, bounds: $low:literal ..= $high:literal, at: $at:expr,
+        reference: $reference:expr $(, url: $url:expr)? $(,)?
+    ) => {
+        impl Problem for $name {
+            type Representation = Real;
+
+            fn name(&self) -> &'static str {
+                stringify!($name)
+            }
+
+            fn representation(&self) -> Real {
+                uniform(self.dimensions, $low, $high)
+            }
+
+            fn optimum(&self) -> Option<Optimum<Reals>> {
+                Some(Optimum::proven(0.0, vec![repeated(self.dimensions, $at)]))
+            }
+
+            fn reference(&self) -> &'static str {
+                $reference
+            }
+
+            $(
+                fn reference_url(&self) -> Option<&'static str> {
+                    Some($url)
+                }
+            )?
+        }
+    };
+}
+
+scalable!(
+    /// The sum of different powers, `Σ |xᵢ|^(i+1)` (i from 1): unimodal, and the flatter near the
+    /// minimum the later the gene.
+    ///
+    /// Bounds [−1, 1]ⁿ; minimum 0 at the origin; 30 dimensions by default.
+    ///
+    /// Its origin is unknown: definition and bounds as Molga and Smutnicki (2005, section 2.8)
+    /// give them. Not yet checked against an original
+    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    SumOfDifferentPowers,
+    "SumOfDifferentPowers",
+    1,
+    30
+);
+
+impl FitnessFunction<Reals> for SumOfDifferentPowers {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        x.iter()
+            .enumerate()
+            .map(|(i, xi)| math::powi(xi.abs(), i as i32 + 2))
+            .sum()
+    }
+}
+
+scalable_problem!(
+    SumOfDifferentPowers,
+    bounds: -1.0..=1.0,
+    at: 0.0,
+    reference: MOLGA_SMUTNICKI,
+);
+
+scalable!(
+    /// The step function, `Σ ⌊xᵢ + 0.5⌋²`: a sphere of flat steps, whose gradient is 0 almost
+    /// everywhere.
+    ///
+    /// Bounds [−100, 100]ⁿ; minimum 0 on the whole cube [−0.5, 0.5)ⁿ, here at the origin; 30
+    /// dimensions by default.
+    ///
+    /// Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made faster. *IEEE
+    /// Transactions on Evolutionary Computation* 3(2): 82-102, function f6 (table I and the
+    /// appendix, read): its definition, bounds and dimension. De Jong's (1975) F3, which it is
+    /// often credited to, is another step function, `Σ ⌊xᵢ⌋` on [−5.12, 5.12]⁵, with its
+    /// minimum at a corner.
+    Step,
+    "Step",
+    1,
+    30
+);
+
+impl FitnessFunction<Reals> for Step {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        x.iter()
+            .map(|xi| {
+                let step = (xi + 0.5).floor();
+                step * step
+            })
+            .sum()
+    }
+}
+
+scalable_problem!(
+    Step,
+    bounds: -100.0..=100.0,
+    at: 0.0,
+    reference: YAO_LIU_LIN,
+    url: YAO_LIU_LIN_URL,
+);
+
+/// The quartic function, `Σ i xᵢ⁴` (i from 1), De Jong's F4, without noise or with it.
+///
+/// Bounds [−1.28, 1.28]ⁿ; minimum 0 at the origin, without noise; 30 dimensions by default. The
+/// function is flat near the minimum: at 0.01 from it in every gene, it's below 10⁻⁵.
+///
+/// Yao, Liu and Lin (1999, f7) add a uniform random number in [0, 1) to each evaluation, so that
+/// an algorithm can't use differences smaller than the noise. A fitness function is deterministic
+/// in genoxide (a copy of a genome inherits its fitness), so [`noisy`](Quartic::noisy) draws the
+/// noise from a generator seeded with the genome's bits: the same genome always gets the same
+/// noise, and two genomes, however close, independent noises. Its minimum isn't known (it's the
+/// smallest noise near the origin), so [`optimum`](Problem::optimum) is `None`.
+///
+/// De Jong, K. A. (1975). *An Analysis of the Behavior of a Class of Genetic Adaptive Systems.*
+/// PhD thesis, University of Michigan, function F4, with Gaussian noise, in 30 dimensions on
+/// [−1.28, 1.28]: as restated by Yao, Liu and Lin (1999, f7, table I and the appendix, read),
+/// whose definition, uniform noise and bounds these are. Not yet checked against De Jong's
+/// thesis ([#168](https://github.com/tachsin/genoxide/issues/168)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Quartic {
+    dimensions: usize,
+    noisy: bool,
+}
+
+impl Quartic {
+    /// The function in `dimensions` dimensions, at least 1, without noise.
+    ///
+    /// # Panics
+    ///
+    /// If `dimensions` is 0.
+    pub fn new(dimensions: usize) -> Self {
+        assert!(
+            dimensions >= 1,
+            "Quartic needs at least 1 dimensions, got {dimensions}"
+        );
+        Self {
+            dimensions,
+            noisy: false,
+        }
+    }
+
+    /// The function in `dimensions` dimensions, at least 1, with Yao, Liu and Lin's uniform noise
+    /// in [0, 1), drawn from the genome.
+    ///
+    /// # Panics
+    ///
+    /// If `dimensions` is 0.
+    pub fn noisy(dimensions: usize) -> Self {
+        Self {
+            noisy: true,
+            ..Self::new(dimensions)
+        }
+    }
+
+    /// The number of dimensions.
+    pub fn dimensions(&self) -> usize {
+        self.dimensions
+    }
+
+    /// Whether the evaluations have noise.
+    pub fn is_noisy(&self) -> bool {
+        self.noisy
+    }
+}
+
+impl Default for Quartic {
+    /// The function in 30 dimensions, without noise.
+    fn default() -> Self {
+        Self::new(30)
+    }
+}
+
+// SplitMix64's finalizer: a well-mixed 64-bit value from another
+fn mix(mut z: u64) -> u64 {
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+// a number in [0, 1) that depends only on the bits of `x`
+fn genome_noise(x: &Reals) -> f64 {
+    let hash = x.iter().fold(0x9E37_79B9_7F4A_7C15, |hash, xi| {
+        mix(hash ^ xi.to_bits()).wrapping_add(0x9E37_79B9_7F4A_7C15)
+    });
+    (mix(hash) >> 11) as f64 / (1u64 << 53) as f64
+}
+
+impl FitnessFunction<Reals> for Quartic {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let quartic: f64 = x
+            .iter()
+            .enumerate()
+            .map(|(i, xi)| (i + 1) as f64 * math::powi(*xi, 4))
+            .sum();
+        if self.noisy {
+            quartic + genome_noise(x)
+        } else {
+            quartic
+        }
+    }
+}
+
+impl Problem for Quartic {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        "Quartic"
+    }
+
+    fn representation(&self) -> Real {
+        uniform(self.dimensions, -1.28, 1.28)
+    }
+
+    /// 0 at the origin without noise; not known with noise.
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        (!self.noisy).then(|| Optimum::proven(0.0, vec![repeated(self.dimensions, 0.0)]))
+    }
+
+    fn reference(&self) -> &'static str {
+        "De Jong, K. A. (1975). An Analysis of the Behavior of a Class of Genetic Adaptive \
+         Systems. PhD thesis, University of Michigan. As restated in Yao, X., Liu, Y. and Lin, G. \
+         (1999). Evolutionary programming made faster. IEEE Transactions on Evolutionary \
+         Computation 3(2): 82-102."
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        Some("https://hdl.handle.net/2027.42/4507")
+    }
+}
+
+// the penalty u(x, a, k, m) of Yao, Liu and Lin's penalized functions: k (|x| − a)^m outside
+// [−a, a], 0 inside
+fn penalty(x: f64, a: f64, k: f64, m: i32) -> f64 {
+    if x.abs() > a {
+        k * math::powi(x.abs() - a, m)
+    } else {
+        0.0
+    }
+}
+
+// sin² x
+fn sin_squared(x: f64) -> f64 {
+    math::powi(math::sin(x), 2)
+}
+
+scalable!(
+    /// The first generalized penalized function: with `yᵢ = 1 + (xᵢ + 1) / 4`,
+    /// `(π / n) {10 sin²(πy₁) + Σᵢ₌₁ⁿ⁻¹ (yᵢ − 1)² [1 + 10 sin²(πyᵢ₊₁)] + (yₙ − 1)²}
+    /// + Σ u(xᵢ, 10, 100, 4)`, where `u(x, a, k, m)` is `k (|x| − a)^m` outside [−a, a] and 0
+    /// inside: Levy's function with a penalty beyond ±10.
+    ///
+    /// Bounds [−50, 50]ⁿ; minimum 0 at (−1, …, −1), where every yᵢ is 1 (every term is at least
+    /// 0); 30 dimensions by default.
+    ///
+    /// Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made faster. *IEEE
+    /// Transactions on Evolutionary Computation* 3(2): 82-102, function f12 (table I and the
+    /// appendix, read), whose appendix misprints the minimizer as (1, …, 1). The function is
+    /// usually credited to Levy and Montalvo's tunneling papers (1985), not read.
+    Penalized1,
+    "Penalized1",
+    1,
+    30
+);
+
+impl FitnessFunction<Reals> for Penalized1 {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let n = x.len();
+        let y: Vec<f64> = x.iter().map(|xi| 1.0 + (xi + 1.0) / 4.0).collect();
+        let (Some(&first), Some(&last)) = (y.first(), y.last()) else {
+            return 0.0;
+        };
+        let middle: f64 = y
+            .windows(2)
+            .map(|pair| math::powi(pair[0] - 1.0, 2) * (1.0 + 10.0 * sin_squared(PI * pair[1])))
+            .sum();
+        let levy = 10.0 * sin_squared(PI * first) + middle + math::powi(last - 1.0, 2);
+        let penalties: f64 = x.iter().map(|&xi| penalty(xi, 10.0, 100.0, 4)).sum();
+        PI / n as f64 * levy + penalties
+    }
+}
+
+scalable_problem!(
+    Penalized1,
+    bounds: -50.0..=50.0,
+    at: -1.0,
+    reference: YAO_LIU_LIN,
+    url: YAO_LIU_LIN_URL,
+);
+
+scalable!(
+    /// The second generalized penalized function,
+    /// `0.1 {sin²(3πx₁) + Σᵢ₌₁ⁿ⁻¹ (xᵢ − 1)² [1 + sin²(3πxᵢ₊₁)] + (xₙ − 1)² [1 + sin²(2πxₙ)]}
+    /// + Σ u(xᵢ, 5, 100, 4)`, where `u(x, a, k, m)` is `k (|x| − a)^m` outside [−a, a] and 0
+    /// inside.
+    ///
+    /// Bounds [−50, 50]ⁿ; minimum 0 at (1, …, 1) (every term is at least 0); 30 dimensions by
+    /// default.
+    ///
+    /// Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made faster. *IEEE
+    /// Transactions on Evolutionary Computation* 3(2): 82-102, function f13 (table I and the
+    /// appendix, read). Table I prints the last term's `(xₙ − 1)` without its square, which the
+    /// appendix has: without it, the function would have no minimum at (1, …, 1). Usually
+    /// credited to Levy and Montalvo's tunneling papers (1985), not read.
+    Penalized2,
+    "Penalized2",
+    1,
+    30
+);
+
+impl FitnessFunction<Reals> for Penalized2 {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let (Some(&first), Some(&last)) = (x.first(), x.last()) else {
+            return 0.0;
+        };
+        let middle: f64 = x
+            .windows(2)
+            .map(|pair| math::powi(pair[0] - 1.0, 2) * (1.0 + sin_squared(3.0 * PI * pair[1])))
+            .sum();
+        let end = math::powi(last - 1.0, 2) * (1.0 + sin_squared(2.0 * PI * last));
+        let penalties: f64 = x.iter().map(|&xi| penalty(xi, 5.0, 100.0, 4)).sum();
+        0.1 * (sin_squared(3.0 * PI * first) + middle + end) + penalties
+    }
+}
+
+scalable_problem!(
+    Penalized2,
+    bounds: -50.0..=50.0,
+    at: 1.0,
+    reference: YAO_LIU_LIN,
+    url: YAO_LIU_LIN_URL,
+);
+
+// 10⁶ to the power (i − 1) / (n − 1), for gene i from 0: from 1 for the first gene to 10⁶ for
+// the last
+fn conditioning(i: usize, n: usize) -> f64 {
+    math::powf(1e6, i as f64 / (n - 1) as f64)
+}
+
+scalable!(
+    /// The high-conditioned elliptic function, `Σ (10⁶)^((i−1)/(n−1)) xᵢ²` (i from 1): an
+    /// ellipsoid whose axes grow from 1 to 10³ in length, so that its condition number is 10⁶.
+    ///
+    /// Bounds [−100, 100]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
+    ///
+    /// Suganthan, P. N., Hansen, N., Liang, J. J., Deb, K., Chen, Y.-P., Auger, A. and Tiwari, S.
+    /// (2005). *Problem Definitions and Evaluation Criteria for the CEC 2005 Special Session on
+    /// Real-Parameter Optimization*, function F3 (read), shifted and rotated there: its
+    /// definition and bounds, as the CEC 2014 and 2017 reports' basic function. BBOB's f2 and
+    /// f10 (Hansen, Finck, Ros and Auger 2009) are the same ellipsoid, with an oscillation
+    /// T_osz that genoxide doesn't apply; [`Shifted`](super::Shifted) and
+    /// [`Rotated`](super::Rotated) give CEC 2005's form.
+    HighConditionedElliptic,
+    "HighConditionedElliptic",
+    2,
+    30
+);
+
+impl FitnessFunction<Reals> for HighConditionedElliptic {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let n = x.len();
+        x.iter()
+            .enumerate()
+            .map(|(i, xi)| conditioning(i, n) * xi * xi)
+            .sum()
+    }
+}
+
+scalable_problem!(
+    HighConditionedElliptic,
+    bounds: -100.0..=100.0,
+    at: 0.0,
+    reference: CEC_2005,
+    url: CEC_2005_URL,
+);
+
+scalable!(
+    /// The bent cigar, `x₁² + 10⁶ Σᵢ₌₂ⁿ xᵢ²`: a long narrow ridge along the first axis, a
+    /// thousand times wider than it's high, that a search has to follow to the minimum.
+    ///
+    /// Bounds [−100, 100]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
+    ///
+    /// Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box
+    /// Optimization Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report
+    /// RR-6829, function f12 (read), which composes it with an asymmetric transformation and two
+    /// rotations. This is its plain form and bounds, the basic function of the CEC 2014 report
+    /// (Liang, Qu and Suganthan 2013, function 2, read) and the CEC 2017 report (Awad et al.
+    /// 2016, function 1, read), which shift and rotate it as [`Shifted`](super::Shifted) and
+    /// [`Rotated`](super::Rotated) do.
+    BentCigar,
+    "BentCigar",
+    2,
+    30
+);
+
+impl FitnessFunction<Reals> for BentCigar {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let Some((first, rest)) = x.split_first() else {
+            return 0.0;
+        };
+        first * first + 1e6 * rest.iter().map(|xi| xi * xi).sum::<f64>()
+    }
+}
+
+scalable_problem!(
+    BentCigar,
+    bounds: -100.0..=100.0,
+    at: 0.0,
+    reference: BBOB,
+    url: BBOB_URL,
+);
+
+scalable!(
+    /// The discus, `10⁶ x₁² + Σᵢ₌₂ⁿ xᵢ²`: a sphere squashed along the first axis, so that one
+    /// direction is a thousand times more sensitive than the others.
+    ///
+    /// Bounds [−100, 100]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
+    ///
+    /// Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box
+    /// Optimization Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report
+    /// RR-6829, function f11 (read), which composes it with an oscillation and a rotation. This
+    /// is its plain form and bounds, the basic function of the CEC 2014 report (Liang, Qu and
+    /// Suganthan 2013, function 3, read) and the CEC 2017 report (Awad et al. 2016, function 11,
+    /// read).
+    Discus,
+    "Discus",
+    2,
+    30
+);
+
+impl FitnessFunction<Reals> for Discus {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let Some((first, rest)) = x.split_first() else {
+            return 0.0;
+        };
+        1e6 * first * first + rest.iter().map(|xi| xi * xi).sum::<f64>()
+    }
+}
+
+scalable_problem!(
+    Discus,
+    bounds: -100.0..=100.0,
+    at: 0.0,
+    reference: BBOB,
+    url: BBOB_URL,
+);
+
+scalable!(
+    /// BBOB's different powers, `√(Σ |xᵢ|^(2 + 4 (i−1)/(n−1)))` (i from 1): the exponents grow
+    /// from 2 to 6, so the genes' sensitivities drift further apart the nearer the minimum.
+    ///
+    /// Bounds [−5, 5]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
+    ///
+    /// Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box
+    /// Optimization Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report
+    /// RR-6829, function f14 (read): its definition, without the rotation, and its search
+    /// domain. Not the [`SumOfDifferentPowers`], `Σ |xᵢ|^(i+1)`.
+    DifferentPowers,
+    "DifferentPowers",
+    2,
+    30
+);
+
+impl FitnessFunction<Reals> for DifferentPowers {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let n = x.len();
+        let exponent = |i: usize| 2.0 + 4.0 * i as f64 / (n.max(2) - 1) as f64;
+        x.iter()
+            .enumerate()
+            .map(|(i, xi)| math::powf(xi.abs(), exponent(i)))
+            .sum::<f64>()
+            .sqrt()
+    }
+}
+
+scalable_problem!(
+    DifferentPowers,
+    bounds: -5.0..=5.0,
+    at: 0.0,
+    reference: BBOB,
+    url: BBOB_URL,
+);
+
+// BBOB's oscillation T_osz of one value: the identity, but for small smooth wiggles that scale
+// with the value
+fn oscillation(x: f64) -> f64 {
+    if x == 0.0 {
+        return 0.0;
+    }
+    let logarithm = math::ln(x.abs());
+    let (c1, c2) = if x > 0.0 { (10.0, 7.9) } else { (5.5, 3.1) };
+    let wiggle = 0.049 * (math::sin(c1 * logarithm) + math::sin(c2 * logarithm));
+    x.signum() * math::exp(logarithm + wiggle)
+}
+
+scalable!(
+    /// The Büche-Rastrigin function, `10 (n − Σ cos 2πzᵢ) + Σ zᵢ² + 100 Σ max(0, |xᵢ| − 5)²`,
+    /// with `zᵢ = sᵢ T_osz(xᵢ)`: Rastrigin's function made asymmetric, with steeper walls on the
+    /// positive side of every other gene.
+    ///
+    /// T_osz is BBOB's oscillation, `sign(x) exp(x̂ + 0.049 (sin c₁x̂ + sin c₂x̂))` with
+    /// `x̂ = ln |x|` (and T_osz(0) = 0), c₁ = 10 and c₂ = 7.9 for x > 0, c₁ = 5.5 and c₂ = 3.1
+    /// otherwise. The scale `sᵢ` is `10^((i−1) / (2 (n−1)))` (i from 1), times 10 where
+    /// T_osz(xᵢ) > 0 and i is odd.
+    ///
+    /// Bounds [−5, 5]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
+    ///
+    /// Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box
+    /// Optimization Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report
+    /// RR-6829, function f4 (read): its definition, with its optimum at the origin and no offset
+    /// (xᵒᵖᵗ = 0, fᵒᵖᵗ = 0), and its search domain. The penalty is 0 within the bounds.
+    BucheRastrigin,
+    "BucheRastrigin",
+    2,
+    30
+);
+
+impl FitnessFunction<Reals> for BucheRastrigin {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let n = x.len();
+        let mut cosines = 0.0;
+        let mut squares = 0.0;
+        let mut penalty = 0.0;
+        for (i, &xi) in x.iter().enumerate() {
+            let oscillated = oscillation(xi);
+            let mut scale = math::powf(10.0, 0.5 * i as f64 / (n.max(2) - 1) as f64);
+            // i from 0 here: the odd genes from 1 are the even ones from 0
+            if oscillated > 0.0 && i % 2 == 0 {
+                scale *= 10.0;
+            }
+            let z = scale * oscillated;
+            cosines += math::cos(2.0 * PI * z);
+            squares += z * z;
+            penalty += math::powi((xi.abs() - 5.0).max(0.0), 2);
+        }
+        10.0 * (n as f64 - cosines) + squares + 100.0 * penalty
+    }
+}
+
+scalable_problem!(
+    BucheRastrigin,
+    bounds: -5.0..=5.0,
+    at: 0.0,
+    reference: BBOB,
+    url: BBOB_URL,
+);
+
+scalable!(
+    /// The non-continuous Rastrigin function, `Σ (yᵢ² − 10 cos 2πyᵢ + 10)`, where `yᵢ = xᵢ` if
+    /// `|xᵢ| < 1/2` and `round(2xᵢ) / 2` otherwise: Rastrigin's function, flat between the
+    /// half-integers away from the origin, with as many local minima.
+    ///
+    /// Bounds [−5.12, 5.12]ⁿ; minimum 0 at the origin; 30 dimensions by default. `round` rounds
+    /// halves away from 0, as MATLAB's does.
+    ///
+    /// Liang, J. J., Qin, A. K., Suganthan, P. N. and Baskar, S. (2006). Comprehensive learning
+    /// particle swarm optimizer for global optimization of multimodal functions. *IEEE
+    /// Transactions on Evolutionary Computation* 10(3): 281-295, function f7 and table II
+    /// (read): its definition, bounds and minimum. The CEC 2017 report composes it with BBOB's
+    /// transformations, which genoxide doesn't apply.
+    NonContinuousRastrigin,
+    "NonContinuousRastrigin",
+    1,
+    30
+);
+
+impl FitnessFunction<Reals> for NonContinuousRastrigin {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        x.iter()
+            .map(|&xi| {
+                let y = if xi.abs() < 0.5 {
+                    xi
+                } else {
+                    (2.0 * xi).round() / 2.0
+                };
+                y * y - 10.0 * math::cos(2.0 * PI * y) + 10.0
+            })
+            .sum()
+    }
+}
+
+scalable_problem!(
+    NonContinuousRastrigin,
+    bounds: -5.12..=5.12,
+    at: 0.0,
+    reference: "Liang, J. J., Qin, A. K., Suganthan, P. N. and Baskar, S. (2006). Comprehensive \
+                learning particle swarm optimizer for global optimization of multimodal \
+                functions. IEEE Transactions on Evolutionary Computation 10(3): 281-295.",
+    url: "https://doi.org/10.1109/TEVC.2005.857610",
+);
+
+// Weierstrass's a, b and k_max
+const WEIERSTRASS_A: f64 = 0.5;
+const WEIERSTRASS_B: f64 = 3.0;
+const WEIERSTRASS_TERMS: i32 = 21;
+
+// Σₖ aᵏ cos(2π bᵏ (x + 0.5)), k from 0 to k_max
+fn weierstrass_sum(x: f64) -> f64 {
+    (0..WEIERSTRASS_TERMS)
+        .map(|k| {
+            let (ak, bk) = (math::powi(WEIERSTRASS_A, k), math::powi(WEIERSTRASS_B, k));
+            ak * math::cos(2.0 * PI * bk * (x + 0.5))
+        })
+        .sum()
+}
+
+scalable!(
+    /// The Weierstrass function, `Σᵢ Σₖ aᵏ cos(2π bᵏ (xᵢ + 0.5)) − n Σₖ aᵏ cos(π bᵏ)` with
+    /// a = 0.5, b = 3 and k from 0 to 20: continuous, but differentiable only on a set of
+    /// points, a fractal of ripples within ripples.
+    ///
+    /// Bounds [−0.5, 0.5]ⁿ; minimum 0 at the origin (at every integer point without bounds);
+    /// 30 dimensions by default. Each gene's sum is at least −Σ aᵏ, reached where every cosine
+    /// is −1, at the integers, and the second term is −n Σ aᵏ, since every bᵏ is odd.
+    ///
+    /// Suganthan, P. N., Hansen, N., Liang, J. J., Deb, K., Chen, Y.-P., Auger, A. and Tiwari, S.
+    /// (2005). *Problem Definitions and Evaluation Criteria for the CEC 2005 Special Session on
+    /// Real-Parameter Optimization*, function F11 (read), shifted and rotated there: its
+    /// definition, constants and bounds, which Liang, Qin, Suganthan and Baskar (2006, f5) and
+    /// the CEC 2014 report restate. BBOB's f16 (Hansen et al. 2009) is another form, with 12
+    /// terms and a cube. After Weierstrass's (1872) continuous nowhere-differentiable function.
+    Weierstrass,
+    "Weierstrass",
+    1,
+    30
+);
+
+impl FitnessFunction<Reals> for Weierstrass {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        // the same sum at 0, so that the minimum is exactly 0
+        let offset = x.len() as f64 * weierstrass_sum(0.0);
+        x.iter().map(|&xi| weierstrass_sum(xi)).sum::<f64>() - offset
+    }
+}
+
+scalable_problem!(
+    Weierstrass,
+    bounds: -0.5..=0.5,
+    at: 0.0,
+    reference: CEC_2005,
+    url: CEC_2005_URL,
+);
+
+scalable!(
+    /// Katsuura's function,
+    /// `(10 / n²) Πᵢ (1 + i Σⱼ₌₁³² |2ʲxᵢ − round(2ʲxᵢ)| / 2ʲ)^(10 / n^1.2) − 10 / n²`
+    /// (i from 1): rugged everywhere, continuous but nowhere differentiable, and highly
+    /// repetitive.
+    ///
+    /// Bounds [−5, 5]ⁿ; minimum 0 at the origin, and at every point whose genes are multiples
+    /// of 1/2 (where every term of the inner sums is 0): 21ⁿ global minima in the box. 30
+    /// dimensions by default.
+    ///
+    /// Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box
+    /// Optimization Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report
+    /// RR-6829, function f23 (read), "based on the idea" of Katsuura, H. (1991). Continuous
+    /// nowhere-differentiable functions: an application of contraction mappings. *The American
+    /// Mathematical Monthly* 98(5): 411-416 (not read). BBOB adds a penalty outside [−5, 5]ⁿ,
+    /// 0 within it, and a rotation and scaling; this is the plain form, the basic function of
+    /// the CEC 2014 report (Liang, Qu and Suganthan 2013, function 10, read), with BBOB's
+    /// search domain (the CEC 2014 report scales its [−100, 100] to the same [−5, 5]).
+    Katsuura,
+    "Katsuura",
+    1,
+    30
+);
+
+impl FitnessFunction<Reals> for Katsuura {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let n = x.len() as f64;
+        let exponent = 10.0 / math::powf(n, 1.2);
+        let product: f64 = x
+            .iter()
+            .enumerate()
+            .map(|(i, &xi)| {
+                let sum: f64 = (1..=32)
+                    .map(|j| {
+                        let power = math::powi(2.0, j);
+                        let scaled = power * xi;
+                        (scaled - scaled.round()).abs() / power
+                    })
+                    .sum();
+                math::powf(1.0 + (i + 1) as f64 * sum, exponent)
+            })
+            .product();
+        10.0 / (n * n) * product - 10.0 / (n * n)
+    }
+}
+
+scalable_problem!(
+    Katsuura,
+    bounds: -5.0..=5.0,
+    at: 0.0,
+    reference: BBOB,
+    url: BBOB_URL,
+);
+
+scalable!(
+    /// HappyCat, `|Σ xᵢ² − n|^(1/4) + (½ Σ xᵢ² + Σ xᵢ) / n + ½`: a sphere of radius √n where the
+    /// first term is 0, a groove that curves around to the minimum, and a slope that leads along
+    /// it.
+    ///
+    /// Bounds [−5, 5]ⁿ; minimum 0 at (−1, …, −1), the only one: the second part is
+    /// `Σ (xᵢ + 1)² / (2n)`, 0 only there, where the first is 0 too. 30 dimensions by default.
+    ///
+    /// Beyer, H.-G. and Finck, S. (2012). HappyCat: a simple function class where well-known
+    /// direct search algorithms do fail. *Parallel Problem Solving from Nature, PPSN XII*, LNCS
+    /// 7491: 367-376, which couldn't be read. Its function has a parameter α that shapes the
+    /// groove, and its experiments use α = 1/8 (as later papers that cite it say); if α is the
+    /// exponent of `(Σ xᵢ² − n)²`, as it's usually written, α = 1/8 is this function's 1/4 on the
+    /// absolute value, which couldn't be confirmed. Definition as in the CEC 2014 report (Liang,
+    /// Qu and Suganthan 2013, function 11, read), which cites Beyer and Finck and scales its
+    /// search space [−100, 100] by 5/100, to this one, [−5, 5]. Not yet checked against the
+    /// original ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    HappyCat,
+    "HappyCat",
+    1,
+    30
+);
+
+// Σ xᵢ² and Σ xᵢ
+fn squares_and_sum(x: &Reals) -> (f64, f64) {
+    x.iter().fold((0.0, 0.0), |(squares, sum), xi| {
+        (squares + xi * xi, sum + xi)
+    })
+}
+
+impl FitnessFunction<Reals> for HappyCat {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let n = x.len() as f64;
+        let (squares, sum) = squares_and_sum(x);
+        math::powf((squares - n).abs(), 0.25) + (0.5 * squares + sum) / n + 0.5
+    }
+}
+
+scalable_problem!(
+    HappyCat,
+    bounds: -5.0..=5.0,
+    at: -1.0,
+    reference: "Beyer, H.-G. and Finck, S. (2012). HappyCat: a simple function class where \
+                well-known direct search algorithms do fail. Parallel Problem Solving from \
+                Nature, PPSN XII, LNCS 7491: 367-376.",
+    url: "https://doi.org/10.1007/978-3-642-32937-1_37",
+);
+
+scalable!(
+    /// HGBat, `|(Σ xᵢ²)² − (Σ xᵢ)²|^(1/2) + (½ Σ xᵢ² + Σ xᵢ) / n + ½`: HappyCat's relative, whose
+    /// first term is 0 on a cone, `‖x‖² = |Σ xᵢ|`, instead of a sphere.
+    ///
+    /// Bounds [−5, 5]ⁿ; minimum 0 at (−1, …, −1), the only one: the second part is
+    /// `Σ (xᵢ + 1)² / (2n)`, 0 only there, where the first is 0 too. 30 dimensions by default.
+    ///
+    /// Liang, J. J., Qu, B. Y. and Suganthan, P. N. (2013). *Problem Definitions and Evaluation
+    /// Criteria for the CEC 2014 Special Session and Competition on Single Objective
+    /// Real-Parameter Numerical Optimization.* Technical report 201311, Zhengzhou University and
+    /// Nanyang Technological University, function 12 (read): its definition, and its search space
+    /// [−100, 100] scaled by 5/100 to this one, [−5, 5]. The report gives no other source; it's
+    /// usually credited to Beyer and Finck too, whose paper couldn't be read.
+    HgBat,
+    "HgBat",
+    1,
+    30
+);
+
+impl FitnessFunction<Reals> for HgBat {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let n = x.len() as f64;
+        let (squares, sum) = squares_and_sum(x);
+        (squares * squares - sum * sum).abs().sqrt() + (0.5 * squares + sum) / n + 0.5
+    }
+}
+
+scalable_problem!(
+    HgBat,
+    bounds: -5.0..=5.0,
+    at: -1.0,
+    reference: CEC_2014,
+    url: CEC_2014_URL,
+);
+
+scalable!(
+    /// Schaffer's F7, in n dimensions:
+    /// `((1 / (n − 1)) Σᵢ₌₁ⁿ⁻¹ √sᵢ (1 + sin²(50 sᵢ^(1/5))))²` with `sᵢ = √(xᵢ² + xᵢ₊₁²)`: rings
+    /// of ripples around the minimum, whose frequency and amplitude change with the distance.
+    ///
+    /// Bounds [−100, 100]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
+    ///
+    /// Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control
+    /// parameters affecting online performance of genetic algorithms for function optimization.
+    /// *Proceedings of the Third International Conference on Genetic Algorithms*, Morgan
+    /// Kaufmann: 51-60, which couldn't be read; its F7 has two dimensions. This n-dimensional
+    /// form is BBOB's f17 (Hansen, Finck, Ros and Auger 2009, read), without its transformations
+    /// and penalty; the bounds are Schaffer's F6's ([`SchafferF6`]). The CEC 2017 report
+    /// (Awad et al. 2016, function 19, read) prints `sin` for `sin²`, and scales its search space
+    /// to [−0.5, 0.5]. Not yet checked against the original
+    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    SchafferF7,
+    "SchafferF7",
+    2,
+    30
+);
+
+impl FitnessFunction<Reals> for SchafferF7 {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let pairs = x.len().saturating_sub(1).max(1) as f64;
+        let sum: f64 = x
+            .windows(2)
+            .map(|pair| {
+                let s = (pair[0] * pair[0] + pair[1] * pair[1]).sqrt();
+                s.sqrt() * (1.0 + sin_squared(50.0 * math::powf(s, 0.2)))
+            })
+            .sum();
+        math::powi(sum / pairs, 2)
+    }
+}
+
+scalable_problem!(
+    SchafferF7,
+    bounds: -100.0..=100.0,
+    at: 0.0,
+    reference: "Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of \
+                control parameters affecting online performance of genetic algorithms for \
+                function optimization. Proceedings of the Third International Conference on \
+                Genetic Algorithms, Morgan Kaufmann: 51-60.",
+);
+
+scalable!(
+    /// The rotated hyper-ellipsoid, `Σᵢ Σⱼ≤ᵢ xⱼ²`, as Molga and Smutnicki (2005) define it.
+    ///
+    /// Despite its name, it isn't rotated: gene j appears in the n − j + 1 sums from i = j on, so
+    /// the function is `Σⱼ (n − j + 1) xⱼ²`, an axis-parallel ellipsoid whose weights fall from n
+    /// to 1 (the [`AxisParallelEllipsoid`] reversed). The ellipsoid rotated with respect to the
+    /// axes is Schwefel's problem 1.2, `Σᵢ (Σⱼ≤ᵢ xⱼ)²` ([`Schwefel1_2`]), which Molga and
+    /// Smutnicki describe; [`Rotated`](super::Rotated) rotates this one.
+    ///
+    /// Bounds [−65.536, 65.536]ⁿ; minimum 0 at the origin; 30 dimensions by default.
+    ///
+    /// Its origin is unknown: definition and bounds as Molga and Smutnicki (2005, section 2.3,
+    /// read) give them. Not yet checked against an original
+    /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    RotatedHyperEllipsoid,
+    "RotatedHyperEllipsoid",
+    1,
+    30
+);
+
+impl FitnessFunction<Reals> for RotatedHyperEllipsoid {
+    type Output = f64;
+
+    fn evaluate(&self, x: &Reals) -> f64 {
+        let mut prefix = 0.0;
+        let mut sum = 0.0;
+        for xi in x.iter() {
+            prefix += xi * xi;
+            sum += prefix;
+        }
+        sum
+    }
+}
+
+scalable_problem!(
+    RotatedHyperEllipsoid,
+    bounds: -65.536..=65.536,
+    at: 0.0,
+    reference: MOLGA_SMUTNICKI,
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3328,6 +4252,281 @@ mod tests {
             for f in point_symmetric {
                 assert_close(f(&pair), f(&opposite), 1e-12);
             }
+        }
+    }
+
+    // ---- batch 10b ----
+
+    #[test]
+    fn sum_of_different_powers() {
+        check_optimum(&SumOfDifferentPowers::new(5));
+        // 1² + |−1|³ + 0.5⁴
+        let problem = SumOfDifferentPowers::new(3);
+        assert_eq!(problem.evaluate(&at(&[1.0, -1.0, 0.5])), 2.0625);
+        assert_eq!(problem.representation().bounds()[2], -1.0..=1.0);
+        assert_eq!(SumOfDifferentPowers::default().dimensions(), 30);
+    }
+
+    #[test]
+    fn step() {
+        check_optimum(&Step::new(5));
+        let problem = Step::new(3);
+        // ⌊0.99⌋ = 0, ⌊0⌋ = 0, ⌊2⌋ = 2: the cube [−0.5, 0.5) is flat at 0
+        assert_eq!(problem.evaluate(&at(&[0.49, -0.5, 1.5])), 4.0);
+        assert_eq!(problem.evaluate(&at(&[0.49, -0.5, 0.0])), 0.0);
+        // ⌊−0.01⌋ = −1
+        assert_eq!(problem.evaluate(&at(&[-0.51, 0.0, 0.0])), 1.0);
+        assert_eq!(problem.representation().bounds()[0], -100.0..=100.0);
+    }
+
+    #[test]
+    fn quartic() {
+        check_optimum(&Quartic::new(5));
+        // 1 + 2 + 3
+        let ones = at(&[1.0, 1.0, 1.0]);
+        assert_eq!(Quartic::new(3).evaluate(&ones), 6.0);
+        assert_eq!(
+            Quartic::default().representation().bounds()[0],
+            -1.28..=1.28
+        );
+        assert!(!Quartic::default().is_noisy());
+        // the noise is in [0, 1), the same for the same genome, and another for another
+        let noisy = Quartic::noisy(3);
+        assert!(noisy.is_noisy());
+        assert!(noisy.optimum().is_none());
+        let value = noisy.evaluate(&ones);
+        assert!((6.0..7.0).contains(&value));
+        assert_eq!(noisy.evaluate(&ones), value);
+        assert_ne!(noisy.evaluate(&at(&[1.0, 1.0, 1.0 + f64::EPSILON])), value);
+        let mut rng = StreamRng::seed_from_u64(3);
+        let real = Real::uniform(3, -1e-9..=1e-9).expect("valid");
+        let noises: Vec<f64> = (0..1_000)
+            .map(|_| noisy.evaluate(&real.random_genome(&mut rng)))
+            .collect();
+        let mean = noises.iter().sum::<f64>() / noises.len() as f64;
+        assert!((mean - 0.5).abs() < 0.05, "{mean}");
+        assert!(noises.iter().all(|noise| (0.0..1.0).contains(noise)));
+    }
+
+    #[test]
+    #[should_panic(expected = "Quartic needs at least 1 dimensions, got 0")]
+    fn quartic_needs_a_dimension() {
+        let _ = Quartic::noisy(0);
+    }
+
+    #[test]
+    fn penalized() {
+        check_optimum(&Penalized1::new(5));
+        check_optimum(&Penalized2::new(5));
+        assert_eq!(
+            Penalized1::default().representation().bounds()[0],
+            -50.0..=50.0
+        );
+        // at x = 11, y = 4: π (10 sin² 4π + 3²), and the penalty 100 (11 − 10)⁴
+        let value = Penalized1::new(1).evaluate(&at(&[11.0]));
+        assert_close(value, 9.0 * PI + 100.0, 1e-12);
+        // Yao, Liu and Lin's appendix gives (1, …, 1) as the minimizer: there y = 1.5, and the
+        // value is (π / 2) (10 + 0.25 · 11 + 0.25)
+        let value = Penalized1::new(2).evaluate(&at(&[1.0, 1.0]));
+        assert_close(value, PI / 2.0 * 13.0, 1e-12);
+        // 0.1 (sin² 0 + (0 − 1)² (1 + sin² 0) + (0 − 1)² (1 + sin² 0))
+        assert_close(Penalized2::new(2).evaluate(&at(&[0.0, 0.0])), 0.2, 1e-12);
+        // 0.1 (sin² 18π + 25 (1 + sin² 3π) + 0) and the penalty 100 (6 − 5)⁴
+        let value = Penalized2::new(2).evaluate(&at(&[6.0, 1.0]));
+        assert_close(value, 102.5, 1e-12);
+    }
+
+    #[test]
+    fn ill_conditioned_quadratics() {
+        check_optimum(&HighConditionedElliptic::new(5));
+        check_optimum(&BentCigar::new(5));
+        check_optimum(&Discus::new(5));
+        check_optimum(&RotatedHyperEllipsoid::new(5));
+        // the weights 1, 10³ and 10⁶
+        let elliptic = HighConditionedElliptic::new(3);
+        assert_eq!(elliptic.evaluate(&at(&[1.0, 0.0, 0.0])), 1.0);
+        assert_close(elliptic.evaluate(&at(&[0.0, 1.0, 0.0])), 1e3, 1e-14);
+        assert_eq!(elliptic.evaluate(&at(&[0.0, 0.0, 1.0])), 1e6);
+        let ones = at(&[1.0, 1.0, 1.0]);
+        assert_eq!(BentCigar::new(3).evaluate(&ones), 1.0 + 2e6);
+        assert_eq!(Discus::new(3).evaluate(&ones), 1e6 + 2.0);
+        // Σⱼ (n − j + 1) xⱼ²: 3 + 2 + 1, and the axis-parallel ellipsoid reversed
+        let ellipsoid = RotatedHyperEllipsoid::new(3);
+        assert_eq!(ellipsoid.evaluate(&ones), 6.0);
+        assert_eq!(ellipsoid.evaluate(&at(&[1.0, 0.0, 0.0])), 3.0);
+        assert_eq!(ellipsoid.evaluate(&at(&[0.0, 0.0, 2.0])), 4.0);
+        let x = at(&[0.5, -1.5, 2.5, 3.0]);
+        let reversed: Reals = x.iter().rev().copied().collect();
+        assert_eq!(
+            RotatedHyperEllipsoid::new(4).evaluate(&x),
+            AxisParallelEllipsoid::new(4).evaluate(&reversed)
+        );
+        assert_eq!(ellipsoid.representation().bounds()[0], -65.536..=65.536);
+        assert_eq!(
+            BentCigar::default().representation().bounds()[0],
+            -100.0..=100.0
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "HighConditionedElliptic needs at least 2 dimensions")]
+    fn the_elliptic_function_needs_two_dimensions() {
+        let _ = HighConditionedElliptic::new(1);
+    }
+
+    #[test]
+    fn different_powers() {
+        check_optimum(&DifferentPowers::new(5));
+        let problem = DifferentPowers::new(3);
+        // the exponents 2, 4 and 6
+        assert_close(problem.evaluate(&at(&[1.0, 1.0, 1.0])), 3f64.sqrt(), 1e-15);
+        assert_close(problem.evaluate(&at(&[0.5, 0.0, 0.0])), 0.5, 1e-15);
+        assert_close(problem.evaluate(&at(&[0.0, 0.5, 0.0])), 0.25, 1e-15);
+        assert_close(problem.evaluate(&at(&[0.0, 0.0, -0.5])), 0.125, 1e-15);
+        assert_eq!(problem.representation().bounds()[0], -5.0..=5.0);
+    }
+
+    #[test]
+    fn buche_rastrigin() {
+        check_optimum(&BucheRastrigin::new(5));
+        // T_osz(±1) = ±1; the first gene, odd from 1, positive: z₁ = 10, so 10 (2 − 2) + 100
+        let problem = BucheRastrigin::new(2);
+        assert_close(problem.evaluate(&at(&[1.0, 0.0])), 100.0, 1e-12);
+        // negative: z₁ = −1, so 10 (2 − 2) + 1
+        assert_close(problem.evaluate(&at(&[-1.0, 0.0])), 1.0, 1e-12);
+        // T_osz keeps the sign, is the identity at ±1, and oscillates around it elsewhere
+        assert_eq!(oscillation(0.0), 0.0);
+        assert_close(oscillation(1.0), 1.0, 1e-15);
+        assert_close(oscillation(-1.0), -1.0, 1e-15);
+        for x in [1e-3, 0.3, 2.0, 7.5] {
+            assert!(oscillation(x) > 0.0 && oscillation(-x) < 0.0);
+            assert!((oscillation(x) / x - 1.0).abs() < 0.11);
+        }
+        // the penalty outside [−5, 5]: 100 (6 − 5)², besides the Rastrigin part
+        let x = at(&[0.0, -6.0]);
+        let z = 10f64.sqrt() * oscillation(-6.0);
+        let rastrigin = 10.0 * (2.0 - 1.0 - math::cos(2.0 * PI * z)) + z * z;
+        assert_close(problem.evaluate(&x), rastrigin + 100.0, 1e-12);
+    }
+
+    #[test]
+    fn non_continuous_rastrigin() {
+        check_optimum(&NonContinuousRastrigin::new(5));
+        let f = |x: f64| NonContinuousRastrigin::new(1).evaluate(&at(&[x]));
+        // below 1/2, Rastrigin's function
+        assert_close(f(0.3), Rastrigin::new(1).evaluate(&at(&[0.3])), 1e-12);
+        // from 1/2, round(2x) / 2: 0.7 → 0.5, where the value is 0.25 + 10 + 10
+        assert_close(f(0.7), 20.25, 1e-12);
+        // 0.75 → 1 and −0.75 → −1, rounding halves away from 0, where the value is 1
+        assert_close(f(0.75), 1.0, 1e-12);
+        assert_close(f(-0.75), 1.0, 1e-12);
+        assert_eq!(f(1.1), f(1.2));
+    }
+
+    #[test]
+    fn weierstrass() {
+        check_optimum(&Weierstrass::new(5));
+        let f = |x: f64| Weierstrass::new(1).evaluate(&at(&[x]));
+        // at the bound 0.5, every cosine is 1, against −1 at 0: 2 Σ 0.5ᵏ = 4 (1 − 2⁻²¹)
+        assert_close(f(0.5), 4.0 * (1.0 - 0.5f64.powi(21)), 1e-12);
+        // at the integers, 0 again
+        assert!(f(1.0).abs() < 1e-9 && f(-2.0).abs() < 1e-9);
+        assert_eq!(
+            Weierstrass::default().representation().bounds()[0],
+            -0.5..=0.5
+        );
+    }
+
+    #[test]
+    fn katsuura() {
+        check_optimum(&Katsuura::new(5));
+        let f = |x: f64| Katsuura::new(1).evaluate(&at(&[x]));
+        // 2 · 0.25 is 0.5 from an integer; 4 · 0.25 and higher are integers: the sum is 0.25,
+        // and the value 10 · 1.25¹⁰ − 10
+        assert_close(f(0.25), 10.0 * 1.25f64.powi(10) - 10.0, 1e-12);
+        // the multiples of 1/2 are global minima
+        for x in [0.5, -1.5, 3.0, 5.0] {
+            assert_eq!(f(x), 0.0);
+        }
+        assert!(f(0.3) > 0.0);
+    }
+
+    #[test]
+    fn happy_cat_and_hg_bat() {
+        check_optimum(&HappyCat::new(5));
+        check_optimum(&HgBat::new(5));
+        // |0 − 2|^(1/4) + 0 + ½
+        assert_close(
+            HappyCat::new(2).evaluate(&at(&[0.0, 0.0])),
+            2f64.powf(0.25) + 0.5,
+            1e-15,
+        );
+        // on the sphere Σ xᵢ² = n, the first term is 0: (1 + 2) / 2 + ½
+        assert_eq!(HappyCat::new(2).evaluate(&at(&[1.0, 1.0])), 2.0);
+        // |4 − 4|^(1/2) + 3 / 2 + ½, and |4 − 0|^(1/2) + 1 / 2 + ½
+        assert_eq!(HgBat::new(2).evaluate(&at(&[1.0, 1.0])), 2.0);
+        assert_eq!(HgBat::new(2).evaluate(&at(&[1.0, -1.0])), 3.0);
+        assert_eq!(HappyCat::default().representation().bounds()[0], -5.0..=5.0);
+        // the minimum (−1, …, −1) is the only point where the second part, Σ (xᵢ + 1)² / 2n,
+        // is 0
+        let mut rng = StreamRng::seed_from_u64(5);
+        let real = HappyCat::new(4).representation();
+        for _ in 0..1000 {
+            let x = real.random_genome(&mut rng);
+            let part = x.iter().map(|xi| (xi + 1.0) * (xi + 1.0)).sum::<f64>() / 8.0;
+            assert!(HappyCat::new(4).evaluate(&x) >= part - 1e-12);
+            assert!(HgBat::new(4).evaluate(&x) >= part - 1e-12);
+        }
+    }
+
+    #[test]
+    fn schaffer_f7() {
+        check_optimum(&SchafferF7::new(5));
+        // in 2 dimensions at (1, 0): s = 1, and ((1 + sin² 50))²
+        let expected = math::powi(1.0 + math::powi(math::sin(50.0), 2), 2);
+        assert_close(
+            SchafferF7::new(2).evaluate(&at(&[1.0, 0.0])),
+            expected,
+            1e-15,
+        );
+        // the mean of the pairs, squared: (0, 1, 0) has two pairs with s = 1
+        assert_close(
+            SchafferF7::new(3).evaluate(&at(&[0.0, 1.0, 0.0])),
+            expected,
+            1e-15,
+        );
+        assert_eq!(
+            SchafferF7::default().representation().bounds()[0],
+            -100.0..=100.0
+        );
+    }
+
+    // sign changes and permutations of the genes don't change the functions of batch 10b that
+    // are symmetric
+    #[test]
+    fn symmetric_functions_of_batch_10b() {
+        let mut rng = StreamRng::seed_from_u64(9);
+        let real = Real::uniform(6, -0.5..=0.5).expect("valid");
+        for _ in 0..200 {
+            let x = real.random_genome(&mut rng);
+            let negated: Reals = x.iter().map(|xi| -xi).collect();
+            let reversed: Reals = x.iter().rev().copied().collect();
+            let sign = |f: &dyn Fn(&Reals) -> f64| assert_close(f(&x), f(&negated), 1e-12);
+            let order = |f: &dyn Fn(&Reals) -> f64| assert_close(f(&x), f(&reversed), 1e-12);
+            sign(&|x| SumOfDifferentPowers::new(6).evaluate(x));
+            sign(&|x| HighConditionedElliptic::new(6).evaluate(x));
+            sign(&|x| BentCigar::new(6).evaluate(x));
+            sign(&|x| Discus::new(6).evaluate(x));
+            sign(&|x| DifferentPowers::new(6).evaluate(x));
+            sign(&|x| NonContinuousRastrigin::new(6).evaluate(x));
+            sign(&|x| Weierstrass::new(6).evaluate(x));
+            sign(&|x| SchafferF7::new(6).evaluate(x));
+            sign(&|x| RotatedHyperEllipsoid::new(6).evaluate(x));
+            order(&|x| NonContinuousRastrigin::new(6).evaluate(x));
+            order(&|x| Weierstrass::new(6).evaluate(x));
+            order(&|x| SchafferF7::new(6).evaluate(x));
+            order(&|x| HappyCat::new(6).evaluate(x));
+            order(&|x| HgBat::new(6).evaluate(x));
         }
     }
 }

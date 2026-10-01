@@ -64,6 +64,30 @@
 //! | [`Langermann`] | 2 | [0, 10] | −4.15581 at (2.79340, 1.59723), best known |
 //! | [`ShekelFoxholes`] | 2 | [−65.536, 65.536] | 0.99800 near (−32, −32), best known |
 //! | [`Kowalik`] | 4 | [−5, 5] | 3.07486e-4 at (0.19283, 0.19084, 0.12312, 0.13577), best known |
+//! | [`SumOfDifferentPowers`] | any (30) | [−1, 1] | 0 at the origin |
+//! | [`Step`] | any (30) | [−100, 100] | 0 on [−0.5, 0.5)ⁿ |
+//! | [`Quartic`] | any (30) | [−1.28, 1.28] | 0 at the origin, without noise |
+//! | [`Penalized1`] | any (30) | [−50, 50] | 0 at (−1, …, −1) |
+//! | [`Penalized2`] | any (30) | [−50, 50] | 0 at (1, …, 1) |
+//! | [`HighConditionedElliptic`] | 2 or more (30) | [−100, 100] | 0 at the origin |
+//! | [`BentCigar`] | 2 or more (30) | [−100, 100] | 0 at the origin |
+//! | [`Discus`] | 2 or more (30) | [−100, 100] | 0 at the origin |
+//! | [`DifferentPowers`] | 2 or more (30) | [−5, 5] | 0 at the origin |
+//! | [`BucheRastrigin`] | 2 or more (30) | [−5, 5] | 0 at the origin |
+//! | [`NonContinuousRastrigin`] | any (30) | [−5.12, 5.12] | 0 at the origin |
+//! | [`Weierstrass`] | any (30) | [−0.5, 0.5] | 0 at the origin |
+//! | [`Katsuura`] | any (30) | [−5, 5] | 0 at the origin, and wherever every gene is a multiple of 1/2 |
+//! | [`HappyCat`] | any (30) | [−5, 5] | 0 at (−1, …, −1) |
+//! | [`HgBat`] | any (30) | [−5, 5] | 0 at (−1, …, −1) |
+//! | [`SchafferF7`] | 2 or more (30) | [−100, 100] | 0 at the origin |
+//! | [`RotatedHyperEllipsoid`] | any (30) | [−65.536, 65.536] | 0 at the origin |
+//!
+//! Two wrappers make instances of any of them, as the CEC and BBOB suites do: [`Shifted`] moves
+//! the optimum to a point drawn from a seed, and [`Rotated`] turns the function about its
+//! optimum by an orthogonal matrix drawn from a seed, so that the genes interact. The shifted and
+//! the shifted rotated Rastrigin of CEC 2005 (F9 and F10) are
+//! `Shifted::new(Rastrigin::new(n), seed)` and `Rotated::new(Shifted::new(Rastrigin::new(n), seed), seed)`,
+//! with genoxide's own shift and matrix rather than the report's data files.
 //!
 //! The classic functions but [`Eggholder`], [`Schwefel2_21`] and [`Schwefel2_22`], which aren't
 //! differentiable everywhere, supply their analytic gradient to the algorithms that want one (see
@@ -112,6 +136,22 @@
 //!   optimisation problems. *International Journal of Mathematical Modelling and Numerical
 //!   Optimisation* 4(2): 150-194. arXiv:1308.4008
 //!
+//! The functions of the CEC competitions and of BBOB are taken from their reports, which define
+//! them:
+//!
+//! - Suganthan, P. N., Hansen, N., Liang, J. J., Deb, K., Chen, Y.-P., Auger, A. and Tiwari, S.
+//!   (2005). *Problem Definitions and Evaluation Criteria for the CEC 2005 Special Session on
+//!   Real-Parameter Optimization.* Nanyang Technological University and KanGAL report 2005005
+//! - Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box Optimization
+//!   Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report RR-6829
+//! - Liang, J. J., Qu, B. Y. and Suganthan, P. N. (2013). *Problem Definitions and Evaluation
+//!   Criteria for the CEC 2014 Special Session and Competition on Single Objective
+//!   Real-Parameter Numerical Optimization.* Zhengzhou University and Nanyang Technological
+//!   University, technical report 201311
+//! - Awad, N. H., Ali, M. Z., Suganthan, P. N., Liang, J. J. and Qu, B. Y. (2016). *Problem
+//!   Definitions and Evaluation Criteria for the CEC 2017 Special Session and Competition on
+//!   Single Objective Real-Parameter Numerical Optimization.* Nanyang Technological University
+//!
 //! Optima not given to full precision by the sources are derived from the formulas, and the docs
 //! say how.
 //!
@@ -125,6 +165,7 @@ mod classic;
 pub mod control;
 pub mod engineering;
 mod gradients;
+mod transform;
 
 pub use classic::{
     Ackley, AxisParallelEllipsoid, Branin, GoldsteinPrice, Griewank, Himmelblau, Levy, Michalewicz,
@@ -135,7 +176,13 @@ pub use classic::{
     Beale, Bohachevsky1, Bohachevsky2, Bohachevsky3, Booth, DixonPrice, Kowalik, Langermann,
     Matyas, Powell, Schwefel2_21, Schwefel2_22, ShekelFoxholes, ThreeHumpCamel, Trid,
 };
+pub use classic::{
+    BentCigar, BucheRastrigin, DifferentPowers, Discus, HappyCat, HgBat, HighConditionedElliptic,
+    Katsuura, NonContinuousRastrigin, Penalized1, Penalized2, Quartic, RotatedHyperEllipsoid,
+    SchafferF7, Step, SumOfDifferentPowers, Weierstrass,
+};
 pub use classic::{Easom, Eggholder, Hartmann3, Hartmann6, SchafferF6, Shekel5, Shekel7, Shekel10};
+pub use transform::{Rotated, Shifted};
 
 use crate::constraint::{at_most, equal};
 use crate::engine::{Extras, FitnessFunction, IntoFitness, Provided};
@@ -479,6 +526,23 @@ pub fn all() -> Vec<Box<dyn DynProblem>> {
         boxed(Langermann),
         boxed(ShekelFoxholes),
         boxed(Kowalik),
+        boxed(SumOfDifferentPowers::default()),
+        boxed(Step::default()),
+        boxed(Quartic::default()),
+        boxed(Penalized1::default()),
+        boxed(Penalized2::default()),
+        boxed(HighConditionedElliptic::default()),
+        boxed(BentCigar::default()),
+        boxed(Discus::default()),
+        boxed(DifferentPowers::default()),
+        boxed(BucheRastrigin::default()),
+        boxed(NonContinuousRastrigin::default()),
+        boxed(Weierstrass::default()),
+        boxed(Katsuura::default()),
+        boxed(HappyCat::default()),
+        boxed(HgBat::default()),
+        boxed(SchafferF7::default()),
+        boxed(RotatedHyperEllipsoid::default()),
         boxed(cec2006::G01),
         boxed(cec2006::G02),
         boxed(cec2006::G03::default()),
@@ -523,7 +587,7 @@ mod tests {
     #[test]
     fn the_registry_describes_every_problem() {
         let problems = all();
-        assert_eq!(problems.len(), 71);
+        assert_eq!(problems.len(), 88);
         let names: HashSet<_> = problems.iter().map(|problem| problem.name()).collect();
         assert_eq!(names.len(), problems.len(), "names are unique");
         let mut rng = StreamRng::seed_from_u64(0);
