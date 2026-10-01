@@ -218,7 +218,7 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [x] Python: OpenAI's ES, the networks and control tasks, NEAT, and genetic programming with built-in primitives and your own, evaluated by numpy ([#385](https://github.com/tachsin/genoxide/pull/385), [#387](https://github.com/tachsin/genoxide/pull/387), [#389](https://github.com/tachsin/genoxide/pull/389))
 
 ### 0.12: Local optimization
-- [x] Convergence as a stop reason (`StopReason::Converged`), random restarts for local methods, Nelder-Mead with adaptive coefficients and speculative asks ([docs/optimization-plan.md](docs/optimization-plan.md), batch A1)
+- [x] Convergence as a stop reason (`StopReason::Converged`), random restarts for local methods, Nelder-Mead with adaptive coefficients and speculative asks ([#371](https://github.com/tachsin/genoxide/pull/371); [docs/optimization-plan.md](docs/optimization-plan.md), batch A1)
 - [ ] Linear algebra through a dependency pinned to a portable path (batch A1)
 - [ ] Gradients (supplied, or by finite differences evaluated as one batch), line searches, L-BFGS-B (batch A2)
 
