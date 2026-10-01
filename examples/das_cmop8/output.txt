@@ -1,0 +1,3 @@
+NSGA-II, η = 20, 1000 generations: 300 solutions, 300 feasible, IGD+ 0.0158, hypervolume 0.7432, 97.2% of the sample's
+NSGA-III, η = 5, 1000 generations: 300 solutions, 300 feasible, IGD+ 0.0111, hypervolume 0.7603, 99.4% of the sample's
+the whole front: hypervolume 0.7853; a sample of 346 of its points: 0.7647

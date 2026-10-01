@@ -1,0 +1,3 @@
+NSGA-III, 1000 generations: 1 solution, none feasible, the least violation 0.8975
+NSGA-III, unconstrained, 1000 generations: 92 solutions, 92 feasible, IGD+ 0.0289, hypervolume 1.1203, 99.7% of the sample's
+the whole front: hypervolume 1.1577; a sample of 105 of its points: 1.1239

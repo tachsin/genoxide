@@ -1,0 +1,3 @@
+NSGA-II, η = 20, 1000 generations: 253 solutions, 253 feasible, IGD+ 0.1432, hypervolume 0.6155
+NSGA-II, η = 5, 1000 generations: 230 solutions, 230 feasible, IGD+ 0.1418, hypervolume 0.6176
+the whole front: hypervolume 0.8612
