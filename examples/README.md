@@ -191,7 +191,7 @@ python examples/tsp_berlin52/main.py
 | [Cart-pole](cart_pole/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cart-pole) |
 | [Double pole balancing](double_pole/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/double-pole) |
 | [Double pole balancing without velocities](double_pole_no_velocities/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/double-pole-no-velocities) |
-| [Two spirals](two_spirals/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/two-spirals) |
+| [Two spirals](two_spirals/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/two-spirals) |
 | [Koza's quartic](koza_quartic/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/koza-quartic) |
 | [Koza's 11-multiplexer](multiplexer_11/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/multiplexer-11) |
 | [\|x\| by strongly typed GP](abs_typed/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/abs-typed) |

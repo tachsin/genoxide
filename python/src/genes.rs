@@ -1,7 +1,8 @@
-//! Genomes as numpy arrays: one genome as a 1-D array, a batch as a 2-D array with a genome per
-//! row, new or, for a batch, the matrix of an earlier batch that Python didn't keep, written
-//! again.
+//! Genomes as Python sees them ([`PyGenome`]): the genomes of genes ([`Genes`]) as numpy arrays,
+//! one genome as a 1-D array, a batch as a 2-D array with a genome per row, new or, for a batch,
+//! the matrix of an earlier batch that Python didn't keep, written again.
 
+use crate::snapshot::{Kept, Packed};
 use genoxide::genome::{AdaptiveReals, Bits, Genome, Integers, Order, Reals};
 use numpy::ndarray::Array2;
 use numpy::{Element, IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyUntypedArrayMethods};
@@ -10,8 +11,101 @@ use pyo3::prelude::*;
 use std::cell::RefCell;
 use std::thread::LocalKey;
 
+/// What a genome needs to become a Python object, besides itself: nothing for the genomes of
+/// genes.
+#[derive(Clone, Copy, Debug, Default)]
+pub enum GenomeContext {
+    #[default]
+    None,
+}
+
+/// A genome that Python sees: as a Python object for the fitness function, the progress and the
+/// result, and kept after a generation until the progress reads it.
+pub trait PyGenome: Genome + Clone + Send + Sync + 'static {
+    /// The genome as a Python object, e.g. a 1-D numpy array.
+    fn object<'py>(&self, py: Python<'py>, cx: &GenomeContext) -> PyResult<Bound<'py, PyAny>>;
+
+    /// The genomes as one Python object for a batch fitness function, e.g. a 2-D numpy array
+    /// with a genome per row.
+    fn batch<'py>(
+        py: Python<'py>,
+        genomes: &[&Self],
+        cx: &GenomeContext,
+    ) -> PyResult<Bound<'py, PyAny>>;
+
+    /// Writes `genomes` into `batch`, an object of an earlier [`batch`](PyGenome::batch) that only
+    /// the caller references, if it can. Returns whether it did; never by default.
+    fn refill(_batch: &Bound<'_, PyAny>, _genomes: &[&Self]) -> bool {
+        false
+    }
+
+    /// The genomes, copied for a progress object, to become a Python object when it's read.
+    fn keep<'a>(
+        genomes: impl ExactSizeIterator<Item = &'a Self>,
+        cx: &GenomeContext,
+    ) -> Box<dyn Kept>
+    where
+        Self: 'a;
+
+    /// The genome as real numbers, if it is: what the test problems of `genoxide::problems`
+    /// evaluate.
+    fn reals(&self) -> Option<&Reals> {
+        None
+    }
+
+    /// The genome as whole numbers, if it is: what the integer test problems evaluate.
+    fn integers(&self) -> Option<&Integers> {
+        None
+    }
+
+    /// The genome as bits, if it is: what the binary test problems evaluate.
+    fn bits(&self) -> Option<&Bits> {
+        None
+    }
+}
+
+impl<G: Genes> PyGenome for G {
+    fn object<'py>(&self, py: Python<'py>, _: &GenomeContext) -> PyResult<Bound<'py, PyAny>> {
+        Ok(array(py, self).into_any())
+    }
+
+    fn batch<'py>(
+        py: Python<'py>,
+        genomes: &[&Self],
+        _: &GenomeContext,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        matrix(py, genomes).map(Bound::into_any)
+    }
+
+    fn refill(batch: &Bound<'_, PyAny>, genomes: &[&Self]) -> bool {
+        refill_matrix(batch, genomes)
+    }
+
+    fn keep<'a>(
+        genomes: impl ExactSizeIterator<Item = &'a Self>,
+        _: &GenomeContext,
+    ) -> Box<dyn Kept>
+    where
+        Self: 'a,
+    {
+        Box::new(Packed::new(genomes))
+    }
+
+    fn reals(&self) -> Option<&Reals> {
+        Genes::reals(self)
+    }
+
+    fn integers(&self) -> Option<&Integers> {
+        Genes::integers(self)
+    }
+
+    fn bits(&self) -> Option<&Bits> {
+        Genes::bits(self)
+    }
+}
+
 /// A genome whose genes go into numpy arrays.
-pub trait Genes: Genome + 'static {
+pub trait Genes: Genome + Clone + Send + Sync + 'static {
     /// The numpy type of a gene: `bool`, `float64` or `int64`.
     type Element: Element + Copy;
 

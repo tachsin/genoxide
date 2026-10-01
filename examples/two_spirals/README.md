@@ -5,7 +5,7 @@ summary: Evolve the 2,545 weights of a neural network that tells two interleaved
 reference: "Lang, K. J. and Witbrock, M. J. (1988). Learning to tell two spirals apart. Proceedings of the 1988 Connectionist Models Summer School: 52-59. The method: Salimans, T., Ho, J., Chen, X., Sidor, S. and Sutskever, I. (2017). Evolution strategies as a scalable alternative to reinforcement learning. arXiv:1703.03864."
 reference_url: https://arxiv.org/abs/1703.03864
 optimum: "All 194 points classified"
-languages: [rust]
+languages: [rust, python]
 order: 254
 ---
 
@@ -24,7 +24,8 @@ angle `i π / 16` and the radius `6.5 (104 − i) / 104`, at `(r sin θ, r cos �
 spiral's point is at `(−x, −y)`. Here they're scaled by 1/6.5, to [−1, 1]², and computed with
 genoxide's portable `math::sin` and `math::cos`, so they're the same bits on every platform.
 
-There's no Python version: the Python package has no networks or `OpenEs` yet.
+The Python version computes them with `gx.math.sin` and `gx.math.cos`, and runs the network in
+Rust with `gx.nn.Mlp.forward`: it prints the same output and writes the same trace.
 
 ## What makes it hard
 

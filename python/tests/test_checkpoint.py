@@ -47,6 +47,9 @@ ALGORITHMS = {
     "de": lambda: gx.De(real, population_size=20, objective="minimize", seed=1),
     "es": lambda: gx.Es(real, parents=4, offspring=28, objective="minimize", seed=1),
     "cmaes": lambda: gx.Cmaes(real, restarts="ipop", objective="minimize", seed=1),
+    "open es": lambda: gx.OpenEs(
+        real, population_size=20, evaluate_mean=True, objective="minimize", seed=1
+    ),
     "pso": lambda: gx.Pso(real, population_size=20, objective="minimize", seed=1),
     "local search": lambda: gx.LocalSearch(
         real, neighbor=gx.GaussianMutation(0.1, rate=0.5), neighbors=3, objective="minimize", seed=1

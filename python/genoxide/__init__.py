@@ -1,8 +1,8 @@
 """Evolutionary computation in Rust, for Python.
 
-Genetic algorithms, local search, differential evolution, evolution strategies, CMA-ES, particle
-swarm optimization, the island model, and NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for
-several objectives, from
+Genetic algorithms, local search, differential evolution, evolution strategies, CMA-ES, OpenAI's
+evolution strategy, particle swarm optimization, the island model, and NSGA-II, NSGA-III, SPEA2,
+MOEA/D and SMS-EMOA for several objectives, from
 `genoxide <https://github.com/tachsin/genoxide>`_, with Python fitness functions::
 
     import genoxide as gx
@@ -28,7 +28,10 @@ of scores: at most one call per generation, for vectorized numpy code.
 
 :mod:`genoxide.problems` has test problems from the literature, single- and multi-objective,
 which ``run`` evaluates in Rust, and :mod:`genoxide.indicators` the quality indicators of
-multi-objective fronts.
+multi-objective fronts. :mod:`genoxide.nn` has neural networks whose weights a genome holds, and
+:mod:`genoxide.problems.control` pole-balancing tasks for them (neuroevolution).
+:mod:`genoxide.math` has genoxide's portable math functions, the same to the bit on every
+platform.
 
 A run stops at the first of its stop conditions: ``generations``, ``evaluations``, ``target``,
 ``time`` (seconds) and ``stagnation`` (generations without improvement), or when its
@@ -49,7 +52,7 @@ A wrong one is a ``ValueError`` that names it.
 from __future__ import annotations
 
 import json
-import math
+import math as _math
 import numbers
 import operator
 import os
@@ -116,6 +119,9 @@ __all__ = [
     "De",
     "Es",
     "Cmaes",
+    "OpenEs",
+    "Adam",
+    "Sgd",
     "Pso",
     "LocalSearch",
     "Islands",
@@ -136,12 +142,15 @@ __all__ = [
     "RunningDe",
     "RunningEs",
     "RunningCmaes",
+    "RunningOpenEs",
     "RunningPso",
     "RunningLocalSearch",
     "RunningIslands",
     # submodules
     "problems",
     "indicators",
+    "nn",
+    "math",
 ]
 
 ObjectiveName = Literal["maximize", "minimize"]
@@ -208,7 +217,7 @@ def _number(name: str, value: Any, *, plural: bool = False) -> float:
     if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
         raise ValueError(wrong)
     number = float(value)
-    if not math.isfinite(number):
+    if not _math.isfinite(number):
         raise ValueError(wrong)
     return number
 
@@ -321,6 +330,16 @@ class Real:
 
     def _describe(self) -> dict[str, Any]:
         return {"type": "real", "bounds": _bounds("Real", self.bounds, self.length, _real_bound)}
+
+    def random_genome(self, seed: int) -> np.ndarray:
+        """A random genome, uniform within the bounds: the one that genoxide's Rust
+        ``real.random_genome(&mut StreamRng::seed_from_u64(seed))`` gives, so that a Python program
+        can start from the same point as a Rust one, e.g. ``OpenEs(initial_mean=...)``.
+
+        ``seed`` is 0 to 2^64 - 1.
+        """
+        bounds = [tuple(pair) for pair in self._describe()["bounds"]]
+        return _genoxide.random_real(bounds, _whole("seed", seed))
 
 
 @dataclass(frozen=True)
@@ -1100,8 +1119,8 @@ class Running:
     ``on_generation`` to stop a run.
 
     Each algorithm has a class of its own, with its settings as properties: :class:`RunningGa`,
-    :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`, :class:`RunningPso`,
-    :class:`RunningLocalSearch` and :class:`RunningIslands`. A new value is checked as in the
+    :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`, :class:`RunningOpenEs`,
+    :class:`RunningPso`, :class:`RunningLocalSearch` and :class:`RunningIslands`. A new value is checked as in the
     algorithm's constructor: a wrong one raises a ``ValueError`` and changes nothing. The handle
     works only during the callback; afterwards it raises a ``RuntimeError``.
 
@@ -1253,6 +1272,34 @@ class RunningEs(Running):
     __slots__ = ()
 
 
+class RunningOpenEs(Running):
+    """A running :class:`OpenEs`, for ``control``: its sigma and learning rate, e.g. both decayed
+    over the run. Sigma applies from the next samples, the learning rate from the next step of the
+    mean; the optimizer keeps its memory. Re-evaluation scores the last samples again without
+    moving the mean."""
+
+    __slots__ = ()
+
+    @property
+    def sigma(self) -> float:
+        """The perturbations' standard deviation, a fraction of each gene's range, greater than
+        0."""
+        return float(self._get("sigma"))
+
+    @sigma.setter
+    def sigma(self, sigma: float) -> None:
+        self._set("sigma", _number("sigma", sigma))
+
+    @property
+    def learning_rate(self) -> float:
+        """The optimizer's learning rate, a fraction of each gene's range, greater than 0."""
+        return float(self._get("learning_rate"))
+
+    @learning_rate.setter
+    def learning_rate(self, learning_rate: float) -> None:
+        self._set("learning_rate", _number("learning_rate", learning_rate))
+
+
 class RunningPso(Running):
     """A running :class:`Pso`, for ``control``: its inertia and accelerations, e.g. an inertia
     falling from 0.9 to 0.4 over the run (Shi and Eberhart, 1998), or accelerations from a large
@@ -1397,7 +1444,7 @@ def _seconds(time: Any) -> float | None:
     if isinstance(time, (bool, np.bool_)) or not isinstance(time, numbers.Real):
         raise ValueError(f"time is a number of seconds, not {time!r}")
     seconds = float(time)
-    if seconds == math.inf:
+    if seconds == _math.inf:
         return None
     if not seconds >= 0:
         raise ValueError(f"time is a number of seconds, at least 0, not {time!r}")
@@ -1623,7 +1670,9 @@ class _SingleObjective(_Algorithm):
             deterministic. A problem of :mod:`genoxide.problems` is evaluated in Rust, with no
             Python call: ``batch`` doesn't apply, the genome must be the problem's
             (``problem.genome``: a :class:`Real`, or an :class:`Integer` for
-            :class:`~genoxide.problems.engineering.GearTrain`), and the objective "minimize".
+            :class:`~genoxide.problems.engineering.GearTrain`), and the objective "minimize". So
+            is a :class:`~genoxide.problems.control.Balance`, with a :class:`Real` genome of a
+            gene per weight of its network, and the objective "maximize".
         generations : int, optional
             Stops after this many generations, 0 or more. 0 evaluates only the initial
             population.
@@ -1652,7 +1701,8 @@ class _SingleObjective(_Algorithm):
             Called as ``control(algorithm, progress)`` once per generation, after
             ``on_generation``, on the same thread, with the running algorithm (a
             :class:`RunningGa`, :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`,
-            :class:`RunningPso`, :class:`RunningLocalSearch` or :class:`RunningIslands`) and a
+            :class:`RunningOpenEs`, :class:`RunningPso`, :class:`RunningLocalSearch` or
+            :class:`RunningIslands`) and a
             :class:`Progress`: to change the algorithm's
             settings for the next generation, or to re-evaluate it after the fitness function
             changed. See :class:`Running`.
@@ -1716,7 +1766,7 @@ class _SingleObjective(_Algorithm):
         callback = _on_generation(on_generation, Progress)
         controls = _control(control, self)
         saving = _checkpoints(checkpoint, checkpoint_every, resume)
-        if isinstance(fitness, problems.Problem):
+        if isinstance(fitness, (problems.Problem, problems.control.Balance)):
             description = fitness._json()
             return Result(
                 **self._run(
@@ -2154,6 +2204,154 @@ class Cmaes(_SingleObjective):
         }
 
 
+@dataclass(frozen=True)
+class Adam:
+    """Adam (Kingma and Ba, 2015), the optimizer of :class:`OpenEs` by default: steps of about
+    ``learning_rate`` per gene whatever the scale of the gradient, from averages of the gradient
+    and of its square, corrected for their start at 0.
+
+    ``learning_rate`` is a fraction of each gene's range, greater than 0; ``beta1`` and ``beta2``
+    the decays of the averages, in [0, 1): Kingma and Ba's 0.9 and 0.999 by default.
+    """
+
+    learning_rate: float
+    beta1: float = 0.9
+    beta2: float = 0.999
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "adam",
+            "learning_rate": _number("Adam.learning_rate", self.learning_rate),
+            "beta1": _number("Adam.beta1", self.beta1),
+            "beta2": _number("Adam.beta2", self.beta2),
+        }
+
+
+@dataclass(frozen=True)
+class Sgd:
+    """Gradient ascent with momentum, an optimizer of :class:`OpenEs`: the velocity
+    ``v = momentum v + (1 - momentum) g``, then the mean moves by ``learning_rate v``.
+
+    ``learning_rate`` is a fraction of each gene's range, greater than 0; ``momentum`` how much
+    of the last direction is kept, in [0, 1): 0.9 is common, 0 for none.
+    """
+
+    learning_rate: float
+    momentum: float
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "sgd",
+            "learning_rate": _number("Sgd.learning_rate", self.learning_rate),
+            "momentum": _number("Sgd.momentum", self.momentum),
+        }
+
+
+Optimizer = Union[Adam, Sgd]
+_OPTIMIZER = "gx.Adam(learning_rate) or gx.Sgd(learning_rate, momentum)"
+
+
+class OpenEs(_SingleObjective):
+    """OpenAI's evolution strategy (Salimans, Ho, Chen, Sidor and Sutskever, 2017). Real genomes.
+
+    The baseline of neuroevolution at scale: a mean moves along an estimate of the gradient of the
+    expected fitness of the samples ``mean + sigma eps``, ``eps`` standard normal, gene by gene in
+    units of each gene's range. Each generation draws ``population_size / 2`` perturbations and
+    asks for ``mean + sigma eps`` and ``mean - sigma eps`` (mirrored sampling), clamped to the
+    bounds; replaces their scores by their ranks, spread evenly over [-0.5, 0.5]; and lets the
+    ``optimizer`` move the mean along the rank-weighted sum of the perturbations. Its cost per
+    sample is linear in the number of genes, without the covariance matrix of :class:`Cmaes`, so it
+    scales to tens of thousands of genes, such as a network's weights (:mod:`genoxide.nn`). The
+    population is the last samples, followed by the mean if it is evaluated.
+
+    Parameters
+    ----------
+    genome : Real
+        The search space.
+    population_size : int
+        The samples per generation, even (mirrored pairs), 2 to 2^24: tens to thousands.
+    sigma : float, default 0.02
+        The perturbations' standard deviation, a fraction of each gene's range, greater than 0.
+    optimizer : Adam or Sgd, default Adam(0.01)
+        How the mean follows the gradient estimate. Adam steps about its learning rate per gene
+        even near the optimum: lower it for precise answers.
+    weight_decay : float, default 0
+        The pull of the mean toward 0 (L2 regularization, as Salimans et al. used on networks'
+        weights): the gradient loses ``weight_decay`` times the mean, in units of each gene's
+        range. 0 or more.
+    evaluate_mean : bool, default False
+        Whether the mean is evaluated each generation too, after the samples: one more evaluation
+        per generation, counted, and a candidate for the best solution. On many problems it is
+        better than all the samples.
+    initial_mean : array_like, optional
+        The initial mean, a gene per gene of ``genome``, within its bounds. A random point within
+        the bounds by default; small weights, e.g. from ``Real((-0.25, 0.25),
+        length=n).random_genome(seed)``, suit networks.
+    parallel_breeding : bool, default False
+        Whether the samples are drawn on all cores, each pair with random numbers of its own: a
+        seed gives other results than without it, but the same on any number of cores. It pays
+        off with thousands of genes and a fast fitness function.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
+    """
+
+    _running = RunningOpenEs
+
+    def __init__(
+        self,
+        genome: Real,
+        *,
+        population_size: int,
+        sigma: float | None = None,
+        optimizer: Optimizer | None = None,
+        weight_decay: float | None = None,
+        evaluate_mean: bool | None = None,
+        initial_mean: Sequence[float] | np.ndarray | None = None,
+        parallel_breeding: bool | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.population_size = population_size
+        self.sigma = sigma
+        self.optimizer = optimizer
+        self.weight_decay = weight_decay
+        self.evaluate_mean = evaluate_mean
+        self.initial_mean = initial_mean
+        self.parallel_breeding = parallel_breeding
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        optimizer = None
+        if self.optimizer is not None:
+            if not isinstance(self.optimizer, (Adam, Sgd)):
+                raise ValueError(f"optimizer is {_OPTIMIZER}, not {self.optimizer!r}")
+            optimizer = self.optimizer._describe()
+        initial_mean = None
+        if self.initial_mean is not None:
+            mean = np.asarray(self.initial_mean, dtype=object)
+            if mean.ndim != 1:
+                raise ValueError(
+                    f"initial_mean is a 1-D array, a value per gene, not of shape {mean.shape}"
+                )
+            initial_mean = [_number("initial_mean", gene, plural=True) for gene in mean]
+        return {
+            "type": "open_es",
+            "population_size": _whole("population_size", self.population_size),
+            "sigma": _optional_number("sigma", self.sigma),
+            "optimizer": optimizer,
+            "weight_decay": _optional_number("weight_decay", self.weight_decay),
+            "evaluate_mean": _flag("evaluate_mean", self.evaluate_mean),
+            "initial_mean": initial_mean,
+            "parallel_breeding": _flag("parallel_breeding", self.parallel_breeding),
+            "seed": _optional_whole("seed", self.seed),
+        }
+
+
 class Pso(_SingleObjective):
     """Particle swarm optimization. Real genomes.
 
@@ -2553,7 +2751,7 @@ class _MultiObjective(_Algorithm):
             of ``fitness`` under way return.
         """
         _check_callable(fitness)
-        if isinstance(fitness, problems.Problem):
+        if isinstance(fitness, (problems.Problem, problems.control.Balance)):
             raise ValueError(
                 f"{type(fitness).__name__} has one objective: use a single-objective algorithm"
             )
@@ -2950,4 +3148,4 @@ class SmsEmoa(_MultiObjective):
 
 
 # the submodules use the classes above
-from . import indicators, problems  # noqa: E402
+from . import indicators, math, nn, problems  # noqa: E402
