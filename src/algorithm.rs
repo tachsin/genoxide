@@ -32,6 +32,7 @@ pub mod de;
 pub mod es;
 pub mod ga;
 pub mod islands;
+pub(crate) mod line_search;
 pub mod local;
 pub mod local_search;
 pub mod nelder_mead;
