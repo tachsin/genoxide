@@ -159,6 +159,23 @@ python examples/tsp_berlin52/main.py
 | [Convex C2-DTLZ2 with 3 objectives](convex_c2_dtlz2_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/convex-c2-dtlz2-3obj) |
 | [C3-DTLZ1 with 3 objectives](c3_dtlz1_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/c3-dtlz1-3obj) |
 | [C3-DTLZ4 with 3 objectives](c3_dtlz4_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/c3-dtlz4-3obj) |
+| [DTLZ8 with 3 objectives](dtlz8_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dtlz8-3obj) |
+| [DTLZ9 with 3 objectives](dtlz9_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dtlz9-3obj) |
+| [DC1-DTLZ1 with 3 objectives](dc1_dtlz1_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dc1-dtlz1-3obj) |
+| [DC1-DTLZ3 with 3 objectives](dc1_dtlz3_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dc1-dtlz3-3obj) |
+| [DC2-DTLZ1 with 3 objectives](dc2_dtlz1_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dc2-dtlz1-3obj) |
+| [DC2-DTLZ3 with 3 objectives](dc2_dtlz3_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dc2-dtlz3-3obj) |
+| [DC3-DTLZ1 with 3 objectives](dc3_dtlz1_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dc3-dtlz1-3obj) |
+| [DC3-DTLZ3 with 3 objectives](dc3_dtlz3_3obj/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dc3-dtlz3-3obj) |
+| [DAS-CMOP1](das_cmop1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/das-cmop1) |
+| [DAS-CMOP2](das_cmop2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/das-cmop2) |
+| [DAS-CMOP3](das_cmop3/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/das-cmop3) |
+| [DAS-CMOP4](das_cmop4/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/das-cmop4) |
+| [DAS-CMOP5](das_cmop5/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/das-cmop5) |
+| [DAS-CMOP6](das_cmop6/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/das-cmop6) |
+| [DAS-CMOP7](das_cmop7/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/das-cmop7) |
+| [DAS-CMOP8](das_cmop8/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/das-cmop8) |
+| [DAS-CMOP9](das_cmop9/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/das-cmop9) |
 | [Convex DTLZ2 with 3 objectives](convex_dtlz2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/convex-dtlz2) |
 | [Scaled DTLZ1 with 3 objectives](scaled_dtlz1/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/scaled-dtlz1) |
 | [Scaled DTLZ2 with 3 objectives](scaled_dtlz2/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/scaled-dtlz2) |

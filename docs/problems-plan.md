@@ -431,6 +431,18 @@ All x ∈ [0, 1]ⁿ, n = M + k − 1.
 | DTLZ8 (eq. 28), constrained | n = 10M | a line (f₁ = … = f_{M−1} = t, f_M = 1 − 4t, t ∈ [0, 1/6]) and a hyperplane 2f_M + fᵢ + fⱼ = 1, f_M ∈ [0, 1/3] (derived) | M constraints; **index erratum:** the block sums start at ⌊(j − 1)n/M⌋ + 1 (1-based) |
 | DTLZ9 (eq. 29), constrained | n = 10M | f₁ = … = f_{M−1}, f_M² + fⱼ² = 1 | M − 1 constraints |
 
+**Checked in batch 11** (DTLZ8 and DTLZ9, in the report, section 8.8-8.9, eqs. 28-29; no code of
+the authors' found). The index erratum is read as above. DTLZ8 needs M ≥ 3 (its last constraint
+takes the least sum of two different objectives other than f_M), and its surface part is not the
+whole plane but, derived and checked against random feasible points for M = 3 and 4: f_M = t in
+[0, 1/3], one of the first M − 1 objectives s in [(1 − t)/4, (1 − 2t)/2] and the others equal,
+u = 1 − 2t − s (a point with two unequal larger objectives is dominated by the lesser); ideal 0,
+nadir (3/4, …, 3/4, 1). DTLZ9 prints no mean (its objectives are sums, up to ⌈n/M⌉). Examples:
+NSGA-II for the report's 500 generations fails on both (DTLZ9: IGD+ 3.4 to 4.8), SMS-EMOA for
+20,000 generations reaches 99.5% to 100.7% (DTLZ8) and 98.6% (DTLZ9, IGD+ 0.0025, the sample's
+own) of a population-sized sample's hypervolume: the weakly dominated surfaces next to the line
+and the curve are what NSGA-II keeps and hypervolume selection drops.
+
 - **Erratum (DTLZ1):** the report's text says the Pareto set is x_M = 0; it is x_M = 0.5 (the
   CEC paper's eq. 8). genoxide's DTLZ1 uses 0.5 already.
 - **Numbering:** the CEC 2002 paper has seven problems: its DTLZ5 is the report's DTLZ6, its
@@ -688,6 +700,26 @@ v3 (the journal text not compared; v1 had different problems, "DAC-MOP").
   ellipse parameters a_k² = 0.3, b_k² = 1.2 (Table 2) vs 0.4 and 1.6 (eq. 5's example), and
   implementations in circulation that read 0.3 and 1.2 as the semi-axes; d at ζ = 0.
 
+**Checked in batch 11.** Read: the arXiv v3 text (tables 2-5, figure 6), and the authors' Java
+code and sampled fronts (their laboratory's page,
+<http://imagelab.stu.edu.cn/Content.aspx?type=content&Content_ID=1310>: no license, compared
+only). Settled by the code, which agrees with the paper otherwise: g sums from j = 2; a_k² = 0.3
+and b_k² = 1.2 are squares; at ζ = 0, d = 0 and e = 10³⁰ (genoxide: the constraint −g); at
+ζ = 1, |g − 0.5| ≤ 10⁻⁴. Fronts: the first feasible point of each ray α + g (1, …, 1) (each
+ellipse or sphere a quadratic in g along it), non-dominated: 20,000 rays plus the type I
+intervals' ends for two objectives, Das and Dennis's 288 divisions for three, cached per triplet.
+Against the authors' 144 sampled fronts, the mean distance is under 0.01 both ways for 130 (theirs
+to genoxide's) and 140 (genoxide's to theirs); the rest are their points that break the
+constraints (g ≠ 0.5 at ζ = 1, x₁ outside the type I intervals), the isolated x₁ = 1 at η = 0.5
+(feasible only in exact arithmetic), and genoxide's points pushed out by the type III spheres near
+the corners of DAS-CMOP8/9's front, which their files leave out. Examples (the paper's figure 6
+triplets, N = 300, 300,000 evaluations): NSGA-II with constrained dominance reproduces the
+paper's NSGA-II-CDP (DAS-CMOP1 IGD ≈ 0.7, DAS-CMOP2-3 ≈ 0.15); DAS-CMOP1-3 and DAS-CMOP9, with
+linked distance variables, aren't reached by any of genoxide's MOEAs (SBX and polynomial
+mutation move variables one at a time; the paper's MOEA/D-CDP uses differential evolution);
+DAS-CMOP4-6 are reached by NSGA-II with polynomial mutation η = 5 (19-20 of 20 seeds), and
+DAS-CMOP7-8 by NSGA-III with η = 5 (20 of 20 at 99% of a sample's hypervolume).
+
 #### LIR-CMOP1-14
 
 Fan, Z., Li, W., Cai, X., Huang, H., Fang, Y., You, Y., Mo, J., Wei, C. and Goodman, E. (2019).
@@ -722,6 +754,22 @@ on g: same front, most of the space infeasible), DC3 (M + 1 constraints: a segme
 DTLZ1 and DTLZ3. **U:** n (M + 4 and M + 9 assumed), DC2's and DC3's a and b values. Constraints
 are printed strict (">"). The supplement gives C2-DTLZ2's r as 0.1, which conflicts with Jain and
 Deb (0.4 / 0.5): genoxide follows Jain and Deb.
+
+**Checked in batch 11.** Read: the supplement and the arXiv paper, and the C++ code of the
+authors' laboratory, EMOC (<https://github.com/COLA-Laboratory/EMOC>, `src/problem/dcdtlz`, and
+its sampled fronts `pf_data/dc*dtlz`; no license, compared only). Settled: a = 3 throughout,
+b = 0.5 but for DC2-DTLZ1's 0.9 (EMOC; the supplement gives values for DC1 only); DC3 constrains
+the M − 1 position variables and g, M constraints (EMOC and the supplement's table 2, whose
+feasible shares, 3⁻ᵐ, fit only that; the supplement's "j = 1, …, m" would make the front
+infeasible); DTLZ3's g keeps DTLZ3's factor 100 (EMOC has 10, in its C1-DTLZ3 too); n = M + 4 and
+M + 9 stay assumed; the strict ">" is read as ≥. Table 2 gives DC1 a feasible share of 10.1%,
+arccos(b)/π for b = 0.95, where the text and EMOC have b = 0.5 (a third): genoxide follows the
+text. Fronts derived (DTLZ's front where the position variables are feasible; DC2's whole),
+agreeing with EMOC's samples (mean distances at most 0.011 both ways). Examples (NSGA-III with
+C-NSGA-III's settings, 1,000 generations): constrained dominance reaches DC1 (DC1-DTLZ3 within
+2% of the target) and stalls on DC2 (at the violation's local minima, no feasible solution in
+20/20) and DC3 (in a band of g), as the paper's C-NSGA-III does; solving without the constraints
+(DC2) or without the one on g (DC3) reaches the front.
 
 ### 1.5 Engineering design
 
@@ -1165,7 +1213,7 @@ page); a comparison belongs on the problems' own pages.
 | 9 | done ([#357](https://github.com/tachsin/genoxide/pull/357); the marine design after it, once its original was read) | Engineering design, several objectives (`multi::problems::engineering`, section 1.5's "Checked in batch 9") | Two-bar truss, welded beam (2 objectives), disc brake, car side impact (3 objectives), speed reducer (2 objectives), four-bar truss, water resource planning, rocket injector, vehicle crashworthiness, conceptual marine design (10) | an example per problem: `two_bar_truss`, `welded_beam_2obj`, `disc_brake`, `speed_reducer_2obj`, `four_bar_truss` (NSGA-II), `car_side_impact_3obj` (NSGA-III, Jain and Deb's settings), `rocket_injector`, `vehicle_crashworthiness`, `marine_design` (SMS-EMOA), `water_resource_planning` (SPEA2) |
 | 10a | done | Remaining low-dimensional and classic scalable functions (section 1.1's "Checked in batch 10a") | Beale, Booth, Matyas, Bohachevsky 1-3, Three-hump camel, Dixon-Price, Trid, Powell, Langermann, Shekel's foxholes, Kowalik, Schwefel 2.21, Schwefel 2.22 (15) | an example per function: `beale`, `booth`, `matyas`, `bohachevsky1` to `bohachevsky3`, `three_hump_camel`, `langermann`, `shekel_foxholes` and `kowalik` (30 seeds each of CMA-ES with and without IPOP, DE, PSO or a GA), `dixon_price` (CMA-ES with IPOP, DE and PSO in 5 and 10 dimensions), and `schwefel_2_21`, `schwefel_2_22`, `trid` and `powell` (CMA-ES, sep-CMA-ES, DE, PSO and a GA to errors of 1 … 1e-8) |
 | 10b |  | CEC and BBOB-style functions, and the shift / rotation wrappers | `Shifted<P>`, `Rotated<P>`; Sum of different powers, Step, Quartic (deterministic: without noise, or with noise seeded from the genome, since fitness functions must be deterministic), Penalized 1 and 2, High-conditioned elliptic, Bent cigar, Discus, Büche-Rastrigin, Non-continuous Rastrigin, Weierstrass, Katsuura, HappyCat, HGBat, Schaffer F7, Rotated hyper-ellipsoid, BBOB different powers (17; the shifted and rotated Rastrigin of CEC 2005 and BBOB are the wrappers around `Rastrigin`) | an example per function (e.g. CMA-ES with full and diagonal covariance on a rotated ellipsoid's page) |
-| 11 |  | Advanced constrained multi-objective suites | DAS-CMOP1-9 (with the 16 difficulty triplets as a parameter), DC-DTLZ (DC1-DC3 on DTLZ1/DTLZ3), DTLZ8, DTLZ9 (≈15) | an example per problem |
+| 11 | done | Advanced constrained multi-objective suites (sections 1.3's and 1.4's "Checked in batch 11") | DAS-CMOP1-9 (with the 16 difficulty triplets as a parameter), DC-DTLZ (DC1-DC3 on DTLZ1/DTLZ3), DTLZ8, DTLZ9 (17) | an example per problem: `das_cmop1` to `das_cmop6` (NSGA-II, the paper's settings and η = 5; DAS-CMOP1-3 not reached, linked variables), `das_cmop7` to `das_cmop9` (NSGA-II and NSGA-III; DAS-CMOP9 not reached), `dc1_dtlz1_3obj`, `dc1_dtlz3_3obj` (NSGA-III and SMS-EMOA), `dc2_dtlz1_3obj`, `dc2_dtlz3_3obj`, `dc3_dtlz1_3obj`, `dc3_dtlz3_3obj` (NSGA-III with constrained dominance, and without the constraints, or the one on g), `dtlz8_3obj`, `dtlz9_3obj` (NSGA-II for the report's 500 generations, and SMS-EMOA) |
 | 12 |  | Binary and combinatorial problems | OneMax, LeadingOnes, deceptive trap, royal road, NK landscapes (seeded), 0/1 knapsack (generated instance classes) (6) | an example per problem; `one_max` and `knapsack` switch to the problems |
 | 13 (optional) |  | Competition suites whose definitions are long | LIR-CMOP1-14, CEC 2009 UF1-UF10 and CF1-CF10, MaF1-MaF15, Deb's 1999 two-objective problems, Van Veldhuizen's constrained problems; the deferred engineering problems (section 1.5) once their originals are read | none; used by the benchmark suite |
 
