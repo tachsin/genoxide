@@ -5,7 +5,7 @@ summary: Evolve a recurrent neural network that balances two poles on a cart see
 reference: "Gruau, F., Whitley, D. and Pyeatt, L. (1996). A comparison between cellular encoding and direct encoding for genetic neural networks. Genetic Programming 1996: 81-89. On Wieland's (1991) double pole, with the settings of Gomez, F., Schmidhuber, J. and Miikkulainen, R. (2008). Accelerated neural evolution through cooperatively coevolved synapses. JMLR 9: 937-965."
 reference_url: https://www.jmlr.org/papers/v9/gomez08a.html
 optimum: "Balanced for 100,000 steps, and for 1000 steps from at least 200 of 625 other starts (Gruau et al.'s success criteria)"
-languages: [rust]
+languages: [rust, python]
 order: 253
 family: pole balancing
 tab: Two poles, no velocities
@@ -47,7 +47,10 @@ The task is `genoxide::problems::control::DoublePole::without_velocities()`, wit
 `damping_fitness`, `generalization` and `solved`, integrated as the double pole by fourth-order
 Runge-Kutta with portable `sin` and `cos`, the same bits on every platform.
 
-There's no Python version: the Python package has no networks or control tasks yet.
+The Python version runs the task, the network and the damping fitness in Rust
+(`gx.problems.control.DoublePole(velocities=False)`, `gx.nn.Elman`, `Balance(...,
+fitness="damping")`), and NEAT with `gx.Neat`, its recurrent networks' policies run in Rust
+too: it prints the same output and writes the same trace.
 
 ## What makes it hard
 
