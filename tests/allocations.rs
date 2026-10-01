@@ -1,6 +1,6 @@
-//! The first-order methods and MMA at scale: after their first iteration, their steps allocate
-//! nothing, here at a million genes (docs/optimization-plan.md, section 2.13). A test binary of its
-//! own, for its counting allocator.
+//! The first-order methods, MMA and continuations of them at scale: after their first iteration,
+//! their steps allocate nothing, here at a million genes (docs/optimization-plan.md, section 2.13).
+//! A test binary of its own, for its counting allocator.
 
 use genoxide::algorithm::first_order::Step;
 use genoxide::algorithm::mma::Method;
@@ -235,5 +235,118 @@ fn mma_iterations_allocate_nothing_after_the_first() {
         let per_gene = peak as f64 / N as f64;
         assert!(per_gene <= 136.5, "{method:?}: {per_gene} bytes a gene");
         println!("{method:?}: peak {per_gene:.1} bytes a gene");
+    }
+}
+
+#[test]
+fn continuations_allocate_nothing_after_the_first_step() {
+    let _one = ONE_AT_A_TIME
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    // 3 stages of 4 generations, each from the last: generations 4 and 8 end a stage, and the
+    // next ones start with a re-evaluation of the point on the changed function
+    const STAGES: usize = 3;
+    const BUDGET: u64 = 4;
+    const GENERATIONS: u64 = STAGES as u64 * BUDGET;
+    // the weight of the stage, shared with the fitness functions
+    static WEIGHT: AtomicU64 = AtomicU64::new(0);
+    let weight = |stage: usize| {
+        WEIGHT.store((1.0 + stage as f64).to_bits(), Ordering::Relaxed);
+        Ok(())
+    };
+    let weighted = || f64::from_bits(WEIGHT.load(Ordering::Relaxed));
+
+    // Adam on w Σ xᵢ², its gradient supplied
+    let sphere = Differentiable(|x: &Reals, gradient: &mut [f64]| {
+        let w = weighted();
+        let mut value = 0.0;
+        for (g, &xi) in gradient.iter_mut().zip(x.iter()) {
+            *g = 2.0 * w * xi;
+            value += w * xi * xi;
+        }
+        value
+    });
+    let adam = FirstOrder::builder(Real::uniform(N, -1.0..=1.0).unwrap())
+        .step(Step::adam(0.01))
+        .gradient_tolerance(0.0)
+        .minimize()
+        .seed(1)
+        .build()
+        .unwrap();
+    let continuation = Continuation::builder(adam)
+        .stages(STAGES)
+        .generations(BUDGET)
+        .on_stage(move |stage, _| weight(stage))
+        .build()
+        .unwrap();
+    let mut counts = Vec::with_capacity(GENERATIONS as usize + 1);
+    let mut engine = Engine::new(continuation, sphere)
+        .stop_when(Stop::generations(10 * GENERATIONS))
+        .control(|_, _| {
+            counts.push(ALLOCATIONS.load(Ordering::Relaxed));
+            Ok(())
+        });
+    let outcome = engine.run().unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Converged);
+    assert_eq!(outcome.generations(), GENERATIONS);
+    assert_eq!(engine.algorithm().stages().len(), STAGES);
+    drop(engine);
+    // the control runs once per generation, not after a re-evaluation; nothing is allocated
+    // after the first step, up to the last generation (whose outcome copies the best)
+    assert_eq!(counts.len(), GENERATIONS as usize + 1);
+    let steps = &counts[1..GENERATIONS as usize];
+    assert!(
+        steps.windows(2).all(|pair| pair[0] == pair[1]),
+        "Adam: allocations {counts:?}"
+    );
+
+    // MMA on Σ cⱼ / xⱼ subject to w Σ xⱼ ≤ n
+    let c: Vec<f64> = (0..N).map(|j| 1.0 + (j % 9) as f64).collect();
+    let volume = N as f64;
+    for method in [Method::Mma, Method::Gcmma] {
+        let problem = Constrained::differentiable(
+            1,
+            |x: &Reals, gradient: &mut [f64], g: &mut [f64], jacobian: &mut [f64]| {
+                let w = weighted();
+                let (mut value, mut sum) = (0.0, 0.0);
+                for j in 0..x.len() {
+                    value += c[j] / x[j];
+                    gradient[j] = -c[j] / (x[j] * x[j]);
+                    jacobian[j] = w;
+                    sum += x[j];
+                }
+                g[0] = w * sum - volume;
+                value
+            },
+        );
+        let mma = Mma::builder(Real::uniform(N, 0.01..=10.0).unwrap())
+            .method(method)
+            .initial_genome(Reals::from(vec![0.5; N]))
+            .minimize()
+            .build()
+            .unwrap();
+        let continuation = Continuation::builder(mma)
+            .stages(STAGES)
+            .generations(BUDGET)
+            .on_stage(move |stage, _| weight(stage))
+            .build()
+            .unwrap();
+        let mut counts = Vec::with_capacity(GENERATIONS as usize + 1);
+        let mut engine = Engine::new(continuation, problem)
+            .stop_when(Stop::generations(10 * GENERATIONS))
+            .control(|_, _| {
+                counts.push(ALLOCATIONS.load(Ordering::Relaxed));
+                Ok(())
+            });
+        let outcome = engine.run().unwrap();
+        assert_eq!(outcome.generations(), GENERATIONS, "{method:?}");
+        assert_eq!(engine.algorithm().stages().len(), STAGES);
+        drop(engine);
+        assert_eq!(counts.len(), GENERATIONS as usize + 1);
+        let steps = &counts[1..GENERATIONS as usize];
+        assert!(
+            steps.windows(2).all(|pair| pair[0] == pair[1]),
+            "{method:?}: allocations {counts:?}"
+        );
     }
 }

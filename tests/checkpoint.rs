@@ -1015,3 +1015,121 @@ fn an_lbfgsb_saved_between_an_ask_and_its_tell_resumes() {
     resumed.tell(&fitness).unwrap();
     assert_eq!(bytes(&resumed), bytes(&lbfgsb));
 }
+
+// a continuation: Adam through 3 stages of a smoothed Σ |xᵢ − cᵢ|, its ε shared by an atomic
+mod continuation {
+    use super::bytes;
+    use genoxide::checkpoint;
+    use genoxide::gradient::Differentiable;
+    use genoxide::prelude::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    const EPSILON: [f64; 3] = [1.0, 0.1, 0.01];
+
+    type Staged = Continuation<FirstOrder>;
+
+    // the stage's ε, set from its index
+    fn on_stage(epsilon: &Arc<AtomicU64>) -> impl Fn(usize, &mut FirstOrder) -> Result<()> + use<> {
+        let epsilon = Arc::clone(epsilon);
+        move |stage, _| {
+            epsilon.store(EPSILON[stage].to_bits(), Ordering::Relaxed);
+            Ok(())
+        }
+    }
+
+    fn staged(epsilon: &Arc<AtomicU64>) -> Staged {
+        let adam = FirstOrder::builder(Real::uniform(3, -5.0..=5.0).unwrap())
+            .step(first_order::Step::adam(0.05))
+            .minimize()
+            .seed(4)
+            .build()
+            .unwrap();
+        Continuation::builder(adam)
+            .stages(EPSILON.len())
+            .generations(10)
+            .on_stage(on_stage(epsilon))
+            .build()
+            .unwrap()
+    }
+
+    fn smoothed(
+        epsilon: &Arc<AtomicU64>,
+    ) -> Differentiable<impl Fn(&Reals, &mut [f64]) -> f64 + Sync + use<>> {
+        let epsilon = Arc::clone(epsilon);
+        Differentiable(move |x: &Reals, gradient: &mut [f64]| {
+            let e = f64::from_bits(epsilon.load(Ordering::Relaxed));
+            let mut value = 0.0;
+            for (i, c) in [0.5, -1.0, 2.0].into_iter().enumerate() {
+                let root = ((x[i] - c) * (x[i] - c) + e * e).sqrt();
+                gradient[i] = (x[i] - c) / root;
+                value += root;
+            }
+            value
+        })
+    }
+
+    #[test]
+    fn a_continuation_resumes_in_its_stage() {
+        let epsilon = Arc::new(AtomicU64::new(0));
+        let mut whole =
+            Engine::new(staged(&epsilon), smoothed(&epsilon)).stop_when(Stop::generations(1_000));
+        let expected = whole.run().unwrap();
+        assert_eq!(expected.stop_reason(), StopReason::Converged);
+        assert_eq!(expected.generations(), 30);
+
+        // within a stage, at its end (a re-evaluation pending), and in the last one
+        for split in [7, 10, 15, 29] {
+            // a fresh ε, as in another process: the resumed run sets its stage's
+            let epsilon = Arc::new(AtomicU64::new(0));
+            let mut first = Engine::new(staged(&epsilon), smoothed(&epsilon))
+                .stop_when(Stop::generations(split));
+            first.run().unwrap();
+            let saved = bytes(first.algorithm());
+            let epsilon = Arc::new(AtomicU64::new(0));
+            let mut resumed: Staged = checkpoint::load(saved.as_slice()).unwrap();
+            assert_eq!(resumed.generation(), split);
+            assert_eq!(resumed.stage(), first.algorithm().stage());
+            assert_eq!(resumed.stages(), first.algorithm().stages());
+            // without its closure, the run can't start
+            let mut missing = Engine::new(resumed.clone(), smoothed(&epsilon))
+                .stop_when(Stop::generations(1_000));
+            assert!(matches!(
+                missing.run(),
+                Err(Error::MissingSetting {
+                    setting: "on_stage"
+                })
+            ));
+            resumed.set_on_stage(on_stage(&epsilon));
+            let mut second =
+                Engine::new(resumed, smoothed(&epsilon)).stop_when(Stop::generations(1_000));
+            let outcome = second.run().unwrap();
+            assert_eq!(outcome.best(), expected.best(), "{split}");
+            assert_eq!(outcome.evaluations(), expected.evaluations());
+            assert_eq!(second.algorithm().stages(), whole.algorithm().stages());
+            assert_eq!(bytes(second.algorithm()), bytes(whole.algorithm()));
+        }
+    }
+
+    #[test]
+    fn a_damaged_continuation_is_an_error() {
+        let epsilon = Arc::new(AtomicU64::new(0));
+        let mut engine =
+            Engine::new(staged(&epsilon), smoothed(&epsilon)).stop_when(Stop::generations(12));
+        engine.run().unwrap();
+        let value = serde_json::to_value(engine.algorithm()).unwrap();
+        let loads = |change: &dyn Fn(&mut serde_json::Value)| {
+            let mut value = value.clone();
+            change(&mut value);
+            serde_json::from_value::<Staged>(value).is_ok()
+        };
+        assert!(loads(&|_| {}));
+        assert!(!loads(&|value| value["stage"] = 3.into()));
+        assert!(!loads(&|value| value["stage_count"] = 0.into()));
+        assert!(!loads(&|value| value["generations"] = 0.into()));
+        assert!(!loads(&|value| {
+            let stage = value["stages"][0].clone();
+            value["stages"] = vec![stage; 4].into();
+        }));
+    }
+}
