@@ -1,7 +1,7 @@
 //! Fitness programs: long-lived processes, one per worker, that read a genome per line on stdin
 //! and write its fitness per line on stdout.
 
-use genoxide::engine::FitnessFunction;
+use genoxide::engine::{Extras, FitnessFunction, Provided};
 use genoxide::genome::{Bits, Integers, Order, Reals};
 use genoxide::multi::MultiFitnessFunction;
 use std::fmt::Write as _;
@@ -20,6 +20,9 @@ pub trait Genes {
 
     /// The genes as a JSON array.
     fn to_json(&self) -> serde_json::Value;
+
+    /// The number of genes.
+    fn count(&self) -> usize;
 }
 
 impl Genes for Bits {
@@ -34,6 +37,10 @@ impl Genes for Bits {
 
     fn to_json(&self) -> serde_json::Value {
         self.iter().map(u8::from).collect()
+    }
+
+    fn count(&self) -> usize {
+        self.len()
     }
 }
 
@@ -61,6 +68,10 @@ impl Genes for Reals {
     fn to_json(&self) -> serde_json::Value {
         self.iter().copied().collect()
     }
+
+    fn count(&self) -> usize {
+        self.len()
+    }
 }
 
 impl Genes for Integers {
@@ -71,6 +82,10 @@ impl Genes for Integers {
     fn to_json(&self) -> serde_json::Value {
         self.iter().copied().collect()
     }
+
+    fn count(&self) -> usize {
+        self.len()
+    }
 }
 
 impl Genes for Order {
@@ -80,6 +95,10 @@ impl Genes for Order {
 
     fn to_json(&self) -> serde_json::Value {
         self.iter().copied().collect()
+    }
+
+    fn count(&self) -> usize {
+        self.len()
     }
 }
 
@@ -130,17 +149,20 @@ pub struct Pool {
     failure: Mutex<Option<String>>,
     abort: Arc<AtomicBool>,
     timeout: Option<Timeout>,
+    // whether each answer has the gradient after the value
+    gradient: bool,
 }
 
 impl Pool {
     /// Starts `workers` copies of `command`, in `directory`, each answer awaited at most
-    /// `timeout`.
+    /// `timeout`, with the gradient after the value if `gradient`.
     pub fn start(
         command: &[String],
         directory: &Path,
         workers: usize,
         abort: Arc<AtomicBool>,
         timeout: Option<Timeout>,
+        gradient: bool,
     ) -> Result<Self, String> {
         let (program, arguments) = command.split_first().ok_or("`fitness.command` is empty")?;
         // absolute: a relative program path joined to a relative directory would be resolved
@@ -199,6 +221,7 @@ impl Pool {
             failure: Mutex::new(None),
             abort,
             timeout,
+            gradient,
         })
     }
 
@@ -207,14 +230,20 @@ impl Pool {
         self.failure.lock().ok().and_then(|failure| failure.clone())
     }
 
-    // the objective values and the constraint violation of a genome, NaN after a failure
-    fn evaluate<G: Genes>(&self, genome: &G, values: &mut [f64]) -> f64 {
+    // the objective values and the constraint violation of a genome, and with the gradient
+    // protocol its gradient into `gradient` (if it's wanted); NaN after a failure
+    fn evaluate<G: Genes>(
+        &self,
+        genome: &G,
+        values: &mut [f64],
+        gradient: Option<&mut [f64]>,
+    ) -> f64 {
         if self.abort.load(Ordering::Relaxed) && self.failure().is_some() {
             values.fill(f64::NAN);
             return 0.0;
         }
         let index = self.checkout();
-        let result = self.ask(index, genome, values);
+        let result = self.ask(index, genome, values, gradient);
         self.checkin(index);
         match result {
             Ok(violation) => violation,
@@ -246,7 +275,13 @@ impl Pool {
     }
 
     // writes a genome to program `index` and reads its answer
-    fn ask<G: Genes>(&self, index: usize, genome: &G, values: &mut [f64]) -> Result<f64, String> {
+    fn ask<G: Genes>(
+        &self,
+        index: usize,
+        genome: &G,
+        values: &mut [f64],
+        gradient: Option<&mut [f64]>,
+    ) -> Result<f64, String> {
         let mut process = self.processes[index]
             .lock()
             .map_err(|_| "a worker panicked".to_string())?;
@@ -304,7 +339,12 @@ impl Pool {
                 ));
             }
         };
-        parse(&process.line, values).map_err(|reason| {
+        let parsed = if self.gradient {
+            parse_gradient(&process.line, genome.count(), values, gradient)
+        } else {
+            parse(&process.line, values)
+        };
+        parsed.map_err(|reason| {
             format!(
                 "`{}` wrote `{}`: {reason}",
                 self.command,
@@ -374,6 +414,40 @@ pub fn parse(line: &str, values: &mut [f64]) -> Result<f64, String> {
     }
 }
 
+/// Parses an answer of the gradient protocol: the value, then a derivative per gene, into
+/// `values` (one value) and `gradient` if it's given. Returns the violation, 0.
+pub fn parse_gradient(
+    line: &str,
+    genes: usize,
+    values: &mut [f64],
+    gradient: Option<&mut [f64]>,
+) -> Result<f64, String> {
+    let mut count = 0;
+    let mut gradient = gradient;
+    for word in line.split_whitespace() {
+        let number: f64 = word
+            .parse()
+            .map_err(|_| format!("`{word}` isn't a number"))?;
+        match count {
+            0 => values[0] = number,
+            k if k <= genes => {
+                if let Some(gradient) = gradient.as_deref_mut() {
+                    gradient[k - 1] = number;
+                }
+            }
+            _ => {}
+        }
+        count += 1;
+    }
+    if count != genes + 1 {
+        return Err(format!(
+            "expected {} numbers (the value, then the gradient's {genes} components), got {count}",
+            genes + 1
+        ));
+    }
+    Ok(0.0)
+}
+
 impl Pool {
     /// Closes the programs' input, gives them a second to exit, then kills them. The first
     /// failure, if any: also a program that wrote more lines than genomes, found in what it
@@ -439,7 +513,22 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
 
     fn evaluate(&self, genome: &G) -> (f64, f64) {
         let mut value = [0.0];
-        let violation = self.0.evaluate(genome, &mut value);
+        let violation = self.0.evaluate(genome, &mut value, None);
+        (value[0], violation)
+    }
+
+    // the gradient, with `fitness.gradient`
+    fn provides(&self) -> Provided {
+        if self.0.gradient {
+            Provided::GRADIENT
+        } else {
+            Provided::NOTHING
+        }
+    }
+
+    fn evaluate_with(&self, genome: &G, extras: &mut Extras<'_>) -> (f64, f64) {
+        let mut value = [0.0];
+        let violation = self.0.evaluate(genome, &mut value, extras.gradient());
         (value[0], violation)
     }
 }
@@ -452,7 +541,7 @@ impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_> {
 
     fn evaluate(&self, genome: &G) -> ([f64; M], f64) {
         let mut values = [0.0; M];
-        let violation = self.0.evaluate(genome, &mut values);
+        let violation = self.0.evaluate(genome, &mut values, None);
         (values, violation)
     }
 }
@@ -488,6 +577,28 @@ mod tests {
             parse("1", &mut two)
                 .unwrap_err()
                 .contains("expected 2 numbers")
+        );
+    }
+
+    #[test]
+    fn gradient_answers_parse() {
+        let (mut value, mut gradient) = ([0.0], [0.0; 2]);
+        assert_eq!(
+            parse_gradient("1.5 -2 3e-1\n", 2, &mut value, Some(&mut gradient)),
+            Ok(0.0)
+        );
+        assert_eq!((value, gradient), ([1.5], [-2.0, 0.3]));
+        assert_eq!(parse_gradient("4 1 2", 2, &mut value, None), Ok(0.0));
+        assert_eq!(value, [4.0]);
+        assert!(
+            parse_gradient("1 2", 2, &mut value, None)
+                .unwrap_err()
+                .contains("expected 3 numbers")
+        );
+        assert!(
+            parse_gradient("1 2 x", 2, &mut value, None)
+                .unwrap_err()
+                .contains("`x` isn't a number")
         );
     }
 

@@ -318,8 +318,10 @@ fn portable_runs() {
                 .build()
                 .unwrap(),
         ),
+        // forward differences: the trial points and their stencils
+        portable_run(Lbfgsb::builder(real()).minimize().seed(1).build().unwrap()),
     ];
-    let expected: [[f64; 4]; 8] = [
+    let expected: [[f64; 4]; 9] = [
         // L-SHADE
         [
             0.5886518163542276,
@@ -375,6 +377,13 @@ fn portable_runs() {
             -0.867373269448164,
             -0.27176836817948113,
             -1.087568298282683,
+        ],
+        // L-BFGS-B, forward differences
+        [
+            0.5988088458914269,
+            0.28669497148242135,
+            0.07699164601971455,
+            0.012765658807016292,
         ],
     ];
     for (run, expected) in runs.iter().zip(expected) {

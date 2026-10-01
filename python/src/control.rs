@@ -263,6 +263,57 @@ impl Settings<NelderMead> for NelderMeadSettings {
     }
 }
 
+/// L-BFGS-B: its memory, which a control can change, and its state, read-only.
+pub struct LbfgsbSettings;
+
+impl Settings<Lbfgsb> for LbfgsbSettings {
+    fn get(&self, lbfgsb: &Lbfgsb, name: &str) -> Result<Value> {
+        match name {
+            "memory" => Ok(json!(lbfgsb.memory())),
+            "pairs" => Ok(json!(lbfgsb.pairs())),
+            "converged" => Ok(json!(lbfgsb.converged().map(criterion))),
+            "projected_gradient" => Ok(json!(lbfgsb.projected_gradient())),
+            "iterations" => Ok(json!(lbfgsb.iterations())),
+            "gradients" => Ok(json!(gradient_source(lbfgsb.gradients()))),
+            "gradient_evaluations" => Ok(json!(lbfgsb.gradient_evaluations())),
+            "stencil_evaluations" => Ok(json!(lbfgsb.stencil_evaluations())),
+            "skipped_pairs" => Ok(json!(lbfgsb.skipped_pairs())),
+            "memory_resets" => Ok(json!(lbfgsb.memory_resets())),
+            "restart_count" => Ok(json!(lbfgsb.restart_count())),
+            _ => Err(unknown(name)),
+        }
+    }
+
+    fn set(&self, lbfgsb: &mut Lbfgsb, name: &str, value: &str) -> Result<()> {
+        match name {
+            "memory" => setting(lbfgsb.set_memory(parse(name, value)?)),
+            _ => Err(unknown(name)),
+        }
+    }
+}
+
+// a convergence criterion's Python name
+fn criterion(criterion: lbfgsb::Criterion) -> &'static str {
+    match criterion {
+        lbfgsb::Criterion::ProjectedGradient => "projected_gradient",
+        lbfgsb::Criterion::RelativeDecrease => "relative_decrease",
+        lbfgsb::Criterion::LineSearch => "line_search",
+        lbfgsb::Criterion::NotFinite => "not_finite",
+        _ => "other",
+    }
+}
+
+// where the gradients come from, by its Python name
+fn gradient_source(gradients: genoxide::gradient::Gradients) -> &'static str {
+    use genoxide::gradient::Gradients;
+    match gradients {
+        Gradients::Supplied => "supplied",
+        Gradients::Forward { .. } => "forward",
+        Gradients::Central { .. } => "central",
+        _ => "auto",
+    }
+}
+
 /// OpenAI's evolution strategy's step: σ and the learning rate.
 pub struct OpenEsSettings;
 

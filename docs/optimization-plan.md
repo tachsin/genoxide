@@ -1,13 +1,15 @@
 # Plan: general optimization methods
 
-A working plan, removed when the work is done. Of batch A1, `Algorithm::is_finished` with
-`StopReason::Converged`, `local::Restarts`, Nelder-Mead and the linear algebra (without QR, which
-comes with its first user) are implemented; of batch A2, the Moré-Thuente line search
-(crate-private until L-BFGS-B uses it), the extras path of the engine limited to gradients
-(`Provided`, `Wanted`, `Extras`, `BatchExtras`, `Evaluations`, `prepare`, `wants`,
-`tell_evaluations`), `Differentiable`, `gradient::Gradients`, finite-difference stencils,
-`gradient::check` and the analytic gradients of the smooth problems; L-BFGS-B and the later
-batches aren't yet. genoxide has
+A working plan, removed when the work is done. Batches A1 and A2 are implemented: of A1,
+`Algorithm::is_finished` with `StopReason::Converged`, `local::Restarts`, Nelder-Mead and the
+linear algebra (without QR, which comes with its first user); of A2, the Moré-Thuente line search
+(crate-private), the extras path of the engine limited to gradients (`Provided`, `Wanted`,
+`Extras`, `BatchExtras`, `Evaluations`, `prepare`, `wants`, `tell_evaluations`), `Differentiable`,
+`gradient::Gradients`, finite-difference stencils, `gradient::check`, the analytic gradients of
+the smooth problems, and L-BFGS-B (`Lbfgsb`, with the scale requirements of 2.13: O(m · n) memory
+and work per iteration, the counting-allocator test at n = 10⁶ and the benchmark at 10³, 10⁵ and
+10⁶), in Python and the `genoxide` program, with its three examples. The later batches aren't
+yet. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
 optimization library: local derivative-free methods, gradient-based methods, constrained
@@ -80,6 +82,55 @@ tested, and orders the work in batches.
   steps √ε and ε^(1/3), the rounding of the step so that x + h − x = h, and the one-sided
   second-order formula at a bound are the textbook ones, as section 1.3 records them; the
   `gradient` module says so. To be checked against both before L-BFGS-B's line search uses them.
+- **Batch A2, L-BFGS-B, read on 2026-10-01.** Byrd, Lu, Nocedal and Zhu (1995), read in its
+  technical report, Northwestern NAM-08 (revised May 1994): **verified**, with the notes below.
+  As implemented: the compact form B = θI − W M Wᵀ, W = [Y θS], M = [−D Lᵀ; L θSᵀS]⁻¹ (eq.
+  3.2-3.6); a pair skipped when sᵀy ≤ eps ‖y‖² without dropping the oldest (eq. 3.9, eps =
+  2.2e-16 in section 6, step 6); θ = yᵀy / yᵀs of the newest pair (section 6, step 7); the
+  breakpoints (4.1) and Algorithm CP with its O(m²) updates of f′ and f″ per breakpoint, including
+  the θ g_b z_b term (section 4, p. 8-9; c = Wᵀ(xᶜ − x), eq. 4.13); the direct primal method:
+  the reduced gradient (5.4), B̂ by Sherman-Morrison-Woodbury (5.10), the truncation (5.8, 5.9);
+  the products over the free genes computed over the fewer of the free and the bound genes,
+  subtracted from the full ones (end of 5.1; not updated incrementally between iterations, so
+  O(m² · min(free, bound)) besides O(m · n)); the test ‖P(x − g) − x‖∞ (6.1); the line search's
+  constants 10⁻⁴ and 0.9 (2.5, 2.6 and section 6) and its largest step, to the nearest bound along
+  the direction (section 6). Notes: eq. 5.11 and step 6 of the direct primal method print
+  B̂⁻¹ r̂ᶜ, without the minus sign of (5.7), d̂ᵘ = −B̂⁻¹ r̂ᶜ, which genoxide follows; the 2m × 2m system K = M⁻¹ − WᵀZZᵀW/θ is solved by
+  eliminating its first block, −(D + YᵀZZᵀY/θ), whose Schur complement θSᵀAAᵀS + C P⁻¹ Cᵀ is
+  positive definite: two Cholesky factorizations (genoxide's own derivation; Zhu et al. factor the
+  same matrix similarly, section 4); products with M by the Schur complement θSᵀS + L D⁻¹ Lᵀ of
+  its block −D. Zhu, Byrd, Lu and Nocedal (1997), read in its report version (December 1994,
+  revised October 1996, distributed with L-BFGS-B 3.0): **verified**: the tests (1), the relative
+  decrease against factr · epsmch (factr = 10⁷ "moderate accuracy", genoxide's default
+  `function_tolerance` 10⁷ ε), and (2), ‖proj g‖∞ ≤ pgtol, **absolute**, not relative as this plan
+  had it (genoxide's `gradient_tolerance` is absolute, 1e-5 as in the authors' tests, eq. 4);
+  the primal method only (section 4); after a line search of 20 evaluations without a lower value,
+  a singular or indefinite matrix, or a direction that isn't of descent, the pairs dropped and the
+  iteration restarted along steepest descent, and a failure there ends the run (section 4). Its
+  skipping test (3) is yᵀs ≤ epsmch (−gᵀs), not the 1995 paper's (3.9); genoxide follows (3.9).
+  Morales and Nocedal (2011), read in its preprint (March 2011): **verified**: the subspace
+  minimizer projected into the box (section 1.1), the truncated step instead when the projection
+  "is not a direction of strong descent", which the text doesn't define: genoxide reverts when
+  (x̄ − x)ᵀg > 0, as the authors' code does; machine precision from the language, not dpmeps
+  (section 1.2). Liu and Nocedal (1989), read in the authors' copy: **verified**: Algorithm 2.1
+  (the product form 2.1-2.6, the unit step tried first) and the scaling M3, γₖ = yₖᵀsₖ / ‖yₖ‖²
+  (3.2, 4.1), whose inverse is θ. Nocedal (1980), read in Math. Comp.: **verified** as the source
+  of the limited memory (section 2, eq. 3, the oldest correction dropped; section 4, the
+  recursion), which genoxide applies in the compact form of the 1995 paper. Byrd, Nocedal and
+  Schnabel (1994), the compact form: **not re-read**; the 1995 paper restates it (3.2-3.8). The
+  authors' implementation, L-BFGS-B 3.0 (BSD-3-Clause), was read to compare behavior, not copied:
+  genoxide follows it in keeping f″ at least ε times its first value in Algorithm CP, in a first
+  iteration of step min(1, 1/‖d‖) capped at 1 (its rule for a problem with bounds, which genoxide's
+  box always is), and in accepting the best step when the line search stops with a warning; it
+  differs in the line search's constants (the code's ftol = 10⁻³ and xtol = 0.1; genoxide the
+  paper's 10⁻⁴ and its own xtol 10⁻¹⁰) and in a first-iteration step after the pairs are dropped
+  (the code: 1). With finite differences, each trial point is asked with its whole stencil (n + 1
+  points), not the directional derivative only (2 points, then the stencil at the accepted
+  point, as 2.4 suggests): near a minimum the first trial is accepted, where the whole stencil
+  saves a round and an evaluation. Checked, not as expected values: from Rosenbrock's classic start
+  with n = 2, 10, 100 and 1000, the iterations and evaluations are within a few percent of SciPy
+  1.18.1's L-BFGS-B, which wraps the authors' code (n = 100: 551 and 651 against 539 and 636).
+  Memory at n = 10⁶: about 44 values per gene (the authors' code needs (12 + 2m) n = 32 n).
 - The methods are general. The docs and examples motivate them with generic cases (expensive
   simulations, engineering design, black-box functions, model fitting), not with an application
   domain.
@@ -622,6 +673,8 @@ The same shape as today's classes: settings in the constructor, `run(fitness, st
 import genoxide as gx
 
 lbfgsb = gx.Lbfgsb(gx.Real((-5, 10), length=100), objective="minimize", memory=10, seed=1)
+# implemented as planned; the gradient sources are one setting, gradients="auto" | "supplied" |
+# "forward" | "central", as Rust's Gradients
 result = lbfgsb.run(f, gradient=grad_f, evaluations=10_000)   # grad_f(x) -> array
 result = lbfgsb.run(f_and_grad, gradient=True, evaluations=10_000)  # f(x) -> (value, gradient)
 result = lbfgsb.run(gx.problems.Rosenbrock(100), evaluations=10_000)  # analytic, in Rust

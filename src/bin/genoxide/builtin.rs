@@ -1,10 +1,12 @@
 //! `genoxide fitness <name>`: test functions that speak the fitness protocol, to try a run file
 //! without writing a program, and as examples of the protocol.
 
+use genoxide::engine::{Extras, FitnessFunction};
 use genoxide::genome::Reals;
 use genoxide::math;
 use genoxide::multi::MultiFitnessFunction;
 use genoxide::multi::problems::{Schaffer1, Zdt1};
+use genoxide::problems::{Ackley, Rastrigin, Rosenbrock, Sphere};
 use std::f64::consts::{E, TAU};
 use std::io::{BufRead, Write};
 
@@ -99,12 +101,49 @@ pub const FUNCTIONS: &[Function] = &[
     },
 ];
 
-/// Runs a built-in function on stdin until it closes.
-pub fn serve(name: &str) -> Result<(), String> {
+/// A function's value, its gradient written into the second argument.
+pub type WithGradient = fn(&[f64], &mut [f64]) -> f64;
+
+/// The value and gradient of a built-in function with the gradient protocol: genoxide's test
+/// problem of the same name, with its analytic gradient, for the real-valued smooth ones.
+pub fn gradient_of(name: &str) -> Option<WithGradient> {
+    fn with<F: FitnessFunction<Reals, Output = f64>>(
+        problem: F,
+        x: &[f64],
+        gradient: &mut [f64],
+    ) -> f64 {
+        problem.evaluate_with(
+            &Reals::from(x.to_vec()),
+            &mut Extras::with_gradient(gradient),
+        )
+    }
+    match name {
+        "sphere" => Some(|x, gradient| with(Sphere::new(x.len()), x, gradient)),
+        "rastrigin" => Some(|x, gradient| with(Rastrigin::new(x.len()), x, gradient)),
+        "rosenbrock" => Some(|x, gradient| with(Rosenbrock::new(x.len()), x, gradient)),
+        "ackley" => Some(|x, gradient| with(Ackley::new(x.len()), x, gradient)),
+        _ => None,
+    }
+}
+
+/// Runs a built-in function on stdin until it closes; with `gradient`, writing the value and
+/// then the gradient (the gradient protocol, `fitness.gradient`).
+pub fn serve(name: &str, gradient: bool) -> Result<(), String> {
     let function = FUNCTIONS
         .iter()
         .find(|function| function.name == name)
         .ok_or_else(|| format!("no built-in fitness `{name}`; {}", list()))?;
+    let with_gradient = if gradient {
+        Some(gradient_of(name).ok_or_else(|| {
+            format!(
+                "the built-in fitness `{name}` has no gradient; sphere, rastrigin, rosenbrock and \
+                 ackley do"
+            )
+        })?)
+    } else {
+        None
+    };
+    let mut derivatives = Vec::new();
     let stdin = std::io::stdin().lock();
     let mut stdout = std::io::BufWriter::new(std::io::stdout().lock());
     let mut genes = Vec::new();
@@ -120,10 +159,21 @@ pub fn serve(name: &str) -> Result<(), String> {
         if genes.is_empty() {
             return Err("an empty genome".to_string());
         }
-        let values: Vec<String> = (function.score)(&genes)
-            .iter()
-            .map(f64::to_string)
-            .collect();
+        let values: Vec<String> = match with_gradient {
+            Some(evaluate) => {
+                derivatives.clear();
+                derivatives.resize(genes.len(), 0.0);
+                let value = evaluate(&genes, &mut derivatives);
+                std::iter::once(value)
+                    .chain(derivatives.iter().copied())
+                    .map(|number| format!("{number:?}"))
+                    .collect()
+            }
+            None => (function.score)(&genes)
+                .iter()
+                .map(f64::to_string)
+                .collect(),
+        };
         writeln!(stdout, "{}", values.join(" "))
             .and_then(|()| stdout.flush())
             .map_err(|error| error.to_string())?;

@@ -1,0 +1,22 @@
+Rosenbrock's function in 100 dimensions, from (-1.2, 1, -1.2, 1, ...) where f = 24926
+L-BFGS-B with 10 pairs to f <= 1e-10: the analytic gradient, and forward differences
+       analytic gradient        forward differences
+round  evaluations  best value  evaluations  best value
+    0            1       2.5e4          101       2.5e4
+   50           51       9.3e1         5151       9.3e1
+  100          101       8.3e1        10201       8.3e1
+  150          151       7.4e1        15251       7.4e1
+  200          201       6.5e1        20301       6.5e1
+  250          251       5.7e1        25351       5.7e1
+  300          301       4.8e1        30401       4.8e1
+  350          351       4.0e1        35451       3.9e1
+  400          401       3.2e1        40501       3.0e1
+  450          451       2.3e1        45551       2.1e1
+  500          501       1.4e1        50601       1.3e1
+  550          551       5.7e0        55651       3.5e0
+  600          601      3.3e-5        60701      5.3e-9
+  605          606      1.9e-7        61206     9.9e-11
+  612          613     3.0e-11                         
+analytic gradient: f = 3.0e-11 after 520 iterations and 613 evaluations
+forward differences: f = 9.9e-11 after 523 iterations and 61206 evaluations
+forward differences took 100 times the evaluations

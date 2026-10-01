@@ -10,6 +10,7 @@ use genoxide::algorithm::{Incremental, cmaes, local, pso};
 use genoxide::checkpoint;
 use genoxide::engine::asynchronous::MAX_WORKERS;
 use genoxide::genome::Representation;
+use genoxide::gradient::Gradients;
 use genoxide::multi::MultiObjectiveAlgorithm;
 use genoxide::observer::Report;
 use genoxide::operator::{Crossover, Mutate};
@@ -52,6 +53,8 @@ struct Context {
     stop: config::Stop,
     report: config::Report,
     checkpoint: Option<(PathBuf, u64)>,
+    // whether the fitness program writes the gradient after the value
+    gradient: bool,
     // the genome and algorithm settings, as JSON: a checkpoint resumes only with the same
     settings: String,
     options: Options,
@@ -68,6 +71,7 @@ struct Saved<A> {
 /// only checking.
 pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
     let directory = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let gradient = run.fitness.gradient;
     let command = match (run.fitness.command, run.fitness.builtin) {
         (Some(command), None) if !command.is_empty() => command,
         (None, Some(name)) => {
@@ -80,13 +84,23 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
                     crate::builtin::list()
                 ));
             }
+            if gradient && crate::builtin::gradient_of(&name).is_none() {
+                return Err(format!(
+                    "`fitness.gradient`: the built-in fitness `{name}` has no gradient; sphere, \
+                     rastrigin, rosenbrock and ackley do"
+                ));
+            }
             let program = std::env::current_exe()
                 .map_err(|error| format!("can't find the genoxide program: {error}"))?;
-            vec![
+            let mut command = vec![
                 program.to_string_lossy().into_owned(),
                 "fitness".to_string(),
                 name,
-            ]
+            ];
+            if gradient {
+                command.push("--gradient".to_string());
+            }
+            command
         }
         (Some(_), None) => return Err("`fitness.command` is empty".to_string()),
         _ => {
@@ -107,6 +121,11 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
         .collect();
     if objectives.is_empty() {
         return Err("`fitness.objectives` is empty".to_string());
+    }
+    if gradient && objectives.len() != 1 {
+        return Err(
+            "`fitness.gradient` needs a single objective: the gradient is of its value".to_string(),
+        );
     }
     let stop = &run.stop;
     if stop.generations.is_none()
@@ -186,6 +205,7 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
         checkpoint: run
             .checkpoint
             .map(|checkpoint| (directory.join(checkpoint.path), checkpoint.every)),
+        gradient,
         directory,
         options,
     };
@@ -369,6 +389,70 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             }
             generational(setting(builder.build())?, context)
         }
+        config::Algorithm::Lbfgsb {
+            seed,
+            memory,
+            gradients,
+            difference_step,
+            gradient_tolerance,
+            function_tolerance,
+            max_line_search,
+            restarts,
+        } => {
+            let mut builder = Lbfgsb::builder(real).objective(context.single_objective()?);
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            if let Some(memory) = memory {
+                builder = builder.memory(memory);
+            }
+            let source = gradients.unwrap_or(config::GradientSource::Auto);
+            builder = builder.gradients(match source {
+                config::GradientSource::Auto | config::GradientSource::Supplied
+                    if difference_step.is_some() =>
+                {
+                    return Err(
+                        "`algorithm.difference_step` needs `gradients = \"forward\"` or \
+                         `\"central\"`"
+                            .to_string(),
+                    );
+                }
+                config::GradientSource::Auto => Gradients::Auto,
+                config::GradientSource::Supplied if !context.gradient => {
+                    return Err(
+                        "`algorithm.gradients = \"supplied\"` needs `fitness.gradient = true`"
+                            .to_string(),
+                    );
+                }
+                config::GradientSource::Supplied => Gradients::Supplied,
+                config::GradientSource::Forward => Gradients::Forward {
+                    step: difference_step,
+                },
+                config::GradientSource::Central => Gradients::Central {
+                    step: difference_step,
+                },
+            });
+            if let Some(tolerance) = gradient_tolerance {
+                builder = builder.gradient_tolerance(tolerance);
+            }
+            if let Some(tolerance) = function_tolerance {
+                builder = builder.function_tolerance(tolerance);
+            }
+            if let Some(trials) = max_line_search {
+                builder = builder.max_line_search(trials);
+            }
+            match restarts {
+                Some(0) => {
+                    return Err(
+                        "`algorithm.restarts` must be at least 1; leave it out for none"
+                            .to_string(),
+                    );
+                }
+                Some(times) => builder = builder.restarts(local::Restarts::Random { times }),
+                None => {}
+            }
+            generational(setting(builder.build())?, context)
+        }
         config::Algorithm::NelderMead {
             seed,
             coefficients,
@@ -517,6 +601,7 @@ where
         config::Algorithm::NelderMead { .. } => {
             Err("`nelder-mead` needs a real genome".to_string())
         }
+        config::Algorithm::Lbfgsb { .. } => Err("`lbfgsb` needs a real genome".to_string()),
     }
 }
 
@@ -704,6 +789,7 @@ impl Context {
             self.workers,
             abort.clone(),
             self.timeout,
+            self.gradient,
         )?;
         Ok((pool, abort))
     }
