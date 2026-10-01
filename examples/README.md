@@ -186,6 +186,7 @@ python examples/tsp_berlin52/main.py
 | [Rocket injector](rocket_injector/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rocket-injector) |
 | [Vehicle crashworthiness](vehicle_crashworthiness/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/vehicle-crashworthiness) |
 | [Water resource planning](water_resource_planning/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/water-resource-planning) |
+| [Conceptual marine design](marine_design/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/marine-design) |
 | [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neuroevolution) |
 | [XOR by NEAT](xor_neat/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neat) |
 | [Cart-pole](cart_pole/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cart-pole) |
