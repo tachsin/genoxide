@@ -70,7 +70,14 @@ ga = gx.Ga(
 )
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(ITEMS, CAPACITY, optimum())
-result = ga.run(value, stagnation=200, generations=2_000, on_generation=trace.on_generation)
+# stops at the optimum that dynamic programming finds, or once the search stalls
+result = ga.run(
+    value,
+    target=optimum(),
+    stagnation=200,
+    generations=2_000,
+    on_generation=trace.on_generation,
+)
 
 best = result.best_genome
 print(f"items {np.flatnonzero(best).tolist()}")

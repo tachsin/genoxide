@@ -56,8 +56,8 @@ A genetic algorithm:
 - two-point crossover, which swaps a segment of items between the parents;
 - bit-flip mutation at a rate of 1/20 per bit, one flip per child on average.
 
-The optimum isn't given to the run. It stops after 200 generations without improvement, or after
-2,000 generations.
+It stops as soon as it reaches the optimum, 625, which dynamic programming finds beforehand; or,
+if it never does, after 200 generations without improvement, or after 2,000 generations.
 
 ## Output
 
@@ -65,14 +65,14 @@ The first line lists the chosen items, numbered from 0. The second gives their t
 weight, and the capacity. The third gives the evaluations, and the optimum that dynamic programming
 finds for comparison.
 
-The run stops only after 200 generations without improvement, so its last 200 generations find
-nothing better, and their evaluations count too.
+The run stops at the generation that finds the optimum, the 36th, after 6,588 evaluations. Copies
+of a parent inherit its score, so a generation of 200 needs fewer than 200 evaluations.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/knapsack) plays this run back.
 
 ## Good results
 
 The optimum is 625: 13 items that weigh 395. The run finds it, and the dynamic programming line
-confirms it. Over seeds 1 to 300, every run found it, stopping after 38,800 evaluations at the
-median and at most 66,748. With a population of 60, 18 of seeds 1 to 100 stopped short of it:
+confirms it. Over seeds 1 to 300, every run found it, after 4,988 evaluations at the median
+and at most 33,544. With a population of 60, 18 of seeds 1 to 100 stopped short of it:
 17 at 624, a selection that fills the knapsack exactly, and one at 619.

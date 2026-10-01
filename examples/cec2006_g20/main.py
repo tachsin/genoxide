@@ -23,6 +23,8 @@ from trace import Trace
 
 # the CEC 2006 report's budget of evaluations per run
 BUDGET = 500_000
+# generations without a better best before the run stops
+STAGNATION = 200
 # a constraint within this of its boundary is active
 ACTIVE = 1e-6
 
@@ -62,7 +64,7 @@ problem = gx.problems.cec2006.G20()
 optimum = problem.optimum
 # the violation of the report's best known solution
 _, reported = problem(optimum.solutions[0])
-shade = gx.De(problem.genome, objective=problem.objective, seed=1)
+shade = gx.De(problem.genome, objective=problem.objective, restarts="never", seed=1)
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(problem)
 # the evaluations when the best is first less infeasible than the report's solution
@@ -76,7 +78,11 @@ def on_generation(progress):
     trace.record(progress)
 
 
-result = shade.run(problem, evaluations=BUDGET, on_generation=on_generation)
+# the report's budget, or 200 generations without a better best: the run settles long before the
+# budget ends
+result = shade.run(
+    problem, evaluations=BUDGET, stagnation=STAGNATION, on_generation=on_generation
+)
 
 print("SHADE with Deb's feasibility rules on g20, seed 1")
 if result.violation == 0.0:

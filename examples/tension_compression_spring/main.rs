@@ -1,6 +1,6 @@
 //! The tension/compression spring (Belegundu, 1982; Arora, 1989): the lightest coil spring whose
 //! deflection, shear stress, surge frequency and outer diameter stay within their limits. A
-//! constrained continuous problem, whose best known weight is 0.012665.
+//! constrained continuous problem, whose best known weight is 0.01266523.
 //!
 //! The variables are the wire diameter d, the mean coil diameter D and the number of active coils
 //! N. genoxide's `TensionCompressionSpring` gives the weight and the violation of the four
@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
     let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(de, problem)
-        .stop_when(Stop::evaluations(50_000))
+        .stop_when(Stop::target(best_known * (1.0 + 1e-10)).or(Stop::evaluations(100_000)))
         .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
@@ -45,8 +45,9 @@ fn main() -> Result<()> {
         .map(|(i, _)| format!("g{}", i + 1))
         .collect();
     println!(
-        "weight {:.7} (the best known: {best_known})",
-        best.score().unwrap_or(f64::NAN)
+        "weight {:.7} after {} evaluations (the best known: {best_known})",
+        best.score().unwrap_or(f64::NAN),
+        outcome.evaluations()
     );
     println!("violation {:.6}", best.violation());
     println!("d {:.6}, D {:.6}, N {:.6}", x[0], x[1], x[2]);

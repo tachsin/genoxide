@@ -74,7 +74,8 @@ minimum. The second gives the design's constraint violation; 0 means it's feasib
 the design: the shell and head thicknesses, rounded to whole plates, the radius and the length. In
 Python, `run` evaluates the problem in Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/pressure-vessel) plays this run back.
+[The project page](https://tachsin.gr/projects/genoxide/examples/pressure-vessel) plays this run back. Its
+progress curve is the cost's error to the minimum, on a log axis.
 
 ## Good results
 

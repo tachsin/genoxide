@@ -58,7 +58,12 @@ best_known = problem.optimum.value
 l_shade = gx.De(problem.genome, l_shade=BUDGET, objective=problem.objective, seed=1)
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(problem)
-result = l_shade.run(problem, evaluations=BUDGET, on_generation=trace.on_generation)
+result = l_shade.run(
+    problem,
+    target=best_known * (1.0 + 1e-10),
+    evaluations=BUDGET,
+    on_generation=trace.on_generation,
+)
 
 weight, evaluations = result.best_fitness, result.evaluations
 print(f"weight {weight:.9f} after {evaluations} evaluations (the best known: {best_known:.9f})")

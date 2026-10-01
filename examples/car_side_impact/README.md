@@ -96,12 +96,15 @@ infeasible one, two feasible ones compare by weight, and two infeasible ones by 
 L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665), a differential evolution that adapts
 its scale factor and crossover rate from successful trials. Its population starts at 18 times the
 number of genes, 126, and shrinks linearly to 4 over the budget of 20,000 evaluations. genoxide's
-`De::l_shade` takes L-SHADE's settings, so the example only gives it the budget.
+`De::l_shade` takes L-SHADE's settings, so the example only gives it the budget. The run stops
+once its weight is within 1e-10 of the best known weight, relative to it, or at the end of the
+budget.
 
 Its shrinking population gets to the best known weight sooner than SHADE (Tanabe and Fukunaga,
 2013, IEEE CEC 2013: 71-78) with genoxide's defaults, as in the welded beam example, whose
 population stays at 100. With seeds 1 to 5, L-SHADE comes within 1e-12 of the best known weight,
-relative to it, after 18,200 to 19,800 evaluations. SHADE, which doesn't restart on the way,
+relative to it, after 18,200 to 19,800 evaluations, and within 1e-10, where the example stops,
+after 16,955 to 18,168. SHADE, which doesn't restart on the way,
 ends 2e-11 to 9e-11 above it after 30,000 evaluations.
 
 CMA-ES, which solves the cantilever beam example, puts the other six thicknesses on their bounds and
@@ -122,8 +125,9 @@ both versions print the same.
 ## Good results
 
 The best known weight is 23.585657980780084, at (0.5, 1.225732, 0.5, 1.207111, 0.875, 0.884189,
-0.4). The run ends at 23.585657981, with no violation: a relative gap of 3.1e-13, 7e-12 in weight.
-Of the other four seeds, two end at it exactly and two 3e-16 above it.
+0.4). The run stops after 17,649 evaluations at 23.585657982, with no violation: a relative gap of
+6.5e-11, 1.5e-9 in weight. The other four seeds stop after 16,955 to 18,168 evaluations, with
+relative gaps of 7.8e-11 to 9.7e-11.
 
 At the best known design, all seven constraints of the corner hold with equality. With x₁, x₃, x₅
 and x₇ on their lower bounds, the lower rib deflection gives
@@ -131,7 +135,7 @@ x₂ = (46.36 − 4.4505 · 0.5 − 32) / 9.9 = 1.225732, the pubic force gives 
 front door's velocity gives x₆ = 0.884189.
 genoxide stores the corner to the last bit: each of x₂, x₄ and x₆ is the smallest floating-point
 number whose limit holds as genoxide computes it, so its violation is exactly 0. The run's design
-is the same to the printed digits.
+is the same to the printed digits, except x₆ (below).
 
 At the corner, the weight's gradient is a combination of the seven active constraints' gradients
 with positive coefficients, the Lagrange multipliers, so no feasible move nearby makes the design
@@ -139,4 +143,8 @@ lighter: it's a local minimum. The constraints aren't convex, so that doesn't pr
 
 genoxide's earlier best known design had x₆ = 0.884329, where the front door's velocity is 1.0e-4
 below its limit: 3.3e-9 heavier, a gain far below the accuracy of response surfaces fitted to crash
-simulations. The run finds the corner exactly, down to the gene that barely counts.
+simulations. The run stops short of the corner on that gene: within 1e-10 of the best known
+weight, relative to it, its x₆ is 0.884258, 6.9e-5 above the corner's and 1.5e-9 heavier, and the
+front door's velocity is below its limit. Without the target, the run goes on to the end of the
+budget and finds the corner, down to the gene that barely counts: a relative gap of 3.1e-13, with
+x₆ = 0.884189 to the printed digits.
