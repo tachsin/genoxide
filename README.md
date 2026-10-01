@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/crates/l/genoxide.svg)](#license)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-16_libraries-ce422b)](https://tachsin.gr/projects/genoxide/benchmarks)
 
-**Optimization for Rust: genetic algorithms, evolution strategies, differential evolution, particle swarms, local search and multi-objective optimization in one library.**
+**Optimization for Rust and Python: genetic algorithms, evolution strategies, CMA-ES, differential evolution, particle swarms, genetic programming, multi-objective optimization, local search and gradient-based methods (L-BFGS-B, Adam, MMA) in one library. A seed gives the same results, to the bit, on every platform and thread count.**
 
 ## Install
 

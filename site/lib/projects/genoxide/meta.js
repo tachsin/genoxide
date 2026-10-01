@@ -20,7 +20,7 @@ export const GENOXIDE_COMMIT = site.commit;
 export const GENOXIDE_PATH = "/projects/genoxide";
 export const GENOXIDE_OG_IMAGE = "/projects/genoxide/opengraph-image";
 
-export const GENOXIDE_TAGLINE = "Evolutionary computation for Rust and Python";
+export const GENOXIDE_TAGLINE = "Optimization for Rust and Python";
 
 export const GENOXIDE_DESCRIPTION =
   "genoxide is an evolutionary computation library for Rust, with a Python package: genetic algorithms, evolution strategies, CMA-ES, differential evolution, particle swarms, local search and multi-objective optimization in one library.";

@@ -3,7 +3,7 @@
 # repository, which snippets include the examples from: mkdocs build --strict. The example pages are
 # generated from the folders in examples/ by docs/hooks/examples.py.
 site_name: genoxide
-site_description: Evolutionary computation for Rust and Python
+site_description: Optimization for Rust and Python, reproducible on every platform
 site_url: https://tachsin.github.io/genoxide/
 repo_url: https://github.com/tachsin/genoxide
 repo_name: tachsin/genoxide

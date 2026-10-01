@@ -4,13 +4,30 @@ build-backend = "maturin"
 
 [project]
 name = "genoxide"
-description = "Optimization in Rust, for Python: genetic algorithms, CMA-ES, differential evolution, NSGA-II and more"
+description = "Optimization in Rust, for Python: genetic algorithms, CMA-ES, differential evolution, NSGA-II, L-BFGS-B, Adam, MMA and more, reproducible on every platform"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 license-files = ["licenses/LICENSE-MIT", "licenses/LICENSE-APACHE"]
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.21"]
-keywords = ["genetic-algorithm", "evolutionary", "optimization", "metaheuristics", "cma-es"]
+keywords = [
+    "optimization",
+    "genetic-algorithm",
+    "evolutionary-algorithm",
+    "metaheuristics",
+    "cma-es",
+    "differential-evolution",
+    "particle-swarm-optimization",
+    "multi-objective",
+    "nsga2",
+    "l-bfgs-b",
+    "adam",
+    "method-of-moving-asymptotes",
+    "nelder-mead",
+    "genetic-programming",
+    "neuroevolution",
+    "reproducibility",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
