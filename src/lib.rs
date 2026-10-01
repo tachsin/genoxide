@@ -91,6 +91,7 @@ pub mod genome;
 pub mod gp;
 pub mod gradient;
 pub mod individual;
+pub(crate) mod linalg;
 pub mod math;
 pub mod multi;
 pub mod neat;

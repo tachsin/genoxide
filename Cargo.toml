@@ -92,6 +92,12 @@ required-features = ["parallel"]
 name = "instructions"
 harness = false
 
+# the linear algebra on one thread and on eight
+[[bench]]
+name = "linalg"
+harness = false
+required-features = ["parallel"]
+
 # the Python package's wheels: `profile` in python/pyproject.toml. Thin LTO, on every codegen unit:
 # measured on 4 cores, it builds the bindings in 130 s against fat LTO's 458 s with one unit, and
 # the Python examples run as fast (within 3% either way)

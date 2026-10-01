@@ -1,12 +1,13 @@
 # Plan: general optimization methods
 
 A working plan, removed when the work is done. Of batch A1, `Algorithm::is_finished` with
-`StopReason::Converged`, `local::Restarts` and Nelder-Mead are implemented; of batch A2, the
-Moré-Thuente line search (crate-private until L-BFGS-B uses it), the extras path of the engine
-limited to gradients (`Provided`, `Wanted`, `Extras`, `BatchExtras`, `Evaluations`, `prepare`,
-`wants`, `tell_evaluations`), `Differentiable`, `gradient::Gradients`, finite-difference stencils,
-`gradient::check` and the analytic gradients of the smooth problems; the linear algebra,
-L-BFGS-B and the later batches aren't yet. genoxide has
+`StopReason::Converged`, `local::Restarts`, Nelder-Mead and the linear algebra (without QR, which
+comes with its first user) are implemented; of batch A2, the Moré-Thuente line search
+(crate-private until L-BFGS-B uses it), the extras path of the engine limited to gradients
+(`Provided`, `Wanted`, `Extras`, `BatchExtras`, `Evaluations`, `prepare`, `wants`,
+`tell_evaluations`), `Differentiable`, `gradient::Gradients`, finite-difference stencils,
+`gradient::check` and the analytic gradients of the smooth problems; L-BFGS-B and the later
+batches aren't yet. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
 optimization library: local derivative-free methods, gradient-based methods, constrained
@@ -569,6 +570,12 @@ the dependency's types behind it):
 | LDLᵀ with Bunch-Kaufman pivoting and inertia | interior point, KKT systems |
 | Dense strictly convex QP (Goldfarb-Idnani; in the crate if the dependency has none) | SQP |
 
+**Revised (2026-10-01, #373): in-crate code** (open question 1): neither dependency can be pinned
+to a portable path that is as fast. `src/linalg.rs` has the products, the blocked Cholesky with a
+growing jitter, triangular solves and CMA-ES's eigendecomposition, with fixed hashes of their bits
+tested on the three platforms. The rest of the table (rank-one and rank-k updates, QR, LDLᵀ, the
+QP) comes with the batches that use it.
+
 - **Portability comes first.** As far as their docs show, nalgebra's dynamic-size products call
   the `matrixmultiply` crate above a size threshold, and faer dispatches SIMD kernels at run time,
   FMA among them: two machines could round differently, which breaks genoxide's guarantee. Batch A1
@@ -824,7 +831,7 @@ a batch isn't done until every example reaches its optimum on the three platform
 
 | Batch | Contents | Depends on | Examples |
 |---|---|---|---|
-| A1 | `linalg` (Cholesky, triangular solves, QR, the eigendecomposition moved from CMA-ES) with the dependency check of 2.8; `Algorithm::is_finished` and `StopReason::Converged`; `Restarts` for local methods; Nelder-Mead (Gao-Han, 1965 option, speculative asks) | | `nelder_mead`, `nelder_mead_himmelblau` |
+| A1 | `linalg` (Cholesky, triangular solves, QR, the eigendecomposition moved from CMA-ES) with the dependency check of 2.8 (done, in-crate, #373: products, Cholesky with jitter, triangular solves and the eigendecomposition; QR, LDLᵀ and Bunch-Kaufman come with their first users); `Algorithm::is_finished` and `StopReason::Converged`; `Restarts` for local methods; Nelder-Mead (Gao-Han, 1965 option, speculative asks) | | `nelder_mead`, `nelder_mead_himmelblau` |
 | A2 | The extras of 2.3 (`Provided`, `Wanted`, `Extras`, `Evaluations`, `prepare`, `tell_evaluations`) in `Engine`; `Differentiable`, `gradient::Gradients`, finite differences, `gradient::check`; analytic gradients for the smooth problems; Moré-Thuente; L-BFGS-B | A1 | `lbfgsb`, `lbfgsb_bounds`, `polish` |
 | A3 | Momentum, Nesterov, Adam and AdamW (moved from D1); MMA and GCMMA, with supplied constraint values and Jacobians in `Extras` (the supplied half of batch C's constraint Jacobians; finite differences of constraints stay in C); `Continuation` and the `Continue` trait (2.12); the scale requirements of 2.13 for A2's and A3's methods, with the allocation test and the benchmarks | A2 | `adam`, `mma`, `continuation` |
 | B | `model::gp` (kernels, hyperparameters by L-BFGS-B), portable `erf`/`erfc`/`erfcx` in `math`; `Bo` with EI, log-EI, UCB, PI; Latin hypercube; batch BO (Kriging believer, constant liar); `Incremental` for `AsyncEngine`; `Constrained` values (`constraint::Constraints`) and constrained BO; integer genes | A2 | `bayesian_optimization`, `bo_hartmann6`, `bo_asynchronous`, `bo_constrained` |
