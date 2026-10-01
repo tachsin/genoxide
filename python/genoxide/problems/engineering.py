@@ -68,9 +68,10 @@ class WeldedBeam(Problem[Real]):
     subject to the weld's shear stress, the bar's bending stress, h ≤ b, a second cost limit,
     h ≥ 0.125, the end deflection and the buckling load.
 
-    Bounds h, b in [0.1, 2], l, t in [0.1, 10]; best known 1.724852 at (0.205730, 3.470489,
-    9.036624, 0.205729), from Cagnina, Esquivel and Coello Coello (2008, Informatica 32: 319-326),
-    whose printed solution exceeds the bending and buckling limits by 0.09 psi and 0.06 lb, and
+    Bounds h, b in [0.1, 2], l, t in [0.1, 10]; best known 1.7248523085993899 at (0.205729639786,
+    3.470488665628, 9.03662391037356, 0.205729639786): Cagnina, Esquivel and Coello Coello's
+    (2008, Informatica 32: 319-326) 1.724852 to full precision, found by a local solver from their
+    printed solution, which exceeds the bending and buckling limits by 0.09 psi and 0.06 lb, and
     has h above b by 1e-6.
     :class:`WeldedBeamRagsdell` is the other form in the literature.
 
@@ -97,8 +98,9 @@ class WeldedBeamRagsdell(Problem[Real]):
     weld's shear stress, the bar's bending stress, h ≤ b, the buckling load
     ``64,746.022 (1 − 0.0282346 t) t b³ >= 6000`` and the deflection ``2.1952 / (t³ b) <= 0.25``.
 
-    Bounds h in [0.125, 10], l, t, b in [0.1, 10]; best known 2.3811341 at (0.24436895, 6.2186069,
-    8.2914718, 0.24436895), feasible, found with genoxide's SHADE. Reklaitis, Ravindran and
+    Bounds h in [0.125, 10], l, t, b in [0.1, 10]; best known 2.3811341169090015 at
+    (0.24436895344980142, 6.21860691844998, 8.29147176970237, 0.24436895344980142), feasible: a
+    local solver's minimum from the design genoxide's SHADE finds. Reklaitis, Ravindran and
     Ragsdell (1983) report 2.38116 at (0.2444, 6.2187, 8.2915, 0.2444); printed to 4 digits, that
     solution evaluates to 2.38151. Ragsdell and Phillips's own solution, (0.2455, 6.1960, 8.2730,
     0.2455) at 2.3859 as tabulated by Coello Coello and Mezura-Montes (2002), exceeds the shear
@@ -154,9 +156,10 @@ class TensionCompressionSpring(Problem[Real]):
     The genes are the wire diameter d, the mean coil diameter D and the number of active coils N;
     the weight is ``(N + 2) D d²``.
 
-    Bounds d in [0.05, 2], D in [0.25, 1.3], N in [2, 15]; best known 0.012665 at (0.051690,
-    0.356750, 11.287126), from Cagnina, Esquivel and Coello Coello (2008), whose printed solution
-    exceeds the second constraint by 2e-5.
+    Bounds d in [0.05, 2], D in [0.25, 1.3], N in [2, 15]; best known 0.01266523278831971 at
+    (0.051689057348001326, 0.3567176499508918, 11.288971019155943): Cagnina, Esquivel and Coello
+    Coello's (2008) 0.012665 to full precision, found by a local solver from their printed
+    solution, which exceeds the second constraint by 2e-5.
 
     Belegundu, A. D. (1982). A Study of Mathematical Programming Methods for Structural
     Optimization. PhD thesis, University of Iowa; and Arora, J. S. (1989). Introduction to

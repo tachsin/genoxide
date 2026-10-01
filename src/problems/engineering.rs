@@ -83,10 +83,13 @@ const SHEAR: f64 = 12e6;
 /// `τ = √(τ'² + 2τ'τ'' l / (2R) + τ''²)`, `τ' = P / (√2 h l)`, `τ'' = MR / J`, `M = P (L + l/2)`,
 /// `R = √(l²/4 + ((h + t)/2)²)` and `J = 2 √2 h l (l²/12 + ((h + t)/2)²)`.
 ///
-/// Bounds h, b ∈ [0.1, 2], l, t ∈ [0.1, 10]; best known 1.724852 at (0.205730, 3.470489,
-/// 9.036624, 0.205729), from Cagnina, Esquivel and Coello Coello (2008, *Informatica* 32:
-/// 319-326, appendix), whose solution, printed to 6 digits, exceeds the bending limit by 0.09 psi
-/// and the buckling limit by 0.06 lb, and has h above b by 1e-6. Not proven optimal. [`WeldedBeamRagsdell`] is the other
+/// Bounds h, b ∈ [0.1, 2], l, t ∈ [0.1, 10]; best known 1.7248523085993899 at (0.205729639786,
+/// 3.470488665628, 9.03662391037356, 0.205729639786): Cagnina, Esquivel and Coello Coello's
+/// (2008, *Informatica* 32: 319-326, appendix) 1.724852 to full precision. Their solution, printed
+/// to 6 digits, exceeds the bending limit by 0.09 psi and the buckling limit by 0.06 lb, and has h
+/// above b by 1e-6; a local solver (SLSQP) from it reaches 1.7248523085973646 with every
+/// constraint met to 4e-12, and this point, t raised by 1.5e-12 relative, meets them exactly. Not
+/// proven optimal. [`WeldedBeamRagsdell`] is the other
 /// form in the literature.
 ///
 /// [`constraints`](Problem::constraints) gives g₁…g₇ in this order, as `g(x) ≤ 0`.
@@ -152,8 +155,13 @@ impl Problem for WeldedBeam {
 
     fn optimum(&self) -> Option<Optimum<Reals>> {
         Some(Optimum::best_known(
-            1.724_852,
-            vec![reals(&[0.205_730, 3.470_489, 9.036_624, 0.205_729])],
+            1.724_852_308_599_389_9,
+            vec![reals(&[
+                0.205_729_639_786,
+                3.470_488_665_628,
+                9.036_623_910_373_56,
+                0.205_729_639_786,
+            ])],
         ))
     }
 
@@ -173,9 +181,11 @@ impl Problem for WeldedBeam {
 /// in, with `τ = √(τ'² + τ''² + l τ'τ'' / √(0.25 (l² + (h + t)²)))`, `τ' = 6000 / (√2 h l)` and
 /// `τ'' = 6000 (14 + 0.5 l) √(0.25 (l² + (h + t)²)) / (2 · 0.707 h l (l²/12 + 0.25 (h + t)²))`.
 ///
-/// Bounds h ∈ [0.125, 10], l, t, b ∈ [0.1, 10]; best known 2.3811341 at (0.24436895, 6.2186069,
-/// 8.2914718, 0.24436895), feasible, found with genoxide's SHADE and checked by several runs,
-/// which all end within 3e-9 of it. Not proven optimal. Reklaitis, Ravindran and Ragsdell (1983)
+/// Bounds h ∈ [0.125, 10], l, t, b ∈ [0.1, 10]; best known 2.3811341169090015 at
+/// (0.24436895344980142, 6.21860691844998, 8.29147176970237, 0.24436895344980142), feasible: a
+/// local solver's (SLSQP) minimum from the design genoxide's SHADE finds, with the active
+/// constraints tightened by 1e-7 and h = b, so that it meets them exactly. SHADE's runs end within
+/// 2e-9 of it. Not proven optimal. Reklaitis, Ravindran and Ragsdell (1983)
 /// report 2.38116 at (0.2444, 6.2187, 8.2915, 0.2444); printed to 4 digits, that solution
 /// evaluates to 2.38151. Deb (1991) reports 2.43 at (0.2489, 6.1730, 8.1789, 0.2533).
 /// Ragsdell and Phillips's own solution, (0.2455, 6.1960, 8.2730, 0.2455) at 2.3859 as tabulated
@@ -237,12 +247,12 @@ impl Problem for WeldedBeamRagsdell {
 
     fn optimum(&self) -> Option<Optimum<Reals>> {
         Some(Optimum::best_known(
-            2.381_134_118_152_728_4,
+            2.381_134_116_909_001_5,
             vec![reals(&[
-                0.244_368_953_265_364_54,
-                6.218_606_921_256_014,
-                8.291_471_775_474_83,
-                0.244_368_953_453_794_95,
+                0.244_368_953_449_801_42,
+                6.218_606_918_449_98,
+                8.291_471_769_702_37,
+                0.244_368_953_449_801_42,
             ])],
         ))
     }
@@ -386,10 +396,12 @@ impl Problem for PressureVessel {
 /// `(4D² − dD) / (12566 (D d³ − d⁴)) + 1 / (5108 d²) − 1 ≤ 0`, `1 − 140.45 d / (D² N) ≤ 0` and
 /// `(D + d) / 1.5 − 1 ≤ 0`.
 ///
-/// Bounds d ∈ [0.05, 2], D ∈ [0.25, 1.3], N ∈ [2, 15]; best known 0.012665 at (0.051690,
-/// 0.356750, 11.287126), from Cagnina, Esquivel and Coello Coello (2008, *Informatica* 32:
-/// 319-326, appendix), whose solution, printed to 6 digits, exceeds g₂ by 2e-5. Not proven
-/// optimal. N is continuous, as in the restatement.
+/// Bounds d ∈ [0.05, 2], D ∈ [0.25, 1.3], N ∈ [2, 15]; best known 0.01266523278831971 at
+/// (0.051689057348001326, 0.3567176499508918, 11.288971019155943): Cagnina, Esquivel and Coello
+/// Coello's (2008, *Informatica* 32: 319-326, appendix) 0.012665 to full precision. Their
+/// solution, printed to 6 digits, exceeds g₂ by 2e-5; a local solver (SLSQP) from it reaches
+/// 0.012665232788319474 with every constraint met to 1e-14, and this point, nudged by 1e-9
+/// relative, meets them exactly. Not proven optimal. N is continuous, as in the restatement.
 ///
 /// [`constraints`](Problem::constraints) gives g₁…g₄ in this order.
 ///
@@ -436,8 +448,12 @@ impl Problem for TensionCompressionSpring {
 
     fn optimum(&self) -> Option<Optimum<Reals>> {
         Some(Optimum::best_known(
-            0.012_665,
-            vec![reals(&[0.051_690, 0.356_750, 11.287_126])],
+            0.012_665_232_788_319_71,
+            vec![reals(&[
+                0.051_689_057_348_001_326,
+                0.356_717_649_950_891_8,
+                11.288_971_019_155_943,
+            ])],
         ))
     }
 
@@ -1020,10 +1036,14 @@ mod tests {
 
     #[test]
     fn welded_beam() {
-        // Cagnina et al.'s solution gives their 1.724852 to its digits, exceeding σ's limit by
-        // 0.09 psi and P_c's by 0.06 lb
-        let violations = check_optimum(&WeldedBeam, 3e-6);
-        assert!(violations[0] < 0.2, "{violations:?}");
+        // the best known solution is feasible and gives the best known cost
+        assert_eq!(check_optimum(&WeldedBeam, 0.0), [0.0]);
+        // Cagnina et al.'s printed solution gives their 1.724852 to its digits, exceeding σ's
+        // limit by 0.09 psi and P_c's by 0.06 lb
+        let (value, violation) =
+            WeldedBeam.evaluate(&reals(&[0.205_730, 3.470_489, 9.036_624, 0.205_729]));
+        assert_close(value, 1.724_852, 3e-6);
+        assert!(violation > 0.0 && violation < 0.2, "{violation}");
         // Coello's own solution and the constraint values of his table 3: f = 1.74830941,
         // g₁ = −0.337812, g₂ = −353.902604, g₇ = −363.232384
         let x = reals(&[0.2088, 3.4205, 8.9975, 0.2100]);
@@ -1042,9 +1062,12 @@ mod tests {
 
     #[test]
     fn welded_beam_ragsdell() {
-        // the printed solution evaluates to 2.38151, 1.5e-4 above the printed value
-        let violations = check_optimum(&WeldedBeamRagsdell, 2e-4);
-        assert_eq!(violations, [0.0]);
+        // the best known solution is feasible and gives the best known cost
+        assert_eq!(check_optimum(&WeldedBeamRagsdell, 0.0), [0.0]);
+        // Reklaitis et al.'s solution, printed to 4 digits, evaluates to 2.38151, 1.5e-4 above
+        // their printed value
+        let (value, _) = WeldedBeamRagsdell.evaluate(&reals(&[0.2444, 6.2187, 8.2915, 0.2444]));
+        assert_close(value, 2.381_16, 2e-4);
         // Deb's (1991) solution, 2.433116 in Coello's table 3, to its digits
         let (value, violation) =
             WeldedBeamRagsdell.evaluate(&reals(&[0.2489, 6.1730, 8.1789, 0.2533]));
@@ -1118,8 +1141,13 @@ mod tests {
 
     #[test]
     fn tension_compression_spring() {
-        let violations = check_optimum(&TensionCompressionSpring, 1e-5);
-        assert!(violations[0] < 3e-5, "{violations:?}");
+        // the best known solution is feasible and gives the best known weight
+        assert_eq!(check_optimum(&TensionCompressionSpring, 0.0), [0.0]);
+        // Cagnina et al.'s printed solution gives their 0.012665 to its digits, exceeding g₂
+        let (value, violation) =
+            TensionCompressionSpring.evaluate(&reals(&[0.051_690, 0.356_750, 11.287_126]));
+        assert_close(value, 0.012_665, 1e-5);
+        assert!(violation > 0.0 && violation < 3e-5, "{violation}");
         // Coello's solution and its values (table 4): 0.0127047834, g₂ = −0.000110,
         // g₃ = −4.026318; his g₄ repeats g₃, a misprint: it's −0.731239
         let x = reals(&[0.051_480, 0.351_661, 11.632_201]);
