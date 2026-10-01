@@ -35,12 +35,12 @@ def test_it_converges_on_rosenbrock_from_the_classic_start(coefficients):
 def test_a_run_as_in_rust():
     # tests/nelder_mead.rs has the same runs in Rust, evaluated in Rust, with the same results
     problem = gx.problems.Rosenbrock(4)
-    for speculative, evaluations, generations in [(False, 1946, 1933), (True, 4715, 1177)]:
+    for speculative, evaluations, generations in [(False, 1985, 1969), (True, 4815, 1202)]:
         result = gx.NelderMead(
             problem.genome,
             coefficients=(1.0, 2.5, 0.4, 0.6),
             initial_step=0.2,
-            tolerance=1e-8,
+            tolerance=5e-8,
             restarts=2,
             speculative=speculative,
             objective="minimize",
@@ -48,7 +48,7 @@ def test_a_run_as_in_rust():
         ).run(problem, evaluations=20_000)
         assert result.stop_reason == "converged"
         assert (result.evaluations, result.generations) == (evaluations, generations)
-        assert result.best_fitness == 8.555975764172048e-15
+        assert result.best_fitness == 6.607094554363915e-14
 
 
 def test_python_batch_and_parallel_evaluation_give_the_same_run():
@@ -116,7 +116,7 @@ def test_restarts_reach_the_minima_of_every_basin():
     def control(nelder_mead, progress):
         assert isinstance(nelder_mead, gx.RunningNelderMead)
         if nelder_mead.converged:
-            assert nelder_mead.size <= 1e-10
+            assert nelder_mead.size <= 1e-9
             # the simplex, best first
             ends.append((progress.population[0], progress.scores[0]))
         restarts.append(nelder_mead.restart_count)
@@ -156,9 +156,9 @@ def test_the_running_algorithm_reads_the_simplex():
     )
     assert result.stop_reason == "converged"
     # the first simplex: a step of 0.1 of each range
-    assert seen[0] == (False, pytest.approx(0.1), 0, 0)
+    assert seen[0] == (False, pytest.approx(1.0), 0, 0)
     converged, size, iterations, restart_count = seen[-1]
-    assert converged and size <= 1e-10 and restart_count == 0
+    assert converged and size <= 1e-9 and restart_count == 0
     assert 0 < iterations <= result.generations
     assert [state[0] for state in seen].count(True) == 1
 
@@ -187,14 +187,16 @@ def test_a_stop_condition_is_still_needed():
 
 
 def test_fixed_genes_stay_and_points_stay_in_the_bounds():
-    # the minimum of the sphere is outside [1, 3] x [2, 2]: at (1, 2), on the bound
+    # the minimum of the sphere is outside [1, 3] x [2, 2]: at (1, 2), on the bound, which the
+    # simplex approaches (mirrored at the bound) rather than lands on
     nelder_mead = gx.NelderMead(gx.Real([(1.0, 3.0), (2.0, 2.0)]), objective="minimize", seed=6)
     genomes = []
     result = nelder_mead.run(
         sphere, evaluations=10_000, on_generation=lambda p: genomes.append(p.population)
     )
     assert result.stop_reason == "converged"
-    assert np.array_equal(result.best_genome, [1.0, 2.0])
+    assert np.allclose(result.best_genome, [1.0, 2.0], rtol=0, atol=1e-8)
+    assert result.best_fitness - 5.0 < 1e-7
     for population in genomes:
         assert np.all(population[:, 0] >= 1.0) and np.all(population[:, 0] <= 3.0)
         assert np.all(population[:, 1] == 2.0)
@@ -214,7 +216,7 @@ def test_fixed_genes_stay_and_points_stay_in_the_bounds():
         ({"initial_step": 1.5}, "invalid setting `initial_step`"),
         ({"initial_step": math.nan}, "initial_step is a finite number"),
         ({"tolerance": 0.0}, "invalid setting `tolerance`"),
-        ({"tolerance": 0.2}, "invalid setting `tolerance`"),
+        ({"tolerance": 1.0}, "invalid setting `tolerance`"),
         ({"restarts": 0}, "restarts is at least 1"),
         ({"restarts": -2}, "restarts is at least 1"),
         ({"restarts": 2.0}, "restarts is a whole number"),
@@ -268,3 +270,33 @@ def test_a_resumed_run_converges_as_an_uninterrupted_one(tmp_path):
     other = gx.NelderMead(gx.Real((-5, 5), length=4), restarts=3, objective="minimize", seed=2)
     with pytest.raises(ValueError, match="other settings"):
         other.run(rosenbrock_n, evaluations=50_000, resume=path)
+
+
+def test_an_absolute_step_works_in_any_box():
+    # with a fraction of the range, a box of ±1e10 would start with a step of 2e9
+    def run(width):
+        return gx.NelderMead(
+            gx.Real((-width, width), length=2),
+            initial_genome=[-1.2, 1.0],
+            initial_step_absolute=0.5,
+            objective="minimize",
+        ).run(gx.problems.Rosenbrock(2), evaluations=10_000)
+
+    narrow = run(10.0)
+    assert narrow.stop_reason == "converged"
+    assert narrow.best_fitness < 1e-15
+    for width in (1e3, 1e6, 1e10):
+        wide = run(width)
+        assert wide.best_fitness == narrow.best_fitness
+        assert wide.evaluations == narrow.evaluations
+
+
+def test_one_initial_step_at_a_time():
+    genome = gx.Real((-1, 1), length=2)
+    with pytest.raises(ValueError, match="not both"):
+        gx.NelderMead(genome, initial_step=0.1, initial_step_absolute=0.5).run(
+            lambda x: 0.0, evaluations=10
+        )
+    for bad in (0.0, -1.0, float("inf")):
+        with pytest.raises(ValueError, match="initial_step_absolute"):
+            gx.NelderMead(genome, initial_step_absolute=bad).run(lambda x: 0.0, evaluations=10)

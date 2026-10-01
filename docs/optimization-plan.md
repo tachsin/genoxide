@@ -31,12 +31,16 @@ tested, and orders the work in batches.
   non-shrink rule prints the new vertex's place as `j = max{ℓ | f(v) < f(x_{ℓ+1})}`, which read
   literally is always n; the implementation follows the rule as the paper states it in words, "the
   highest possible index consistent with the ordering": after every vertex at least as good.
-  Gao and Han (2012): **not re-read**, behind a paywall with no open copy found; the adaptive
-  coefficients are as recorded here, and the docs cite the paper for them. They give the standard
-  ones for n = 2, and for n = 1 they'd shrink to a point (σ = 0), so the standard ones are used
-  there. Nelder and Mead (1965): **not re-read**; the method follows Lagarias et al.'s statement of
-  it. The termination test (simplex size against a tolerance, relative to each gene's range) is
-  genoxide's own: Lagarias et al. define one iteration, not when to stop.
+  Gao and Han (2012): **verified** (#380), section 4.1, eq. (4.1): "for n ≥ 2, α = 1,
+  β = 1 + 2/n, γ = 0.75 − 1/(2n), δ = 1 − 1/n", identical to SNMS for n = 2. The paper defines
+  nothing for n = 1, where δ = 0 breaks its own condition 0 < δ < 1, so genoxide uses the
+  standard coefficients there (its choice). Its initial simplex and termination test are
+  FMINSEARCH's (section 3), not prescribed. Measured from 2 to 30 genes: up to ~28% slower than
+  the standard coefficients for 3-6 genes, faster from about 9, and far more reliable from about
+  20. Nelder and Mead (1965): **not re-read**; the method follows Lagarias et al.'s statement of
+  it. The termination test (simplex size against a tolerance, relative to each gene's first step,
+  #375) and the mirroring of trial points at the bounds (#386) are genoxide's own: Lagarias et
+  al. define one iteration, without bounds or a stop.
 - The methods are general. The docs and examples motivate them with generic cases (expensive
   simulations, engineering design, black-box functions, model fitting), not with an application
   domain.
@@ -759,7 +763,9 @@ mixed genome.
    magic, one more line in every example)?
 3. **Unbounded reals.** Keep `Real`'s finite widths (a wide box for unbounded problems, as
    recommended), or add `Real::unbounded(n)` with infinite bounds that sampling algorithms reject
-   at `build()` and local methods accept with an initial genome?
+   at `build()` and local methods accept with an initial genome? Applied in #371 (#375): finite
+   bounds stay; local methods take an absolute initial step, and their tolerance is relative to
+   it, so a wide box gives the same run as a narrow one.
 4. **Names.** `Bo` or `BayesianOptimization` (and `Lbfgsb` or `LBfgsB`); `model::gp` or
    `surrogate::gp`; `Differentiable` or `WithGradient`. The crate name stays genoxide.
 5. **Convergence for existing algorithms.** Should CMA-ES without restarts, and DE and PSO when

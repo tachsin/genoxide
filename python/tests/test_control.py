@@ -173,10 +173,10 @@ def test_the_settings_in_use_are_read_back():
         "neighbor": gx.GaussianMutation(0.05, rate=0.5),
         "neighbors": 1,
     }
-    # the first simplex, a step of 0.1 of each range
+    # the first simplex: one initial step in each gene
     assert seen["nelder_mead"] == {
         "converged": False,
-        "size": pytest.approx(0.1),
+        "size": pytest.approx(1.0),
         "iterations": 0,
         "restart_count": 0,
     }

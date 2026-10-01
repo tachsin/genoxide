@@ -38,9 +38,11 @@ precision.
 
 `NelderMead` with `local::Restarts::Random { times: 19 }`: a Nelder-Mead simplex search (see the
 [Nelder-Mead on Rosenbrock](../nelder_mead/) example for its steps) that starts again from a new
-random point in the box each time its simplex has converged, 19 times. A run has converged when every
-vertex of its triangle is within 1e-10 of the range of the best vertex in each gene. After the last
-run, the engine stops with `StopReason::Converged`.
+random point in the box each time its simplex has converged, 19 times. A run has converged when
+every vertex of its triangle is within 1e-9 of the first step (1e-10 of the range) of the best
+vertex in each gene. After the last run, the engine stops with `StopReason::Converged`. A trial
+point that leaves the box is mirrored back in, so a triangle that meets the edge of the box
+doesn't flatten against it.
 
 Each run starts from a random point with a triangle of 0.1 of the range on each side, 1 in both
 genes, and follows its basin down. The best vertex of each run when it converges is assigned to the
@@ -59,8 +61,8 @@ runs back: the triangle on the contour of the function, and where each run so fa
 ## Good results
 
 Each minimum is worth 0. A good result finds all four, each within 1e-6 of 0. The 20 runs find all
-four, 4 to 6 runs each, and every run ends between 2.1e-18 and 6.7e-18, after 141 evaluations on
-average: 2,815 in all.
+four, 4 to 6 runs each, and every run ends between 2.1e-18 and 6.7e-18, after 140 evaluations on
+average: 2,808 in all.
 
 With seeds 1 to 300, every run of every seed ends at one of the minima, at most 2.4e-17 from 0, and
 294 of the 300 seeds find all four. In the other 6, none of the 20 random starts fell in one of the

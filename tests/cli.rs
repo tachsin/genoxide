@@ -774,7 +774,7 @@ fn nelder_mead_runs_until_it_converges() {
     }
     // the settings' defaults
     let explicit = run(&nelder_mead(
-        "coefficients = \"adaptive\"\ninitial_step = 0.1\ntolerance = 1e-10\nspeculative = false",
+        "coefficients = \"adaptive\"\ninitial_step = 0.1\ntolerance = 1e-9\nspeculative = false",
     ));
     assert_eq!(explicit, default);
     // the standard coefficients, by name or as a table
@@ -857,12 +857,16 @@ fn nelder_mead_settings_are_checked() {
         "`algorithm.restarts` must be at least 1; leave it out for none",
     );
     expect(
-        &nelder_mead("tolerance = 0.1"),
-        "invalid setting `tolerance`: must be greater than 0 and smaller than the initial step 0.1",
+        &nelder_mead("tolerance = 1.0"),
+        "invalid setting `tolerance`: must be greater than 0 and smaller than 1",
     );
     expect(
-        &nelder_mead("initial_step = 0.001\ntolerance = 0.01"),
-        "invalid setting `tolerance`",
+        &nelder_mead("initial_step_absolute = 0.0"),
+        "invalid setting `initial_step_absolute`",
+    );
+    expect(
+        &nelder_mead("initial_step = 0.1\ninitial_step_absolute = 0.5"),
+        "`algorithm.initial_step` and `algorithm.initial_step_absolute`: give one, not both",
     );
     expect(
         &nelder_mead("tolerance = 0.0"),

@@ -54,8 +54,9 @@ The coefficients are Gao and Han's (2012), which in two dimensions are the stand
 the reflection, 2 for the expansion, 1/2 for contractions and shrinks.
 
 The first triangle is the start (−1.2, 1) and two copies moved by 0.1 of each gene's range: (−0.8,
-1) and (−1.2, 1.4). The run has converged when every vertex is within 1e-10 of the range of the
-best vertex in each gene; the engine then stops with `StopReason::Converged`.
+1) and (−1.2, 1.4). The run has converged when every vertex is within 1e-9 of that first step
+(1e-10 of the range) of the best vertex in each gene; the engine then stops with
+`StopReason::Converged`.
 
 A round is one batch of evaluations: one trial point, or the two vertices of a shrink. Then the same
 run again with speculative asks: each iteration evaluates the reflection, the expansion and both

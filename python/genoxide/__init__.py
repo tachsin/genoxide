@@ -1621,8 +1621,8 @@ class RunningNelderMead(Running):
     @property
     def size(self) -> float:
         """The size of the simplex: the largest difference between a vertex and the best vertex
-        in any searched gene, as a fraction of the gene's range. The run has converged once it's
-        within the tolerance."""
+        in any searched gene, as a fraction of the gene's initial step (1 or less for the first
+        simplex). The run has converged once it's within the tolerance."""
         return float(self._get("size"))
 
     @property
@@ -3054,10 +3054,12 @@ class NelderMead(_SingleObjective):
     others, by an expansion further out, or by a contraction nearer; when none of them is better,
     the simplex shrinks towards its best point. The steps, their conditions and the order of tied
     points are those of Lagarias, Reeds, Wright and Wright (1998), and the coefficients by default
-    Gao and Han's (2012), which adapt to the number of genes and keep the simplex from flattening
-    from about 5 genes up. Points outside the bounds are moved to the nearest point inside, gene
-    by gene. A run has converged when every vertex is within ``tolerance`` of the best one, in
-    every gene, as a fraction of the gene's range: without restarts, ``run`` then stops with the
+    Gao and Han's (2012), which adapt to the number of genes: about as fast as the standard ones
+    up to 8 genes, faster from about 9, and far more reliable from about 20. A trial point outside
+    the bounds is mirrored back in at the bound it crossed, gene by gene, so the simplex doesn't
+    flatten against a bound; a minimum on a bound takes more evaluations than one inside. A run
+    has converged when every vertex is within ``tolerance`` of the best one, in every gene, as a
+    fraction of the initial step: without restarts, ``run`` then stops with the
     stop reason "converged"; with them, the search starts again from a random point, and the
     result is the best of all the runs. A generation is one round of evaluations: a new simplex,
     one trial point, or the points of a shrink. With ``speculative``, the reflection, the
@@ -3087,18 +3089,24 @@ class NelderMead(_SingleObjective):
     coefficients : "adaptive", "standard" or tuple of 4 floats, default "adaptive"
         How far the simplex reflects, expands, contracts and shrinks. "adaptive" is Gao and
         Han's for ``n`` searched genes: reflection 1, expansion ``1 + 2/n``, contraction
-        ``0.75 - 1/(2n)`` and shrink ``1 - 1/n`` (the standard ones for 1 or 2 genes).
+        ``0.75 - 1/(2n)`` and shrink ``1 - 1/n``, the standard ones for 2 genes. The paper
+        defines them for 2 genes or more; for 1 gene, the standard ones.
         "standard" is Nelder and Mead's (1965): 1, 2, 1/2 and 1/2. A tuple
         ``(reflection, expansion, contraction, shrink)`` sets them, with ``reflection > 0``,
         ``expansion > 1`` and greater than ``reflection``, and ``contraction`` and ``shrink``
         between 0 and 1 (exclusive).
-    initial_step : float, default 0.1
+    initial_step : float, optional
         The size of the first simplex of every run, as a fraction of each gene's range, greater
         than 0 and at most 1: each other vertex is the start moved up by it in one gene, or down
-        if up leaves the bounds.
-    tolerance : float, default 1e-10
-        The simplex size at which a run has converged, as a fraction of each gene's range,
-        greater than 0 and smaller than ``initial_step``.
+        if up leaves the bounds. None is 0.1, unless ``initial_step_absolute`` is given.
+    initial_step_absolute : float, optional
+        The size of the first simplex as a distance, the same in every gene, positive and finite,
+        instead of ``initial_step``: for a wide box around an unbounded problem (e.g. ±1e10),
+        where a fraction of the range would be far too large.
+    tolerance : float, default 1e-9
+        The simplex size at which a run has converged, as a fraction of each gene's initial step,
+        greater than 0 and smaller than 1: 1e-10 of the range with the default step, and the same
+        test in a wide box as in a narrow one.
     restarts : int, optional
         Random restarts after a run converges, at least 1, each from a new random point in the
         bounds: for multimodal functions, or to make sure of a minimum. None is no restarts.
@@ -3134,8 +3142,9 @@ class NelderMead(_SingleObjective):
         coefficients: Literal["adaptive", "standard"] | tuple[float, float, float, float] = (
             "adaptive"
         ),
-        initial_step: float = 0.1,
-        tolerance: float = 1e-10,
+        initial_step: float | None = None,
+        initial_step_absolute: float | None = None,
+        tolerance: float = 1e-9,
         restarts: int | None = None,
         speculative: bool = False,
         initial_genome: Sequence[float] | np.ndarray | None = None,
@@ -3146,6 +3155,7 @@ class NelderMead(_SingleObjective):
         self._objective = objective
         self.coefficients = coefficients
         self.initial_step = initial_step
+        self.initial_step_absolute = initial_step_absolute
         self.tolerance = tolerance
         self.restarts = restarts
         self.speculative = speculative
@@ -3187,10 +3197,15 @@ class NelderMead(_SingleObjective):
                     f"{self.initial_genome!r}"
                 )
             initial_genome = [_number("initial_genome", gene, plural=True) for gene in genes]
+        if self.initial_step is not None and self.initial_step_absolute is not None:
+            raise ValueError("give initial_step or initial_step_absolute, not both")
         return {
             "type": "nelder_mead",
             "coefficients": coefficients,
-            "initial_step": _number("initial_step", self.initial_step),
+            "initial_step": _optional_number("initial_step", self.initial_step),
+            "initial_step_absolute": _optional_number(
+                "initial_step_absolute", self.initial_step_absolute
+            ),
             "tolerance": _number("tolerance", self.tolerance),
             "restarts": restarts,
             "speculative": _flag("speculative", self.speculative),

@@ -804,12 +804,13 @@ fn main() -> genoxide::Result<()> {
 |---|---|
 | `.coefficients(nelder_mead::Coefficients::...)` | `Adaptive` (Gao and Han), `Standard` (1, 2, 1/2, 1/2), `Custom { reflection, expansion, contraction, shrink }` |
 | `.initial_step(fraction)` | 0.1 of each gene's range, 0 < fraction ≤ 1 |
-| `.tolerance(fraction)` | 1e-10: converged when every vertex is this close to the best in each gene, relative to its range; below the initial step |
+| `.initial_step_absolute(distance)` | instead of a fraction: the same distance in every gene, for a wide box around an unbounded problem (e.g. ±1e10) |
+| `.tolerance(fraction)` | 1e-9: converged when every vertex is this close to the best in each gene, relative to the initial step (1e-10 of the range by default); below 1 |
 | `.restarts(local::Restarts::Random { times })` | `Never`; each restart from a random point |
 | `.speculative(true)` | off: the reflection, expansion and both contractions in one round, the same path in fewer rounds, for `.parallel(true)` |
 | `.initial_genome(genome)` | random |
 
-A generation is a round of evaluations: n + 1 for a new simplex, 1 trial point (4 speculative), or n for a shrink. Points outside the bounds move onto them. `nelder_mead.converged()`, `size()`, `iterations()`, `restart_count()`.
+A generation is a round of evaluations: n + 1 for a new simplex, 1 trial point (4 speculative), or n for a shrink. Points outside the bounds are mirrored back in, so the simplex can't flatten on a bound; a minimum on a bound costs more evaluations than one inside. `nelder_mead.converged()`, `size()`, `iterations()`, `restart_count()`.
 
 ```rust
 use genoxide::prelude::*;

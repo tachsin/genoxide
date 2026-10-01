@@ -741,6 +741,7 @@ fn real_algorithm<'py>(
         config::Algorithm::NelderMead {
             coefficients,
             initial_step,
+            initial_step_absolute,
             tolerance,
             restarts,
             speculative,
@@ -753,6 +754,9 @@ fn real_algorithm<'py>(
             }
             if let Some(step) = initial_step {
                 builder = builder.initial_step(step);
+            }
+            if let Some(distance) = initial_step_absolute {
+                builder = builder.initial_step_absolute(distance);
             }
             if let Some(tolerance) = tolerance {
                 builder = builder.tolerance(tolerance);

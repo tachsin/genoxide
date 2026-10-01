@@ -12,11 +12,14 @@ use rand::Rng;
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Coefficients {
-    /// Gao and Han's (2012) coefficients for `n` searched genes (the default): reflection 1,
-    /// expansion 1 + 2/n, contraction 0.75 − 1/(2n) and shrink 1 − 1/n. With 2 genes they are the
-    /// standard ones; with more, smaller expansions and gentler contractions and shrinks keep the
-    /// simplex from flattening, which makes the method much faster from about 5 genes up. With a
-    /// single gene, where the formulas would shrink the simplex to a point, the standard ones.
+    /// Gao and Han's (2012, eq. 4.1) coefficients for `n ≥ 2` searched genes (the default):
+    /// reflection 1, expansion 1 + 2/n, contraction 0.75 − 1/(2n) and shrink 1 − 1/n. With 2
+    /// genes they are the standard ones. With more, smaller expansions and gentler contractions
+    /// and shrinks keep the simplex from flattening: about as fast as the standard ones up to 8
+    /// genes (up to a quarter slower from 3 to 6), faster from about 9, and from about 20 genes far
+    /// more reliable, where the standard method stalls before the minimum. The paper defines them
+    /// for `n ≥ 2` only; for a single gene, where the shrink would be 0, genoxide uses the
+    /// standard ones.
     #[default]
     Adaptive,
     /// The standard coefficients of Nelder and Mead (1965): reflection 1, expansion 2,
@@ -96,6 +99,15 @@ impl Coefficients {
     }
 }
 
+// the initial step of a `NelderMeadBuilder`
+#[derive(Clone, Copy, Debug)]
+enum InitialStep {
+    // of each gene's range
+    Fraction(f64),
+    // in every gene
+    Absolute(f64),
+}
+
 // what the next ask of a `NelderMead` evaluates
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -139,15 +151,20 @@ enum Decision {
 /// compared by Deb's rules, as everywhere in genoxide.
 ///
 /// - **Start.** The first simplex is the initial genome (random by default) and, for each
-///   searched gene, a copy moved by [`initial_step`](NelderMeadBuilder::initial_step) of the
-///   gene's range: up, or down if up leaves the bounds. Genes whose bounds are equal stay fixed
-///   and aren't searched.
-/// - **Bounds.** Points outside the bounds are moved to the nearest point inside, gene by gene.
-///   The simplex can then flatten against a bound; when the minimum is on it, that's where it
-///   converges.
+///   searched gene, a copy moved by the initial step: a fraction of the gene's range
+///   ([`initial_step`](NelderMeadBuilder::initial_step)), or a distance
+///   ([`initial_step_absolute`](NelderMeadBuilder::initial_step_absolute)); up, or down if up
+///   leaves the bounds. Genes whose bounds are equal stay fixed and aren't searched.
+/// - **Bounds.** A trial point outside the bounds is mirrored back in at the bound it crossed,
+///   gene by gene (and moved onto the bound if it's still outside), as
+///   [`GaussianMutation`](crate::operator::GaussianMutation) does. Moving it onto the bound
+///   instead would flatten the simplex against it, where it could "converge" with the minimum
+///   inside. A minimum on a bound is then approached rather than landed on: it takes more
+///   evaluations than one inside.
 /// - **Convergence.** A run has converged when every vertex is within
 ///   [`tolerance`](NelderMeadBuilder::tolerance) of the best one, in every gene, as a fraction of
-///   the gene's range. Without [`Restarts`] left, the method has then
+///   the initial step: the same test in a wide box as in a narrow one. Without [`Restarts`]
+///   left, the method has then
 ///   [finished](Algorithm::is_finished): the [`Engine`](crate::Engine) stops with
 ///   [`StopReason::Converged`](crate::StopReason::Converged). With them, the next ask starts a
 ///   new simplex at a random point.
@@ -199,7 +216,8 @@ pub struct NelderMead {
     expansion: f64,
     contraction: f64,
     shrink: f64,
-    initial_step: f64,
+    // the initial step of each searched gene, a distance
+    steps: Vec<f64>,
     tolerance: f64,
     restarts: Restarts,
     speculative: bool,
@@ -233,8 +251,8 @@ impl NelderMead {
         NelderMeadBuilder {
             real,
             coefficients: Coefficients::default(),
-            initial_step: 0.1,
-            tolerance: 1e-10,
+            initial_step: InitialStep::Fraction(0.1),
+            tolerance: 1e-9,
             restarts: Restarts::Never,
             speculative: false,
             initial_genome: None,
@@ -254,20 +272,19 @@ impl NelderMead {
     }
 
     /// The size of the simplex: the largest difference between a vertex and the best vertex in
-    /// any searched gene, as a fraction of the gene's range. The run has converged once it's
-    /// within the [tolerance](NelderMeadBuilder::tolerance).
+    /// any searched gene, as a fraction of the gene's initial step. 1 or less for the first
+    /// simplex of a run; the run has converged once it's within the
+    /// [tolerance](NelderMeadBuilder::tolerance).
     pub fn size(&self) -> f64 {
         let vertices = self.simplex.as_slice();
         let Some((first, others)) = vertices.split_first() else {
             return 0.0;
         };
-        let bounds = self.real.bounds();
         let mut size = 0.0f64;
         for vertex in others {
-            for &gene in &self.free {
-                let width = bounds[gene].end() - bounds[gene].start();
+            for (&gene, &step) in self.free.iter().zip(&self.steps) {
                 let difference = (vertex.genome()[gene] - first.genome()[gene]).abs();
-                size = size.max(difference / width);
+                size = size.max(difference / step);
             }
         }
         size
@@ -343,12 +360,7 @@ impl NelderMead {
     fn restart(&mut self) {
         self.restart_count += 1;
         let start = self.real.random_genome(&mut self.rng);
-        self.simplex = Population::new(simplex_around(
-            &self.real,
-            &self.free,
-            self.initial_step,
-            start,
-        ));
+        self.simplex = Population::new(simplex_around(&self.real, &self.free, &self.steps, start));
         self.converged = false;
         self.trials.clear();
     }
@@ -367,7 +379,7 @@ impl NelderMead {
         centroid
     }
 
-    // `x̄ + t (x̄ − x_worst)`, moved into the bounds
+    // `x̄ + t (x̄ − x_worst)`, mirrored back into the bounds
     fn along(&self, centroid: &[f64], t: f64) -> Reals {
         let worst = self.simplex[self.free.len()].genome();
         let bounds = self.real.bounds();
@@ -375,7 +387,7 @@ impl NelderMead {
             .iter()
             .zip(centroid)
             .zip(worst.iter())
-            .map(|((range, &c), &w)| (c + t * (c - w)).clamp(*range.start(), *range.end()))
+            .map(|((range, &c), &w)| mirror(c + t * (c - w), *range.start(), *range.end()))
             .collect()
     }
 
@@ -489,14 +501,35 @@ fn update_best<'a>(
     }
 }
 
-// the first simplex of a run: `start`, and for each searched gene a copy moved by `step` of its
-// range: up, or down if up leaves the bounds, or to the farther bound if both do
-fn simplex_around(real: &Real, free: &[usize], step: f64, start: Reals) -> Vec<Individual<Reals>> {
+// `x` mirrored at the bound it crossed, and onto the bound if it's still outside (more than the
+// range beyond it); NaN, from an overflowing step, onto the lower bound
+fn mirror(x: f64, low: f64, high: f64) -> f64 {
+    let mirrored = if x > high {
+        high - (x - high)
+    } else if x < low {
+        low + (low - x)
+    } else {
+        x
+    };
+    if mirrored.is_nan() {
+        low
+    } else {
+        mirrored.clamp(low, high)
+    }
+}
+
+// the first simplex of a run: `start`, and for each searched gene a copy moved by its step: up,
+// or down if up leaves the bounds, or to the farther bound if both do
+fn simplex_around(
+    real: &Real,
+    free: &[usize],
+    steps: &[f64],
+    start: Reals,
+) -> Vec<Individual<Reals>> {
     let bounds = real.bounds();
     let mut vertices = Vec::with_capacity(free.len() + 1);
-    for &gene in free {
+    for (&gene, &distance) in free.iter().zip(steps) {
         let (low, high) = (*bounds[gene].start(), *bounds[gene].end());
-        let distance = step * (high - low);
         let x = start[gene];
         let moved = if x + distance <= high {
             x + distance
@@ -694,14 +727,14 @@ impl Algorithm for NelderMead {
 
 /// A builder for a [`NelderMead`], from [`NelderMead::builder`].
 ///
-/// Defaults: maximize, [`Coefficients::Adaptive`], an initial step of 0.1 and a tolerance of
-/// 1e-10 of each gene's range, no restarts, one point per round, a random initial genome and a
+/// Defaults: maximize, [`Coefficients::Adaptive`], an initial step of 0.1 of each gene's range and
+/// a tolerance of 1e-9 of it, no restarts, one point per round, a random initial genome and a
 /// random seed.
 #[derive(Clone, Debug)]
 pub struct NelderMeadBuilder {
     real: Real,
     coefficients: Coefficients,
-    initial_step: f64,
+    initial_step: InitialStep,
     tolerance: f64,
     restarts: Restarts,
     speculative: bool,
@@ -720,14 +753,26 @@ impl NelderMeadBuilder {
 
     /// The size of the first simplex of every run, as a fraction of each gene's range, greater
     /// than 0 and at most 1: 0.1 by default. A larger simplex looks further at the start, a
-    /// smaller one stays near the initial genome.
+    /// smaller one stays near the initial genome. Replaces an
+    /// [absolute](NelderMeadBuilder::initial_step_absolute) step.
     pub fn initial_step(mut self, fraction: f64) -> Self {
-        self.initial_step = fraction;
+        self.initial_step = InitialStep::Fraction(fraction);
+        self
+    }
+
+    /// The size of the first simplex of every run as a distance, the same in every gene: for a
+    /// wide box around an unbounded problem (e.g. ±1e10), where a fraction of the range would be
+    /// far too large, with the initial genome where the search should start. Positive and
+    /// finite. Replaces a [fraction](NelderMeadBuilder::initial_step) of the range.
+    pub fn initial_step_absolute(mut self, distance: f64) -> Self {
+        self.initial_step = InitialStep::Absolute(distance);
         self
     }
 
     /// The simplex size at which a run has converged ([`NelderMead::size`]), as a fraction of
-    /// each gene's range, greater than 0 and smaller than the initial step: 1e-10 by default.
+    /// each gene's initial step, greater than 0 and smaller than 1: 1e-9 by default, which is
+    /// 1e-10 of each gene's range with the default initial step. Each factor of 10 costs a few
+    /// more iterations and gains about two digits of the minimum's position.
     pub fn tolerance(mut self, fraction: f64) -> Self {
         self.tolerance = fraction;
         self
@@ -785,8 +830,8 @@ impl NelderMeadBuilder {
     ///
     /// - [`Error::InvalidSetting`] for a representation without a gene that has more than one
     ///   value, invalid custom coefficients, an initial step that isn't greater than 0 and at
-    ///   most 1, a tolerance that isn't greater than 0 and smaller than the initial step, or
-    ///   random restarts 0 times.
+    ///   most 1 (as a fraction) or positive and finite (as a distance), a tolerance that isn't
+    ///   greater than 0 and smaller than 1, or random restarts 0 times.
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<NelderMead> {
         let invalid =
@@ -800,21 +845,34 @@ impl NelderMeadBuilder {
         }
         self.coefficients.validate()?;
         self.restarts.validate()?;
-        if !(self.initial_step > 0.0 && self.initial_step <= 1.0) {
-            return invalid(
-                "initial_step",
-                format!(
-                    "must be greater than 0 and at most 1, got {}",
-                    self.initial_step
-                ),
-            );
-        }
-        if !(self.tolerance > 0.0 && self.tolerance < self.initial_step) {
+        let bounds = self.real.bounds();
+        let steps: Vec<f64> = match self.initial_step {
+            InitialStep::Fraction(fraction) => {
+                if !(fraction > 0.0 && fraction <= 1.0) {
+                    return invalid(
+                        "initial_step",
+                        format!("must be greater than 0 and at most 1, got {fraction}"),
+                    );
+                }
+                let width = |gene: usize| bounds[gene].end() - bounds[gene].start();
+                free.iter().map(|&gene| fraction * width(gene)).collect()
+            }
+            InitialStep::Absolute(distance) => {
+                if !(distance > 0.0 && distance.is_finite()) {
+                    return invalid(
+                        "initial_step_absolute",
+                        format!("must be positive and finite, got {distance}"),
+                    );
+                }
+                vec![distance; free.len()]
+            }
+        };
+        if !(self.tolerance > 0.0 && self.tolerance < 1.0) {
             return invalid(
                 "tolerance",
                 format!(
-                    "must be greater than 0 and smaller than the initial step {}, got {}",
-                    self.initial_step, self.tolerance
+                    "must be greater than 0 and smaller than 1, got {}",
+                    self.tolerance
                 ),
             );
         }
@@ -829,7 +887,7 @@ impl NelderMeadBuilder {
             Some(genome) => genome,
             None => self.real.random_genome(&mut rng),
         };
-        let simplex = simplex_around(&self.real, &free, self.initial_step, start);
+        let simplex = simplex_around(&self.real, &free, &steps, start);
         let [reflection, expansion, contraction, shrink] = self.coefficients.values(free.len());
         Ok(NelderMead {
             real: self.real,
@@ -839,7 +897,7 @@ impl NelderMeadBuilder {
             expansion,
             contraction,
             shrink,
-            initial_step: self.initial_step,
+            steps,
             tolerance: self.tolerance,
             restarts: self.restarts,
             speculative: self.speculative,

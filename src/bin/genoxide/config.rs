@@ -193,7 +193,9 @@ pub enum Algorithm {
         coefficients: Option<NelderMeadCoefficients>,
         /// The size of the first simplex, as a fraction of each gene's range.
         initial_step: Option<f64>,
-        /// The simplex size at which a run has converged, as a fraction of each gene's range.
+        /// The size of the first simplex as a distance, instead.
+        initial_step_absolute: Option<f64>,
+        /// The simplex size at which a run has converged, as a fraction of the initial step.
         tolerance: Option<f64>,
         /// Random restarts after convergence; none if unset.
         restarts: Option<u64>,

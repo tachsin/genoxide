@@ -244,7 +244,7 @@ fn it_converges_on_rosenbrock_from_the_classic_start() {
         for (x, optimum) in outcome.best_genome().iter().zip([1.0, 1.0]) {
             assert!((x - optimum).abs() < 1e-7);
         }
-        assert!(engine.algorithm().size() <= 1e-10);
+        assert!(engine.algorithm().size() <= 1e-9);
         // run again, it stops at once
         let again = engine.run().unwrap();
         assert_eq!(again.evaluations(), outcome.evaluations());
@@ -322,7 +322,65 @@ fn points_stay_in_the_bounds_and_converge_on_them() {
             .collect();
         nelder_mead.tell(&fitness).unwrap();
     }
-    assert_eq!(nelder_mead.best().unwrap().genome().to_vec(), [1.0, -1.0]);
+    // mirrored at the bounds, the simplex approaches the corner rather than landing on it
+    let best = nelder_mead.best().unwrap();
+    for (x, corner) in best.genome().iter().zip([1.0, -1.0]) {
+        assert!((x - corner).abs() < 1e-8, "{x}");
+    }
+    assert!(best.fitness().unwrap().score().unwrap() - 5.0 < 1e-7);
+}
+
+#[test]
+fn a_simplex_that_meets_a_bound_doesnt_flatten_on_it() {
+    // Branin's minima are inside the box; clamped to the bounds, the simplex of seed 2 stopped on
+    // the edge x₁ = 10 at f = 1.94, away from any minimum, as did 138 of 1000 seeds. Mirrored,
+    // none stops on a bound, and a few stall inside, as Nelder-Mead can (8 of 1000, e.g. seed 20)
+    use genoxide::problems::{Branin, Problem};
+    let bounds = Branin.representation();
+    let mut minima = 0;
+    for seed in 1..=50 {
+        let nelder_mead = NelderMead::builder(Branin.representation())
+            .minimize()
+            .seed(seed)
+            .build()
+            .unwrap();
+        let outcome = Engine::new(nelder_mead, Branin)
+            .stop_when(Stop::evaluations(10_000))
+            .run()
+            .unwrap();
+        let mut genes = outcome.best_genome().iter().zip(bounds.bounds());
+        let on_bound = genes.any(|(x, range)| x == range.start() || x == range.end());
+        assert!(!on_bound, "seed {seed}");
+        let value = outcome.best_fitness().score().unwrap();
+        minima += usize::from(value - 0.397_887_357_729_738 < 1e-9);
+    }
+    assert_eq!(minima, 49);
+}
+
+#[test]
+fn an_absolute_step_and_a_relative_tolerance_work_in_any_box() {
+    // the same run, bit for bit, in boxes from ±10 to ±1e10: with a fraction of the range, the
+    // widest box would start with a step of 2e9 and stop 2 from the minimum
+    let run = |width: f64| {
+        let nelder_mead = NelderMead::builder(Real::uniform(2, -width..=width).unwrap())
+            .initial_genome(Reals::from(vec![-1.2, 1.0]))
+            .initial_step_absolute(0.5)
+            .minimize()
+            .build()
+            .unwrap();
+        Engine::new(nelder_mead, rosenbrock)
+            .stop_when(Stop::evaluations(10_000))
+            .run()
+            .unwrap()
+    };
+    let narrow = run(10.0);
+    assert_eq!(narrow.stop_reason(), StopReason::Converged);
+    assert!(narrow.best_fitness().score().unwrap() < 1e-15);
+    for width in [1e3, 1e6, 1e10] {
+        let wide = run(width);
+        assert_eq!(wide.best(), narrow.best(), "±{width}");
+        assert_eq!(wide.evaluations(), narrow.evaluations(), "±{width}");
+    }
 }
 
 #[test]
@@ -515,9 +573,23 @@ fn invalid_settings_are_errors() {
     for step in [0.0, 1.5, f64::NAN] {
         assert_eq!(setting(builder().initial_step(step)), "initial_step");
     }
-    for tolerance in [0.0, 0.1, 0.5, f64::NAN] {
+    for tolerance in [0.0, 1.0, 1.5, f64::NAN] {
         assert_eq!(setting(builder().tolerance(tolerance)), "tolerance");
     }
+    for distance in [0.0, -1.0, f64::INFINITY, f64::NAN] {
+        assert_eq!(
+            setting(builder().initial_step_absolute(distance)),
+            "initial_step_absolute"
+        );
+    }
+    // the last of the two initial steps counts
+    assert!(
+        builder()
+            .initial_step_absolute(-1.0)
+            .initial_step(0.1)
+            .build()
+            .is_ok()
+    );
     assert_eq!(
         setting(builder().restarts(local::Restarts::Random { times: 0 })),
         "restarts"
@@ -561,7 +633,7 @@ fn a_run_as_in_python() {
     // same results: every setting of the builder, on a problem evaluated in Rust
     use genoxide::problems::Rosenbrock;
     let problem = Rosenbrock::new(4);
-    for (speculative, evaluations, generations) in [(false, 1946, 1933), (true, 4715, 1177)] {
+    for (speculative, evaluations, generations) in [(false, 1985, 1969), (true, 4815, 1202)] {
         let nelder_mead = NelderMead::builder(problem.representation())
             .coefficients(Coefficients::Custom {
                 reflection: 1.0,
@@ -570,7 +642,7 @@ fn a_run_as_in_python() {
                 shrink: 0.6,
             })
             .initial_step(0.2)
-            .tolerance(1e-8)
+            .tolerance(5e-8)
             .restarts(local::Restarts::Random { times: 2 })
             .speculative(speculative)
             .minimize()
@@ -584,6 +656,6 @@ fn a_run_as_in_python() {
         assert_eq!(outcome.stop_reason(), StopReason::Converged);
         assert_eq!(outcome.evaluations(), evaluations);
         assert_eq!(outcome.generations(), generations);
-        assert_eq!(outcome.best_fitness().score(), Some(8.555975764172048e-15));
+        assert_eq!(outcome.best_fitness().score(), Some(6.607094554363915e-14));
     }
 }

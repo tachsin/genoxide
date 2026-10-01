@@ -372,10 +372,17 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             seed,
             coefficients,
             initial_step,
+            initial_step_absolute,
             tolerance,
             restarts,
             speculative,
         } => {
+            if initial_step.is_some() && initial_step_absolute.is_some() {
+                return Err(
+                    "`algorithm.initial_step` and `algorithm.initial_step_absolute`: give one, not both"
+                        .to_string(),
+                );
+            }
             let mut builder = NelderMead::builder(real).objective(context.single_objective()?);
             if let Some(seed) = seed {
                 builder = builder.seed(seed);
@@ -385,6 +392,9 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             }
             if let Some(step) = initial_step {
                 builder = builder.initial_step(step);
+            }
+            if let Some(distance) = initial_step_absolute {
+                builder = builder.initial_step_absolute(distance);
             }
             if let Some(tolerance) = tolerance {
                 builder = builder.tolerance(tolerance);
