@@ -24,7 +24,7 @@ pub fn record_small() -> Result<()> {
         .seed(1)
         .build()?;
     let mut frames = Frames::new(100);
-    Engine::new(cmaes, problem.clone())
+    Engine::new(cmaes, problem)
         .stop_when(Stop::target(minimum + 1e-8).or(Stop::evaluations(budget)))
         .on_generation(|snapshot| {
             let population = snapshot.population().iter().map(|x| &x.genome()[..]);
