@@ -81,7 +81,10 @@
 //! DTLZ problems are Deb and Jain's (2014, *IEEE Transactions on Evolutionary Computation* 18(4):
 //! 577-601 and 602-622), CTP Deb, Pratap and Meyarivan's (2001, EMO 2001, LNCS 1993: 284-298),
 //! C-DTLZ Jain and Deb's (2014, *IEEE Transactions on Evolutionary Computation* 18(4): 602-622),
-//! and MW Ma and Wang's (2019, *IEEE Transactions on Evolutionary Computation* 23(6): 972-986).
+//! MW Ma and Wang's (2019, *IEEE Transactions on Evolutionary Computation* 23(6): 972-986),
+//! DC-DTLZ Li, Chen, Fu and Yao's (2019, *IEEE Transactions on Evolutionary Computation* 23(2):
+//! 303-315), and DAS-CMOP Fan et al.'s (2020, *Evolutionary Computation* 28(3): 339-378); DTLZ8
+//! and DTLZ9 are the DTLZ report's.
 //! [`Zdt5`] has
 //! [`Binary`](crate::genome::Binary) genomes, and so isn't in [`all`], whose problems have
 //! [`Real`] ones. Each other problem's docs give its definition and cite its original authors.
@@ -319,7 +322,7 @@ where
 }
 
 /// Every problem of this module with `M` objectives and [`Real`] genomes, at its default size:
-/// the two-objective problems for `M = 2`, the Viennet problems for `M = 3`, and the
+/// the two-objective problems for `M = 2`, the Viennet problems and DAS-CMOP7-9 for `M = 3`, and the
 /// [`engineering`] problems with `M` objectives, in the order of the table above, then DTLZ1-7,
 /// the convex, scaled and inverted DTLZ problems, WFG1-9, MW4, MW8
 /// and MW14 for any `M` from 2 on, then the constrained DTLZ problems (C1-DTLZ3 and convex
