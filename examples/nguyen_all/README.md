@@ -5,7 +5,7 @@ summary: All twelve of Nguyen's symbolic regression problems, by the same geneti
 reference: "Uy, N. Q., Hoai, N. X., O'Neill, M., McKay, R. I. and Galván-López, E. (2011). Semantically-based crossover in genetic programming: application to real-valued symbolic regression. Genetic Programming and Evolvable Machines 12(2): 91-119."
 reference_url: https://doi.org/10.1007/s10710-010-9121-2
 optimum: "Each formula, exactly (an RMSE of 0, up to rounding); this search recovers 11 of the 12 in some runs"
-languages: [rust]
+languages: [rust, python]
 order: 258
 family: Nguyen
 tab: All twelve
@@ -43,7 +43,8 @@ genoxide's random stream: another library's differ, and so can how hard a proble
 The Nguyen-1, 5 and 9 tabs have a page each: the problems this search recovers in nearly every run,
 without being as easy as Nguyen-10 and 11.
 
-There's no Python version: the Python package has no genetic programming yet.
+The Python version runs the same searches with `gx.gp`, the trees evaluated in Rust in
+parallel: it prints the same table.
 
 ## What makes them hard
 

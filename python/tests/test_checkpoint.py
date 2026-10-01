@@ -13,9 +13,13 @@ def sphere(x):
 
 
 def same(a, b):
+    if isinstance(a.best_genome, gx.gp.Tree):
+        genomes = a.best_genome == b.best_genome
+    else:
+        genomes = np.array_equal(a.best_genome, b.best_genome)
     return (
         a.best_fitness == b.best_fitness
-        and np.array_equal(a.best_genome, b.best_genome)
+        and genomes
         and a.evaluations == b.evaluations
         and a.generations == b.generations
     )
@@ -58,7 +62,16 @@ ALGORITHMS = {
     "islands": lambda: gx.Islands(
         [ga(seed=seed) for seed in range(3)], topology="random", interval=3, seed=5
     ),
+    "gp": lambda: ga(
+        gx.gp.Gp(KOZA.primitives()),
+        gx.gp.Mutations([(0.7, gx.gp.SubtreeMutation()), (0.3, gx.gp.PointMutation(count=1))]),
+        gx.gp.SubtreeCrossover(),
+        mutation_rate=0.2,
+    ),
 }
+
+# symbolic regression, evaluated in Rust
+KOZA = gx.gp.regression.problems.Koza1()
 
 
 def xor(network):
@@ -71,6 +84,8 @@ def fitness_for(algorithm):
     if isinstance(algorithm, gx.Neat):
         return xor
     genome = algorithm._genome
+    if isinstance(genome, gx.gp.Gp):
+        return KOZA
     if isinstance(genome, gx.Permutation):
         return lambda order: float(np.sum(np.abs(np.diff(order))))
     if isinstance(genome, gx.Binary):

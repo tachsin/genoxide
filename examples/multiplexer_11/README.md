@@ -5,7 +5,7 @@ summary: Find the Boolean function that uses 3 address bits to select one of 8 d
 reference: "Koza, J. R. (1992). Genetic Programming: On the Programming of Computers by Means of Natural Selection. MIT Press."
 reference_url: https://www.genetic-programming.com/gpbook1toc.html
 optimum: "All 2048 cases right"
-languages: [rust]
+languages: [rust, python]
 order: 256
 ---
 
@@ -25,7 +25,9 @@ in generation 9. The critique of GP benchmarks (McDermott et al. 2012, Genetic p
 better benchmarks, GECCO 2012: 791-798) lists it among the overused problems; it stays GP's classic
 Boolean test, with an exact optimum.
 
-There's no Python version: the Python package has no genetic programming yet.
+The Python version runs the same search with `gx.gp`, the problem itself as the fitness
+function, evaluated in Rust (`gx.gp.boolean.Multiplexer(3)`): it prints the same output and
+writes the same trace.
 
 ## What makes it hard
 

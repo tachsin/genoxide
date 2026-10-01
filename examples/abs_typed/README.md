@@ -25,7 +25,8 @@ negative, else x. So the formulas are built from two types of values, real numbe
 function says what types its arguments and its result have, and the search only makes programs in
 which they fit.
 
-There's no Python version: the Python package has no genetic programming yet.
+There's no Python version: the Python package has genoxide's built-in primitives, for symbolic
+regression and the Boolean problems, but no primitives of your own, such as this typed set, yet.
 
 ## What makes it hard
 

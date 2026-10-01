@@ -17,6 +17,21 @@ pub fn genome_setting<T>(result: genoxide::Result<T>, genome: &str) -> Result<T>
     result.map_err(|error| message(error, Some(genome)))
 }
 
+/// [`setting`], with genoxide's settings named as `names` says, `(genoxide, Python)`, e.g.
+/// `("tournament_size", "DoubleTournament.fitness_size")`: for the settings whose genoxide name
+/// stands for more than one Python setting.
+pub fn setting_named<T>(result: genoxide::Result<T>, names: &[(&str, &str)]) -> Result<T> {
+    result.map_err(|error| match error {
+        Error::InvalidSetting { setting, reason } => {
+            match names.iter().find(|(genoxide, _)| *genoxide == setting) {
+                Some((_, python)) => format!("invalid setting `{python}`: {reason}"),
+                None => message(Error::InvalidSetting { setting, reason }, None),
+            }
+        }
+        error => message(error, None),
+    })
+}
+
 fn message(error: Error, genome: Option<&str>) -> String {
     match error {
         Error::MissingSetting { setting } => format!("`{}` is needed", python(setting, genome)),

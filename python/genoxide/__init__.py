@@ -30,7 +30,9 @@ of scores: at most one call per generation, for vectorized numpy code.
 which ``run`` evaluates in Rust, and :mod:`genoxide.indicators` the quality indicators of
 multi-objective fronts. :mod:`genoxide.nn` has neural networks whose weights a genome holds, and
 :mod:`genoxide.problems.control` pole-balancing tasks for them (neuroevolution); :class:`Neat`
-evolves networks' structure too, as :mod:`genoxide.neat`'s networks.
+evolves networks' structure too, as :mod:`genoxide.neat`'s networks. :mod:`genoxide.gp` has
+genetic programming: trees of formulas and Boolean functions, with symbolic regression and the
+Boolean problems evaluated in Rust.
 :mod:`genoxide.math` has genoxide's portable math functions, the same to the bit on every
 platform.
 
@@ -83,6 +85,9 @@ __all__ = [
     "StochasticUniversalSampling",
     "Truncation",
     "RandomSelection",
+    "LexicographicTournament",
+    "DoubleTournament",
+    "Tarpeian",
     # crossover
     "UniformCrossover",
     "PointCrossover",
@@ -158,6 +163,7 @@ __all__ = [
     "nn",
     "neat",
     "math",
+    "gp",
 ]
 
 ObjectiveName = Literal["maximize", "minimize"]
@@ -389,7 +395,8 @@ class AdaptiveReal:
         }
 
 
-Genome = Union[Binary, Integer, Real, Permutation, AdaptiveReal]
+# trees of genetic programming are a genome of `gp`, which imports this module
+Genome = Union[Binary, Integer, Real, Permutation, AdaptiveReal, "gp.Gp"]
 
 # --- selection -----------------------------------------------------------------------------------
 
@@ -450,7 +457,82 @@ class RandomSelection:
         return {"type": "random"}
 
 
-Select = Union[Tournament, Rank, Roulette, StochasticUniversalSampling, Truncation, RandomSelection]
+@dataclass(frozen=True)
+class LexicographicTournament:
+    """Lexicographic parsimony pressure (Luke and Panait 2002): tournaments of ``size``
+    individuals (1 to 2^24) in which, of equal fitness, the smaller genome wins: a tree with fewer
+    nodes (:mod:`genoxide.gp`), else the shorter genome. Strong where fitness values repeat
+    (Boolean problems, counts), little with continuous fitness, for which ``bucket_ratio``
+    (greater than 0 and at most 1, Luke and Panait's 1/2) makes near values equal: the worst
+    ``bucket_ratio`` of the population in the lowest bucket, the worst ``bucket_ratio`` of the
+    rest in the next, and so on, and tournaments compare the buckets, then sizes."""
+
+    size: int
+    bucket_ratio: float | None = None
+
+    def _describe(self) -> dict[str, Any]:
+        ratio = None
+        if self.bucket_ratio is not None:
+            ratio = _number("LexicographicTournament.bucket_ratio", self.bucket_ratio)
+        return {
+            "type": "lexicographic_tournament",
+            "size": _whole("LexicographicTournament.size", self.size),
+            "bucket_ratio": ratio,
+        }
+
+
+@dataclass(frozen=True)
+class DoubleTournament:
+    """Double tournament (Luke and Panait 2002), against bloat: a size tournament between the
+    winners of two fitness tournaments of ``fitness_size`` individuals (1 to 2^24), in which the
+    smaller of the two wins with probability ``parsimony / 2``, ``parsimony`` from 1 (no pressure)
+    to 2 (always the smaller). With ``size_first``, the fitness tournament's contestants are the
+    winners of size tournaments instead. Size is a tree's number of nodes (:mod:`genoxide.gp`),
+    or a genome's length. Fitness tournaments of 7 and a parsimony of 1.4 were the best in Luke
+    and Panait's comparison (2006)."""
+
+    fitness_size: int
+    parsimony: float
+    size_first: bool = False
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "double_tournament",
+            "fitness_size": _whole("DoubleTournament.fitness_size", self.fitness_size),
+            "parsimony": _number("DoubleTournament.parsimony", self.parsimony),
+            "size_first": bool(_flag("DoubleTournament.size_first", self.size_first)),
+        }
+
+
+@dataclass(frozen=True)
+class Tarpeian:
+    """Tarpeian bloat control (Poli 2003): ``select``, any selection but another Tarpeian one,
+    with each genome larger than the population's mean size counted as invalid with probability
+    ``rate`` (greater than 0 and at most 1), drawn anew at each selection. Size is a tree's
+    number of nodes (:mod:`genoxide.gp`), or a genome's length."""
+
+    select: Select
+    rate: float
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "tarpeian",
+            "select": _describe_setting("Tarpeian.select", self.select, _SELECT),
+            "rate": _number("Tarpeian.rate", self.rate),
+        }
+
+
+Select = Union[
+    Tournament,
+    Rank,
+    Roulette,
+    StochasticUniversalSampling,
+    Truncation,
+    RandomSelection,
+    LexicographicTournament,
+    DoubleTournament,
+    Tarpeian,
+]
 
 # --- crossover -----------------------------------------------------------------------------------
 
@@ -556,6 +638,8 @@ Crossover = Union[
     PartiallyMappedCrossover,
     CycleCrossover,
     EdgeRecombinationCrossover,
+    "gp.SubtreeCrossover",
+    "gp.OnePointCrossover",
 ]
 
 # --- mutation ------------------------------------------------------------------------------------
@@ -701,6 +785,12 @@ Mutation = Union[
     InsertionMutation,
     ScrambleMutation,
     SelfAdaptiveMutation,
+    "gp.SubtreeMutation",
+    "gp.PointMutation",
+    "gp.HoistMutation",
+    "gp.ShrinkMutation",
+    "gp.ConstantMutation",
+    "gp.Mutations",
 ]
 
 # --- schemes of the genetic algorithm ------------------------------------------------------------
@@ -843,8 +933,9 @@ Decomposition = Union[Tchebycheff, Pbi]
 class Result:
     """The result of a single-objective run."""
 
-    best_genome: np.ndarray
-    """The best genome found."""
+    best_genome: Any
+    """The best genome found: a 1-D numpy array, or a :class:`genoxide.gp.Tree` for a
+    :class:`genoxide.gp.Gp` genome."""
     best_fitness: float | None
     """Its score, or None if no valid solution was found."""
     violation: float
@@ -873,8 +964,9 @@ class MultiResult:
     first of its copies), as in the last generation's ``MultiProgress``. Different genomes with the
     same objective values each have a row."""
 
-    front_genomes: np.ndarray
-    """The genomes of the front, a row each."""
+    front_genomes: Any
+    """The genomes of the front, a row each; a tuple of :class:`genoxide.gp.Tree` objects for a
+    :class:`genoxide.gp.Gp` genome."""
     front_objectives: np.ndarray
     """Their objective values, a row each."""
     front_violations: np.ndarray
@@ -965,8 +1057,8 @@ class Progress(_ReadOnly):
     """The time since the run started."""
     best_fitness: float | None
     """The best score so far, or None if no valid solution was found yet."""
-    best_genome: np.ndarray
-    """The best genome so far."""
+    best_genome: Any
+    """The best genome so far: a 1-D numpy array, or a :class:`genoxide.gp.Tree`."""
     _population: _genoxide.Snapshot | _Arrays
 
     def __init__(
@@ -975,7 +1067,7 @@ class Progress(_ReadOnly):
         evaluations: int,
         seconds: float,
         best_fitness: float | None,
-        best_genome: np.ndarray,
+        best_genome: Any,
         population: Any,
     ) -> None:
         # `population`: the run's copy of the population, or its arrays (`_Arrays`)
@@ -989,10 +1081,11 @@ class Progress(_ReadOnly):
         )
 
     @cached_property
-    def population(self) -> np.ndarray:
-        """The population after the generation, a genome per row."""
+    def population(self) -> Any:
+        """The population after the generation, a genome per row; a tuple of
+        :class:`genoxide.gp.Tree` objects for a :class:`genoxide.gp.Gp` genome."""
         # a population has genomes: only a front's arrays have none
-        return cast(np.ndarray, self._population.genomes())
+        return self._population.genomes()
 
     @cached_property
     def scores(self) -> np.ndarray:
@@ -1072,10 +1165,11 @@ class MultiProgress(_ReadOnly):
         )
 
     @cached_property
-    def population(self) -> np.ndarray:
-        """The population after the generation, a genome per row."""
+    def population(self) -> Any:
+        """The population after the generation, a genome per row; a tuple of
+        :class:`genoxide.gp.Tree` objects for a :class:`genoxide.gp.Gp` genome."""
         # a population has genomes: only a front's arrays have none
-        return cast(np.ndarray, self._population.genomes())
+        return self._population.genomes()
 
     @cached_property
     def objectives(self) -> np.ndarray:
@@ -1819,7 +1913,11 @@ class _SingleObjective(_Single):
             (``problem.genome``: a :class:`Real`, or an :class:`Integer` for
             :class:`~genoxide.problems.engineering.GearTrain`), and the objective "minimize". So
             is a :class:`~genoxide.problems.control.Balance`, with a :class:`Real` genome of a
-            gene per weight of its network, and the objective "maximize".
+            gene per weight of its network, and the objective "maximize". For a
+            :class:`genoxide.gp.Gp` genome, the function takes a :class:`genoxide.gp.Tree`; a
+            :class:`genoxide.gp.regression.Regression`, a regression problem or a Boolean problem
+            of :mod:`genoxide.gp` is evaluated in Rust, with the Gp built from its primitives and
+            the objective "minimize".
         generations : int, optional
             Stops after this many generations, 0 or more. 0 evaluates only the initial
             population.
@@ -1913,6 +2011,11 @@ class _SingleObjective(_Single):
         callback = _on_generation(on_generation, Progress)
         controls = _control(control, self)
         saving = _checkpoints(checkpoint, checkpoint_every, resume)
+        if gp._is_tree_fitness(fitness):
+            # a fitness of trees, evaluated in Rust
+            return Result(
+                **self._run(fitness, stop, False, parallel, callback, None, controls, saving)
+            )
         if isinstance(fitness, (problems.Problem, problems.control.Balance)):
             description = fitness._json()
             return Result(
@@ -1936,11 +2039,11 @@ class Ga(_SingleObjective):
 
     Parameters
     ----------
-    genome : Binary, Integer, Real or Permutation
+    genome : Binary, Integer, Real, Permutation, AdaptiveReal or gp.Gp
         The search space.
     population_size : int
         The number of individuals, 1 to 2^24.
-    select : Tournament, Rank, Roulette, StochasticUniversalSampling, Truncation or RandomSelection
+    select : a selection, e.g. Tournament, Rank or DoubleTournament
         How parents are picked.
     crossover : a crossover
         How pairs of parents are combined. It must fit the genome.
@@ -1963,6 +2066,10 @@ class Ga(_SingleObjective):
     seed : int, optional
         The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
         repeats the run.
+    initial_genomes : sequence of gp.Tree, optional
+        For a :class:`genoxide.gp.Gp` genome, trees of its set to start from, at most
+        ``population_size``, e.g. ``gp.ramped_half_and_half(population_size, seed)``; random
+        trees fill the rest.
     """
 
     _running = RunningGa
@@ -1981,6 +2088,7 @@ class Ga(_SingleObjective):
         parallel_breeding: bool | None = None,
         objective: ObjectiveName = "maximize",
         seed: int | None = None,
+        initial_genomes: Sequence[gp.Tree] | None = None,
     ) -> None:
         self._genome = genome
         self._objective = objective
@@ -1993,6 +2101,7 @@ class Ga(_SingleObjective):
         self.scheme = scheme
         self.parallel_breeding = parallel_breeding
         self.seed = seed
+        self.initial_genomes = initial_genomes
 
     def _describe(self) -> dict[str, Any]:
         return {
@@ -2008,6 +2117,7 @@ class Ga(_SingleObjective):
                 None if self.scheme is None else _describe_setting("scheme", self.scheme, _SCHEME)
             ),
             "parallel_breeding": _flag("parallel_breeding", self.parallel_breeding),
+            "initial_genomes": gp._initial_genomes(self._genome, self.initial_genomes),
         }
 
 
@@ -3096,7 +3206,10 @@ class _MultiObjective(_Algorithm):
             :mod:`genoxide.problems` is evaluated in Rust, with no Python call: ``batch`` doesn't
             apply, and the genome must be the problem's (``problem.genome``: a :class:`Real`
             with a gene per variable, or a :class:`Binary` for :class:`~genoxide.problems.Zdt5`),
-            and the objectives the problem's, all "minimize".
+            and the objectives the problem's, all "minimize". For a :class:`genoxide.gp.Gp`
+            genome, the function takes a :class:`genoxide.gp.Tree`; a
+            :class:`genoxide.gp.WithSize` (a fitness of :mod:`genoxide.gp` and the tree's size)
+            is evaluated in Rust, with 2 objectives, both "minimize".
         generations : int, optional
             Stops after this many generations, 0 or more. 0 evaluates only the initial
             population.
@@ -3182,6 +3295,11 @@ class _MultiObjective(_Algorithm):
         stop = _stop(generations, evaluations, None, time, stagnation)
         callback = _on_generation(on_generation, MultiProgress)
         saving = _checkpoints(checkpoint, checkpoint_every, resume)
+        if gp._is_tree_fitness(fitness):
+            # a fitness of trees with their size, evaluated in Rust
+            return MultiResult(
+                **self._run(fitness, stop, False, parallel, callback, None, None, saving)
+            )
         if isinstance(fitness, problems.MultiProblem):
             description = fitness._json()
             return MultiResult(
@@ -3230,6 +3348,10 @@ class Nsga2(_MultiObjective):
     seed : int, optional
         The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
         repeats the run.
+    initial_genomes : sequence of gp.Tree, optional
+        For a :class:`genoxide.gp.Gp` genome (with 2 objectives, e.g. the error and the size,
+        :class:`genoxide.gp.WithSize`), trees of its set to start from, at most
+        ``population_size``; random trees fill the rest.
     """
 
     def __init__(
@@ -3244,6 +3366,7 @@ class Nsga2(_MultiObjective):
         mutation_rate: float | None = None,
         eliminate_duplicates: bool | None = None,
         seed: int | None = None,
+        initial_genomes: Sequence[gp.Tree] | None = None,
     ) -> None:
         self._genome = genome
         self.objectives = _objective_list(objectives)
@@ -3254,6 +3377,7 @@ class Nsga2(_MultiObjective):
         self.mutation_rate = mutation_rate
         self.eliminate_duplicates = eliminate_duplicates
         self.seed = seed
+        self.initial_genomes = initial_genomes
 
     def _describe(self) -> dict[str, Any]:
         return {
@@ -3261,6 +3385,7 @@ class Nsga2(_MultiObjective):
             "population_size": _whole("population_size", self.population_size),
             "seed": _optional_whole("seed", self.seed),
             "variation": self._variation(),
+            "initial_genomes": gp._initial_genomes(self._genome, self.initial_genomes),
         }
 
 
@@ -3573,3 +3698,4 @@ class SmsEmoa(_MultiObjective):
 
 # the submodules use the classes above
 from . import indicators, math, nn, problems  # noqa: E402
+from . import gp  # noqa: E402

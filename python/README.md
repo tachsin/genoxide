@@ -9,6 +9,7 @@ The algorithms of [genoxide](https://github.com/tachsin/genoxide), a Rust librar
 - genetic algorithms and local search
 - differential evolution, evolution strategies, CMA-ES and particle swarm optimization
 - NEAT, OpenAI's evolution strategy, neural networks and pole-balancing tasks, for neuroevolution
+- genetic programming: formulas and Boolean functions as trees, with symbolic regression and Koza's problems evaluated in Rust
 - the island model, and checkpoints to resume a long run
 - NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives
 
@@ -81,6 +82,7 @@ A fitness function takes a genome as a numpy array:
 | `Real(bounds, length)` | `float64` |
 | `Permutation(length)` | `int64`, an ordering of `0 .. length - 1` |
 | `AdaptiveReal(real, initial_step)` | `float64`, the genes of `real`, without the step size that evolves with them |
+| `gx.gp.Gp(primitives)` | not an array: a `gx.gp.Tree`, see [Genetic programming](#genetic-programming) |
 
 `bounds` is one pair `(low, high)` for every gene, with `length`, or a list of pairs, one per gene.
 
@@ -110,6 +112,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | Reals in ranges | `Real` | `Cmaes`; `De`; `Es`; `Ga` with `SimulatedBinaryCrossover(eta)` and `PolynomialMutation(eta)` |
 | A neural network's weights | `Real`, from `network.representation(bounds)` | `Cmaes` up to a few hundred weights; `OpenEs` for thousands and more |
 | A neural network's structure and weights | `gx.neat.Network`, NEAT's own | `Neat` |
+| A formula or a Boolean function (genetic programming) | `gx.gp.Gp`, trees | `Ga` with `gx.gp.SubtreeCrossover()` and `gx.gp.SubtreeMutation()`, or `Islands` of them; `Nsga2` for accuracy against size |
 | Several objectives | any | `Nsga2` for 2 or 3 objectives; `Nsga3` or `Moead` for more |
 
 - `Cmaes` is the strongest general choice for continuous problems with up to a few hundred genes, especially when the genes interact. Its defaults need no tuning. For multimodal functions, add `restarts="ipop"` or `"bipop"`. For thousands of genes or separable problems, `covariance="diagonal"` (sep-CMA-ES): O(n) per sample, no correlations between genes.
@@ -123,7 +126,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 
 | Algorithm | Genomes | Settings |
 |---|---|---|
-| `Ga` | all | `population_size`, `select`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1), `scheme`, `parallel_breeding` (False) |
+| `Ga` | all | `population_size`, `select`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1), `scheme`, `parallel_breeding` (False), `initial_genomes` (trees of a `gx.gp.Gp`) |
 | `LocalSearch` | all | `neighbor` (a mutation), `neighbors` (1), `acceptance`, `restart=(patience, kicks)` |
 | `De` | real | `population_size` (100; with `l_shade`, 18 × genes, at least 4), `l_shade` (a budget of evaluations, for L-SHADE), `strategy` (`{"max_p": 0.2, "archive": 1.0}`; `"rand1"`, `"best1"`, `{"p", "archive"}`), `control` (`{"memory": 100}`; `{"f", "cr"}`, `{"min_f", "max_f", "cr"}`, `{"c"}`), `restarts` (`{"tolerance": 1e-12, "patience": 200}`; `"never"`), `parallel_breeding` (False) |
 | `Es` | real | `parents` (μ), `offspring` (λ, 5 to 7 times μ), `recombination` (`"intermediate"`; `"dominant"`), `rho` (the parents per offspring, all by default), `selection` (`"comma"`; `"plus"`), `step_sizes` (`"per_gene"`; `"one"`), `initial_step` (0.3 of each range), `parallel_breeding` (False) |
@@ -132,7 +135,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | `Neat` | its networks | `inputs`, `outputs` (needed), `population_size` (150), `compatibility` (`(1.0, 1.0, 0.4, 3.0)`: c1, c2, c3, threshold), `weight_mutation` (`(0.8, 0.1)`: rate, replace), `weight_deviations` (`(1.0, 1.0)`), `structural_mutation` (`(0.03, 0.05)`: add node, add connection), `reproduction` (`(0.25, 0.001, 0.75)`), `selection` (`(5, 0.2)`: elitism size, survival), `stagnation` (15), `activation` (`"steep_sigmoid"`), `feed_forward` (True), `initial` (`"fully_connected"`; `"unconnected"`), `sharing` (`"normalized"`; `"raw"`, the paper's) |
 | `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
 | `Islands` | those of its islands | `islands` (a list of `Ga` or of `De`, with the same genome and objective, and seeds of their own), `topology` (`"ring"`; `"fully_connected"`, `"random"`, `"isolated"`), `interval` (10 generations between migrations), `migrants` (2 copies of each island's best), `seed` (of the random topology) |
-| `Nsga2` | all | `objectives`, `population_size`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1) |
+| `Nsga2` | all | `objectives`, `population_size`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1), `initial_genomes` (trees of a `gx.gp.Gp`) |
 | `Nsga3` | all | `objectives`, `reference_directions`, `crossover`, `mutation`, `population_size` (the number of reference directions), `crossover_rate` (1), `mutation_rate` (1) |
 | `Spea2` | all | `objectives`, `population_size` (the archive's), `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1) |
 | `Moead` | all | `objectives`, `weights` (a subproblem each), `crossover`, `mutation`, `decomposition` (`Tchebycheff()`), `neighbors` (20), `neighbor_mating` (0.9), `max_replacements` (2), `crossover_rate` (1), `mutation_rate` (1) |
@@ -194,7 +197,7 @@ print(result.best_fitness, result.evaluations)
 The islands' candidates are evaluated together each generation: in one batch with `batch=True`, or in parallel with `parallel=True`. Breeding and migration are sequential, so a seeded run is the same on any number of threads. Each island counts its own evaluations: give an `l_shade` island its share of the budget.
 
 Operators:
-- **Selection:** `Tournament(size)`, `Rank(pressure)`, `Roulette()`, `StochasticUniversalSampling()`, `Truncation(fraction)`, `RandomSelection()`
+- **Selection:** `Tournament(size)`, `Rank(pressure)`, `Roulette()`, `StochasticUniversalSampling()`, `Truncation(fraction)`, `RandomSelection()`; against bloat (trees that grow without getting better), selections that see a genome's size, a tree's nodes: `DoubleTournament(fitness_size, parsimony)` (7 and 1.4, Luke and Panait's best), `LexicographicTournament(size, bucket_ratio=None)` (of equal fitness, the smaller wins), `Tarpeian(select, rate)` (genomes larger than the mean count as invalid with probability `rate`)
 - **Crossover:**
   - any list genome: `UniformCrossover()`, `PointCrossover(points)`, `NoCrossover()`
   - real genomes: `SimulatedBinaryCrossover(eta)`, `BlendCrossover(alpha)`, `ArithmeticCrossover()`
@@ -370,6 +373,57 @@ print(result.best_fitness, result.evaluations)
 measures such as the largest angle; `examples/xor_neat`, `cart_pole`, `double_pole` and
 `double_pole_no_velocities` repeat the Rust examples exactly.
 
+## Genetic programming
+
+`gx.gp` evolves trees of primitives: functions (`add`, `if`) whose children are their arguments, and terminals (inputs such as `x`) and constants at the leaves (Koza 1992). The primitives are genoxide's built-in ones, and the trees and the fitness functions below run in Rust; primitives of your own come in a later version.
+
+- `gx.gp.regression.primitives(functions, variables, constants=None)`: a set of mathematical functions by name (`"add"`, `"sub"`, `"mul"`, `"div"`, the analytic quotient `"aq"`, `"neg"`, `"inv"`, `"square"`, `"cube"`, `"sin"`, `"cos"`, `"exp"`, `"log"`, `"sqrt"`, `"tanh"`, `"abs"`, and Koza's protected `"pdiv"`, `"plog"`, `"psqrt"`) and named variables, with ephemeral random constants `gx.gp.Constants.uniform(low, high)`, `integers(low, high)`, `choice(values)` or `normal(mean, deviation)`.
+- `gx.gp.Gp(primitives, max_depth=17, max_size=1024, init=gx.gp.RampedHalfAndHalf((2, 6)))`: the genome (also `gx.gp.Full(depths)`, `gx.gp.Grow(depths)`). `gp.ramped_half_and_half(n, seed)` gives Koza's even division among the depths and methods, for `Ga(initial_genomes=...)`; `gp.parse(text)` and `gp.validate(tree)` check a tree against the set and the limits.
+- `gx.gp.Tree`, what a fitness function gets: `len(tree)` nodes, `tree.depth`, `str(tree)` (`add(x, mul(x, 0.5))`, read back by `primitives.parse`), and `tree.evaluate(x)`, its values at points, a row each, on numpy arrays in Rust. Trees compare, hash and pickle.
+- `gx.gp.regression.Regression(primitives, Dataset(Sample(x, y), test), metric="rmse", linear_scaling=True)`: the error of a tree on the training sample, after Keijzer's linear scaling `a + b f(x)` by default; `error(tree, sample)`, `predict`, `scaling`, `display`. `gx.gp.regression.problems` has Koza-1 to 3 and Nguyen-1 to 12, each with its paper's data and set: `primitives()`, `dataset()`, `regression(...)`.
+- `gx.gp.boolean.Multiplexer(address_bits)` and `EvenParity(inputs)`: Koza's Boolean problems, the cases of the truth table a tree gets wrong.
+- Operators: `gx.gp.SubtreeCrossover(internal_rate=0.9)`, `gx.gp.OnePointCrossover()`; `gx.gp.SubtreeMutation(max_depth=4)`, `gx.gp.PointMutation(rate=... | count=...)`, `gx.gp.HoistMutation()`, `gx.gp.ShrinkMutation()`, `gx.gp.ConstantMutation(sigma)` and a mix of them by weight, `gx.gp.Mutations([(0.5, gx.gp.SubtreeMutation()), (0.5, gx.gp.PointMutation(count=1))])`. Every child is within the limits.
+
+A `Regression`, a problem or `gx.gp.WithSize(fitness)` (the fitness and the size, two objectives for `Nsga2`) is evaluated in Rust, without a Python call per tree; any Python function of a tree is a fitness function too. Trees run with `Ga`, `Islands` of `Ga`s and `Nsga2` with two objectives, and with checkpoints.
+
+```python
+# Koza's quartic, x^4 + x^3 + x^2 + x, recovered exactly from 20 points
+problem = gx.gp.regression.problems.Koza1()
+gp = gx.gp.Gp(problem.primitives())
+search = gx.Ga(
+    gp,
+    population_size=500,
+    initial_genomes=gp.ramped_half_and_half(500, seed=2),
+    select=gx.Tournament(7),
+    crossover=gx.gp.SubtreeCrossover(),
+    mutation=gx.gp.SubtreeMutation(),
+    mutation_rate=0.1,
+    objective="minimize",
+    seed=2,
+)
+regression = problem.regression(linear_scaling=False)  # the RMSE of the tree itself
+result = search.run(regression, target=1e-10, generations=100)
+print(result.best_genome, regression.error(result.best_genome, problem.dataset().test))
+
+# the trade-off between error and size, as a Pareto front
+nsga2 = gx.Nsga2(
+    gx.gp.Gp(problem.primitives()),
+    objectives=["minimize", "minimize"],
+    population_size=200,
+    crossover=gx.gp.SubtreeCrossover(),
+    mutation=gx.gp.SubtreeMutation(),
+    mutation_rate=0.1,
+    seed=1,
+)
+front = nsga2.run(gx.gp.WithSize(problem), generations=30)
+for tree, (error, size) in sorted(
+    zip(front.front_genomes, front.front_objectives.tolist()), key=lambda pair: pair[1][1]
+):
+    print(int(size), error, tree)
+```
+
+`examples/koza_quartic`, `nguyen_1`, `nguyen_5`, `nguyen_9`, `nguyen_all`, `multiplexer_11` and `accuracy_and_size` repeat the Rust examples exactly.
+
 ## Stopping
 
 `run` stops at the first of its stop conditions, and needs at least one:
@@ -525,10 +579,10 @@ The package is benchmarked as a library of its own, genoxide (Python), beside th
 
 The package covers a subset of the Rust library. These parts are only in Rust:
 - `SteadyGa` and the asynchronous engine, for evaluations of varying duration
-- memetic search in `Ga`, and initial genomes for a population
+- memetic search in `Ga`, and initial genomes for a population other than trees
 - operators of your own
 - islands of algorithms other than `Ga` and `De`, or of both kinds together
-- NEAT and genetic programming
+- genetic programming with primitives of your own, typed or not (the package has genoxide's built-in ones), and the typed evaluators of `gp`
 - checkpoints in other formats, e.g. JSON through serde
 - observers: statistics, a hall of fame and reports
 - stop conditions combined with `and`, and custom ones
@@ -557,6 +611,14 @@ Some names differ:
 | `De(control={"f": 0.5, "cr": 0.9})` | `.control(de::Control::Fixed { f: 0.5, cr: 0.9 })`; `{"min_f", "max_f", "cr"}` for `Dither`, `{"c"}` for `Jade`, `{"memory"}` for `Shade` |
 | `De(restarts="never")`, `De(restarts={"tolerance": 1e-12, "patience": 200})` | `.restarts(de::Restarts::Never)`, `.restarts(de::Restarts::OnStagnation { tolerance: 1e-12, patience: 200 })` |
 | `Pbi(theta)` | `Decomposition::Pbi { theta }` |
+| `gx.gp.Gp(primitives, init=gx.gp.Full((2, 6)))` | `Gp::builder(set).init(Init::Full { depths: 2..=6 }).build()?` |
+| `gx.gp.PointMutation(rate=...)`, `gx.gp.ConstantMutation(sigma)` | `PointMutation::per_node(rate)`, `ConstantMutation::gaussian(sigma)` |
+| `gx.gp.Mutations([(0.5, gx.gp.SubtreeMutation()), (0.5, gx.gp.HoistMutation())])` | `Mutations::builder().subtree(0.5).hoist(0.5).build()?` |
+| `gx.gp.regression.primitives(["add", "mul"], ["x"])` | `regression::primitives([Math::Add, Math::Mul], ["x"], None)?` |
+| `gx.gp.regression.Sample(x, y)`, a point per row | `Sample::new(columns, targets)?`, a column per variable |
+| `problem.regression(linear_scaling=False)` | `problem.regression().clone().linear_scaling(false)` |
+| `gx.gp.WithSize(regression)` | `\|tree\| Some([regression.evaluate(tree)?, tree.len() as f64])` |
+| `gx.gp.boolean.Multiplexer(3)` | `boolean::Multiplexer::new(3)?` |
 | `Es(recombination="dominant", rho=2, selection="plus", step_sizes="one")` | `.recombination(es::Recombination::Dominant { rho: 2 })`, `.selection(es::Selection::Plus)`, `.step_sizes(es::StepSizes::One)` |
 | `AdaptiveReal(real, initial_step)` | `AdaptiveReal::new(real, initial_step)?` |
 | `SelfAdaptiveMutation(learning_rate=tau, min_step=m)` | `SelfAdaptiveMutation::with_learning_rate(tau)?.with_min_step(m)?` |

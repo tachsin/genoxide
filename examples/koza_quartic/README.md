@@ -5,7 +5,7 @@ summary: Find the formula x⁴ + x³ + x² + x from 20 points of it, by genetic 
 reference: "Koza, J. R. (1992). Genetic Programming: On the Programming of Computers by Means of Natural Selection. MIT Press."
 reference_url: https://www.genetic-programming.com/gpbook1toc.html
 optimum: "x⁴ + x³ + x² + x, exactly (an RMSE of 0, up to rounding)"
-languages: [rust]
+languages: [rust, python]
 order: 255
 ---
 
@@ -27,7 +27,9 @@ here.
 The formula is found when it's recovered exactly: an error at the level of rounding, both on the 20
 training points and on 101 test points spread evenly over [−1, 1] that the search never sees.
 
-There's no Python version: the Python package has no genetic programming yet.
+The Python version builds the same islands with `gx.gp` and evaluates the trees in Rust
+(`problem.regression(linear_scaling=False)`): it prints the same output and writes the same
+trace.
 
 ## What makes it hard
 

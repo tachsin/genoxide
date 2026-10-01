@@ -5,7 +5,7 @@ summary: Find the formula sin(x) + sin(y²) of two variables from 100 points of 
 reference: "Uy, N. Q., Hoai, N. X., O'Neill, M., McKay, R. I. and Galván-López, E. (2011). Semantically-based crossover in genetic programming: application to real-valued symbolic regression. Genetic Programming and Evolvable Machines 12(2): 91-119."
 reference_url: https://doi.org/10.1007/s10710-010-9121-2
 optimum: "sin(x) + sin(y²), exactly (an RMSE of 0, up to rounding)"
-languages: [rust]
+languages: [rust, python]
 order: 258
 family: Nguyen
 tab: Nguyen-9
@@ -28,7 +28,9 @@ The problem's name, target, sampling and function set are as McDermott et al. (2
 not yet checked against the paper. Its points come from a fixed seed of genoxide's random stream;
 another library's differ.
 
-There's no Python version: the Python package has no genetic programming yet.
+The Python version builds the same islands with `gx.gp` and evaluates the trees in Rust
+(`problem.regression(linear_scaling=False)`): it prints the same output and writes the same
+trace.
 
 ## What makes it hard
 

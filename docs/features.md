@@ -43,6 +43,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - **Problems:** Koza's Boolean multiplexer and even-parity functions, and Koza's regression problems (the quartic and two more polynomials) and Nguyen-1 to 12 (polynomials, sines and cosines, logarithms, a square root, and four of two variables), each with its paper's function set and sampling.
 - **Evaluation:** a stack machine for values of any type, the same on columns of all the data's points at once (several times faster, the same results to the bit), and a top-down walk for interpreters.
 - Runs on the genetic algorithms, islands and the multi-objective algorithms, with checkpoints and parallel breeding.
+- **In Python** (`gx.gp`): trees of genoxide's built-in primitives, those of symbolic regression and the Boolean problems (primitives of your own come later), with the representation, its initialization and limits, every tree operator, the selections against bloat for any genome, and Koza's even ramped half-and-half for the initial population. The regression error, the test problems and the Boolean problems run in Rust without the GIL, alone or with the size as a second objective for NSGA-II; a Python function of a tree works too. On a GA, islands of GAs and NSGA-II, with checkpoints; a seeded Python run repeats the Rust one to the bit.
 
 ## Neuroevolution
 
@@ -129,5 +130,5 @@ cargo run --release --example nguyen_all          # Nguyen's twelve regression p
 cargo run --release --example accuracy_and_size   # NSGA-II on trees: the front of error against size
 cargo run --release --example asynchronous        # a slow fitness function, asynchronous evaluation
 cargo run --release --manifest-path examples/gpu/Cargo.toml  # neuroevolution on the GPU, with wgpu
-python examples/tsp_berlin52/main.py              # the same in Python, for all but the last three
+python examples/tsp_berlin52/main.py              # the same in Python, for all but abs_typed, asynchronous and gpu
 ```

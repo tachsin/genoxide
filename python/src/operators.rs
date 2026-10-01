@@ -2,15 +2,15 @@
 //! implement serde as the operators in them, for checkpoints.
 
 use crate::config;
-use crate::errors::setting;
+use crate::errors::{setting, setting_named};
 use genoxide::genome::{AdaptiveReal, Binary, Genome, Integer, Permutation, Real, Representation};
 use genoxide::operator::{
-    ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, CycleCrossover,
-    EdgeRecombinationCrossover, GaussianMutation, InsertionMutation, InversionMutation, Mutate,
-    NoCrossover, OrderCrossover, PartiallyMappedCrossover, PointCrossover, PolynomialMutation,
-    RandomSelection, Rank, Roulette, ScrambleMutation, Select, SelfAdaptiveMutation,
-    SimulatedBinaryCrossover, StochasticUniversalSampling, SwapMutation, Tournament, Truncation,
-    UniformCrossover, UniformMutation,
+    ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, CycleCrossover, DoubleTournament,
+    EdgeRecombinationCrossover, GaussianMutation, InsertionMutation, InversionMutation,
+    LexicographicTournament, Mutate, NoCrossover, OrderCrossover, PartiallyMappedCrossover,
+    PointCrossover, PolynomialMutation, RandomSelection, Rank, Roulette, ScrambleMutation, Select,
+    SelfAdaptiveMutation, SimulatedBinaryCrossover, StochasticUniversalSampling, SwapMutation,
+    Tarpeian, Tournament, Truncation, UniformCrossover, UniformMutation,
 };
 use genoxide::{Objective, Population, StreamRng};
 
@@ -24,7 +24,14 @@ pub enum AnySelect {
     StochasticUniversalSampling(StochasticUniversalSampling),
     Truncation(Truncation),
     Random(RandomSelection),
+    Lexicographic(LexicographicTournament),
+    Double(DoubleTournament),
+    Tarpeian(Tarpeian<InnerSelect>),
 }
+
+/// The selection that a Tarpeian selection wraps: any but another Tarpeian one.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct InnerSelect(Box<AnySelect>);
 
 impl AnySelect {
     pub fn new(select: config::Select) -> Result<Self> {
@@ -41,6 +48,47 @@ impl AnySelect {
                 Self::Truncation(setting(Truncation::new(fraction))?)
             }
             config::Select::Random {} => Self::Random(RandomSelection),
+            config::Select::LexicographicTournament { size, bucket_ratio } => {
+                let names = [
+                    ("tournament_size", "LexicographicTournament.size"),
+                    ("bucket_ratio", "LexicographicTournament.bucket_ratio"),
+                ];
+                let select = setting_named(LexicographicTournament::new(size), &names)?;
+                Self::Lexicographic(match bucket_ratio {
+                    Some(ratio) => setting_named(select.ratio_buckets(ratio), &names)?,
+                    None => select,
+                })
+            }
+            config::Select::DoubleTournament {
+                fitness_size,
+                parsimony,
+                size_first,
+            } => {
+                let names = [
+                    ("tournament_size", "DoubleTournament.fitness_size"),
+                    ("parsimony", "DoubleTournament.parsimony"),
+                ];
+                let select = setting_named(DoubleTournament::new(fitness_size, parsimony), &names)?;
+                Self::Double(if size_first {
+                    select.size_first()
+                } else {
+                    select
+                })
+            }
+            config::Select::Tarpeian { select, rate } => {
+                let inner = Self::new(*select)?;
+                if let Self::Tarpeian(_) = inner {
+                    return Err(
+                        "invalid setting `Tarpeian.select`: a selection other than Tarpeian"
+                            .to_string(),
+                    );
+                }
+                let names = [("tarpeian_rate", "Tarpeian.rate")];
+                Self::Tarpeian(setting_named(
+                    Tarpeian::new(InnerSelect(Box::new(inner)), rate),
+                    &names,
+                )?)
+            }
         })
     }
 }
@@ -54,15 +102,46 @@ impl Select for AnySelect {
         rng: &mut StreamRng,
     ) -> Vec<usize> {
         match self {
-            Self::Tournament(select) => select.select(population, objective, count, rng),
-            Self::Rank(select) => select.select(population, objective, count, rng),
-            Self::Roulette(select) => select.select(population, objective, count, rng),
-            Self::StochasticUniversalSampling(select) => {
-                select.select(population, objective, count, rng)
-            }
-            Self::Truncation(select) => select.select(population, objective, count, rng),
-            Self::Random(select) => select.select(population, objective, count, rng),
+            Self::Tarpeian(select) => select.select(population, objective, count, rng),
+            select => select_untarpeian(select, population, objective, count, rng),
         }
+    }
+}
+
+// a Tarpeian selection's view of the population is a `Population<&G>`: the selection it wraps
+// selects without another level of references, as none of them is Tarpeian
+impl Select for InnerSelect {
+    fn select<G: Genome>(
+        &self,
+        population: &Population<G>,
+        objective: Objective,
+        count: usize,
+        rng: &mut StreamRng,
+    ) -> Vec<usize> {
+        select_untarpeian(&self.0, population, objective, count, rng)
+    }
+}
+
+// the selection of any but a Tarpeian selection, which `AnySelect::new` never wraps in another
+fn select_untarpeian<G: Genome>(
+    select: &AnySelect,
+    population: &Population<G>,
+    objective: Objective,
+    count: usize,
+    rng: &mut StreamRng,
+) -> Vec<usize> {
+    match select {
+        AnySelect::Tournament(select) => select.select(population, objective, count, rng),
+        AnySelect::Rank(select) => select.select(population, objective, count, rng),
+        AnySelect::Roulette(select) => select.select(population, objective, count, rng),
+        AnySelect::StochasticUniversalSampling(select) => {
+            select.select(population, objective, count, rng)
+        }
+        AnySelect::Truncation(select) => select.select(population, objective, count, rng),
+        AnySelect::Random(select) => select.select(population, objective, count, rng),
+        AnySelect::Lexicographic(select) => select.select(population, objective, count, rng),
+        AnySelect::Double(select) => select.select(population, objective, count, rng),
+        AnySelect::Tarpeian(_) => unreachable!("a Tarpeian selection in a Tarpeian one"),
     }
 }
 
@@ -79,10 +158,12 @@ fn crossover_name(crossover: config::Crossover) -> &'static str {
         config::Crossover::PartiallyMapped {} => "PartiallyMappedCrossover",
         config::Crossover::Cycle {} => "CycleCrossover",
         config::Crossover::EdgeRecombination {} => "EdgeRecombinationCrossover",
+        config::Crossover::Subtree { .. } => "SubtreeCrossover",
+        config::Crossover::OnePoint {} => "OnePointCrossover",
     }
 }
 
-fn mutate_name(mutate: config::Mutate) -> &'static str {
+fn mutate_name(mutate: &config::Mutate) -> &'static str {
     match mutate {
         config::Mutate::BitFlip { .. } => "BitFlip",
         config::Mutate::Uniform { .. } => "UniformMutation",
@@ -93,17 +174,23 @@ fn mutate_name(mutate: config::Mutate) -> &'static str {
         config::Mutate::Insertion {} => "InsertionMutation",
         config::Mutate::Scramble {} => "ScrambleMutation",
         config::Mutate::SelfAdaptive { .. } => "SelfAdaptiveMutation",
+        config::Mutate::Subtree { .. } => "SubtreeMutation",
+        config::Mutate::Point { .. } => "PointMutation",
+        config::Mutate::Hoist {} => "HoistMutation",
+        config::Mutate::Shrink {} => "ShrinkMutation",
+        config::Mutate::Constant { .. } => "ConstantMutation",
+        config::Mutate::Mutations { .. } => "Mutations",
     }
 }
 
-fn wrong_crossover(crossover: config::Crossover, genome: &str, fits: &str) -> String {
+pub fn wrong_crossover(crossover: config::Crossover, genome: &str, fits: &str) -> String {
     format!(
         "{} doesn't work with {genome} genomes; use {fits}",
         crossover_name(crossover)
     )
 }
 
-fn wrong_mutate(mutate: config::Mutate, genome: &str, fits: &str) -> String {
+pub fn wrong_mutate(mutate: &config::Mutate, genome: &str, fits: &str) -> String {
     format!(
         "{} doesn't work with {genome} genomes; use {fits}",
         mutate_name(mutate)
@@ -111,7 +198,7 @@ fn wrong_mutate(mutate: config::Mutate, genome: &str, fits: &str) -> String {
 }
 
 // exactly one of a rate per gene and a count of genes
-fn rate_or_count(rate: Option<f64>, count: Option<usize>) -> Result<RateOrCount> {
+pub fn rate_or_count(rate: Option<f64>, count: Option<usize>) -> Result<RateOrCount> {
     match (rate, count) {
         (Some(rate), None) => Ok(RateOrCount::Rate(rate)),
         (None, Some(count)) => Ok(RateOrCount::Count(count)),
@@ -119,7 +206,7 @@ fn rate_or_count(rate: Option<f64>, count: Option<usize>) -> Result<RateOrCount>
     }
 }
 
-enum RateOrCount {
+pub enum RateOrCount {
     Rate(f64),
     Count(usize),
 }
@@ -295,7 +382,7 @@ pub fn bit_flip(mutate: config::Mutate) -> Result<BitFlip> {
             RateOrCount::Rate(rate) => setting(BitFlip::per_gene(rate)),
             RateOrCount::Count(count) => setting(BitFlip::count(count)),
         },
-        _ => Err(wrong_mutate(mutate, "binary", "BitFlip")),
+        _ => Err(wrong_mutate(&mutate, "binary", "BitFlip")),
     }
 }
 
@@ -306,7 +393,7 @@ pub fn integer_mutation(mutate: config::Mutate) -> Result<UniformMutation> {
             RateOrCount::Rate(rate) => setting(UniformMutation::per_gene(rate)),
             RateOrCount::Count(count) => setting(UniformMutation::count(count)),
         },
-        _ => Err(wrong_mutate(mutate, "integer", "UniformMutation")),
+        _ => Err(wrong_mutate(&mutate, "integer", "UniformMutation")),
     }
 }
 
@@ -327,7 +414,7 @@ pub fn self_adaptive(mutate: config::Mutate) -> Result<SelfAdaptiveMutation> {
             }
         }
         _ => Err(wrong_mutate(
-            mutate,
+            &mutate,
             "adaptive real",
             "SelfAdaptiveMutation",
         )),
@@ -365,7 +452,7 @@ impl RealMutation {
             }
             _ => {
                 return Err(wrong_mutate(
-                    mutate,
+                    &mutate,
                     "real",
                     "PolynomialMutation, GaussianMutation or UniformMutation",
                 ));
@@ -407,7 +494,7 @@ impl OrderMutation {
             config::Mutate::Scramble {} => Self::Scramble(ScrambleMutation),
             _ => {
                 return Err(wrong_mutate(
-                    mutate,
+                    &mutate,
                     "permutation",
                     "SwapMutation, InversionMutation, InsertionMutation or ScrambleMutation",
                 ));
