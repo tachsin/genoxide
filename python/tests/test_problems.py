@@ -184,6 +184,7 @@ MULTI_ENGINEERING = [
     gx.problems.multi_engineering.CarSideImpact,
     gx.problems.multi_engineering.RocketInjector,
     gx.problems.multi_engineering.VehicleCrashworthiness,
+    gx.problems.multi_engineering.MarineDesign,
     gx.problems.multi_engineering.WaterResourcePlanning,
 ]
 
@@ -1080,6 +1081,12 @@ def test_engineering_values_at_chosen_points():
     objectives, violation = engineering.CarSideImpact()(best)
     assert objectives[0] == single.optimum.value and violation == 0.0
     assert np.array_equal(engineering.CarSideImpact().constraints(best), single.constraints(best))
+    # the marine design: the paper's least transportation cost, 8.377 £/t (table 4)
+    marine = engineering.MarineDesign()
+    objectives, violation = marine([193.86, 32.31, 15.73, 11.71, 0.681, 14.0])
+    assert objectives[0] == pytest.approx(8.377, abs=1e-3) and violation == 0.0
+    assert marine.ideal_point == pytest.approx([8.376894, 5240.3356, -700_552.76], rel=1e-6)
+    assert marine.constraint_count == 9 and len(marine.objectives) == 3
     water = engineering.WaterResourcePlanning()
     assert len(water.objectives) == 5 and water.constraint_count == 7
     assert water.ideal_point[4] == pytest.approx(25 * (1.39 / 0.045 + 49.4 - 80))

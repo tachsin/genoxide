@@ -1,6 +1,6 @@
 //! Engineering design problems with several objectives: the two-bar and four-bar trusses, the
 //! welded beam, the disc brake, the speed reducer, the car side impact, water resource planning,
-//! the rocket injector and vehicle crashworthiness.
+//! the rocket injector, vehicle crashworthiness and conceptual marine design.
 //!
 //! Every objective is minimized, in the units of the paper that states it. A constrained
 //! problem's fitness is `([f64; M], violation)`, the violation being `Σ max(0, gᵢ(x))` over its
@@ -17,6 +17,7 @@
 //! | [`CarSideImpact`] | 7 | 3 | 10 | not known |
 //! | [`RocketInjector`] | 4 | 3 | | not known |
 //! | [`VehicleCrashworthiness`] | 5 | 3 | | not known |
+//! | [`MarineDesign`] | 6 | 3 | 9 | not known |
 //! | [`WaterResourcePlanning`] | 3 | 5 | 7 | a surface, derived |
 //!
 //! The fronts of the two trusses and of water resource planning are derived from their
@@ -35,11 +36,12 @@
 //! KanGAL report 200002 (2000), the preprint of their PPSN VI paper; the car side impact's three
 //! objectives in Jain and Deb's accepted manuscript (2014, appendix); the rocket injector's
 //! response surfaces in Vaidyanathan, Tucker, Papila and Shyy's AIAA paper 2003-296 (appendix,
-//! eqs. A1-A4); and water resource planning in the NSGA-II paper (table V, and the same table in
-//! the preprint, KanGAL report 200001) and in Jain and Deb's appendix. The other originals
-//! (Osyczka and Kundu 1995, Kurpati, Azarm and Wu 2002, Stadler and Dauer 1992, Liao et al.
-//! 2008) couldn't be read: those definitions are taken from later papers that restate them,
-//! named in each problem's docs, and are still to be checked against the originals
+//! eqs. A1-A4); water resource planning in the NSGA-II paper (table V, and the same table in the
+//! preprint, KanGAL report 200001) and in Jain and Deb's appendix; and the marine design in
+//! Parsons and Scott (2004, appendix and the Panamax case). The other originals (Osyczka and
+//! Kundu 1995, Kurpati, Azarm and Wu 2002, Stadler and Dauer 1992, Liao et al. 2008) couldn't be
+//! read: those definitions are taken from later papers that restate them, named in each
+//! problem's docs, and are still to be checked against the originals
 //! ([#168](https://github.com/tachsin/genoxide/issues/168)).
 
 use super::{MultiProblem, Piece, pieces_front};
@@ -1286,6 +1288,208 @@ impl MultiProblem<5> for WaterResourcePlanning {
     }
 }
 
+// ---- conceptual marine design --------------------------------------------------------------------
+
+/// Conceptual marine design: the bulk carrier that carries cargo the cheapest, with the lightest
+/// ship and the most cargo a year, in the Panamax case of Parsons and Scott (2004).
+///
+/// The genes are the ship's length L, beam B, depth D and draft T, in m, its block coefficient
+/// C_B and its speed V_k, in knots: x = (L, B, D, T, C_B, V_k), the paper's order. The objectives
+/// are the transportation cost `f₁ = annual cost / annual cargo`, in £/t, the light ship weight
+/// `f₂ = W_s + W_o + W_m`, in t, and the annual cargo, maximized, so `f₃ = −annual cargo`, in t a
+/// year. The model, Parsons and Scott's appendix (after Sen and Yang, with the Froude number in
+/// consistent units):
+///
+/// ```text
+/// displacement Δ = 1.025 L B T C_B                       V = 0.5144 V_k m/s, g = 9.8065 m/s²
+/// Froude number F_n = V / √(g L)
+/// power P = Δ^(2/3) V_k³ / (a + b F_n),   a = 4977.06 C_B² − 8105.61 C_B + 4456.51
+///                                         b = −10847.2 C_B² + 12817 C_B − 6960.32
+/// steel W_s = 0.034 L^1.7 B^0.7 D^0.4 C_B^0.5,  outfit W_o = L^0.8 B^0.6 D^0.3 C_B^0.1,
+/// machinery W_m = 0.17 P^0.9,   deadweight DWT = Δ − (W_s + W_o + W_m)
+/// daily consumption = 0.19 P · 24 / 1000 + 0.2,   sea days = 5000 / (24 V_k)
+/// cargo deadweight = DWT − daily consumption (sea days + 5) − 2 DWT^0.5
+/// port days = 2 (cargo deadweight / 8000 + 0.5)
+/// round trips a year RTPA = 350 / (sea days + port days)
+/// annual cost = 0.2 · 1.3 (2000 W_s^0.85 + 3500 W_o + 2400 P^0.8) + 40000 DWT^0.3
+///             + (1.05 · daily consumption · sea days · 100 + 6.3 DWT^0.8) RTPA
+/// annual cargo = cargo deadweight · RTPA
+/// ```
+///
+/// subject to nine constraints: `L/B ≥ 6`, `L/D ≤ 15`, `L/T ≤ 19`, `T ≤ 0.45 DWT^0.31`,
+/// `T ≤ 0.7 D + 0.7`, `25,000 ≤ DWT ≤ 500,000`, `F_n ≤ 0.32` and the metacentric height
+/// `GM_T = 0.53 T + (0.085 C_B − 0.002) B² / (T C_B) − (1 + 0.52 D) ≥ 0.07 B`.
+///
+/// Bounds L ∈ [150, 274.32], B ∈ [20, 32.31], D ∈ [10, 25], T ∈ [8, 11.71], C_B ∈ [0.63, 0.75]
+/// and V_k ∈ [14, 18]. The paper's base model has thirteen constraints and no bounds on L, B, D
+/// and T (its variables are only nonnegative); its Panamax case 2 adds L ≤ 274.32 m, B ≤ 32.31 m
+/// and T ≤ 11.71 m and raises the least deadweight from 3000 to 25,000 t. Here those limits and
+/// the base model's 0.63 ≤ C_B ≤ 0.75 and 14 ≤ V_k ≤ 18 are the bounds, and the lower bounds of L,
+/// B, D and T and the upper bound of D, which the paper doesn't give, are genoxide's: they hold
+/// every feasible design, whose L is at least 150.73, B at least 22.23, D from 11.50 to 20.33 and
+/// T at least 8.75 (each found by SLSQP from 300 random starts).
+///
+/// The front isn't known. Its ideal point is the paper's three single-criterion designs (table
+/// 4), computed again: the least transportation cost, 8.376894 £/t at L = 6B = 193.86, B = 32.31,
+/// D = 15.728571, T = 11.71, C_B = 0.680879 and V_k = 14 (the paper: 8.377 at C_B = 0.681); the
+/// lightest ship, 5240.3356 t at (150.73, 25.12, 13.84, 10.39, 0.75, 14) with a deadweight of
+/// exactly 25,000 (the paper: 5240.3); and the most cargo, 700,552.76 t a year at
+/// (222.49, 32.31, 15.73, 11.71, 0.75, 18) (the paper: 700,553).
+///
+/// **Restatements.** Tanabe and Ishibuchi (2020, *Applied Soft Computing* 89: 106078, problem
+/// RE4-6-2) add a fourth objective, the constraints' total violation, keep the least deadweight
+/// at 3000 with bounds L ∈ [150, 274.32], B ∈ [20, 32.31], D ∈ [13, 25] and T ∈ [10, 11.71],
+/// which cut off feasible designs, and their code computes the sea days as (5000/24) V_k. Kudela
+/// (2023, *Computers* 12(11): 225) has V = 0.5114 V_k and the annual cargo from the deadweight.
+/// The paper's tables decide: its designs (tables 3 to 6) give its printed criteria, deadweights
+/// and powers to their printed digits with this model, and not with 0.5114.
+///
+/// [`constraints`](MultiProblem::constraints) gives the nine constraints in this order, as
+/// `g(x) ≤ 0`.
+///
+/// Parsons, M. G. and Scott, R. L. (2004). Formulation of multicriterion design optimization
+/// problems for solution with scalar numerical optimization methods. *Journal of Ship Research*
+/// 48(1): 61-76, the numerical example (p. 68), its Panamax case 2 and table 4 (p. 69) and the
+/// appendix (p. 76), after Sen, P. and Yang, J.-B. (1998). *Multiple Criteria Decision Support in
+/// Engineering Design*. Springer.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct MarineDesign;
+
+// the quantities of a ship that the objectives and constraints need
+struct Ship {
+    froude: f64,
+    light: f64,
+    deadweight: f64,
+    cost: f64,
+    cargo: f64,
+    metacentric: f64,
+}
+
+impl MarineDesign {
+    // a design that minimizes each objective (see the docs): the least transportation cost at
+    // L = 6B, B and T at their bounds, T = 0.7D + 0.7 and V_k = 14, C_B found by Brent's method;
+    // the lightest ship at L = 6B, T = 0.7D + 0.7 = 0.45 DWT^0.31 and DWT = 25,000 (plus 1e-6, so
+    // that it's feasible when evaluated); and the most cargo at L = 19T, with B, T, C_B and V_k at
+    // their upper bounds and T = 0.7D + 0.7. SLSQP from 300 random starts finds none better
+    const EXTREMES: [[f64; 6]; 3] = [
+        [
+            193.86,
+            32.31,
+            15.728_571_428_571_431,
+            11.71,
+            0.680_878_824_022_718_3,
+            14.0,
+        ],
+        [
+            150.726_427_459_813_46,
+            25.121_071_243_302_243,
+            13.841_434_387_783_172,
+            10.389_004_071_448_22,
+            0.75,
+            14.0,
+        ],
+        [222.49, 32.31, 15.728_571_428_571_431, 11.71, 0.75, 18.0],
+    ];
+
+    fn ship(x: &Reals) -> Ship {
+        let (length, beam, depth, draft, block, knots) = (x[0], x[1], x[2], x[3], x[4], x[5]);
+        let displacement = 1.025 * length * beam * draft * block;
+        let froude = 0.5144 * knots / (9.8065 * length).sqrt();
+        let a = 4977.06 * block * block - 8105.61 * block + 4456.51;
+        let b = -10847.2 * block * block + 12817.0 * block - 6960.32;
+        let power = math::powf(displacement, 2.0 / 3.0) * math::powi(knots, 3) / (a + b * froude);
+        let steel = 0.034
+            * math::powf(length, 1.7)
+            * math::powf(beam, 0.7)
+            * math::powf(depth, 0.4)
+            * block.sqrt();
+        let outfit = math::powf(length, 0.8)
+            * math::powf(beam, 0.6)
+            * math::powf(depth, 0.3)
+            * math::powf(block, 0.1);
+        let machinery = 0.17 * math::powf(power, 0.9);
+        let light = steel + outfit + machinery;
+        let deadweight = displacement - light;
+        let daily = 0.19 * power * 24.0 / 1000.0 + 0.2;
+        let sea_days = 5000.0 / (24.0 * knots);
+        let cargo_deadweight = deadweight - daily * (sea_days + 5.0) - 2.0 * deadweight.sqrt();
+        let port_days = 2.0 * (cargo_deadweight / 8000.0 + 0.5);
+        let trips = 350.0 / (sea_days + port_days);
+        let ship_cost = 1.3
+            * (2000.0 * math::powf(steel, 0.85)
+                + 3500.0 * outfit
+                + 2400.0 * math::powf(power, 0.8));
+        let voyage = (1.05 * daily * sea_days * 100.0 + 6.3 * math::powf(deadweight, 0.8)) * trips;
+        let cost = 0.2 * ship_cost + 40_000.0 * math::powf(deadweight, 0.3) + voyage;
+        let metacentric = 0.53 * draft + (0.085 * block - 0.002) * beam * beam / (draft * block)
+            - (1.0 + 0.52 * depth);
+        Ship {
+            froude,
+            light,
+            deadweight,
+            cost,
+            cargo: cargo_deadweight * trips,
+            metacentric,
+        }
+    }
+
+    fn objectives(&self, x: &Reals) -> [f64; 3] {
+        let ship = Self::ship(x);
+        [ship.cost / ship.cargo, ship.light, -ship.cargo]
+    }
+
+    fn values(&self, x: &Reals) -> [f64; 9] {
+        let (length, beam, depth, draft) = (x[0], x[1], x[2], x[3]);
+        let ship = Self::ship(x);
+        [
+            6.0 - length / beam,
+            length / depth - 15.0,
+            length / draft - 19.0,
+            draft - 0.45 * math::powf(ship.deadweight, 0.31),
+            draft - (0.7 * depth + 0.7),
+            25_000.0 - ship.deadweight,
+            ship.deadweight - 500_000.0,
+            ship.froude - 0.32,
+            0.07 * beam - ship.metacentric,
+        ]
+    }
+}
+
+constrained!(MarineDesign, 3, 9);
+
+impl MultiProblem<3> for MarineDesign {
+    type Representation = Real;
+
+    metadata!(
+        "MarineDesign",
+        "Parsons, M. G. and Scott, R. L. (2004). Formulation of multicriterion design \
+         optimization problems for solution with scalar numerical optimization methods. Journal \
+         of Ship Research 48(1): 61-76.",
+        Some("https://doi.org/10.5957/jsr.2004.48.1.61")
+    );
+
+    constraint_methods!();
+
+    fn representation(&self) -> Real {
+        bounds([
+            (150.0, 274.32),
+            (20.0, 32.31),
+            (10.0, 25.0),
+            (8.0, 11.71),
+            (0.63, 0.75),
+            (14.0, 18.0),
+        ])
+    }
+
+    fn optimal_front(&self, _points: usize) -> Option<Vec<[f64; 3]>> {
+        None
+    }
+
+    fn ideal_point(&self) -> Option<[f64; 3]> {
+        Some(ideal(|x| self.objectives(x), &Self::EXTREMES))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1742,6 +1946,59 @@ mod tests {
         assert_close(&f, &[mass, deceleration, intrusion], 1e-14);
         assert_eq!(VehicleCrashworthiness.ideal_point().unwrap()[0], f[0]);
         check_random(&VehicleCrashworthiness, 100_000);
+    }
+
+    #[test]
+    fn marine_design() {
+        // Parsons and Scott's designs, printed to their tables' digits, give their printed
+        // criteria and deadweights: table 4's three single-criterion designs (Panamax case 2),
+        // table 6's min-max design, and table 3's least transportation cost (case 1, where B and
+        // T may exceed the Panamax limits); criteria (£/t, t, t a year) and deadweight (t)
+        for (x, [cost, light, cargo, deadweight]) in [
+            (
+                [193.86, 32.31, 15.73, 11.71, 0.681, 14.0],
+                [8.377, 9029.0, 551_265.0, 42_160.0],
+            ),
+            (
+                [150.73, 25.12, 13.84, 10.39, 0.750, 14.0],
+                [9.474, 5240.3, 386_500.0, 25_000.0],
+            ),
+            (
+                [222.49, 32.31, 15.73, 11.71, 0.750, 18.0],
+                [10.294, 12_436.0, 700_553.0, 52_277.0],
+            ),
+            (
+                [169.07, 28.16, 15.36, 10.66, 0.655, 17.95],
+                [10.696, 6920.3, 475_966.0, 27_137.0],
+            ),
+            (
+                [220.02, 36.67, 19.76, 14.53, 0.726, 14.0],
+                [7.973, 13_512.0, 746_121.0, 73_761.0],
+            ),
+        ] {
+            let (f, _) = MarineDesign.evaluate(&at(&x));
+            let g = MarineDesign.constraints(&at(&x));
+            assert!((f[0] - cost).abs() < 0.0015, "{x:?}: {f:?}");
+            assert_close(&[f[1], -f[2]], &[light, cargo], 5e-4);
+            assert_close(&[25_000.0 - g.inequalities()[5]], &[deadweight], 1e-3);
+        }
+        // the ideal point, the same as the paper's table 4 to its digits, at feasible designs
+        let ideal = MarineDesign.ideal_point().unwrap();
+        assert_close(
+            &ideal,
+            &[8.376_894_177_775, 5_240.335_559_466, -700_552.764_631_57],
+            1e-9,
+        );
+        for design in MarineDesign::EXTREMES {
+            assert_eq!(MarineDesign.evaluate(&at(&design)).1, 0.0, "{design:?}");
+        }
+        // the lightest ship has the least deadweight, 25,000, and its draft at both limits
+        let lightest = MarineDesign.constraints(&at(&MarineDesign::EXTREMES[1]));
+        for i in [0, 3, 4, 5] {
+            assert!(lightest.inequalities()[i] > -1e-5, "{i}: {lightest:?}");
+        }
+        assert_eq!(MarineDesign.constraint_count(), 9);
+        check_random(&MarineDesign, 100_000);
     }
 
     #[test]
