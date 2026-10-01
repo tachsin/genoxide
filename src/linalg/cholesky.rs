@@ -9,7 +9,7 @@
 // L-BFGS-B (batch A2) and the Gaussian processes (batch B) are the first users
 #![allow(dead_code)]
 
-use super::{MR, NR, for_each_chunk, tile_sub};
+use super::{CHUNK_ROWS, MR, NR, for_each_chunk, tile_sub};
 use std::fmt;
 
 // the size of the diagonal blocks, and the largest one the stack buffers hold
@@ -156,31 +156,37 @@ pub(super) fn factor(
         // k1 ≤ j ≤ i, by tiles of MR rows and NR columns. A tile that crosses the diagonal also
         // updates elements above it, which are never read and zeroed at the end.
         let packed = &*packed;
-        for_each_chunk(below, MR * n, parallel, |t, chunk| {
-            let i0 = t * MR;
+        for_each_chunk(below, CHUNK_ROWS * n, parallel, |t, chunk| {
+            let i0 = t * CHUNK_ROWS;
             let height = chunk.len() / n;
-            let mut panel = [0.0; MAX_BLOCK * MR];
+            // L[i][k0..k1] for the chunk's rows, by tiles of MR rows, zero padded
+            let mut panel = vec![0.0; height.div_ceil(MR) * size * MR];
             for (r, row) in chunk.chunks_exact(n).enumerate() {
+                let tile = &mut panel[r / MR * size * MR..];
                 for (kk, &x) in row[k0..k1].iter().enumerate() {
-                    panel[kk * MR + r] = x;
+                    tile[kk * MR + r % MR] = x;
                 }
             }
-            let panel = &panel[..size * MR];
-            // the column tiles up to the diagonal of the last row
-            for (tj, tile) in packed
-                .chunks_exact(size * NR)
-                .enumerate()
-                .take((i0 + height).div_ceil(NR))
-            {
+            // the column tiles up to the diagonal of the last row, each reused by all the row
+            // tiles while it's in the cache
+            let tiles = packed.chunks_exact(size * NR).enumerate();
+            for (tj, tile) in tiles.take((i0 + height).div_ceil(NR)) {
                 let j0 = k1 + tj * NR;
                 let width = (n - j0).min(NR);
-                let mut acc = [[0.0; NR]; MR];
-                for (acc, row) in acc.iter_mut().zip(chunk.chunks_exact(n)) {
-                    acc[..width].copy_from_slice(&row[j0..j0 + width]);
-                }
-                tile_sub(&mut acc, panel, tile);
-                for (acc, row) in acc.iter().zip(chunk.chunks_exact_mut(n)) {
-                    row[j0..j0 + width].copy_from_slice(&acc[..width]);
+                let row_tiles = chunk.chunks_mut(MR * n).zip(panel.chunks_exact(size * MR));
+                for (rt, (rows, a)) in row_tiles.enumerate() {
+                    if tj * NR >= i0 + rt * MR + rows.len() / n {
+                        // above the diagonal of every row of the tile
+                        continue;
+                    }
+                    let mut acc = [[0.0; NR]; MR];
+                    for (acc, row) in acc.iter_mut().zip(rows.chunks_exact(n)) {
+                        acc[..width].copy_from_slice(&row[j0..j0 + width]);
+                    }
+                    tile_sub(&mut acc, a, tile);
+                    for (acc, row) in acc.iter().zip(rows.chunks_exact_mut(n)) {
+                        row[j0..j0 + width].copy_from_slice(&acc[..width]);
+                    }
                 }
             }
         });

@@ -9,7 +9,7 @@
 // L-BFGS-B (batch A2) and the Gaussian processes (batch B) are the first users
 #![allow(dead_code)]
 
-use super::{MR, NR, for_each_chunk, tile_add};
+use super::{CHUNK_ROWS, MR, NR, for_each_chunk, tile_add};
 
 // the rows of `b` packed at a time: the packed panel (KC × NR per column tile) stays in the cache
 const KC: usize = 256;
@@ -166,28 +166,32 @@ pub(super) fn gemm_with(
             }
         }
         let packed = &*packed;
-        for_each_chunk(c, MR * n, parallel, |t, rows| {
-            let i0 = t * MR;
-            let height = rows.len() / n;
-            // α A[i0..][p0..p1], packed as depth × MR, zero padded
-            let mut panel = [0.0; KC * MR];
+        for_each_chunk(c, CHUNK_ROWS * n, parallel, |t, chunk| {
+            let i0 = t * CHUNK_ROWS;
+            let height = chunk.len() / n;
+            // α A[i0..][p0..p1] by tiles of MR rows, zero padded
+            let mut panel = vec![0.0; height.div_ceil(MR) * depth * MR];
             for r in 0..height {
                 let row = &a[(i0 + r) * k + p0..(i0 + r) * k + p1];
+                let tile = &mut panel[r / MR * depth * MR..];
                 for (kk, &x) in row.iter().enumerate() {
-                    panel[kk * MR + r] = alpha * x;
+                    tile[kk * MR + r % MR] = alpha * x;
                 }
             }
-            let panel = &panel[..depth * MR];
+            // each column tile reused by all the row tiles while it's in the cache
             for (tj, tile) in packed.chunks_exact(depth * NR).enumerate() {
                 let j0 = tj * NR;
                 let width = (n - j0).min(NR);
-                let mut acc = [[0.0; NR]; MR];
-                for (acc, row) in acc.iter_mut().zip(rows.chunks_exact(n)) {
-                    acc[..width].copy_from_slice(&row[j0..j0 + width]);
-                }
-                tile_add(&mut acc, panel, tile);
-                for (acc, row) in acc.iter().zip(rows.chunks_exact_mut(n)) {
-                    row[j0..j0 + width].copy_from_slice(&acc[..width]);
+                let row_tiles = chunk.chunks_mut(MR * n).zip(panel.chunks_exact(depth * MR));
+                for (rows, a) in row_tiles {
+                    let mut acc = [[0.0; NR]; MR];
+                    for (acc, row) in acc.iter_mut().zip(rows.chunks_exact(n)) {
+                        acc[..width].copy_from_slice(&row[j0..j0 + width]);
+                    }
+                    tile_add(&mut acc, a, tile);
+                    for (acc, row) in acc.iter().zip(rows.chunks_exact_mut(n)) {
+                        row[j0..j0 + width].copy_from_slice(&acc[..width]);
+                    }
                 }
             }
         });

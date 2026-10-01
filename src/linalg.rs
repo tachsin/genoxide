@@ -40,6 +40,9 @@ use rayon::prelude::*;
 // the register tile of the products: MR rows by NR columns of the output, in registers
 const MR: usize = 4;
 const NR: usize = 4;
+// the rows of an output updated together, a multiple of MR: their packed rows of the left factor
+// stay in the cache, and each packed column tile of the right one is reused by all their tiles
+const CHUNK_ROWS: usize = 32;
 
 // `f(index, chunk)` for each chunk of `size` elements of `data` (the last one may be shorter), on
 // rayon when `parallel` is true and the `parallel` feature is on. The chunks must be independent,
