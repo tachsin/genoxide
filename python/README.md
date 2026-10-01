@@ -256,6 +256,10 @@ The constrained problems of tunable difficulty work the same way: `Ctp1` to `Ctp
 constrained DTLZ problems `C1Dtlz1(objectives, variables)`, `C1Dtlz3(objectives, variables,
 radius)`, `C2Dtlz2`, `ConvexC2Dtlz2`, `C3Dtlz1` and `C3Dtlz4`, and Ma and Wang's `Mw1` to `Mw14`
 (`Mw4`, `Mw8` and `Mw14` with any number of `objectives`).
+So do the constrained `Dtlz8(objectives, variables)` and `Dtlz9`, Li et al.'s DC-DTLZ problems
+`Dc1Dtlz1(objectives, variables, a, b)`, `Dc1Dtlz3`, `Dc2Dtlz1`, `Dc2Dtlz3`, `Dc3Dtlz1` and
+`Dc3Dtlz3`, and Fan et al.'s `DasCmop1(difficulty, variables)` to `DasCmop9`, whose
+`difficulty` is a triplet (η, ζ, γ) in [0, 1]³ or the number of one of the paper's sixteen.
 
 Two submodules have constrained single-objective problems, whose fitness is `(score,
 violation)`: `gx.problems.cec2006` has CEC 2006's `G01()` to `G24()`, and

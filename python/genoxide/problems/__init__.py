@@ -196,6 +196,23 @@ __all__ = [
     "Mw12",
     "Mw13",
     "Mw14",
+    "Dtlz8",
+    "Dtlz9",
+    "Dc1Dtlz1",
+    "Dc1Dtlz3",
+    "Dc2Dtlz1",
+    "Dc2Dtlz3",
+    "Dc3Dtlz1",
+    "Dc3Dtlz3",
+    "DasCmop1",
+    "DasCmop2",
+    "DasCmop3",
+    "DasCmop4",
+    "DasCmop5",
+    "DasCmop6",
+    "DasCmop7",
+    "DasCmop8",
+    "DasCmop9",
 ]
 
 @dataclass(frozen=True, eq=False)
@@ -2536,6 +2553,430 @@ class Mw14(_ScalableMw):
     """
 
     _type: ClassVar[str] = "mw14"
+
+
+# ---- DTLZ8 and DTLZ9 (the DTLZ report) ---------------------------------------------------------
+
+
+@dataclass(frozen=True, init=False)
+class _BlockDtlz(MultiProblem[Real]):
+    """DTLZ8 or DTLZ9 with ``objectives`` objectives, from ``_least`` to 6, and ``variables``
+    variables, at least ``objectives``; None is the report's ``10 objectives``. The field
+    ``objective_count`` keeps the number, as the ``objectives`` property lists the objectives."""
+
+    objective_count: int
+    variables: int | None
+    _least: ClassVar[int] = 2
+
+    def __init__(self, objectives: int = 3, variables: int | None = None) -> None:
+        object.__setattr__(self, "objective_count", objectives)
+        object.__setattr__(self, "variables", variables)
+
+    def _describe(self) -> dict[str, Any]:
+        name = type(self).__name__
+        objectives = _whole(f"{name}.objectives", self.objective_count, minimum=self._least)
+        if objectives > 6:
+            raise ValueError(f"{name}.objectives is at most 6, not {objectives}")
+        variables = self.variables
+        if variables is not None:
+            variables = _whole(f"{name}.variables", variables, minimum=objectives, maximum=2**24)
+        return {"type": self._type, "objectives": objectives, "variables": variables}
+
+
+@dataclass(frozen=True, init=False)
+class Dtlz8(_BlockDtlz):
+    """DTLZ8: each objective the mean of its own block of variables,
+    ``fⱼ = (1/⌊n/M⌋) Σ xᵢ`` over ``x_{⌊(j−1)n/M⌋+1}`` to ``x_{⌊jn/M⌋}``, subject to
+    ``f_M + 4fⱼ − 1 ≥ 0`` for j < M and ``2f_M + min_{i≠j<M} (fᵢ + fⱼ) − 1 ≥ 0``, on [0, 1]ⁿ.
+    ``Dtlz8(objectives=3, variables=None)``: 3 to 6 objectives, None for ``10 objectives``
+    variables. (The report prints the blocks from ``⌊(j−1)n/M⌋``, which would start at a variable
+    x₀ and let blocks overlap.)
+
+    The front (derived from the constraints): the line ``f₁ = … = f_{M−1} = t``,
+    ``f_M = 1 − 4t`` for t in [0, 1/6], and the part of the plane ``2f_M + fᵢ + fⱼ = 1`` where
+    one of the first M − 1 objectives is at most the others, which are equal. Ideal point the
+    origin, nadir point (3/4, …, 3/4, 1).
+
+    Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2001). Scalable Test Problems for
+    Evolutionary Multi-Objective Optimization. TIK-Report 112, ETH Zürich, section 8.8, eq. 28.
+    """
+
+    _type: ClassVar[str] = "dtlz8"
+    _least: ClassVar[int] = 3
+
+
+@dataclass(frozen=True, init=False)
+class Dtlz9(_BlockDtlz):
+    """DTLZ9: ``fⱼ = Σ xᵢ^0.1`` over the j-th block of variables (as :class:`Dtlz8`'s), subject
+    to ``f_M² + fⱼ² − 1 ≥ 0`` for j < M, on [0, 1]ⁿ. ``Dtlz9(objectives=3, variables=None)``: 2
+    to 6 objectives, None for ``10 objectives`` variables.
+
+    The front is the curve ``f₁ = … = f_{M−1} = cos θ``, ``f_M = sin θ``, θ in [0, π/2]: a
+    quarter of the unit circle with f_M and any other objective. Ideal point the origin, nadir
+    point (1, …, 1). The power 0.1 makes small objectives hard to reach: on the front each
+    variable is below 10⁻¹⁰.
+
+    Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2001). Scalable Test Problems for
+    Evolutionary Multi-Objective Optimization. TIK-Report 112, ETH Zürich, section 8.9, eq. 29.
+    """
+
+    _type: ClassVar[str] = "dtlz9"
+
+
+# ---- DC-DTLZ (Li, Chen, Fu and Yao, 2019) ------------------------------------------------------
+
+
+@dataclass(frozen=True, init=False)
+class _DcDtlz(MultiProblem[Real]):
+    """A DC-DTLZ problem with ``objectives`` objectives, 2 to 6, ``variables`` variables (None
+    for DTLZ's usual), and the parameters ``a`` (above 0) and ``b`` (between −1 and 1), None for
+    genoxide's defaults. The field ``objective_count`` keeps the number, as the ``objectives``
+    property lists the objectives."""
+
+    objective_count: int
+    variables: int | None
+    a: float | None
+    b: float | None
+
+    def __init__(
+        self,
+        objectives: int = 3,
+        variables: int | None = None,
+        a: float | None = None,
+        b: float | None = None,
+    ) -> None:
+        object.__setattr__(self, "objective_count", objectives)
+        object.__setattr__(self, "variables", variables)
+        object.__setattr__(self, "a", a)
+        object.__setattr__(self, "b", b)
+
+    def _describe(self) -> dict[str, Any]:
+        name = type(self).__name__
+        objectives = _whole(f"{name}.objectives", self.objective_count, minimum=2)
+        if objectives > 6:
+            raise ValueError(f"{name}.objectives is at most 6, not {objectives}")
+        variables = self.variables
+        if variables is not None:
+            variables = _whole(f"{name}.variables", variables, minimum=objectives, maximum=2**24)
+        description: dict[str, Any] = {
+            "type": self._type,
+            "objectives": objectives,
+            "variables": variables,
+        }
+        for setting in ("a", "b"):
+            value = getattr(self, setting)
+            if value is not None:
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise TypeError(f"{name}.{setting} is a number, not {value!r}")
+                value = float(value)
+            description[setting] = value
+        return description
+
+
+@dataclass(frozen=True, init=False)
+class Dc1Dtlz1(_DcDtlz):
+    """DC1-DTLZ1: :class:`Dtlz1` subject to ``cos(aπx₁) ≥ b``, a = 3 and b = 0.5 by default.
+    ``Dc1Dtlz1(objectives=3, variables=None, a=None, b=None)``: None for ``objectives + 4``
+    variables.
+
+    The front (derived from the definition): the parts of DTLZ1's, ``Σ fᵢ = 1/2``, where x₁ is
+    feasible, in [0, 1/9] or [5/9, 7/9]: two bands, cones from the origin. Ideal point
+    (0, …, 0, 1/9), nadir point (7/18, …, 7/18, 1/2).
+
+    Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionary algorithm for
+    constrained multiobjective optimization. IEEE Transactions on Evolutionary Computation 23(2):
+    303-315, supplementary document, section 1.2. a and b as the
+    supplement gives them.
+    """
+
+    _type: ClassVar[str] = "dc1_dtlz1"
+
+
+@dataclass(frozen=True, init=False)
+class Dc1Dtlz3(_DcDtlz):
+    """DC1-DTLZ3: :class:`Dtlz3` subject to ``cos(aπx₁) ≥ b``, a = 3 and b = 0.5 by default.
+    ``Dc1Dtlz3(objectives=3, variables=None, a=None, b=None)``: None for ``objectives + 9``
+    variables.
+
+    The front: the parts of DTLZ3's, the unit sphere, where x₁ is feasible, in [0, 1/9] or
+    [5/9, 7/9]. Ideal point the origin, nadir point (1, …, 1, sin(7π/18)).
+
+    Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionary algorithm for
+    constrained multiobjective optimization. IEEE Transactions on Evolutionary Computation 23(2):
+    303-315, supplementary document, section 1.2. a and b as the
+    supplement gives them.
+    """
+
+    _type: ClassVar[str] = "dc1_dtlz3"
+
+
+@dataclass(frozen=True, init=False)
+class Dc2Dtlz1(_DcDtlz):
+    """DC2-DTLZ1: :class:`Dtlz1` subject to ``cos(aπg) ≥ b`` and ``exp(−g) ≥ b``, a = 3 and
+    b = 0.9 by default (the authors' lab's code). ``Dc2Dtlz1(objectives=3, variables=None, a=None,
+    b=None)``: None for ``objectives + 4`` variables.
+
+    The front is DTLZ1's, whole; only solutions with g below 0.048 are feasible, and the
+    violation has local minima on the way. Ideal point the origin, nadir point (1/2, …, 1/2).
+
+    Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionary algorithm for
+    constrained multiobjective optimization. IEEE Transactions on Evolutionary Computation 23(2):
+    303-315, supplementary document, section 1.2. b from the code
+    of the authors' lab (EMOC), as the supplement gives none.
+    """
+
+    _type: ClassVar[str] = "dc2_dtlz1"
+
+
+@dataclass(frozen=True, init=False)
+class Dc2Dtlz3(_DcDtlz):
+    """DC2-DTLZ3: :class:`Dtlz3` subject to ``cos(aπg) ≥ b`` and ``exp(−g) ≥ b``, a = 3 and
+    b = 0.5 by default (the authors' lab's code). ``Dc2Dtlz3(objectives=3, variables=None, a=None,
+    b=None)``: None for ``objectives + 9`` variables.
+
+    The front is DTLZ3's, whole; g must be in [0, 1/9] or [5/9, ln 2]. Ideal point the origin,
+    nadir point (1, …, 1).
+
+    Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionary algorithm for
+    constrained multiobjective optimization. IEEE Transactions on Evolutionary Computation 23(2):
+    303-315, supplementary document, section 1.2. b from the code
+    of the authors' lab (EMOC), as the supplement gives none.
+    """
+
+    _type: ClassVar[str] = "dc2_dtlz3"
+
+
+@dataclass(frozen=True, init=False)
+class Dc3Dtlz1(_DcDtlz):
+    """DC3-DTLZ1: :class:`Dtlz1` subject to ``cos(aπxⱼ) ≥ b`` for each position variable
+    (j < M) and ``cos(aπg) ≥ b``, a = 3 and b = 0.5 by default: M constraints.
+    ``Dc3Dtlz1(objectives=3, variables=None, a=None, b=None)``: None for ``objectives + 4``
+    variables.
+
+    The front: the parts of DTLZ1's where every position variable is in [0, 1/9] or [5/9, 7/9],
+    2^(M−1) patches. Ideal point (0, …, 0, 1/9), nadir point (7/18 (7/9)^(M−2), …, 7/18, 1/2).
+
+    Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionary algorithm for
+    constrained multiobjective optimization. IEEE Transactions on Evolutionary Computation 23(2):
+    303-315, supplementary document, section 1.2. The supplement
+    constrains x₁ to x_m; genoxide constrains the M − 1 position variables, as the authors' lab's
+    code does and the supplement's table 2 confirms.
+    """
+
+    _type: ClassVar[str] = "dc3_dtlz1"
+
+
+@dataclass(frozen=True, init=False)
+class Dc3Dtlz3(_DcDtlz):
+    """DC3-DTLZ3: :class:`Dtlz3` subject to ``cos(aπxⱼ) ≥ b`` for each position variable
+    (j < M) and ``cos(aπg) ≥ b``, a = 3 and b = 0.5 by default: M constraints.
+    ``Dc3Dtlz3(objectives=3, variables=None, a=None, b=None)``: None for ``objectives + 9``
+    variables.
+
+    The front: the parts of the unit sphere where every position variable is in [0, 1/9] or
+    [5/9, 7/9], 2^(M−1) patches. Ideal point the origin, nadir point
+    (1, sin(7π/18), …, sin(7π/18)).
+
+    Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionary algorithm for
+    constrained multiobjective optimization. IEEE Transactions on Evolutionary Computation 23(2):
+    303-315, supplementary document, section 1.2. The supplement
+    constrains x₁ to x_m; genoxide constrains the M − 1 position variables, as the authors' lab's
+    code does and the supplement's table 2 confirms.
+    """
+
+    _type: ClassVar[str] = "dc3_dtlz3"
+
+
+# ---- DAS-CMOP1-9 (Fan et al., 2020) -------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _DasCmop(MultiProblem[Real]):
+    """A DAS-CMOP problem with the difficulty triplet ``difficulty``: (η, ζ, γ), each in
+    [0, 1], the number of one of the paper's sixteen (table 3), or None for the triplet of the
+    paper's figure 6; and ``variables`` variables, 30 by default."""
+
+    difficulty: tuple[float, float, float] | int | None = None
+    variables: int = 30
+    _least: ClassVar[int] = 2
+
+    # the paper's table 3
+    STANDARD: ClassVar[tuple[tuple[float, float, float], ...]] = (
+        (0.25, 0.0, 0.0),
+        (0.0, 0.25, 0.0),
+        (0.0, 0.0, 0.25),
+        (0.25, 0.25, 0.25),
+        (0.5, 0.0, 0.0),
+        (0.0, 0.5, 0.0),
+        (0.0, 0.0, 0.5),
+        (0.5, 0.5, 0.5),
+        (0.75, 0.0, 0.0),
+        (0.0, 0.75, 0.0),
+        (0.0, 0.0, 0.75),
+        (0.75, 0.75, 0.75),
+        (0.0, 1.0, 0.0),
+        (0.5, 1.0, 0.0),
+        (0.0, 1.0, 0.5),
+        (0.5, 1.0, 0.5),
+    )
+
+    def _describe(self) -> dict[str, Any]:
+        name = type(self).__name__
+        variables = _whole(f"{name}.variables", self.variables, minimum=self._least, maximum=2**24)
+        difficulty = self.difficulty
+        triplet: list[float] | None = None
+        if isinstance(difficulty, (bool, np.bool_)):
+            raise TypeError(f"{name}.difficulty is a triplet or 1 to 16, not {difficulty!r}")
+        if isinstance(difficulty, (int, np.integer)):
+            number = int(difficulty)
+            if not 1 <= number <= 16:
+                raise ValueError(f"{name}.difficulty is a triplet or 1 to 16, not {number}")
+            triplet = list(self.STANDARD[number - 1])
+        elif difficulty is not None:
+            levels = list(difficulty)
+            if len(levels) != 3 or any(
+                isinstance(level, bool) or not isinstance(level, (int, float)) for level in levels
+            ):
+                raise TypeError(f"{name}.difficulty is three numbers, not {difficulty!r}")
+            triplet = [float(level) for level in levels]
+            if not all(0.0 <= level <= 1.0 for level in triplet):
+                raise ValueError(f"{name}.difficulty's levels are in [0, 1], not {difficulty!r}")
+        return {"type": self._type, "variables": variables, "difficulty": triplet}
+
+
+@dataclass(frozen=True)
+class DasCmop1(_DasCmop):
+    """DAS-CMOP1: ``f₁ = x₁ + g``, ``f₂ = 1 − x₁² + g``, ``g = Σⱼ₌₂ⁿ (xⱼ − sin(0.5πx₁))²``,
+    on [0, 1]ⁿ, subject to 11 constraints whose difficulty the triplet (η, ζ, γ) sets:
+    ``sin(20πx₁) ≥ 2η − 1`` (the front in pieces), ``(e − g)(g − 0.5) ≥ 0`` with
+    ``e = 0.5 − ln ζ`` (g in a band; any g at ζ = 0, 0.5 within 10⁻⁴ at ζ = 1), and nine
+    rotated ellipses of size ``γ/2`` that block the way. ``DasCmop1(difficulty=None,
+    variables=30)``: the triplet, or the number of one of the paper's sixteen, None for
+    (0, 0.5, 0.5), the paper's figure 6.
+
+    The front depends on the triplet: sampled from the definition, as the paper does.
+
+    Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Goodman, E. (2020).
+    Difficulty adjustable and scalable constrained multiobjective test problem toolkit.
+    Evolutionary Computation 28(3): 339-378, table 2.
+    """
+
+    _type: ClassVar[str] = "das_cmop1"
+
+
+@dataclass(frozen=True)
+class DasCmop2(_DasCmop):
+    """DAS-CMOP2: :class:`DasCmop1` with the convex ``f₂ = 1 − √x₁ + g``. ``DasCmop2(
+    difficulty=None, variables=30)``, None for (0, 0.5, 0.5), the paper's figure 6.
+
+    Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Goodman, E. (2020).
+    Difficulty adjustable and scalable constrained multiobjective test problem toolkit.
+    Evolutionary Computation 28(3): 339-378, table 2.
+    """
+
+    _type: ClassVar[str] = "das_cmop2"
+
+
+@dataclass(frozen=True)
+class DasCmop3(_DasCmop):
+    """DAS-CMOP3: :class:`DasCmop1` with the disconnected
+    ``f₂ = 1 − √x₁ + 0.5 |sin(5πx₁)| + g``. ``DasCmop3(difficulty=None, variables=30)``, None
+    for (0, 0.5, 0.5), the paper's figure 6.
+
+    Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Goodman, E. (2020).
+    Difficulty adjustable and scalable constrained multiobjective test problem toolkit.
+    Evolutionary Computation 28(3): 339-378, table 2.
+    """
+
+    _type: ClassVar[str] = "das_cmop3"
+
+
+@dataclass(frozen=True)
+class DasCmop4(_DasCmop):
+    """DAS-CMOP4: :class:`DasCmop1`'s shape and constraints with the multimodal
+    ``g = (n − 1) + Σⱼ₌₂ⁿ ((xⱼ − 0.5)² − cos(20π(xⱼ − 0.5)))``. ``DasCmop4(difficulty=None,
+    variables=30)``, None for (0.5, 0.5, 0.5), the paper's figure 6. The front is DAS-CMOP1's
+    for the same triplet.
+
+    Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Goodman, E. (2020).
+    Difficulty adjustable and scalable constrained multiobjective test problem toolkit.
+    Evolutionary Computation 28(3): 339-378, table 2.
+    """
+
+    _type: ClassVar[str] = "das_cmop4"
+
+
+@dataclass(frozen=True)
+class DasCmop5(_DasCmop):
+    """DAS-CMOP5: :class:`DasCmop2`'s shape with :class:`DasCmop4`'s multimodal g.
+    ``DasCmop5(difficulty=None, variables=30)``, None for (0.5, 0.5, 0.5), the paper's figure 6.
+
+    Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Goodman, E. (2020).
+    Difficulty adjustable and scalable constrained multiobjective test problem toolkit.
+    Evolutionary Computation 28(3): 339-378, table 2.
+    """
+
+    _type: ClassVar[str] = "das_cmop5"
+
+
+@dataclass(frozen=True)
+class DasCmop6(_DasCmop):
+    """DAS-CMOP6: :class:`DasCmop3`'s shape with :class:`DasCmop4`'s multimodal g.
+    ``DasCmop6(difficulty=None, variables=30)``, None for (0.5, 0.5, 0.5), the paper's figure 6.
+
+    Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Goodman, E. (2020).
+    Difficulty adjustable and scalable constrained multiobjective test problem toolkit.
+    Evolutionary Computation 28(3): 339-378, table 2.
+    """
+
+    _type: ClassVar[str] = "das_cmop6"
+
+
+@dataclass(frozen=True)
+class DasCmop7(_DasCmop):
+    """DAS-CMOP7: three objectives, ``f₁ = x₁x₂ + g``, ``f₂ = x₂(1 − x₁) + g``,
+    ``f₃ = 1 − x₂ + g``, ``g = (n − 2) + Σⱼ₌₃ⁿ ((xⱼ − 0.5)² − cos(20π(xⱼ − 0.5)))``, on
+    [0, 1]ⁿ, subject to 7 constraints: type I on x₁ and x₂, the type II band on g, and four
+    spheres of radius ``γ/2`` at the unit vectors and (1, 1, 1)/√3. ``DasCmop7(difficulty=None,
+    variables=30)``, None for (0.5, 0.5, 0.5), the paper's figure 6.
+
+    Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Goodman, E. (2020).
+    Difficulty adjustable and scalable constrained multiobjective test problem toolkit.
+    Evolutionary Computation 28(3): 339-378, table 2.
+    """
+
+    _type: ClassVar[str] = "das_cmop7"
+    _least: ClassVar[int] = 3
+
+
+@dataclass(frozen=True)
+class DasCmop8(_DasCmop):
+    """DAS-CMOP8: three objectives on the sphere, ``f₁ = cos(0.5πx₁) cos(0.5πx₂) + g``,
+    ``f₂ = cos(0.5πx₁) sin(0.5πx₂) + g``, ``f₃ = sin(0.5πx₁) + g``, with :class:`DasCmop7`'s g
+    and constraints. ``DasCmop8(difficulty=None, variables=30)``, None for (0.5, 0.5, 0.5).
+
+    Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Goodman, E. (2020).
+    Difficulty adjustable and scalable constrained multiobjective test problem toolkit.
+    Evolutionary Computation 28(3): 339-378, table 2.
+    """
+
+    _type: ClassVar[str] = "das_cmop8"
+    _least: ClassVar[int] = 3
+
+
+@dataclass(frozen=True)
+class DasCmop9(_DasCmop):
+    """DAS-CMOP9: :class:`DasCmop8`'s shape with ``g = Σⱼ₌₃ⁿ (xⱼ − cos(0.25jπ(x₁ + x₂)/n))²``,
+    linked variables, and :class:`DasCmop7`'s constraints. ``DasCmop9(difficulty=None,
+    variables=30)``, None for (0.5, 0.5, 0.5).
+
+    Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Goodman, E. (2020).
+    Difficulty adjustable and scalable constrained multiobjective test problem toolkit.
+    Evolutionary Computation 28(3): 339-378, table 2.
+    """
+
+    _type: ClassVar[str] = "das_cmop9"
+    _least: ClassVar[int] = 3
 
 
 from . import cec2006, control, engineering, multi_engineering  # noqa: E402
