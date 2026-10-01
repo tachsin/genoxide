@@ -331,12 +331,12 @@ fn continuations_allocate_nothing_after_the_first_step() {
     }
 }
 
-// one test, so that only these runs allocate while counting: with several, the test harness
-// records and prints a finished test's result while the next one counts
-#[test]
-fn steps_allocate_nothing_after_the_first() {
+// without the test harness (`harness = false` in Cargo.toml): its threads allocate while a check
+// counts, to record and print results or to warn of a test running over 60 seconds
+fn main() {
     lbfgsb_steps_allocate_nothing_after_the_first();
     first_order_steps_allocate_nothing_after_the_first();
     mma_iterations_allocate_nothing_after_the_first();
     continuations_allocate_nothing_after_the_first_step();
+    println!("the steps allocate nothing after the first");
 }

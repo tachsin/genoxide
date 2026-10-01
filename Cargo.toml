@@ -89,6 +89,11 @@ name = "genoxide"
 required-features = ["cli"]
 
 # parallel breeding and evaluation
+# a counting allocator: without the test harness, whose threads allocate while it counts
+[[test]]
+name = "allocations"
+harness = false
+
 [[bench]]
 name = "hot_paths"
 harness = false
