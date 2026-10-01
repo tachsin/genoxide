@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/tachsin/genoxide/compare/v0.10.0...v0.11.0) - 2026-10-01
+
+### <!-- 0 -->Added
+
+- *(python)* evolution strategies, islands and checkpoints ([#342](https://github.com/tachsin/genoxide/pull/342))
+- *(gp)* tree genetic programming, strongly typed, with subtree crossover and mutation ([#343](https://github.com/tachsin/genoxide/pull/343))
+- *(gp)* point, hoist, shrink and constant mutation, bloat control and Boolean problems ([#345](https://github.com/tachsin/genoxide/pull/345))
+- *(nn)* neural networks and pole-balancing tasks, with CMA-ES examples ([#348](https://github.com/tachsin/genoxide/pull/348))
+- *(gp)* symbolic regression, with linear scaling, and Koza's regression problems ([#359](https://github.com/tachsin/genoxide/pull/359))
+- *(gp)* the Nguyen regression problems, their pages, and accuracy against size ([#360](https://github.com/tachsin/genoxide/pull/360))
+- *(gp)* normal constants and the inverse, and G4's outcome ([#361](https://github.com/tachsin/genoxide/pull/361))
+- *(neat)* add NEAT, networks whose structure evolves with their weights, and XOR by NEAT ([#363](https://github.com/tachsin/genoxide/pull/363))
+- nine multi-objective engineering design problems, each with its own example ([#357](https://github.com/tachsin/genoxide/pull/357))
+- *(neat)* add recurrent evaluation, and NEAT on the pole-balancing tasks ([#366](https://github.com/tachsin/genoxide/pull/366))
+- fifteen classic test functions, from Beale to Powell, each with its own example ([#367](https://github.com/tachsin/genoxide/pull/367))
+- *(open_es)* add OpenAI's evolution strategy, and two spirals by it ([#368](https://github.com/tachsin/genoxide/pull/368))
+- *(python)* OpenEs, neural networks and pole-balancing tasks ([#385](https://github.com/tachsin/genoxide/pull/385))
+- *(python)* NEAT and its networks ([#387](https://github.com/tachsin/genoxide/pull/387))
+- *(python)* genetic programming with built-in primitives ([#389](https://github.com/tachsin/genoxide/pull/389))
+- *(python)* genetic programming with your own primitives ([#390](https://github.com/tachsin/genoxide/pull/390))
+- *(examples)* the pole-balancing pages animate the cart and its poles ([#391](https://github.com/tachsin/genoxide/pull/391))
+
+### <!-- 1 -->Fixed
+
+- a checkpoint of a De with fewer than 4 individuals, or of Islands with no island, is an error ([#346](https://github.com/tachsin/genoxide/pull/346))
+- *(cli)* a fitness program that writes extra lines or stops answering ends the run with an error ([#347](https://github.com/tachsin/genoxide/pull/347))
+- lengths above 2^24 are errors for Real and Integer, and CMA-ES restarts stay within 2^24 ([#344](https://github.com/tachsin/genoxide/pull/344))
+- *(python)* a parallel run stops on Ctrl+C after the calls under way, not after the generation ([#350](https://github.com/tachsin/genoxide/pull/350))
+- the problems' genome and objectives pass type checking, and small gaps in the CLI and Python checks ([#353](https://github.com/tachsin/genoxide/pull/353))
+- *(examples)* progress plots that end where the progress does ([#372](https://github.com/tachsin/genoxide/pull/372))
+- *(examples)* front pages that end where the front stops visibly moving ([#384](https://github.com/tachsin/genoxide/pull/384))
+
+### <!-- 2 -->Performance
+
+- the NSGA-III association skips the exact distance to reference directions a lower bound rules out ([#354](https://github.com/tachsin/genoxide/pull/354))
+- permutation operators, SPEA2, NSGA-III and MOEA/D reuse their scratch space instead of allocating it ([#355](https://github.com/tachsin/genoxide/pull/355))
+- [**breaking**] both normals of each polar-method draw, lazy CMA-ES eigendecomposition, and integer powers in the CTP constraints ([#356](https://github.com/tachsin/genoxide/pull/356))
+- the last front of SMS-EMOA is sorted once, not after every removal ([#352](https://github.com/tachsin/genoxide/pull/352))
+
+### <!-- 4 -->Documentation
+
+- a plan for genetic programming and neuroevolution ([#340](https://github.com/tachsin/genoxide/pull/340))
+- *(contributing)* no AI attribution in commits, PRs, comments or files ([#370](https://github.com/tachsin/genoxide/pull/370))
+
 ## [0.10.0](https://github.com/tachsin/genoxide/compare/v0.9.3...v0.10.0) - 2026-09-29
 
 ### <!-- 0 -->Added
