@@ -6,7 +6,7 @@ reference: "Levy, A. V. and Montalvo, A. (1985). The tunneling algorithm for the
 reference_url: "https://doi.org/10.1137/0906002"
 optimum: "0 (at (1, …, 1))"
 languages: [rust, python]
-order: 51
+order: 61
 trace_note: "Recorded from another run: L-SHADE in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 

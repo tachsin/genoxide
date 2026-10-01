@@ -6,7 +6,7 @@ reference: "Zitzler, E., Deb, K. and Thiele, L. (2000). Comparison of multiobjec
 reference_url: https://doi.org/10.1162/106365600568202
 optimum: "five pieces of f₂ = 1 − √f₁ − f₁ sin(10π f₁); hypervolume 1.3318 (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 132
+order: 152
 family: ZDT
 ---
 

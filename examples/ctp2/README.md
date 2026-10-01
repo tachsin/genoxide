@@ -6,7 +6,7 @@ reference: "Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test probl
 reference_url: https://doi.org/10.1007/3-540-44719-9_20
 optimum: "13 disconnected pieces of the constraint's boundary, from (0, 1) to (0.9845, 0.2872); hypervolume 0.6901 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 166
+order: 186
 family: CTP
 ---
 

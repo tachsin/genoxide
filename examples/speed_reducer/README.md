@@ -6,7 +6,7 @@ reference: "Golinski, J. (1970). Optimal synthesis problems solved by means of n
 reference_url: https://doi.org/10.1016/0022-2569(70)90064-9
 optimum: "2996.348165 (weight), best known"
 languages: [rust, python]
-order: 93
+order: 113
 ---
 
 # Speed reducer

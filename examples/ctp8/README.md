@@ -6,7 +6,7 @@ reference: "Deb, K. (2001). Multi-Objective Optimization Using Evolutionary Algo
 reference_url: ""
 optimum: "three pieces of CTP6's front, from (0, 3.6958) to (0.1345, 3.3128), (0.3263, 2.7686) to (0.4790, 2.3372) and (0.6823, 1.7654) to (0.8229, 1.3727); hypervolume 0.6540 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 172
+order: 192
 family: CTP
 ---
 

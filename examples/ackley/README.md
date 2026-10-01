@@ -6,7 +6,7 @@ reference: "Ackley, D. H. (1987). A Connectionist Machine for Genetic Hillclimbi
 reference_url: "https://doi.org/10.1007/978-1-4613-1997-9"
 optimum: "0 (at the origin)"
 languages: [rust, python]
-order: 54
+order: 64
 trace_note: "Recorded from another run: PSO with a ring topology in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 

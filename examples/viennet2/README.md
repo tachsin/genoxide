@@ -6,7 +6,7 @@ reference: "Viennet, R., Fonteix, C. and Marc, I. (1996). Multicriteria optimiza
 reference_url: https://doi.org/10.1080/00207729608929211
 optimum: "not known in closed form; hypervolume about 0.7744 (reference point (4.3697, −16.4242, −11.9584))"
 languages: [rust, python]
-order: 163
+order: 183
 family: Viennet
 ---
 

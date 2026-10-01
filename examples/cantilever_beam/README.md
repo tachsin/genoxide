@@ -6,7 +6,7 @@ reference: "Fleury, C. and Braibant, V. (1986). Structural optimization: a new d
 reference_url: https://doi.org/10.1002/nme.1620230307
 optimum: "1.339956361 (weight), proven"
 languages: [rust, python]
-order: 95
+order: 115
 ---
 
 # Cantilever beam

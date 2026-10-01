@@ -6,7 +6,7 @@ reference: "Jamil, M. and Yang, X.-S. (2013). A literature survey of benchmark f
 reference_url: "https://doi.org/10.1504/IJMMNO.2013.055204"
 optimum: "0 at (1, 3)"
 languages: [rust, python]
-order: 64
+order: 74
 ---
 
 # Booth

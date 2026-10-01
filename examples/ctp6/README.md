@@ -6,7 +6,7 @@ reference: "Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test probl
 reference_url: https://doi.org/10.1007/3-540-44719-9_20
 optimum: "one piece of a constraint boundary, from (0, 3.6958) to (1, 0.8813); hypervolume 0.7124 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 170
+order: 190
 family: CTP
 ---
 

@@ -6,7 +6,7 @@ reference: "Beale, E. M. L. (1958). On an Iterative Method for Finding a Local M
 reference_url: ""
 optimum: "0 at (3, 0.5)"
 languages: [rust, python]
-order: 63
+order: 73
 ---
 
 # Beale

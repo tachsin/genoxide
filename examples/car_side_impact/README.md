@@ -6,7 +6,7 @@ reference: "Gu, L., Yang, R. J., Tho, C. H., Makowski, M., Faruque, O. and Li, Y
 reference_url: https://doi.org/10.1504/IJVD.2001.005210
 optimum: "23.585658 (weight), best known"
 languages: [rust, python]
-order: 96
+order: 116
 ---
 
 # Car side impact

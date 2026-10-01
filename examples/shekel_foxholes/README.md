@@ -6,7 +6,7 @@ reference: "De Jong, K. A. (1975). An Analysis of the Behavior of a Class of Gen
 reference_url: "https://hdl.handle.net/2027.42/4507"
 optimum: "0.99800 at (−31.97833, −31.97833) (best known)"
 languages: [rust, python]
-order: 74
+order: 84
 ---
 
 # Shekel's foxholes
