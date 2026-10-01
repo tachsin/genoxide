@@ -12,11 +12,13 @@ use std::cell::RefCell;
 use std::thread::LocalKey;
 
 /// What a genome needs to become a Python object, besides itself: nothing for the genomes of
-/// genes.
-#[derive(Clone, Copy, Debug, Default)]
+/// genes; a tree's primitive set.
+#[derive(Clone, Debug, Default)]
 pub enum GenomeContext {
     #[default]
     None,
+    /// The primitive set of a run's trees.
+    Tree(std::sync::Arc<crate::trees::Set>),
 }
 
 /// A genome that Python sees: as a Python object for the fitness function, the progress and the
@@ -60,6 +62,12 @@ pub trait PyGenome: Genome + Clone + Send + Sync + 'static {
 
     /// The genome as bits, if it is: what the binary test problems evaluate.
     fn bits(&self) -> Option<&Bits> {
+        None
+    }
+
+    /// The genome as a tree, if it is: what symbolic regression and the Boolean problems
+    /// evaluate.
+    fn tree(&self) -> Option<&genoxide::gp::Tree> {
         None
     }
 }

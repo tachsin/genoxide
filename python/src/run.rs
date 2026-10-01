@@ -16,6 +16,8 @@ use crate::operators::{
 use crate::problems;
 use crate::snapshot::{Snapshot, objective_values};
 use crate::tasks::Balance;
+use crate::tree_problems::TreeFitness;
+use crate::trees::tree_algorithm;
 use genoxide::algorithm::islands::{Migrate, Topology};
 use genoxide::algorithm::{GaBuilder, Islands, Reevaluate, cmaes, es, pso};
 use genoxide::engine::Progress;
@@ -84,8 +86,19 @@ pub fn run<'py>(
     if let Some(balance) = &balance {
         balance.check(&run).map_err(PyValueError::new_err)?;
     }
+    // a fitness of trees evaluated in Rust, and the primitive set of a run's trees
+    let tree = TreeFitness::from_object(fitness.bind(py));
+    let genome_context = match &run.genome {
+        config::Genome::Gp(gp) => GenomeContext::Tree(Arc::new(gp.primitives.clone())),
+        _ if tree.is_some() => {
+            return Err(PyValueError::new_err(
+                "a fitness of trees needs a gx.gp.Gp genome",
+            ));
+        }
+        _ => GenomeContext::None,
+    };
     let context = Context {
-        shared: Shared::new(fitness, batch, parallel, on_generation, GenomeContext::None),
+        shared: Shared::new(fitness, batch, parallel, on_generation, genome_context),
         objectives: run
             .objectives
             .iter()
@@ -98,6 +111,7 @@ pub fn run<'py>(
         parallel,
         problem,
         balance,
+        tree,
         control,
         checkpoints,
     };
@@ -154,6 +168,9 @@ pub fn run<'py>(
         config::Genome::Network { inputs, outputs } => {
             neat_algorithm(py, inputs, outputs, run.algorithm, &context)
         }
+        config::Genome::Gp(gp) => {
+            tree_algorithm(py, crate::trees::build_gp(*gp), run.algorithm, &context)
+        }
     };
     result.map_err(|error| match error {
         Failure::Setting(message) => PyValueError::new_err(message),
@@ -200,7 +217,7 @@ fn checkpoints(
 
 // why a run failed: its description, or Python (the fitness function, the progress callback,
 // Ctrl+C)
-enum Failure {
+pub(crate) enum Failure {
     Setting(String),
     Python(PyErr),
 }
@@ -217,7 +234,7 @@ impl From<PyErr> for Failure {
     }
 }
 
-type Returns<'py> = std::result::Result<Bound<'py, PyDict>, Failure>;
+pub(crate) type Returns<'py> = std::result::Result<Bound<'py, PyDict>, Failure>;
 
 // a single-objective test problem is minimized: maximizing it by mistake (the algorithms' default)
 // would optimize the wrong way without a warning
@@ -306,15 +323,17 @@ fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
 }
 
 // what a run needs besides the algorithm
-struct Context {
+pub(crate) struct Context {
     shared: Shared,
-    objectives: Vec<Objective>,
+    pub objectives: Vec<Objective>,
     stop: config::Stop,
     parallel: bool,
     // a test problem, evaluated in Rust instead of the Python function
     problem: Option<problems::Problem>,
     // a network's weights balancing poles, evaluated in Rust instead of the Python function
     balance: Option<Balance>,
+    // a fitness of trees, evaluated in Rust instead of the Python function
+    pub tree: Option<TreeFitness>,
     // called with the running algorithm once per generation
     control: Option<Py<PyAny>>,
     checkpoints: Checkpoints,
@@ -408,7 +427,7 @@ fn build_de(real: Real, de: config::De, context: &Context) -> std::result::Resul
 }
 
 // the island model of `islands`, with its settings
-fn build_islands<A: Migrate>(
+pub(crate) fn build_islands<A: Migrate>(
     islands: Vec<A>,
     topology: Option<config::Topology>,
     interval: Option<u64>,
@@ -852,16 +871,16 @@ where
             let settings = LocalSearchSettings { neighbor: mutate };
             generational(py, setting(builder.build())?, settings, context)
         }
-        config::Algorithm::Nsga2 { variation, .. }
-        | config::Algorithm::Nsga3 { variation, .. }
-        | config::Algorithm::Spea2 { variation, .. }
-        | config::Algorithm::Moead { variation, .. }
-        | config::Algorithm::SmsEmoa { variation, .. } => {
+        config::Algorithm::Nsga2 { ref variation, .. }
+        | config::Algorithm::Nsga3 { ref variation, .. }
+        | config::Algorithm::Spea2 { ref variation, .. }
+        | config::Algorithm::Moead { ref variation, .. }
+        | config::Algorithm::SmsEmoa { ref variation, .. } => {
             let multi = MultiObjective {
                 py,
                 representation,
                 crossover: crossover(variation.crossover)?,
-                mutate: mutate(variation.mutate)?,
+                mutate: mutate(variation.mutate.clone())?,
                 algorithm,
                 context,
             };
@@ -880,7 +899,10 @@ where
     }
 }
 
-fn ga_builder<R, C, M>(
+// initial genomes are trees: other genomes start from random ones
+const INITIAL_GENOMES: &str = "initial_genomes are the trees of a gx.gp.Gp genome";
+
+pub(crate) fn ga_builder<R, C, M>(
     representation: R,
     ga: &config::Ga,
     context: &Context,
@@ -890,11 +912,14 @@ fn ga_builder<R, C, M>(
 where
     R: Representation,
 {
+    if ga.initial_genomes.is_some() {
+        return Err(INITIAL_GENOMES.to_string());
+    }
     let mut builder = Ga::builder(representation)
         .population_size(ga.population_size)
-        .select(AnySelect::new(ga.select)?)
+        .select(AnySelect::new(ga.select.clone())?)
         .crossover(crossover(ga.crossover)?)
-        .mutate(mutate(ga.mutate)?)
+        .mutate(mutate(ga.mutate.clone())?)
         .objective(context.single_objective()?);
     if let Some(seed) = ga.seed {
         builder = builder.seed(seed);
@@ -1064,7 +1089,11 @@ where
                 population_size,
                 seed,
                 variation,
+                initial_genomes,
             } => {
+                if initial_genomes.is_some() {
+                    return Err(INITIAL_GENOMES.to_string().into());
+                }
                 let builder =
                     Nsga2::builder(representation, objectives).population_size(population_size);
                 let builder = variation!(builder, crossover, mutate, variation, seed);
@@ -1171,7 +1200,7 @@ fn rows<const N: usize>(rows: Vec<Vec<f64>>, setting: &str) -> Result<Vec<[f64; 
 // runs a single-objective algorithm, detached from Python so that other threads, and the fitness
 // function on rayon's threads, can run; with the control of the run, if any, which can change
 // `settings` of the algorithm
-fn generational<'py, A, S>(
+pub(crate) fn generational<'py, A, S>(
     py: Python<'py>,
     algorithm: A,
     settings: S,
@@ -1190,7 +1219,10 @@ where
     let problem = match &context.problem {
         Some(problems::Problem::Single(problem)) => Some(Native::Real(problem.as_ref())),
         Some(problems::Problem::Integer(problem)) => Some(Native::Integer(problem.as_ref())),
-        _ => context.balance.as_ref().map(Native::Balance),
+        _ => match &context.tree {
+            Some(tree) => Some(Native::Tree(tree)),
+            None => context.balance.as_ref().map(Native::Balance),
+        },
     };
     let fitness = Single { shared, problem };
     // the control, the handle it gets, and the slot that holds the algorithm during its call
@@ -1272,7 +1304,7 @@ where
 }
 
 // runs a multi-objective algorithm, detached from Python like `generational`
-fn multi_objective<'py, A, const N: usize>(
+pub(crate) fn multi_objective<'py, A, const N: usize>(
     py: Python<'py>,
     algorithm: A,
     context: &Context,
@@ -1293,6 +1325,7 @@ where
     let fitness = Multi {
         shared,
         problem: problem.as_ref(),
+        tree: context.tree.as_ref(),
     };
     let outcome = py.detach(|| {
         let mut engine = MultiEngine::new(algorithm, fitness)

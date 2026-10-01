@@ -24,6 +24,7 @@
 use crate::genes::{GenomeContext, PyGenome};
 use crate::problems::{IntegerProblem, MultiNative};
 use crate::tasks::Balance;
+use crate::tree_problems::TreeFitness;
 use genoxide::Fitness;
 use genoxide::engine::{FitnessFunction, IntoFitness, Progress};
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
@@ -409,12 +410,13 @@ pub struct Single<'a> {
 }
 
 /// A single-objective test problem evaluated in Rust: on real or on integer genomes; or a
-/// network's weights balancing poles.
+/// network's weights balancing poles; or a fitness of trees.
 #[derive(Clone, Copy)]
 pub enum Native<'a> {
     Real(&'a dyn DynProblem),
     Integer(&'a dyn IntegerProblem),
     Balance(&'a Balance),
+    Tree(&'a TreeFitness),
 }
 
 impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
@@ -441,6 +443,12 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
                 return genome.reals().map_or(Value::Invalid, |weights| {
                     Value::Native(balance.evaluate(weights))
                 });
+            }
+            Some(Native::Tree(fitness)) => {
+                return genome
+                    .tree()
+                    .and_then(|tree| fitness.evaluate(tree))
+                    .map_or(Value::Invalid, Value::Score);
             }
             None => {}
         }
@@ -580,10 +588,12 @@ fn multi_values<const M: usize>(
 }
 
 /// A multi-objective fitness function: the Python function of `Shared`, or a test problem of
-/// `genoxide::multi::problems`, evaluated in Rust without Python.
+/// `genoxide::multi::problems` or a fitness of trees with their size, evaluated in Rust without
+/// Python.
 pub struct Multi<'a, const M: usize> {
     pub shared: &'a Shared,
     pub problem: Option<&'a MultiNative<M>>,
+    pub tree: Option<&'a TreeFitness>,
 }
 
 impl<G: PyGenome, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
@@ -598,13 +608,20 @@ impl<G: PyGenome, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
             // the run checks that the genome is the problem's
             return MultiValue::Native(problem.evaluate(genome));
         }
+        if let Some(fitness) = self.tree {
+            // the run checks that the objectives are the fitness's
+            let values = genome.tree().and_then(|tree| fitness.values(tree));
+            return values
+                .and_then(|values| <[f64; M]>::try_from(values).ok())
+                .map_or(MultiValue::Invalid, MultiValue::Scores);
+        }
         Python::attach(|py| shared.call_genome(py, genome, multi_value))
             .unwrap_or(MultiValue::Invalid)
     }
 
     // as for `Single`
     fn is_batch(&self) -> bool {
-        self.problem.is_none()
+        self.problem.is_none() && self.tree.is_none()
     }
 
     fn evaluate_batch(&self, genomes: &[&G]) -> Vec<MultiValue<M>> {

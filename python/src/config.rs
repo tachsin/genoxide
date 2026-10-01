@@ -39,6 +39,28 @@ pub enum Genome {
         inputs: usize,
         outputs: usize,
     },
+    /// Trees of a genetic program.
+    Gp(Box<Gp>),
+}
+
+/// Trees of a genetic program: a primitive set of genoxide's built-in primitives, the limits and
+/// the initialization.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Gp {
+    pub primitives: genoxide::gp::PrimitiveSet<crate::trees::Op>,
+    pub max_depth: usize,
+    pub max_size: usize,
+    pub init: Init,
+}
+
+/// How random trees are made, with the range of their depths.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Init {
+    Full { depths: (usize, usize) },
+    Grow { depths: (usize, usize) },
+    RampedHalfAndHalf { depths: (usize, usize) },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -120,6 +142,8 @@ pub enum Algorithm {
         population_size: usize,
         seed: Option<u64>,
         variation: Variation,
+        /// The trees of the initial population, for a `Gp` genome.
+        initial_genomes: Option<Vec<genoxide::gp::Tree>>,
     },
     Nsga3 {
         /// A direction per row, a value per objective.
@@ -216,7 +240,7 @@ pub enum Topology {
 }
 
 /// How a multi-objective algorithm makes children.
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Variation {
     pub crossover: Crossover,
@@ -290,36 +314,72 @@ pub struct Ga {
     pub scheme: Option<Scheme>,
     /// Crossover and mutation of each pair of parents on its own random stream, in parallel.
     pub parallel_breeding: Option<bool>,
+    /// The trees of the initial population, for a `Gp` genome.
+    pub initial_genomes: Option<Vec<genoxide::gp::Tree>>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Select {
-    Tournament { size: usize },
-    Rank { pressure: f64 },
+    Tournament {
+        size: usize,
+    },
+    Rank {
+        pressure: f64,
+    },
     Roulette {},
     StochasticUniversalSampling {},
-    Truncation { fraction: f64 },
+    Truncation {
+        fraction: f64,
+    },
     Random {},
+    /// Of equal fitness, the smaller genome wins.
+    LexicographicTournament {
+        size: usize,
+        bucket_ratio: Option<f64>,
+    },
+    /// A size tournament of two fitness tournaments' winners, or the other way around.
+    DoubleTournament {
+        fitness_size: usize,
+        parsimony: f64,
+        size_first: bool,
+    },
+    /// `select`, with genomes larger than the mean counted as invalid with probability `rate`.
+    Tarpeian {
+        select: Box<Select>,
+        rate: f64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Crossover {
     Uniform {},
-    Point { points: usize },
+    Point {
+        points: usize,
+    },
     None {},
-    SimulatedBinary { eta: f64 },
-    Blend { alpha: f64 },
+    SimulatedBinary {
+        eta: f64,
+    },
+    Blend {
+        alpha: f64,
+    },
     Arithmetic {},
     Order {},
     PartiallyMapped {},
     Cycle {},
     EdgeRecombination {},
+    /// Trees: subtrees exchanged, at function nodes with probability `internal_rate`.
+    Subtree {
+        internal_rate: Option<f64>,
+    },
+    /// Trees: subtrees exchanged at a point of the common region.
+    OnePoint {},
 }
 
 /// A mutation: `rate` changes each gene with that probability, `count` exactly that many genes.
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Mutate {
     BitFlip {
@@ -349,6 +409,28 @@ pub enum Mutate {
     SelfAdaptive {
         learning_rate: Option<f64>,
         min_step: Option<f64>,
+    },
+    /// Trees: a subtree replaced by a new one of depth at most `max_depth`.
+    Subtree {
+        max_depth: Option<usize>,
+    },
+    /// Trees: nodes replaced by others of their signature, each with probability `rate`, or
+    /// `count` of them.
+    Point {
+        rate: Option<f64>,
+        count: Option<usize>,
+    },
+    /// Trees: the tree replaced by one of its subtrees.
+    Hoist {},
+    /// Trees: a function's subtree replaced by a leaf.
+    Shrink {},
+    /// Trees: a constant moved by normal noise.
+    Constant {
+        sigma: f64,
+    },
+    /// Trees: one of `mutations`, `(weight, mutation)` pairs, chosen by weight.
+    Mutations {
+        mutations: Vec<(f64, Mutate)>,
     },
 }
 

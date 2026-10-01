@@ -19,6 +19,8 @@ mod problems;
 mod run;
 mod snapshot;
 mod tasks;
+mod tree_problems;
+mod trees;
 
 use pyo3::prelude::*;
 
@@ -57,6 +59,23 @@ fn _genoxide(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     module.add_function(wrap_pyfunction!(portable::portable_math, module)?)?;
     module.add_function(wrap_pyfunction!(portable::random_real, module)?)?;
+    module.add_class::<trees::PyPrimitiveSet>()?;
+    module.add_class::<trees::PyTree>()?;
+    module.add_function(wrap_pyfunction!(trees::gp_check, module)?)?;
+    module.add_function(wrap_pyfunction!(trees::gp_ramped_half_and_half, module)?)?;
+    module.add_function(wrap_pyfunction!(trees::gp_random_genome, module)?)?;
+    module.add_function(wrap_pyfunction!(trees::gp_validate, module)?)?;
+    module.add_function(wrap_pyfunction!(trees::gp_parse, module)?)?;
+    module.add_class::<tree_problems::PySample>()?;
+    module.add_class::<tree_problems::PyDataset>()?;
+    module.add_class::<tree_problems::PyRegression>()?;
+    module.add_class::<tree_problems::PyRegressionProblem>()?;
+    module.add_class::<tree_problems::PyBooleanProblem>()?;
+    module.add_class::<tree_problems::PyWithSize>()?;
+    module.add_function(wrap_pyfunction!(
+        tree_problems::regression_primitives,
+        module
+    )?)?;
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

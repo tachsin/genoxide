@@ -3,6 +3,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
 import numpy as np
+from typing_extensions import Self
 
 __version__: str
 
@@ -188,3 +189,231 @@ class Recurrent:
         """A policy of the control tasks whose actions are ``scale * output + offset``."""
 
 def neat_network(json: str) -> NeatNetwork: ...
+
+class PrimitiveSet:
+    """The functions, terminals and ephemeral random constants of a genetic program's trees, of
+    genoxide's built-in primitives: from ``gx.gp.regression.primitives(...)`` or a problem's
+    ``primitives()``. Sets compare equal by their primitives, and pickle."""
+
+    @property
+    def functions(self) -> list[str]:
+        """The names of the functions, in order."""
+    @property
+    def terminals(self) -> list[str]:
+        """The names of the terminals (the variables or inputs), in order."""
+    @property
+    def constants(self) -> str | None:
+        """The ephemeral random constants, e.g. ``"Constants.normal(0.0, 5.0)"``, or None."""
+    def parse(self, text: str) -> Tree:
+        """The tree written in ``text`` as ``str(tree)`` writes it, e.g. ``add(mul(x, x), 0.5)``:
+        a primitive's name and its arguments in parentheses, separated by commas, or a number
+        for a constant. A ``ValueError`` for text that isn't a tree of the set. The limits of a
+        ``gx.gp.Gp`` aren't checked: ``gp.parse`` does that."""
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+    @staticmethod
+    def _from_json(text: str) -> PrimitiveSet: ...
+    def _json(self) -> str: ...
+
+class Tree:
+    """A tree of a genetic program, in Rust: its nodes in prefix order and its primitive set. A
+    run's fitness function gets one, and its result's ``best_genome`` is one. It's read-only;
+    trees compare equal by their nodes and set, hash, and pickle."""
+
+    def __len__(self) -> int:
+        """The number of nodes: what ``max_size`` counts, and the size that
+        ``DoubleTournament``, ``LexicographicTournament`` and ``Tarpeian`` see."""
+    @property
+    def depth(self) -> int:
+        """The depth, the root at depth 0: 0 for a single node."""
+    @property
+    def primitives(self) -> PrimitiveSet:
+        """The tree's primitive set."""
+    def display(self) -> str:
+        """The tree as text, e.g. ``add(mul(x, x), 0.5)``, as ``str(tree)``: the set's
+        ``parse`` reads it back."""
+    def evaluate(self, x: Any) -> np.ndarray:
+        """The tree's values at points, on all of them at once in Rust, without the GIL: ``x``
+        holds a point per row, a value per variable (or input) in the order of the set's
+        terminals, or for one variable a 1-D array of its values. A ``float64`` array for
+        regression's primitives, computed as ``Regression`` computes them (before linear
+        scaling); a ``bool`` array for the Boolean problems' (an input is true where it isn't
+        0). A ``ValueError`` for fewer columns than variables."""
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+    @staticmethod
+    def _from_json(set: str, tree: str) -> Tree: ...
+    def _json(self) -> str: ...
+
+def gp_check(description: str) -> None: ...
+def gp_ramped_half_and_half(description: str, count: int, seed: int) -> list[Tree]: ...
+def gp_random_genome(description: str, seed: int) -> Tree: ...
+def gp_validate(description: str, tree: Tree) -> None: ...
+def gp_parse(description: str, text: str) -> Tree: ...
+def regression_primitives(
+    functions: list[str], variables: list[str], constants: str | None = None
+) -> PrimitiveSet: ...
+
+class Sample:
+    """Points and their targets, for symbolic regression: ``Sample(x, y)``, ``x`` a point per row
+    with a value per variable (or a 1-D array of one variable), ``y`` a target per point; all
+    finite. A ``ValueError`` for no points or variables, more than 2^16 variables, a number of
+    targets other than the points', or a value that isn't finite."""
+
+    def __init__(self, x: Any, y: Any) -> None: ...
+    @property
+    def x(self) -> np.ndarray:
+        """The points, a row each with a value per variable."""
+    @property
+    def y(self) -> np.ndarray:
+        """The targets."""
+    @property
+    def variables(self) -> int:
+        """The number of variables."""
+    @property
+    def points(self) -> int:
+        """The number of points."""
+    def deviation(self) -> float:
+        """The standard deviation of the targets (divided by the number of points): the scale of
+        an error, exact recovery being an error of at most 1e-10 of it."""
+    def __len__(self) -> int:
+        """The number of points."""
+
+class Dataset:
+    """The data of a regression: the ``training`` sample that the search fits, and a ``test``
+    sample it never sees, to measure how the result generalizes. A ``ValueError`` for a test
+    sample of other variables."""
+
+    def __init__(self, training: Sample, test: Sample | None = None) -> None: ...
+    @property
+    def training(self) -> Sample:
+        """The training sample."""
+    @property
+    def test(self) -> Sample | None:
+        """The test sample, or None."""
+    @property
+    def variables(self) -> int:
+        """The number of variables."""
+
+class Regression:
+    """The fitness function of symbolic regression, evaluated in Rust: the error of a tree's
+    predictions on the training sample of ``dataset``, minimized; None (an invalid tree) if a
+    value isn't finite.
+
+    ``primitives`` is a set of ``gx.gp.regression``'s functions, whose variables are the
+    dataset's columns. ``metric`` is "rmse" (the root mean squared error, the default), "mse" or
+    "mae"; with ``linear_scaling`` (the default), the error of ``a + b f(x)``, with ``a`` and
+    ``b`` fitted by least squares on the training sample. A tree is evaluated on all the points
+    at once, without the GIL. ``regression(tree)`` is ``regression.evaluate(tree)``. Each method
+    taking a tree raises a ``ValueError`` for a tree of another primitive set."""
+
+    def __init__(
+        self,
+        primitives: PrimitiveSet,
+        dataset: Dataset,
+        *,
+        metric: Literal["rmse", "mse", "mae"] = "rmse",
+        linear_scaling: bool = True,
+    ) -> None: ...
+    def evaluate(self, tree: Tree) -> float | None:
+        """The error on the training sample, None if a value isn't finite."""
+    def __call__(self, tree: Tree) -> float | None: ...
+    def error(self, tree: Tree, sample: Sample) -> float | None:
+        """The error on ``sample``, e.g. the test sample, after the scaling fitted on the
+        training sample; None if a prediction isn't finite."""
+    def values(self, tree: Tree, sample: Sample) -> np.ndarray:
+        """The tree's values at the points of ``sample``, before scaling."""
+    def predict(self, tree: Tree, sample: Sample) -> np.ndarray | None:
+        """The tree's predictions at the points of ``sample``: its values after the scaling
+        fitted on the training sample; None if a value on the training sample isn't finite."""
+    def scaling(self, tree: Tree) -> tuple[float, float] | None:
+        """The linear scaling ``(intercept, slope)`` fitted on the training sample, ``(0.0,
+        1.0)`` without linear scaling, None if a value on the training sample isn't finite."""
+    def display(self, tree: Tree) -> str:
+        """The tree as text, with its scaling if linear scaling is on: ``intercept + slope *
+        (expression)``."""
+    @property
+    def primitives(self) -> PrimitiveSet:
+        """The primitive set."""
+    @property
+    def dataset(self) -> Dataset:
+        """The dataset."""
+    @property
+    def metric(self) -> str:
+        """The error measure: "rmse", "mse" or "mae"."""
+    @property
+    def linear_scaling(self) -> bool:
+        """Whether the error is the one after linear scaling."""
+
+class RegressionProblem:
+    """A test problem of symbolic regression, evaluated in Rust: the fitness function
+    ``regression()``, the RMSE after linear scaling, on the paper's data with its primitives."""
+
+    def __new__(cls, name: str) -> Self: ...
+    @property
+    def name(self) -> str:
+        """The problem's name, e.g. "Koza-1"."""
+    @property
+    def formula(self) -> str:
+        """The target as a formula, e.g. "x^4 + x^3 + x^2 + x"."""
+    @property
+    def reference(self) -> str:
+        """The paper that defines the problem."""
+    @property
+    def reference_url(self) -> str | None:
+        """Its DOI or URL, or None."""
+    def target(self, point: Sequence[float]) -> float:
+        """The target at ``point``, a value per variable."""
+    def primitives(self) -> PrimitiveSet:
+        """The paper's primitive set: build the ``gx.gp.Gp`` from it."""
+    def dataset(self) -> Dataset:
+        """The training and test samples."""
+    def regression(
+        self, *, metric: Literal["rmse", "mse", "mae"] = "rmse", linear_scaling: bool = True
+    ) -> Regression:
+        """The fitness function, with these settings: the RMSE after linear scaling by default,
+        what the problem itself evaluates."""
+    def __call__(self, tree: Tree) -> float | None:
+        """The RMSE after linear scaling, None if a value isn't finite."""
+
+class BooleanProblem:
+    """A Boolean problem of ``gx.gp.boolean``, evaluated in Rust: the cases of its truth table a
+    tree gets wrong, minimized."""
+
+    def __new__(cls, kind: str, size: int) -> Self: ...
+    def primitives(self) -> PrimitiveSet:
+        """The paper's primitive set: build the ``gx.gp.Gp`` from it."""
+    @property
+    def inputs(self) -> int:
+        """The number of inputs."""
+    @property
+    def cases(self) -> int:
+        """The number of cases of the truth table, 2^inputs."""
+    @property
+    def address_bits(self) -> int | None:
+        """The multiplexer's address bits; None for even parity."""
+    @property
+    def reference(self) -> str:
+        """The source of the problem."""
+    def targets(self) -> list[int]:
+        """The right outputs, 64 cases per word: case ``c`` at bit ``c % 64`` of word
+        ``c // 64``."""
+    def outputs(self, tree: Tree) -> list[int]:
+        """The tree's outputs, as ``targets()`` lays them out."""
+    def errors(self, tree: Tree) -> int:
+        """The number of cases the tree gets wrong: the fitness, 0 at the optimum."""
+    def __call__(self, tree: Tree) -> float:
+        """The number of cases the tree gets wrong."""
+
+class WithSize:
+    """A fitness of trees with their size as a second objective, for ``gx.Nsga2`` with
+    ``objectives=["minimize", "minimize"]``: ``(fitness, number of nodes)``, both minimized,
+    evaluated in Rust. ``fitness`` is a ``gx.gp.regression.Regression``, a regression problem
+    or a Boolean problem: the trade-off between accuracy and size, as a Pareto front."""
+
+    def __init__(self, fitness: Regression | RegressionProblem | BooleanProblem) -> None: ...
+    @property
+    def fitness(self) -> Any:
+        """The fitness of the first objective."""
+    def __call__(self, tree: Tree) -> tuple[float, float] | None:
+        """``(fitness, size)``, or None for an invalid tree."""
