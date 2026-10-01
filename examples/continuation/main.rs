@@ -1,9 +1,10 @@
-//! Continuation: the smallest ball around 420 points in 10 dimensions, its center found by
-//! minimizing a smoothed largest distance, (Σ dᵢ^2p)^(1/2p), for p = 2, 4, 8 and 16, each stage
-//! from the last, with Adam's state kept between them.
+//! Continuation: a tilted Rastrigin function in 10 dimensions, Σ (xᵢ − aᵢ)² + 10 (1 − cos 2πxᵢ),
+//! minimized through 6 stages of its Gaussian smoothing, σ from 0.6 (convex) to 0 (the function
+//! itself), each stage from the last, with L-BFGS-B.
 //!
-//! The points are made so that the center is known exactly, and the last stage ends at it. Then
-//! the same stages keeping only the point, and p = 16 from the start, as contrasts.
+//! The function is separable, so its global minimum is computed exactly, gene by gene, and the
+//! last stage ends at it. Then, as contrasts, σ = 0 from the same start, which a local method
+//! can't take out of the nearest basin, and the stages with L-BFGS-B's curvature pairs kept.
 //!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its runs for the plot on the example's
 //! page, with `trace.rs`.
@@ -14,255 +15,212 @@
 
 mod trace;
 
-use genoxide::algorithm::continuation::Keep;
-use genoxide::algorithm::first_order::Step;
+use genoxide::math;
 use genoxide::prelude::*;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::f64::consts::{PI, TAU};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-// the dimensions, and the points near the center
-const D: usize = 10;
-const NEAR: usize = 400;
-// how far from the center the near points are, at most
-const SPREAD: f64 = 0.3;
-// the stages' p = 2^k, for k = 1 to 4
-const POWERS: [u32; 4] = [1, 2, 3, 4];
-// Adam's learning rate, and the largest component of the gradient at which a stage has converged
-const RATE: f64 = 0.05;
-const TOLERANCE: f64 = 1e-11;
+// the centers of the quadratic, off the cosine's lattice, and the cosine's amplitude
+const CENTERS: [f64; 10] = [1.3, -0.7, 2.2, -1.6, 0.35, 3.25, -2.8, 0.7, -0.3, 1.8];
+const A: f64 = 10.0;
+// the stages' smoothing: 0.6 is convex (above 0.517), 0 the function itself
+const SIGMAS: [f64; 6] = [0.6, 0.4, 0.3, 0.2, 0.1, 0.0];
+// every gene starts here
+const START: f64 = -3.0;
+// L-BFGS-B's largest projected gradient component at which a stage has converged
+const TOLERANCE: f64 = 1e-10;
 
-// the problem: the center, the points, and the cell with the current stage's k, which the fitness
-// function reads
-struct Problem {
-    center: Vec<f64>,
-    points: Arc<Vec<Vec<f64>>>,
-    power: Arc<AtomicU32>,
-}
-
-// what a run did: per stage, its p, steps, evaluations, smoothed distance and distance to the
-// center; and in all, its steps, evaluations and last point
+// what a run did: per stage, its σ, rounds, evaluations, best value and distance to the global
+// minimum; and in all, its rounds, evaluations and last point
 struct Run {
-    stages: Vec<(u32, u64, u64, f64, f64)>,
-    steps: u64,
+    stages: Vec<(f64, u64, u64, f64, f64)>,
+    rounds: u64,
     evaluations: u64,
     point: Vec<f64>,
 }
 
 fn main() -> Result<()> {
-    let problem = Problem::new()?;
+    let exact = global_minimum();
+    let minimum = value(&exact, 0.0);
     let mut trace = trace::Trace::from_env();
 
     println!(
-        "The smallest ball around {} points in {D} dimensions: {} at distance 1 from its center, \
-         {NEAR} within {SPREAD} of it",
-        2 * D + NEAR,
-        2 * D
+        "A tilted Rastrigin function in {} dimensions, Σ (xᵢ − aᵢ)² + {A} (1 − cos 2πxᵢ), from \
+         xᵢ = {START}",
+        CENTERS.len()
     );
-    println!("Adam through 4 stages of the smoothed largest distance, each from the last");
-    let kept = problem.run(Keep::State, &POWERS, &mut trace, 0)?;
-    println!(" stage   p  steps  evaluations  smoothed distance  distance to the center");
-    for (index, &(p, steps, evaluations, smoothed, distance)) in kept.stages.iter().enumerate() {
+    println!(
+        "L-BFGS-B through 6 stages of the function smoothed by a Gaussian of σ, each from the last"
+    );
+    let staged = run(&SIGMAS, false, &exact, &mut trace, 0)?;
+    println!(
+        " stage     σ  rounds  evaluations  value of the stage  distance to the global minimum"
+    );
+    for (index, &(sigma, rounds, evaluations, best, distance)) in staged.stages.iter().enumerate() {
         println!(
-            "{:>6}  {p:>2}  {steps:>5}  {evaluations:>11}  {smoothed:>17.10}  {:>22}",
+            "{:>6}  {sigma:>4.2}  {rounds:>6}  {evaluations:>11}  {best:>18.10}  {:>29}",
             index + 1,
             scientific(distance)
         );
     }
-    let error = problem.distance(&kept.point);
+    let error = distance(&staged.point, &exact);
     println!(
-        "converged after {} steps and {} evaluations: the center within {}, the largest \
-         distance 1 + {}",
-        kept.steps,
-        kept.evaluations,
-        scientific(error),
-        scientific(problem.largest(&kept.point) - 1.0)
+        "converged after {} rounds and {} evaluations: f = {:.14}, within {} of the global \
+         minimum",
+        staged.rounds,
+        staged.evaluations,
+        value(&staged.point, 0.0),
+        scientific(error)
     );
-    assert!(error < 1e-10);
+    println!("the global minimum, gene by gene by bisection: f* = {minimum:.14}");
+    assert!(error < 1e-12);
 
-    // the contrasts: the same stages keeping only the point, and p = 16 alone
-    let point = problem.run(Keep::Point, &POWERS, &mut trace, 1)?;
+    // the contrasts: σ = 0 from the same start, and the stages keeping the curvature pairs
+    let cold = run(&SIGMAS[5..], false, &exact, &mut trace, 1)?;
+    let trapped = value(&cold.point, 0.0);
     println!(
-        "the point only kept between stages: {} steps and {} evaluations, the center within {}",
-        point.steps,
-        point.evaluations,
-        scientific(problem.distance(&point.point))
-    );
-    let cold = problem.run(Keep::State, &POWERS[3..], &mut trace, 2)?;
-    println!(
-        "p = 16 from the start: {} steps and {} evaluations, the center within {}",
-        cold.steps,
+        "σ = 0 from the start: {} rounds and {} evaluations, trapped at f = {trapped:.8}, {:.8} \
+         above f*, {} from the global minimum",
+        cold.rounds,
         cold.evaluations,
-        scientific(problem.distance(&cold.point))
+        trapped - minimum,
+        scientific(distance(&cold.point, &exact))
+    );
+    let paired = run(&SIGMAS, true, &exact, &mut trace, 2)?;
+    println!(
+        "the stages with L-BFGS-B's curvature pairs kept: {} rounds and {} evaluations, within {}",
+        paired.rounds,
+        paired.evaluations,
+        scientific(distance(&paired.point, &exact))
     );
     trace.write();
     Ok(())
 }
 
-impl Problem {
-    // the center c, and the points: c ± eᵢ on every axis i, the farthest from c, and NEAR points
-    // within SPREAD of it, each coordinate moved by up to SPREAD / √D
-    fn new() -> Result<Self> {
-        let center: Vec<f64> = (0..D).map(|i| (i + 1) as f64 / D as f64 - 0.5).collect();
-        let mut points = Vec::with_capacity(2 * D + NEAR);
-        for i in 0..D {
-            for sign in [1.0, -1.0] {
-                let mut point = center.clone();
-                point[i] += sign;
-                points.push(point);
-            }
-        }
-        let offsets =
-            Real::uniform(NEAR * D, 0.0..=1.0)?.random_genome(&mut StreamRng::seed_from_u64(1));
-        let scale = SPREAD / (D as f64).sqrt();
-        for offset in offsets.as_chunks::<D>().0 {
-            points.push(
-                center
-                    .iter()
-                    .zip(offset)
-                    .map(|(c, u)| c + scale * u)
-                    .collect(),
-            );
-        }
-        Ok(Self {
-            center,
-            points: Arc::new(points),
-            power: Arc::new(AtomicU32::new(POWERS[0])),
+// L-BFGS-B through the stages of `sigmas` from the same start, keeping its pairs between them
+// or not, until the last stage has converged; each round recorded in the trace as run `line`
+fn run(
+    sigmas: &[f64],
+    keep_pairs: bool,
+    exact: &[f64],
+    trace: &mut trace::Trace,
+    line: usize,
+) -> Result<Run> {
+    // the stage's σ, shared with the fitness function
+    let sigma = Arc::new(AtomicU64::new(sigmas[0].to_bits()));
+    let shared = Arc::clone(&sigma);
+    let smoothed = Differentiable(move |x: &Reals, gradient: &mut [f64]| {
+        let s = f64::from_bits(shared.load(Ordering::Relaxed));
+        smoothed(x, s, gradient)
+    });
+    let lbfgsb = Lbfgsb::builder(Real::uniform(CENTERS.len(), -5.0..=5.0)?)
+        .initial_genome(Reals::from(vec![START; CENTERS.len()]))
+        .gradient_tolerance(TOLERANCE)
+        .keep_pairs(keep_pairs)
+        .minimize()
+        .build()?;
+    // each stage's distance to the global minimum when it ends
+    let distances = Arc::new(Mutex::new(Vec::new()));
+    let (ended, minimum) = (Arc::clone(&distances), exact.to_vec());
+    let stages = sigmas.to_vec();
+    let continuation = Continuation::builder(lbfgsb)
+        .stages(sigmas.len())
+        .on_stage(move |stage, _| {
+            sigma.store(stages[stage].to_bits(), Ordering::Relaxed);
+            Ok(())
         })
-    }
-
-    // Adam through the stages of `powers` from the same start, keeping `keep` between them, until
-    // the last stage has converged; each step recorded in the trace as run `line`
-    fn run(
-        &self,
-        keep: Keep,
-        powers: &[u32],
-        trace: &mut trace::Trace,
-        line: usize,
-    ) -> Result<Run> {
-        let (points, power) = (Arc::clone(&self.points), Arc::clone(&self.power));
-        let smoothed = Differentiable(move |x: &Reals, gradient: &mut [f64]| {
-            smoothed(x, &points, power.load(Ordering::Relaxed), gradient)
+        .on_stage_finished(move |_, lbfgsb| {
+            let point = lbfgsb.population()[0].genome();
+            let mut ended = ended.lock().expect("not poisoned");
+            ended.push(distance(point, &minimum));
+        })
+        .build()?;
+    let mut engine = Engine::new(continuation, smoothed)
+        .stop_when(Stop::evaluations(10_000))
+        .control(|staged: &mut Continuation<Lbfgsb>, progress| {
+            let point = staged.population()[0].genome();
+            let s = sigmas[staged.stage()];
+            trace.record(line, progress.generation(), distance(point, exact), s);
+            Ok(())
         });
-        let adam = FirstOrder::builder(Real::uniform(D, -2.0..=2.0)?)
-            .step(Step::adam(RATE))
-            .initial_genome(Reals::from(vec![-1.5; D]))
-            .gradient_tolerance(TOLERANCE)
-            .minimize()
-            .build()?;
-        // each stage's p in the shared cell, and its distance to the center when it ends
-        let (cell, stages) = (Arc::clone(&self.power), powers.to_vec());
-        let distances = Arc::new(Mutex::new(Vec::new()));
-        let (ended, center) = (Arc::clone(&distances), self.center.clone());
-        let continuation = Continuation::builder(adam)
-            .stages(powers.len())
-            .keep(keep)
-            .on_stage(move |stage, _| {
-                cell.store(stages[stage], Ordering::Relaxed);
-                Ok(())
-            })
-            .on_stage_finished(move |_, adam| {
-                let point = adam.population()[0].genome();
-                let mut ended = ended.lock().expect("not poisoned");
-                ended.push(distance(point, &center));
-            })
-            .build()?;
-        let mut engine = Engine::new(continuation, smoothed)
-            .stop_when(Stop::generations(100_000))
-            .control(|staged: &mut Continuation<FirstOrder>, progress| {
-                let point = staged.population()[0].genome();
-                let p = 1u32 << powers[staged.stage()];
-                trace.record(line, progress.generation(), self.distance(point), p);
-                Ok(())
-            });
-        let outcome = engine.run()?;
-        assert_eq!(outcome.stop_reason(), StopReason::Converged);
-        let distances = distances.lock().expect("not poisoned");
-        let stages = engine
-            .algorithm()
-            .stages()
-            .iter()
-            .zip(distances.iter())
-            .map(|(stage, &distance)| {
-                let p = 1u32 << powers[stage.index()];
-                let smoothed = stage.best().score().expect("valid").sqrt();
-                (
-                    p,
-                    stage.generations(),
-                    stage.evaluations(),
-                    smoothed,
-                    distance,
-                )
-            })
-            .collect();
-        Ok(Run {
-            stages,
-            steps: outcome.generations(),
-            evaluations: outcome.evaluations(),
-            point: engine.algorithm().population()[0].genome().to_vec(),
+    let outcome = engine.run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Converged);
+    let distances = distances.lock().expect("not poisoned");
+    let stages = engine
+        .algorithm()
+        .stages()
+        .iter()
+        .zip(distances.iter())
+        .map(|(stage, &distance)| {
+            let best = stage.best().score().expect("valid");
+            let s = sigmas[stage.index()];
+            (s, stage.generations(), stage.evaluations(), best, distance)
         })
-    }
-
-    // the largest difference of a coordinate from the center's
-    fn distance(&self, x: &[f64]) -> f64 {
-        distance(x, &self.center)
-    }
-
-    // the largest distance from x to a point
-    fn largest(&self, x: &[f64]) -> f64 {
-        let squared = self.points.iter().map(|point| squared(x, point));
-        squared.fold(0.0, f64::max).sqrt()
-    }
+        .collect();
+    Ok(Run {
+        stages,
+        rounds: outcome.generations(),
+        evaluations: outcome.evaluations(),
+        point: engine.algorithm().population()[0].genome().to_vec(),
+    })
 }
 
-fn distance(x: &[f64], center: &[f64]) -> f64 {
-    x.iter()
-        .zip(center)
-        .map(|(a, b)| (a - b).abs())
-        .fold(0.0, f64::max)
-}
-
-// |x − a|², summed in the order of the genes
-fn squared(x: &[f64], a: &[f64]) -> f64 {
+// the function smoothed by a Gaussian of σ, E[f(x + σz)] for z standard normal, and its gradient
+// into `gradient`. E[cos 2π(x + σz)] = e^(−2π²σ²) cos 2πx and E[(x + σz − a)²] = (x − a)² + σ²,
+// so each gene's term is (x − a)² + σ² + A (1 − e^(−2π²σ²) cos 2πx), convex once
+// 4π²A e^(−2π²σ²) < 2. With genoxide's portable cos, sin and exp, the same bits everywhere.
+fn smoothed(x: &[f64], s: f64, gradient: &mut [f64]) -> f64 {
+    let e = math::exp(-2.0 * PI * PI * s * s);
     let mut sum = 0.0;
-    for (xi, ai) in x.iter().zip(a) {
-        sum += (xi - ai) * (xi - ai);
+    for ((g, &xi), &a) in gradient.iter_mut().zip(x).zip(&CENTERS) {
+        let d = xi - a;
+        sum += d * d + s * s + A * (1.0 - e * math::cos(TAU * xi));
+        *g = 2.0 * d + 2.0 * PI * A * e * math::sin(TAU * xi);
     }
     sum
 }
 
-// the smoothed largest squared distance (Σ gᵢ^p)^(1/p), gᵢ = |x − aᵢ|², p = 2^k, and its gradient
-// into `gradient`. With M the largest gᵢ, it's M (Σ rᵢ^p)^(1/p) with rᵢ = gᵢ / M ≤ 1, which can't
-// overflow; the powers are k squarings and the root k square roots, which round the same on every
-// platform. The gradient is (Σ rᵢ^p)^(1/p − 1) Σ rᵢ^(p−1) 2 (x − aᵢ).
-fn smoothed(x: &[f64], points: &[Vec<f64>], k: u32, gradient: &mut [f64]) -> f64 {
-    let g: Vec<f64> = points.iter().map(|point| squared(x, point)).collect();
-    let most = g.iter().copied().fold(0.0, f64::max);
-    let mut sum = 0.0;
-    let mut weights = Vec::with_capacity(g.len());
-    for &gi in &g {
-        let r = gi / most;
-        let mut power = r;
-        for _ in 0..k {
-            power *= power;
+// the function smoothed by σ, without the gradient
+fn value(x: &[f64], s: f64) -> f64 {
+    smoothed(x, s, &mut vec![0.0; x.len()])
+}
+
+// the global minimum, gene by gene: in each basin around an integer k near the center a, where
+// the term is convex (|x − k| ≤ 1/4), the root of its derivative 2(x − a) + 2πA sin 2πx by
+// bisection to the last bit, and of those the lowest
+fn global_minimum() -> Vec<f64> {
+    let mut minimum = Vec::with_capacity(CENTERS.len());
+    for &a in &CENTERS {
+        let derivative = |x: f64| 2.0 * (x - a) + 2.0 * PI * A * math::sin(TAU * x);
+        let term = |x: f64| (x - a) * (x - a) + A * (1.0 - math::cos(TAU * x));
+        let mut best: Option<(f64, f64)> = None;
+        for k in (a.floor() as i64 - 3)..=(a.ceil() as i64 + 3) {
+            let (mut low, mut high) = (k as f64 - 0.25, k as f64 + 0.25);
+            for _ in 0..100 {
+                let middle = 0.5 * (low + high);
+                if derivative(middle) > 0.0 {
+                    high = middle;
+                } else {
+                    low = middle;
+                }
+            }
+            let x = 0.5 * (low + high);
+            if best.is_none_or(|(lowest, _)| term(x) < lowest) {
+                best = Some((term(x), x));
+            }
         }
-        sum += power;
-        weights.push(if r > 0.0 { power / r } else { 0.0 });
+        minimum.push(best.expect("a basin").1);
     }
-    let mut root = sum;
-    for _ in 0..k {
-        root = root.sqrt();
-    }
-    gradient.fill(0.0);
-    for (point, &weight) in points.iter().zip(&weights) {
-        for j in 0..x.len() {
-            gradient[j] += 2.0 * weight * (x[j] - point[j]);
-        }
-    }
-    let factor = root / sum;
-    for gj in gradient.iter_mut() {
-        *gj *= factor;
-    }
-    most * root
+    minimum
+}
+
+// the largest difference of a gene from the global minimum's
+fn distance(x: &[f64], exact: &[f64]) -> f64 {
+    x.iter()
+        .zip(exact)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0, f64::max)
 }
 
 // one digit after the point, e.g. 1.2e-7

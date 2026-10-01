@@ -124,7 +124,7 @@ cargo run --release --example lbfgsb_bounds       # a minimum on the bound, land
 cargo run --release --example polish              # SHADE on Rastrigin, then L-BFGS-B from its best to f = 0
 cargo run --release --example adam                # 100,000 values smoothed to the exact answer, by Adam with a schedule
 cargo run --release --example mma                 # a million variables and one constraint, by MMA, to the closed-form minimum
-cargo run --release --example continuation        # a smoothed maximum sharpened in 4 stages, Adam's state kept, to the exact minimax point
+cargo run --release --example continuation        # a tilted Rastrigin through 6 Gaussian smoothings, L-BFGS-B, to the global minimum
 cargo run --release --example pressure_vessel     # constrained mixed discrete-continuous design, SHADE
 cargo run --release --example welded_beam         # constrained design in two forms, SHADE
 cargo run --release --example gear_train          # integer genome, genetic algorithm

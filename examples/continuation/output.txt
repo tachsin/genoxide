@@ -1,10 +1,13 @@
-The smallest ball around 420 points in 10 dimensions: 20 at distance 1 from its center, 400 within 0.3 of it
-Adam through 4 stages of the smoothed largest distance, each from the last
- stage   p  steps  evaluations  smoothed distance  distance to the center
-     1   2    529          530       2.1212211921                  1.3e-2
-     2   4    409          410       1.4542199226                  2.3e-5
-     3   8    284          285       1.2059085510                 5.1e-11
-     4  16     29           30       1.0981386757                 1.1e-11
-converged after 1251 steps and 1255 evaluations: the center within 1.1e-11, the largest distance 1 + 1.1e-11
-the point only kept between stages: 1853 steps and 1857 evaluations, the center within 9.7e-13
-p = 16 from the start: 517 steps and 518 evaluations, the center within 2.6e-12
+A tilted Rastrigin function in 10 dimensions, Σ (xᵢ − aᵢ)² + 10 (1 − cos 2πxᵢ), from xᵢ = -3
+L-BFGS-B through 6 stages of the function smoothed by a Gaussian of σ, each from the last
+ stage     σ  rounds  evaluations  value of the stage  distance to the global minimum
+     1  0.60       7            8      103.6083820481                         3.8e-1
+     2  0.40       6            7       98.0869311788                         4.1e-2
+     3  0.30       5            6       84.7785592764                         9.6e-3
+     4  0.20       4            5       55.8118222263                         2.4e-3
+     5  0.10       4            5       18.8330678713                         4.4e-4
+     6  0.00       4            5        0.8208415338                        2.7e-15
+converged after 30 rounds and 36 evaluations: f = 0.82084153378296, within 2.7e-15 of the global minimum
+the global minimum, gene by gene by bisection: f* = 0.82084153378296
+σ = 0 from the start: 5 rounds and 6 evaluations, trapped at f = 146.38192099, 145.56107945 above f*, 6.0e0 from the global minimum
+the stages with L-BFGS-B's curvature pairs kept: 50 rounds and 56 evaluations, within 4.4e-9

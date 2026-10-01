@@ -813,11 +813,14 @@ from scratch.
   `.keep_pairs(true)`; `next_stage` drops a restart that was due, so a stage goes on from the
   point. Each stage's record (generations, evaluations, best fitness, why it ended) has its room
   from the start: nothing is allocated per step (`tests/allocations.rs`, `FirstOrder` and `Mma`
-  at 10⁶ genes, stage transitions included). The `continuation` example minimizes a p-norm of
-  distances, the smallest ball's center, for p = 2, 4, 8 and 16 with Adam; its points are made so
-  that the center is the minimax point, and F₁₆'s minimum to within 10⁻¹³, and the run ends within
-  1.1e-11 of it. Measured there: keeping Adam's state takes 1,255 evaluations, keeping only
-  the point 1,857, and p = 16 from the start 518, since that F_p is convex with the same minimum.
+  at 10⁶ genes, stage transitions included). The `continuation` example isn't the p-norm one
+  planned below: a p-norm of convex distances is convex at every p, so p = 16 from a cold start
+  needs no stages, and measured cheaper than them. It is graduated smoothing instead, on a
+  Rastrigin function tilted off its lattice in 10 dimensions, Σ (xᵢ − aᵢ)² + 10 (1 − cos 2πxᵢ),
+  through its closed-form Gaussian smoothings for σ = 0.6 (convex) to 0 with L-BFGS-B: 36
+  evaluations to the global minimum, computed gene by gene by bisection (within 2.7e-15), where
+  L-BFGS-B on the function alone from the same start stops in the nearest well, 145.56 above it
+  (6 evaluations), and the stages with the pairs kept take 56 evaluations, within 4.4e-9.
 
 ### 2.13 Scale: millions of variables
 
@@ -932,7 +935,7 @@ own on the site (e.g. `local`, `bayesian`), to settle with the site.
 |---|---|
 | A1 | `nelder_mead`: Rosenbrock in 2-D from (−1.2, 1), the simplex drawn on the contour; `nelder_mead_himmelblau`: restarts find all four minima |
 | A2 | `lbfgsb`: Rosenbrock in 100-D, analytic gradient against forward differences (evaluations to 1e-10); `lbfgsb_bounds`: a problem whose optimum is on the bound; `polish`: SHADE on Rastrigin 10-D, then L-BFGS-B from its best to the exact minimum |
-| A3 | `adam`: a smooth fit of many parameters with a learning-rate schedule by `control`, against L-BFGS-B; `mma`: minimize Σ cⱼ / xⱼ subject to Σ xⱼ ≤ V over 10⁶ variables in a box, whose optimum xⱼ ∝ √cⱼ is known in closed form; `continuation`: a smoothed max (a p-norm) minimized for p = 2, 4, 8, 16, each stage from the last, to the true minimax optimum |
+| A3 | `adam`: a smooth fit of many parameters with a learning-rate schedule by `control`, against L-BFGS-B; `mma`: minimize Σ cⱼ / xⱼ subject to Σ xⱼ ≤ V over 10⁶ variables in a box, whose optimum xⱼ ∝ √cⱼ is known in closed form; `continuation`: a tilted Rastrigin function minimized through its Gaussian smoothings, σ from convex to 0, each stage from the last, to the global minimum, where a cold start stays in the nearest well (planned as a p-norm smoothing of a maximum; see 2.12) |
 | B | `bayesian_optimization`: Branin in 2-D, posterior and acquisition drawn per step, to f* + 1e-4 with a final L-BFGS-B polish on the GP mean then one evaluation; `bo_hartmann6`: batch BO (q = 4) with `parallel(true)`; `bo_asynchronous`: `AsyncEngine` with evaluations of random duration; `bo_constrained`: Gramacy et al.'s toy problem |
 | C | `sqp`: CEC 2006 g07 (or g09) from a random start to the report's f*; `sqp_welded_beam`; `augmented_lagrangian`: a problem with many constraints (g16 or g19); an ε-feasibility comparison with SHADE on the same problem |
 | D1 | `conjugate_gradient` on a large quadratic or Rosenbrock 1000-D; `trust_region` on an MGH problem with a Hessian; `levenberg_marquardt`: fitting a model to data (an MGH problem such as Osborne 2, or Bard); `dual_numbers` (if the feature lands) |

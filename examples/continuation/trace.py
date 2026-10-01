@@ -1,15 +1,15 @@
 """The trace of the runs for the plot on the example's page, written to the file that
-``GENOXIDE_TRACE`` names: the distance to the center and the stage's p at every step, of the run
-that keeps Adam's state between stages, of the run that keeps only the point, and of p = 16 from
-the start. The Rust example writes the same file."""
+``GENOXIDE_TRACE`` names: the distance to the global minimum and the stage's σ at every round, of
+the run through the stages, of σ = 0 from the start, and of the stages with L-BFGS-B's pairs kept.
+The Rust example writes the same file."""
 
 import json
 import math
 import os
 
 # the lines of the plot: a panel per quantity, a line per run
-RUNS = ("state kept", "point kept", "p = 16 from the start")
-QUANTITIES = ("distance to the center", "p")
+RUNS = ("stages", "σ = 0 from the start", "pairs kept")
+QUANTITIES = ("distance to the global minimum", "σ")
 
 
 class Trace:
@@ -19,11 +19,11 @@ class Trace:
         self.path = os.environ.get("GENOXIDE_TRACE")
         self.runs = ([], [], [])
 
-    def record(self, run, step, distance, p):
-        """Records a step of run ``run``."""
+    def record(self, run, step, distance, sigma):
+        """Records a round of run ``run``."""
         if self.path:
             assert len(self.runs[run]) == step
-            self.runs[run].append((distance, p))
+            self.runs[run].append((distance, sigma))
 
     def write(self):
         """Writes the trace, if there's one, with at most 200 of its frames."""
@@ -50,8 +50,8 @@ class Trace:
             "format": 1,
             "example": "continuation",
             "objective": "minimize",
-            "x_label": "steps",
-            "y_label": "distance to the center",
+            "x_label": "rounds",
+            "y_label": "distance to the global minimum",
             "log_y": True,
             "optimum": 0.0,
             "plot": "multi-curve",

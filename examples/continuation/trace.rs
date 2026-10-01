@@ -1,18 +1,18 @@
 //! The trace of the runs for the plot on the example's page, written to the file that
-//! `GENOXIDE_TRACE` names: the distance to the center and the stage's p at every step, of the run
-//! that keeps Adam's state between stages, of the run that keeps only the point, and of p = 16
-//! from the start. The Python example writes the same file.
+//! `GENOXIDE_TRACE` names: the distance to the global minimum and the stage's σ at every round, of
+//! the run through the stages, of σ = 0 from the start, and of the stages with L-BFGS-B's pairs
+//! kept. The Python example writes the same file.
 
 use serde_json::{Value, json};
 
 // the lines of the plot: a panel per quantity, a line per run
-const RUNS: [&str; 3] = ["state kept", "point kept", "p = 16 from the start"];
-const QUANTITIES: [&str; 2] = ["distance to the center", "p"];
+const RUNS: [&str; 3] = ["stages", "σ = 0 from the start", "pairs kept"];
+const QUANTITIES: [&str; 2] = ["distance to the global minimum", "σ"];
 
 pub struct Trace {
     path: Option<String>,
-    // per run, per step: the distance to the center and p
-    runs: [Vec<(f64, u32)>; 3],
+    // per run, per round: the distance to the global minimum and σ
+    runs: [Vec<(f64, f64)>; 3],
 }
 
 impl Trace {
@@ -24,11 +24,11 @@ impl Trace {
         }
     }
 
-    // records a step of run `run`
-    pub fn record(&mut self, run: usize, step: u64, distance: f64, p: u32) {
+    // records a round of run `run`
+    pub fn record(&mut self, run: usize, step: u64, distance: f64, sigma: f64) {
         if self.path.is_some() {
             assert_eq!(self.runs[run].len() as u64, step);
-            self.runs[run].push((distance, p));
+            self.runs[run].push((distance, sigma));
         }
     }
 
@@ -47,7 +47,7 @@ impl Trace {
                 );
                 values.insert(
                     format!("{}/{name}", QUANTITIES[1]),
-                    json!(at.map(|&(_, p)| p)),
+                    json!(at.map(|&(_, sigma)| sigma)),
                 );
             }
             let kept = self.runs[0].get(step).map(|&(distance, _)| distance);
@@ -66,8 +66,8 @@ impl Trace {
             "format": 1,
             "example": "continuation",
             "objective": "minimize",
-            "x_label": "steps",
-            "y_label": "distance to the center",
+            "x_label": "rounds",
+            "y_label": "distance to the global minimum",
             "log_y": true,
             "optimum": 0.0,
             "plot": "multi-curve",

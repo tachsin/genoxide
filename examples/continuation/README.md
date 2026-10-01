@@ -1,111 +1,99 @@
 ---
-title: Continuation, from a smooth maximum to the exact one
+title: Continuation by Gaussian smoothing
 category: local
-summary: Find the center of the smallest ball around 420 points by minimizing a smoothed largest distance, sharper in each of 4 stages, Adam's state kept from one to the next, to the exact center.
-reference: "Pólya, G. (1913). Sur un algorithme toujours convergent pour obtenir les polynomes de meilleure approximation de Tchebycheff pour une fonction continue quelconque. Comptes Rendus de l'Académie des Sciences 157: 840-843."
+summary: Minimize a tilted Rastrigin function with L-BFGS-B through 6 stages of its Gaussian smoothing, from convex to exact, to the global minimum, where L-BFGS-B alone from the same start stays in the nearest basin.
+reference: "Blake, A. and Zisserman, A. (1987). Visual Reconstruction. MIT Press."
 reference_url: ""
-optimum: "the center c, at largest distance 1"
+optimum: "f* = 0.82084153378296, computed gene by gene to the last bit"
 languages: [rust, python]
 order: 286
 ---
 
-# Continuation, from a smooth maximum to the exact one
+# Continuation by Gaussian smoothing
 
 ## The problem
 
-The smallest ball around a set of points: the point x whose largest distance to them is least, a
-minimax problem,
+A Rastrigin function tilted by a quadratic centered off its lattice, in 10 dimensions:
 
 ```text
-minimize  max_i |x − aᵢ|
+f(x) = Σᵢ (xᵢ − aᵢ)² + 10 (1 − cos 2πxᵢ),   a = (1.3, −0.7, 2.2, −1.6, 0.35, 3.25, −2.8, 0.7, −0.3, 1.8)
 ```
 
-in 10 dimensions, with 420 points made so that the answer is known exactly: 20 points at distance
-1 from a center c along each axis, c ± eᵢ, and 400 points within 0.3 of c, all on one side of it
-(each coordinate moved by up to 0.3/√10, upwards).
-
-The answer is c, at largest distance 1. From any other point x = c + u, the axis point opposite
-the largest component of u, c − sign(uᵢ) eᵢ, is at squared distance |u|² + 2|uᵢ| + 1 > 1; and the
-near points are at most 0.3 from c.
+Each gene has a well near every integer, and the quadratic makes the well nearest aᵢ the deepest.
+The function is separable, so its global minimum is computed exactly, gene by gene: in each well
+around an integer k near aᵢ, where the term is convex (|x − k| ≤ 1/4), the root of its derivative
+2(x − aᵢ) + 20π sin 2πx by bisection to the last bit, and of those the lowest. The minimum is
+f* = 0.82084153378296, at x ≈ (1.0015, −0.9985, 2.0010, −1.9980, 0.0018, 3.0013, −2.9990, 0.9985,
+−0.0015, 1.9990).
 
 ## What makes it hard
 
-The largest distance has a kink wherever two points tie for the largest, and at the answer all 20
-axis points tie: no gradient leads to it. The usual remedy smooths the maximum by a p-norm,
+A well near every integer of the box [−5, 5] in every gene: 11¹⁰, about 2.6 × 10¹⁰ local minima,
+each a trap for a local method. From xᵢ = −3, L-BFGS-B settles in the well near −3 of every gene.
+
+Smoothing removes them. The function averaged over a Gaussian of standard deviation σ,
+E[f(x + σz)], has a closed form, since E[cos 2π(x + σz)] = e^(−2π²σ²) cos 2πx:
 
 ```text
-F_p(x) = (Σᵢ |x − aᵢ|^2p)^(1/2p)
+f_σ(x) = Σᵢ (xᵢ − aᵢ)² + σ² + 10 (1 − e^(−2π²σ²) cos 2πxᵢ)
 ```
 
-which is smooth, and tends to the largest distance as p grows (Pólya used it in 1913 to reach
-best uniform approximations through least p-th powers). But a small p averages over the points:
-the minimum of F₂ is pulled 1.3e-2 towards the 400 near points. A large p from the start is sharp
-everywhere, with the steep sides of a near-kink. So the problem is solved in stages, p = 2, 4, 8
-and 16, each started where the last ended: continuation.
+Its second derivative is at least 2 − 40π² e^(−2π²σ²), so f_σ is convex for σ above 0.517, with
+its minimum near a; and f₀ = f. Graduated smoothing (Blake and Zisserman's graduated
+non-convexity) follows the minimum from the convex function to the exact one: σ = 0.6, 0.4, 0.3,
+0.2, 0.1 and 0, each stage started where the last ended. As σ falls, the wells come back around
+the point, and it slides into the one nearest a, the deepest.
 
-The last stage ends at the exact answer, because the stages' minima approach c fast. Each F_p is
-convex, and at c the axis points' pulls cancel in opposite pairs, so only the near points pull,
-each weighted by (its squared distance / 1)^(p−1) ≤ 0.09^(p−1) against the axis points' 1: for
-p = 16, 0.09¹⁵ ≈ 2e-16 each, which moves the minimum less than 10⁻¹³ from c, below the run's
-tolerance.
+The stages move the point: the smoothed minimum lies between aᵢ and the deepest well, and closes
+in on the well as σ falls (0.38 from the global minimum at σ = 0.6, then 4.1e-2, 9.6e-3, 2.4e-3
+and 4.4e-4); the last stage, on f itself, ends at it.
 
 ## Representation
 
-A `Real` genome of 10 genes in [−2, 2], starting from (−1.5, …, −1.5). The fitness is F_p², the
-smoothed largest squared distance, to minimize, with its gradient: `Differentiable` in Rust, and
-`gradient=True` in Python, where the function returns the value and the gradient. The stage's p
-is a shared value the fitness function reads: an `Arc<AtomicU32>` in Rust, a variable in Python.
-With M the largest squared distance, F_p² = M (Σ rᵢ^p)^(1/p) with rᵢ ≤ 1, which can't overflow;
-p = 2^k, so the powers are k squarings and the root k square roots, which round the same on every
-platform, and both versions sum in the same order.
+A `Real` genome of 10 genes in [−5, 5], starting from xᵢ = −3. The fitness is f_σ, to minimize,
+with its gradient, 2(xᵢ − aᵢ) + 20π e^(−2π²σ²) sin 2πxᵢ: `Differentiable` in Rust and
+`gradient=True` in Python. The stage's σ is a value the fitness function reads, an
+`Arc<AtomicU64>` in Rust and a variable in Python. The cosines, sines and exponential are
+genoxide's portable ones, and the terms are summed in the same order in both, so both versions
+take the same steps.
 
 ## Algorithm
 
-`Continuation` around `FirstOrder` with `Step::Adam` (Kingma and Ba 2015, β₁ = 0.9, β₂ = 0.999,
-learning rate 0.05), through 4 stages. A stage ends when Adam has converged (no component of the
-gradient above 1e-11, or a step within 1e-12); then the `on_stage` closure sets the next p, Adam's
-point is evaluated again on the changed function, and Adam goes on from there with its state:
-its averages of the gradient and of its square, and the step count of their corrections
-(`Keep::State`, the default). The run stops by itself (`StopReason::Converged`) after the last
-stage.
+`Continuation` around `Lbfgsb`, through 6 stages. A stage ends when L-BFGS-B has converged (its
+projected gradient within 1e-10); then the `on_stage` closure sets the next σ, the point is
+evaluated again on the new function, and L-BFGS-B goes on from it. It drops its curvature pairs
+between stages by default: they describe the last stage's function. The run stops by itself
+(`StopReason::Converged`) after the last stage.
 
-Then, as contrasts, the same stages keeping only the point (`Keep::Point`: Adam's averages start
-again at 0 in each stage), and p = 16 from the start.
+Then, as contrasts from the same start: σ = 0 at once, L-BFGS-B on f alone; and the stages with
+the curvature pairs kept (`keep_pairs(true)`).
 
 ## Output
 
-A row per stage: its p, its steps and evaluations (the first evaluation of a stage re-evaluates
-its start), F_p at its end, and the distance to the center (the largest difference of a
-coordinate) where it ended.
-
-The stages close in on the center: 1.3e-2 at p = 2, 2.3e-5 at p = 4, then 5.1e-11 and 1.1e-11,
-the last within the tolerance of the answer, its largest distance 1 + 1.1e-11. The value F₁₆ can't
-show such digits: it changes by less than its rounding within about 1e-8 of c, and Adam, which
-steps by the gradient alone, still resolves the center to 1e-11.
+A row per stage: its σ, its rounds and evaluations (the first evaluation of a stage re-evaluates
+its start), the stage's own minimum value, and the distance to the global minimum (the largest
+difference of a gene) where it ended. The last stage ends within 2.7e-15 of the global minimum,
+at f* to all 14 printed digits.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/continuation) plays the three
-runs back: the distance to the center and the stage's p at every step.
+runs back: the distance to the global minimum and the stage's σ at every round.
 
 ## Good results
 
-The answer is c, at largest distance 1. The stages converge in 1,251 steps and 1,255 evaluations,
-within 1.1e-11 of c.
+The global minimum f* = 0.82084153378296, reached in 36 evaluations.
 
-| Run | Steps (evaluations) | Distance to c |
+| Run, from xᵢ = −3 | Rounds (evaluations) | Result |
 |---|---|---|
-| 4 stages, Adam's state kept (this example) | 1,251 (1,255) | 1.1e-11 |
-| 4 stages, only the point kept | 1,853 (1,857) | 9.7e-13 |
-| p = 16 from the start | 517 (518) | 2.6e-12 |
-| p = 2 alone | 529 (530) | 1.3e-2 |
+| 6 stages of smoothing (this example) | 30 (36) | f*, within 2.7e-15 of the global minimum |
+| σ = 0 from the start | 5 (6) | trapped at f = 146.38192099, 145.56 above f*, 6.0 from the global minimum |
+| 6 stages, L-BFGS-B's pairs kept | 50 (56) | within 4.4e-9 of the global minimum |
 
-Keeping the state saves a third of the steps: with only the point kept, each stage restarts Adam's
-averages at 0, and its first steps are then a full learning rate long, 0.05 per coordinate, away
-from a point already within 2.3e-5 or 5e-11 of the stage's minimum, which takes 390 to 470 steps
-to undo. With the state kept, the later stages take 409, 284 and 29 steps.
+L-BFGS-B alone converges fast, to the wrong minimum: the well it starts in. The stages cost 30
+evaluations more, and find the global one. Keeping the curvature pairs across stages costs 20
+evaluations more and digits of accuracy: the pairs describe the last stage's function, whose
+curvature changes most where the wells come back, and mislead the first steps of the next.
 
-On this problem, p = 16 from the start costs fewer steps still: F₁₆ is convex, and its minimum
-is already c, so the smoother stages have nothing to show it. Continuation pays where the sharp
-function is hard to start on (several local minima, or gradients that vanish far from the answer,
-as with sharp projections and penalty weights): the smooth stages lead it to the right minimum,
-and each later stage starts close to its own. This example shows the mechanism, the state carried
-over and its measured effect, on a problem whose answer is known to the last digit.
+Smoothing finds the global minimum here because the deepest well is the one nearest the minimum
+of the convex smoothing, a property of this function (a quadratic with a periodic ripple), not of
+smoothing in general: for functions without that structure, graduated smoothing leads to a good
+minimum, not always the best.

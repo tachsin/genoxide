@@ -1,9 +1,10 @@
-"""Continuation: the smallest ball around 420 points in 10 dimensions, its center found by
-minimizing a smoothed largest distance, (Σ dᵢ^2p)^(1/2p), for p = 2, 4, 8 and 16, each stage from
-the last, with Adam's state kept between them.
+"""Continuation: a tilted Rastrigin function in 10 dimensions, Σ (xᵢ − aᵢ)² + 10 (1 − cos 2πxᵢ),
+minimized through 6 stages of its Gaussian smoothing, σ from 0.6 (convex) to 0 (the function
+itself), each stage from the last, with L-BFGS-B.
 
-The points are made so that the center is known exactly, and the last stage ends at it. Then the
-same stages keeping only the point, and p = 16 from the start, as contrasts.
+The function is separable, so its global minimum is computed exactly, gene by gene, and the last
+stage ends at it. Then, as contrasts, σ = 0 from the same start, which a local method can't take
+out of the nearest basin, and the stages with L-BFGS-B's curvature pairs kept.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its runs for the plot on the example's
 page, with trace.py.
@@ -19,73 +20,61 @@ import genoxide as gx
 
 from trace import Trace
 
-# the dimensions, and the points near the center
-D = 10
-NEAR = 400
-# how far from the center the near points are, at most
-SPREAD = 0.3
-# the stages' p = 2^k, for k = 1 to 4
-POWERS = (1, 2, 3, 4)
-# Adam's learning rate, and the largest component of the gradient at which a stage has converged
-RATE = 0.05
-TOLERANCE = 1e-11
+# the centers of the quadratic, off the cosine's lattice, and the cosine's amplitude
+CENTERS = np.array([1.3, -0.7, 2.2, -1.6, 0.35, 3.25, -2.8, 0.7, -0.3, 1.8])
+A = 10.0
+# the stages' smoothing: 0.6 is convex (above 0.517), 0 the function itself
+SIGMAS = (0.6, 0.4, 0.3, 0.2, 0.1, 0.0)
+# every gene starts here
+START = -3.0
+# L-BFGS-B's largest projected gradient component at which a stage has converged
+TOLERANCE = 1e-10
+PI, TAU = math.pi, math.tau
 
 
-def points():
-    """The center c, and the points: c ± eᵢ on every axis i, the farthest from c, and NEAR points
-    within SPREAD of it, each coordinate moved by up to SPREAD / √D."""
-    center = np.array([(i + 1) / D - 0.5 for i in range(D)])
-    axes = []
-    for i in range(D):
-        for sign in (1.0, -1.0):
-            point = center.copy()
-            point[i] += sign
-            axes.append(point)
-    offsets = gx.Real((0.0, 1.0), length=NEAR * D).random_genome(1).reshape(NEAR, D)
-    near = center + (SPREAD / math.sqrt(D)) * offsets
-    return center, np.vstack([np.array(axes), near])
-
-
-CENTER, POINTS = points()
-
-
-def squared(x):
-    """|x − a|² for every point a, each summed in the order of the genes."""
-    differences = x - POINTS
+def smoothed(x, s):
+    """The function smoothed by a Gaussian of σ, E[f(x + σz)] for z standard normal, and its
+    gradient. E[cos 2π(x + σz)] = e^(−2π²σ²) cos 2πx and E[(x + σz − a)²] = (x − a)² + σ², so each
+    gene's term is (x − a)² + σ² + A (1 − e^(−2π²σ²) cos 2πx), convex once 4π²A e^(−2π²σ²) < 2.
+    With genoxide's portable cos, sin and exp, and the terms summed one after the other, the same
+    bits as the Rust example."""
+    e = float(gx.math.exp(np.array([-2.0 * PI * PI * s * s]))[0])
+    d = x - CENTERS
+    terms = d * d + s * s + A * (1.0 - e * gx.math.cos(TAU * x))
+    gradient = 2.0 * d + 2.0 * PI * A * e * gx.math.sin(TAU * x)
     # a cumulative sum adds one term after the other, as the Rust example's loop
-    return np.cumsum(differences * differences, axis=1)[:, -1]
+    return float(np.cumsum(terms)[-1]), gradient
 
 
-def smoothed(x, k):
-    """The smoothed largest squared distance (Σ gᵢ^p)^(1/p), gᵢ = |x − aᵢ|², p = 2^k, and its
-    gradient, in the order of the Rust example's operations, so that both take the same steps.
-    With M the largest gᵢ, it's M (Σ rᵢ^p)^(1/p) with rᵢ = gᵢ / M ≤ 1, which can't overflow; the
-    powers are k squarings and the root k square roots, which round the same on every platform.
-    The gradient is (Σ rᵢ^p)^(1/p − 1) Σ rᵢ^(p−1) 2 (x − aᵢ)."""
-    g = squared(x)
-    most = float(np.max(g))
-    r = g / most
-    power = r.copy()
-    for _ in range(k):
-        power = power * power
-    total = float(np.cumsum(power)[-1])
-    weights = np.where(r > 0.0, power / np.where(r > 0.0, r, 1.0), 0.0)
-    root = total
-    for _ in range(k):
-        root = math.sqrt(root)
-    terms = (2.0 * weights)[:, None] * (x - POINTS)
-    gradient = np.cumsum(terms, axis=0)[-1] * (root / total)
-    return most * root, gradient
+def value(x, s):
+    """The function smoothed by σ, without the gradient."""
+    return smoothed(x, s)[0]
 
 
-def distance(x):
-    """The largest difference of a coordinate from the center's."""
-    return float(np.max(np.abs(x - CENTER)))
+def global_minimum():
+    """The global minimum, gene by gene: in each basin around an integer k near the center a,
+    where the term is convex (|x − k| ≤ 1/4), the root of its derivative 2(x − a) + 2πA sin 2πx by
+    bisection to the last bit, and of those the lowest. A gene's basins are bisected side by side,
+    as an array."""
+    minimum = []
+    for a in CENTERS:
+        k = np.arange(math.floor(a) - 3, math.ceil(a) + 4, dtype=float)
+        low, high = k - 0.25, k + 0.25
+        for _ in range(100):
+            middle = 0.5 * (low + high)
+            rising = 2.0 * (middle - a) + 2.0 * PI * A * gx.math.sin(TAU * middle) > 0.0
+            high = np.where(rising, middle, high)
+            low = np.where(rising, low, middle)
+        x = 0.5 * (low + high)
+        terms = (x - a) * (x - a) + A * (1.0 - gx.math.cos(TAU * x))
+        # the first of the lowest, as the Rust loop keeps it
+        minimum.append(x[int(np.argmin(terms))])
+    return np.array(minimum)
 
 
-def largest(x):
-    """The largest distance from x to a point."""
-    return math.sqrt(float(np.max(squared(x))))
+def distance(x, exact):
+    """The largest difference of a gene from the global minimum's."""
+    return float(np.max(np.abs(x - exact)))
 
 
 def scientific(value):
@@ -97,56 +86,48 @@ def scientific(value):
 trace = Trace()
 
 
-def run(keep, powers, line):
-    """Adam through the stages of ``powers`` from the same start, keeping ``keep`` between them,
-    until the last stage has converged; each step recorded in the trace as run ``line``."""
+def run(sigmas, keep_pairs, exact, line):
+    """L-BFGS-B through the stages of ``sigmas`` from the same start, keeping its pairs between
+    them or not, until the last stage has converged; each round recorded in the trace as run
+    ``line``."""
     stage = {"index": 0}
     ended = []
+    last = {}
 
     def on_stage(index):
         stage["index"] = index
 
     def on_stage_finished(finished, point):
-        ended.append(distance(point))
+        ended.append(distance(point, exact))
 
     def record(running, progress):
-        p = 1 << powers[stage["index"]]
-        trace.record(line, progress.generation, distance(progress.population[0]), p)
+        point = progress.population[0]
+        trace.record(line, progress.generation, distance(point, exact), sigmas[stage["index"]])
+        last["point"] = point
 
-    adam = gx.FirstOrder(
-        gx.Real((-2.0, 2.0), length=D),
-        step="adam",
-        learning_rate=RATE,
-        initial_genome=[-1.5] * D,
+    lbfgsb = gx.Lbfgsb(
+        gx.Real((-5.0, 5.0), length=len(CENTERS)),
+        initial_genome=[START] * len(CENTERS),
         gradient_tolerance=TOLERANCE,
+        keep_pairs=keep_pairs,
         objective="minimize",
     )
     continuation = gx.Continuation(
-        adam,
-        stages=len(powers),
-        on_stage=on_stage,
-        keep=keep,
-        on_stage_finished=on_stage_finished,
+        lbfgsb, stages=len(sigmas), on_stage=on_stage, on_stage_finished=on_stage_finished
     )
-    last = {}
-
-    def keep_last(running, progress):
-        record(running, progress)
-        last["point"] = progress.population[0]
-
     result = continuation.run(
-        lambda x: smoothed(x, powers[stage["index"]]),
+        lambda x: smoothed(x, sigmas[stage["index"]]),
         gradient=True,
-        generations=100_000,
-        control=keep_last,
+        evaluations=10_000,
+        control=record,
     )
     assert result.stop_reason == "converged"
     stages = [
         (
-            1 << powers[finished.index],
+            sigmas[finished.index],
             finished.generations,
             finished.evaluations,
-            math.sqrt(finished.best_fitness),
+            finished.best_fitness,
             ended[finished.index],
         )
         for finished in result.stages
@@ -154,34 +135,39 @@ def run(keep, powers, line):
     return stages, result, last["point"]
 
 
+exact = global_minimum()
+minimum = value(exact, 0.0)
 print(
-    f"The smallest ball around {2 * D + NEAR} points in {D} dimensions: {2 * D} at distance 1 "
-    f"from its center, {NEAR} within {SPREAD} of it"
+    f"A tilted Rastrigin function in {len(CENTERS)} dimensions, Σ (xᵢ − aᵢ)² + {A:g} (1 − cos "
+    f"2πxᵢ), from xᵢ = {START:g}"
 )
-print("Adam through 4 stages of the smoothed largest distance, each from the last")
-stages, kept, point = run("state", POWERS, 0)
-print(" stage   p  steps  evaluations  smoothed distance  distance to the center")
-for index, (p, steps, evaluations, value, gap) in enumerate(stages):
+print("L-BFGS-B through 6 stages of the function smoothed by a Gaussian of σ, each from the last")
+stages, staged, point = run(SIGMAS, False, exact, 0)
+print(" stage     σ  rounds  evaluations  value of the stage  distance to the global minimum")
+for index, (sigma, rounds, evaluations, best, gap) in enumerate(stages):
     print(
-        f"{index + 1:>6}  {p:>2}  {steps:>5}  {evaluations:>11}  {value:>17.10f}  "
-        f"{scientific(gap):>22}"
+        f"{index + 1:>6}  {sigma:>4.2f}  {rounds:>6}  {evaluations:>11}  {best:>18.10f}  "
+        f"{scientific(gap):>29}"
     )
-error = distance(point)
+error = distance(point, exact)
 print(
-    f"converged after {kept.generations} steps and {kept.evaluations} evaluations: the center "
-    f"within {scientific(error)}, the largest distance 1 + {scientific(largest(point) - 1.0)}"
+    f"converged after {staged.generations} rounds and {staged.evaluations} evaluations: f = "
+    f"{value(point, 0.0):.14f}, within {scientific(error)} of the global minimum"
 )
-assert error < 1e-10
+print(f"the global minimum, gene by gene by bisection: f* = {minimum:.14f}")
+assert error < 1e-12
 
-# the contrasts: the same stages keeping only the point, and p = 16 alone
-_, only_point, point = run("point", POWERS, 1)
+# the contrasts: σ = 0 from the same start, and the stages keeping the curvature pairs
+_, cold, point = run(SIGMAS[5:], False, exact, 1)
+trapped = value(point, 0.0)
 print(
-    f"the point only kept between stages: {only_point.generations} steps and "
-    f"{only_point.evaluations} evaluations, the center within {scientific(distance(point))}"
+    f"σ = 0 from the start: {cold.generations} rounds and {cold.evaluations} evaluations, trapped "
+    f"at f = {trapped:.8f}, {trapped - minimum:.8f} above f*, "
+    f"{scientific(distance(point, exact))} from the global minimum"
 )
-_, cold, point = run("state", POWERS[3:], 2)
+_, paired, point = run(SIGMAS, True, exact, 2)
 print(
-    f"p = 16 from the start: {cold.generations} steps and {cold.evaluations} evaluations, the "
-    f"center within {scientific(distance(point))}"
+    f"the stages with L-BFGS-B's curvature pairs kept: {paired.generations} rounds and "
+    f"{paired.evaluations} evaluations, within {scientific(distance(point, exact))}"
 )
 trace.write()

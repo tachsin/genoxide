@@ -210,7 +210,7 @@ python examples/tsp_berlin52/main.py
 | [SHADE, then L-BFGS-B](polish/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/polish) |
 | [Adam with a learning-rate schedule](adam/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/adam) |
 | [MMA on a million variables](mma/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mma) |
-| [Continuation, from a smooth maximum to the exact one](continuation/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/continuation) |
+| [Continuation by Gaussian smoothing](continuation/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/continuation) |
 
 The GPU example is a crate of its own, with wgpu as a dependency:
 `cargo run --release --manifest-path examples/gpu/Cargo.toml`.
