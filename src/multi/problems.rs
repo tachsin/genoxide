@@ -67,6 +67,8 @@
 //! | [`Dc3Dtlz1`], [`Dc3Dtlz3`] | M or more (M + 4, M + 9) | any M ≥ 2 | M | DTLZ1's, DTLZ3's, in patches |
 //! | [`Mw1`] to [`Mw3`], [`Mw5`] to [`Mw7`], [`Mw9`] to [`Mw13`] | 3 or more (15) | 2 | 1 to 4 | disconnected, points, or on constraint boundaries |
 //! | [`Mw4`], [`Mw8`], [`Mw14`] | M + 1 or more (M + 12) | any M ≥ 2 | 1 | linear; spherical in four bands; 2^(M−1) patches |
+//! | [`DasCmop1`] to [`DasCmop6`] | 2 or more (30) | 2 | 11 | sampled; per [`Difficulty`] triplet |
+//! | [`DasCmop7`] to [`DasCmop9`] | 3 or more (30) | 3 | 7 | sampled; per [`Difficulty`] triplet |
 //! | [`engineering`]: two-bar and four-bar trusses, welded beam, disc brake, speed reducer | 3 to 7 | 2 | 0 to 11 | the trusses' derived; the others not known |
 //! | [`engineering`]: car side impact, rocket injector, vehicle crashworthiness, marine design; water resource planning | 3 to 7 | 3; 5 | 0, 9 or 10; 7 | not known; derived |
 //!
@@ -94,6 +96,7 @@
 mod cdtlz;
 mod classic;
 mod ctp;
+mod das_cmop;
 mod dcdtlz;
 mod dtlz;
 mod dtlz_constrained;
@@ -109,6 +112,10 @@ pub use classic::{
     Viennet2, Viennet3,
 };
 pub use ctp::{Ctp1, Ctp2, Ctp3, Ctp4, Ctp5, Ctp6, Ctp7, Ctp8};
+pub use das_cmop::{
+    DasCmop1, DasCmop2, DasCmop3, DasCmop4, DasCmop5, DasCmop6, DasCmop7, DasCmop8, DasCmop9,
+    Difficulty,
+};
 pub use dcdtlz::{Dc1Dtlz1, Dc1Dtlz3, Dc2Dtlz1, Dc2Dtlz3, Dc3Dtlz1, Dc3Dtlz3};
 pub use dtlz::{Dtlz1, Dtlz2, Dtlz3, Dtlz4, Dtlz5, Dtlz6, Dtlz7};
 pub use dtlz_constrained::{Dtlz8, Dtlz9};
@@ -357,6 +364,15 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
         try_boxed::<_, 2, M>(Mw11::default()),
         try_boxed::<_, 2, M>(Mw12::default()),
         try_boxed::<_, 2, M>(Mw13::default()),
+        try_boxed::<_, 2, M>(DasCmop1::default()),
+        try_boxed::<_, 2, M>(DasCmop2::default()),
+        try_boxed::<_, 2, M>(DasCmop3::default()),
+        try_boxed::<_, 2, M>(DasCmop4::default()),
+        try_boxed::<_, 2, M>(DasCmop5::default()),
+        try_boxed::<_, 2, M>(DasCmop6::default()),
+        try_boxed::<_, 3, M>(DasCmop7::default()),
+        try_boxed::<_, 3, M>(DasCmop8::default()),
+        try_boxed::<_, 3, M>(DasCmop9::default()),
         try_boxed::<_, 2, M>(engineering::TwoBarTruss),
         try_boxed::<_, 2, M>(engineering::WeldedBeam),
         try_boxed::<_, 2, M>(engineering::DiscBrake),
@@ -703,7 +719,7 @@ mod tests {
     #[test]
     fn the_registries_describe_every_problem() {
         let two = all::<2>();
-        assert_eq!(two.len(), 73);
+        assert_eq!(two.len(), 79);
         check_registry(two);
         let three = all::<3>();
         assert_eq!(
@@ -712,6 +728,9 @@ mod tests {
                 "VNT1",
                 "VNT2",
                 "VNT3",
+                "DAS-CMOP7",
+                "DAS-CMOP8",
+                "DAS-CMOP9",
                 "CarSideImpact",
                 "RocketInjector",
                 "VehicleCrashworthiness",
