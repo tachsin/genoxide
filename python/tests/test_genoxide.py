@@ -972,10 +972,12 @@ def test_other_threads_run_during_a_run():
     ticks = []
     done = threading.Event()
 
+    # yields the interpreter lock without a timed sleep: macOS can stretch a 1 ms sleep to 100 ms,
+    # which left only 2 ticks in a 0.2 s run on CI
     def tick():
         while not done.is_set():
             ticks.append(1)
-            done.wait(0.001)
+            time.sleep(0)
 
     thread = threading.Thread(target=tick)
     thread.start()
