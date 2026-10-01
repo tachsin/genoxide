@@ -85,6 +85,20 @@ pub enum Algorithm {
         /// Neighbors on each side in a ring, instead of the whole swarm.
         ring: Option<usize>,
     },
+    /// OpenAI's evolution strategy.
+    OpenEs {
+        population_size: usize,
+        /// The perturbations' standard deviation, as a fraction of each gene's range.
+        sigma: Option<f64>,
+        optimizer: Option<Optimizer>,
+        weight_decay: Option<f64>,
+        /// Whether the mean is evaluated each generation too.
+        evaluate_mean: Option<bool>,
+        initial_mean: Option<Vec<f64>>,
+        /// The samples drawn on their own random streams, in parallel.
+        parallel_breeding: Option<bool>,
+        seed: Option<u64>,
+    },
     LocalSearch {
         seed: Option<u64>,
         neighbor: Mutate,
@@ -165,6 +179,21 @@ pub enum EsSelection {
 pub enum StepSizes {
     One,
     PerGene,
+}
+
+/// How OpenAI's evolution strategy moves its mean along the gradient estimate.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Optimizer {
+    Adam {
+        learning_rate: f64,
+        beta1: f64,
+        beta2: f64,
+    },
+    Sgd {
+        learning_rate: f64,
+        momentum: f64,
+    },
 }
 
 /// Where the migrants of islands go.

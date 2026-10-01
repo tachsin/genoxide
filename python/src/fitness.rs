@@ -23,6 +23,7 @@
 
 use crate::genes::{GenomeContext, PyGenome};
 use crate::problems::{IntegerProblem, MultiNative};
+use crate::tasks::Balance;
 use genoxide::Fitness;
 use genoxide::engine::{FitnessFunction, IntoFitness, Progress};
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
@@ -407,11 +408,13 @@ pub struct Single<'a> {
     pub problem: Option<Native<'a>>,
 }
 
-/// A single-objective test problem evaluated in Rust: on real or on integer genomes.
+/// A single-objective test problem evaluated in Rust: on real or on integer genomes; or a
+/// network's weights balancing poles.
 #[derive(Clone, Copy)]
 pub enum Native<'a> {
     Real(&'a dyn DynProblem),
     Integer(&'a dyn IntegerProblem),
+    Balance(&'a Balance),
 }
 
 impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
@@ -432,6 +435,11 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
             Some(Native::Integer(problem)) => {
                 return genome.integers().map_or(Value::Invalid, |genome| {
                     Value::Native(problem.evaluate(genome))
+                });
+            }
+            Some(Native::Balance(balance)) => {
+                return genome.reals().map_or(Value::Invalid, |weights| {
+                    Value::Native(balance.evaluate(weights))
                 });
             }
             None => {}

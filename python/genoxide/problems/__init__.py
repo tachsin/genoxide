@@ -2532,4 +2532,4 @@ class Mw14(_ScalableMw):
     _type: ClassVar[str] = "mw14"
 
 
-from . import cec2006, engineering, multi_engineering  # noqa: E402
+from . import cec2006, control, engineering, multi_engineering  # noqa: E402

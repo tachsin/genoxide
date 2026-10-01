@@ -207,6 +207,27 @@ impl Settings<Es> for EsSettings {
     }
 }
 
+/// OpenAI's evolution strategy's step: σ and the learning rate.
+pub struct OpenEsSettings;
+
+impl Settings<OpenEs> for OpenEsSettings {
+    fn get(&self, open_es: &OpenEs, name: &str) -> Result<Value> {
+        match name {
+            "sigma" => Ok(json!(open_es.sigma())),
+            "learning_rate" => Ok(json!(open_es.optimizer().learning_rate())),
+            _ => Err(unknown(name)),
+        }
+    }
+
+    fn set(&self, open_es: &mut OpenEs, name: &str, value: &str) -> Result<()> {
+        match name {
+            "sigma" => setting(open_es.set_sigma(parse(name, value)?)),
+            "learning_rate" => setting(open_es.set_learning_rate(parse(name, value)?)),
+            _ => Err(unknown(name)),
+        }
+    }
+}
+
 /// The settings of each island, those of its algorithm, named `index/setting`: `2/mutation_rate`
 /// is the mutation rate of the third island.
 pub struct IslandsSettings<S>(pub S);
