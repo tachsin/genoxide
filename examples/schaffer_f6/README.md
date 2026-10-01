@@ -21,7 +21,7 @@ f(x₁, x₂) = 0.5 + (sin² √(x₁² + x₂²) − 0.5) / (1 + 0.001 (x₁² 
 
 It comes from Schaffer, Caruana, Eshelman and Das (1989), a study of how the settings of a genetic
 algorithm affect its performance, whose test suite it is part of. Their paper couldn't be read:
-genoxide takes the definition and the bounds from Whitley, Mathias, Rana and Dzubera (1996, table
+genoxide takes the definition and the bounds from Whitley, Rana, Dzubera and Mathias (1996, table
 1, F9), who call it the sine envelope sine wave and credit Schaffer et al., and the CEC 2005 report
 (Suganthan et al., 2005) states the same function.
 

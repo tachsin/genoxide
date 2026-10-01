@@ -42,7 +42,7 @@ CTP8 isn't in the EMO 2001 paper, which has CTP1 to CTP7. Later papers credit it
 read. The definition here is the one in the NSGA-II code of Deb's group (version 1.1.6, KanGAL),
 with the same g, variables and bounds as its CTP6 and CTP7; the parameters of the two constraints
 come from there. The constraint's form is the one of the EMO 2001 paper, checked in the authors'
-KanGAL report 200002 (eq. 5).
+KanGAL report 200005 (eq. 5).
 
 ## What makes it hard
 

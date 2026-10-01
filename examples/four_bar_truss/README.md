@@ -2,7 +2,7 @@
 title: Four-bar truss
 category: multi-objective
 summary: Minimize the volume of a truss of four bars and the displacement of its loaded joint, whose convex front has three pieces derived from the definition, with NSGA-II.
-reference: "Stadler, W. and Dauer, J. (1992). Multicriteria optimization in engineering: a tutorial and survey. In Structural Optimization: Status and Promise, Progress in Astronautics and Aeronautics 150, AIAA: 209-249."
+reference: "Stadler, W. and Dauer, J. (1993). Multicriteria optimization in engineering: a tutorial and survey. In Structural Optimization: Status and Promise, Progress in Astronautics and Aeronautics 150, AIAA: 209-249."
 reference_url: https://doi.org/10.2514/5.9781600866234.0209.0249
 optimum: "the front from (1400, 0.04) to (2200 + 600√2, (2√2 − 2)/300) ≈ (3048.53, 0.0027614), in three pieces with x₃ = √2; hypervolume 0.8891 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
@@ -23,7 +23,7 @@ F = 10 kN, L = 200 cm, E = 2·10⁵ kN/cm², σ = 10 kN/cm²
 x₁, x₄ in [F/σ, 3F/σ] = [1, 3], x₂, x₃ in [√2 F/σ, 3F/σ] = [√2, 3]
 ```
 
-The bounds keep each bar's stress under σ. Stadler and Dauer's survey (1992) and Cheng and Li's
+The bounds keep each bar's stress under σ. Stadler and Dauer's survey (1993) and Cheng and Li's
 paper (1999), the problem's sources, couldn't be read: the definition, constants and bounds are
 those of Costa and Fernandes (2009, 8th World Congress on Structural and Multidisciplinary
 Optimization, problem (4-truss)), who restate it after Stadler and Dauer with the displacement as a

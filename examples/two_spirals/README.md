@@ -2,7 +2,7 @@
 title: Two spirals
 category: neuroevolution
 summary: Evolve the 2,545 weights of a neural network that tells two interleaved spirals apart, by OpenAI's evolution strategy.
-reference: "Lang, K. J. and Witbrock, M. J. (1988). Learning to tell two spirals apart. Proceedings of the 1988 Connectionist Models Summer School: 52-59. The method: Salimans, T., Ho, J., Chen, X., Sidor, S. and Sutskever, I. (2017). Evolution strategies as a scalable alternative to reinforcement learning. arXiv:1703.03864."
+reference: "Lang, K. J. and Witbrock, M. J. (1988). Learning to tell two spirals apart. Proceedings of the 1988 Connectionist Models Summer School: 52-59, who posed the problem (no DOI). The method, to which the link points: Salimans, T., Ho, J., Chen, X., Sidor, S. and Sutskever, I. (2017). Evolution strategies as a scalable alternative to reinforcement learning. arXiv:1703.03864."
 reference_url: https://arxiv.org/abs/1703.03864
 optimum: "All 194 points classified"
 languages: [rust, python]

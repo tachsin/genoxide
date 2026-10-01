@@ -2,7 +2,7 @@
 title: Eggholder
 category: continuous
 summary: Minimize the eggholder function, a two-dimensional landscape of deep local minima whose deepest lies on the edge of the box, from 30 seeds with CMA-ES and particle swarms.
-reference: "Whitley, D., Mathias, K., Rana, S. and Dzubera, J. (1996). Evaluating evolutionary algorithms. Artificial Intelligence 85(1-2): 245-276."
+reference: "Whitley, D., Rana, S., Dzubera, J. and Mathias, K. (1996). Evaluating evolutionary algorithms. Artificial Intelligence 85(1-2): 245-276."
 reference_url: "https://doi.org/10.1016/0004-3702(95)00124-7"
 optimum: "−959.6407 at (512, 404.2318) (best known)"
 languages: [rust, python]
@@ -19,7 +19,7 @@ The eggholder function is a function of two variables to minimize:
 f(x₁, x₂) = −(x₂ + 47) sin √|x₂ + x₁ / 2 + 47| − x₁ sin √|x₁ − (x₂ + 47)|,   x₁, x₂ in [−512, 512]
 ```
 
-It comes from Whitley, Mathias, Rana and Dzubera (1996, section 4.2), who built test functions
+It comes from Whitley, Rana, Dzubera and Mathias (1996, section 4.2), who built test functions
 that are hard for evolutionary algorithms: it is their F101, with this formula, on [−512, 511] with
 10 bits per variable, and without a minimum in 2 dimensions. The name and the bounds [−512, 512]
 are those of Mishra (2006, MPRA paper 2718), which later papers follow. On Whitley et al.'s

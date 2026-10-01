@@ -38,7 +38,7 @@ feasible f₂ is 1.0446, on the edge of a band, and that point is optimal too, s
 smaller f₁. The front was found by sampling the
 boundaries of the feasible region.
 
-The definitions come from the authors' KanGAL report 200002 (October 2000), the paper's preprint:
+The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
 eq. 5 on p. 7 and CTP7's parameters on pp. 10-11. The report leaves g, the number of variables and
 their bounds open, and prints f₂ as g (1 − f₁/g); its figures draw the unconstrained front as the
 curve 1 − √f₁, and the authors' NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g))

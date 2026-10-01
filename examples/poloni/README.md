@@ -31,14 +31,16 @@ squared distance from B to A: 1 at (1, 2). f₂ is the squared distance from x t
 The two minima are far apart, so the objectives conflict. The best trade-offs, the Pareto front,
 run from (1, 25), at x = (1, 2), to (16.77, 0), at x = (−3, −1).
 
-The problem first appeared in Poloni et al. (1996, ECCOMAS '96, Wiley: 258-264) and Poloni (1997,
+The problem first appeared in Poloni, Mosetti and Contessi (1996, "Multi objective optimization by
+GAs: application to system and component design", ECCOMAS '96, Wiley: 258-264) and Poloni (1997,
 in Genetic Algorithms in Engineering and Computer Science, Wiley: 397-414), which, as Van Veldhuizen
 (1999, PhD thesis, Air Force Institute of Technology, table B.1) notes, print it mistyped. The
 definition and bounds here are as the NSGA-II paper (Deb, Pratap, Agarwal and Meyarivan, 2002, IEEE
 Transactions on Evolutionary Computation 6(2): 182-197, table I) restates them, minimized. Van
 Veldhuizen restates it as the maximization of the negated objectives, and Rigoni and Poles (2005,
-Dagstuhl Seminar Proceedings 04461) minimize it with the same constants. genoxide hasn't yet
-checked these restatements against the originals.
+"NBI and MOGA-II, two complementary algorithms for multi-objective optimizations", Dagstuhl Seminar
+Proceedings 04461) minimize it with the same constants. genoxide hasn't yet checked these
+restatements against the originals.
 
 ## What makes it hard
 

@@ -37,7 +37,7 @@ unconstrained front up to f₁ = 0.33367, the first constraint's boundary up to 
 second's up to f₁ = 1, where f₂ = 0.728 e^−0.295 = 0.5420. Two thirds of it lies on constraint
 boundaries, as the report says; the rest of the unconstrained front, below them, is infeasible.
 
-The definitions come from the authors' KanGAL report 200002 (October 2000), the paper's preprint:
+The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
 CTP1 is its eq. 4, with the table of a and b on p. 6. The report leaves g, the number of variables
 and their bounds open; genoxide takes them from the authors' NSGA-II code (version 1.1.6, KanGAL),
 which has g = 1 + x₂ and two variables in [0, 1]. The report's own experiments used five variables

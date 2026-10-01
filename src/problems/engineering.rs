@@ -606,12 +606,14 @@ impl Problem for SpeedReducer {
     }
 
     fn reference(&self) -> &'static str {
-        "Golinski, J. (1973). An adaptive optimization system applied to machine synthesis. \
-         Mechanism and Machine Theory 8(4): 419-436."
+        "Golinski, J. (1970). Optimal synthesis problems solved by means of nonlinear programming \
+         and random methods. Journal of Mechanisms 5(3): 287-309, where the problem is first \
+         posed. Also Golinski, J. (1973). An adaptive optimization system applied to machine \
+         synthesis. Mechanism and Machine Theory 8(4): 419-436."
     }
 
     fn reference_url(&self) -> Option<&'static str> {
-        Some("https://doi.org/10.1016/0094-114X(73)90018-9")
+        Some("https://doi.org/10.1016/0022-2569(70)90064-9")
     }
 
     constraint_values!();

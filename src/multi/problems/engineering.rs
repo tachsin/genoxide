@@ -39,7 +39,7 @@
 //! eqs. A1-A4); water resource planning in the NSGA-II paper (table V, and the same table in the
 //! preprint, KanGAL report 200001) and in Jain and Deb's appendix; and the marine design in
 //! Parsons and Scott (2004, appendix and the Panamax case). The other originals (Osyczka and
-//! Kundu 1995, Kurpati, Azarm and Wu 2002, Stadler and Dauer 1992, Liao et al. 2008) couldn't be
+//! Kundu 1995, Kurpati, Azarm and Wu 2002, Stadler and Dauer 1993, Liao et al. 2008) couldn't be
 //! read: those definitions are taken from later papers that restate them, named in each
 //! problem's docs, and are still to be checked against the originals
 //! ([#168](https://github.com/tachsin/genoxide/issues/168)).
@@ -237,7 +237,8 @@ fn ideal<const M: usize, const N: usize>(
 /// using elitist non-dominated sorting GA. *Parallel Problem Solving from Nature (PPSN VI)*, LNCS
 /// 1917: 859-868, eq. 1 and section 4.1, checked in the authors' preprint (KanGAL report 200002),
 /// which calls x₁ and x₂ the bars' lengths but uses them as areas; after Palli, Azarm, McCluskey
-/// and Sundararajan's ε-constraint study (not read). Bounds and the front's derivation as in Deb,
+/// and Sundararajan's ε-constraint study (1998, *Journal of Mechanical Design* 120(4): 678-686,
+/// which Deb et al. date 1999; not read). Bounds and the front's derivation as in Deb,
 /// K. and Srinivasan, A. (2006). Innovization: innovating design principles through
 /// optimization. *GECCO 2006*: 1629-1636 (KanGAL report 2005007, eqs. 1-7).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -696,7 +697,7 @@ const FOUR_BAR_LENGTH: f64 = 200.0;
 const FOUR_BAR_YOUNG: f64 = 2e5;
 
 /// The four-bar truss: the truss of four bars with the least volume, and the one whose loaded
-/// joint moves least (Stadler and Dauer, 1992).
+/// joint moves least (Stadler and Dauer, 1993).
 ///
 /// The genes are the bars' cross-sections x₁ … x₄, in cm². The objectives are the volume
 /// `f₁ = L (2x₁ + √2 x₂ + √2 x₃ + x₄)`, in cm³, and the joint's displacement
@@ -716,7 +717,7 @@ const FOUR_BAR_YOUNG: f64 = 2e5;
 /// Tanabe and Ishibuchi's restatement (2020, *Applied Soft Computing* 89: 106078, problem RE2-4-1)
 /// prints and computes the volume with √x₃ for √2 x₃: not the same front.
 ///
-/// Stadler, W. and Dauer, J. (1992). Multicriteria optimization in engineering: a tutorial and
+/// Stadler, W. and Dauer, J. (1993). Multicriteria optimization in engineering: a tutorial and
 /// survey. In *Structural Optimization: Status and Promise*, Progress in Astronautics and
 /// Aeronautics 150, AIAA: 209-249; and Cheng, F. Y. and Li, X. S. (1999). Generalized center
 /// method for multiobjective engineering optimization. *Engineering Optimization* 31(5): 641-661.
@@ -760,7 +761,7 @@ impl MultiProblem<2> for FourBarTruss {
 
     metadata!(
         "FourBarTruss",
-        "Stadler, W. and Dauer, J. (1992). Multicriteria optimization in engineering: a tutorial \
+        "Stadler, W. and Dauer, J. (1993). Multicriteria optimization in engineering: a tutorial \
          and survey. In Structural Optimization: Status and Promise, Progress in Astronautics and \
          Aeronautics 150, AIAA: 209-249.",
         Some("https://doi.org/10.2514/5.9781600866234.0209.0249")

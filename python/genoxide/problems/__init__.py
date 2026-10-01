@@ -482,10 +482,12 @@ class Rastrigin(_Scalable):
 
     Rastrigin, L. A. (1974). Systems of Extremal Control. Nauka, Moscow, whose function is a
     related one in two dimensions with other constants, as Törn and Žilinskas (1989) restate it.
-    The n-dimensional form is credited to Rudolph (1990), and was spread by Hoffmeister and Bäck
-    (1991) and Mühlenbein, H., Schomisch, M. and Born, J. (1991). The parallel genetic algorithm
-    as function optimizer. Parallel Computing 17(6-7): 619-632, whose F6 this is. Definition and
-    bounds as in Yao, Liu and Lin (1999, f9); not yet checked against Rastrigin's book (#168).
+    The n-dimensional form is first in Rudolph, G. (1990). Globale Optimierung mit parallelen
+    Evolutionsstrategien. Diplomarbeit, Universität Dortmund (problems 2-4, with A = 50), and was
+    spread by Hoffmeister and Bäck (1991) and Mühlenbein, H., Schomisch, M. and Born, J. (1991).
+    The parallel genetic algorithm as function optimizer. Parallel Computing 17(6-7): 619-632,
+    whose F6 this is. Definition and bounds as in Yao, Liu and Lin (1999, f9); not yet checked
+    against Rastrigin's book (#168).
     """
 
     dimensions: int = 30
@@ -534,10 +536,12 @@ class Griewank(_Scalable):
     Bounds [-600, 600]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 1.
 
     Griewank, A. O. (1981). Generalized descent for global optimization. Journal of Optimization
-    Theory and Applications 34(1): 11-39, whose function, as Bosse and Bücker (2024) restate it, is
-    two-dimensional with the divisor 200: 1 + (x₁² + x₂²) / 200 − cos x₁ cos(x₂ / √2). The
-    n-dimensional form with the divisor 4000 and the bounds are those of Mühlenbein, Schomisch and
-    Born (1991, F8) and Yao, Liu and Lin (1999, f11). Not yet checked against the original (#168).
+    Theory and Applications 34(1): 11-39, whose function, as Bosse and Bücker (2024, A piecewise
+    smooth version of the Griewank function, Optimization Methods and Software,
+    doi:10.1080/10556788.2024.2414186) restate it, is two-dimensional with the divisor 200:
+    1 + (x₁² + x₂²) / 200 − cos x₁ cos(x₂ / √2). The n-dimensional form with the divisor 4000 and
+    the bounds are those of Mühlenbein, Schomisch and Born (1991, F8) and Yao, Liu and Lin (1999,
+    f11). Not yet checked against the original (#168).
     """
 
     dimensions: int = 30
@@ -846,7 +850,7 @@ class Eggholder(Problem[Real]):
     computed by Newton's method; the next, −956.9182316, inside the box at (482.35331, 432.87900).
     Not proven global (``optimum.proven`` is False).
 
-    Whitley, D., Mathias, K., Rana, S. and Dzubera, J. (1996). Evaluating evolutionary algorithms.
+    Whitley, D., Rana, S., Dzubera, J. and Mathias, K. (1996). Evaluating evolutionary algorithms.
     Artificial Intelligence 85(1-2): 245-276, section 4.2, where it is F101, on [−512, 511] (where
     the minimum is −956.9182). The name and the bounds [−512, 512] are Mishra's (2006, MPRA paper
     2718).
@@ -867,7 +871,7 @@ class SchafferF6(Problem[Real]):
     Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control
     parameters affecting online performance of genetic algorithms for function optimization.
     Proceedings of the Third International Conference on Genetic Algorithms: 51-60. Definition
-    and bounds as Whitley, Mathias, Rana and Dzubera (1996, table 1, F9) and the CEC 2005 report
+    and bounds as Whitley, Rana, Dzubera and Mathias (1996, table 1, F9) and the CEC 2005 report
     restate it; not yet checked against the original (#168).
     """
 
@@ -1810,13 +1814,15 @@ class Poloni(MultiProblem[Real]):
     Poloni, C., Giurgevich, A., Onesti, L. and Pediroda, V. (2000). Hybridization of a
     multi-objective genetic algorithm, a neural network and a classical optimizer for a complex
     design problem in fluid dynamics. Computer Methods in Applied Mechanics and Engineering
-    186(2-4): 403-420. It first appeared in Poloni et al. (1996, ECCOMAS '96, Wiley: 258-264) and
-    Poloni (1997, in Genetic Algorithms in Engineering and Computer Science, Wiley: 397-414),
-    which, as Van Veldhuizen (1999, PhD thesis, table B.1) notes, print it mistyped. Definition
-    and bounds as restated in Deb, Pratap, Agarwal and Meyarivan (2002, NSGA-II, table I),
-    minimized; Van Veldhuizen restates it as the maximization of the negated objectives, and
-    Rigoni and Poles (2005, Dagstuhl Seminar Proceedings 04461) minimize it with the same
-    constants. Not yet checked against the originals (#168).
+    186(2-4): 403-420. It first appeared in Poloni, Mosetti and Contessi (1996, "Multi objective
+    optimization by GAs: application to system and component design", ECCOMAS '96, Wiley:
+    258-264) and Poloni (1997, in Genetic Algorithms in Engineering and Computer Science, Wiley:
+    397-414), which, as Van Veldhuizen (1999, PhD thesis, table B.1) notes, print it mistyped.
+    Definition and bounds as restated in Deb, Pratap, Agarwal and Meyarivan (2002, NSGA-II, table
+    I), minimized; Van Veldhuizen restates it as the maximization of the negated objectives, and
+    Rigoni and Poles (2005, "NBI and MOGA-II, two complementary algorithms for multi-objective
+    optimizations", Dagstuhl Seminar Proceedings 04461) minimize it with the same constants. Not
+    yet checked against the originals (#168).
     """
 
     _type: ClassVar[str] = "poloni"
@@ -1997,7 +2003,7 @@ class Ctp1(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
     bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
     open and prints f₂ without the root that its figures and the code have.
     """
@@ -2016,7 +2022,7 @@ class Ctp2(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
     bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
     open and prints f₂ without the root that its figures and the code have.
     """
@@ -2031,7 +2037,7 @@ class Ctp3(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
     bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
     open and prints f₂ without the root that its figures and the code have.
     """
@@ -2046,7 +2052,7 @@ class Ctp4(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
     bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
     open and prints f₂ without the root that its figures and the code have.
     """
@@ -2062,7 +2068,7 @@ class Ctp5(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
     bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
     open and prints f₂ without the root that its figures and the code have.
     """
@@ -2079,7 +2085,7 @@ class Ctp6(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
     bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
     open and prints f₂ without the root that its figures and the code have.
     """
@@ -2096,7 +2102,7 @@ class Ctp7(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200002; g = 1 + x₂, the two variables, their
+    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
     bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
     open and prints f₂ without the root that its figures and the code have.
     """

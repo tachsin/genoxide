@@ -24,8 +24,9 @@ f(x) = −Σ xᵢ sin √|xᵢ|,   each xᵢ in [−500, 500]
 In Schwefel's book (1981, problem 2.26, the translation of the German edition of 1977), it has one
 variable and no bounds, and so no finite minimum. The sum over n variables on [−500, 500] is
 Mühlenbein, Schomisch and Born's (1991, F7), restated by Yao, Liu and Lin (1999, f8). genoxide
-checked its definition against Schwefel's book (issue #168). This is the form without an offset:
-some papers add 418.9829 n, which moves the minimum near 0.
+checked its definition against Schwefel's book, in the German edition of 1977 (p. 335; issue
+#168). This is the form without an offset: some papers add 418.9829 n, which moves the minimum
+near 0.
 
 Each term, −x sin √|x|, is minimized alone, so the minimum is where every gene minimizes its term:
 at xᵢ = 420.9687, with −418.9829 per gene. Here n = 30, and the minimum is −12569.4866.
