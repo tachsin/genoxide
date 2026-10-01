@@ -102,6 +102,15 @@ pub(super) fn factor(
 ) -> Result<(), NotPositiveDefinite> {
     debug_assert_eq!(w.len(), n * n);
     assert!((1..=MAX_BLOCK).contains(&block));
+    if n <= block {
+        // one diagonal block: the same operations, without the buffers of the panels, so a small
+        // factorization (L-BFGS-B's, every iteration) allocates nothing
+        factor_diagonal(w, n, 0, n)?;
+        for i in 0..n {
+            w[i * n + i + 1..(i + 1) * n].fill(0.0);
+        }
+        return Ok(());
+    }
     // L[j][k0..k1] for the rows j below the diagonal block, packed by tiles of NR rows
     let mut packed = vec![0.0; n.div_ceil(NR) * NR * block.min(n)];
     // the diagonal block's columns: columns[j * block + i] = L[k0 + i][k0 + j]
