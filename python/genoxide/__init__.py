@@ -955,7 +955,8 @@ class Result:
     - "target", "generations", "evaluations", "time" or "stagnation": that stop condition;
     - "aborted": ``on_generation`` returned False;
     - "converged": the algorithm converged with nothing more to do, e.g. a :class:`NelderMead`
-      whose simplex shrank within its tolerance, with no restart left;
+      whose simplex shrank within its tolerance, with no restart left, or a :class:`Cmaes` with
+      ``restarts="stop"`` whose run met a stop criterion;
     - "stalled": nothing new to evaluate for 10,000 generations in a row (e.g. every child was a
       copy of a parent), while only ``target`` or ``evaluations`` could stop the run;
     - "other": a reason that the stop conditions of the package don't produce.
@@ -2441,11 +2442,17 @@ class Cmaes(_SingleObjective):
     population_size : int, optional
         The samples per generation, 2 to 2^24. ``4 + floor(3 ln n)`` by default, for the ``n``
         genes with ``low < high``: 10 for 10 genes. With restarts, the size of the first run.
-    restarts : {"never", "ipop", "bipop"}, default "never"
+    restarts : {"never", "ipop", "bipop", "stop"}, default "never"
         What happens when a run converges. "never" goes on sampling around the same point.
         "ipop" restarts from a random point with a doubled population, up to 1024 times the
         initial one. "bipop" alternates such large populations with small ones of random size
-        and step size. Restarts suit multimodal functions.
+        and step size. Restarts suit multimodal functions. "stop" ends the run once it meets one
+        of Hansen's stop criteria, as his reference code does: ``run`` returns with the stop
+        reason "converged", unless a stop condition is met in the same generation; up to there,
+        the run is the one of "never". It saves most of a budget on smooth problems without
+        constraints. On flat or quantized fitness (plateaus, e.g. Easom's function) and with
+        constraints, the criteria can fire while the best would still improve: use "never"
+        there, or a ``target``.
     initial_step : float, default 0.3
         The initial step size as a fraction of each gene's range, greater than 0 and at most 1.
     covariance : {"full", "diagonal"}, default "full"
@@ -2474,7 +2481,7 @@ class Cmaes(_SingleObjective):
         genome: Real,
         *,
         population_size: int | None = None,
-        restarts: Literal["never", "ipop", "bipop"] | None = None,
+        restarts: Literal["never", "ipop", "bipop", "stop"] | None = None,
         initial_step: float | None = None,
         covariance: Literal["full", "diagonal"] | None = None,
         min_step: float | None = None,
@@ -2491,8 +2498,10 @@ class Cmaes(_SingleObjective):
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
-        if self.restarts not in (None, "never", "ipop", "bipop"):
-            raise ValueError(f'restarts is "never", "ipop" or "bipop", not {self.restarts!r}')
+        if self.restarts not in (None, "never", "ipop", "bipop", "stop"):
+            raise ValueError(
+                f'restarts is "never", "ipop", "bipop" or "stop", not {self.restarts!r}'
+            )
         if self.covariance not in (None, "full", "diagonal"):
             raise ValueError(f'covariance is "full" or "diagonal", not {self.covariance!r}')
         return {

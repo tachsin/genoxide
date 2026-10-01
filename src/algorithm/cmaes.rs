@@ -8,13 +8,13 @@ use crate::{Error, Fitness, Individual, Objective, Population, Result, StreamRng
 use rand::Rng;
 use std::collections::VecDeque;
 
-/// Whether a [`Cmaes`] starts a new run when the current one has converged.
+/// What a [`Cmaes`] does when the current run has converged: go on, start a new run, or stop.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Restarts {
-    /// No restarts: a converged run goes on sampling around the same point (the default). Stop
-    /// it with a stop condition such as [`Stop::stagnation`](crate::Stop::stagnation).
+    /// No restarts: a converged run goes on sampling around the same point until a stop
+    /// condition, such as [`Stop::stagnation`](crate::Stop::stagnation), ends it (the default).
     #[default]
     Never,
     /// IPOP-CMA-ES (Auger and Hansen, 2005): each restart doubles the population size, up to
@@ -29,6 +29,28 @@ pub enum Restarts {
     /// goes next; the first run counts as a small one, as in Hansen's reference code, so the first
     /// restart is a large one. Good on a wider range of multimodal functions than IPOP.
     Bipop,
+    /// No restarts, and the run ends when it converges: once it meets one of the stop criteria
+    /// ([`Cmaes::converged`] is `Some`), the CMA-ES has [finished](Algorithm::is_finished), and
+    /// the [`Engine`](crate::Engine) stops with
+    /// [`StopReason::Converged`](crate::StopReason::Converged), unless a stop condition is met in
+    /// the same generation. Hansen's reference code stops on its termination criteria in the
+    /// same way. Up to that generation, a run is the same as with [`Restarts::Never`].
+    ///
+    /// The criteria say that the distribution, or the fitness it sees, has stopped changing, not
+    /// that the best can't improve any more. On smooth problems without constraints they lose
+    /// nothing and save most of a budget. But:
+    ///
+    /// - On flat or quantized fitness, [`Criterion::EqualFunValues`] can fire on a plateau the
+    ///   run would leave: on Easom's function, after a dozen evaluations.
+    /// - With constraints (Deb's rules), the mean can go on sliding along the active
+    ///   constraints after [`Criterion::ConditionCov`], [`Criterion::NoEffectAxis`] or
+    ///   [`Criterion::TolX`], and the best on improving: on CEC 2006's G06 and G21, a third or
+    ///   more of the runs improve after converging, some by orders of magnitude.
+    ///
+    /// Use it for smooth problems without constraints, or with a
+    /// [`Stop::target`](crate::Stop::target): the stop reason then tells a run that reached the
+    /// target from one that converged short of it.
+    Stop,
 }
 
 /// Why a run of a [`Cmaes`] has converged: the stop criteria of Hansen (2009), with the
@@ -181,7 +203,7 @@ impl Parameters {
 /// start with the same relative step size, and genes with a single value are left out. A sample
 /// outside the bounds is drawn again, up to 100 times, and then clipped; the distribution learns
 /// from the samples as evaluated. When a run meets one of the stop criteria ([`Criterion`]),
-/// [`Restarts`] can start a new one.
+/// [`Restarts`] can start a new one, or end the search.
 ///
 /// Every random decision and every math function (a Householder and QL eigendecomposition,
 /// fdlibm's `log` and `exp`) is portable, so a seed gives the same run on every platform.
@@ -301,8 +323,9 @@ impl Cmaes {
         self.deviations.iter().map(|d| self.sigma * d).collect()
     }
 
-    /// Why the current run has converged, or `None` if it hasn't. With [`Restarts`], the next
-    /// [`ask`](Algorithm::ask) starts a new run.
+    /// Why the current run has converged, or `None` if it hasn't. With [`Restarts::Ipop`] or
+    /// [`Restarts::Bipop`], the next [`ask`](Algorithm::ask) starts a new run; with
+    /// [`Restarts::Stop`], the CMA-ES has then [finished](Algorithm::is_finished).
     pub fn converged(&self) -> Option<Criterion> {
         self.converged
     }
@@ -330,7 +353,9 @@ impl Cmaes {
     ///   compare the fitness of generations, [`Criterion::TolHistFun`] and
     ///   [`Criterion::EqualFunValues`], start over, and if the run had converged by one of them,
     ///   it hasn't any more. The criteria on the distribution stay, and a restart they made due
-    ///   still happens at the next ask after the re-evaluation.
+    ///   still happens at the next ask after the re-evaluation. With [`Restarts::Stop`], the
+    ///   CMA-ES isn't [finished](Algorithm::is_finished) until the re-evaluation is told, and
+    ///   then only if the run is still converged.
     /// - The distribution (its mean, step size, covariance matrix and evolution paths) doesn't
     ///   change, and no random number is drawn: a seeded run that re-evaluates at the same points
     ///   gives the same results.
@@ -994,7 +1019,9 @@ impl Algorithm for Cmaes {
     fn ask(&mut self) -> Candidates<'_, Reals> {
         if !self.asked {
             if self.started && !self.reevaluating {
-                if self.converged.is_some() && self.restarts != Restarts::Never {
+                if self.converged.is_some()
+                    && matches!(self.restarts, Restarts::Ipop | Restarts::Bipop)
+                {
                     self.restart();
                 }
                 self.sample();
@@ -1069,6 +1096,12 @@ impl Algorithm for Cmaes {
     fn best_generation(&self) -> u64 {
         self.best_generation
     }
+
+    /// With [`Restarts::Stop`], whether the run has converged ([`Cmaes::converged`]); `false`
+    /// while a [re-evaluation](Cmaes::reevaluate) is due, which can clear the convergence.
+    fn is_finished(&self) -> bool {
+        self.restarts == Restarts::Stop && self.converged.is_some() && !self.reevaluating
+    }
 }
 
 /// A builder for a [`Cmaes`], from [`Cmaes::builder`].
@@ -1128,8 +1161,8 @@ impl CmaesBuilder {
         self
     }
 
-    /// Whether to start a new run when the current one has converged. [`Restarts::Never`] by
-    /// default.
+    /// What to do when the current run has converged: go on, start a new run, or stop.
+    /// [`Restarts::Never`] by default.
     pub fn restarts(mut self, restarts: Restarts) -> Self {
         self.restarts = restarts;
         self
@@ -1826,6 +1859,96 @@ mod tests {
         assert!(best < 0.1, "{best}");
     }
 
+    // the populations of every generation of an engine's run, its outcome and the CMA-ES
+    fn populations(
+        restarts: Restarts,
+        stop: Stop,
+    ) -> (Vec<Population<Reals>>, crate::Outcome<Reals>, Cmaes) {
+        let mut populations = Vec::new();
+        let mut engine = Engine::new(builder(4, 2).restarts(restarts).build().unwrap(), sphere)
+            .stop_when(stop)
+            .on_generation(|snapshot| populations.push(snapshot.population().clone()));
+        let outcome = engine.run().unwrap();
+        let cmaes = engine.into_algorithm();
+        (populations, outcome, cmaes)
+    }
+
+    #[test]
+    fn stop_ends_the_run_where_it_converges() {
+        // the generation of the first convergence, without the setting
+        let mut never = builder(4, 2).build().unwrap();
+        while never.converged().is_none() {
+            step(&mut never, sphere);
+            assert!(!never.is_finished());
+        }
+        assert_eq!(never.converged(), Some(Criterion::TolHistFun));
+        let converged = never.generation();
+
+        let (stopped, outcome, mut cmaes) =
+            populations(Restarts::Stop, Stop::generations(10 * converged));
+        assert_eq!(outcome.stop_reason(), StopReason::Converged);
+        assert_eq!(outcome.generations(), converged);
+        assert_eq!(outcome.evaluations(), never.evaluations());
+        assert_eq!(Some(outcome.best()), never.best());
+        assert_eq!(cmaes.converged(), Some(Criterion::TolHistFun));
+        assert!(cmaes.is_finished());
+
+        // the same run as without the setting up to there, and after it, if asked again
+        let (unstopped, outcome, _) =
+            populations(Restarts::Never, Stop::generations(converged + 5));
+        assert_eq!(outcome.stop_reason(), StopReason::Generations);
+        assert_eq!(stopped.len() as u64, converged + 1);
+        assert_eq!(stopped[..], unstopped[..stopped.len()]);
+        step(&mut cmaes, sphere);
+        step(&mut never, sphere);
+        assert_eq!(cmaes.population(), never.population());
+        assert_eq!(distribution(&cmaes), distribution(&never));
+        assert_eq!(cmaes.restart_count(), 0);
+
+        // a stop condition met in the same generation is reported first
+        let (_, outcome, _) = populations(Restarts::Stop, Stop::generations(converged));
+        assert_eq!(outcome.stop_reason(), StopReason::Generations);
+        assert_eq!(outcome.generations(), converged);
+    }
+
+    #[test]
+    fn stop_is_unfinished_until_a_reevaluation_is_told() {
+        let mut cmaes = builder(4, 2).restarts(Restarts::Stop).build().unwrap();
+        while !cmaes.is_finished() {
+            step(&mut cmaes, sphere);
+        }
+        assert_eq!(cmaes.converged(), Some(Criterion::TolHistFun));
+        // a re-evaluation is due, then forgets the fitness criteria: the run goes on
+        cmaes.reevaluate().unwrap();
+        assert!(!cmaes.is_finished());
+        step(&mut cmaes, shifted);
+        assert_eq!(cmaes.converged(), None);
+        assert!(!cmaes.is_finished());
+        let generation = cmaes.generation();
+        step(&mut cmaes, shifted);
+        assert_eq!(cmaes.generation(), generation + 1);
+
+        // the criteria on the distribution stay
+        cmaes.converged = Some(Criterion::TolX);
+        assert!(cmaes.is_finished());
+        cmaes.reevaluate().unwrap();
+        assert!(!cmaes.is_finished());
+        step(&mut cmaes, shifted);
+        assert!(cmaes.is_finished());
+        assert_eq!(cmaes.restart_count(), 0);
+    }
+
+    #[test]
+    fn only_stop_finishes() {
+        for restarts in [Restarts::Never, Restarts::Ipop, Restarts::Bipop] {
+            let mut cmaes = builder(4, 3).restarts(restarts).build().unwrap();
+            while cmaes.converged().is_none() {
+                step(&mut cmaes, |_| 1.0);
+            }
+            assert!(!cmaes.is_finished());
+        }
+    }
+
     fn symmetric(n: usize) -> impl Strategy<Value = Vec<f64>> {
         prop::collection::vec(-100.0..100.0f64, n * n).prop_map(move |mut matrix| {
             for i in 0..n {
@@ -1902,7 +2025,12 @@ mod tests {
             seed: u64,
             lambda in 2usize..12,
             initial_step in 0.001..=1.0f64,
-            restarts in prop::sample::select(vec![Restarts::Never, Restarts::Ipop, Restarts::Bipop]),
+            restarts in prop::sample::select(vec![
+                Restarts::Never,
+                Restarts::Ipop,
+                Restarts::Bipop,
+                Restarts::Stop,
+            ]),
             diagonal: bool,
         ) {
             // one fixed gene, bounds of different widths, and a random fitness

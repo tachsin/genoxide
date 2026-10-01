@@ -115,7 +115,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | A formula or a Boolean function (genetic programming) | `gx.gp.Gp`, trees | `Ga` with `gx.gp.SubtreeCrossover()` and `gx.gp.SubtreeMutation()`, or `Islands` of them; `Nsga2` for accuracy against size |
 | Several objectives | any | `Nsga2` for 2 or 3 objectives; `Nsga3` or `Moead` for more |
 
-- `Cmaes` is the strongest general choice for continuous problems with up to a few hundred genes, especially when the genes interact. Its defaults need no tuning. For multimodal functions, add `restarts="ipop"` or `"bipop"`. For thousands of genes or separable problems, `covariance="diagonal"` (sep-CMA-ES): O(n) per sample, no correlations between genes.
+- `Cmaes` is the strongest general choice for continuous problems with up to a few hundred genes, especially when the genes interact. Its defaults need no tuning. For multimodal functions, add `restarts="ipop"` or `"bipop"`. `restarts="stop"` ends a run once it converges, with the stop reason `"converged"`: for smooth problems without constraints, as on flat, quantized or constrained fitness a run can still improve after it converges. For thousands of genes or separable problems, `covariance="diagonal"` (sep-CMA-ES): O(n) per sample, no correlations between genes.
 - `De` often needs far fewer evaluations than a GA on continuous problems.
 - `Pso` with `ring=1` explores longer than the default global topology, for multimodal functions.
 - `Es`, an evolution strategy whose step sizes evolve with its solutions, suits smooth problems that need precise answers. A `Ga` on an `AdaptiveReal` genome with `SelfAdaptiveMutation()` is one too.
@@ -131,7 +131,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | `LocalSearch` | all | `neighbor` (a mutation), `neighbors` (1), `acceptance`, `restart=(patience, kicks)` |
 | `De` | real | `population_size` (100; with `l_shade`, 18 × genes, at least 4), `l_shade` (a budget of evaluations, for L-SHADE), `strategy` (`{"max_p": 0.2, "archive": 1.0}`; `"rand1"`, `"best1"`, `{"p", "archive"}`), `control` (`{"memory": 100}`; `{"f", "cr"}`, `{"min_f", "max_f", "cr"}`, `{"c"}`), `restarts` (`{"tolerance": 1e-12, "patience": 200}`; `"never"`), `parallel_breeding` (False) |
 | `Es` | real | `parents` (μ), `offspring` (λ, 5 to 7 times μ), `recombination` (`"intermediate"`; `"dominant"`), `rho` (the parents per offspring, all by default), `selection` (`"comma"`; `"plus"`), `step_sizes` (`"per_gene"`; `"one"`), `initial_step` (0.3 of each range), `parallel_breeding` (False) |
-| `Cmaes` | real | `population_size`, `restarts` (`"ipop"`, `"bipop"`), `initial_step`, `covariance` (`"full"`; `"diagonal"`), `min_step` (0) |
+| `Cmaes` | real | `population_size`, `restarts` (`"never"`; `"ipop"`, `"bipop"`, `"stop"`), `initial_step`, `covariance` (`"full"`; `"diagonal"`), `min_step` (0) |
 | `OpenEs` | real | `population_size` (even, needed), `sigma` (0.02 of each range), `optimizer` (`Adam(0.01)`; `Adam(learning_rate, beta1, beta2)`, `Sgd(learning_rate, momentum)`), `weight_decay` (0), `evaluate_mean` (False), `initial_mean` (random), `parallel_breeding` (False) |
 | `Neat` | its networks | `inputs`, `outputs` (needed), `population_size` (150), `compatibility` (`(1.0, 1.0, 0.4, 3.0)`: c1, c2, c3, threshold), `weight_mutation` (`(0.8, 0.1)`: rate, replace), `weight_deviations` (`(1.0, 1.0)`), `structural_mutation` (`(0.03, 0.05)`: add node, add connection), `reproduction` (`(0.25, 0.001, 0.75)`), `selection` (`(5, 0.2)`: elitism size, survival), `stagnation` (15), `activation` (`"steep_sigmoid"`), `feed_forward` (True), `initial` (`"fully_connected"`; `"unconnected"`), `sharing` (`"normalized"`; `"raw"`, the paper's) |
 | `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
@@ -488,7 +488,7 @@ print(result.best_genome)  # |x| at every point, by a comparison and a condition
 - `time`: seconds (`math.inf` for no limit)
 - `stagnation`: generations without improvement
 
-The result has the condition that stopped it, `stop_reason`, and the `generations`, `evaluations` and `seconds` it took. A `NelderMead` also stops on its own once it has converged, with no restart left: its stop reason is then `"converged"`. It still needs a stop condition, in case it doesn't converge within it:
+The result has the condition that stopped it, `stop_reason`, and the `generations`, `evaluations` and `seconds` it took. A `NelderMead` also stops on its own once it has converged, with no restart left, and so does a `Cmaes` with `restarts="stop"`: its stop reason is then `"converged"`. It still needs a stop condition, in case it doesn't converge within it:
 
 ```python
 def rosenbrock(x):
@@ -668,7 +668,7 @@ Some names differ:
 | `BitFlip(rate=...)`, `BitFlip(count=...)` | `BitFlip::per_gene(rate)`, `BitFlip::count(count)`, and so for the other mutations |
 | `PointCrossover(points)` | `PointCrossover::k_point(points)` |
 | `MuPlusLambda(offspring)`, `MuCommaLambda(offspring)` | `Scheme::MuPlusLambda { lambda }`, `Scheme::MuCommaLambda { lambda }` |
-| `Cmaes(restarts="ipop")` | `.restarts(cmaes::Restarts::Ipop)` |
+| `Cmaes(restarts="ipop")`, `Cmaes(restarts="stop")` | `.restarts(cmaes::Restarts::Ipop)`, `.restarts(cmaes::Restarts::Stop)` |
 | `Cmaes(covariance="diagonal")` | `.covariance(cmaes::Covariance::Diagonal)` |
 | `Pso(ring=k)` | `.topology(pso::Topology::Ring { neighbors: k })` |
 | `NelderMead(coefficients="standard")`, `NelderMead(coefficients=(1.0, 2.0, 0.5, 0.5))` | `.coefficients(nelder_mead::Coefficients::Standard)`, `.coefficients(nelder_mead::Coefficients::Custom { reflection: 1.0, expansion: 2.0, contraction: 0.5, shrink: 0.5 })` |

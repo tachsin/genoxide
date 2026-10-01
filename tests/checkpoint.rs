@@ -323,6 +323,47 @@ fn other_algorithms_resume_exactly() {
 }
 
 #[test]
+fn a_cmaes_that_stops_where_it_converges_resumes() {
+    let cmaes = || {
+        Cmaes::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+            .restarts(cmaes::Restarts::Stop)
+            .minimize()
+            .seed(12)
+            .build()
+            .unwrap()
+    };
+    let mut whole = Engine::new(cmaes(), rastrigin).stop_when(Stop::generations(100_000));
+    let expected = whole.run().unwrap();
+    assert_eq!(expected.stop_reason(), StopReason::Converged);
+    let converged = expected.generations();
+    assert!(converged > 100, "{converged}");
+
+    // saved before the convergence, resumed to it
+    resumes(cmaes, rastrigin, converged / 2, 100_000);
+    let mut first = Engine::new(cmaes(), rastrigin).stop_when(Stop::generations(converged / 2));
+    first.run().unwrap();
+    let resumed: Cmaes = checkpoint::load(bytes(first.algorithm()).as_slice()).unwrap();
+    let outcome = Engine::new(resumed, rastrigin)
+        .stop_when(Stop::generations(100_000))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.stop_reason(), StopReason::Converged);
+    assert_eq!(outcome.generations(), converged);
+
+    // saved when it has finished: it stays finished
+    let finished: Cmaes = checkpoint::load(bytes(whole.algorithm()).as_slice()).unwrap();
+    assert!(finished.is_finished());
+    assert_eq!(finished.converged(), whole.algorithm().converged());
+    let again = Engine::new(finished, rastrigin)
+        .stop_when(Stop::generations(100_000))
+        .run()
+        .unwrap();
+    assert_eq!(again.stop_reason(), StopReason::Converged);
+    assert_eq!(again.evaluations(), expected.evaluations());
+    assert_eq!(again.best(), expected.best());
+}
+
+#[test]
 fn local_search_resumes_exactly() {
     let conflicts = |order: &Order| {
         let mut count = 0;

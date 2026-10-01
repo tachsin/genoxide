@@ -455,6 +455,7 @@ pub enum Restarts {
     Never,
     Ipop,
     Bipop,
+    Stop,
 }
 
 /// CMA-ES's covariance matrix: full, or diagonal (sep-CMA-ES).

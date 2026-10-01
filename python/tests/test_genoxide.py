@@ -121,6 +121,32 @@ def test_real_algorithms_minimize(algorithm):
     assert np.all(np.abs(result.best_genome) <= 5.12)
 
 
+def test_cmaes_can_stop_where_it_converges():
+    real = gx.Real((-5.0, 5.0), length=4)
+
+    def sphere(x):
+        return float((x * x).sum())
+
+    def cmaes(**settings):
+        return gx.Cmaes(real, objective="minimize", seed=2, **settings)
+
+    stopped = cmaes(restarts="stop").run(sphere, evaluations=100_000)
+    assert stopped.stop_reason == "converged"
+    assert stopped.best_fitness < 1e-12
+    assert stopped.evaluations < 100_000
+    # up to there, the run of "never", which goes on to the budget
+    never = cmaes(restarts="never").run(sphere, generations=stopped.generations)
+    assert never.stop_reason == "generations"
+    assert never.evaluations == stopped.evaluations
+    assert never.best_fitness == stopped.best_fitness
+    np.testing.assert_array_equal(never.best_genome, stopped.best_genome)
+    assert cmaes().run(sphere, evaluations=100_000).stop_reason == "evaluations"
+    # a stop condition met in the same generation comes first
+    limited = cmaes(restarts="stop").run(sphere, generations=stopped.generations)
+    assert limited.stop_reason == "generations"
+    assert limited.best_fitness == stopped.best_fitness
+
+
 @pytest.mark.parametrize(
     "strategy, control, restarts",
     [

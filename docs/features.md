@@ -57,7 +57,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 ## Other single-objective methods
 
 - **Evolution strategies:** (μ/ρ +, λ)-ES with intermediate or dominant recombination. Self-adapted step sizes: one, or one per gene.
-- **CMA-ES:** IPOP and BIPOP restarts, and sep-CMA-ES for high dimensions.
+- **CMA-ES:** IPOP and BIPOP restarts, or, opt-in, a run that ends when it converges (`Restarts::Stop`, `StopReason::Converged`), and sep-CMA-ES for high dimensions.
 - **Differential evolution:** rand/1, best/1, and current-to-pbest/1 with an archive. Fixed, dithered or adaptive parameters (JADE, SHADE, L-SHADE).
 - **Particle swarm optimization:** global or ring topology, constriction coefficients, velocity limits.
 - **Local search:** hill climbing (first-improvement or best-of-k, with plateau moves), simulated annealing, tabu search, iterated local search. Any mutation serves as the neighborhood.

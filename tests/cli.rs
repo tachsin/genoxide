@@ -224,6 +224,40 @@ fn a_seed_gives_the_same_result() {
 }
 
 #[test]
+fn cmaes_can_stop_where_it_converges() {
+    let directory = directory("cmaes-stop");
+    // `CMAES` without its target, with these settings and stop conditions
+    let run = |settings: &str, stop: &str| {
+        let text = CMAES
+            .replace("type = \"cmaes\"", &format!("type = \"cmaes\"\n{settings}"))
+            .replace("target = 1e-8\nevaluations = 50000", stop);
+        untimed(run(&directory, "run.toml", &text, &[]).unwrap())
+    };
+    let budget = "evaluations = 50000";
+    let stopped = run("restarts = \"stop\"", budget);
+    assert_eq!(stopped["stop_reason"], "converged");
+    assert!(stopped["fitness"].as_f64().unwrap() < 1e-12, "{stopped}");
+    assert!(
+        stopped["evaluations"].as_u64().unwrap() < 50_000,
+        "{stopped}"
+    );
+    // without it, the same run goes on to the budget
+    let never = run("restarts = \"never\"", budget);
+    assert_eq!(never["stop_reason"], "evaluations");
+    assert_eq!(never, run("", budget));
+    // a stop condition met in the same generation comes first
+    let generations = stopped["generations"].as_u64().unwrap();
+    let limited = run(
+        "restarts = \"stop\"",
+        &format!("generations = {generations}"),
+    );
+    assert_eq!(limited["stop_reason"], "generations");
+    assert_eq!(limited["generations"], generations);
+    assert_eq!(limited["fitness"], stopped["fitness"]);
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
 fn runs_resume_from_checkpoints() {
     let directory = directory("resume");
     let text = |generations: u64| {
