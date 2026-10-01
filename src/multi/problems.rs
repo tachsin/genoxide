@@ -62,6 +62,9 @@
 //! | [`C1Dtlz1`], [`C1Dtlz3`] | M or more (M + 4, M + 9) | any M ≥ 2 | 1 | DTLZ1's, DTLZ3's, behind infeasible barriers |
 //! | [`C2Dtlz2`], [`ConvexC2Dtlz2`] | M or more (M + 9) | any M ≥ 2 | 1 | parts of DTLZ2's, of convex DTLZ2's |
 //! | [`C3Dtlz1`], [`C3Dtlz4`] | M or more (M + 4) | any M ≥ 2 | M | on the constraints' boundaries |
+//! | [`Dc1Dtlz1`], [`Dc1Dtlz3`] | M or more (M + 4, M + 9) | any M ≥ 2 | 1 | DTLZ1's, DTLZ3's, in cones |
+//! | [`Dc2Dtlz1`], [`Dc2Dtlz3`] | M or more (M + 4, M + 9) | any M ≥ 2 | 2 | DTLZ1's, DTLZ3's, nearly all else infeasible |
+//! | [`Dc3Dtlz1`], [`Dc3Dtlz3`] | M or more (M + 4, M + 9) | any M ≥ 2 | M | DTLZ1's, DTLZ3's, in patches |
 //! | [`Mw1`] to [`Mw3`], [`Mw5`] to [`Mw7`], [`Mw9`] to [`Mw13`] | 3 or more (15) | 2 | 1 to 4 | disconnected, points, or on constraint boundaries |
 //! | [`Mw4`], [`Mw8`], [`Mw14`] | M + 1 or more (M + 12) | any M ≥ 2 | 1 | linear; spherical in four bands; 2^(M−1) patches |
 //! | [`engineering`]: two-bar and four-bar trusses, welded beam, disc brake, speed reducer | 3 to 7 | 2 | 0 to 11 | the trusses' derived; the others not known |
@@ -91,6 +94,7 @@
 mod cdtlz;
 mod classic;
 mod ctp;
+mod dcdtlz;
 mod dtlz;
 mod dtlz_constrained;
 mod dtlz_variants;
@@ -105,6 +109,7 @@ pub use classic::{
     Viennet2, Viennet3,
 };
 pub use ctp::{Ctp1, Ctp2, Ctp3, Ctp4, Ctp5, Ctp6, Ctp7, Ctp8};
+pub use dcdtlz::{Dc1Dtlz1, Dc1Dtlz3, Dc2Dtlz1, Dc2Dtlz3, Dc3Dtlz1, Dc3Dtlz3};
 pub use dtlz::{Dtlz1, Dtlz2, Dtlz3, Dtlz4, Dtlz5, Dtlz6, Dtlz7};
 pub use dtlz_constrained::{Dtlz8, Dtlz9};
 pub use dtlz_variants::{ConvexDtlz2, InvertedDtlz1, ScaledDtlz1, ScaledDtlz2};
@@ -312,7 +317,7 @@ where
 /// the convex, scaled and inverted DTLZ problems, WFG1-9, MW4, MW8
 /// and MW14 for any `M` from 2 on, then the constrained DTLZ problems (C1-DTLZ3 and convex
 /// C2-DTLZ2 only for the numbers of objectives their paper gives a radius for: 3, 5, 8, 10 and
-/// 15), then DTLZ8 (from 3 objectives on) and DTLZ9. [`Zdt5`], on bit strings, isn't in it.
+/// 15), then DTLZ8 (from 3 objectives on), DTLZ9 and the DC-DTLZ problems. [`Zdt5`], on bit strings, isn't in it.
 pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
     let fixed = [
         try_boxed::<_, 2, M>(Zdt1::default()),
@@ -397,6 +402,7 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
     }
     if M >= 2 {
         problems.push(boxed(Dtlz9::<M>::default()));
+        problems.extend(dcdtlz::all::<M>());
     }
     problems
 }
@@ -697,7 +703,7 @@ mod tests {
     #[test]
     fn the_registries_describe_every_problem() {
         let two = all::<2>();
-        assert_eq!(two.len(), 67);
+        assert_eq!(two.len(), 73);
         check_registry(two);
         let three = all::<3>();
         assert_eq!(
@@ -741,6 +747,12 @@ mod tests {
                 "C3-DTLZ4",
                 "DTLZ8",
                 "DTLZ9",
+                "DC1-DTLZ1",
+                "DC1-DTLZ3",
+                "DC2-DTLZ1",
+                "DC2-DTLZ3",
+                "DC3-DTLZ1",
+                "DC3-DTLZ3",
             ]
         );
         check_registry(three);
