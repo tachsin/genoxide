@@ -18,6 +18,19 @@ fn rastrigin(x: &Reals) -> f64 {
             .sum::<f64>()
 }
 
+// minimize Σ xⱼ subject to Σ xⱼ² ≤ 1 and x₀ ≥ −0.5, with the derivatives
+fn ball(x: &Reals, gradient: &mut [f64], g: &mut [f64], jacobian: &mut [f64]) -> f64 {
+    let n = x.len();
+    gradient.fill(1.0);
+    g[0] = x.iter().map(|xi| xi * xi).sum::<f64>() - 1.0;
+    g[1] = -0.5 - x[0];
+    for j in 0..n {
+        jacobian[j] = 2.0 * x[j];
+    }
+    jacobian[n] = -1.0;
+    x.iter().sum()
+}
+
 fn one_max(genome: &Bits) -> f64 {
     genome.count_ones() as f64
 }
@@ -317,6 +330,20 @@ fn other_algorithms_resume_exactly() {
         value
     });
     resumes(lbfgsb, rosenbrock, 23, 80);
+    // MMA's asymptotes and iterates, and GCMMA's inner iterations under way, to convergence
+    for method in [mma::Method::Mma, mma::Method::Gcmma] {
+        let mma = || {
+            Mma::builder(Real::uniform(3, -5.0..=5.0).unwrap())
+                .method(method)
+                .minimize()
+                .seed(12)
+                .build()
+                .unwrap()
+        };
+        for split in [1, 5, 9] {
+            resumes(mma, Constrained::differentiable(2, ball), split, 200);
+        }
+    }
     // the mean and Adam's moments, with the mean evaluated and parallel breeding
     for parallel in [false, true] {
         let open_es = || {

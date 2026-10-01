@@ -1,0 +1,16 @@
+minimize the sum of c_j / x_j subject to the sum of x_j <= 1000000
+1000000 variables in [0.01, 10], c_j = 1 + (j mod 9), from x_j = 0.5
+iteration  best value        largest error of a variable
+        0  9.9999920000e6                         6.4e-1
+        4  9.9999920000e6                          1.9e0
+        8  9.9999920000e6                         9.8e-1
+       12  4.8556119309e6                         3.7e-1
+       16  4.6146391143e6                         1.6e-1
+       20  4.6016040237e6                         1.0e-2
+       24  4.6014970171e6                         6.5e-6
+       28  4.6014970170e6                         6.6e-9
+       31  4.6014970170e6                        9.5e-10
+converged by the step after 31 iterations and 32 evaluations
+value 4.6014970170e6, the minimum 4.6014970170e6
+largest relative error of a variable 2.7e-9, the volume used 999999.999997 (violation 0.0e0)
+multiplier 4.6014970177, the exact (sum of the roots of c_j)^2 / V^2 = 4.6014970170

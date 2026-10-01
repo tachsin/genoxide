@@ -263,6 +263,32 @@ impl Settings<NelderMead> for NelderMeadSettings {
     }
 }
 
+/// MMA, whose subproblems follow from its asymptotes: its state, read-only, and re-evaluation.
+pub struct MmaSettings;
+
+impl Settings<Mma> for MmaSettings {
+    fn get(&self, mma: &Mma, name: &str) -> Result<Value> {
+        match name {
+            "converged" => Ok(json!(mma.converged().map(|criterion| match criterion {
+                mma::Convergence::Kkt => "kkt",
+                _ => "step",
+            }))),
+            "iterations" => Ok(json!(mma.iterations())),
+            "inner_iterations" => Ok(json!(mma.inner_iterations())),
+            "multipliers" => Ok(json!(mma.multipliers())),
+            // NaN before the first iteration, which JSON can't hold
+            "kkt_residual" => Ok(json!(
+                Some(mma.kkt_residual()).filter(|residual| residual.is_finite())
+            )),
+            _ => Err(unknown(name)),
+        }
+    }
+
+    fn set(&self, _: &mut Mma, name: &str, _: &str) -> Result<()> {
+        Err(unknown(name))
+    }
+}
+
 /// L-BFGS-B: its memory, which a control can change, and its state, read-only.
 pub struct LbfgsbSettings;
 

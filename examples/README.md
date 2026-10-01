@@ -209,6 +209,7 @@ python examples/tsp_berlin52/main.py
 | [L-BFGS-B on a minimum at the bound](lbfgsb_bounds/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/lbfgsb-bounds) |
 | [SHADE, then L-BFGS-B](polish/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/polish) |
 | [Adam with a learning-rate schedule](adam/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/adam) |
+| [MMA on a million variables](mma/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mma) |
 
 The GPU example is a crate of its own, with wgpu as a dependency:
 `cargo run --release --manifest-path examples/gpu/Cargo.toml`.

@@ -128,6 +128,10 @@ pub struct Fitness {
     /// per gene on each line.
     #[serde(default)]
     pub gradient: bool,
+    /// The number of inequality constraints g(x) <= 0 whose values, then Jacobian, the program
+    /// writes after the gradient.
+    #[serde(default)]
+    pub constraints: usize,
 }
 
 fn maximize() -> Vec<Objective> {
@@ -190,6 +194,25 @@ pub enum Algorithm {
         acceptance: Option<Acceptance>,
         /// Iterated local search: `[patience, kicks]`.
         restart: Option<(u64, usize)>,
+    },
+    Mma {
+        seed: Option<u64>,
+        method: Option<MmaMethod>,
+        /// The asymptotes' distance in the first two iterations, a fraction of each range.
+        asymptote_initial: Option<f64>,
+        /// The factors that bring the asymptotes nearer and move them away.
+        asymptote_decrease: Option<f64>,
+        asymptote_increase: Option<f64>,
+        /// The largest step, a fraction of each range.
+        move_limit: Option<f64>,
+        /// The cost of the artificial variable that relaxes a constraint.
+        constraint_cost: Option<f64>,
+        kkt_tolerance: Option<f64>,
+        step_tolerance: Option<f64>,
+        /// The restoration step after a run that converges to an infeasible point.
+        restoration: Option<bool>,
+        /// The dual's sums over the genes on several threads.
+        parallel_sums: Option<bool>,
     },
     Lbfgsb {
         seed: Option<u64>,
@@ -415,6 +438,14 @@ pub enum DeRestartsName {
 pub struct OnStagnation {
     pub tolerance: f64,
     pub patience: u64,
+}
+
+/// MMA's method: `"mma"` or `"gcmma"`.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MmaMethod {
+    Mma,
+    Gcmma,
 }
 
 /// Where a gradient-based method's gradients come from.

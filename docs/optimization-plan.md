@@ -10,7 +10,10 @@ the smooth problems, and L-BFGS-B (`Lbfgsb`, with the scale requirements of 2.13
 and work per iteration, the counting-allocator test at n = 10⁶ and the benchmark at 10³, 10⁵ and
 10⁶), in Python and the `genoxide` program, with its three examples. Of batch A3, the first-order
 methods (`FirstOrder`: gradient descent, momentum, Nesterov, Adam and AdamW, with the allocation
-test and the benchmarks of 2.13); the rest of A3 (MMA, GCMMA, continuation) and the later batches
+test and the benchmarks of 2.13), and MMA and GCMMA (`Mma`) with the inequality constraints'
+values and Jacobian as extras (`Provided::inequalities`, `constraint_jacobian`,
+`constraint::Constrained`) and the restoration step of open question 6 for MMA, in Python and
+the `genoxide` program, with its example; the rest of A3 (continuation) and the later batches
 aren't yet. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
@@ -157,6 +160,42 @@ tested, and orders the work in batches.
   Algorithm 1 line 8, and for Adam), the default tolerances (1e-6 on the projected gradient's
   largest component, 1e-12 on a step relative to max(1, |xᵢ|)), and the step halfway back from an
   invalid point.
+- **Batch A3, MMA and GCMMA, read on 2026-10-01**, in the copies on Svanberg's KTH page (the
+  1987 paper scanned, the 2002 paper, and the 2007 notes "MMA and GCMMA – two methods for
+  nonlinear optimization"). The notes: **verified**, sections 1-5. As implemented: the problem
+  with artificial variables (eq. 1.1, with a₀ = 1, aᵢ = 0, dᵢ = 1 and cᵢ the
+  `constraint_cost`, 1000 as in the 2002 paper's section 8.4); the approximations (3.2)-(3.5)
+  with their constants 1.001, 0.001 and raa0 = 10⁻⁵; the move limits (3.6)-(3.7) with albefa
+  0.1 and move 0.5; the asymptotes (3.11)-(3.14) with asyinit 0.5, asydecr 0.7, asyincr 1.2 and
+  the bounds 0.01 and 10 of the range; GCMMA's subproblem (4.1)-(4.5), the conservativeness
+  test, ρ's start (4.6) with 0.1 / n and its floor 10⁻⁶, d(x) (4.7) and the update (4.8)-(4.9)
+  with 1.1 and 10. The primal-dual interior point of section 5 was read and not used: genoxide
+  solves the subproblem through its dual in the m multipliers, as the 1987 paper does
+  (section 4) and the 2002 paper suggests (section 5), at a pass over the genes per evaluation of
+  the dual, many times cheaper on millions of genes; the Newton method on the multipliers, its
+  search along each direction, the subproblem written as differences from x⁽ᵏ⁾ (without the
+  cancellation of eq. 3.5), the KKT residual's scaling by the ranges, the conservativeness
+  tolerance (100 ε √n of the terms' scale) and the inner iterations' limit (30) are genoxide's
+  own. Svanberg (1987): **verified**, sections 2-6: the approximations (eqs. 2-5), the move
+  limits' condition (8), the first asymptote rule (11)-(13) with s = 0.7, which the notes'
+  rule replaces, the dual (14)-(21) and the artificial variables (section 5); test problem 1,
+  the cantilever beam, is reached from its start x = 5 (eq. 22: x = (6.016, 5.309, 4.494, 3.502,
+  2.153), weight 1.340), but the paper's x₄ = 3.502 is 3.50147 to more digits, which genoxide's
+  `CantileverBeam` gives (its asymptotes were x/t and t·x, a rule genoxide doesn't have).
+  Svanberg (2002): **verified**, sections 2-8: the problem (2.3), the outer and inner iterations
+  (section 3) and the KKT test (8.3)-(8.4), whose factors 1 ± xⱼ genoxide divides by the range.
+  Its CCSA method (example 5.4: asymptotes x ∓ σ, curvature ρσ/4, ρ from 0.1 of the last outer
+  iteration's (6.1b)) differs from the notes' GCMMA, which genoxide follows. Reproduced
+  (`tests/mma.rs`): table 8.1 for n = 1000, problem 1 by GCMMA to the printed digits (objective
+  260.85, 184 variables at a bound, multipliers 0.138 and 0.451), in 166 outer and 334 inner
+  iterations against the paper's 177 and 209; problem 2 (outside the tests, too slow in debug)
+  to −739.15, 184 at a bound and 0.549 and 0.862, in 419 and 1020 against 436 and 415. The
+  authors' MATLAB codes (`mmasub`, `gcmmasub`) weren't read: they're given by e-mail for
+  academic use, not published. Open question 6 for MMA: the restoration step of #378's
+  refinements 2 (the active set from the last multipliers, satisfied constraints included) and
+  3 (the best by Deb's rules, so a restoration that loses more than it should leaves the best
+  feasible point seen); equalities (refinement 1) aren't in MMA, and the tolerance setting for
+  user functions (4) is left for batch C.
 - The methods are general. The docs and examples motivate them with generic cases (expensive
   simulations, engineering design, black-box functions, model fitting), not with an application
   domain.
@@ -963,7 +1002,13 @@ mixed genome.
    definition, which has a tolerance on equalities only, unless it defaults to 0 for the
    problems); or the NLP methods end with a restoration step that makes near-active inequalities
    exactly feasible (at most the tolerance's change in the score). Recommended: the second, for
-   the problems' semantics, with a tolerance setting for user functions.
+   the problems' semantics, with a tolerance setting for user functions. Applied in MMA (batch
+   A3, #378): a run that converges to an infeasible point ends with the restoration step,
+   projecting the active set of its last multipliers onto the feasible side, with a margin of
+   the violation's size doubled on up to 8 attempts; on 200 runs of a problem with two active
+   constraints from random starts, the 23 that ended infeasible by rounding all ended feasible,
+   with 4 extra evaluations on average (1 each for the 5 of the tests' 40 runs) and a change of
+   the score below 1e-9 relative. The tolerance setting for user functions is left for batch C.
 7. **Mixed genome.** Design it as part of batch E, or as a separate plan before it (it affects
    GA operators, DE, the CLI and Python too)?
 8. **Public `linalg` and `model::gp`.** Public from their first batch (users fitting GPs), or

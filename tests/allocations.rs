@@ -1,8 +1,9 @@
-//! The first-order methods at scale: after their first iteration, their steps allocate nothing,
-//! here at a million genes (docs/optimization-plan.md, section 2.13). A test binary of its own,
-//! for its counting allocator.
+//! The first-order methods and MMA at scale: after their first iteration, their steps allocate
+//! nothing, here at a million genes (docs/optimization-plan.md, section 2.13). A test binary of its
+//! own, for its counting allocator.
 
 use genoxide::algorithm::first_order::Step;
+use genoxide::algorithm::mma::Method;
 use genoxide::gradient::Differentiable;
 use genoxide::prelude::*;
 use std::alloc::{GlobalAlloc, Layout, System};
@@ -170,5 +171,69 @@ fn first_order_steps_allocate_nothing_after_the_first() {
         let per_gene = peak as f64 / N as f64;
         assert!(per_gene <= 72.5, "{step:?}: {per_gene} bytes a gene");
         println!("{step:?}: peak {per_gene:.1} bytes a gene");
+    }
+}
+
+#[test]
+fn mma_iterations_allocate_nothing_after_the_first() {
+    let _one = ONE_AT_A_TIME
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    const GENERATIONS: u64 = 6;
+    // minimize Σ cⱼ / xⱼ subject to Σ xⱼ ≤ n, with cⱼ from 1 to 9: one constraint, active
+    let c: Vec<f64> = (0..N).map(|j| 1.0 + (j % 9) as f64).collect();
+    let volume = N as f64;
+    for method in [Method::Mma, Method::Gcmma] {
+        let problem = Constrained::differentiable(
+            1,
+            |x: &Reals, gradient: &mut [f64], g: &mut [f64], jacobian: &mut [f64]| {
+                let (mut value, mut sum) = (0.0, 0.0);
+                for j in 0..x.len() {
+                    value += c[j] / x[j];
+                    gradient[j] = -c[j] / (x[j] * x[j]);
+                    jacobian[j] = 1.0;
+                    sum += x[j];
+                }
+                g[0] = sum - volume;
+                value
+            },
+        );
+        let real = Real::uniform(N, 0.01..=10.0).unwrap();
+        let initial = Reals::from(vec![0.5; N]);
+        // the peak from here, the representation and the initial genome aside
+        let start = IN_USE.load(Ordering::Relaxed);
+        PEAK.store(start, Ordering::Relaxed);
+        let mma = Mma::builder(real)
+            .method(method)
+            .initial_genome(initial)
+            .minimize()
+            .build()
+            .unwrap();
+        // the allocations counted at each generation's control, kept without allocating
+        let mut counts = Vec::with_capacity(GENERATIONS as usize + 1);
+        let outcome = Engine::new(mma, problem)
+            .stop_when(Stop::generations(GENERATIONS))
+            .control(|_, _| {
+                counts.push(ALLOCATIONS.load(Ordering::Relaxed));
+                Ok(())
+            })
+            .run()
+            .unwrap();
+        let peak = PEAK.load(Ordering::Relaxed).saturating_sub(start);
+        assert_eq!(outcome.generations(), GENERATIONS);
+        // generation 0 evaluates the start, and generation 1 takes the first step and sizes the
+        // buffers: from then on, nothing (the outcome's copy of the best is made at the last
+        // generation, before its control)
+        assert_eq!(counts.len(), GENERATIONS as usize + 1);
+        let steps = &counts[1..GENERATIONS as usize];
+        assert!(
+            steps.windows(2).all(|pair| pair[0] == pair[1]),
+            "{method:?}: allocations {counts:?}"
+        );
+        // O(n) memory: the run's vectors, the engine's buffers of the gradient and the Jacobian,
+        // and the subproblem's table of the genes: 16 values a gene
+        let per_gene = peak as f64 / N as f64;
+        assert!(per_gene <= 136.5, "{method:?}: {per_gene} bytes a gene");
+        println!("{method:?}: peak {per_gene:.1} bytes a gene");
     }
 }

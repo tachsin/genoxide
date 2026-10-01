@@ -20,6 +20,7 @@ def run(
     resume: str | os.PathLike[str] | None = None,
     gradient: Callable[[Any], Any] | None = None,
     combined_gradient: bool = False,
+    constraints: int = 0,
 ) -> dict[str, Any]: ...
 
 class Running:

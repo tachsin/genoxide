@@ -17,7 +17,7 @@
 //! genome is evaluated; its `design` method gives the rounded design variables.
 
 use super::{Constraints, Optimum, Problem};
-use crate::engine::FitnessFunction;
+use crate::engine::{Extras, FitnessFunction, Provided};
 use crate::genome::{Integer, Integers, Real, Reals};
 use crate::math;
 use std::f64::consts::{PI, SQRT_2};
@@ -50,8 +50,34 @@ macro_rules! constrained {
             fn evaluate(&self, x: &Reals) -> (f64, f64) {
                 (self.value(x), violation(&self.values(x)))
             }
+
+            /// The values of the constraints `gᵢ(x) ≤ 0`, in the order of
+            /// [`constraints`](Problem::constraints).
+            fn provides(&self) -> Provided {
+                Provided::NOTHING.with_inequalities(count(Self::values))
+            }
+
+            /// As [`evaluate`](FitnessFunction::evaluate), with the constraints' values if
+            /// they're wanted.
+            ///
+            /// # Panics
+            ///
+            /// If `x` has fewer genes than the problem's variables, or the buffer for the
+            /// constraints' values has another length than their number.
+            fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> (f64, f64) {
+                let values = self.values(x);
+                if let Some(g) = extras.inequalities() {
+                    g.copy_from_slice(&values);
+                }
+                (self.value(x), violation(&values))
+            }
         }
     };
+}
+
+// the number of constraints `K` of a problem whose constraint values are `[f64; K]`
+const fn count<P, const K: usize>(_: fn(&P, &Reals) -> [f64; K]) -> usize {
+    K
 }
 
 // the constraint values of a constrained problem, as `Problem::constraints`

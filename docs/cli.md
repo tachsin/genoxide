@@ -81,7 +81,7 @@ workers = 8
 
 If the program exits, can't be started, writes something else or more lines than genomes, or doesn't answer in time, the run stops with an error. The error names the program and the line it wrote. No checkpoint is saved after the failure.
 
-**With the gradient** (`gradient = true` in `[fitness]`, a single objective), each line is the value, then the derivative of the value by each gene, n + 1 numbers for n genes, and no violation. `lbfgsb` uses it instead of finite differences, which cost n evaluations per gradient; other algorithms read the value and ignore the rest. The derivative is of the value as written, whether it's minimized or maximized. Sphere, with its gradient:
+**With the gradient** (`gradient = true` in `[fitness]`, a single objective), each line is the value, then the derivative of the value by each gene, n + 1 numbers for n genes, and no violation. `lbfgsb` and `first-order` use it instead of finite differences, which cost n evaluations per gradient; other algorithms read the value and ignore the rest. The derivative is of the value as written, whether it's minimized or maximized. Sphere, with its gradient:
 
 ```python
 import sys
@@ -89,6 +89,18 @@ import sys
 for line in sys.stdin:
     x = [float(gene) for gene in line.split()]
     print(sum(gene * gene for gene in x), *(2 * gene for gene in x), flush=True)
+```
+
+**With constraints** (`constraints = m` and `gradient = true` in `[fitness]`), the gradient is followed by the values of m inequality constraints `g(x) <= 0` (feasible at 0 or below), then their Jacobian: m rows of a derivative per gene, one row after the other on the same line, 1 + n + m + m × n numbers in all, and no violation: genoxide adds up the positive constraint values. `mma` uses the values and the Jacobian; other algorithms read the value and the violation. Minimizing the sum of squares with the first gene at least 1, as `1 − x₀ <= 0`:
+
+```python
+import sys
+
+for line in sys.stdin:
+    x = [float(gene) for gene in line.split()]
+    gradient = [2 * gene for gene in x]
+    jacobian = [-1.0] + [0.0] * (len(x) - 1)
+    print(sum(gene * gene for gene in x), *gradient, 1.0 - x[0], *jacobian, flush=True)
 ```
 
 A relative program path with a directory, like `./fitness`, is relative to the run file.
@@ -118,7 +130,8 @@ TOML, or JSON for files ending in `.json`, with the same structure. Unknown sett
 | `workers` | the number of CPUs | programs evaluating at the same time, 1 to 4096 |
 | `nan` | `"invalid"` | a NaN makes the genome invalid (`"invalid"`), or stops the run (`"error"`) |
 | `timeout` | `stop.time` | the longest wait for one answer, e.g. `"10m"`; a program that takes longer stops the run with an error |
-| `gradient` | `false` | each answer is the value, then its gradient: see [the fitness program](#the-fitness-program). With `builtin`, the built-in's analytic gradient (`sphere`, `rastrigin`, `rosenbrock` and `ackley`) |
+| `gradient` | `false` | each answer is the value, then its gradient: see [the fitness program](#the-fitness-program). With `builtin`, the built-in's analytic gradient (`sphere`, `rastrigin`, `rosenbrock`, `ackley` and `volume`) |
+| `constraints` | 0 | with `gradient = true`, the number of inequality constraints whose values and Jacobian each answer has after the gradient; 1 for the built-in `volume` |
 
 Set exactly one of `command` and `builtin`.
 
@@ -136,6 +149,7 @@ Set exactly one of `command` and `builtin`.
 | `"local-search"` | any | `neighbor` (a mutation) | `neighbors` (1), `acceptance` (`not-worse`), `restart` (off) |
 | `"nelder-mead"` | real | | `coefficients` (`"adaptive"`), `initial_step` (0.1), `initial_step_absolute`, `tolerance` (1e-9), `restarts` (none), `speculative` (false) |
 | `"lbfgsb"` | real | | `memory` (10), `gradients` (`"auto"`), `difference_step`, `gradient_tolerance` (1e-5), `function_tolerance` (2.220446049250313e-9), `max_line_search` (20), `restarts` (none) |
+| `"mma"` | real | `fitness.gradient = true` | `method` (`"mma"`), `asymptote_initial` (0.5), `asymptote_decrease` (0.7), `asymptote_increase` (1.2), `move_limit` (0.5), `constraint_cost` (1000), `kkt_tolerance` (1e-9), `step_tolerance` (1e-10), `restoration` (true), `parallel_sums` (false) |
 | `"first-order"` | real | | `step` (`{ type = "adam", learning_rate = 0.001 }`), `gradients` (`"auto"`), `difference_step`, `gradient_tolerance` (1e-6), `step_tolerance` (1e-12), `restarts` (none) |
 | `"nsga2"` | any | `population_size`, `crossover`, `mutate` | `crossover_rate` (0.9) |
 
@@ -148,6 +162,7 @@ Set exactly one of `command` and `builtin`.
 - `cmaes`: n is the number of genes whose bounds differ. `restarts` is `"never"` (a converged run goes on sampling around its point), `"ipop"`, `"bipop"` or `"stop"`: the run ends when it converges, with the stop reason `"converged"`, which saves most of a budget on smooth problems without constraints; on flat or quantized fitness and with constraints, a run can still improve after it converges. `initial_step` is the initial step size as a fraction of each gene's range, greater than 0 and at most 1. `covariance` is `"full"`, which learns the correlations between genes (O(n²) per sample: up to a few hundred genes), or `"diagonal"`, sep-CMA-ES, which learns only each gene's variance (O(n) per sample: for separable problems and thousands of genes).
 - `nelder-mead`: the Nelder-Mead simplex method, a local method for a few genes (up to about 10, more with the adaptive coefficients). It starts from a random point, and ends the run by itself when it has converged, with the stop reason `"converged"`; a `[stop]` condition is still needed. `coefficients` is `"adaptive"` (Gao and Han's, for the number of genes whose bounds differ), `"standard"` (Nelder and Mead's: reflection 1, expansion 2, contraction 0.5, shrink 0.5) or `{ reflection, expansion, contraction, shrink }`, with reflection greater than 0, expansion greater than 1 and than reflection, and contraction and shrink greater than 0 and less than 1. `initial_step` is the size of the first simplex as a fraction of each gene's range, greater than 0 and at most 1; `initial_step_absolute` sets it as a distance instead, the same in every gene (positive), for a wide box around an unbounded problem; give one or neither. `tolerance` is the simplex size at which a run has converged, as a fraction of the initial step, greater than 0 and less than 1. A trial point outside the bounds is mirrored back in at the bound it crossed. `restarts = <times>` starts again from a random point that many times (at least 1) after converging, and the result is the best of all the runs. A generation is one round of evaluations: the first simplex, one trial point, or a shrink. `speculative = true` evaluates the reflection, the expansion and both contractions in one round, so that up to four workers evaluate at the same time.
 - `lbfgsb`: L-BFGS-B, the limited-memory BFGS method with bounds, a local method for smooth functions from a few genes to millions. It starts from a random point and ends the run by itself when it has converged, with the stop reason `"converged"`; a `[stop]` condition is still needed. `gradients` is `"auto"` (the program's gradient with `fitness.gradient = true`, forward differences otherwise), `"supplied"` (needs `fitness.gradient = true`), `"forward"` or `"central"` (finite differences in any case: n or 2n more points per gradient, evaluated by the workers together with the point). `difference_step` is the relative step of finite differences, above 0, with `"forward"` or `"central"` (default √ε for forward, ε^(1/3) for central). `memory` is the number of correction pairs kept, at least 1 (3 to 20 is usual). A run has converged when the largest component of the projected gradient is at most `gradient_tolerance` (absolute, 0 or more; forward differences rarely meet much less than 1e-7 of the function's scale), or a step lowers the value by at most `function_tolerance` times max(|f|, 1) (0 or more), or no step lowers it. `max_line_search` is the most trial steps of a line search, at least 1. `restarts = <times>` starts again from a random point that many times (at least 1) after converging.
+- `mma`: Svanberg's method of moving asymptotes, for smooth problems with very many genes and few inequality constraints, from the program's gradient and, with `fitness.constraints`, the constraints' values and Jacobian. Each iteration is one evaluation. It starts from a random point and ends the run by itself when it has converged (the KKT residual within `kkt_tolerance`, or a step within `step_tolerance` of each gene's range), with the stop reason `"converged"`; a `[stop]` condition is still needed. A run that converges to a point infeasible by rounding ends with a restoration step onto the feasible side of its active constraints (`restoration = false` turns it off). `method = "gcmma"` is the globally convergent form: more evaluations, convergence from any start. `asymptote_initial` (above 0) is the asymptotes' first distance from the point and `move_limit` (above 0) the largest step, as fractions of each gene's range; `asymptote_decrease` (above 0 and at most 1) and `asymptote_increase` (at least 1) move them for oscillating and steady genes. `constraint_cost` (above 0) is the cost of the artificial variable that relaxes each constraint: above the constraints' multipliers at the solution. `parallel_sums = true` sums over the genes on several threads, with the same results. One worker is enough: it evaluates one genome at a time.
 - `first-order`: a first-order method, for smooth functions: each generation evaluates a point and its gradient, and steps along the gradient by a step rule, without a line search; the point stays in the bounds by projection. `step` is `{ type = "gradient", learning_rate }`, `{ type = "momentum", learning_rate, momentum }` (Polyak's heavy ball), `{ type = "nesterov", learning_rate, momentum }` (Nesterov's accelerated gradient, as Sutskever et al. state it), `{ type = "adam", learning_rate, beta1, beta2, epsilon }` (Kingma and Ba; all optional, 0.001, 0.9, 0.999 and 1e-8 by default) or `{ type = "adamw", learning_rate, beta1, beta2, epsilon, weight_decay }` (Loshchilov and Hutter's decoupled weight decay, `weight_decay` required), with the learning rate greater than 0 in the units of the genes, `momentum`, `beta1` and `beta2` from 0 to less than 1, `epsilon` greater than 0 and `weight_decay` 0 or more. `gradients` and `difference_step` are as for `lbfgsb`: the program's gradient with `fitness.gradient = true` (one evaluation per generation), or finite differences, asked in the same generation as the point (`"auto"` up to 10,000 genes whose bounds differ). The run ends by itself with the stop reason `"converged"` when the gradient's largest component is within `gradient_tolerance` (0 at a bound it points out of) or the last step moved no gene by more than `step_tolerance` relative to max(1, |x|), both 0 or more; a `[stop]` condition is still needed. `restarts = <times>` starts again from a random point that many times (at least 1) after converging.
 - `ring = <neighbors>`: a ring topology, with that many neighbors on each side, at least 1.
 - `neighbors`: the neighbors evaluated per step, 1 to 2^24.
@@ -265,7 +280,7 @@ On stdout, as JSON:
 | `"evaluations"` | at `stop.evaluations` |
 | `"time"` | at `stop.time` |
 | `"stagnation"` | at `stop.stagnation` |
-| `"converged"` | when `nelder-mead`, `lbfgsb` or `first-order` has converged, after its last restart, or `cmaes` with `restarts = "stop"` |
+| `"converged"` | when `nelder-mead`, `lbfgsb`, `first-order` or `mma` has converged, after its last restart, or `cmaes` with `restarts = "stop"` |
 | `"stalled"` | after 10,000 generations without a new genome to evaluate, when only `target` or `evaluations` could stop it. E.g. a GA whose children are all copies of their parents. |
 | `"aborted"`, `"other"` | reserved: a run file doesn't cause them |
 
@@ -273,7 +288,7 @@ The exit code is 0 after a run and 1 after an error, with the error on stderr.
 
 ## Built-in fitness programs
 
-`genoxide fitness` lists them. `genoxide fitness <name>` runs one on stdin and stdout, with the same protocol; `genoxide fitness <name> --gradient` writes the gradient after the value (`sphere`, `rastrigin`, `rosenbrock` and `ackley`, with the analytic gradients of genoxide's test problems), which `builtin` with `gradient = true` runs:
+`genoxide fitness` lists them. `genoxide fitness <name>` runs one on stdin and stdout, with the same protocol; `genoxide fitness <name> --gradient` writes the gradient after the value (`sphere`, `rastrigin`, `rosenbrock` and `ackley`, with the analytic gradients of genoxide's test problems, and `volume`, then its constraint), which `builtin` with `gradient = true` runs:
 
 | Name | Genome | Scores |
 |---|---|---|
@@ -282,6 +297,7 @@ The exit code is 0 after a run and 1 after an error, with the error on stderr.
 | `rastrigin` | real | Rastrigin's function (minimize) |
 | `rosenbrock` | real | Rosenbrock's function (minimize) |
 | `ackley` | real | Ackley's function (minimize) |
+| `volume` | real | the sum of c_j / x_j, c_j = 1 + (j mod 9), and the violation of sum(x) <= n for n genes (minimize); with `--gradient`, the gradient, then the constraint's value sum(x) − n and its gradient (`gradient = true`, `constraints = 1`, for `mma`) |
 | `inversions` | permutation | the pairs out of order (minimize) |
 | `zdt1` | real in [0, 1] | ZDT1's two objectives (minimize both) |
 | `schaffer` | real | Schaffer's two objectives (minimize both) |

@@ -10,6 +10,7 @@ pub use crate::algorithm::es::{self, Es};
 pub use crate::algorithm::first_order::{self, FirstOrder};
 pub use crate::algorithm::lbfgsb::{self, Lbfgsb};
 pub use crate::algorithm::local;
+pub use crate::algorithm::mma::{self, Mma};
 pub use crate::algorithm::nelder_mead::{self, NelderMead};
 pub use crate::algorithm::open_es::{self, OpenEs};
 pub use crate::algorithm::pso::{self, Pso};
@@ -17,7 +18,7 @@ pub use crate::algorithm::{
     Acceptance, Algorithm, Ga, Incremental, Islands, LocalSearch, Migrate, Reevaluate, Scheme,
     SteadyGa,
 };
-pub use crate::constraint::{self, Penalty};
+pub use crate::constraint::{self, Constrained, Penalty};
 pub use crate::engine::{
     AsyncEngine, Batch, Engine, Evaluated, FitnessFunction, NanPolicy, Outcome, Stop, StopReason,
 };

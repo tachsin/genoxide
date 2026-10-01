@@ -68,6 +68,15 @@ pub const FUNCTIONS: &[Function] = &[
         },
     },
     Function {
+        name: "volume",
+        description: "real: the sum of c_j / x_j, c_j = 1 + (j mod 9), and the violation of sum(x) <= n for n genes (minimize; with `gradient = true` and `constraints = 1`, its gradient, then the constraint's value sum(x) - n and its gradient, for mma)",
+        score: |x| {
+            let mut gradient = vec![0.0; x.len()];
+            let value = volume(x, &mut gradient);
+            vec![value, (x.iter().sum::<f64>() - x.len() as f64).max(0.0)]
+        },
+    },
+    Function {
         name: "inversions",
         description: "permutation: the number of pairs out of order (minimize, 0 when sorted)",
         score: |x| {
@@ -104,6 +113,23 @@ pub const FUNCTIONS: &[Function] = &[
 /// A function's value, its gradient written into the second argument.
 pub type WithGradient = fn(&[f64], &mut [f64]) -> f64;
 
+// the sum of c_j / x_j, c_j = 1 + (j mod 9), its gradient written into `gradient`
+fn volume(x: &[f64], gradient: &mut [f64]) -> f64 {
+    let mut value = 0.0;
+    for (j, (&xj, derivative)) in x.iter().zip(gradient.iter_mut()).enumerate() {
+        let cost = 1.0 + (j % 9) as f64;
+        value += cost / xj;
+        *derivative = -cost / (xj * xj);
+    }
+    value
+}
+
+/// The number of inequality constraints whose values and gradients a built-in function writes
+/// after its gradient: 1 for `volume`, sum(x) - n <= 0.
+pub fn constraints_of(name: &str) -> usize {
+    usize::from(name == "volume")
+}
+
 /// The value and gradient of a built-in function with the gradient protocol: genoxide's test
 /// problem of the same name, with its analytic gradient, for the real-valued smooth ones.
 pub fn gradient_of(name: &str) -> Option<WithGradient> {
@@ -122,6 +148,7 @@ pub fn gradient_of(name: &str) -> Option<WithGradient> {
         "rastrigin" => Some(|x, gradient| with(Rastrigin::new(x.len()), x, gradient)),
         "rosenbrock" => Some(|x, gradient| with(Rosenbrock::new(x.len()), x, gradient)),
         "ackley" => Some(|x, gradient| with(Ackley::new(x.len()), x, gradient)),
+        "volume" => Some(volume),
         _ => None,
     }
 }
@@ -136,13 +163,14 @@ pub fn serve(name: &str, gradient: bool) -> Result<(), String> {
     let with_gradient = if gradient {
         Some(gradient_of(name).ok_or_else(|| {
             format!(
-                "the built-in fitness `{name}` has no gradient; sphere, rastrigin, rosenbrock and \
-                 ackley do"
+                "the built-in fitness `{name}` has no gradient; sphere, rastrigin, rosenbrock, \
+                 ackley and volume do"
             )
         })?)
     } else {
         None
     };
+    let constrained = constraints_of(name) > 0;
     let mut derivatives = Vec::new();
     let stdin = std::io::stdin().lock();
     let mut stdout = std::io::BufWriter::new(std::io::stdout().lock());
@@ -164,10 +192,17 @@ pub fn serve(name: &str, gradient: bool) -> Result<(), String> {
                 derivatives.clear();
                 derivatives.resize(genes.len(), 0.0);
                 let value = evaluate(&genes, &mut derivatives);
-                std::iter::once(value)
+                let mut numbers: Vec<String> = std::iter::once(value)
                     .chain(derivatives.iter().copied())
                     .map(|number| format!("{number:?}"))
-                    .collect()
+                    .collect();
+                // `volume`'s constraint, sum(x) - n <= 0, and its gradient
+                if constrained {
+                    let sum = genes.iter().sum::<f64>() - genes.len() as f64;
+                    numbers.push(format!("{sum:?}"));
+                    numbers.extend(std::iter::repeat_n("1.0".to_string(), genes.len()));
+                }
+                numbers
             }
             None => (function.score)(&genes)
                 .iter()

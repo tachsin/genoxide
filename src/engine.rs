@@ -537,8 +537,11 @@ pub struct Engine<'o, A: Algorithm, F> {
     controls: Vec<Control<'o, A>>,
     results: Vec<Result<Fitness>>,
     scores: Vec<Fitness>,
-    // the gradients of the last evaluations, row-major, when the algorithm wants them
+    // the gradients, inequality constraints' values and their Jacobians of the last
+    // evaluations, row-major, when the algorithm wants them
     gradients: Vec<f64>,
+    inequalities: Vec<f64>,
+    jacobians: Vec<f64>,
     // the info returned with the last evaluations, with their genomes
     evaluated_infos: Vec<(A::Genome, Info)>,
     // the info of the population, the discarded individuals and the best
@@ -609,6 +612,8 @@ where
             results: Vec::new(),
             scores: Vec::new(),
             gradients: Vec::new(),
+            inequalities: Vec::new(),
+            jacobians: Vec::new(),
             evaluated_infos: Vec::new(),
             infos: InfoStore::default(),
             idle: 0,
@@ -793,7 +798,7 @@ where
     /// - [`Error::FitnessCount`] if a [`Batch`] returns a different number of scores than genomes.
     /// - [`Error::InvalidSetting`] if the algorithm wants an extra, such as a gradient, that the
     ///   fitness function doesn't [provide](FitnessFunction::provides), and
-    ///   [`Error::InvalidGenome`] if it wants the gradients of genomes of different lengths in one
+    ///   [`Error::InvalidGenome`] if it wants the extras of genomes of different lengths in one
     ///   ask.
     /// - The errors of the algorithm's [`prepare`](Algorithm::prepare), its
     ///   [`tell`](Algorithm::tell) or [`tell_evaluations`](Algorithm::tell_evaluations), of the
@@ -865,9 +870,17 @@ where
                 self.evaluate()?;
                 self.algorithm.tell(&self.scores)?;
             } else {
-                let dimensions = self.evaluate_with_extras(wanted)?;
-                let gradients = wanted.gradient.then_some(self.gradients.as_slice());
-                let evaluations = Evaluations::from_parts(&self.scores, gradients, dimensions);
+                let (dimensions, constraints) = self.evaluate_with_extras(wanted)?;
+                let evaluations = Evaluations::from_parts(
+                    &self.scores,
+                    wanted.gradient.then_some(self.gradients.as_slice()),
+                    wanted.inequalities.then_some(self.inequalities.as_slice()),
+                    wanted
+                        .constraint_jacobian
+                        .then_some(self.jacobians.as_slice()),
+                    dimensions,
+                    constraints,
+                );
                 self.algorithm.tell_evaluations(&evaluations)?;
             }
             let reevaluated = evaluated && self.algorithm.generation() == generation;
@@ -994,18 +1007,25 @@ where
     }
 
     // evaluates the asked genomes with the `wanted` extras: the fitness into `self.scores`, the
-    // gradients into `self.gradients`, a row per genome; returns the length of a row. Each genome
-    // writes its own row, so parallel and batch evaluation give the same bits as sequential.
+    // gradients, constraint values and Jacobians into their buffers, a row per genome; returns the
+    // number of genes and of constraints. Each genome writes its own rows, so parallel and batch
+    // evaluation give the same bits as sequential.
     #[inline(never)]
-    fn evaluate_with_extras(&mut self, wanted: Wanted) -> Result<usize> {
+    fn evaluate_with_extras(&mut self, wanted: Wanted) -> Result<(usize, usize)> {
         let fitness = &self.fitness;
-        if let Some(missing) = wanted.missing_from(fitness.provides()) {
+        let provided = fitness.provides();
+        if let Some(missing) = wanted.missing_from(provided) {
+            let fix = if wanted.gradient && !provided.gradient {
+                "supply it, e.g. with `Differentiable`, or let the algorithm compute it by finite \
+                 differences"
+            } else {
+                "supply them, e.g. with `Constrained`"
+            };
             return Err(Error::InvalidSetting {
                 setting: "fitness",
                 reason: format!(
-                    "the algorithm wants the {missing} of the score, which the fitness function \
-                     doesn't provide: supply it, e.g. with `Differentiable`, or let the algorithm \
-                     compute it by finite differences"
+                    "the algorithm wants the {missing}, which the fitness function doesn't \
+                     provide: {fix}"
                 ),
             });
         }
@@ -1013,20 +1033,48 @@ where
         let dimensions = candidates.get(0).map_or(0, Genome::len);
         if candidates.iter().any(|genome| genome.len() != dimensions) {
             return Err(Error::InvalidGenome {
-                reason: "the genomes of an ask that wants gradients must have the same length"
+                reason: "the genomes of an ask that wants extras must have the same length"
                     .to_string(),
             });
         }
-        let width = if wanted.gradient { dimensions } else { 0 };
-        self.gradients.clear();
-        self.gradients.resize(candidates.len() * width, 0.0);
-        let gradients = &mut self.gradients;
-        if fitness.is_batch() {
-            let mut batch = if wanted.gradient {
-                BatchExtras::with_gradients(gradients, width)
+        let constraints = if wanted.inequalities || wanted.constraint_jacobian {
+            provided.inequalities
+        } else {
+            0
+        };
+        let widths = Widths {
+            gradient: if wanted.gradient { dimensions } else { 0 },
+            inequalities: if wanted.inequalities { constraints } else { 0 },
+            jacobian: if wanted.constraint_jacobian {
+                constraints * dimensions
             } else {
-                BatchExtras::none()
-            };
+                0
+            },
+        };
+        let count = candidates.len();
+        for (buffer, width) in [
+            (&mut self.gradients, widths.gradient),
+            (&mut self.inequalities, widths.inequalities),
+            (&mut self.jacobians, widths.jacobian),
+        ] {
+            buffer.clear();
+            buffer.resize(count * width, 0.0);
+        }
+        let (gradients, inequalities, jacobians) = (
+            &mut self.gradients,
+            &mut self.inequalities,
+            &mut self.jacobians,
+        );
+        if fitness.is_batch() {
+            let mut batch = BatchExtras::new(
+                wanted.gradient.then_some(gradients.as_mut_slice()),
+                wanted.inequalities.then_some(inequalities.as_mut_slice()),
+                wanted
+                    .constraint_jacobian
+                    .then_some(jacobians.as_mut_slice()),
+                dimensions,
+                constraints,
+            );
             evaluate_batch(
                 candidates,
                 |genomes| fitness.evaluate_batch_with(genomes, &mut batch),
@@ -1034,15 +1082,12 @@ where
                 &mut self.evaluated_infos,
                 IntoFitness::into_evaluation,
             )?;
-        } else if self.parallel && width > 0 {
+        } else if self.parallel && count > 1 {
             evaluate_rows_parallel(
                 candidates,
-                gradients,
-                width,
-                &|genome: &A::Genome, row: &mut [f64]| {
-                    fitness
-                        .evaluate_with(genome, &mut extras_for(wanted, row))
-                        .into_evaluation()
+                rows(wanted, widths, gradients, inequalities, jacobians, count),
+                &|genome: &A::Genome, extras: &mut Extras<'_>| {
+                    fitness.evaluate_with(genome, extras).into_evaluation()
                 },
                 &mut self.results,
                 &mut self.evaluated_infos,
@@ -1051,10 +1096,18 @@ where
             self.results.clear();
             self.evaluated_infos.clear();
             for (position, genome) in candidates.iter().enumerate() {
-                let row = &mut gradients[position * width..(position + 1) * width];
-                let (result, info) = fitness
-                    .evaluate_with(genome, &mut extras_for(wanted, row))
-                    .into_evaluation();
+                let mut extras = Extras::new(
+                    wanted
+                        .gradient
+                        .then(|| row(gradients, widths.gradient, position)),
+                    wanted
+                        .inequalities
+                        .then(|| row(inequalities, widths.inequalities, position)),
+                    wanted
+                        .constraint_jacobian
+                        .then(|| row(jacobians, widths.jacobian, position)),
+                );
+                let (result, info) = fitness.evaluate_with(genome, &mut extras).into_evaluation();
                 if let Some(info) = info {
                     self.evaluated_infos.push((genome.clone(), info));
                 }
@@ -1066,9 +1119,18 @@ where
         self.scores.clear();
         let mut first_error = None;
         for (position, result) in self.results.drain(..).enumerate() {
-            let row = &self.gradients[position * width..(position + 1) * width];
+            let nan = |buffer: &[f64], width: usize| {
+                buffer[position * width..(position + 1) * width]
+                    .iter()
+                    .any(|value| value.is_nan())
+            };
             let result = match result {
-                Ok(fitness) if fitness.is_valid() && row.iter().any(|value| value.is_nan()) => {
+                Ok(fitness)
+                    if fitness.is_valid()
+                        && (nan(&self.gradients, widths.gradient)
+                            || nan(&self.inequalities, widths.inequalities)
+                            || nan(&self.jacobians, widths.jacobian)) =>
+                {
                     Err(Error::NanFitness)
                 }
                 result => result,
@@ -1082,40 +1144,70 @@ where
                 }
             });
         }
-        first_error.map_or(Ok(dimensions), Err)
+        first_error.map_or(Ok((dimensions, constraints)), Err)
     }
 }
 
-// the buffers of one evaluation for the `wanted` extras: `row` for the gradient
-fn extras_for(wanted: Wanted, row: &mut [f64]) -> Extras<'_> {
-    if wanted.gradient {
-        Extras::with_gradient(row)
-    } else {
-        Extras::none()
-    }
+// the lengths of the rows of one genome's extras in the engine's buffers: 0 for one not wanted
+#[derive(Clone, Copy)]
+struct Widths {
+    gradient: usize,
+    inequalities: usize,
+    jacobian: usize,
 }
 
-// evaluates every candidate in parallel with its own row of `rows` (`width` values each), into
-// `results` in order, and the info returned into `infos`, with a copy of its genome
+// the row at `position` of a buffer of rows of `width` values
+fn row(buffer: &mut [f64], width: usize, position: usize) -> &mut [f64] {
+    &mut buffer[position * width..(position + 1) * width]
+}
+
+// one `Extras` per genome, with its rows of the wanted buffers, for parallel evaluation
+fn rows<'b>(
+    wanted: Wanted,
+    widths: Widths,
+    gradients: &'b mut [f64],
+    inequalities: &'b mut [f64],
+    jacobians: &'b mut [f64],
+    count: usize,
+) -> Vec<Extras<'b>> {
+    let (mut gradients, mut inequalities, mut jacobians) = (gradients, inequalities, jacobians);
+    let mut rows = Vec::with_capacity(count);
+    for _ in 0..count {
+        let (gradient, rest) = std::mem::take(&mut gradients).split_at_mut(widths.gradient);
+        gradients = rest;
+        let (values, rest) = std::mem::take(&mut inequalities).split_at_mut(widths.inequalities);
+        inequalities = rest;
+        let (jacobian, rest) = std::mem::take(&mut jacobians).split_at_mut(widths.jacobian);
+        jacobians = rest;
+        rows.push(Extras::new(
+            wanted.gradient.then_some(gradient),
+            wanted.inequalities.then_some(values),
+            wanted.constraint_jacobian.then_some(jacobian),
+        ));
+    }
+    rows
+}
+
+// evaluates every candidate in parallel with its own buffers of `rows`, into `results` in order,
+// and the info returned into `infos`, with a copy of its genome
 #[cfg(feature = "parallel")]
 fn evaluate_rows_parallel<G, T, E>(
     candidates: Candidates<'_, G>,
-    rows: &mut [f64],
-    width: usize,
+    mut rows: Vec<Extras<'_>>,
     evaluate: &E,
     results: &mut Vec<T>,
     infos: &mut Vec<(G, Info)>,
 ) where
     G: Genome,
     T: Send,
-    E: Fn(&G, &mut [f64]) -> (T, Option<Info>) + Sync,
+    E: Fn(&G, &mut Extras<'_>) -> (T, Option<Info>) + Sync,
 {
     use rayon::prelude::*;
     let mut found = Vec::new();
     // unzipping an indexed parallel iterator keeps the order, whatever the thread count
-    rows.par_chunks_mut(width)
+    rows.par_iter_mut()
         .enumerate()
-        .map(|(position, row)| evaluate(candidates.get(position).expect("in bounds"), row))
+        .map(|(position, extras)| evaluate(candidates.get(position).expect("in bounds"), extras))
         .unzip_into_vecs(results, &mut found);
     infos.clear();
     for (genome, info) in candidates.iter().zip(found) {
@@ -1128,8 +1220,7 @@ fn evaluate_rows_parallel<G, T, E>(
 #[cfg(not(feature = "parallel"))]
 fn evaluate_rows_parallel<G, T, E>(
     _: Candidates<'_, G>,
-    _: &mut [f64],
-    _: usize,
+    _: Vec<Extras<'_>>,
     _: &E,
     _: &mut Vec<T>,
     _: &mut Vec<(G, Info)>,

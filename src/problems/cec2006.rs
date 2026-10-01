@@ -44,7 +44,7 @@
 #![allow(clippy::excessive_precision)]
 
 use super::{Constraints, Optimum, Problem};
-use crate::engine::FitnessFunction;
+use crate::engine::{Extras, FitnessFunction, Provided};
 use crate::genome::{Real, Reals};
 use crate::math;
 
@@ -84,6 +84,42 @@ macro_rules! cec2006 {
             }
         }
     };
+    // a problem with inequalities only, which gives their values
+    ($name:ident, inequalities = $count:literal) => {
+        impl FitnessFunction<Reals> for $name {
+            type Output = (f64, f64);
+
+            /// The value of `x` and its constraint violation, 0 when it's feasible.
+            ///
+            /// # Panics
+            ///
+            /// If `x` has fewer genes than the problem's dimensions.
+            fn evaluate(&self, x: &Reals) -> (f64, f64) {
+                (self.value(x), self.constraints(x).violation(0.0))
+            }
+
+            /// The values of its inequality constraints `gᵢ(x) ≤ 0`, in the order of
+            /// [`constraints`](Problem::constraints).
+            fn provides(&self) -> Provided {
+                Provided::NOTHING.with_inequalities($count)
+            }
+
+            /// As [`evaluate`](FitnessFunction::evaluate), with the constraints' values if
+            /// they're wanted.
+            ///
+            /// # Panics
+            ///
+            /// If `x` has fewer genes than the problem's dimensions, or the buffer for the
+            /// constraints' values has another length than their number.
+            fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> (f64, f64) {
+                let constraints = self.constraints(x);
+                if let Some(g) = extras.inequalities() {
+                    g.copy_from_slice(constraints.inequalities());
+                }
+                (self.value(x), constraints.violation(0.0))
+            }
+        }
+    };
 }
 
 // ---- g01 -----------------------------------------------------------------------------------------
@@ -108,7 +144,7 @@ impl G01 {
     }
 }
 
-cec2006!(G01, |_problem| 0.0);
+cec2006!(G01, inequalities = 9);
 
 impl Problem for G01 {
     type Representation = Real;
@@ -193,7 +229,7 @@ impl G02 {
     }
 }
 
-cec2006!(G02, |_problem| 0.0);
+cec2006!(G02, inequalities = 2);
 
 impl Problem for G02 {
     type Representation = Real;
@@ -358,7 +394,7 @@ impl G04 {
     }
 }
 
-cec2006!(G04, |_problem| 0.0);
+cec2006!(G04, inequalities = 6);
 
 impl Problem for G04 {
     type Representation = Real;
@@ -520,7 +556,7 @@ impl G06 {
     }
 }
 
-cec2006!(G06, |_problem| 0.0);
+cec2006!(G06, inequalities = 2);
 
 impl Problem for G06 {
     type Representation = Real;
@@ -593,7 +629,7 @@ impl G07 {
     }
 }
 
-cec2006!(G07, |_problem| 0.0);
+cec2006!(G07, inequalities = 8);
 
 impl Problem for G07 {
     type Representation = Real;
@@ -677,7 +713,7 @@ impl G08 {
     }
 }
 
-cec2006!(G08, |_problem| 0.0);
+cec2006!(G08, inequalities = 2);
 
 impl Problem for G08 {
     type Representation = Real;
@@ -744,7 +780,7 @@ impl G09 {
     }
 }
 
-cec2006!(G09, |_problem| 0.0);
+cec2006!(G09, inequalities = 4);
 
 impl Problem for G09 {
     type Representation = Real;
@@ -823,7 +859,7 @@ impl G10 {
     }
 }
 
-cec2006!(G10, |_problem| 0.0);
+cec2006!(G10, inequalities = 6);
 
 impl Problem for G10 {
     type Representation = Real;
@@ -984,7 +1020,7 @@ impl G12 {
     }
 }
 
-cec2006!(G12, |_problem| 0.0);
+cec2006!(G12, inequalities = 1);
 
 impl Problem for G12 {
     type Representation = Real;
@@ -1417,7 +1453,7 @@ impl G16 {
     }
 }
 
-cec2006!(G16, |_problem| 0.0);
+cec2006!(G16, inequalities = 38);
 
 impl Problem for G16 {
     type Representation = Real;
@@ -1614,7 +1650,7 @@ impl G18 {
     }
 }
 
-cec2006!(G18, |_problem| 0.0);
+cec2006!(G18, inequalities = 13);
 
 impl Problem for G18 {
     type Representation = Real;
@@ -1734,7 +1770,7 @@ impl G19 {
     }
 }
 
-cec2006!(G19, |_problem| 0.0);
+cec2006!(G19, inequalities = 5);
 
 impl Problem for G19 {
     type Representation = Real;
@@ -2334,7 +2370,7 @@ impl G24 {
     }
 }
 
-cec2006!(G24, |_problem| 0.0);
+cec2006!(G24, inequalities = 2);
 
 impl Problem for G24 {
     type Representation = Real;

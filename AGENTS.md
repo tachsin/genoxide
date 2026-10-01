@@ -41,13 +41,15 @@ fn main() -> genoxide::Result<()> {
 | A smooth function of reals, a local minimum to many digits, any number of genes | `Real::new(...)`, its box the bounds | `Reals` | none: `Lbfgsb` with the gradient ([template](#l-bfgs-b-smooth-functions-with-a-gradient)) | none |
 | A neural network's weights (neuroevolution) | `nn::Mlp::new([4, 8, 1], nn::Activation::Tanh)?.representation(-1.0..=1.0)?`, `nn::Elman` (recurrent) ([template](#neuroevolution-a-networks-weights-by-cma-es)) | `Reals` | none: `Cmaes` (up to a few hundred weights), `OpenEs` (thousands and more) | none |
 | A smooth function of many reals, its gradient noisy (mini-batches) or a step set by a learning-rate schedule (model fitting, up to millions of parameters) | `Real::uniform(n, lo..=hi)` ([template](#first-order-methods-adam-momentum-nesterov)) | `Reals` | none: `FirstOrder` | none |
+| Smooth, with gradients: very many reals (up to millions), few inequality constraints | `Real::uniform(n, lo..=hi)` ([template](#many-variables-few-constraints-mma)) | `Reals` | none: `Mma` | none |
 
 | Continuous problem | Method |
 |---|---|
 | Smooth, gradient available (or n + 1 evaluations per gradient affordable) | `Lbfgsb`: fastest to many digits, any number of genes, bounds landed on exactly |
 | Smooth or not, a few genes, no gradient | `NelderMead` |
 | Multimodal, rotated or badly conditioned, up to a few hundred genes | `Cmaes` (with `Restarts::Ipop`), `De`; then `Lbfgsb` from the best to polish it |
-| Constrained beyond the box | `De` or `Ga` with `(score, violation)` (Deb's rules) |
+| Smooth, gradients of the score and of each constraint, very many genes and few inequality constraints | `Mma` (`Method::Gcmma` to converge from any start) |
+| Constrained beyond the box, without gradients | `De` or `Ga` with `(score, violation)` (Deb's rules) |
 
 Any selection fits any representation; usually `Tournament` of size 2 to 5. For trees, a selection against bloat (growth without better fitness): `DoubleTournament::new(7, 1.4)?`, `LexicographicTournament::new(7)?` (ties in fitness to the smaller), or `Tarpeian::new(select, rate)?`; size is `genome.len()`.
 
@@ -134,6 +136,7 @@ Stops: `Stop::target(score)` (at least as good), `generations(n)`, `evaluations(
 - **Test problems:** `problems::{Sphere, AxisParallelEllipsoid, Schwefel1_2, Rastrigin, Rosenbrock, Ackley, Griewank, Schwefel2_26, Levy, Zakharov, StyblinskiTang, Michalewicz, Schwefel2_21, Schwefel2_22, DixonPrice, Trid, Powell}::new(n)` (`Powell` takes a multiple of 4) and `problems::{Himmelblau, Branin, GoldsteinPrice, SixHumpCamel, Hartmann3, Hartmann6, Shekel5, Shekel7, Shekel10, Easom, Eggholder, SchafferF6, Beale, Booth, Matyas, Bohachevsky1, Bohachevsky2, Bohachevsky3, ThreeHumpCamel, Langermann, ShekelFoxholes, Kowalik}` are fitness functions for `Engine::new(algorithm, problem)`, all minimized. The `problems::Problem` trait gives `representation()` (the bounds), `optimum()` (`value()`, `solutions()`), `reference()`; `problems::all()` lists them as `Box<dyn DynProblem>`. Constrained, with fitness `(score, violation)` and `constraints(&x)` (`g <= 0`, then `h = 0`): `problems::cec2006::{G01, …, G24}` (equalities met within `EQUALITY_TOLERANCE` = 1e-4; `with_tolerance(δ)` for the problems with equalities, e.g. `G03::with_tolerance(δ)`), and `problems::engineering::{WeldedBeam, WeldedBeamRagsdell, PressureVessel, TensionCompressionSpring, SpeedReducer, ThreeBarTruss, CantileverBeam, CarSideImpact}`. `PressureVessel` and `SpeedReducer` round their discrete genes when evaluated; `design(&x)` gives the rounded design. `engineering::GearTrain` has an `Integer` genome and isn't in `all()`. `Optimum::is_proven()` is false for a best known value.
 - **Extras:** return `Evaluated::new(value, info)` (`value` any of the above, `info` any `Send + Sync + 'static` type, e.g. a struct with a penalty's terms) to keep what the fitness function computed. Read it by type: `outcome.best_info::<T>()`, `snapshot.info::<T>(genome)` and `snapshot.best_info::<T>()` in `.on_generation`, `hall_of_fame.info::<T>(genome)`, and in `MultiEngine` `snapshot.info` and `outcome.info(genome)` for the front; `None` for another type. Never used by the search. Kept by genome for the population, the discarded and the best (copies share it); not in checkpoints.
 - **Gradients:** `Differentiable(|x: &Reals, gradient: &mut [f64]| value)`, for gradient-based methods; see [Gradients](#gradients-supplying-them).
+- **Constraint values:** `Constrained::new(m, |x: &Reals, g: &mut [f64]| score)` writes the values of m constraints `gᵢ(x) <= 0`; `Constrained::differentiable(m, |x, gradient, g, jacobian| score)` also the gradient and the Jacobian (`jacobian[i * n + j]` = ∂gᵢ/∂xⱼ). Either is `(score, Σ max(0, gᵢ))` for any algorithm, and gives the values one by one to those that use them (`Mma`). The CEC 2006 problems with inequalities only and the engineering problems give their values (`problem.provides().inequalities`), not their gradients.
 - **Batch:** `Batch(|genomes: &[&G]| -> Vec<T>)` scores a generation in one call, in order (SIMD, GPU, remote), in `Engine` or `MultiEngine`; the slice can be empty. A wrong count is `Error::FitnessCount`. See `examples/gpu` (wgpu).
 
 ## Templates
@@ -897,7 +900,7 @@ Python: `gx.Lbfgsb(real, memory=10, gradients="auto", ...)`, `lbfgsb.run(f, grad
 
 ### Gradients: supplying them
 
-How fitness functions give gradients to gradient-based methods ([L-BFGS-B](#l-bfgs-b-smooth-functions-with-a-gradient), [first-order methods](#first-order-methods-adam-momentum-nesterov)). A gradient is of the score as returned (`∂score/∂xᵢ`), whatever the objective: no sign change when maximizing.
+How fitness functions give gradients to gradient-based methods ([L-BFGS-B](#l-bfgs-b-smooth-functions-with-a-gradient), [first-order methods](#first-order-methods-adam-momentum-nesterov), [MMA](#many-variables-few-constraints-mma)). A gradient is of the score as returned (`∂score/∂xᵢ`), whatever the objective: no sign change when maximizing.
 
 - `Differentiable(|x: &Reals, gradient: &mut [f64]| value)` writes the gradient (zeroed, one value per gene) and returns the value; any algorithm takes it as a plain fitness function. `Batch(Differentiable(|xs: &[&Reals], gradients: &mut [f64]| values))`: flat, row-major, a row per genome.
 - A `FitnessFunction` declares it with `fn provides(&self) -> Provided { Provided::GRADIENT }` and writes it in `fn evaluate_with(&self, x, extras: &mut Extras<'_>)` when `extras.gradient()` is `Some` (`genoxide::engine::{Extras, Provided}`); the value must be `evaluate`'s, to the bit.
@@ -905,7 +908,7 @@ How fitness functions give gradients to gradient-based methods ([L-BFGS-B](#l-bf
 - `gradient::check(&function, &x)?` compares a supplied gradient with central differences: `.largest()` about 1e-10 when right, `.worst_gene()`.
 - An algorithm's `gradient::Gradients` setting: `Auto` (default: supplied if provided, else forward differences, n evaluations per gradient, up to `gradient::AUTO_LIMIT` = 10⁴ genes), `Supplied` (an error at the start of a run without one), `Forward { step: None }`, `Central { step: None }` (2n per gradient, more accurate). Finite differences count towards `Stop::evaluations`.
 - A NaN in a gradient follows the `NanPolicy`: invalid fitness, or `Error::NanFitness`.
-- Writing an algorithm that uses gradients: `prepare(provided)` (call `gradients.resolve(provided, &real)?`), `wants()` (`Wanted::GRADIENT` for supplied ones), `tell_evaluations(&evaluations)` (`evaluations.gradient(i)`); for finite differences, ask the points of a `gradient::Stencil` with the current point in one round, and `stencil.gradient(f_x, &values, &mut gradient)?`.
+- Writing an algorithm that uses gradients: `prepare(provided)` (call `gradients.resolve(provided, &real)?`), `wants()` (`Wanted::GRADIENT` for supplied ones), `tell_evaluations(&evaluations)` (`evaluations.gradient(i)`); for finite differences, ask the points of a `gradient::Stencil` with the current point in one round, and `stencil.gradient(f_x, &values, &mut gradient)?`. Constraint values the same way: `provided.inequalities` (their number), `Wanted::GRADIENT.with_inequalities().with_constraint_jacobian()`, `evaluations.inequalities(i)` and `evaluations.constraint_jacobian(i)` (row-major, m × n).
 
 ```rust
 use genoxide::gradient::{self, Differentiable};
@@ -980,6 +983,59 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+### Many variables, few constraints: MMA
+
+`Mma` on `Real` genomes: Svanberg's method of moving asymptotes, for smooth problems with very many variables (up to millions) and few inequality constraints `gᵢ(x) <= 0` (up to a few hundred), from the gradient of the score and of every constraint (`Constrained::differentiable`, or `Differentiable` without constraints). Each iteration is one evaluation: convex, separable approximations around the current point, with two asymptotes per gene that move with the iterates, solved through their dual in the m multipliers: O(n·m) memory and work, no n × n matrix, nothing allocated after the first iteration. It stops as `StopReason::Converged` when the KKT residual or the step is within its tolerance; `mma.converged()` says which (`mma::Convergence::Kkt`, `Step`). A run that converges to a point infeasible by rounding ends with a restoration step onto the feasible side of its active constraints. Equality constraints aren't supported.
+
+| Setting | Default |
+|---|---|
+| `.method(mma::Method::Gcmma)` | `Mma`: one evaluation per iteration. `Gcmma` adds inner iterations (each an evaluation) until the approximations are conservative: it converges from any start, and where MMA cycles (around a minimum inside the bounds where the objective's gradient vanishes) |
+| `.constraint_cost(c)` | 1000: the cost of the artificial variable that relaxes each constraint; must exceed the multipliers at the solution, or the result is infeasible with a multiplier at `c` (`mma.multipliers()`) |
+| `.asymptote_initial(0.5)`, `.asymptote_decrease(0.7)`, `.asymptote_increase(1.2)`, `.move_limit(0.5)` | Svanberg's: fractions of each gene's range, and the factors for oscillating and steady genes |
+| `.kkt_tolerance(t)`, `.step_tolerance(t)` | 1e-9 (the KKT residual, in the score's units), 1e-10 (of each range) |
+| `.restoration(false)` | on |
+| `.parallel_sums(true)` | off: the dual's sums on rayon's threads, the same bits; from about 10⁵ genes |
+| `.initial_genome(genome)` | random |
+
+Scale the genes to ranges of about 0.1 to 100 and the score to about 1 to 100, as Svanberg advises. `mma.multipliers()`, `kkt_residual()`, `iterations()`, `inner_iterations()`, `lower_asymptotes()`, `upper_asymptotes()`. See `examples/mma` (a million variables, about 2.5 s).
+
+```rust
+use genoxide::constraint::Constrained;
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    // minimize Σ cⱼ/xⱼ subject to Σ xⱼ <= n: the minimum is at xⱼ = n √cⱼ / Σ √cₖ
+    let n = 1_000;
+    let c: Vec<f64> = (0..n).map(|j| 1.0 + (j % 9) as f64).collect();
+    let problem = Constrained::differentiable(
+        1,
+        |x: &Reals, gradient: &mut [f64], g: &mut [f64], jacobian: &mut [f64]| {
+            let (mut value, mut sum) = (0.0, 0.0);
+            for j in 0..n {
+                value += c[j] / x[j];
+                gradient[j] = -c[j] / (x[j] * x[j]);
+                jacobian[j] = 1.0; // row i is constraint i's gradient: here ∂g₀/∂xⱼ
+                sum += x[j];
+            }
+            g[0] = sum - n as f64; // feasible at 0 or below
+            value
+        },
+    );
+    let mma = Mma::builder(Real::uniform(n, 0.01..=10.0)?)
+        .initial_genome(Reals::from(vec![0.5; n]))
+        .minimize()
+        .build()?;
+    let mut engine = Engine::new(mma, problem).stop_when(Stop::evaluations(500));
+    let outcome = engine.run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Converged);
+    assert!(outcome.best_fitness().is_feasible());
+    let roots: f64 = c.iter().map(|c| c.sqrt()).sum();
+    let multiplier = engine.algorithm().multipliers()[0]; // (Σ √cₖ / n)²
+    assert!((multiplier - (roots / n as f64).powi(2)).abs() < 1e-6);
+    Ok(())
+}
+```
+
 ### Ask / tell: evaluating outside the engine
 
 For fitness computed elsewhere (another process, async code).
@@ -1014,7 +1070,7 @@ When the fitness function changes during a run (adaptive penalty weights, a retr
 
 ### Without Rust: the `genoxide` program
 
-`cargo install genoxide --features cli`; `genoxide run run.toml` (or JSON). Each worker runs `fitness.command`: a genome per stdin line in, objective values (then an optional violation) per stdout line out. The result is JSON on stdout. Settings: [docs/cli.md](docs/cli.md).
+`cargo install genoxide --features cli`; `genoxide run run.toml` (or JSON). Each worker runs `fitness.command`: a genome per stdin line in, objective values (then an optional violation) per stdout line out; with `gradient = true` and `constraints = m` in `[fitness]`, the score, its gradient, the m constraint values and their Jacobian (for `mma`). The result is JSON on stdout. Settings: [docs/cli.md](docs/cli.md).
 
 ```toml
 [genome]
@@ -1027,7 +1083,7 @@ command = ["python3", "fitness.py"]   # or builtin = "rastrigin"
 objectives = ["minimize"]
 
 [algorithm]
-type = "ga"            # ga, steady-ga, de, cmaes, pso, local-search, nelder-mead, lbfgsb, first-order, nsga2
+type = "ga"            # ga, steady-ga, de, cmaes, pso, local-search, nelder-mead, lbfgsb, first-order, mma, nsga2
 population_size = 50
 select = { type = "tournament", size = 3 }
 crossover = { type = "simulated-binary", eta = 15.0 }
@@ -1063,6 +1119,8 @@ every = 50
 | Best solution infeasible | Run longer, check the constraints, or add a feasible genome with `.initial_genomes(...)` |
 | Adam hovers near the minimum and doesn't converge | Lower the learning rate over the run in `.control` (`set_learning_rate`), e.g. halved every few hundred steps |
 | `FirstOrder` diverges to the bounds, or its loss grows | A smaller learning rate (gradient descent and momentum need `lr` below 2 / the largest curvature), or Adam, whose steps don't scale with the gradient |
+| MMA ends infeasible, with a multiplier at the constraint cost | A `.constraint_cost(c)` above the multipliers (or the constraints scaled down), or a feasible `.initial_genome(...)` |
+| MMA cycles without converging (stops by `Stop::evaluations`) | `.method(mma::Method::Gcmma)`; genes scaled to ranges of 0.1 to 100 |
 | Nelder-Mead converges to a local minimum, or crawls in many genes | `.restarts(local::Restarts::Random { times })`; above about 10 genes, CMA-ES first, then Nelder-Mead from its best (`.initial_genome(...)`) |
 | L-BFGS-B ends with `converged()` = `Some(Criterion::LineSearch)` far from a minimum | Check the gradient with `gradient::check(&f, &x)?`; with forward differences, a `gradient_tolerance` above their accuracy (about 1e-7 of f's scale), or `Gradients::Central` |
 | L-BFGS-B takes many evaluations per iteration | Forward differences cost n + 1 per round: supply the gradient (`Differentiable`, `FitnessFunction::provides`) |
@@ -1082,4 +1140,4 @@ every = 50
 - **Reproducible:** a seed gives the same results on every platform and thread count, parallel or not. The exception is a fitness function that calls the platform's `sin`, `cos`, `exp` and the like (`f64::sin`, numpy): their last bit can differ between operating systems, and long runs drift apart. `genoxide::math::{sin, cos, tan, exp, ln, powf, powi, atan2, ...}` are the same to the bit everywhere, at native speed; `problems` and `multi::problems` use them.
 - **Ties:** the earlier individual wins.
 - **The best is kept:** `outcome.best()` is the best individual ever evaluated.
-- **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `problems` or `multi::problems` constructor with too few dimensions or variables (or a radius that isn't above 0, or none from the paper for `C1Dtlz3::new` and `ConvexC2Dtlz2::new`), a `Batch` returning no score for a single genome, a gradient slice of the wrong length for a test problem's `evaluate_with`, and an input, output or observation slice of the wrong length for an `nn` network or a `control` task.
+- **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `problems` or `multi::problems` constructor with too few dimensions or variables (or a radius that isn't above 0, or none from the paper for `C1Dtlz3::new` and `ConvexC2Dtlz2::new`), a `Batch` returning no score for a single genome, a gradient or constraint-values slice of the wrong length for a test problem's `evaluate_with`, and an input, output or observation slice of the wrong length for an `nn` network or a `control` task.

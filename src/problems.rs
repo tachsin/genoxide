@@ -83,7 +83,12 @@
 //!   the car side impact.
 //!
 //! [`Problem::constraints`] gives a constrained problem's constraint values, as `g(x) <= 0` and
-//! `h(x) = 0`.
+//! `h(x) = 0`. The problems with inequalities only (g01, g02, g04, g06 to g10, g12, g16, g18,
+//! g19, g24 and the engineering problems on [`Real`] genomes) also give their values to the
+//! algorithms that use them, such as [`Mma`](crate::algorithm::Mma): their
+//! [`provides`](FitnessFunction::provides) declares them, and
+//! [`evaluate_with`](FitnessFunction::evaluate_with) writes them. Their gradients aren't given:
+//! [`Constrained::differentiable`](crate::constraint::Constrained::differentiable) adds them.
 //!
 //! [`control`] holds control tasks instead of functions: the cart-pole and the double pole, with
 //! and without velocities, driven by a [`Policy`](control::Policy) such as a neural network of
@@ -339,7 +344,8 @@ pub trait DynProblem: Send + Sync {
     fn constraints(&self, genome: &Reals) -> Constraints;
 
     /// What the problem gives besides the fitness, as [`FitnessFunction::provides`]: the
-    /// gradient, for the smooth classic functions. Nothing by default.
+    /// gradient, for the smooth classic functions, and the constraints' values, for the
+    /// problems with inequalities only. Nothing by default.
     fn provides(&self) -> Provided {
         Provided::NOTHING
     }
@@ -614,6 +620,47 @@ mod tests {
                 }
             }
         }
+    }
+
+    // the problems with inequalities only give their values, those of `constraints`, with the
+    // same fitness; the others give none
+    #[test]
+    fn inequality_values_are_the_constraints() {
+        let mut rng = StreamRng::seed_from_u64(2);
+        let mut giving = Vec::new();
+        for problem in all() {
+            let real = problem.real();
+            let count = problem.provides().inequalities;
+            for _ in 0..50 {
+                let x = real.random_genome(&mut rng);
+                let constraints = problem.constraints(&x);
+                let only_inequalities =
+                    constraints.equalities().is_empty() && !constraints.inequalities().is_empty();
+                assert_eq!(
+                    count > 0,
+                    only_inequalities,
+                    "{}: gives {count} values",
+                    problem.name()
+                );
+                if count == 0 {
+                    break;
+                }
+                assert_eq!(
+                    constraints.inequalities().len(),
+                    count,
+                    "{}",
+                    problem.name()
+                );
+                let mut g = vec![f64::NAN; count];
+                let fitness = problem.evaluate_with(&x, &mut Extras::new(None, Some(&mut g), None));
+                assert_eq!(fitness, problem.evaluate(&x), "{}", problem.name());
+                assert_eq!(g, constraints.inequalities(), "{}", problem.name());
+            }
+            if count > 0 {
+                giving.push(problem.name());
+            }
+        }
+        assert_eq!(giving.len(), 13 + 8, "{giving:?}");
     }
 
     #[test]
