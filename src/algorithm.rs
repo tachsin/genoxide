@@ -51,6 +51,7 @@ pub use open_es::{OpenEs, OpenEsBuilder};
 pub use pso::{Pso, PsoBuilder, Topology};
 pub use steady::{Incremental, SteadyGa};
 
+use crate::engine::{Evaluations, Provided, Wanted};
 use crate::genome::Genome;
 use crate::{Fitness, Individual, Objective, Population, Result, StreamRng};
 
@@ -178,6 +179,45 @@ pub trait Algorithm {
     /// stop by their stop conditions.
     fn is_finished(&self) -> bool {
         false
+    }
+
+    /// Called by the [`Engine`](crate::Engine) once at the start of each run, with what the
+    /// fitness function [provides](crate::engine::FitnessFunction::provides) besides the fitness:
+    /// an algorithm that uses an extra, such as a gradient, resolves where it comes from here
+    /// (e.g. with [`Gradients::resolve`](crate::gradient::Gradients::resolve)), and fails for
+    /// what's missing. Nothing by default.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`](crate::Error::InvalidSetting) for an extra the algorithm needs
+    /// and the fitness function doesn't provide, with the fix in the reason.
+    #[inline]
+    fn prepare(&mut self, provided: Provided) -> Result<()> {
+        let _ = provided;
+        Ok(())
+    }
+
+    /// What the next [`ask`](Algorithm::ask) wants besides the fitness, such as the gradient at
+    /// each genome; between an ask and its tell, what that ask wants. The
+    /// [`Engine`](crate::Engine) calls it before every ask, and only what the fitness function
+    /// provides can be wanted. Nothing by default: the engine then evaluates as it would without
+    /// extras.
+    #[inline]
+    fn wants(&self) -> Wanted {
+        Wanted::NOTHING
+    }
+
+    /// The fitness and the [wanted](Algorithm::wants) extras of the genomes of the last
+    /// [`ask`](Algorithm::ask), in the same order: what the [`Engine`](crate::Engine) tells an
+    /// algorithm that wants extras, instead of [`tell`](Algorithm::tell). By default,
+    /// `tell(evaluations.fitness())`.
+    ///
+    /// # Errors
+    ///
+    /// As [`tell`](Algorithm::tell).
+    #[inline]
+    fn tell_evaluations(&mut self, evaluations: &Evaluations<'_>) -> Result<()> {
+        self.tell(evaluations.fitness())
     }
 }
 

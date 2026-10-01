@@ -13,11 +13,13 @@
 //! gets the whole generation in one call, e.g. for a GPU or a remote service.
 
 pub mod asynchronous;
+mod extras;
 mod info;
 pub mod stop;
 pub(crate) mod trace;
 
 pub use asynchronous::AsyncEngine;
+pub use extras::{BatchExtras, Evaluations, Extras, Provided, Wanted};
 pub use info::Evaluated;
 #[doc(hidden)]
 pub use info::Info;
@@ -98,6 +100,83 @@ pub trait FitnessFunction<G>: Sync {
     /// generation at once, e.g. on a GPU.
     fn evaluate_batch(&self, genomes: &[&G]) -> Vec<Self::Output> {
         genomes.iter().map(|genome| self.evaluate(genome)).collect()
+    }
+
+    /// What the function gives besides the fitness, such as the gradient of the score: nothing by
+    /// default. An algorithm that needs an extra checks it once per run in
+    /// [`Algorithm::prepare`]. Declare an extra here, and write it in
+    /// [`evaluate_with`](FitnessFunction::evaluate_with).
+    #[inline]
+    fn provides(&self) -> Provided {
+        Provided::NOTHING
+    }
+
+    /// The score of `genome`, with the extras that `extras` has buffers for (only ones that
+    /// [`provides`](FitnessFunction::provides) declares). The engine calls it instead of
+    /// [`evaluate`](FitnessFunction::evaluate) when the algorithm [wants](Algorithm::wants)
+    /// extras. The score must be the same as `evaluate`'s, to the bit. By default,
+    /// `evaluate(genome)`.
+    ///
+    /// ```
+    /// use genoxide::engine::{Extras, FitnessFunction, Provided};
+    /// use genoxide::genome::Reals;
+    ///
+    /// // the squared distance to a point, and its gradient
+    /// struct Distance {
+    ///     point: Vec<f64>,
+    /// }
+    ///
+    /// impl FitnessFunction<Reals> for Distance {
+    ///     type Output = f64;
+    ///
+    ///     fn evaluate(&self, x: &Reals) -> f64 {
+    ///         x.iter().zip(&self.point).map(|(x, p)| (x - p) * (x - p)).sum()
+    ///     }
+    ///
+    ///     fn provides(&self) -> Provided {
+    ///         Provided::GRADIENT
+    ///     }
+    ///
+    ///     fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> f64 {
+    ///         if let Some(gradient) = extras.gradient() {
+    ///             for ((g, x), p) in gradient.iter_mut().zip(x.iter()).zip(&self.point) {
+    ///                 *g = 2.0 * (x - p);
+    ///             }
+    ///         }
+    ///         self.evaluate(x)
+    ///     }
+    /// }
+    ///
+    /// let distance = Distance { point: vec![1.0, -2.0] };
+    /// let error = genoxide::gradient::check(&distance, &Reals::from(vec![0.5, 3.0]))?;
+    /// assert!(error.largest() < 1e-8);
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    ///
+    /// [`Differentiable`](crate::gradient::Differentiable) does this for a closure.
+    fn evaluate_with(&self, genome: &G, extras: &mut Extras<'_>) -> Self::Output {
+        let _ = extras;
+        self.evaluate(genome)
+    }
+
+    /// The scores of `genomes`, in their order, with the extras that `extras` has buffers for,
+    /// a row per genome. The engine calls it instead of
+    /// [`evaluate_batch`](FitnessFunction::evaluate_batch) for a batch function when the
+    /// algorithm wants extras. By default, `evaluate_batch(genomes)` without extras, and one
+    /// [`evaluate_with`](FitnessFunction::evaluate_with) each otherwise.
+    fn evaluate_batch_with(
+        &self,
+        genomes: &[&G],
+        extras: &mut BatchExtras<'_>,
+    ) -> Vec<Self::Output> {
+        if extras.wanted().is_empty() {
+            return self.evaluate_batch(genomes);
+        }
+        genomes
+            .iter()
+            .enumerate()
+            .map(|(position, genome)| self.evaluate_with(genome, &mut extras.get(position)))
+            .collect()
     }
 }
 
@@ -458,6 +537,8 @@ pub struct Engine<'o, A: Algorithm, F> {
     controls: Vec<Control<'o, A>>,
     results: Vec<Result<Fitness>>,
     scores: Vec<Fitness>,
+    // the gradients of the last evaluations, row-major, when the algorithm wants them
+    gradients: Vec<f64>,
     // the info returned with the last evaluations, with their genomes
     evaluated_infos: Vec<(A::Genome, Info)>,
     // the info of the population, the discarded individuals and the best
@@ -527,6 +608,7 @@ where
             controls: Vec::new(),
             results: Vec::new(),
             scores: Vec::new(),
+            gradients: Vec::new(),
             evaluated_infos: Vec::new(),
             infos: InfoStore::default(),
             idle: 0,
@@ -709,7 +791,12 @@ where
     /// - [`Error::InvalidFitness`] if the fitness function returns a negative constraint violation,
     ///   with any [`NanPolicy`]: that's a bug in the fitness function, not a result.
     /// - [`Error::FitnessCount`] if a [`Batch`] returns a different number of scores than genomes.
-    /// - The errors of the algorithm's [`tell`](Algorithm::tell), of the
+    /// - [`Error::InvalidSetting`] if the algorithm wants an extra, such as a gradient, that the
+    ///   fitness function doesn't [provide](FitnessFunction::provides), and
+    ///   [`Error::InvalidGenome`] if it wants the gradients of genomes of different lengths in one
+    ///   ask.
+    /// - The errors of the algorithm's [`prepare`](Algorithm::prepare), its
+    ///   [`tell`](Algorithm::tell) or [`tell_evaluations`](Algorithm::tell_evaluations), of the
     ///   [`control`](Engine::control) closures and of the checkpoint closure.
     ///
     /// If the algorithm has run before and a stop condition is already met, it returns that
@@ -732,6 +819,7 @@ where
             stop.validate()?;
         }
         validate_checkpoint(&self.checkpoint)?;
+        self.algorithm.prepare(self.fitness.provides())?;
         let _span = trace::run::<A>();
         if let Some(best) = self.algorithm.best() {
             // a run that continues: its stop condition may already be met
@@ -771,8 +859,17 @@ where
         let mut evaluated = self.algorithm.best().is_some();
         loop {
             let generation = self.algorithm.generation();
-            self.evaluate()?;
-            self.algorithm.tell(&self.scores)?;
+            let wanted = self.algorithm.wants();
+            if wanted.is_empty() {
+                // the path of every algorithm that wants no extras, as it always was
+                self.evaluate()?;
+                self.algorithm.tell(&self.scores)?;
+            } else {
+                let dimensions = self.evaluate_with_extras(wanted)?;
+                let gradients = wanted.gradient.then_some(self.gradients.as_slice());
+                let evaluations = Evaluations::from_parts(&self.scores, gradients, dimensions);
+                self.algorithm.tell_evaluations(&evaluations)?;
+            }
             let reevaluated = evaluated && self.algorithm.generation() == generation;
             evaluated = true;
             self.idle = if self.scores.is_empty() {
@@ -895,6 +992,151 @@ where
         }
         Ok(())
     }
+
+    // evaluates the asked genomes with the `wanted` extras: the fitness into `self.scores`, the
+    // gradients into `self.gradients`, a row per genome; returns the length of a row. Each genome
+    // writes its own row, so parallel and batch evaluation give the same bits as sequential.
+    #[inline(never)]
+    fn evaluate_with_extras(&mut self, wanted: Wanted) -> Result<usize> {
+        let fitness = &self.fitness;
+        if let Some(missing) = wanted.missing_from(fitness.provides()) {
+            return Err(Error::InvalidSetting {
+                setting: "fitness",
+                reason: format!(
+                    "the algorithm wants the {missing} of the score, which the fitness function \
+                     doesn't provide: supply it, e.g. with `Differentiable`, or let the algorithm \
+                     compute it by finite differences"
+                ),
+            });
+        }
+        let candidates = self.algorithm.ask();
+        let dimensions = candidates.get(0).map_or(0, Genome::len);
+        if candidates.iter().any(|genome| genome.len() != dimensions) {
+            return Err(Error::InvalidGenome {
+                reason: "the genomes of an ask that wants gradients must have the same length"
+                    .to_string(),
+            });
+        }
+        let width = if wanted.gradient { dimensions } else { 0 };
+        self.gradients.clear();
+        self.gradients.resize(candidates.len() * width, 0.0);
+        let gradients = &mut self.gradients;
+        if fitness.is_batch() {
+            let mut batch = if wanted.gradient {
+                BatchExtras::with_gradients(gradients, width)
+            } else {
+                BatchExtras::none()
+            };
+            evaluate_batch(
+                candidates,
+                |genomes| fitness.evaluate_batch_with(genomes, &mut batch),
+                &mut self.results,
+                &mut self.evaluated_infos,
+                IntoFitness::into_evaluation,
+            )?;
+        } else if self.parallel && width > 0 {
+            evaluate_rows_parallel(
+                candidates,
+                gradients,
+                width,
+                &|genome: &A::Genome, row: &mut [f64]| {
+                    fitness
+                        .evaluate_with(genome, &mut extras_for(wanted, row))
+                        .into_evaluation()
+                },
+                &mut self.results,
+                &mut self.evaluated_infos,
+            );
+        } else {
+            self.results.clear();
+            self.evaluated_infos.clear();
+            for (position, genome) in candidates.iter().enumerate() {
+                let row = &mut gradients[position * width..(position + 1) * width];
+                let (result, info) = fitness
+                    .evaluate_with(genome, &mut extras_for(wanted, row))
+                    .into_evaluation();
+                if let Some(info) = info {
+                    self.evaluated_infos.push((genome.clone(), info));
+                }
+                self.results.push(result);
+            }
+        }
+        // NaN in an extra follows the NaN policy, as in the score: the whole evaluation is invalid
+        // or an error. The first error in order is returned, after every genome is evaluated.
+        self.scores.clear();
+        let mut first_error = None;
+        for (position, result) in self.results.drain(..).enumerate() {
+            let row = &self.gradients[position * width..(position + 1) * width];
+            let result = match result {
+                Ok(fitness) if fitness.is_valid() && row.iter().any(|value| value.is_nan()) => {
+                    Err(Error::NanFitness)
+                }
+                result => result,
+            };
+            self.scores.push(match (result, self.nan_policy) {
+                (Ok(fitness), _) => fitness,
+                (Err(Error::NanFitness), NanPolicy::Invalid) => Fitness::invalid(),
+                (Err(error), _) => {
+                    first_error.get_or_insert(error);
+                    Fitness::invalid()
+                }
+            });
+        }
+        first_error.map_or(Ok(dimensions), Err)
+    }
+}
+
+// the buffers of one evaluation for the `wanted` extras: `row` for the gradient
+fn extras_for(wanted: Wanted, row: &mut [f64]) -> Extras<'_> {
+    if wanted.gradient {
+        Extras::with_gradient(row)
+    } else {
+        Extras::none()
+    }
+}
+
+// evaluates every candidate in parallel with its own row of `rows` (`width` values each), into
+// `results` in order, and the info returned into `infos`, with a copy of its genome
+#[cfg(feature = "parallel")]
+fn evaluate_rows_parallel<G, T, E>(
+    candidates: Candidates<'_, G>,
+    rows: &mut [f64],
+    width: usize,
+    evaluate: &E,
+    results: &mut Vec<T>,
+    infos: &mut Vec<(G, Info)>,
+) where
+    G: Genome,
+    T: Send,
+    E: Fn(&G, &mut [f64]) -> (T, Option<Info>) + Sync,
+{
+    use rayon::prelude::*;
+    let mut found = Vec::new();
+    // unzipping an indexed parallel iterator keeps the order, whatever the thread count
+    rows.par_chunks_mut(width)
+        .enumerate()
+        .map(|(position, row)| evaluate(candidates.get(position).expect("in bounds"), row))
+        .unzip_into_vecs(results, &mut found);
+    infos.clear();
+    for (genome, info) in candidates.iter().zip(found) {
+        if let Some(info) = info {
+            infos.push((genome.clone(), info));
+        }
+    }
+}
+
+#[cfg(not(feature = "parallel"))]
+fn evaluate_rows_parallel<G, T, E>(
+    _: Candidates<'_, G>,
+    _: &mut [f64],
+    _: usize,
+    _: &E,
+    _: &mut Vec<T>,
+    _: &mut Vec<(G, Info)>,
+) where
+    G: Genome,
+{
+    unreachable!("parallel evaluation can't be enabled without the `parallel` feature")
 }
 
 // evaluates every candidate with one call of a batch function into `results`, in order, and the

@@ -23,6 +23,7 @@ pub use crate::genome::{
     AdaptiveReal, AdaptiveReals, Binary, Bits, Genome, Integer, Integers, Order, Permutation, Real,
     Reals, Representation,
 };
+pub use crate::gradient::{self, Differentiable};
 pub use crate::multi::{
     self, Moead, MultiEngine, MultiObjectiveAlgorithm, Nsga2, Nsga3, Scores, SmsEmoa, Spea2,
 };
