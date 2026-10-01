@@ -20,7 +20,7 @@ use pyo3::types::PyDict;
 use serde::Deserialize;
 
 /// A problem, as `_describe()` of a `gx.problems` class gives it.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Config {
     Sphere {
@@ -100,6 +100,68 @@ pub enum Config {
     Langermann {},
     ShekelFoxholes {},
     Kowalik {},
+    SumOfDifferentPowers {
+        dimensions: usize,
+    },
+    Step {
+        dimensions: usize,
+    },
+    Quartic {
+        dimensions: usize,
+        noisy: bool,
+    },
+    Penalized1 {
+        dimensions: usize,
+    },
+    Penalized2 {
+        dimensions: usize,
+    },
+    HighConditionedElliptic {
+        dimensions: usize,
+    },
+    BentCigar {
+        dimensions: usize,
+    },
+    Discus {
+        dimensions: usize,
+    },
+    DifferentPowers {
+        dimensions: usize,
+    },
+    BucheRastrigin {
+        dimensions: usize,
+    },
+    NonContinuousRastrigin {
+        dimensions: usize,
+    },
+    Weierstrass {
+        dimensions: usize,
+    },
+    Katsuura {
+        dimensions: usize,
+    },
+    HappyCat {
+        dimensions: usize,
+    },
+    HgBat {
+        dimensions: usize,
+    },
+    SchafferF7 {
+        dimensions: usize,
+    },
+    RotatedHyperEllipsoid {
+        dimensions: usize,
+    },
+    /// A single-objective problem on real genomes, shifted.
+    Shifted {
+        problem: Box<Config>,
+        seed: u64,
+    },
+    /// A single-objective problem on real genomes, rotated.
+    Rotated {
+        problem: Box<Config>,
+        seed: u64,
+    },
     G01 {},
     G02 {},
     G03 {
@@ -1265,6 +1327,84 @@ fn build(config: Config) -> Result<Problem, String> {
         Config::Langermann {} => problems::boxed(problems::Langermann),
         Config::ShekelFoxholes {} => problems::boxed(problems::ShekelFoxholes),
         Config::Kowalik {} => problems::boxed(problems::Kowalik),
+        Config::SumOfDifferentPowers { dimensions } => problems::boxed(
+            problems::SumOfDifferentPowers::new(at_least(dimensions, 1, "SumOfDifferentPowers")?),
+        ),
+        Config::Step { dimensions } => {
+            problems::boxed(problems::Step::new(at_least(dimensions, 1, "Step")?))
+        }
+        Config::Quartic { dimensions, noisy } => {
+            let dimensions = at_least(dimensions, 1, "Quartic")?;
+            if noisy {
+                problems::boxed(problems::Quartic::noisy(dimensions))
+            } else {
+                problems::boxed(problems::Quartic::new(dimensions))
+            }
+        }
+        Config::Penalized1 { dimensions } => problems::boxed(problems::Penalized1::new(at_least(
+            dimensions,
+            1,
+            "Penalized1",
+        )?)),
+        Config::Penalized2 { dimensions } => problems::boxed(problems::Penalized2::new(at_least(
+            dimensions,
+            1,
+            "Penalized2",
+        )?)),
+        Config::HighConditionedElliptic { dimensions } => {
+            problems::boxed(problems::HighConditionedElliptic::new(at_least(
+                dimensions,
+                2,
+                "HighConditionedElliptic",
+            )?))
+        }
+        Config::BentCigar { dimensions } => problems::boxed(problems::BentCigar::new(at_least(
+            dimensions,
+            2,
+            "BentCigar",
+        )?)),
+        Config::Discus { dimensions } => {
+            problems::boxed(problems::Discus::new(at_least(dimensions, 2, "Discus")?))
+        }
+        Config::DifferentPowers { dimensions } => problems::boxed(problems::DifferentPowers::new(
+            at_least(dimensions, 2, "DifferentPowers")?,
+        )),
+        Config::BucheRastrigin { dimensions } => problems::boxed(problems::BucheRastrigin::new(
+            at_least(dimensions, 2, "BucheRastrigin")?,
+        )),
+        Config::NonContinuousRastrigin { dimensions } => {
+            problems::boxed(problems::NonContinuousRastrigin::new(at_least(
+                dimensions,
+                1,
+                "NonContinuousRastrigin",
+            )?))
+        }
+        Config::Weierstrass { dimensions } => problems::boxed(problems::Weierstrass::new(
+            at_least(dimensions, 1, "Weierstrass")?,
+        )),
+        Config::Katsuura { dimensions } => problems::boxed(problems::Katsuura::new(at_least(
+            dimensions, 1, "Katsuura",
+        )?)),
+        Config::HappyCat { dimensions } => problems::boxed(problems::HappyCat::new(at_least(
+            dimensions, 1, "HappyCat",
+        )?)),
+        Config::HgBat { dimensions } => {
+            problems::boxed(problems::HgBat::new(at_least(dimensions, 1, "HgBat")?))
+        }
+        Config::SchafferF7 { dimensions } => problems::boxed(problems::SchafferF7::new(at_least(
+            dimensions,
+            2,
+            "SchafferF7",
+        )?)),
+        Config::RotatedHyperEllipsoid { dimensions } => problems::boxed(
+            problems::RotatedHyperEllipsoid::new(at_least(dimensions, 1, "RotatedHyperEllipsoid")?),
+        ),
+        Config::Shifted { problem, seed } => {
+            problems::boxed(problems::Shifted::new(wrapped(*problem, "Shifted")?, seed))
+        }
+        Config::Rotated { problem, seed } => {
+            problems::boxed(problems::Rotated::new(wrapped(*problem, "Rotated")?, seed))
+        }
         Config::G01 {} => problems::boxed(cec2006::G01),
         Config::G02 {} => problems::boxed(cec2006::G02),
         Config::G03 { tolerance } => {
@@ -1329,6 +1469,83 @@ fn build(config: Config) -> Result<Problem, String> {
     }))
 }
 
+// a single-objective problem on real genomes behind `DynProblem`, as a `Problem`, for the
+// wrappers
+struct Wrapped(Box<dyn DynProblem>);
+
+impl FitnessFunction<Reals> for Wrapped {
+    type Output = Fitness;
+
+    fn evaluate(&self, genome: &Reals) -> Fitness {
+        self.0.evaluate(genome)
+    }
+}
+
+impl problems::Problem for Wrapped {
+    type Representation = Real;
+
+    fn name(&self) -> &'static str {
+        self.0.name()
+    }
+
+    fn representation(&self) -> Real {
+        self.0.real()
+    }
+
+    fn objective(&self) -> Objective {
+        self.0.objective()
+    }
+
+    fn optimum(&self) -> Option<Optimum<Reals>> {
+        self.0.optimum()
+    }
+
+    fn reference(&self) -> &'static str {
+        self.0.reference()
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        self.0.reference_url()
+    }
+
+    fn constraints(&self, genome: &Reals) -> Constraints {
+        self.0.constraints(genome)
+    }
+}
+
+// the problem that a wrapper (`name`) wraps: a single-objective one on real genomes
+fn wrapped(config: Config, name: &str) -> Result<Wrapped, String> {
+    match build(config)? {
+        Problem::Single(problem) => Ok(Wrapped(problem)),
+        _ => Err(format!(
+            "{name} wraps a single-objective problem on real genomes"
+        )),
+    }
+}
+
+// the shift of a shifted problem, and the matrix and center of a rotated one, for their Python
+// classes
+fn transformation<'py>(py: Python<'py>, config: Config, info: &Bound<'py, PyDict>) -> PyResult<()> {
+    match config {
+        Config::Shifted { problem, seed } => {
+            let problem = wrapped(*problem, "Shifted").map_err(PyValueError::new_err)?;
+            let shifted = problems::Shifted::new(problem, seed);
+            info.set_item("shift", PyArray1::from_slice(py, shifted.shift()))?;
+        }
+        Config::Rotated { problem, seed } => {
+            let problem = wrapped(*problem, "Rotated").map_err(PyValueError::new_err)?;
+            let rotated = problems::Rotated::new(problem, seed);
+            let n = rotated.center().len();
+            let matrix = Array2::from_shape_vec((n, n), rotated.matrix().to_vec())
+                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            info.set_item("matrix", matrix.into_pyarray(py))?;
+            info.set_item("center", PyArray1::from_slice(py, rotated.center()))?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 // an equality tolerance: the report's by default, and finite and at least 0 otherwise
 fn equality_tolerance(tolerance: Option<f64>) -> Result<f64, String> {
     match tolerance {
@@ -1342,12 +1559,16 @@ fn equality_tolerance(tolerance: Option<f64>) -> Result<f64, String> {
 
 /// The problem that `description` (JSON) describes.
 pub fn parse(description: &str) -> PyResult<Problem> {
+    build(config(description)?).map_err(PyValueError::new_err)
+}
+
+// the description of a problem, from JSON
+fn config(description: &str) -> PyResult<Config> {
     let mut json = serde_json::Deserializer::from_str(description);
-    let config: Config = serde_path_to_error::deserialize(&mut json).map_err(|error| {
+    serde_path_to_error::deserialize(&mut json).map_err(|error| {
         let (path, error) = (error.path().to_string(), error.into_inner());
         PyValueError::new_err(format!("invalid problem `{path}`: {error}"))
-    })?;
-    build(config).map_err(PyValueError::new_err)
+    })
 }
 
 // a genome per row, as numpy arrays of the problem's dimensions
@@ -1391,6 +1612,7 @@ fn matrix<'py, const M: usize>(py: Python<'py>, points: &[[f64; M]]) -> Bound<'p
 #[pyfunction]
 pub fn problem_info<'py>(py: Python<'py>, problem: &str) -> PyResult<Bound<'py, PyDict>> {
     let info = PyDict::new(py);
+    let description = problem;
     match parse(problem)? {
         Problem::Single(problem) => {
             info.set_item("name", problem.name())?;
@@ -1423,6 +1645,7 @@ pub fn problem_info<'py>(py: Python<'py>, problem: &str) -> PyResult<Bound<'py, 
             }
             info.set_item("reference", problem.reference())?;
             info.set_item("reference_url", problem.reference_url())?;
+            transformation(py, config(description)?, &info)?;
         }
         Problem::Integer(problem) => {
             let integer = problem.integer();

@@ -48,6 +48,15 @@ pressure vessel)::
     result = de.run(problem, evaluations=20_000)
     print(result.best_fitness, result.violation, problem.design(result.best_genome))
 
+Two wrappers make instances of the single-objective problems, as the CEC and BBOB suites do:
+:class:`Shifted` moves the optimum to a point drawn from a seed, and :class:`Rotated` turns the
+function about its optimum by an orthogonal matrix drawn from a seed, so that the genes
+interact::
+
+    problem = gx.problems.Rotated(gx.problems.Shifted(gx.problems.Rastrigin(10), seed=1), seed=1)
+    cmaes = gx.Cmaes(problem.genome, restarts="ipop", objective="minimize", seed=1)
+    result = cmaes.run(problem, target=problem.optimum.value + 1e-8, evaluations=200_000)
+
 All problems here are minimized, on :class:`genoxide.Real` genomes except the gear train's
 :class:`genoxide.Integer` and :class:`Zdt5`'s :class:`genoxide.Binary`. Each class's docstring
 gives
@@ -128,6 +137,25 @@ __all__ = [
     "Langermann",
     "ShekelFoxholes",
     "Kowalik",
+    "SumOfDifferentPowers",
+    "Step",
+    "Quartic",
+    "Penalized1",
+    "Penalized2",
+    "HighConditionedElliptic",
+    "BentCigar",
+    "Discus",
+    "DifferentPowers",
+    "BucheRastrigin",
+    "NonContinuousRastrigin",
+    "Weierstrass",
+    "Katsuura",
+    "HappyCat",
+    "HgBat",
+    "SchafferF7",
+    "RotatedHyperEllipsoid",
+    "Shifted",
+    "Rotated",
     # multi-objective
     "Zdt1",
     "Zdt2",
@@ -1134,6 +1162,381 @@ class Kowalik(Problem[Real]):
     """
 
     _type: ClassVar[str] = "kowalik"
+
+@dataclass(frozen=True)
+class SumOfDifferentPowers(_Scalable):
+    """The sum of different powers, ``Σ |xᵢ|^(i+1)`` (i from 1): unimodal, and the flatter near
+    the minimum the later the gene.
+
+    Bounds [-1, 1]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 1.
+
+    Its origin is unknown: definition and bounds as Molga and Smutnicki (2005, section 2.8) give
+    them; not yet checked against an original (#168).
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "sum_of_different_powers"
+
+
+@dataclass(frozen=True)
+class Step(_Scalable):
+    """The step function, ``Σ ⌊xᵢ + 0.5⌋²``: a sphere of flat steps, whose gradient is 0 almost
+    everywhere.
+
+    Bounds [-100, 100]ⁿ; minimum 0 on the whole cube [-0.5, 0.5)ⁿ, here at the origin.
+    ``dimensions`` is at least 1.
+
+    Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made faster. IEEE Transactions
+    on Evolutionary Computation 3(2): 82-102, function f6. De Jong's (1975) F3, which it's often
+    credited to, is another step function, ``Σ ⌊xᵢ⌋`` on [-5.12, 5.12]⁵.
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "step"
+
+
+@dataclass(frozen=True)
+class Quartic(_Scalable):
+    """The quartic function, ``Σ i xᵢ⁴`` (i from 1), De Jong's F4, without noise or with it.
+
+    Bounds [-1.28, 1.28]ⁿ; minimum 0 at the origin, without noise. ``dimensions`` is at least 1.
+
+    With ``noisy=True``, a uniform random number in [0, 1) is added, as Yao, Liu and Lin (1999,
+    f7) do, drawn from a generator seeded with the genome's bits, so that the function stays
+    deterministic: the same genome always gets the same noise. Its minimum is then unknown, and
+    ``optimum`` is None.
+
+    De Jong, K. A. (1975). An Analysis of the Behavior of a Class of Genetic Adaptive Systems. PhD
+    thesis, University of Michigan, function F4, with Gaussian noise: as restated by Yao, Liu and
+    Lin (1999, f7), whose definition, uniform noise and bounds these are. Not yet checked against
+    De Jong's thesis (#168).
+    """
+
+    dimensions: int = 30
+    noisy: bool = False
+    _type: ClassVar[str] = "quartic"
+
+    def _describe(self) -> dict[str, Any]:
+        if not isinstance(self.noisy, (bool, np.bool_)):
+            raise ValueError(f"Quartic.noisy is True or False, not {self.noisy!r}")
+        return {**super()._describe(), "noisy": bool(self.noisy)}
+
+
+@dataclass(frozen=True)
+class Penalized1(_Scalable):
+    """The first generalized penalized function: with ``yᵢ = 1 + (xᵢ + 1) / 4``,
+    ``(π / n) {10 sin²(πy₁) + Σᵢ₌₁ⁿ⁻¹ (yᵢ − 1)² [1 + 10 sin²(πyᵢ₊₁)] + (yₙ − 1)²}
+    + Σ u(xᵢ, 10, 100, 4)``, where ``u(x, a, k, m)`` is ``k (|x| − a)^m`` outside [-a, a] and 0
+    inside.
+
+    Bounds [-50, 50]ⁿ; minimum 0 at (−1, …, −1). ``dimensions`` is at least 1.
+
+    Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made faster. IEEE Transactions
+    on Evolutionary Computation 3(2): 82-102, function f12, whose appendix misprints the
+    minimizer as (1, …, 1).
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "penalized1"
+
+
+@dataclass(frozen=True)
+class Penalized2(_Scalable):
+    """The second generalized penalized function,
+    ``0.1 {sin²(3πx₁) + Σᵢ₌₁ⁿ⁻¹ (xᵢ − 1)² [1 + sin²(3πxᵢ₊₁)] + (xₙ − 1)² [1 + sin²(2πxₙ)]}
+    + Σ u(xᵢ, 5, 100, 4)``, where ``u(x, a, k, m)`` is ``k (|x| − a)^m`` outside [-a, a] and 0
+    inside.
+
+    Bounds [-50, 50]ⁿ; minimum 0 at (1, …, 1). ``dimensions`` is at least 1.
+
+    Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made faster. IEEE Transactions
+    on Evolutionary Computation 3(2): 82-102, function f13; its table I drops the square of the
+    last term's (xₙ − 1), which its appendix has.
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "penalized2"
+
+
+@dataclass(frozen=True)
+class HighConditionedElliptic(_Scalable):
+    """The high-conditioned elliptic function, ``Σ (10⁶)^((i−1)/(n−1)) xᵢ²`` (i from 1): an
+    ellipsoid with a condition number of 10⁶.
+
+    Bounds [-100, 100]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 2.
+
+    Suganthan, P. N., Hansen, N., Liang, J. J., Deb, K., Chen, Y.-P., Auger, A. and Tiwari, S.
+    (2005). Problem Definitions and Evaluation Criteria for the CEC 2005 Special Session on
+    Real-Parameter Optimization, function F3, shifted and rotated there (see :class:`Shifted` and
+    :class:`Rotated`).
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "high_conditioned_elliptic"
+    _minimum: ClassVar[int] = 2
+
+
+@dataclass(frozen=True)
+class BentCigar(_Scalable):
+    """The bent cigar, ``x₁² + 10⁶ Σᵢ₌₂ⁿ xᵢ²``: a long narrow ridge along the first axis.
+
+    Bounds [-100, 100]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 2.
+
+    Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). Real-Parameter Black-Box Optimization
+    Benchmarking 2009: Noiseless Functions Definitions. INRIA research report RR-6829, function
+    f12, there with an asymmetric transformation and two rotations; this plain form and the
+    bounds are the CEC 2014 and 2017 reports' basic function.
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "bent_cigar"
+    _minimum: ClassVar[int] = 2
+
+
+@dataclass(frozen=True)
+class Discus(_Scalable):
+    """The discus, ``10⁶ x₁² + Σᵢ₌₂ⁿ xᵢ²``: one direction a thousand times more sensitive than
+    the others.
+
+    Bounds [-100, 100]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 2.
+
+    Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). Real-Parameter Black-Box Optimization
+    Benchmarking 2009: Noiseless Functions Definitions. INRIA research report RR-6829, function
+    f11, there with an oscillation and a rotation; this plain form and the bounds are the CEC 2014
+    and 2017 reports' basic function.
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "discus"
+    _minimum: ClassVar[int] = 2
+
+
+@dataclass(frozen=True)
+class DifferentPowers(_Scalable):
+    """BBOB's different powers, ``√(Σ |xᵢ|^(2 + 4 (i−1)/(n−1)))`` (i from 1): exponents from 2
+    to 6.
+
+    Bounds [-5, 5]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 2. Not
+    :class:`SumOfDifferentPowers`.
+
+    Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). Real-Parameter Black-Box Optimization
+    Benchmarking 2009: Noiseless Functions Definitions. INRIA research report RR-6829, function
+    f14, without its rotation.
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "different_powers"
+    _minimum: ClassVar[int] = 2
+
+
+@dataclass(frozen=True)
+class BucheRastrigin(_Scalable):
+    """The Büche-Rastrigin function, ``10 (n − Σ cos 2πzᵢ) + Σ zᵢ² + 100 Σ max(0, |xᵢ| − 5)²``
+    with ``zᵢ = sᵢ T_osz(xᵢ)``: Rastrigin's function made asymmetric.
+
+    T_osz is BBOB's oscillation, and ``sᵢ = 10^((i−1) / (2 (n−1)))``, times 10 where xᵢ > 0 and i
+    is odd. Bounds [-5, 5]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 2.
+
+    Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). Real-Parameter Black-Box Optimization
+    Benchmarking 2009: Noiseless Functions Definitions. INRIA research report RR-6829, function
+    f4, with its optimum at the origin and no offset.
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "buche_rastrigin"
+    _minimum: ClassVar[int] = 2
+
+
+@dataclass(frozen=True)
+class NonContinuousRastrigin(_Scalable):
+    """The non-continuous Rastrigin function, ``Σ (yᵢ² − 10 cos 2πyᵢ + 10)``, where ``yᵢ = xᵢ`` if
+    ``|xᵢ| < 1/2`` and ``round(2xᵢ) / 2`` otherwise (halves rounded away from 0).
+
+    Bounds [-5.12, 5.12]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 1.
+
+    Liang, J. J., Qin, A. K., Suganthan, P. N. and Baskar, S. (2006). Comprehensive learning
+    particle swarm optimizer for global optimization of multimodal functions. IEEE Transactions on
+    Evolutionary Computation 10(3): 281-295, function f7.
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "non_continuous_rastrigin"
+
+
+@dataclass(frozen=True)
+class Weierstrass(_Scalable):
+    """The Weierstrass function, ``Σᵢ Σₖ aᵏ cos(2π bᵏ (xᵢ + 0.5)) − n Σₖ aᵏ cos(π bᵏ)`` with
+    a = 0.5, b = 3 and k from 0 to 20: continuous, differentiable only on a set of points.
+
+    Bounds [-0.5, 0.5]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 1.
+
+    Suganthan, P. N., Hansen, N., Liang, J. J., Deb, K., Chen, Y.-P., Auger, A. and Tiwari, S.
+    (2005). Problem Definitions and Evaluation Criteria for the CEC 2005 Special Session on
+    Real-Parameter Optimization, function F11, shifted and rotated there. BBOB's f16 is another
+    form.
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "weierstrass"
+
+
+@dataclass(frozen=True)
+class Katsuura(_Scalable):
+    """Katsuura's function,
+    ``(10 / n²) Πᵢ (1 + i Σⱼ₌₁³² |2ʲxᵢ − round(2ʲxᵢ)| / 2ʲ)^(10 / n^1.2) − 10 / n²``: rugged
+    everywhere, continuous but nowhere differentiable.
+
+    Bounds [-5, 5]ⁿ; minimum 0 at the origin, and wherever every gene is a multiple of 1/2.
+    ``dimensions`` is at least 1.
+
+    Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). Real-Parameter Black-Box Optimization
+    Benchmarking 2009: Noiseless Functions Definitions. INRIA research report RR-6829, function
+    f23, after Katsuura, H. (1991), The American Mathematical Monthly 98(5): 411-416 (not read);
+    the plain form of the CEC 2014 report's basic function.
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "katsuura"
+
+
+@dataclass(frozen=True)
+class HappyCat(_Scalable):
+    """HappyCat, ``|Σ xᵢ² − n|^(1/4) + (½ Σ xᵢ² + Σ xᵢ) / n + ½``: a groove along a sphere that
+    curves around to the minimum.
+
+    Bounds [-5, 5]ⁿ; minimum 0 at (−1, …, −1), the only one. ``dimensions`` is at least 1.
+
+    Beyer, H.-G. and Finck, S. (2012). HappyCat: a simple function class where well-known direct
+    search algorithms do fail. PPSN XII, LNCS 7491: 367-376, which couldn't be read. Definition as
+    in the CEC 2014 report (function 11), whose [-100, 100] is scaled by 5/100 to these bounds.
+    Not yet checked against the original (#168).
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "happy_cat"
+
+
+@dataclass(frozen=True)
+class HgBat(_Scalable):
+    """HGBat, ``|(Σ xᵢ²)² − (Σ xᵢ)²|^(1/2) + (½ Σ xᵢ² + Σ xᵢ) / n + ½``: HappyCat's relative,
+    with a groove along a cone.
+
+    Bounds [-5, 5]ⁿ; minimum 0 at (−1, …, −1), the only one. ``dimensions`` is at least 1.
+
+    Liang, J. J., Qu, B. Y. and Suganthan, P. N. (2013). Problem Definitions and Evaluation
+    Criteria for the CEC 2014 Special Session and Competition on Single Objective Real-Parameter
+    Numerical Optimization. Technical report 201311, Zhengzhou University and Nanyang
+    Technological University, function 12, whose [-100, 100] is scaled by 5/100 to these bounds.
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "hg_bat"
+
+
+@dataclass(frozen=True)
+class SchafferF7(_Scalable):
+    """Schaffer's F7 in n dimensions, ``((1 / (n − 1)) Σᵢ₌₁ⁿ⁻¹ √sᵢ (1 + sin²(50 sᵢ^(1/5))))²``
+    with ``sᵢ = √(xᵢ² + xᵢ₊₁²)``: rings of ripples around the minimum.
+
+    Bounds [-100, 100]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 2.
+
+    Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control
+    parameters affecting online performance of genetic algorithms for function optimization.
+    Proceedings of the Third International Conference on Genetic Algorithms: 51-60, which couldn't
+    be read. This n-dimensional form is BBOB's f17 without its transformations; the bounds are
+    Schaffer's F6's. Not yet checked against the original (#168).
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "schaffer_f7"
+    _minimum: ClassVar[int] = 2
+
+
+@dataclass(frozen=True)
+class RotatedHyperEllipsoid(_Scalable):
+    """The rotated hyper-ellipsoid, ``Σᵢ Σⱼ≤ᵢ xⱼ²``, as Molga and Smutnicki (2005, section 2.3)
+    define it.
+
+    Despite its name, it isn't rotated: it's ``Σⱼ (n − j + 1) xⱼ²``, an axis-parallel ellipsoid;
+    :class:`Schwefel1_2` is the rotated one, and :class:`Rotated` rotates this one. Bounds
+    [-65.536, 65.536]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 1.
+
+    Its origin is unknown; not yet checked against an original (#168).
+    """
+
+    dimensions: int = 30
+    _type: ClassVar[str] = "rotated_hyper_ellipsoid"
+
+
+def _wrapped(name: str, problem: Any) -> dict[str, Any]:
+    """The description of the problem a wrapper wraps."""
+    if not isinstance(problem, Problem):
+        raise ValueError(f"{name}.problem is a single-objective problem of genoxide.problems, not {problem!r}")
+    return problem._describe()
+
+
+@dataclass(frozen=True)
+class Shifted(Problem[Real]):
+    """``problem`` shifted by a vector generated from ``seed``: ``f(x − o)``, as the CEC and BBOB
+    suites shift their functions.
+
+    The shift moves the first solution of the problem's optimum (the center of its box if the
+    optimum isn't known) to a point drawn uniformly from the middle 80% of each gene's range, as
+    CEC draws its shifted optima from [-80, 80]ⁿ in [-100, 100]ⁿ and BBOB from [-4, 4]ⁿ in
+    [-5, 5]ⁿ. The bounds, the name and the reference are the problem's; the optimum keeps its
+    value, its solutions shifted (those that leave the box are dropped). That holds when the
+    problem's minimum is its minimum over all of ℝⁿ, as for the functions that CEC and BBOB shift,
+    not for one whose minimum is only the lowest in its box, such as :class:`Schwefel2_26`. The
+    same seed gives the same shift as Rust's ``problems::Shifted`` on every platform.
+    """
+
+    problem: Problem[Real]
+    seed: int
+    _type: ClassVar[str] = "shifted"
+
+    def _describe(self) -> dict[str, Any]:
+        problem = _wrapped("Shifted", self.problem)
+        return {"type": self._type, "problem": problem, "seed": _whole("Shifted.seed", self.seed)}
+
+    @property
+    def shift(self) -> np.ndarray:
+        """The shift ``o``, a value per gene: the problem is evaluated at ``x − o``."""
+        return cast(np.ndarray, self._info["shift"])
+
+
+@dataclass(frozen=True)
+class Rotated(Problem[Real]):
+    """``problem`` rotated by an orthogonal matrix generated from ``seed``: ``f(c + M (x − c))``,
+    where ``c`` is the first solution of the problem's optimum (the center of its box if the
+    optimum isn't known), so that the genes interact.
+
+    ``M`` is generated as BBOB generates its rotations: standard normal numbers whose rows are
+    made orthonormal by Gram-Schmidt orthonormalization; it may reflect as well as rotate. It
+    turns about the optimum, as CEC 2005 and BBOB do, so the optimum stays in place with its
+    value. Rotating a :class:`Shifted` problem gives CEC 2005's shifted rotated functions, such as
+    its F10, ``Rotated(Shifted(Rastrigin(n), seed), seed)``. The bounds, the name and the
+    reference are the problem's. The same seed gives the same matrix as Rust's
+    ``problems::Rotated`` on every platform.
+    """
+
+    problem: Problem[Real]
+    seed: int
+    _type: ClassVar[str] = "rotated"
+
+    def _describe(self) -> dict[str, Any]:
+        problem = _wrapped("Rotated", self.problem)
+        return {"type": self._type, "problem": problem, "seed": _whole("Rotated.seed", self.seed)}
+
+    @property
+    def matrix(self) -> np.ndarray:
+        """The orthogonal matrix ``M``, n × n."""
+        return cast(np.ndarray, self._info["matrix"])
+
+    @property
+    def center(self) -> np.ndarray:
+        """The point ``c`` that the rotation turns about."""
+        return cast(np.ndarray, self._info["center"])
+
 
 # ---- multi-objective problems -------------------------------------------------------------------
 
