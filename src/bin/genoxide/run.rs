@@ -786,6 +786,7 @@ fn stop_reason(reason: StopReason) -> String {
         StopReason::Stagnation => "stagnation",
         StopReason::Aborted => "aborted",
         StopReason::Stalled => "stalled",
+        StopReason::Converged => "converged",
         _ => "other",
     }
     .to_string()

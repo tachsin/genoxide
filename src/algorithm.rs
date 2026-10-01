@@ -32,7 +32,9 @@ pub mod de;
 pub mod es;
 pub mod ga;
 pub mod islands;
+pub mod local;
 pub mod local_search;
+pub mod nelder_mead;
 pub mod open_es;
 pub mod pso;
 pub mod steady;
@@ -43,6 +45,7 @@ pub use es::{Es, EsBuilder};
 pub use ga::{Ga, GaBuilder, Scheme, Unset};
 pub use islands::{Islands, IslandsBuilder, Migrate};
 pub use local_search::{Acceptance, LocalSearch, LocalSearchBuilder};
+pub use nelder_mead::{NelderMead, NelderMeadBuilder};
 pub use open_es::{OpenEs, OpenEsBuilder};
 pub use pso::{Pso, PsoBuilder, Topology};
 pub use steady::{Incremental, SteadyGa};
@@ -163,6 +166,18 @@ pub trait Algorithm {
 
     /// The generation in which the best individual so far was found.
     fn best_generation(&self) -> u64;
+
+    /// Whether the algorithm has converged and has nothing more to do, e.g. a local method at a
+    /// minimum with no restart left. The engines stop with
+    /// [`StopReason::Converged`](crate::StopReason::Converged) after a generation in which it's
+    /// true, unless a stop condition is met in the same generation. Asked again, the algorithm
+    /// goes on, as it would without this method.
+    ///
+    /// `false` by default: the population-based algorithms never finish on their own, and stop by
+    /// their stop conditions.
+    fn is_finished(&self) -> bool {
+        false
+    }
 }
 
 /// An algorithm that can score again what it keeps, for a fitness function that changes during a

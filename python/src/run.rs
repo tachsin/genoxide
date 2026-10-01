@@ -1438,6 +1438,7 @@ fn stop_reason(reason: StopReason) -> &'static str {
         StopReason::Stagnation => "stagnation",
         StopReason::Aborted => "aborted",
         StopReason::Stalled => "stalled",
+        StopReason::Converged => "converged",
         _ => "other",
     }
 }

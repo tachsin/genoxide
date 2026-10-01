@@ -486,6 +486,11 @@ pub(crate) fn stalled(stop: Option<&Stop>, idle: u64) -> Option<StopReason> {
         .then_some(StopReason::Stalled)
 }
 
+// `StopReason::Converged` once the algorithm has nothing more to do
+fn converged<A: Algorithm>(algorithm: &A) -> Option<StopReason> {
+    algorithm.is_finished().then_some(StopReason::Converged)
+}
+
 // the error for checkpoints every 0 generations
 pub(crate) fn validate_checkpoint<A>(checkpoint: &Option<Checkpoint<'_, A>>) -> Result<()> {
     match checkpoint {
@@ -740,6 +745,7 @@ where
             } else {
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
             }
+            .or_else(|| converged(&self.algorithm))
             .or_else(|| stalled(self.stop.as_ref(), self.idle));
             if let Some(stop_reason) = reason {
                 return Ok(Outcome {
@@ -812,6 +818,7 @@ where
             } else {
                 self.stop.as_ref().and_then(|stop| stop.check(&progress))
             }
+            .or_else(|| converged(&self.algorithm))
             .or_else(|| stalled(self.stop.as_ref(), self.idle));
             let outcome = reason.map(|stop_reason| Outcome {
                 best: best.clone(),
