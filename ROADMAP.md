@@ -215,6 +215,7 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [x] NEAT (speciation, innovation numbers)
 - [x] Neuroevolution with evolution strategies
 - [x] Python: the ES, islands and checkpoints, and a batch's matrix reused ([#342](https://github.com/tachsin/genoxide/pull/342))
+- [x] Python: OpenAI's ES, the networks and control tasks, NEAT, and genetic programming with built-in primitives and your own, evaluated by numpy ([#385](https://github.com/tachsin/genoxide/pull/385), [#387](https://github.com/tachsin/genoxide/pull/387), [#389](https://github.com/tachsin/genoxide/pull/389))
 
 ### 0.12: Local optimization
 - [ ] Linear algebra through a dependency pinned to a portable path, convergence stops, restarts, Nelder-Mead ([docs/optimization-plan.md](docs/optimization-plan.md), batch A1)

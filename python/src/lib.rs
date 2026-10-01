@@ -61,6 +61,8 @@ fn _genoxide(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(portable::random_real, module)?)?;
     module.add_class::<trees::PyPrimitiveSet>()?;
     module.add_class::<trees::PyTree>()?;
+    module.add_class::<trees::PyNode>()?;
+    module.add_function(wrap_pyfunction!(trees::user_primitives, module)?)?;
     module.add_function(wrap_pyfunction!(trees::gp_check, module)?)?;
     module.add_function(wrap_pyfunction!(trees::gp_ramped_half_and_half, module)?)?;
     module.add_function(wrap_pyfunction!(trees::gp_random_genome, module)?)?;

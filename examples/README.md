@@ -194,7 +194,7 @@ python examples/tsp_berlin52/main.py
 | [Two spirals](two_spirals/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/two-spirals) |
 | [Koza's quartic](koza_quartic/) | genetic programming | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/koza-quartic) |
 | [Koza's 11-multiplexer](multiplexer_11/) | genetic programming | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/multiplexer-11) |
-| [\|x\| by strongly typed GP](abs_typed/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/abs-typed) |
+| [\|x\| by strongly typed GP](abs_typed/) | genetic programming | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/abs-typed) |
 | [Nguyen-1](nguyen_1/) | genetic programming | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nguyen-1) |
 | [Nguyen-5](nguyen_5/) | genetic programming | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nguyen-5) |
 | [Nguyen-9](nguyen_9/) | genetic programming | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nguyen-9) |

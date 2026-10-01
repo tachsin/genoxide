@@ -835,7 +835,11 @@ result = neat.run(lambda net: (4 - sum(abs(net.activate(i)[0] - t) for i, t in c
 ```
 
 - Built-in primitives run in Rust; a user primitive is a numpy function called once per node on
-  whole columns. Measured: 50 numpy additions on 100-point arrays take 13.5 µs, against 3.0 µs for
+  whole columns. As built (P2): the set is `gx.gp.PrimitiveSetBuilder` (`new_type`, `function`,
+  `terminal`, `constants`, `build`), data only, so it checkpoints, its primitives one more variant
+  of the package's primitive enum (no new Rust instantiations); the functions are given at
+  evaluation, `tree.evaluate(x, {"less": np.less, "if": np.where, ...})`, or the user walks
+  `tree.nodes()`. Measured: 50 numpy additions on 100-point arrays take 13.5 µs, against 3.0 µs for
   the whole tree in Rust; calling Python per node and point would take 172 µs. So user primitives
   are per column, never per point.
 - A tree reaches a Python fitness function as a `gx.TreeGenome` (Rust-backed: `evaluate(X)`,

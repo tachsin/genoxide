@@ -1,4 +1,4 @@
-"""Genetic programming: trees of genoxide's built-in primitives, evolved and evaluated in Rust.
+"""Genetic programming: trees of genoxide's built-in primitives or of your own, evolved in Rust.
 
 A genetic program is a tree of primitives: functions (``add``, ``if``) whose children are their
 arguments, and terminals (inputs such as ``x``) and constants at the leaves (Koza 1992). Evolved
@@ -31,13 +31,15 @@ The pieces:
 
 - :class:`PrimitiveSet`: the functions, terminals and constants, from
   :func:`genoxide.gp.regression.primitives` (mathematical functions and named variables, with
-  :class:`Constants`) or a problem's ``primitives()``. Its ``parse`` reads a tree.
+  :class:`Constants`), a problem's ``primitives()``, or :class:`PrimitiveSetBuilder` for
+  primitives of your own, strongly typed. Its ``parse`` reads a tree.
 - :class:`Gp`: the genome, a set with Koza's depth limit of 17, a size limit of 1024 nodes and
   the initialization, :class:`RampedHalfAndHalf` of depths 2 to 6 by default (or :class:`Full`,
   :class:`Grow`).
 - :class:`Tree`: a genome as a fitness function gets it, in Rust: ``len(tree)``, ``depth``,
-  ``str(tree)`` (``add(x, mul(x, 0.5))``), and ``evaluate(x)``, its values at points, a row
-  each, on numpy arrays.
+  ``str(tree)`` (``add(x, mul(x, 0.5))``), ``nodes()`` (:class:`Node`, in prefix order), and
+  ``evaluate(x)``, its values at points, a row each, on numpy arrays; for your own primitives,
+  ``evaluate(x, functions)`` with a Python function per primitive.
 - The operators: :class:`SubtreeCrossover` and :class:`OnePointCrossover`;
   :class:`SubtreeMutation`, :class:`PointMutation`, :class:`HoistMutation`,
   :class:`ShrinkMutation`, :class:`ConstantMutation` and a mix of them by weight,
@@ -52,8 +54,30 @@ The pieces:
 
 Trees run with :class:`genoxide.Ga` (any scheme), :class:`genoxide.Islands` of them and
 :class:`genoxide.Nsga2` with two objectives; ``Ga(initial_genomes=gp.ramped_half_and_half(n,
-seed))`` starts from Koza's even division among the depths and methods. The primitives are
-genoxide's built-in ones; primitives of your own come in a later version.
+seed))`` starts from Koza's even division among the depths and methods.
+
+**Your own primitives.** :class:`PrimitiveSetBuilder` declares types, functions (argument types
+and a return type), terminals and constants, as Rust's ``PrimitiveSet::builder``; every tree the
+run makes is well typed. The set is data, names and types, so it checkpoints; what the
+primitives mean is given when a tree is evaluated, a Python function per function, called once
+per node on whole numpy columns::
+
+    import numpy as np
+    import genoxide as gx
+
+    builder = gx.gp.PrimitiveSetBuilder()
+    real, boolean = builder.new_type("real"), builder.new_type("bool")
+    builder.function("add", [real, real], real)
+    builder.function("less", [real, real], boolean)
+    builder.function("if", [boolean, real, real], real)
+    builder.terminal("x", real)
+    builder.constants(real, gx.gp.Constants.integers(-2, 2))
+    primitives = builder.build(real)
+
+    FUNCTIONS = {"add": np.add, "less": np.less, "if": np.where}
+    x = np.linspace(-1.0, 1.0, 21)
+    tree = primitives.parse("if(less(x, 0.0), add(x, 1.0), x)")
+    tree.evaluate({"x": x}, FUNCTIONS)  # an array: each function called once, on columns
 """
 
 from __future__ import annotations
@@ -67,7 +91,9 @@ from .. import _genoxide, _number, _whole
 
 __all__ = [
     "PrimitiveSet",
+    "PrimitiveSetBuilder",
     "Tree",
+    "Node",
     "Constants",
     "Gp",
     "Full",
@@ -92,6 +118,7 @@ __all__ = [
 
 PrimitiveSet = _genoxide.PrimitiveSet
 Tree = _genoxide.Tree
+Node = _genoxide.Node
 WithSize = _genoxide.WithSize
 
 
@@ -145,6 +172,104 @@ class Constants:
         raise ValueError(
             "constants are Constants.uniform, Constants.integers, Constants.choice or "
             f"Constants.normal, not {self!r}"
+        )
+
+
+class PrimitiveSetBuilder:
+    """Builds a :class:`PrimitiveSet` of your own primitives, strongly typed (Montana 1995), as
+    Rust's ``PrimitiveSet::builder``: declare the types with :meth:`new_type`, add functions,
+    terminals and constants, then :meth:`build` with the type that trees return.
+
+    A function has argument types and a return type, a terminal (an input, such as ``x``) a type,
+    and constants a type; every tree genoxide makes puts a value of the right type in each place.
+    Types are named by the strings :meth:`new_type` returns. The set holds names and types only:
+    what the primitives mean is given when a tree is evaluated, by
+    ``tree.evaluate(x, functions)``, or by your own interpreter of ``tree.nodes()``::
+
+        builder = gx.gp.PrimitiveSetBuilder()
+        real = builder.new_type("real")
+        boolean = builder.new_type("bool")
+        builder.function("mul", [real, real], real)
+        builder.function("less", [real, real], boolean)
+        builder.function("if", [boolean, real, real], real)
+        builder.terminal("x", real)
+        builder.constants(real, gx.gp.Constants.uniform(-1.0, 1.0))
+        primitives = builder.build(real)
+
+    The methods but :meth:`build` return the builder, to chain them.
+    """
+
+    def __init__(self) -> None:
+        self._types: list[str] = []
+        self._functions: list[tuple[str, list[str], str]] = []
+        self._constants: list[tuple[str, Constants]] = []
+
+    def new_type(self, name: str) -> str:
+        """Declares a type named ``name`` and returns the name, for the type arguments of the
+        other methods. At most 2^16 types, each name once."""
+        self._types.append(str(name))
+        return str(name)
+
+    def function(self, name: str, args: Sequence[str], returns: str) -> PrimitiveSetBuilder:
+        """Adds the function ``name``, taking arguments of the types ``args``, in order, and
+        returning the type ``returns``. A function without arguments is a terminal."""
+        if isinstance(args, str):
+            raise ValueError(
+                f"the argument types of `{name}` are a sequence of type names, not a string"
+            )
+        self._functions.append((str(name), [str(ty) for ty in args], str(returns)))
+        return self
+
+    def terminal(self, name: str, returns: str) -> PrimitiveSetBuilder:
+        """Adds the terminal ``name`` of the type ``returns``, e.g. an input variable: a leaf
+        whose value ``x`` gives when a tree is evaluated."""
+        return self.function(name, [], returns)
+
+    def constants(self, type: str, constants: Constants) -> PrimitiveSetBuilder:  # noqa: A002
+        """Gives the type ``type`` ephemeral random constants, e.g.
+        ``Constants.uniform(-1.0, 1.0)``: in generation, one more leaf of the type, whose value
+        is drawn when it's made. Constants are numbers (``float``), at most one kind per type."""
+        if not isinstance(constants, Constants):
+            raise ValueError(f"constants is a gx.gp.Constants, not {constants!r}")
+        self._constants.append((str(type), constants))
+        return self
+
+    def build(self, root: str) -> PrimitiveSet:
+        """The set, whose trees return the type ``root``.
+
+        Raises a ``ValueError`` that names the problem: no type or more than 2^16, a type that
+        isn't declared, a type name or a primitive name used twice, a name that isn't one
+        (empty, with whitespace, ``(``, ``)`` or ``,``, or a number), constants given twice to a
+        type or wrong, or a type that the root needs and no tree can be made of (no terminal,
+        constants, or function whose arguments can be made).
+        """
+        index: dict[str, int] = {}
+        for position, name in enumerate(self._types):
+            index.setdefault(name, position)
+
+        def ty(name: str, where: str) -> int:
+            if name not in index:
+                declared = ", ".join(self._types) or "none"
+                raise ValueError(
+                    f"invalid setting `primitives`: {where} the type `{name}`, which isn't a "
+                    f"type of the set (declared: {declared})"
+                )
+            return index[name]
+
+        functions = [
+            (
+                name,
+                [ty(arg, f"`{name}` takes") for arg in args],
+                ty(returns, f"`{name}` returns"),
+            )
+            for name, args, returns in self._functions
+        ]
+        constants = [
+            (ty(name, "constants are of"), json.dumps(described._describe()))
+            for name, described in self._constants
+        ]
+        return _genoxide.user_primitives(
+            list(self._types), functions, constants, ty(str(root), "the trees return")
         )
 
 
@@ -208,7 +333,8 @@ class Gp:
     ----------
     primitives : PrimitiveSet
         The functions, terminals and constants, e.g. from
-        :func:`genoxide.gp.regression.primitives` or a problem's ``primitives()``.
+        :func:`genoxide.gp.regression.primitives`, a problem's ``primitives()`` or
+        :meth:`PrimitiveSetBuilder.build`.
     max_depth : int, default 17
         The largest depth of a tree, the root at depth 0 (Koza's limit), at most 2^24.
     max_size : int, default 1024
@@ -226,7 +352,8 @@ class Gp:
         if not isinstance(self.primitives, PrimitiveSet):
             raise ValueError(
                 "Gp.primitives is a gx.gp.PrimitiveSet, e.g. from "
-                f"gx.gp.regression.primitives(...), not {self.primitives!r}"
+                f"gx.gp.regression.primitives(...) or gx.gp.PrimitiveSetBuilder, not "
+                f"{self.primitives!r}"
             )
         if not isinstance(self.init, (Full, Grow, RampedHalfAndHalf)):
             raise ValueError(
