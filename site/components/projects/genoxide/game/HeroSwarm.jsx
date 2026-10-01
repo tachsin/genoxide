@@ -1,12 +1,12 @@
 "use client";
 
-import { Dna } from "lucide-react";
+import { Bird } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { observeTheme, readTheme } from "./render";
 import { World } from "./world";
 
-// The game's HUD loads when someone presses Play.
-const SelectionGame = lazy(() => import("./SelectionGame"));
+// The game loads when someone presses Play.
+const CamouflageGame = lazy(() => import("./camouflage/CamouflageGame"));
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -98,13 +98,13 @@ export default function HeroSwarm() {
           aria-haspopup="dialog"
           className="group inline-flex cursor-pointer items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 font-medium text-primary text-sm transition-colors hover:border-primary/55 hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
         >
-          <Dna size={15} aria-hidden className="transition-transform group-hover:rotate-12" />
-          Play: be the selection
+          <Bird size={15} aria-hidden className="transition-transform group-hover:rotate-12" />
+          Play: be the bird
         </button>
       </div>
       {playing ? (
         <Suspense fallback={null}>
-          <SelectionGame reduced={reduced} onClose={close} />
+          <CamouflageGame reduced={reduced} onClose={close} />
         </Suspense>
       ) : null}
     </>
