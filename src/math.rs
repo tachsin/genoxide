@@ -258,6 +258,13 @@ from_libm! {
     cbrt = cbrt(x);
     /// `sqrt(x² + y²)` without overflow or underflow in between, the same on every platform.
     hypot = hypot(x, y);
+    /// The error function `erf(x) = 2/√π ∫₀ˣ e^(−t²) dt`, the same on every platform, within
+    /// 1 ulp.
+    erf = erf(x);
+    /// The complementary error function `erfc(x) = 1 − erf(x)`, accurate where `1 − erf(x)`
+    /// would cancel (large `x`), the same on every platform. It underflows to 0 above about
+    /// 26.5; [`erfcx`] keeps its scale.
+    erfc = erfc(x);
 }
 
 /// `x` to the integer power `n`, the same on every platform.
@@ -290,6 +297,65 @@ pub fn powi(x: f64, n: i32) -> f64 {
 #[must_use]
 pub fn sin_cos(x: f64) -> (f64, f64) {
     libm::sincos(x)
+}
+
+/// The scaled complementary error function `erfcx(x) = e^(x²) erfc(x)`, the same on every
+/// platform: finite where `erfc` underflows, about `1 / (x √π)` for large `x`. For logarithms of
+/// normal tail probabilities, e.g. `ln Φ(z) = ln(erfcx(−z/√2) / 2) − z²/2` for very negative `z`.
+///
+/// Up to 26 (where `erfc` is still a normal number) it's `e^(x²) · erfc(x)`, with `x²` split
+/// exactly into two parts so that `e^(x²)` is as accurate as `exp`; above, the first 9 terms of
+/// the asymptotic series `1 / (x √π) · Σ (−1)ⁿ (2n − 1)!! / (2x²)ⁿ` (Abramowitz and Stegun,
+/// 1964, 7.1.23), whose remainder there is below 1e-19. Below 0, `2 e^(x²) − erfcx(−x)`, which
+/// overflows to infinity below about −26.6. Within a few ulps everywhere.
+#[must_use]
+pub fn erfcx(x: f64) -> f64 {
+    if x.is_nan() {
+        return x;
+    }
+    if x < 0.0 {
+        return 2.0 * exp_square(x) - erfcx(-x);
+    }
+    if x < 26.0 {
+        return exp_square(x) * erfc(x);
+    }
+    // the asymptotic series in t = 1 / (2x²), by Horner's rule: 1 − t + 3t² − 15t³ + ...; 1 / x
+    // first, so that x² can't overflow
+    let inverse = 1.0 / x;
+    let t = 0.5 * inverse * inverse;
+    const DOUBLE_FACTORIALS: [f64; 9] = [
+        1.0,
+        1.0,
+        3.0,
+        15.0,
+        105.0,
+        945.0,
+        10_395.0,
+        135_135.0,
+        2_027_025.0,
+    ];
+    let mut sum = 0.0;
+    for (n, factorial) in DOUBLE_FACTORIALS.iter().enumerate().rev() {
+        let term = if n % 2 == 0 { *factorial } else { -factorial };
+        sum = sum * t + term;
+    }
+    inverse * std::f64::consts::FRAC_2_SQRT_PI * 0.5 * sum
+}
+
+// e^(x²), with x² split exactly into hi + lo (Dekker's product), so that the rounding of x²
+// doesn't cost accuracy: e^(hi + lo) = e^hi (1 + lo) to within lo², far below an ulp
+fn exp_square(x: f64) -> f64 {
+    const SPLIT: f64 = 134_217_729.0; // 2^27 + 1
+    let c = SPLIT * x;
+    let high = c - (c - x);
+    let low = x - high;
+    let square = x * x;
+    let error = ((high * high - square) + 2.0 * high * low) + low * low;
+    let e = exp(square);
+    if e.is_infinite() {
+        return e;
+    }
+    e + e * error
 }
 
 #[cfg(test)]
@@ -401,6 +467,71 @@ mod tests {
                 4607656066507473108, // 1.1051709180756477
                 4606680541981188862, // 0.944280480021092
                 4487727769212568094, // 1.0995116277759991e-8
+            ],
+            "the portable math changed, which breaks reproducibility"
+        );
+    }
+
+    /// `erfcx` against tests/reference/special_functions.py (mpmath, 50 digits), on both sides of
+    /// each of its branches: 0, 26, and the overflow below −26.6.
+    #[test]
+    fn erfcx_values() {
+        let reference = [
+            (-26.0, 7.657724931490568e+293),
+            (-10.0, 5.376234283632271e+43),
+            (-3.0, 16205.988853999586),
+            (-1.0, 5.008980080762283),
+            (-0.5, 1.952360489182557),
+            (-0.001, 1.0011293799198486),
+            (0.0, 1.0),
+            (1e-10, 0.999999999887162),
+            (0.25, 0.7703465477309968),
+            (0.5, 0.6156903441929259),
+            (1.0, 0.427583576155807),
+            (2.0, 0.25539567631050575),
+            (3.5, 0.1552936556088943),
+            (5.0, 0.11070463773306863),
+            (10.0, 0.05614099274382259),
+            (20.0, 0.02817434874105132),
+            (25.9, 0.021767181150738214),
+            (26.0, 0.021683584850562907),
+            (26.1, 0.021600627726346206),
+            (30.0, 0.01879588886141675),
+            (50.0, 0.011281536265323773),
+            (100.0, 0.005641613782989433),
+            (1000.0, 0.0005641893014533876),
+            (100000000.0, 5.641895835477562e-09),
+            (1e+20, 5.6418958354775626e-21),
+            (1e+200, 5.641895835477563e-201),
+        ];
+        for (x, expected) in reference {
+            let value = erfcx(x);
+            assert!(
+                ulps(value, expected) <= 4,
+                "erfcx({x}) = {value}, not {expected}"
+            );
+        }
+        assert_eq!(erfcx(-27.0), f64::INFINITY);
+        assert_eq!(erfcx(f64::INFINITY), 0.0);
+        assert!(erfcx(f64::NAN).is_nan());
+        // continuous across 26, and decreasing
+        let mut previous = erfcx(0.0);
+        let mut rng = StreamRng::seed_from_u64(2);
+        let mut points: Vec<f64> = (0..2_000).map(|_| rng.unit_f64() * 60.0).collect();
+        points.sort_by(f64::total_cmp);
+        for x in points {
+            let value = erfcx(x);
+            assert!(value <= previous, "erfcx({x})");
+            previous = value;
+        }
+        assert_eq!(
+            [erf(0.5), erfc(0.5), erfcx(0.7), erfcx(-4.2), erfcx(31.0)].map(f64::to_bits),
+            [
+                4602863465656806866, // 0.5204998778130465
+                4602309526204327004, // 0.4795001221869535
+                4602912378887895979, // 0.525930337349441
+                4725920843874906963, // 91618811.94453172
+                4580900192363489479, // 0.018190209599233478
             ],
             "the portable math changed, which breaks reproducibility"
         );
