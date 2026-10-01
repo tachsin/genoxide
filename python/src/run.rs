@@ -4,8 +4,8 @@ use crate::checkpoint::Checkpoints;
 use crate::config;
 use crate::control::{
     CmaesSettings, DeSettings, EsSettings, FirstOrderSettings, GaSettings, IslandsSettings,
-    LbfgsbSettings, LocalSearchSettings, NeatSettings, NelderMeadSettings, OpenEsSettings,
-    PsoSettings, Running, Settings, Slot,
+    LbfgsbSettings, LocalSearchSettings, MmaSettings, NeatSettings, NelderMeadSettings,
+    OpenEsSettings, PsoSettings, Running, Settings, Slot,
 };
 use crate::errors::{genome_setting, setting};
 use crate::fitness::{Gradient, Multi, Native, Shared, Single};
@@ -21,7 +21,7 @@ use crate::tree_problems::TreeFitness;
 use crate::trees::tree_algorithm;
 use genoxide::algorithm::islands::{Migrate, Topology};
 use genoxide::algorithm::nelder_mead::Coefficients;
-use genoxide::algorithm::{GaBuilder, Islands, Reevaluate, cmaes, es, pso};
+use genoxide::algorithm::{GaBuilder, Islands, Reevaluate, cmaes, es, mma, pso};
 use genoxide::engine::Progress;
 use genoxide::genome::{AdaptiveReal, Representation};
 use genoxide::gradient::Gradients;
@@ -54,9 +54,12 @@ type Result<T> = std::result::Result<T, String>;
 /// and the same arguments as `on_generation`, to change the algorithm's settings or re-evaluate
 /// it. With `checkpoint`, the run saves a checkpoint there every `checkpoint_every` generations
 /// and when it stops; with `resume`, it continues from the checkpoint there, saved with the same
-/// settings. Returns the result as a dict.
+/// settings. With `combined_gradient` and `constraints` m > 0, `fitness` returns
+/// `(value, gradient, g, jacobian)`, the values of m inequality constraints `gᵢ(x) <= 0` and their
+/// Jacobian after the gradient, numpy arrays of float64 the Python package makes, for MMA.
+/// Returns the result as a dict.
 #[pyfunction]
-#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None, control = None, checkpoint = None, checkpoint_every = None, resume = None, gradient = None, combined_gradient = false))]
+#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None, control = None, checkpoint = None, checkpoint_every = None, resume = None, gradient = None, combined_gradient = false, constraints = 0))]
 #[allow(clippy::too_many_arguments)]
 pub fn run<'py>(
     py: Python<'py>,
@@ -72,6 +75,7 @@ pub fn run<'py>(
     resume: Option<PathBuf>,
     gradient: Option<Py<PyAny>>,
     combined_gradient: bool,
+    constraints: usize,
 ) -> PyResult<Bound<'py, PyDict>> {
     // the error names the setting, e.g. `stop.generations`
     let mut json = serde_json::Deserializer::from_str(config);
@@ -114,7 +118,8 @@ pub fn run<'py>(
             parallel,
             on_generation,
             genome_context,
-        ),
+        )
+        .with_constraints(constraints),
         objectives: run
             .objectives
             .iter()
@@ -919,6 +924,70 @@ fn real_algorithm<'py>(
             }))?;
             generational(py, first_order, FirstOrderSettings, context)
         }
+        config::Algorithm::Mma {
+            method,
+            asymptote_initial,
+            asymptote_decrease,
+            asymptote_increase,
+            move_limit,
+            constraint_cost,
+            kkt_tolerance,
+            step_tolerance,
+            restoration,
+            parallel_sums,
+            initial_genome,
+            seed,
+        } => {
+            let mut builder = Mma::builder(real).objective(context.single_objective()?);
+            if let Some(method) = method {
+                builder = builder.method(match method {
+                    config::MmaMethod::Mma => mma::Method::Mma,
+                    config::MmaMethod::Gcmma => mma::Method::Gcmma,
+                });
+            }
+            if let Some(fraction) = asymptote_initial {
+                builder = builder.asymptote_initial(fraction);
+            }
+            if let Some(factor) = asymptote_decrease {
+                builder = builder.asymptote_decrease(factor);
+            }
+            if let Some(factor) = asymptote_increase {
+                builder = builder.asymptote_increase(factor);
+            }
+            if let Some(fraction) = move_limit {
+                builder = builder.move_limit(fraction);
+            }
+            if let Some(cost) = constraint_cost {
+                builder = builder.constraint_cost(cost);
+            }
+            if let Some(tolerance) = kkt_tolerance {
+                builder = builder.kkt_tolerance(tolerance);
+            }
+            if let Some(tolerance) = step_tolerance {
+                builder = builder.step_tolerance(tolerance);
+            }
+            if let Some(restoration) = restoration {
+                builder = builder.restoration(restoration);
+            }
+            if let Some(parallel) = parallel_sums {
+                builder = builder.parallel_sums(parallel);
+            }
+            if let Some(genome) = initial_genome {
+                builder = builder.initial_genome(Reals::from(genome));
+            }
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            // the only genome the builder checks is the initial one
+            let mma = setting(builder.build().map_err(|error| match error {
+                genoxide::Error::InvalidGenome { reason } => genoxide::Error::InvalidSetting {
+                    setting: "initial_genome",
+                    reason,
+                },
+                error => error,
+            }))?;
+            generational(py, mma, MmaSettings, context)
+        }
         config::Algorithm::Lbfgsb {
             memory,
             gradients,
@@ -1148,6 +1217,7 @@ where
             Err("NelderMead needs a Real genome".to_string().into())
         }
         config::Algorithm::Lbfgsb { .. } => Err("Lbfgsb needs a Real genome".to_string().into()),
+        config::Algorithm::Mma { .. } => Err("Mma needs a Real genome".to_string().into()),
         config::Algorithm::FirstOrder { .. } => {
             Err("FirstOrder needs a Real genome".to_string().into())
         }

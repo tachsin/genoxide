@@ -167,6 +167,27 @@ pub enum Algorithm {
         initial_genome: Option<Vec<f64>>,
         seed: Option<u64>,
     },
+    /// The method of moving asymptotes, or its globally convergent form.
+    Mma {
+        method: Option<MmaMethod>,
+        /// The asymptotes' distance in the first two iterations, a fraction of each range.
+        asymptote_initial: Option<f64>,
+        /// The factors that bring the asymptotes nearer and move them away.
+        asymptote_decrease: Option<f64>,
+        asymptote_increase: Option<f64>,
+        /// The largest step, a fraction of each range.
+        move_limit: Option<f64>,
+        /// The cost of the artificial variable that relaxes a constraint.
+        constraint_cost: Option<f64>,
+        kkt_tolerance: Option<f64>,
+        step_tolerance: Option<f64>,
+        /// The restoration step after a run that converges to an infeasible point.
+        restoration: Option<bool>,
+        /// The dual's sums over the genes on several threads.
+        parallel_sums: Option<bool>,
+        initial_genome: Option<Vec<f64>>,
+        seed: Option<u64>,
+    },
     Lbfgsb {
         /// The correction pairs kept, m.
         memory: Option<usize>,
@@ -271,6 +292,14 @@ pub enum Optimizer {
         learning_rate: f64,
         momentum: f64,
     },
+}
+
+/// MMA's method: `"mma"` or `"gcmma"`.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MmaMethod {
+    Mma,
+    Gcmma,
 }
 
 /// A first-order method's step rule; Adam's settings default to Kingma and Ba's.

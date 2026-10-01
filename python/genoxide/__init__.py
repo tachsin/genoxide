@@ -136,6 +136,7 @@ __all__ = [
     "NelderMead",
     "FirstOrder",
     "Lbfgsb",
+    "Mma",
     "Islands",
     "Nsga2",
     "Nsga3",
@@ -163,6 +164,7 @@ __all__ = [
     "RunningNelderMead",
     "RunningFirstOrder",
     "RunningLbfgsb",
+    "RunningMma",
     "RunningIslands",
     # submodules
     "problems",
@@ -1331,8 +1333,8 @@ class Running:
     Each algorithm has a class of its own, with its settings as properties: :class:`RunningGa`,
     :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`, :class:`RunningOpenEs`,
     :class:`RunningNeat`, :class:`RunningPso`, :class:`RunningLocalSearch`,
-    :class:`RunningNelderMead`, :class:`RunningLbfgsb`, :class:`RunningFirstOrder` and
-    :class:`RunningIslands`. A new value is checked as in the algorithm's constructor: a wrong one raises a ``ValueError`` and changes nothing. The handle
+    :class:`RunningNelderMead`, :class:`RunningLbfgsb`, :class:`RunningFirstOrder`,
+    :class:`RunningMma` and :class:`RunningIslands`. A new value is checked as in the algorithm's constructor: a wrong one raises a ``ValueError`` and changes nothing. The handle
     works only during the callback; afterwards it raises a ``RuntimeError``.
 
     A control that changes nothing leaves the run as it is: with a seed, the same result as
@@ -1723,6 +1725,47 @@ class RunningLbfgsb(Running):
         return int(self._get("restart_count"))
 
 
+class RunningMma(Running):
+    """A running :class:`Mma`, for ``control``: its state, read-only. Its steps follow from its
+    approximations, so it has no settings to change; ``reevaluate()`` scores the current point
+    again, for a fitness function that changed, and the next iteration starts from it with the
+    asymptotes kept."""
+
+    __slots__ = ()
+
+    @property
+    def converged(self) -> str | None:
+        """Why the run has converged: "kkt" (the KKT residual is within the tolerance) or "step"
+        (the last step is); None while it goes on."""
+        converged = self._get("converged")
+        return None if converged is None else str(converged)
+
+    @property
+    def iterations(self) -> int:
+        """The completed iterations: points accepted after the initial one."""
+        return int(self._get("iterations"))
+
+    @property
+    def inner_iterations(self) -> int:
+        """GCMMA's inner iterations: points rejected because an approximation wasn't
+        conservative there. 0 with ``method="mma"``."""
+        return int(self._get("inner_iterations"))
+
+    @property
+    def multipliers(self) -> list[float]:
+        """The constraints' multipliers from the last subproblem, at least 0: at a solution, the
+        Lagrange multipliers of the problem minimized (of the negated score when maximizing). A
+        multiplier at ``constraint_cost`` or above means its constraint couldn't be met."""
+        return [float(value) for value in self._get("multipliers")]
+
+    @property
+    def kkt_residual(self) -> float:
+        """The KKT residual at the current point with those multipliers (NaN before the first
+        iteration)."""
+        residual = self._get("kkt_residual")
+        return _math.nan if residual is None else float(residual)
+
+
 class RunningFirstOrder(Running):
     """A running :class:`FirstOrder` method, for ``control``: its learning rate and schedule
     multiplier, e.g. lowered over the run (a learning-rate schedule), and its state, read-only.
@@ -1996,6 +2039,38 @@ def _with_gradient(function: Callable[[np.ndarray], Any]) -> Callable[[np.ndarra
     return evaluate
 
 
+def _with_constraints(
+    function: Callable[[np.ndarray], Any], constraints: int
+) -> Callable[[np.ndarray], Any]:
+    """A function returning ``(value, gradient, g, jacobian)``: the gradient and the
+    ``constraints`` values ``g`` float64 arrays, the Jacobian a 2-D one, a row per constraint."""
+
+    def evaluate(genome: np.ndarray) -> tuple[Any, np.ndarray, np.ndarray, np.ndarray]:
+        result = function(genome)
+        if not (isinstance(result, tuple) and len(result) == 4):
+            raise TypeError(
+                "with gradient=True and constraints, the fitness function returns a tuple "
+                "(value, gradient, constraint values, jacobian), not "
+                + type(result).__name__
+                + (f" of length {len(result)}" if isinstance(result, tuple) else "")
+            )
+        value, gradient, values, jacobian = result
+        values = np.asarray(values, dtype=np.float64).reshape(-1)
+        if values.shape != (constraints,):
+            raise ValueError(
+                f"the fitness function returns {values.size} constraint values, for "
+                f"{constraints} constraints"
+            )
+        return (
+            value,
+            np.asarray(gradient, dtype=np.float64).reshape(-1),
+            values,
+            np.asarray(jacobian, dtype=np.float64).reshape(constraints, -1),
+        )
+
+    return evaluate
+
+
 def _batch_gradient_rows(gradient: Callable[[np.ndarray], Any]) -> Callable[[np.ndarray], Any]:
     """A batch gradient function returning a float64 array, a row per genome."""
 
@@ -2090,6 +2165,7 @@ class _Algorithm:
         checkpoints: dict[str, Any] | None = None,
         gradient: Callable[[np.ndarray], Any] | None = None,
         combined_gradient: bool = False,
+        constraints: int = 0,
     ) -> dict[str, Any]:
         run = {
             "genome": _describe_setting("genome", self._genome, _GENOME),
@@ -2110,6 +2186,7 @@ class _Algorithm:
             **(checkpoints or {}),
             gradient=gradient,
             combined_gradient=combined_gradient,
+            constraints=constraints,
         )
 
 
@@ -2199,8 +2276,8 @@ class _SingleObjective(_Single):
             ``on_generation``, on the same thread, with the running algorithm (a
             :class:`RunningGa`, :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`,
             :class:`RunningOpenEs`, :class:`RunningPso`, :class:`RunningLocalSearch`,
-            :class:`RunningNelderMead`, :class:`RunningLbfgsb`, :class:`RunningFirstOrder` or
-            :class:`RunningIslands`) and a
+            :class:`RunningNelderMead`, :class:`RunningLbfgsb`, :class:`RunningFirstOrder`,
+            :class:`RunningMma` or :class:`RunningIslands`) and a
             :class:`Progress`: to change the algorithm's
             settings for the next generation, or to re-evaluate it after the fitness function
             changed. See :class:`Running`.
@@ -3920,6 +3997,265 @@ class FirstOrder(_GradientMethod):
             "initial_genome": initial_genome,
             "seed": _optional_whole("seed", self.seed),
         }
+
+
+class Mma(_GradientMethod):
+    """The method of moving asymptotes (MMA), or its globally convergent form (GCMMA). Real
+    genomes.
+
+    For smooth problems with very many variables (up to millions) and few inequality constraints
+    ``g(x) <= 0`` (up to a few hundred), with the gradient of the score and of every constraint.
+    Each iteration replaces the objective and every constraint by a convex, separable
+    approximation around the current point, ``r + Σ p/(u − x) + q/(x − l)`` with two asymptotes
+    ``l < x < u`` per gene that move with the iterates (closer where a gene oscillates, farther
+    where it moves steadily), and solves the approximate problem through its dual, in the
+    constraints' multipliers: an iteration costs a few passes over the genes, with no matrix of
+    them. ``method="gcmma"`` accepts a point only once the approximations are conservative there,
+    and otherwise adds curvature and solves again (another evaluation): convergence from any
+    start. Plain MMA is faster where it converges; around a minimum inside the bounds where the
+    objective's gradient vanishes, it can cycle, and GCMMA converges. Each constraint is relaxed
+    by an artificial variable at ``constraint_cost`` per unit, so every subproblem has a
+    solution: the cost must exceed the constraints' multipliers. Equality constraints aren't
+    supported. A run stops with the stop reason "converged" when the KKT residual is within
+    ``kkt_tolerance`` or a step within ``step_tolerance``; one that converges to a point
+    infeasible by rounding ends with a restoration step onto the feasible side of its active
+    constraints. The best solution is the best evaluated by Deb's rules, as everywhere in the
+    package. :class:`RunningMma` reads the state in a ``control``.
+
+    ``run`` takes the gradient as :class:`Lbfgsb` does (a ``gradient`` function, or
+    ``gradient=True`` with a fitness function returning ``(value, gradient)``), or a smooth
+    problem of :mod:`genoxide.problems`, evaluated in Rust with its gradient; MMA doesn't use
+    finite differences. With ``constraints=m``, ``gradient=True`` and the fitness function
+    returns ``(value, gradient, g, jacobian)``: ``g`` the constraints' values (feasible at 0 or
+    below) and ``jacobian`` an array of a row per constraint, its gradient.
+
+    Minimize the sum of ``c / x`` subject to ``sum(x) <= 10``; the minimum is at
+    ``x = 10 sqrt(c) / sum(sqrt(c))``::
+
+        import numpy as np
+
+        import genoxide as gx
+
+        c = np.array([1.0, 4.0, 9.0, 16.0])
+
+        def volume(x):
+            return (c / x).sum(), -c / x**2, np.array([x.sum() - 10.0]), np.ones((1, 4))
+
+        mma = gx.Mma(gx.Real((0.1, 10), length=4), initial_genome=[1.0] * 4, objective="minimize")
+        result = mma.run(volume, gradient=True, constraints=1, evaluations=500)
+        print(result.stop_reason, result.best_genome)  # converged [1. 2. 3. 4.]
+
+    Parameters
+    ----------
+    genome : Real
+        The search space. At least one gene needs ``low < high``; fixed genes stay as they are.
+    method : {"mma", "gcmma"}, default "mma"
+        MMA, one evaluation per iteration, or its globally convergent form.
+    asymptote_initial : float, default 0.5
+        The asymptotes' distance from the point in the first two iterations, as a fraction of each
+        gene's range, above 0 (Svanberg's ``asyinit``). Smaller is more conservative.
+    asymptote_decrease : float, default 0.7
+        The factor that brings a gene's asymptotes nearer when it oscillates, above 0 and at most
+        1 (``asydecr``).
+    asymptote_increase : float, default 1.2
+        The factor that moves them away when it moves the same way twice, at least 1
+        (``asyincr``).
+    move_limit : float, default 0.5
+        The largest step of a gene in an iteration, as a fraction of its range, above 0
+        (``move``).
+    constraint_cost : float, default 1000
+        The cost per unit of the artificial variable that relaxes each constraint, above 0: it
+        must exceed the constraints' multipliers at the solution, which depend on the scaling of
+        the score and the constraints.
+    kkt_tolerance : float, default 1e-9
+        The KKT residual (the root mean square of the KKT conditions' residuals, in the score's
+        units) at which a run has converged, at least 0.
+    step_tolerance : float, default 1e-10
+        The step, as a fraction of each gene's range, at which a run has converged, at least 0.
+    restoration : bool, default True
+        Whether a run that converges to an infeasible point ends with the restoration step.
+    parallel_sums : bool, default False
+        Whether the dual's sums over the genes run on all cores, in fixed chunks: the same results
+        as without it. It pays off from about 10^5 genes.
+    initial_genome : array-like of float, optional
+        The point to start from, a number per gene within the bounds. None is a random point.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better. The gradient is of the score as the function
+        returns it.
+    seed : int, optional
+        The seed of the random start, 0 to 2^64 - 1. None is a random seed.
+
+    References: Svanberg, K. (1987). The method of moving asymptotes: a new method for structural
+    optimization. *International Journal for Numerical Methods in Engineering* 24(2): 359-373.
+    Svanberg, K. (2002). A class of globally convergent optimization methods based on
+    conservative convex separable approximations. *SIAM Journal on Optimization* 12(2): 555-573.
+    Svanberg, K. (2007). *MMA and GCMMA – two methods for nonlinear optimization.* Notes, KTH.
+    """
+
+    _running = RunningMma
+
+    def __init__(
+        self,
+        genome: Real,
+        *,
+        method: Literal["mma", "gcmma"] = "mma",
+        asymptote_initial: float = 0.5,
+        asymptote_decrease: float = 0.7,
+        asymptote_increase: float = 1.2,
+        move_limit: float = 0.5,
+        constraint_cost: float = 1000.0,
+        kkt_tolerance: float = 1e-9,
+        step_tolerance: float = 1e-10,
+        restoration: bool = True,
+        parallel_sums: bool = False,
+        initial_genome: Sequence[float] | np.ndarray | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.method = method
+        self.asymptote_initial = asymptote_initial
+        self.asymptote_decrease = asymptote_decrease
+        self.asymptote_increase = asymptote_increase
+        self.move_limit = move_limit
+        self.constraint_cost = constraint_cost
+        self.kkt_tolerance = kkt_tolerance
+        self.step_tolerance = step_tolerance
+        self.restoration = restoration
+        self.parallel_sums = parallel_sums
+        self.initial_genome = initial_genome
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        if self.method not in ("mma", "gcmma"):
+            raise ValueError(f'method is "mma" or "gcmma", not {self.method!r}')
+        initial_genome = None
+        if self.initial_genome is not None:
+            genes = np.asarray(self.initial_genome, dtype=object)
+            if genes.ndim != 1:
+                raise ValueError(
+                    "initial_genome is a sequence of numbers, one per gene, not "
+                    f"{self.initial_genome!r}"
+                )
+            initial_genome = [_number("initial_genome", gene, plural=True) for gene in genes]
+        return {
+            "type": "mma",
+            "method": self.method,
+            "asymptote_initial": _number("asymptote_initial", self.asymptote_initial),
+            "asymptote_decrease": _number("asymptote_decrease", self.asymptote_decrease),
+            "asymptote_increase": _number("asymptote_increase", self.asymptote_increase),
+            "move_limit": _number("move_limit", self.move_limit),
+            "constraint_cost": _number("constraint_cost", self.constraint_cost),
+            "kkt_tolerance": _number("kkt_tolerance", self.kkt_tolerance),
+            "step_tolerance": _number("step_tolerance", self.step_tolerance),
+            "restoration": _flag("restoration", self.restoration),
+            "parallel_sums": _flag("parallel_sums", self.parallel_sums),
+            "initial_genome": initial_genome,
+            "seed": _optional_whole("seed", self.seed),
+        }
+
+    def run(
+        self,
+        fitness: Callable[[np.ndarray], Any],
+        *,
+        gradient: Callable[[np.ndarray], Any] | bool | None = None,
+        constraints: int = 0,
+        generations: int | None = None,
+        evaluations: int | None = None,
+        target: float | None = None,
+        time: float | None = None,
+        stagnation: int | None = None,
+        batch: bool = False,
+        parallel: bool = False,
+        on_generation: Callable[[Progress], bool | None] | None = None,
+        control: Callable[[Any, Progress], Any] | None = None,
+        checkpoint: str | os.PathLike[str] | None = None,
+        checkpoint_every: int | None = None,
+        resume: str | os.PathLike[str] | None = None,
+    ) -> Result:
+        """Runs MMA until it converges or the first stop condition, as :meth:`Lbfgsb.run`, with
+        the constraints.
+
+        Parameters
+        ----------
+        fitness : callable or problems.Problem
+            As for :meth:`Lbfgsb.run`. With ``constraints`` above 0, a function that returns
+            ``(value, gradient, g, jacobian)``: the gradient an array of a number per gene,
+            ``g`` an array of the constraints' values (feasible at 0 or below) and ``jacobian``
+            an array of a row per constraint, a number per gene in each. A NaN value is an
+            invalid point, which MMA doesn't accept.
+        gradient : callable or True
+            As for :meth:`Lbfgsb.run`, and required: True with ``constraints`` above 0. None
+            only for a problem of :mod:`genoxide.problems` with a gradient.
+        constraints : int, default 0
+            The number of inequality constraints whose values and Jacobian ``fitness`` returns.
+
+        The other parameters are those of :meth:`Ga.run`; with constraints, ``batch`` is False.
+        MMA evaluates one point per generation, so ``batch`` and ``parallel`` gain nothing.
+
+        Returns
+        -------
+        Result
+            The best solution found, and what the run took.
+
+        Raises
+        ------
+        ValueError
+            As :meth:`Lbfgsb.run`; and for constraints with ``gradient`` other than True or with
+            ``batch=True``, or a function's constraint values of another number.
+        TypeError
+            As :meth:`Lbfgsb.run`; and if a function with constraints doesn't return a tuple of
+            four.
+        """
+        count = _whole("constraints", constraints)
+        if count == 0:
+            return super().run(
+                fitness,
+                gradient=gradient,
+                generations=generations,
+                evaluations=evaluations,
+                target=target,
+                time=time,
+                stagnation=stagnation,
+                batch=batch,
+                parallel=parallel,
+                on_generation=on_generation,
+                control=control,
+                checkpoint=checkpoint,
+                checkpoint_every=checkpoint_every,
+                resume=resume,
+            )
+        if gradient is not True:
+            raise ValueError(
+                "with constraints, gradient=True: the fitness function returns (value, gradient, "
+                "constraint values, jacobian)"
+            )
+        if batch:
+            raise ValueError("constraints need batch=False: MMA evaluates one point at a time")
+        _check_callable(fitness)
+        if isinstance(fitness, (problems.Problem, problems.MultiProblem, problems.control.Balance)):
+            raise ValueError(
+                f"{type(fitness).__name__} is evaluated in Rust: leave gradient and constraints out"
+            )
+        stop = _stop(generations, evaluations, target, time, stagnation)
+        callback = _on_generation(on_generation, Progress)
+        controls = _control(control, self)
+        saving = _checkpoints(checkpoint, checkpoint_every, resume)
+        return Result(
+            **self._run(
+                _with_constraints(fitness, count),
+                stop,
+                False,
+                parallel,
+                callback,
+                None,
+                controls,
+                saving,
+                combined_gradient=True,
+                constraints=count,
+            )
+        )
 
 
 class Islands(_SingleObjective):

@@ -96,7 +96,12 @@ def control(running, progress):
 
 
 result = mma.run(
-    volume, constraints=1, evaluations=200, on_generation=on_generation, control=control
+    volume,
+    gradient=True,
+    constraints=1,
+    evaluations=200,
+    on_generation=on_generation,
+    control=control,
 )
 
 print(f"minimize the sum of c_j / x_j subject to the sum of x_j <= {N}")

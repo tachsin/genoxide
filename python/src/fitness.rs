@@ -26,9 +26,11 @@ use crate::problems::{IntegerProblem, MultiNative};
 use crate::tasks::Balance;
 use crate::tree_problems::TreeFitness;
 use genoxide::Fitness;
+use genoxide::constraint::at_most;
 use genoxide::engine::{BatchExtras, Extras, FitnessFunction, IntoFitness, Progress, Provided};
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
 use genoxide::problems::DynProblem;
+use numpy::ndarray::{ArrayView, Dimension};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -42,9 +44,10 @@ use std::time::Duration;
 // how often the thread that called `run` checks for Ctrl+C while a parallel run's calls go on
 const SIGNAL_CHECK: Duration = Duration::from_millis(50);
 
-/// Where a Python fitness function's gradient comes from, for L-BFGS-B: nowhere, a function of
-/// its own (`gradient=g`), or the fitness function itself, which returns `(value, gradient)`
-/// (`gradient=True`).
+/// Where a Python fitness function's gradient comes from, for the gradient-based methods: nowhere,
+/// a function of its own (`gradient=g`), or the fitness function itself, which returns
+/// `(value, gradient)` (`gradient=True`), or `(value, gradient, g, jacobian)` with constraints
+/// (see `Shared::with_constraints`).
 pub enum Gradient {
     None,
     Function(Py<PyAny>),
@@ -64,6 +67,9 @@ pub struct Shared {
     matrix: Mutex<Option<Py<PyAny>>>,
     // what the genomes need to become Python objects
     context: GenomeContext,
+    // the number of inequality constraints whose values and Jacobian a function with
+    // `gradient=True` returns after its gradient (MMA)
+    constraints: usize,
 }
 
 impl Shared {
@@ -85,6 +91,17 @@ impl Shared {
             abort: Arc::new(AtomicBool::new(false)),
             matrix: Mutex::new(None),
             context,
+            constraints: 0,
+        }
+    }
+
+    /// A function with `gradient=True` that returns `(value, gradient, g, jacobian)`: the values
+    /// of `constraints` inequality constraints `gᵢ(x) <= 0` and their Jacobian after the gradient,
+    /// its score `(value, Σ max(0, gᵢ))`. Nothing for 0 constraints.
+    pub fn with_constraints(self, constraints: usize) -> Self {
+        Self {
+            constraints,
+            ..self
         }
     }
 
@@ -301,6 +318,15 @@ impl Shared {
         !matches!(self.gradient, Gradient::None)
     }
 
+    // the conversion of a result of the function where no gradient is wanted
+    fn convert(&self) -> for<'py> fn(&Bound<'py, PyAny>) -> PyResult<Value> {
+        match (&self.gradient, self.constraints) {
+            (Gradient::Combined, 0) => value_without_gradient,
+            (Gradient::Combined, _) => value_without_derivatives,
+            _ => value,
+        }
+    }
+
     // the value of one genome and its gradient into `gradient`, a call of the function (and of
     // the gradient's function); `None` after an error or Ctrl+C
     fn call_with_gradient<G: PyGenome>(
@@ -387,6 +413,84 @@ fn value_with_gradient(result: &Bound<'_, PyAny>, gradient: Option<&mut [f64]>) 
 // gradient is wanted (finite differences)
 fn value_without_gradient(result: &Bound<'_, PyAny>) -> PyResult<Value> {
     value_with_gradient(result, None)
+}
+
+// the score of `(value, gradient, g, jacobian)`, `(value, Σ max(0, gᵢ))`, without the derivatives:
+// a function with constraints called where they aren't wanted
+fn value_without_derivatives(result: &Bound<'_, PyAny>) -> PyResult<Value> {
+    with_constraints(result, None, None)
+}
+
+// what a function with `gradient=True` and constraints returns: `(value, gradient, g, jacobian)`,
+// float64 arrays the Python package makes (the Jacobian 2-D, a row per constraint). With
+// `extras`, the number of constraints is checked, and the derivatives and values it wants are
+// written into it. The score is `(value, Σ max(0, gᵢ))`, as `genoxide::constraint::Constrained`
+// gives it.
+fn with_constraints(
+    result: &Bound<'_, PyAny>,
+    constraints: Option<usize>,
+    extras: Option<&mut Extras<'_>>,
+) -> PyResult<Value> {
+    let tuple = result
+        .cast::<PyTuple>()
+        .ok()
+        .filter(|tuple| tuple.len() == 4)
+        .ok_or_else(|| {
+            PyTypeError::new_err(format!(
+                "with gradient=True and constraints, the fitness function returns a tuple (value, gradient, constraint values, jacobian), not {}",
+                type_name(result)
+            ))
+        })?;
+    let value: f64 = tuple.get_item(0)?.extract()?;
+    let g: PyReadonlyArray1<'_, f64> = tuple.get_item(2)?.extract()?;
+    let g = g.as_array();
+    if let Some(constraints) = constraints
+        && g.len() != constraints
+    {
+        return Err(PyValueError::new_err(format!(
+            "the fitness function returns {} constraint values, for {constraints} constraints",
+            g.len()
+        )));
+    }
+    if let Some(extras) = extras {
+        let constraints = g.len();
+        if let Some(gradient) = extras.gradient() {
+            let array: PyReadonlyArray1<'_, f64> = tuple.get_item(1)?.extract()?;
+            copy("the gradient", gradient, array.as_array())?;
+        }
+        if let Some(values) = extras.inequalities() {
+            copy("the constraint values", values, g)?;
+        }
+        if let Some(jacobian) = extras.constraint_jacobian() {
+            let array: PyReadonlyArray2<'_, f64> = tuple.get_item(3)?.extract()?;
+            let (rows, columns) = array.as_array().dim();
+            let genes = jacobian.len() / constraints.max(1);
+            if (rows, columns) != (constraints, genes) {
+                return Err(PyValueError::new_err(format!(
+                    "the jacobian has shape ({rows}, {columns}), for {constraints} constraints of {genes} genes"
+                )));
+            }
+            copy("the jacobian", jacobian, array.as_array())?;
+        }
+    }
+    let violation = g.iter().map(|&g| at_most(g, 0.0)).sum();
+    Ok(Value::Constrained(value, violation))
+}
+
+// copies an array into its buffer, in logical order (a row after the other): an error for another
+// number of values
+fn copy<D: Dimension>(name: &str, into: &mut [f64], values: ArrayView<'_, f64, D>) -> PyResult<()> {
+    if values.len() != into.len() {
+        return Err(PyValueError::new_err(format!(
+            "{name} has {} values, for {}",
+            values.len(),
+            into.len()
+        )));
+    }
+    for (slot, &value) in into.iter_mut().zip(values.iter()) {
+        *slot = value;
+    }
+    Ok(())
 }
 
 // a gradient, a float64 array of a value per gene, into `gradient`
@@ -609,11 +713,8 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
             }
             None => {}
         }
-        let convert = match shared.gradient {
-            Gradient::Combined => value_without_gradient,
-            _ => value,
-        };
-        Python::attach(|py| shared.call_genome(py, genome, convert)).unwrap_or(Value::Invalid)
+        Python::attach(|py| shared.call_genome(py, genome, shared.convert()))
+            .unwrap_or(Value::Invalid)
     }
 
     // a Python function gets a generation at a time (`Shared::call_genomes`); a test problem is
@@ -627,6 +728,9 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
         match self.problem {
             Some(Native::Real(problem)) => problem.provides(),
             Some(_) => Provided::NOTHING,
+            None if self.shared.constraints > 0 => Provided::GRADIENT
+                .with_inequalities(self.shared.constraints)
+                .with_constraint_jacobian(),
             None if self.shared.provides_gradient() => Provided::GRADIENT,
             None => Provided::NOTHING,
         }
@@ -634,43 +738,53 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
 
     fn evaluate_with(&self, genome: &G, extras: &mut Extras<'_>) -> Value {
         let shared = self.shared;
-        let Some(gradient) = extras.gradient() else {
-            return FitnessFunction::<G>::evaluate(self, genome);
-        };
         if shared.aborted() {
             return Value::Invalid;
         }
         match self.problem {
-            Some(Native::Real(problem)) => genome.reals().map_or(Value::Invalid, |genome| {
-                Value::Native(problem.evaluate_with(genome, &mut Extras::with_gradient(gradient)))
-            }),
-            Some(_) => FitnessFunction::<G>::evaluate(self, genome),
-            None => Python::attach(|py| shared.call_with_gradient(py, genome, gradient))
-                .unwrap_or(Value::Invalid),
+            Some(Native::Real(problem)) => {
+                return genome.reals().map_or(Value::Invalid, |genome| {
+                    Value::Native(problem.evaluate_with(genome, extras))
+                });
+            }
+            Some(_) => return FitnessFunction::<G>::evaluate(self, genome),
+            None => {}
         }
+        // the derivatives and constraints wanted, the gradient among them or not
+        if shared.constraints > 0 {
+            return Python::attach(|py| {
+                shared.call_genome(py, genome, |result| {
+                    with_constraints(result, Some(shared.constraints), Some(&mut *extras))
+                })
+            })
+            .unwrap_or(Value::Invalid);
+        }
+        let Some(gradient) = extras.gradient() else {
+            return FitnessFunction::<G>::evaluate(self, genome);
+        };
+        Python::attach(|py| shared.call_with_gradient(py, genome, gradient))
+            .unwrap_or(Value::Invalid)
     }
 
-    // with gradients, a Python function is called a genome at a time on this thread, or once
-    // with the batch
+    // with extras, a Python function is called a genome at a time on this thread, or once with
+    // the batch (gradients only)
     fn evaluate_batch_with(&self, genomes: &[&G], extras: &mut BatchExtras<'_>) -> Vec<Value> {
         let shared = self.shared;
-        let dimensions = extras.dimensions();
-        let Some(gradients) = extras.gradients() else {
+        if extras.wanted().is_empty() {
             return FitnessFunction::<G>::evaluate_batch(self, genomes);
-        };
-        if self.problem.is_some() || !shared.batch {
+        }
+        if self.problem.is_some() || !shared.batch || shared.constraints > 0 {
             return genomes
                 .iter()
-                .zip(gradients.chunks_mut(dimensions.max(1)))
-                .map(|(genome, row)| {
-                    FitnessFunction::<G>::evaluate_with(
-                        self,
-                        genome,
-                        &mut Extras::with_gradient(row),
-                    )
+                .enumerate()
+                .map(|(position, genome)| {
+                    FitnessFunction::<G>::evaluate_with(self, genome, &mut extras.get(position))
                 })
                 .collect();
         }
+        let Some(gradients) = extras.gradients() else {
+            return FitnessFunction::<G>::evaluate_batch(self, genomes);
+        };
         if shared.aborted() || genomes.is_empty() {
             return vec![Value::Invalid; genomes.len()];
         }
@@ -692,12 +806,7 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
         }
         let combined = matches!(shared.gradient, Gradient::Combined);
         if !shared.batch {
-            let convert = if combined {
-                value_without_gradient
-            } else {
-                value
-            };
-            return shared.call_genomes(genomes, convert, Value::Invalid);
+            return shared.call_genomes(genomes, shared.convert(), Value::Invalid);
         }
         Python::attach(|py| {
             shared
