@@ -1,11 +1,11 @@
-"""Quartic: minimize De Jong's quartic function in 30 dimensions, without noise and with
-the noise of Yao, Liu and Lin, drawn from the genome.
+"""Quartic: minimize De Jong's quartic function in 30 dimensions, without noise and with the noise
+of Yao, Liu and Lin, drawn from the genome.
 
 Compares how fast CMA-ES, with a full and with a diagonal covariance matrix (sep-CMA-ES),
 differential evolution, particle swarm optimization and a real-coded genetic algorithm close in on
-the minimum, 0 at the origin: the evaluations each takes until its error is at most 1, 1e-2, 1e-4, 1e-6 and 1e-8.
-The function is genoxide's `problems::Quartic`. Then, with noise, each algorithm's best value and the quartic without noise
-there.
+the minimum, 0 at the origin: the evaluations each takes until its error is at most 1, 1e-2, 1e-4,
+1e-6 and 1e-8. The function is genoxide's `problems::Quartic`. Then, with noise, each algorithm's
+best value and the quartic without noise there.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of a run for the plot on the example's page,
 with trace.py.

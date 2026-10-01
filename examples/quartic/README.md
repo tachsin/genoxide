@@ -66,16 +66,17 @@ With noise, each algorithm runs to the end of its budget, since no target can be
 
 ## Output
 
-The first line gives the dimension and the budget. Then a table for the function without noise: a row per algorithm, the
-evaluations it had used when its best error first reached each value of the heading, and the best
-error it found, to two significant digits. A dash is an error not reached. Then, with noise, a row per algorithm: the best value it found, noise included, and the
-quartic at that point without noise. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension and the budget. Then a table for the function without noise: a
+row per algorithm, the evaluations it had used when its best error first reached each value of the
+heading, and the best error it found, to two significant digits. A dash is an error not reached.
+Then, with noise, a row per algorithm: the best value it found, noise included, and the quartic at
+that point without noise. The function is evaluated with genoxide's portable math, so the runs are
+the same on every platform, and in Python, `run` evaluates it in Rust, so both versions print the
+same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/quartic) plays back another
-run: CMA-ES on the function in 2 dimensions without noise, x₁⁴ + 2x₂⁴, so that the
-population can be drawn on its contour. It meets the target after 108 evaluations.
+[The project page](https://tachsin.gr/projects/genoxide/examples/quartic) plays back another run:
+CMA-ES on the function in 2 dimensions without noise, x₁⁴ + 2x₂⁴, so that the population can be
+drawn on its contour. It meets the target after 108 evaluations.
 
 ## Good results
 

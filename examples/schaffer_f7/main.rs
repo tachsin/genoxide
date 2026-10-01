@@ -16,7 +16,7 @@
 mod trace;
 
 use genoxide::prelude::*;
-use genoxide::problems::{SchafferF7, Problem};
+use genoxide::problems::{Problem, SchafferF7};
 
 const DIMENSIONS: usize = 10;
 const SEEDS: u64 = 10;

@@ -1,11 +1,12 @@
-"""Sum of different powers: minimize the sum of the genes' absolute values to powers from 2 to 31, in 30
-dimensions: the later the gene, the flatter the function near the minimum.
+"""Sum of different powers: minimize the sum of the genes' absolute values to powers from 2 to 31,
+in 30 dimensions: the later the gene, the flatter the function near the minimum.
 
 Compares how fast CMA-ES, with a full and with a diagonal covariance matrix (sep-CMA-ES),
 differential evolution, particle swarm optimization and a real-coded genetic algorithm close in on
-the minimum, 0 at the origin: the evaluations each takes until its error is at most 1, 1e-2, 1e-4, 1e-6 and 1e-8.
-The function is genoxide's `problems::SumOfDifferentPowers`. Then the same on the function shifted and rotated, with genoxide's `problems::Shifted`
-and `problems::Rotated`, as the CEC and BBOB suites transform it.
+the minimum, 0 at the origin: the evaluations each takes until its error is at most 1, 1e-2, 1e-4,
+1e-6 and 1e-8. The function is genoxide's `problems::SumOfDifferentPowers`. Then the same on the
+function shifted and rotated, with genoxide's `problems::Shifted` and `problems::Rotated`, as the
+CEC and BBOB suites transform it.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of a run for the plot on the example's page,
 with trace.py.
@@ -88,8 +89,10 @@ def compare(name, problem):
 
 print(f"Sum of different powers in {DIMENSIONS} dimensions, {BUDGET} evaluations at most")
 compare("Sum of different powers", gx.problems.SumOfDifferentPowers(DIMENSIONS))
-# the same function, shifted and rotated: the CEC 2017 report's first version had it so
-rotated = gx.problems.Rotated(gx.problems.Shifted(gx.problems.SumOfDifferentPowers(DIMENSIONS), seed=1), seed=1)
+# the same function, shifted and rotated, as the CEC and BBOB suites transform theirs
+rotated = gx.problems.Rotated(
+    gx.problems.Shifted(gx.problems.SumOfDifferentPowers(DIMENSIONS), seed=1), seed=1
+)
 compare("Shifted and rotated (seed 1)", rotated)
 
 # with GENOXIDE_TRACE=<file>, a trace for the plot on the example's page, of a separate run in

@@ -14,8 +14,8 @@ trace_note: "Recorded from another run: CMA-ES with IPOP restarts in 2 dimension
 
 ## The problem
 
-The non-continuous Rastrigin function is Rastrigin's function of genes rounded to half-integers
-away from the origin:
+The non-continuous Rastrigin function is Rastrigin's function of genes rounded to half-integers away
+from the origin:
 
 ```text
 f(x) = Σ (yᵢ² − 10 cos 2πyᵢ + 10),   yᵢ = xᵢ if |xᵢ| < 1/2, round(2xᵢ)/2 otherwise
@@ -42,8 +42,8 @@ its minimum.
 
 ## Algorithm
 
-Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension,
-100,000 per run, and a target of 1e-8:
+Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension, 100,000
+per run, and a target of 1e-8:
 
 - CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195), which samples a
   population of 10 from a normal distribution and adapts its mean, its step size and its covariance
@@ -60,14 +60,14 @@ Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations pe
 
 ## Output
 
-The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many
-of its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
-did), and the median of every run's best error, to two significant digits. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many of
+its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
+did), and the median of every run's best error, to two significant digits. The function is evaluated
+with genoxide's portable math, so the runs are the same on every platform, and in Python, `run`
+evaluates it in Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/non-continuous-rastrigin) plays back another run:
-CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population
+[The project page](https://tachsin.gr/projects/genoxide/examples/non-continuous-rastrigin) plays
+back another run: CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population
 can be drawn on its contour. Within 20,000 evaluations it ends at an error of 6.9e-4, near the
 minimum but short of the target.
 

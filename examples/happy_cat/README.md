@@ -20,13 +20,13 @@ HappyCat adds a slope to the distance from a sphere of radius √n:
 f(x) = |Σ xᵢ² − n|^(1/4) + (½ Σ xᵢ² + Σ xᵢ) / n + ½,   each xᵢ in [−5, 5]
 ```
 
-Its minimum is 0, at (−1, …, −1), the only one: the second part is Σ (xᵢ + 1)² / (2n), 0 only
-there, where the first is 0 too. Here n = 10. It's Beyer and Finck's (2012) function, which
-couldn't be read: its parameter α shapes the groove, and its experiments use α = 1/8, which would
-be this function's 1/4 if α is the exponent of (Σ xᵢ² − n)², as it's usually written; that couldn't
-be confirmed. genoxide takes the definition from the CEC 2014 report (Liang, Qu and Suganthan 2013,
-function 11), which cites Beyer and Finck and scales its search space [−100, 100] by 5/100, to
-[−5, 5]. The original is still to be checked (issue #168).
+Its minimum is 0, at (−1, …, −1), the only one: the second part is Σ (xᵢ + 1)² / (2n), 0 only there,
+where the first is 0 too. Here n = 10. It's Beyer and Finck's (2012) function, which couldn't be
+read: its parameter α shapes the groove, and its experiments use α = 1/8, which would be this
+function's 1/4 if α is the exponent of (Σ xᵢ² − n)², as it's usually written; that couldn't be
+confirmed. genoxide takes the definition from the CEC 2014 report (Liang, Qu and Suganthan 2013,
+function 11), which cites Beyer and Finck and scales its search space [−100, 100] by 5/100, to [−5,
+5]. The original is still to be checked (issue #168).
 
 ## What makes it hard
 
@@ -39,13 +39,13 @@ the groove. The shape of its contour in two dimensions gave it its name.
 
 ## Representation
 
-A `Real` genome of 10 genes, each in [−5, 5]: the point x itself. The fitness is f(x), to
-minimize. The function is genoxide's `problems::HappyCat`, which brings its bounds and its minimum.
+A `Real` genome of 10 genes, each in [−5, 5]: the point x itself. The fitness is f(x), to minimize.
+The function is genoxide's `problems::HappyCat`, which brings its bounds and its minimum.
 
 ## Algorithm
 
-Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension,
-100,000 per run, and a target of 1e-8:
+Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension, 100,000
+per run, and a target of 1e-8:
 
 - CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195), which samples a
   population of 10 from a normal distribution and adapts its mean, its step size and its covariance
@@ -62,20 +62,20 @@ Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations pe
 
 ## Output
 
-The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many
-of its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
-did), and the median of every run's best error, to two significant digits. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many of
+its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
+did), and the median of every run's best error, to two significant digits. The function is evaluated
+with genoxide's portable math, so the runs are the same on every platform, and in Python, `run`
+evaluates it in Rust, so both versions print the same.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/happy-cat) plays back another run:
-CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population
-can be drawn on its contour. Within 20,000 evaluations it ends at an error of 1.7e-4, in the groove near the minimum:
-it doesn't reach the target in 2 dimensions either.
+CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population can be drawn on
+its contour. Within 20,000 evaluations it ends at an error of 1.7e-4, in the groove near the
+minimum: it doesn't reach the target in 2 dimensions either.
 
 ## Good results
 
 No algorithm reaches the minimum to within 1e-8: that's the function's point. CMA-ES with IPOP
-restarts comes closest, with a median error of 5.4·10⁻³; CMA-ES without restarts ends at
-9.4·10⁻², the genetic algorithm at 7.8·10⁻², SHADE at 0.10 and PSO at 0.14. They all reach the
-groove, and stall in it, short of the minimum.
+restarts comes closest, with a median error of 5.4·10⁻³; CMA-ES without restarts ends at 9.4·10⁻²,
+the genetic algorithm at 7.8·10⁻², SHADE at 0.10 and PSO at 0.14. They all reach the groove, and
+stall in it, short of the minimum.

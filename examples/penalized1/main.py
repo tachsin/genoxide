@@ -1,10 +1,10 @@
 """Penalized 1: minimize Yao, Liu and Lin's first penalized function, Levy's function with a
 penalty, in 30 dimensions.
 
-Runs CMA-ES without and with IPOP restarts (a population that doubles at each restart),
-differential evolution (SHADE), particle swarm optimization and a real-coded genetic algorithm from
-10 seeds each, and counts the runs that reach the minimum, 0 at (−1, …, −1), to within 1e-8. The
-function is genoxide's `problems::Penalized1`, which run evaluates in Rust.
+Runs CMA-ES without and with IPOP restarts (a population that doubles at each restart), differential
+evolution (SHADE), particle swarm optimization and a real-coded genetic algorithm from 10 seeds
+each, and counts the runs that reach the minimum, 0 at (−1, …, −1), to within 1e-8. The function is
+genoxide's `problems::Penalized1`, which run evaluates in Rust.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of a run for the plot on the example's page,
 with trace.py.
@@ -62,7 +62,10 @@ def error_text(error):
 
 problem = gx.problems.Penalized1(DIMENSIONS)
 minimum = problem.optimum.value
-print(f"Penalized 1 in {DIMENSIONS} dimensions, {SEEDS} seeds, {BUDGET} evaluations at most per run")
+print(
+    f"Penalized 1 in {DIMENSIONS} dimensions, {SEEDS} seeds, "
+    f"{BUDGET} evaluations at most per run"
+)
 print("algorithm         at min  evaluations  median error")
 for name in ALGORITHMS:
     # the evaluations of the runs that reach the minimum, and every run's best error
@@ -78,7 +81,8 @@ for name in ALGORITHMS:
     reached = f"{len(evaluations)}/{SEEDS}"
     middle = median(evaluations)
     evaluations_text = "-" if middle is None else f"{middle:.0f}"
-    print(f"{name:<16}  {reached:>6}  {evaluations_text:>11}  {error_text(median(errors)):>12}")
+    error = error_text(median(errors))
+    print(f"{name:<16}  {reached:>6}  {evaluations_text:>11}  {error:>12}")
 print("evaluations: the median of the runs that reach the minimum")
 
 # with GENOXIDE_TRACE=<file>, a trace for the plot on the example's page, of a separate run in

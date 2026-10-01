@@ -397,8 +397,10 @@ def test_shifted_and_rotated_problems():
     x = np.array([0.5, -1.0, 2.0, 0.0, 1.5])
     assert shifted(x) == gx.problems.Rastrigin(5)(x - shifted.shift)
     # the same seed, the same shift, as in Rust; another, another
-    assert np.array_equal(gx.problems.Shifted(gx.problems.Sphere(2), 1).shift, [46.23653733062747, 24.878588135984046])
-    assert not np.array_equal(gx.problems.Shifted(gx.problems.Rastrigin(5), 2).shift, shifted.shift)
+    expected = [46.23653733062747, 24.878588135984046]
+    assert np.array_equal(gx.problems.Shifted(gx.problems.Sphere(2), 1).shift, expected)
+    other = gx.problems.Shifted(gx.problems.Rastrigin(5), 2)
+    assert not np.array_equal(other.shift, shifted.shift)
     # CEC 2005's F10: rotated about the shifted minimum
     rotated = gx.problems.Rotated(shifted, seed=1)
     matrix = rotated.matrix
@@ -408,7 +410,8 @@ def test_shifted_and_rotated_problems():
     assert np.array_equal(rotated.optimum.solutions[0], shifted.shift)
     y = shifted.shift + matrix @ (x - shifted.shift)
     assert rotated(x) == pytest.approx(shifted(y), rel=1e-12)
-    assert np.array_equal(gx.problems.Rotated(gx.problems.Sphere(2), 1).matrix.ravel(), [-0.9735519448992744, 0.22846577551756006, -0.2284657755175601, -0.9735519448992744])
+    expected = [-0.9735519448992744, 0.22846577551756006, -0.2284657755175601, -0.9735519448992744]
+    assert np.array_equal(gx.problems.Rotated(gx.problems.Sphere(2), 1).matrix.ravel(), expected)
     # constrained problems shift too, with their violation: at G06's minimum, both constraints
     # are active, and x − o rounds to a point outside one of them by 6e-14
     g06 = gx.problems.Shifted(gx.problems.cec2006.G06(), seed=3)
@@ -425,10 +428,16 @@ def test_shifted_and_rotated_problems():
 @pytest.mark.parametrize(
     "problem, message",
     [
-        (gx.problems.Shifted(lambda x: 0.0, seed=1), "Shifted.problem is a single-objective problem of genoxide.problems"),
+        (
+            gx.problems.Shifted(lambda x: 0.0, seed=1),
+            "Shifted.problem is a single-objective problem of genoxide.problems",
+        ),
         (gx.problems.Rotated(gx.problems.Sphere(2), seed=-1), "Rotated.seed is at least 0, not -1"),
-        (gx.problems.Shifted(gx.problems.Zdt1(), seed=1), "Shifted.problem is a single-objective problem"),
-        (gx.problems.Rotated(gx.problems.engineering.GearTrain(), seed=1), "Rotated wraps a single-objective problem on real genomes"),
+        (gx.problems.Shifted(gx.problems.Zdt1(), seed=1), "Shifted.problem is a single-objective"),
+        (
+            gx.problems.Rotated(gx.problems.engineering.GearTrain(), seed=1),
+            "Rotated wraps a single-objective problem on real genomes",
+        ),
         (gx.problems.Quartic(3, noisy=1), "Quartic.noisy is True or False, not 1"),
     ],
 )
@@ -459,7 +468,10 @@ def test_sizes():
         (gx.problems.Powell(6), "Powell.dimensions is a multiple of 4, not 6"),
         (gx.problems.BentCigar(1), "BentCigar.dimensions is at least 2, not 1"),
         (gx.problems.SchafferF7(1), "SchafferF7.dimensions is at least 2, not 1"),
-        (gx.problems.Shifted(gx.problems.Sphere(0), seed=1), "Sphere.dimensions is at least 1, not 0"),
+        (
+            gx.problems.Shifted(gx.problems.Sphere(0), seed=1),
+            "Sphere.dimensions is at least 1, not 0",
+        ),
         (gx.problems.Sphere(2.0), "Sphere.dimensions is a whole number"),
         (gx.problems.Sphere(2**40), "Sphere.dimensions is at most 16777216, not 1099511627776"),
     ],

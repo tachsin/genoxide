@@ -11,7 +11,8 @@ import genoxide as gx
 
 
 def record_small():
-    """Runs CMA-ES with IPOP restarts in 2 dimensions and writes its trace, if ``GENOXIDE_TRACE`` is set."""
+    """Runs CMA-ES with IPOP restarts in 2 dimensions and writes its trace, if
+    ``GENOXIDE_TRACE`` is set."""
     path = os.environ.get("GENOXIDE_TRACE")
     if not path:
         return

@@ -1471,7 +1471,9 @@ class RotatedHyperEllipsoid(_Scalable):
 def _wrapped(name: str, problem: Any) -> dict[str, Any]:
     """The description of the problem a wrapper wraps."""
     if not isinstance(problem, Problem):
-        raise ValueError(f"{name}.problem is a single-objective problem of genoxide.problems, not {problem!r}")
+        raise ValueError(
+            f"{name}.problem is a single-objective problem of genoxide.problems, not {problem!r}"
+        )
     return problem._describe()
 
 

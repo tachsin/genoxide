@@ -22,21 +22,21 @@ f(x) = √(Σ |xᵢ|^(2 + 4 (i−1)/(n−1))),   i from 1 to n, each xᵢ in [�
 ```
 
 Its minimum is 0, at the origin. Here n = 30. It's BBOB's f14 (Hansen et al. 2009), which rotates
-it, with its search domain. It isn't the sum of different powers of Molga and Smutnicki, with
-powers 2 to n + 1 and no square root.
+it, with its search domain. It isn't the sum of different powers of Molga and Smutnicki, with powers
+2 to n + 1 and no square root.
 
 ## What makes it hard
 
 Near the minimum, the genes' sensitivities drift apart: an error of 1e-8, under the square root,
-needs the first gene within 10⁻⁸ of 0, but allows the last one, with its sixth power, to be
-10⁻²·⁷ ≈ 0.002 away. The closer the search gets, the more different the scales it needs, so a
-search must keep adapting them. Shifted and rotated, every direction mixes the powers.
+needs the first gene within 10⁻⁸ of 0, but allows the last one, with its sixth power, to be 10⁻²·⁷ ≈
+0.002 away. The closer the search gets, the more different the scales it needs, so a search must
+keep adapting them. Shifted and rotated, every direction mixes the powers.
 
 ## Representation
 
 A `Real` genome of 30 genes: the point x itself. The fitness is f(x), to minimize. The function is
-genoxide's `problems::DifferentPowers`, which brings its bounds and its minimum, and the shifted and rotated
-instance `problems::Rotated::new(problems::Shifted::new(function, 1), 1)`, which keeps them.
+genoxide's `problems::DifferentPowers`, which brings its bounds and its minimum, and the shifted and
+rotated instance `problems::Rotated::new(problems::Shifted::new(function, 1), 1)`, which keeps them.
 
 ## Algorithm
 
@@ -64,14 +64,14 @@ suites use the function, with their own data; genoxide generates its instances i
 
 ## Output
 
-The first line gives the dimension and the budget. Then two tables, the function as it is and shifted and rotated: a row per algorithm, the
-evaluations it had used when its best error first reached each value of the heading, and the best
-error it found, to two significant digits. A dash is an error not reached. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension and the budget. Then two tables, the function as it is and
+shifted and rotated: a row per algorithm, the evaluations it had used when its best error first
+reached each value of the heading, and the best error it found, to two significant digits. A dash is
+an error not reached. The function is evaluated with genoxide's portable math, so the runs are the
+same on every platform, and in Python, `run` evaluates it in Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/different-powers) plays back another
-run: CMA-ES on the function in 2 dimensions, √(x₁² + x₂⁶), rotated with seed 1, so that the
+[The project page](https://tachsin.gr/projects/genoxide/examples/different-powers) plays back
+another run: CMA-ES on the function in 2 dimensions, √(x₁² + x₂⁶), rotated with seed 1, so that the
 population can be drawn on its contour. It meets the target after 714 evaluations.
 
 ## Good results
@@ -80,5 +80,5 @@ The minimum is 0. As it is, sep-CMA-ES reaches 1e-8 first, after 7,420 evaluatio
 (23,080), SHADE (30,000) and CMA-ES (47,208); the genetic algorithm ends at 1.3e-6.
 
 Shifted and rotated, only CMA-ES reaches 1e-8, after 48,734 evaluations, about as many as before.
-sep-CMA-ES ends at 3.9e-5, SHADE at 1.1e-5, PSO at 1.6e-4 and the genetic algorithm at 3.1e-3:
-their scales per gene, or steps along the axes, no longer fit.
+sep-CMA-ES ends at 3.9e-5, SHADE at 1.1e-5, PSO at 1.6e-4 and the genetic algorithm at 3.1e-3: their
+scales per gene, or steps along the axes, no longer fit.

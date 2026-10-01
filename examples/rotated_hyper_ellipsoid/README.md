@@ -30,9 +30,9 @@ Despite its name, it isn't rotated. Gene j appears in the n − j + 1 sums from 
 f(x) = Σⱼ (n − j + 1) xⱼ²
 ```
 
-an ellipsoid along the axes, with weights from 30 down to 1: genoxide's axis-parallel ellipsoid
-with its genes reversed. Molga and Smutnicki describe Schwefel's problem 1.2, Σᵢ (Σⱼ≤ᵢ xⱼ)²,
-whose ellipsoids are rotated, but write this formula, which other collections repeat.
+an ellipsoid along the axes, with weights from 30 down to 1: genoxide's axis-parallel ellipsoid with
+its genes reversed. Molga and Smutnicki describe Schwefel's problem 1.2, Σᵢ (Σⱼ≤ᵢ xⱼ)², whose
+ellipsoids are rotated, but write this formula, which other collections repeat.
 
 ## What makes it hard
 
@@ -48,8 +48,8 @@ matrix.
 
 ## Representation
 
-A `Real` genome of 30 genes, each in [−65.536, 65.536]: the point x itself. The fitness is f(x),
-to minimize. The function is genoxide's `problems::RotatedHyperEllipsoid`, and its rotation
+A `Real` genome of 30 genes, each in [−65.536, 65.536]: the point x itself. The fitness is f(x), to
+minimize. The function is genoxide's `problems::RotatedHyperEllipsoid`, and its rotation
 `problems::Rotated`, which keeps the bounds and the minimum.
 
 ## Algorithm
@@ -72,15 +72,16 @@ target of 1e-8, from seed 1:
 
 ## Output
 
-The first line gives the dimension and the budget. Then two tables, the function as written and rotated by an orthogonal matrix: a row per algorithm, the
-evaluations it had used when its best error first reached each value of the heading, and the best
-error it found, to two significant digits. A dash is an error not reached. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension and the budget. Then two tables, the function as written and
+rotated by an orthogonal matrix: a row per algorithm, the evaluations it had used when its best
+error first reached each value of the heading, and the best error it found, to two significant
+digits. A dash is an error not reached. The function is evaluated with genoxide's portable math, so
+the runs are the same on every platform, and in Python, `run` evaluates it in Rust, so both versions
+print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/rotated-hyper-ellipsoid) plays back another
-run: CMA-ES on the function in 2 dimensions, 2x₁² + x₂², rotated with seed 1, so that
-the population can be drawn on its contour. It meets the target after 342 evaluations.
+[The project page](https://tachsin.gr/projects/genoxide/examples/rotated-hyper-ellipsoid) plays back
+another run: CMA-ES on the function in 2 dimensions, 2x₁² + x₂², rotated with seed 1, so that the
+population can be drawn on its contour. It meets the target after 342 evaluations.
 
 ## Good results
 
@@ -88,7 +89,7 @@ The minimum is 0. As written, sep-CMA-ES reaches 1e-8 first, after 4,886 evaluat
 (7,140), PSO (27,520) and SHADE (31,900); the genetic algorithm ends at 1.1e-3.
 
 Rotated, CMA-ES takes about as long, 7,294 evaluations: its full covariance matrix learns the
-ellipsoid's axes, whichever they are. sep-CMA-ES takes 2.5 times as long, 12,180, since its
-diagonal matrix can only scale the genes; with a condition number of 30, it still gets there.
-SHADE and PSO slow down by two and three and a half times (59,000 and 96,600), and the genetic
-algorithm, which recombines genes position by position, ends at 4.2.
+ellipsoid's axes, whichever they are. sep-CMA-ES takes 2.5 times as long, 12,180, since its diagonal
+matrix can only scale the genes; with a condition number of 30, it still gets there. SHADE and PSO
+slow down by two and three and a half times (59,000 and 96,600), and the genetic algorithm, which
+recombines genes position by position, ends at 4.2.

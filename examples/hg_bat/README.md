@@ -20,28 +20,27 @@ HGBat is HappyCat's relative, with the difference of two squares in the first te
 f(x) = |(Σ xᵢ²)² − (Σ xᵢ)²|^(1/2) + (½ Σ xᵢ² + Σ xᵢ) / n + ½,   each xᵢ in [−5, 5]
 ```
 
-Its minimum is 0, at (−1, …, −1), the only one: the second part is Σ (xᵢ + 1)² / (2n), 0 only
-there, where the first is 0 too. Here n = 10. genoxide takes it from the CEC 2014 report (Liang, Qu
-and Suganthan 2013, function 12), which scales its search space [−100, 100] by 5/100, to
-[−5, 5], and gives no other source; it's usually credited to Beyer and Finck too, whose paper
-couldn't be read.
+Its minimum is 0, at (−1, …, −1), the only one: the second part is Σ (xᵢ + 1)² / (2n), 0 only there,
+where the first is 0 too. Here n = 10. genoxide takes it from the CEC 2014 report (Liang, Qu and
+Suganthan 2013, function 12), which scales its search space [−100, 100] by 5/100, to [−5, 5], and
+gives no other source; it's usually credited to Beyer and Finck too, whose paper couldn't be read.
 
 ## What makes it hard
 
-The first term is 0 where ‖x‖² = |Σ xᵢ|, a curved surface through the origin and (−1, …, −1),
-and rises as a square root away from it: a groove whose floor curves around to the minimum, with a
+The first term is 0 where ‖x‖² = |Σ xᵢ|, a curved surface through the origin and (−1, …, −1), and
+rises as a square root away from it: a groove whose floor curves around to the minimum, with a
 gentle slope along it. As on HappyCat, a search falls into the groove at once, then has to follow a
 curving direction with small steps across it and large ones along it.
 
 ## Representation
 
-A `Real` genome of 10 genes, each in [−5, 5]: the point x itself. The fitness is f(x), to
-minimize. The function is genoxide's `problems::HgBat`, which brings its bounds and its minimum.
+A `Real` genome of 10 genes, each in [−5, 5]: the point x itself. The fitness is f(x), to minimize.
+The function is genoxide's `problems::HgBat`, which brings its bounds and its minimum.
 
 ## Algorithm
 
-Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension,
-100,000 per run, and a target of 1e-8:
+Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension, 100,000
+per run, and a target of 1e-8:
 
 - CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195), which samples a
   population of 10 from a normal distribution and adapts its mean, its step size and its covariance
@@ -58,16 +57,16 @@ Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations pe
 
 ## Output
 
-The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many
-of its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
-did), and the median of every run's best error, to two significant digits. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many of
+its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
+did), and the median of every run's best error, to two significant digits. The function is evaluated
+with genoxide's portable math, so the runs are the same on every platform, and in Python, `run`
+evaluates it in Rust, so both versions print the same.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/hg-bat) plays back another run:
-CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population
-can be drawn on its contour. Within 20,000 evaluations it ends at an error of 0.010, in the groove: it doesn't reach the
-target in 2 dimensions either.
+CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population can be drawn on
+its contour. Within 20,000 evaluations it ends at an error of 0.010, in the groove: it doesn't reach
+the target in 2 dimensions either.
 
 ## Good results
 

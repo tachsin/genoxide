@@ -28,9 +28,9 @@ which those suites shift and rotate.
 ## What makes it hard
 
 The level sets are discs: one direction is a thousand times more sensitive than all the others. A
-step that suits the 29 flat directions overshoots in the steep one, and a step that suits the
-steep one crawls in the others: a search has to give that one direction its own scale. As it is,
-the direction is a gene's axis; shifted and rotated, a random one.
+step that suits the 29 flat directions overshoots in the steep one, and a step that suits the steep
+one crawls in the others: a search has to give that one direction its own scale. As it is, the
+direction is a gene's axis; shifted and rotated, a random one.
 
 ## Representation
 
@@ -64,15 +64,15 @@ suites use the function, with their own data; genoxide generates its instances i
 
 ## Output
 
-The first line gives the dimension and the budget. Then two tables, the function as it is and shifted and rotated: a row per algorithm, the
-evaluations it had used when its best error first reached each value of the heading, and the best
-error it found, to two significant digits. A dash is an error not reached. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension and the budget. Then two tables, the function as it is and
+shifted and rotated: a row per algorithm, the evaluations it had used when its best error first
+reached each value of the heading, and the best error it found, to two significant digits. A dash is
+an error not reached. The function is evaluated with genoxide's portable math, so the runs are the
+same on every platform, and in Python, `run` evaluates it in Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/discus) plays back another
-run: CMA-ES on the function in 2 dimensions, 10⁶ x₁² + x₂², rotated with seed 1, so that the
-population can be drawn on its contour. It meets the target after 684 evaluations.
+[The project page](https://tachsin.gr/projects/genoxide/examples/discus) plays back another run:
+CMA-ES on the function in 2 dimensions, 10⁶ x₁² + x₂², rotated with seed 1, so that the population
+can be drawn on its contour. It meets the target after 684 evaluations.
 
 ## Good results
 

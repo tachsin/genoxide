@@ -32,21 +32,22 @@ function is usually credited to Levy and Montalvo's tunneling papers (1985), whi
 
 ## What makes it hard
 
-The sines put a local minimum near every point where their arguments are whole multiples of π:
-a grid of shallow wells over the box, the more of them the more genes. The wells' depth scales with
+The sines put a local minimum near every point where their arguments are whole multiples of π: a
+grid of shallow wells over the box, the more of them the more genes. The wells' depth scales with
 the squares in front of the sines, so they are shallower the nearer the minimum, and the squares
-lead towards it. The penalty u is 0 inside [−10, 10] (Penalized 1) or [−5, 5] (Penalized 2), and rises as a
-fourth power outside: a wall that keeps the search away from the bounds of [−50, 50].
+lead towards it. The penalty u is 0 inside [−10, 10] (Penalized 1) or [−5, 5] (Penalized 2), and
+rises as a fourth power outside: a wall that keeps the search away from the bounds of [−50, 50].
 
 ## Representation
 
 A `Real` genome of 30 genes, each in [−50, 50]: the point x itself. The fitness is f(x), to
-minimize. The function is genoxide's `problems::Penalized2`, which brings its bounds and its minimum.
+minimize. The function is genoxide's `problems::Penalized2`, which brings its bounds and its
+minimum.
 
 ## Algorithm
 
-Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension,
-300,000 per run, and a target of 1e-8:
+Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension, 300,000
+per run, and a target of 1e-8:
 
 - CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195), which samples a
   population of 14 from a normal distribution and adapts its mean, its step size and its covariance
@@ -63,15 +64,15 @@ Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations pe
 
 ## Output
 
-The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many
-of its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
-did), and the median of every run's best error, to two significant digits. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many of
+its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
+did), and the median of every run's best error, to two significant digits. The function is evaluated
+with genoxide's portable math, so the runs are the same on every platform, and in Python, `run`
+evaluates it in Rust, so both versions print the same.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/penalized2) plays back another run:
-CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population
-can be drawn on its contour. It meets the target after 396 evaluations.
+CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population can be drawn on
+its contour. It meets the target after 396 evaluations.
 
 ## Good results
 

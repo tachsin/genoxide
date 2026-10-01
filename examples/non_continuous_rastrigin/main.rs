@@ -63,7 +63,12 @@ fn main() -> Result<()> {
 
 // a run of `algorithm` from `seed`, until its best is at most `target` or it has used BUDGET
 // evaluations
-fn run(algorithm: &str, problem: NonContinuousRastrigin, seed: u64, target: f64) -> Result<Outcome<Reals>> {
+fn run(
+    algorithm: &str,
+    problem: NonContinuousRastrigin,
+    seed: u64,
+    target: f64,
+) -> Result<Outcome<Reals>> {
     let real = problem.representation();
     let stop = Stop::target(target).or(Stop::evaluations(BUDGET));
     match algorithm {

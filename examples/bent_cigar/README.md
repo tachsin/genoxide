@@ -22,21 +22,21 @@ f(x) = x₁² + 10⁶ Σᵢ₌₂ⁿ xᵢ²,   each xᵢ in [−100, 100]
 
 Its minimum is 0, at the origin. Here n = 30. It's BBOB's f12 (Hansen et al. 2009), which bends it
 with an asymmetric transformation and rotates it twice; this plain form and the bounds are the CEC
-2014 (Liang, Qu and Suganthan 2013, function 2) and CEC 2017 (Awad et al. 2016, function 1)
-reports' basic function, which those suites shift and rotate.
+2014 (Liang, Qu and Suganthan 2013, function 2) and CEC 2017 (Awad et al. 2016, function 1) reports'
+basic function, which those suites shift and rotate.
 
 ## What makes it hard
 
-The function is a ridge: low only near the line along the first axis, a thousand times narrower
-than long. A search has to find the ridge, then follow it to the minimum, with steps a thousand
-times longer along it than across it, in a single direction. As it is, that direction is a gene's
-axis. Shifted and rotated, it's a random one, and the search has to learn it.
+The function is a ridge: low only near the line along the first axis, a thousand times narrower than
+long. A search has to find the ridge, then follow it to the minimum, with steps a thousand times
+longer along it than across it, in a single direction. As it is, that direction is a gene's axis.
+Shifted and rotated, it's a random one, and the search has to learn it.
 
 ## Representation
 
 A `Real` genome of 30 genes: the point x itself. The fitness is f(x), to minimize. The function is
-genoxide's `problems::BentCigar`, which brings its bounds and its minimum, and the shifted and rotated
-instance `problems::Rotated::new(problems::Shifted::new(function, 1), 1)`, which keeps them.
+genoxide's `problems::BentCigar`, which brings its bounds and its minimum, and the shifted and
+rotated instance `problems::Rotated::new(problems::Shifted::new(function, 1), 1)`, which keeps them.
 
 ## Algorithm
 
@@ -64,21 +64,21 @@ suites use the function, with their own data; genoxide generates its instances i
 
 ## Output
 
-The first line gives the dimension and the budget. Then two tables, the function as it is and shifted and rotated: a row per algorithm, the
-evaluations it had used when its best error first reached each value of the heading, and the best
-error it found, to two significant digits. A dash is an error not reached. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension and the budget. Then two tables, the function as it is and
+shifted and rotated: a row per algorithm, the evaluations it had used when its best error first
+reached each value of the heading, and the best error it found, to two significant digits. A dash is
+an error not reached. The function is evaluated with genoxide's portable math, so the runs are the
+same on every platform, and in Python, `run` evaluates it in Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/bent-cigar) plays back another
-run: CMA-ES on the function in 2 dimensions, x₁² + 10⁶ x₂², not rotated (in 2 dimensions, it's the
+[The project page](https://tachsin.gr/projects/genoxide/examples/bent-cigar) plays back another run:
+CMA-ES on the function in 2 dimensions, x₁² + 10⁶ x₂², not rotated (in 2 dimensions, it's the
 high-conditioned elliptic function), so that the population can be drawn on its contour. It meets
 the target after 756 evaluations.
 
 ## Good results
 
-The minimum is 0. As it is, sep-CMA-ES reaches 1e-8 after 8,316 evaluations and CMA-ES after
-13,482; SHADE takes 42,800 and PSO 47,600. The genetic algorithm ends at 210.
+The minimum is 0. As it is, sep-CMA-ES reaches 1e-8 after 8,316 evaluations and CMA-ES after 13,482;
+SHADE takes 42,800 and PSO 47,600. The genetic algorithm ends at 210.
 
 Shifted and rotated, CMA-ES takes 13,902 evaluations, about as many: it learns the ridge's
 direction. SHADE gets there after 171,700, four times as many as before, and the others fail:

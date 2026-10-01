@@ -1,10 +1,9 @@
-"""Step: minimize a sphere of flat steps in 30 dimensions, whose gradient is 0 almost
-everywhere.
+"""Step: minimize a sphere of flat steps in 30 dimensions, whose gradient is 0 almost everywhere.
 
 Compares how fast CMA-ES, with a full and with a diagonal covariance matrix (sep-CMA-ES),
 differential evolution, particle swarm optimization and a real-coded genetic algorithm close in on
-the minimum, 0 on the cube [−0.5, 0.5)ⁿ: the evaluations each takes until its error is at most 1000, 100, 10, 1 and 0.
-The function is genoxide's `problems::Step`.
+the minimum, 0 on the cube [−0.5, 0.5)ⁿ: the evaluations each takes until its error is at most 1000,
+100, 10, 1 and 0. The function is genoxide's `problems::Step`.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of a run for the plot on the example's page,
 with trace.py.

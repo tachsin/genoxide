@@ -28,7 +28,10 @@ const COLUMNS: [&str; 5] = ["1", "1e-2", "1e-4", "1e-6", "1e-8"];
 
 fn main() -> Result<()> {
     println!("High-conditioned elliptic in {DIMENSIONS} dimensions, {BUDGET} evaluations at most");
-    compare("High-conditioned elliptic", &HighConditionedElliptic::new(DIMENSIONS))?;
+    compare(
+        "High-conditioned elliptic",
+        &HighConditionedElliptic::new(DIMENSIONS),
+    )?;
     // CEC 2005's F3, with genoxide's own shift and rotation
     let rotated = Rotated::new(Shifted::new(HighConditionedElliptic::new(DIMENSIONS), 1), 1);
     compare("Shifted and rotated (seed 1)", &rotated)?;

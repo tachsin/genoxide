@@ -22,11 +22,11 @@ f(x) = 10 (n − Σ cos 2πzᵢ) + Σ zᵢ² + 100 Σ max(0, |xᵢ| − 5)²,   
 each xᵢ in [−5, 5]
 ```
 
-T_osz is BBOB's oscillation, `sign(x) exp(x̂ + 0.049 (sin c₁x̂ + sin c₂x̂))` with x̂ = ln |x|,
-c₁ = 10 and c₂ = 7.9 for positive x, 5.5 and 3.1 otherwise: the identity, with small smooth
-wiggles. The scale sᵢ grows from 1 to √10 along the genes, and is ten times larger where xᵢ > 0
-and i is odd. Its minimum is 0, at the origin. Here n = 10. It's BBOB's f4 (Hansen et al. 2009),
-with its optimum at the origin and no offset, and BBOB's search domain.
+T_osz is BBOB's oscillation, `sign(x) exp(x̂ + 0.049 (sin c₁x̂ + sin c₂x̂))` with x̂ = ln |x|, c₁ =
+10 and c₂ = 7.9 for positive x, 5.5 and 3.1 otherwise: the identity, with small smooth wiggles. The
+scale sᵢ grows from 1 to √10 along the genes, and is ten times larger where xᵢ > 0 and i is odd. Its
+minimum is 0, at the origin. Here n = 10. It's BBOB's f4 (Hansen et al. 2009), with its optimum at
+the origin and no offset, and BBOB's search domain.
 
 ## What makes it hard
 
@@ -38,14 +38,13 @@ look the same on both sides.
 
 ## Representation
 
-A `Real` genome of 10 genes, each in [−5, 5]: the point x itself. The fitness is f(x), to
-minimize. The function is genoxide's `problems::BucheRastrigin`, which brings its bounds and its
-minimum.
+A `Real` genome of 10 genes, each in [−5, 5]: the point x itself. The fitness is f(x), to minimize.
+The function is genoxide's `problems::BucheRastrigin`, which brings its bounds and its minimum.
 
 ## Algorithm
 
-Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension,
-100,000 per run, and a target of 1e-8:
+Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension, 100,000
+per run, and a target of 1e-8:
 
 - CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195), which samples a
   population of 10 from a normal distribution and adapts its mean, its step size and its covariance
@@ -62,16 +61,16 @@ Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations pe
 
 ## Output
 
-The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many
-of its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
-did), and the median of every run's best error, to two significant digits. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many of
+its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
+did), and the median of every run's best error, to two significant digits. The function is evaluated
+with genoxide's portable math, so the runs are the same on every platform, and in Python, `run`
+evaluates it in Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/buche-rastrigin) plays back another run:
-CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population
-can be drawn on its contour. Within 20,000 evaluations it restarts 6 times, up to a population of
-384, and ends at an error of 0.36: it doesn't reach the minimum in 2 dimensions either.
+[The project page](https://tachsin.gr/projects/genoxide/examples/buche-rastrigin) plays back another
+run: CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population can be drawn
+on its contour. Within 20,000 evaluations it restarts 6 times, up to a population of 384, and ends
+at an error of 0.36: it doesn't reach the minimum in 2 dimensions either.
 
 ## Good results
 

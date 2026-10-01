@@ -1,11 +1,11 @@
-"""Rotated hyper-ellipsoid: minimize the "rotated" hyper-ellipsoid in 30 dimensions, which is in fact
-axis-parallel, and then the same function truly rotated.
+"""Rotated hyper-ellipsoid: minimize the "rotated" hyper-ellipsoid in 30 dimensions, which is in
+fact axis-parallel, and then the same function truly rotated.
 
 Compares how fast CMA-ES, with a full and with a diagonal covariance matrix (sep-CMA-ES),
 differential evolution, particle swarm optimization and a real-coded genetic algorithm close in on
-the minimum, 0 at the origin: the evaluations each takes until its error is at most 1, 1e-2, 1e-4, 1e-6 and 1e-8.
-The function is genoxide's `problems::RotatedHyperEllipsoid`. Then the same on the function rotated by an orthogonal matrix, with genoxide's
-`problems::Rotated`.
+the minimum, 0 at the origin: the evaluations each takes until its error is at most 1, 1e-2, 1e-4,
+1e-6 and 1e-8. The function is genoxide's `problems::RotatedHyperEllipsoid`. Then the same on the
+function rotated by an orthogonal matrix, with genoxide's `problems::Rotated`.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of a run for the plot on the example's page,
 with trace.py.

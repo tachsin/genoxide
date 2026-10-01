@@ -21,27 +21,28 @@ first gene to the last:
 f(x) = Σ (10⁶)^((i−1)/(n−1)) xᵢ²,   i from 1 to n, each xᵢ in [−100, 100]
 ```
 
-Its minimum is 0, at the origin. Here n = 30. It's the function F3 of the CEC 2005 report
-(Suganthan et al. 2005), which shifts and rotates it, and gives these bounds; the CEC 2014 and
-2017 reports have the same basic function, and BBOB's f2 and f10 (Hansen et al. 2009) the same
-ellipsoid with an oscillation that genoxide doesn't apply.
+Its minimum is 0, at the origin. Here n = 30. It's the function F3 of the CEC 2005 report (Suganthan
+et al. 2005), which shifts and rotates it, and gives these bounds; the CEC 2014 and 2017 reports
+have the same basic function, and BBOB's f2 and f10 (Hansen et al. 2009) the same ellipsoid with an
+oscillation that genoxide doesn't apply.
 
 ## What makes it hard
 
-The weights run from 1 to 10⁶: the ellipsoid's axes from 1 to 1,000 in length, a condition number
-of 10⁶. Along the first gene the function is a million times flatter than along the last. A search
-with one step size for every direction either crawls along the flat axes or overshoots along the
-steep ones: it must learn a scale per direction.
+The weights run from 1 to 10⁶: the ellipsoid's axes from 1 to 1,000 in length, a condition number of
+10⁶. Along the first gene the function is a million times flatter than along the last. A search with
+one step size for every direction either crawls along the flat axes or overshoots along the steep
+ones: it must learn a scale per direction.
 
-As it is, those directions are the genes' axes, and a scale per gene is enough. Shifted and
-rotated, as in CEC 2005, they're 30 random directions: only a full covariance matrix, with its
-465 parameters, can learn them.
+As it is, those directions are the genes' axes, and a scale per gene is enough. Shifted and rotated,
+as in CEC 2005, they're 30 random directions: only a full covariance matrix, with its 465
+parameters, can learn them.
 
 ## Representation
 
 A `Real` genome of 30 genes: the point x itself. The fitness is f(x), to minimize. The function is
-genoxide's `problems::HighConditionedElliptic`, which brings its bounds and its minimum, and the shifted and rotated
-instance `problems::Rotated::new(problems::Shifted::new(function, 1), 1)`, which keeps them.
+genoxide's `problems::HighConditionedElliptic`, which brings its bounds and its minimum, and the
+shifted and rotated instance `problems::Rotated::new(problems::Shifted::new(function, 1), 1)`, which
+keeps them.
 
 ## Algorithm
 
@@ -69,21 +70,21 @@ suites use the function, with their own data; genoxide generates its instances i
 
 ## Output
 
-The first line gives the dimension and the budget. Then two tables, the function as it is and shifted and rotated: a row per algorithm, the
-evaluations it had used when its best error first reached each value of the heading, and the best
-error it found, to two significant digits. A dash is an error not reached. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension and the budget. Then two tables, the function as it is and
+shifted and rotated: a row per algorithm, the evaluations it had used when its best error first
+reached each value of the heading, and the best error it found, to two significant digits. A dash is
+an error not reached. The function is evaluated with genoxide's portable math, so the runs are the
+same on every platform, and in Python, `run` evaluates it in Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/high-conditioned-elliptic) plays back another
-run: CMA-ES on the function in 2 dimensions, x₁² + 10⁶ x₂², rotated with seed 1, so that the
-population can be drawn on its contour. It meets the target after 654 evaluations.
+[The project page](https://tachsin.gr/projects/genoxide/examples/high-conditioned-elliptic) plays
+back another run: CMA-ES on the function in 2 dimensions, x₁² + 10⁶ x₂², rotated with seed 1, so
+that the population can be drawn on its contour. It meets the target after 654 evaluations.
 
 ## Good results
 
-The minimum is 0. As it is, sep-CMA-ES reaches 1e-8 first, after 9,016 evaluations: a scale per
-gene fits the ellipsoid. PSO takes 35,320, CMA-ES 39,242 (most of them, 36,036, to reach an error of
-1, while its covariance matrix learns the scales), and SHADE 40,100. The genetic algorithm ends at
+The minimum is 0. As it is, sep-CMA-ES reaches 1e-8 first, after 9,016 evaluations: a scale per gene
+fits the ellipsoid. PSO takes 35,320, CMA-ES 39,242 (most of them, 36,036, to reach an error of 1,
+while its covariance matrix learns the scales), and SHADE 40,100. The genetic algorithm ends at
 0.92.
 
 Shifted and rotated, as CEC 2005's F3, CMA-ES takes the same 39,550 evaluations: for its full

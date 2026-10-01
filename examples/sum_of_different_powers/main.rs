@@ -28,8 +28,11 @@ const COLUMNS: [&str; 5] = ["1", "1e-2", "1e-4", "1e-6", "1e-8"];
 
 fn main() -> Result<()> {
     println!("Sum of different powers in {DIMENSIONS} dimensions, {BUDGET} evaluations at most");
-    compare("Sum of different powers", &SumOfDifferentPowers::new(DIMENSIONS))?;
-    // the same function, shifted and rotated: the CEC 2017 report's first version had it so
+    compare(
+        "Sum of different powers",
+        &SumOfDifferentPowers::new(DIMENSIONS),
+    )?;
+    // the same function, shifted and rotated, as the CEC and BBOB suites transform theirs
     let rotated = Rotated::new(Shifted::new(SumOfDifferentPowers::new(DIMENSIONS), 1), 1);
     compare("Shifted and rotated (seed 1)", &rotated)?;
     // with GENOXIDE_TRACE=<file>, a trace for the plot on the example's page, of a separate

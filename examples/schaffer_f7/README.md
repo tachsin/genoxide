@@ -21,18 +21,18 @@ f(x) = ((1 / (n − 1)) Σᵢ₌₁ⁿ⁻¹ √sᵢ (1 + sin²(50 sᵢ^(1/5))))�
 each xᵢ in [−100, 100]
 ```
 
-Its minimum is 0, at the origin. Here n = 10. Schaffer, Caruana, Eshelman and Das (1989) defined
-F7 in two dimensions; their paper couldn't be read. This n-dimensional form is BBOB's f17 (Hansen
-et al. 2009), without the transformations BBOB applies to it, and the bounds are those of Schaffer's
+Its minimum is 0, at the origin. Here n = 10. Schaffer, Caruana, Eshelman and Das (1989) defined F7
+in two dimensions; their paper couldn't be read. This n-dimensional form is BBOB's f17 (Hansen et
+al. 2009), without the transformations BBOB applies to it, and the bounds are those of Schaffer's
 F6. The CEC 2017 report (Awad et al. 2016, function 19) prints sin for sin², and scales its search
 space to [−0.5, 0.5]. The original is still to be checked (issue #168).
 
 ## What makes it hard
 
-Around the minimum, each pair's term is a cone, √sᵢ, with rings of ripples whose frequency grows
-as sᵢ^(1/5): near the origin the rings crowd together, each a local minimum that holds a search
-whose steps are smaller than the ring's width. Far from it, the cone dominates and leads inwards.
-The terms of neighboring pairs share a gene, so the rings of one pair cut across those of the next.
+Around the minimum, each pair's term is a cone, √sᵢ, with rings of ripples whose frequency grows as
+sᵢ^(1/5): near the origin the rings crowd together, each a local minimum that holds a search whose
+steps are smaller than the ring's width. Far from it, the cone dominates and leads inwards. The
+terms of neighboring pairs share a gene, so the rings of one pair cut across those of the next.
 
 ## Representation
 
@@ -42,8 +42,8 @@ minimum.
 
 ## Algorithm
 
-Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension,
-100,000 per run, and a target of 1e-8:
+Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension, 100,000
+per run, and a target of 1e-8:
 
 - CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195), which samples a
   population of 10 from a normal distribution and adapts its mean, its step size and its covariance
@@ -60,15 +60,15 @@ Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations pe
 
 ## Output
 
-The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many
-of its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
-did), and the median of every run's best error, to two significant digits. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many of
+its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
+did), and the median of every run's best error, to two significant digits. The function is evaluated
+with genoxide's portable math, so the runs are the same on every platform, and in Python, `run`
+evaluates it in Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/schaffer-f7) plays back another run:
-CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population
-can be drawn on its contour. It meets the target after 2,070 evaluations.
+[The project page](https://tachsin.gr/projects/genoxide/examples/schaffer-f7) plays back another
+run: CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population can be drawn
+on its contour. It meets the target after 2,070 evaluations.
 
 ## Good results
 

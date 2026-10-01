@@ -61,18 +61,19 @@ target 0, from seed 1:
 
 The first line gives the dimension and the budget. Then a table: a row per algorithm, the
 evaluations it had used when its best error first reached each value of the heading, and the best
-error it found, to two significant digits. A dash is an error not reached. The errors are whole numbers here, so the columns are 1000, 100, 10, 1 and 0. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+error it found, to two significant digits. A dash is an error not reached. The errors are whole
+numbers here, so the columns are 1000, 100, 10, 1 and 0. The function is evaluated with genoxide's
+portable math, so the runs are the same on every platform, and in Python, `run` evaluates it in
+Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/step) plays back another
-run: CMA-ES on the function in 2 dimensions, so that the population can be drawn on its
-contour. It reaches the minimum after 114 evaluations.
+[The project page](https://tachsin.gr/projects/genoxide/examples/step) plays back another run:
+CMA-ES on the function in 2 dimensions, so that the population can be drawn on its contour. It
+reaches the minimum after 114 evaluations.
 
 ## Good results
 
-The minimum is 0. sep-CMA-ES reaches it after 1,848 evaluations and CMA-ES after 1,862: from a
-step size of 60, a third of the range, the plateaus are small next to their steps, and they shrink
-their steps no faster than they close in. SHADE reaches it after 11,600 evaluations and the genetic
+The minimum is 0. sep-CMA-ES reaches it after 1,848 evaluations and CMA-ES after 1,862: from a step
+size of 60, a third of the range, the plateaus are small next to their steps, and they shrink their
+steps no faster than they close in. SHADE reaches it after 11,600 evaluations and the genetic
 algorithm after 25,390. PSO stops at an error of 4, four genes one step from 0: once the swarm has
 gathered on a plateau, its particles slow down and see no better point near them.

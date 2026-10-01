@@ -21,27 +21,25 @@ minimize:
 f(x) = Σ |xᵢ|^(i+1),   i from 1 to n, each xᵢ in [−1, 1]
 ```
 
-Its minimum is 0, at the origin. Here n = 30, so the powers run from 2 to 31. Its origin is
-unknown: genoxide takes the definition and the bounds from Molga and Smutnicki (2005, section
-2.8), and they're still to be checked against an original (issue #168). An early version of the
-CEC 2017 report had it, shifted and rotated, as its function 2.
+Its minimum is 0, at the origin. Here n = 30, so the powers run from 2 to 31. Its origin is unknown:
+genoxide takes the definition and the bounds from Molga and Smutnicki (2005, section 2.8), and
+they're still to be checked against an original (issue #168).
 
 ## What makes it hard
 
 It's unimodal and separable, and each term is smallest at 0. But the terms differ widely in how much
-they matter. Near the minimum, the first gene's term is a parabola, while the thirtieth's, |x|³¹,
-is flat: at x₃₀ = 0.5 it's 5·10⁻¹⁰, and an error of 1e-8 allows x₃₀ up to 0.55. A search reaches
-small values long before the later genes are near 0, and the flatter terms give it little to
-follow.
+they matter. Near the minimum, the first gene's term is a parabola, while the thirtieth's, |x|³¹, is
+flat: at x₃₀ = 0.5 it's 5·10⁻¹⁰, and an error of 1e-8 allows x₃₀ up to 0.55. A search reaches small
+values long before the later genes are near 0, and the flatter terms give it little to follow.
 
-Shifted and rotated, every direction mixes steep and flat terms, and the shapes that the steps
-must learn are no longer along the axes.
+Shifted and rotated, every direction mixes steep and flat terms, and the shapes that the steps must
+learn are no longer along the axes.
 
 ## Representation
 
-A `Real` genome of 30 genes, each in [−1, 1]: the point x itself. The fitness is f(x), to
-minimize. The function is genoxide's `problems::SumOfDifferentPowers`, which brings its bounds and
-its minimum.
+A `Real` genome of 30 genes, each in [−1, 1]: the point x itself. The fitness is f(x), to minimize.
+The function is genoxide's `problems::SumOfDifferentPowers`, which brings its bounds and its
+minimum.
 
 ## Algorithm
 
@@ -69,22 +67,22 @@ suites use the function, with their own data; genoxide generates its instances i
 
 ## Output
 
-The first line gives the dimension and the budget. Then two tables, the function as it is and shifted and rotated: a row per algorithm, the
-evaluations it had used when its best error first reached each value of the heading, and the best
-error it found, to two significant digits. A dash is an error not reached. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension and the budget. Then two tables, the function as it is and
+shifted and rotated: a row per algorithm, the evaluations it had used when its best error first
+reached each value of the heading, and the best error it found, to two significant digits. A dash is
+an error not reached. The function is evaluated with genoxide's portable math, so the runs are the
+same on every platform, and in Python, `run` evaluates it in Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/sum-of-different-powers) plays back another
-run: CMA-ES on the function in 2 dimensions, |x₁|² + |x₂|³, so that the population can be
+[The project page](https://tachsin.gr/projects/genoxide/examples/sum-of-different-powers) plays back
+another run: CMA-ES on the function in 2 dimensions, |x₁|² + |x₂|³, so that the population can be
 drawn on its contour. It meets the target after 204 evaluations.
 
 ## Good results
 
-The minimum is 0. On the function as it is, sep-CMA-ES reaches 1e-8 first, after 2,464
-evaluations, then PSO (4,880), SHADE (6,500), CMA-ES (13,006) and the genetic algorithm (15,922):
-every one gets there. The function is separable, and the methods that work a gene at a time, or
-learn one scale per gene, are the fastest.
+The minimum is 0. On the function as it is, sep-CMA-ES reaches 1e-8 first, after 2,464 evaluations,
+then PSO (4,880), SHADE (6,500), CMA-ES (13,006) and the genetic algorithm (15,922): every one gets
+there. The function is separable, and the methods that work a gene at a time, or learn one scale per
+gene, are the fastest.
 
 Shifted and rotated, CMA-ES takes about as long as before, 12,334 evaluations: its full covariance
 matrix learns the rotation. SHADE needs five times as many, 32,200, and PSO 243,400. sep-CMA-ES

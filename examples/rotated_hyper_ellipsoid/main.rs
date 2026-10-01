@@ -28,7 +28,10 @@ const COLUMNS: [&str; 5] = ["1", "1e-2", "1e-4", "1e-6", "1e-8"];
 
 fn main() -> Result<()> {
     println!("Rotated hyper-ellipsoid in {DIMENSIONS} dimensions, {BUDGET} evaluations at most");
-    compare("Rotated hyper-ellipsoid", &RotatedHyperEllipsoid::new(DIMENSIONS))?;
+    compare(
+        "Rotated hyper-ellipsoid",
+        &RotatedHyperEllipsoid::new(DIMENSIONS),
+    )?;
     // the same function rotated by an orthogonal matrix: now the genes interact
     let rotated = Rotated::new(RotatedHyperEllipsoid::new(DIMENSIONS), 1);
     compare("Rotated by an orthogonal matrix (seed 1)", &rotated)?;

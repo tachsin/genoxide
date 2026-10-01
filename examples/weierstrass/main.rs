@@ -16,7 +16,7 @@
 mod trace;
 
 use genoxide::prelude::*;
-use genoxide::problems::{Weierstrass, Problem};
+use genoxide::problems::{Problem, Weierstrass};
 
 const DIMENSIONS: usize = 10;
 const SEEDS: u64 = 10;

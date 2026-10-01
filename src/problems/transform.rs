@@ -61,7 +61,9 @@ fn moved_optimum(
 /// [`HighConditionedElliptic`](super::HighConditionedElliptic), but not for a function whose
 /// minimum is only the lowest in its box: shifted, [`Schwefel2_26`](super::Schwefel2_26) brings
 /// lower values from outside its box into it. The name and the reference are the wrapped
-/// problem's, and so is the constraint violation of a constrained problem, at `x − o`.
+/// problem's, and so is the constraint violation of a constrained problem, at `x − o`; rounding
+/// in `x − o` can put a shifted solution a few ulps outside a constraint that's active there
+/// (6·10⁻¹⁴ at [`G06`](super::cec2006::G06)'s minimum with seed 3).
 ///
 /// ```
 /// use genoxide::genome::Representation;

@@ -24,8 +24,8 @@ each xᵢ in [−0.5, 0.5]
 Its minimum is 0, at the origin: each gene's sum is at least −Σ aᵏ, reached where every cosine is
 −1, at the integers, and the second term is −n Σ aᵏ, since every bᵏ is odd. Here n = 10. It's the
 function F11 of the CEC 2005 report (Suganthan et al. 2005), shifted and rotated there, with its
-constants and bounds; Liang et al. (2006) and the CEC 2014 report have the same form, and BBOB's
-f16 another one. It's named after Weierstrass's (1872) continuous, nowhere-differentiable function.
+constants and bounds; Liang et al. (2006) and the CEC 2014 report have the same form, and BBOB's f16
+another one. It's named after Weierstrass's (1872) continuous, nowhere-differentiable function.
 
 ## What makes it hard
 
@@ -42,8 +42,8 @@ minimum.
 
 ## Algorithm
 
-Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension,
-100,000 per run, and a target of 1e-8:
+Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations per dimension, 100,000
+per run, and a target of 1e-8:
 
 - CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195), which samples a
   population of 10 from a normal distribution and adapts its mean, its step size and its covariance
@@ -60,15 +60,15 @@ Five algorithms, each from seeds 1 to 10, with a budget of 10,000 evaluations pe
 
 ## Output
 
-The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many
-of its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
-did), and the median of every run's best error, to two significant digits. The function is
-evaluated with genoxide's portable math, so the runs are the same on every platform, and in Python,
-`run` evaluates it in Rust, so both versions print the same.
+The first line gives the dimension, the seeds and the budget. Then a row per algorithm: how many of
+its 10 runs reached the minimum, to within 1e-8, the median of their evaluations (a dash if none
+did), and the median of every run's best error, to two significant digits. The function is evaluated
+with genoxide's portable math, so the runs are the same on every platform, and in Python, `run`
+evaluates it in Rust, so both versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/weierstrass) plays back another run:
-CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population
-can be drawn on its contour. It meets the target after 816 evaluations.
+[The project page](https://tachsin.gr/projects/genoxide/examples/weierstrass) plays back another
+run: CMA-ES with IPOP restarts on the function in 2 dimensions, so that the population can be drawn
+on its contour. It meets the target after 816 evaluations.
 
 ## Good results
 
