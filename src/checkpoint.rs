@@ -51,7 +51,9 @@
 //!
 //! Save between a [`tell`](crate::algorithm::Algorithm::tell) and the next
 //! [`ask`](crate::algorithm::Algorithm::ask), as the engine does. Observers aren't part of a
-//! checkpoint: a resumed run's statistics and hall of fame start empty.
+//! checkpoint: a resumed run's statistics and hall of fame start empty. Nor are a
+//! [`Continuation`](crate::algorithm::Continuation)'s closures: give them again to the loaded one
+//! ([`set_on_stage`](crate::algorithm::Continuation::set_on_stage)).
 //!
 //! Every algorithm, genome, representation and operator of genoxide, and the statistics and hall
 //! of fame, also implement `serde`'s `Serialize` and `Deserialize`, for other formats.

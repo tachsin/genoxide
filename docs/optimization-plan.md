@@ -13,8 +13,11 @@ methods (`FirstOrder`: gradient descent, momentum, Nesterov, Adam and AdamW, wit
 test and the benchmarks of 2.13), and MMA and GCMMA (`Mma`) with the inequality constraints'
 values and Jacobian as extras (`Provided::inequalities`, `constraint_jacobian`,
 `constraint::Constrained`) and the restoration step of open question 6 for MMA, in Python and
-the `genoxide` program, with its example; the rest of A3 (continuation) and the later batches
-aren't yet. genoxide has
+the `genoxide` program, with its example; and continuation (`Continuation` and the `Continue`
+trait of 2.12, for `FirstOrder`, `Mma`, `Lbfgsb`, `NelderMead` and `Cmaes`), in Python (around the
+three gradient methods) but not the `genoxide` program, whose configuration has no form for a
+stage's closure (a fitness program would have to be told its stage), with its example. Batch A3 is
+done; the later batches aren't yet. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
 optimization library: local derivative-free methods, gradient-based methods, constrained
@@ -798,6 +801,23 @@ from scratch.
   `stage_finished` callback and the outcome, so a run's stages can be compared and plotted.
 - **Checkpoints** hold the stage index and the wrapped algorithm's state, so a resumed run
   continues in its stage.
+- **As implemented (batch A3).** The closure, `on_stage(stage, &mut algorithm)`, sets everything a
+  stage needs from its index alone: it's called at the start of every run (`prepare`) with the
+  current stage, and as each next stage begins. It's `Fn + Send + Sync + 'static`, held in an
+  `Arc`, so a continuation is `Clone` and `Send` like the algorithms; the closures aren't
+  serialized, like an engine's observers and controls, and a loaded continuation gets them again
+  (`set_on_stage`), or its run fails at the start with `MissingSetting`. Calling the closure at
+  each run's start is what lets a resumed run (or one continued by another engine) set the
+  parameters of the stage it's in. The budget is one number of generations for every stage
+  (`.generations(n)`); `Lbfgsb`'s pairs are kept under `Keep::State` only when it's built with
+  `.keep_pairs(true)`; `next_stage` drops a restart that was due, so a stage goes on from the
+  point. Each stage's record (generations, evaluations, best fitness, why it ended) has its room
+  from the start: nothing is allocated per step (`tests/allocations.rs`, `FirstOrder` and `Mma`
+  at 10⁶ genes, stage transitions included). The `continuation` example minimizes a p-norm of
+  distances, the smallest ball's center, for p = 2, 4, 8 and 16 with Adam; its points are made so
+  that the center is the minimax point, and F₁₆'s minimum to within 10⁻¹³, and the run ends within
+  1.1e-11 of it. Measured there: keeping Adam's state takes 1,255 evaluations, keeping only
+  the point 1,857, and p = 16 from the start 518, since that F_p is convex with the same minimum.
 
 ### 2.13 Scale: millions of variables
 

@@ -985,7 +985,8 @@ class Result:
     - "converged": the algorithm converged with nothing more to do, e.g. a :class:`NelderMead`
       whose simplex shrank within its tolerance, an :class:`Lbfgsb` or :class:`FirstOrder` at a
       minimum, with no restart
-      left, or a :class:`Cmaes` with ``restarts="stop"`` whose run met a stop criterion;
+      left, a :class:`Cmaes` with ``restarts="stop"`` whose run met a stop criterion, or a
+      :class:`Continuation` after its last stage;
     - "stalled": nothing new to evaluate for 10,000 generations in a row (e.g. every child was a
       copy of a parent), while only ``target`` or ``evaluations`` could stop the run;
     - "other": a reason that the stop conditions of the package don't produce.
