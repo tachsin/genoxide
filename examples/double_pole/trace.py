@@ -2,8 +2,8 @@
 ``GENOXIDE_TRACE`` names, for a new kind of plot, ``cart_poles``: the cart and its poles animated.
 Each of at most 64 generations has the first 100 steps (2 s) of the best network so far, an
 ``[x, θ₁, θ₂]`` per step (m, degrees), from the initial state; the settings have the task's
-geometry and the solution's first 500 steps (10 s). (The animation is for the site to add: the page
-shows the steps curve.) The Rust example writes the same file."""
+geometry and the solution's first 500 steps (10 s). The page plays them.
+The Rust example writes the same file."""
 
 import json
 import math
