@@ -27,6 +27,7 @@
 //! # Ok::<(), genoxide::Error>(())
 //! ```
 
+pub mod bo;
 pub mod cmaes;
 pub mod continuation;
 pub mod de;
