@@ -259,8 +259,8 @@ round their discrete genes, and `design(x)` gives the rounded design.
 
 `gx.problems.multi_engineering` has the engineering design problems with several objectives:
 `TwoBarTruss()`, `WeldedBeam()`, `DiscBrake()`, `SpeedReducer()` and `FourBarTruss()` (two
-objectives), `CarSideImpact()`, `RocketInjector()` and `VehicleCrashworthiness()` (three) and
-`WaterResourcePlanning()` (five). The trusses' fronts are known; the others give their
+objectives), `CarSideImpact()`, `RocketInjector()`, `VehicleCrashworthiness()` and `MarineDesign()`
+(three) and `WaterResourcePlanning()` (five). The trusses' fronts are known; the others give their
 `ideal_point`, and for two objectives their `nadir_point`. `DiscBrake` and `SpeedReducer` round
 their integer gene, and `design(x)` gives the rounded design.
 

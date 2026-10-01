@@ -1,0 +1,3 @@
+SMS-EMOA, 500 generations: 92 solutions on the front, all feasible
+  transportation cost from 8.3776 to 11.6209 £/t, light ship weight from 5346.7 to 12435.3 t, annual cargo from 387515 to 700544 t
+  hypervolume 0.7983, 92.57% of the reference front's 0.8624

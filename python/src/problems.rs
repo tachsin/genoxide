@@ -293,6 +293,7 @@ pub enum MultiConfig {
     MultiCarSideImpact {},
     RocketInjector {},
     VehicleCrashworthiness {},
+    MarineDesign {},
     WaterResourcePlanning {},
     Bnh {},
     Srn {},
@@ -558,7 +559,8 @@ impl MultiConfig {
             Self::Viennet1 {} | Self::Viennet2 {} | Self::Viennet3 {} => 3,
             Self::MultiCarSideImpact {}
             | Self::RocketInjector {}
-            | Self::VehicleCrashworthiness {} => 3,
+            | Self::VehicleCrashworthiness {}
+            | Self::MarineDesign {} => 3,
             Self::WaterResourcePlanning {} => 5,
             _ => 2,
         }
@@ -886,6 +888,7 @@ impl MultiConfig {
             Self::VehicleCrashworthiness {} => {
                 try_boxed::<_, 3, M>(multi::engineering::VehicleCrashworthiness)
             }
+            Self::MarineDesign {} => try_boxed::<_, 3, M>(multi::engineering::MarineDesign),
             Self::WaterResourcePlanning {} => {
                 try_boxed::<_, 5, M>(multi::engineering::WaterResourcePlanning)
             }

@@ -29,9 +29,10 @@ its integer gene is rounded to the nearest integer when it's evaluated, and ``de
 rounded design.
 
 The single-objective welded beam, speed reducer and car side impact are in
-:mod:`genoxide.problems.engineering`. Several originals couldn't be read: each class names its
-original and the paper that restates the definition used here, still to be checked against the
-original (#168).
+:mod:`genoxide.problems.engineering`. Each class names the pages of its original that were
+checked; the disc brake's and the four-bar truss's originals couldn't be read, and those classes
+name the paper that restates the definition used here, still to be checked against the original
+(#168).
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ __all__ = [
     "CarSideImpact",
     "RocketInjector",
     "VehicleCrashworthiness",
+    "MarineDesign",
     "WaterResourcePlanning",
 ]
 
@@ -250,6 +252,37 @@ class VehicleCrashworthiness(MultiProblem[Real]):
     """
 
     _type: ClassVar[str] = "vehicle_crashworthiness"
+
+
+@dataclass(frozen=True)
+class MarineDesign(MultiProblem[Real]):
+    """Conceptual marine design: the bulk carrier that carries cargo the cheapest, with the
+    lightest ship and the most cargo a year, in Parsons and Scott's Panamax case.
+
+    The genes are the length L, beam B, depth D and draft T, in m, the block coefficient C_B and
+    the speed V_k, in knots: x = (L, B, D, T, C_B, V_k). The objectives are the transportation
+    cost, in £/t, the light ship weight, in t, and the annual cargo, maximized, so its negative,
+    in t a year, from the parametric model of a bulk carrier in the paper's appendix (power by the
+    Admiralty coefficient, steel, outfit and machinery weights, deadweight, round trips a year,
+    capital, running and voyage costs). Nine constraints: ``L/B >= 6``, ``L/D <= 15``,
+    ``L/T <= 19``, ``T <= 0.45 DWT^0.31``, ``T <= 0.7 D + 0.7``, ``25,000 <= DWT <= 500,000``,
+    a Froude number of at most 0.32 and a metacentric height of at least 0.07 B.
+
+    Bounds L in [150, 274.32], B in [20, 32.31], D in [10, 25], T in [8, 11.71], C_B in
+    [0.63, 0.75], V_k in [14, 18]: the Panamax case's limits on L, B and T and the model's on C_B
+    and V_k; the other bounds are genoxide's, and hold every feasible design. The front isn't
+    known; its ideal point is (8.376894, 5240.3356, −700,552.76), the paper's single-criterion
+    designs (table 4) computed again.
+
+    Parsons, M. G. and Scott, R. L. (2004). Formulation of multicriterion design optimization
+    problems for solution with scalar numerical optimization methods. Journal of Ship Research
+    48(1): 61-76, the numerical example and its Panamax case 2 (pp. 68-69) and the appendix
+    (p. 76), checked there: its designs give its printed criteria with this model. Tanabe and
+    Ishibuchi's restatement (2020, problem RE4-6-2) differs: a fourth objective, a least
+    deadweight of 3000, narrower bounds and, in its code, sea days of (5000/24) V_k.
+    """
+
+    _type: ClassVar[str] = "marine_design"
 
 
 @dataclass(frozen=True)

@@ -64,7 +64,7 @@
 //! | [`Mw1`] to [`Mw3`], [`Mw5`] to [`Mw7`], [`Mw9`] to [`Mw13`] | 3 or more (15) | 2 | 1 to 4 | disconnected, points, or on constraint boundaries |
 //! | [`Mw4`], [`Mw8`], [`Mw14`] | M + 1 or more (M + 12) | any M ≥ 2 | 1 | linear; spherical in four bands; 2^(M−1) patches |
 //! | [`engineering`]: two-bar and four-bar trusses, welded beam, disc brake, speed reducer | 3 to 7 | 2 | 0 to 11 | the trusses' derived; the others not known |
-//! | [`engineering`]: car side impact, rocket injector, vehicle crashworthiness; water resource planning | 3 to 7 | 3; 5 | 0 or 10; 7 | not known |
+//! | [`engineering`]: car side impact, rocket injector, vehicle crashworthiness, marine design; water resource planning | 3 to 7 | 3; 5 | 0, 9 or 10; 7 | not known; derived |
 //!
 //! ZDT is Zitzler, Deb and Thiele's suite (2000, *Evolutionary Computation* 8(2): 173-195), and
 //! DTLZ Deb, Thiele, Laumanns and Zitzler's (2001, TIK-Report 112, ETH Zürich; and 2002,
@@ -357,6 +357,7 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
         try_boxed::<_, 3, M>(engineering::CarSideImpact),
         try_boxed::<_, 3, M>(engineering::RocketInjector),
         try_boxed::<_, 3, M>(engineering::VehicleCrashworthiness),
+        try_boxed::<_, 3, M>(engineering::MarineDesign),
         try_boxed::<_, 5, M>(engineering::WaterResourcePlanning),
     ];
     let mut problems: Vec<_> = fixed.into_iter().flatten().collect();
@@ -699,6 +700,7 @@ mod tests {
                 "CarSideImpact",
                 "RocketInjector",
                 "VehicleCrashworthiness",
+                "MarineDesign",
                 "DTLZ1",
                 "DTLZ2",
                 "DTLZ3",
