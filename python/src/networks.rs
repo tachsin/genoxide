@@ -2,6 +2,7 @@
 //! networks of `gx.nn`, their forward passes, and their policies for the control tasks.
 
 use crate::errors::setting;
+use crate::neat::Evaluator;
 use genoxide::nn::{Activation, Elman, Mlp};
 use genoxide::problems::control::Policy;
 use numpy::ndarray::Array2;
@@ -231,18 +232,72 @@ impl PyNetwork {
         self.network
             .check(&weights)
             .map_err(PyValueError::new_err)?;
-        Ok(NetworkPolicy {
+        Ok(NetworkPolicy::new(Driver::Weights {
             network: self.network.clone(),
             weights,
-        })
+        }))
     }
 }
 
-/// A network with its weights, a policy for the control tasks that runs in Rust.
+/// What drives a policy: a network of `gx.nn` with its weights, or a NEAT network's evaluator
+/// whose actions are `scale × output + offset`.
+#[derive(Clone, Debug)]
+pub enum Driver {
+    Weights {
+        network: Network,
+        weights: Vec<f64>,
+    },
+    Neat {
+        evaluator: Evaluator,
+        inputs: usize,
+        outputs: usize,
+        scale: f64,
+        offset: f64,
+    },
+}
+
+impl Driver {
+    /// The number of inputs: what the policy observes.
+    pub fn inputs(&self) -> usize {
+        match self {
+            Driver::Weights { network, .. } => network.inputs(),
+            Driver::Neat { inputs, .. } => *inputs,
+        }
+    }
+
+    /// The number of outputs: its actions.
+    pub fn outputs(&self) -> usize {
+        match self {
+            Driver::Weights { network, .. } => network.outputs(),
+            Driver::Neat { outputs, .. } => *outputs,
+        }
+    }
+
+    /// `act` with the policy, from its start: a recurrent network with a context of 0.
+    pub fn act<R>(&mut self, act: impl FnOnce(&mut dyn Policy) -> R) -> Result<R> {
+        match self {
+            Driver::Weights { network, weights } => network.with_policy(weights, act),
+            Driver::Neat {
+                evaluator,
+                scale,
+                offset,
+                ..
+            } => Ok(evaluator.act(*scale, *offset, act)),
+        }
+    }
+}
+
+/// A network with its weights, or a NEAT network's evaluator: a policy for the control tasks
+/// that runs in Rust.
 #[pyclass(frozen, module = "genoxide._genoxide", name = "Policy")]
 pub struct NetworkPolicy {
-    pub network: Network,
-    pub weights: Vec<f64>,
+    pub driver: Driver,
+}
+
+impl NetworkPolicy {
+    pub fn new(driver: Driver) -> Self {
+        Self { driver }
+    }
 }
 
 #[pymethods]
@@ -250,23 +305,36 @@ impl NetworkPolicy {
     /// The number of inputs: what the policy observes.
     #[getter]
     fn inputs(&self) -> usize {
-        self.network.inputs()
+        self.driver.inputs()
     }
 
     /// The number of outputs: its actions.
     #[getter]
     fn outputs(&self) -> usize {
-        self.network.outputs()
+        self.driver.outputs()
     }
 
     fn __repr__(&self) -> String {
-        let kind = match self.network {
-            Network::Mlp(_) => "Mlp",
-            Network::Elman(_) => "Elman",
-        };
-        format!(
-            "<policy of an {kind} of {} weights>",
-            self.network.parameters()
-        )
+        match &self.driver {
+            Driver::Weights { network, .. } => {
+                let kind = match network {
+                    Network::Mlp(_) => "Mlp",
+                    Network::Elman(_) => "Elman",
+                };
+                format!("<policy of an {kind} of {} weights>", network.parameters())
+            }
+            Driver::Neat {
+                evaluator,
+                scale,
+                offset,
+                ..
+            } => {
+                let kind = match evaluator {
+                    Evaluator::FeedForward(_) => "feed-forward",
+                    Evaluator::Recurrent(_) => "recurrent",
+                };
+                format!("<policy of a {kind} NEAT network, actions {scale} × output + {offset}>")
+            }
+        }
     }
 }

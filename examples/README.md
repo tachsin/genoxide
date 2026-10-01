@@ -187,10 +187,10 @@ python examples/tsp_berlin52/main.py
 | [Vehicle crashworthiness](vehicle_crashworthiness/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/vehicle-crashworthiness) |
 | [Water resource planning](water_resource_planning/) | multi-objective | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/water-resource-planning) |
 | [XOR neuroevolution](xor_neuroevolution/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neuroevolution) |
-| [XOR by NEAT](xor_neat/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neat) |
-| [Cart-pole](cart_pole/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cart-pole) |
-| [Double pole balancing](double_pole/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/double-pole) |
-| [Double pole balancing without velocities](double_pole_no_velocities/) | neuroevolution | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/double-pole-no-velocities) |
+| [XOR by NEAT](xor_neat/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/xor-neat) |
+| [Cart-pole](cart_pole/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/cart-pole) |
+| [Double pole balancing](double_pole/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/double-pole) |
+| [Double pole balancing without velocities](double_pole_no_velocities/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/double-pole-no-velocities) |
 | [Two spirals](two_spirals/) | neuroevolution | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/two-spirals) |
 | [Koza's quartic](koza_quartic/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/koza-quartic) |
 | [Koza's 11-multiplexer](multiplexer_11/) | genetic programming | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/multiplexer-11) |

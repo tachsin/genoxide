@@ -5,7 +5,7 @@ summary: Evolve a neural network that balances two poles of different lengths on
 reference: "Wieland, A. P. (1991). Evolving neural network controllers for unstable systems. IJCNN 1991, vol. 2: 667-673. Settings of Gomez, F., Schmidhuber, J. and Miikkulainen, R. (2008). Accelerated neural evolution through cooperatively coevolved synapses. JMLR 9: 937-965."
 reference_url: https://doi.org/10.1109/IJCNN.1991.155416
 optimum: "Balanced for 100,000 steps of 0.02 s (the success criterion of Gomez et al. 2008)"
-languages: [rust]
+languages: [rust, python]
 order: 252
 family: pole balancing
 tab: Two poles
@@ -39,7 +39,9 @@ The equations are integrated by fourth-order Runge-Kutta in two steps of 0.01 s 
 genoxide's portable `math::sin_cos`, so a run is the same bits on every platform
 (`genoxide::problems::control::DoublePole`).
 
-There's no Python version: the Python package has no networks or control tasks yet.
+The Python version runs the task, the network and the fitness in Rust
+(`gx.problems.control.DoublePole`, `gx.nn.Mlp`, `Balance`), and NEAT with `gx.Neat`, its
+networks' policies run in Rust too: it prints the same output and writes the same trace.
 
 ## What makes it hard
 

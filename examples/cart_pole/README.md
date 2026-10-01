@@ -5,7 +5,7 @@ summary: Evolve a neural network that balances a pole on a cart for 100,000 step
 reference: "Barto, A. G., Sutton, R. S. and Anderson, C. W. (1983). Neuronlike adaptive elements that can solve difficult learning control problems. IEEE Transactions on Systems, Man, and Cybernetics 13(5): 834-846. Equations corrected by Florian, R. V. (2007). Correct equations for the dynamics of the cart-pole system. Technical report, Coneural, Romania."
 reference_url: https://doi.org/10.1109/TSMC.1983.6313077
 optimum: "Balanced for 100,000 steps of 0.02 s (the success criterion of Gomez et al. 2008)"
-languages: [rust]
+languages: [rust, python]
 order: 251
 family: pole balancing
 tab: One pole
@@ -38,7 +38,9 @@ The equations are integrated by fourth-order Runge-Kutta in two steps of 0.01 s 
 genoxide's portable `math::sin_cos`, so a run is the same bits on every platform
 (`genoxide::problems::control::CartPole`).
 
-There's no Python version: the Python package has no networks or control tasks yet.
+The Python version runs the task, the network and the fitness in Rust
+(`gx.problems.control.CartPole`, `gx.nn.Mlp`, `Balance`), and NEAT with `gx.Neat`, its
+networks' policies run in Rust too: it prints the same output and writes the same trace.
 
 ## What makes it hard
 

@@ -13,8 +13,10 @@ settings of Gomez, Schmidhuber and Miikkulainen (2008):
   needs a recurrent network such as :class:`genoxide.nn.Elman`.
 
 A task is solved by balancing for :data:`SUCCESS_STEPS` steps, and without velocities also by
-passing the generalization test. A policy is a network's ``policy(weights)``, which the task runs
-in Rust without the GIL, or any Python callable ``policy(observation, action)`` that writes its
+passing the generalization test. A policy is a network's ``policy(weights)``, or a NEAT
+network's evaluator (:mod:`genoxide.neat`: ``network.feed_forward()``, ``network.recurrent()``, or
+their ``policy(scale=2.0, offset=-1.0)``, whose actions are ``2 output - 1``), which the task runs
+in Rust without the GIL; or any Python callable ``policy(observation, action)`` that writes its
 action into ``action[0]``, a numpy array, which is slow: a Python call per step.
 
 :class:`Balance` is the fitness of a network's weights on a task, evaluated in Rust: ``run``
@@ -51,6 +53,7 @@ from typing import Any, ClassVar, Literal, Union
 import numpy as np
 
 from .. import _genoxide, _whole
+from ..neat import FeedForward, Recurrent
 from ..nn import Elman, Mlp, Policy
 
 __all__ = [
@@ -73,8 +76,11 @@ GENERALIZATION_THRESHOLD: int = _genoxide.GENERALIZATION_THRESHOLD
 """The starts of :meth:`DoublePole.generalization` that a policy must balance for
 :data:`DAMPING_STEPS` steps: 200 of the 625."""
 
-PolicyLike = Union[Policy, Callable[[np.ndarray, np.ndarray], Any]]
-"""A network's policy, or a Python callable ``policy(observation, action)``."""
+PolicyLike = Union[
+    Policy, FeedForward, Recurrent, Callable[[np.ndarray, np.ndarray], Any]
+]
+"""A network's policy, a NEAT network's evaluator, or a Python callable ``policy(observation,
+action)``."""
 
 
 def _steps(name: str, steps: Any) -> int:
@@ -103,12 +109,21 @@ class _Task:
         policy (a recurrent network's context): the steps before a pole fell or the cart left the
         track.
 
-        ``policy`` is a network's ``policy(weights)`` with an input per observation and one
-        output, run in Rust without the GIL, or a Python callable ``policy(observation,
+        ``policy`` is a network's ``policy(weights)``, or a NEAT network's evaluator or its
+        ``policy(scale=..., offset=...)``, with an input per observation and one output, run in
+        Rust without the GIL on a copy of it; or a Python callable ``policy(observation,
         action)``, called each step with the observation, a numpy array, to write its action into
         ``action[0]``. An exception in the callable ends the episode, and ``run`` raises it.
         """
         return int(self._native.run(policy, _steps("steps", steps)))
+
+    def episode(self, policy: PolicyLike, steps: int) -> np.ndarray:
+        """Runs an episode as :meth:`run` does, and returns the state after each step, a row
+        each, until the step after which a pole had fallen or the cart had left the track,
+        included: ``x``, ``x'``, ``θ``, ``θ'`` for :class:`CartPole`, ``x``, ``x'``, ``θ₁``,
+        ``θ₁'``, ``θ₂``, ``θ₂'`` for :class:`DoublePole`, in m, m/s, radians and radians per
+        second, unscaled. For plots and for measures such as how far the cart moved."""
+        return np.asarray(self._native.episode(policy, _steps("steps", steps)))
 
     def solved(self, policy: PolicyLike) -> bool:
         """Whether ``policy`` solves the task: balances it for :data:`SUCCESS_STEPS` steps (and,

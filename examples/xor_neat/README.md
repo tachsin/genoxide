@@ -5,7 +5,7 @@ summary: Evolve a network's structure and weights until it computes XOR, from ne
 reference: "Stanley, K. O. and Miikkulainen, R. (2002). Evolving neural networks through augmenting topologies. Evolutionary Computation 10(2): 99-127."
 reference_url: https://doi.org/10.1162/106365602320169811
 optimum: "Every output on the right side of 0.5 (the paper's success criterion); a fitness of 16 is a perfect network"
-languages: [rust]
+languages: [rust, python]
 order: 250.5
 family: XOR
 tab: NEAT
@@ -26,7 +26,8 @@ finds the structure a problem needs.
 The fitness is the paper's, (4 − Σ|error|)², the error summed over the four cases: 16 for a perfect
 network. The problem is solved at the paper's criterion: every output on the right side of 0.5.
 
-There's no Python version: the Python package has no NEAT yet.
+The Python version runs the same NEAT with `gx.Neat`, its networks evaluated in Rust
+(`gx.neat.Network.feed_forward`): it prints the same output and writes the same trace.
 
 ## What makes it hard
 

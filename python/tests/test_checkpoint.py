@@ -50,6 +50,7 @@ ALGORITHMS = {
     "open es": lambda: gx.OpenEs(
         real, population_size=20, evaluate_mean=True, objective="minimize", seed=1
     ),
+    "neat": lambda: gx.Neat(2, 1, population_size=30, seed=1),
     "pso": lambda: gx.Pso(real, population_size=20, objective="minimize", seed=1),
     "local search": lambda: gx.LocalSearch(
         real, neighbor=gx.GaussianMutation(0.1, rate=0.5), neighbors=3, objective="minimize", seed=1
@@ -60,7 +61,15 @@ ALGORITHMS = {
 }
 
 
+def xor(network):
+    evaluator = network.feed_forward()
+    outputs = evaluator.activate(np.array([[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]]))
+    return float((4.0 - np.sum(np.abs(outputs[:, 0] - [0.0, 1.0, 1.0, 0.0]))) ** 2)
+
+
 def fitness_for(algorithm):
+    if isinstance(algorithm, gx.Neat):
+        return xor
     genome = algorithm._genome
     if isinstance(genome, gx.Permutation):
         return lambda order: float(np.sum(np.abs(np.diff(order))))

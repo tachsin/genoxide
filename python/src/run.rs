@@ -4,7 +4,7 @@ use crate::checkpoint::Checkpoints;
 use crate::config;
 use crate::control::{
     CmaesSettings, DeSettings, EsSettings, GaSettings, IslandsSettings, LocalSearchSettings,
-    OpenEsSettings, PsoSettings, Running, Settings, Slot,
+    NeatSettings, OpenEsSettings, PsoSettings, Running, Settings, Slot,
 };
 use crate::errors::{genome_setting, setting};
 use crate::fitness::{Multi, Native, Shared, Single};
@@ -21,6 +21,7 @@ use genoxide::algorithm::{GaBuilder, Islands, Reevaluate, cmaes, es, pso};
 use genoxide::engine::Progress;
 use genoxide::genome::{AdaptiveReal, Representation};
 use genoxide::multi::{self, Decomposition, MultiObjectiveAlgorithm, MultiSnapshot, SmsEmoa};
+use genoxide::neat::{self, Neat};
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
 use numpy::ndarray::Array2;
@@ -150,6 +151,9 @@ pub fn run<'py>(
             |crossover| ListCrossover::new(crossover, "adaptive real"),
             self_adaptive,
         ),
+        config::Genome::Network { inputs, outputs } => {
+            neat_algorithm(py, inputs, outputs, run.algorithm, &context)
+        }
     };
     result.map_err(|error| match error {
         Failure::Setting(message) => PyValueError::new_err(message),
@@ -470,6 +474,73 @@ fn de_restarts(restarts: config::DeRestarts) -> de::Restarts {
     }
 }
 
+// a NEAT run's genome is its networks, and its networks are NEAT's
+const NEAT_GENOME: &str = "Neat evolves its own networks: it takes no genome";
+
+// NEAT, on networks of `inputs` inputs and `outputs` outputs
+fn neat_algorithm<'py>(
+    py: Python<'py>,
+    inputs: usize,
+    outputs: usize,
+    algorithm: config::Algorithm,
+    context: &Context,
+) -> Returns<'py> {
+    let config::Algorithm::Neat(settings) = algorithm else {
+        return Err("a network genome is Neat's: use gx.Neat".to_string().into());
+    };
+    let mut builder = Neat::builder(inputs, outputs);
+    builder = match context.single_objective()? {
+        Objective::Maximize => builder.maximize(),
+        Objective::Minimize => builder.minimize(),
+    };
+    if let Some(size) = settings.population_size {
+        builder = builder.population_size(size);
+    }
+    if let Some((c1, c2, c3, threshold)) = settings.compatibility {
+        builder = builder.compatibility(c1, c2, c3, threshold);
+    }
+    if let Some((rate, replace)) = settings.weight_mutation {
+        builder = builder.weight_mutation(rate, replace);
+    }
+    if let Some((perturbation, new)) = settings.weight_deviations {
+        builder = builder.weight_deviations(perturbation, new);
+    }
+    if let Some((add_node, add_connection)) = settings.structural_mutation {
+        builder = builder.structural_mutation(add_node, add_connection);
+    }
+    if let Some((mutation_only, interspecies, disable)) = settings.reproduction {
+        builder = builder.reproduction(mutation_only, interspecies, disable);
+    }
+    if let Some((elitism_size, survival)) = settings.selection {
+        builder = builder.selection(elitism_size, survival);
+    }
+    if let Some(generations) = settings.stagnation {
+        builder = builder.stagnation(generations);
+    }
+    if let Some(activation) = settings.activation {
+        builder = builder.activation(activation.into());
+    }
+    if let Some(feed_forward) = settings.feed_forward {
+        builder = builder.feed_forward(feed_forward);
+    }
+    if let Some(initial) = settings.initial {
+        builder = builder.initial(match initial {
+            config::NeatInitial::FullyConnected => neat::Initial::FullyConnected,
+            config::NeatInitial::Unconnected => neat::Initial::Unconnected,
+        });
+    }
+    if let Some(sharing) = settings.sharing {
+        builder = builder.sharing(match sharing {
+            config::NeatSharing::Normalized => neat::Sharing::Normalized,
+            config::NeatSharing::Raw => neat::Sharing::Raw,
+        });
+    }
+    if let Some(seed) = settings.seed {
+        builder = builder.seed(seed);
+    }
+    generational(py, setting(builder.build())?, NeatSettings, context)
+}
+
 // the algorithms only for real genomes, and the others
 fn real_algorithm<'py>(
     py: Python<'py>,
@@ -554,6 +625,7 @@ fn real_algorithm<'py>(
             restarts,
             initial_step,
             covariance,
+            min_step,
         } => {
             let mut builder = Cmaes::builder(real).objective(context.single_objective()?);
             if let Some(size) = population_size {
@@ -577,6 +649,9 @@ fn real_algorithm<'py>(
                     config::Covariance::Full => cmaes::Covariance::Full,
                     config::Covariance::Diagonal => cmaes::Covariance::Diagonal,
                 });
+            }
+            if let Some(fraction) = min_step {
+                builder = builder.min_step(fraction);
             }
             generational(py, setting(builder.build())?, CmaesSettings, context)
         }
@@ -801,6 +876,7 @@ where
         config::Algorithm::Cmaes { .. } => Err("Cmaes needs a Real genome".to_string().into()),
         config::Algorithm::Pso { .. } => Err("Pso needs a Real genome".to_string().into()),
         config::Algorithm::OpenEs { .. } => Err("OpenEs needs a Real genome".to_string().into()),
+        config::Algorithm::Neat(_) => Err(NEAT_GENOME.to_string().into()),
     }
 }
 

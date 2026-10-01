@@ -1,8 +1,8 @@
 """Evolutionary computation in Rust, for Python.
 
 Genetic algorithms, local search, differential evolution, evolution strategies, CMA-ES, OpenAI's
-evolution strategy, particle swarm optimization, the island model, and NSGA-II, NSGA-III, SPEA2,
-MOEA/D and SMS-EMOA for several objectives, from
+evolution strategy, NEAT, particle swarm optimization, the island model, and NSGA-II, NSGA-III,
+SPEA2, MOEA/D and SMS-EMOA for several objectives, from
 `genoxide <https://github.com/tachsin/genoxide>`_, with Python fitness functions::
 
     import genoxide as gx
@@ -29,7 +29,8 @@ of scores: at most one call per generation, for vectorized numpy code.
 :mod:`genoxide.problems` has test problems from the literature, single- and multi-objective,
 which ``run`` evaluates in Rust, and :mod:`genoxide.indicators` the quality indicators of
 multi-objective fronts. :mod:`genoxide.nn` has neural networks whose weights a genome holds, and
-:mod:`genoxide.problems.control` pole-balancing tasks for them (neuroevolution).
+:mod:`genoxide.problems.control` pole-balancing tasks for them (neuroevolution); :class:`Neat`
+evolves networks' structure too, as :mod:`genoxide.neat`'s networks.
 :mod:`genoxide.math` has genoxide's portable math functions, the same to the bit on every
 platform.
 
@@ -64,6 +65,7 @@ from typing import Any, Literal, Union, cast
 import numpy as np
 
 from . import _genoxide
+from . import neat
 
 __version__: str = _genoxide.__version__
 
@@ -120,6 +122,7 @@ __all__ = [
     "Es",
     "Cmaes",
     "OpenEs",
+    "Neat",
     "Adam",
     "Sgd",
     "Pso",
@@ -136,6 +139,8 @@ __all__ = [
     "MultiResult",
     "Progress",
     "MultiProgress",
+    "NeatResult",
+    "NeatProgress",
     # parameter control
     "Running",
     "RunningGa",
@@ -143,6 +148,7 @@ __all__ = [
     "RunningEs",
     "RunningCmaes",
     "RunningOpenEs",
+    "RunningNeat",
     "RunningPso",
     "RunningLocalSearch",
     "RunningIslands",
@@ -150,6 +156,7 @@ __all__ = [
     "problems",
     "indicators",
     "nn",
+    "neat",
     "math",
 ]
 
@@ -896,14 +903,12 @@ class _Arrays:
 
     __slots__ = ("_genomes", "_values", "_violations")
 
-    def __init__(
-        self, genomes: np.ndarray | None, values: np.ndarray, violations: np.ndarray
-    ) -> None:
+    def __init__(self, genomes: Any, values: np.ndarray, violations: np.ndarray) -> None:
         self._genomes = genomes
         self._values = values
         self._violations = violations
 
-    def genomes(self) -> np.ndarray | None:
+    def genomes(self) -> Any:
         return self._genomes
 
     def values(self) -> np.ndarray:
@@ -1103,6 +1108,106 @@ class MultiProgress(_ReadOnly):
         )
 
 
+@dataclass(frozen=True, eq=False)
+class NeatResult:
+    """The result of a :class:`Neat` run: :class:`Result`'s fields, with the best network."""
+
+    best_genome: neat.Network
+    """The best network found."""
+    best_fitness: float | None
+    """Its score, or None if no valid solution was found."""
+    violation: float
+    """Its constraint violation: 0 for a feasible solution, and NaN if no valid solution was
+    found."""
+    generations: int
+    """The generations completed after the initial population."""
+    evaluations: int
+    """The fitness evaluations. A network copied unchanged keeps its fitness without one."""
+    seconds: float
+    """The duration of the run, in seconds."""
+    stop_reason: str
+    """What stopped the run, as :attr:`Result.stop_reason`."""
+
+
+class NeatProgress(_ReadOnly):
+    """A :class:`Neat` run after a generation, for ``on_generation`` and ``control``: as
+    :class:`Progress`, with networks for genomes. ``population`` is a tuple of the generation's
+    :class:`genoxide.neat.Network` objects, made when first read."""
+
+    __match_args__ = (
+        "generation",
+        "evaluations",
+        "seconds",
+        "best_fitness",
+        "best_genome",
+        "population",
+        "scores",
+        "violations",
+    )
+    _repr_fields = ("generation", "evaluations", "seconds", "best_fitness")
+
+    generation: int
+    """The generations completed: 0 after the initial population."""
+    evaluations: int
+    """The fitness evaluations so far."""
+    seconds: float
+    """The time since the run started."""
+    best_fitness: float | None
+    """The best score so far, or None if no valid solution was found yet."""
+    best_genome: neat.Network
+    """The best network so far."""
+    _population: _genoxide.Snapshot | _Arrays
+
+    def __init__(
+        self,
+        generation: int,
+        evaluations: int,
+        seconds: float,
+        best_fitness: float | None,
+        best_genome: neat.Network,
+        population: Any,
+    ) -> None:
+        # `population`: the run's copy of the population, or its arrays (`_Arrays`)
+        self.__dict__.update(
+            generation=generation,
+            evaluations=evaluations,
+            seconds=seconds,
+            best_fitness=best_fitness,
+            best_genome=best_genome,
+            _population=population,
+        )
+
+    @cached_property
+    def population(self) -> tuple[neat.Network, ...]:
+        """The networks after the generation, in the population's order."""
+        return cast(tuple[neat.Network, ...], self._population.genomes())
+
+    @cached_property
+    def scores(self) -> np.ndarray:
+        """The networks' scores: NaN for an invalid solution."""
+        return self._population.values()
+
+    @cached_property
+    def violations(self) -> np.ndarray:
+        """The networks' constraint violations: 0 for a feasible solution, NaN for an invalid
+        one."""
+        return self._population.violations()
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        arrays = _Arrays(self.population, self.scores, self.violations)
+        return (
+            NeatProgress,
+            (
+                self.generation,
+                self.evaluations,
+                self.seconds,
+                self.best_fitness,
+                self.best_genome,
+                arrays,
+            ),
+        )
+
+
 # --- parameter control ---------------------------------------------------------------------------
 
 
@@ -1120,8 +1225,9 @@ class Running:
 
     Each algorithm has a class of its own, with its settings as properties: :class:`RunningGa`,
     :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`, :class:`RunningOpenEs`,
-    :class:`RunningPso`, :class:`RunningLocalSearch` and :class:`RunningIslands`. A new value is checked as in the
-    algorithm's constructor: a wrong one raises a ``ValueError`` and changes nothing. The handle
+    :class:`RunningNeat`, :class:`RunningPso`, :class:`RunningLocalSearch` and
+    :class:`RunningIslands`. A new value is checked as in the algorithm's constructor: a wrong one
+    raises a ``ValueError`` and changes nothing. The handle
     works only during the callback; afterwards it raises a ``RuntimeError``.
 
     A control that changes nothing leaves the run as it is: with a seed, the same result as
@@ -1130,7 +1236,7 @@ class Running:
 
     __slots__ = ("_native",)
 
-    def __init__(self, native: Any, algorithm: _SingleObjective) -> None:
+    def __init__(self, native: Any, algorithm: _Single) -> None:
         self._native = native
 
     def reevaluate(self) -> None:
@@ -1165,7 +1271,7 @@ class RunningGa(Running):
 
     __slots__ = ("_select", "_crossover", "_mutation")
 
-    def __init__(self, native: Any, algorithm: _SingleObjective) -> None:
+    def __init__(self, native: Any, algorithm: _Single) -> None:
         super().__init__(native, algorithm)
         assert isinstance(algorithm, Ga)
         self._select = algorithm.select
@@ -1300,6 +1406,39 @@ class RunningOpenEs(Running):
         self._set("learning_rate", _number("learning_rate", learning_rate))
 
 
+class RunningNeat(Running):
+    """A running :class:`Neat`, for ``control``: its species and the innovation numbers it gave,
+    to read. NEAT has no setting to change during a run. Re-evaluation scores the population
+    again, keeping the species but forgetting their best fitness."""
+
+    __slots__ = ()
+
+    @property
+    def species(self) -> tuple[neat.Species, ...]:
+        """The species of the current generation, by id: :class:`genoxide.neat.Species`."""
+        return tuple(
+            neat.Species(
+                id=int(species["id"]),
+                members=tuple(int(member) for member in species["members"]),
+                best_fitness=species["best_fitness"],
+                improved=int(species["improved"]),
+                created=int(species["created"]),
+                representative=_genoxide.neat_network(json.dumps(species["representative"])),
+            )
+            for species in self._get("species")
+        )
+
+    @property
+    def innovations(self) -> int:
+        """The innovation numbers given so far: the distinct connections the run has made."""
+        return int(self._get("innovations"))
+
+    @property
+    def seed(self) -> int:
+        """The seed of the run: a random one when ``seed`` was None."""
+        return int(self._get("seed"))
+
+
 class RunningPso(Running):
     """A running :class:`Pso`, for ``control``: its inertia and accelerations, e.g. an inertia
     falling from 0.9 to 0.4 over the run (Shi and Eberhart, 1998), or accelerations from a large
@@ -1343,7 +1482,7 @@ class RunningLocalSearch(Running):
 
     __slots__ = ("_neighbor",)
 
-    def __init__(self, native: Any, algorithm: _SingleObjective) -> None:
+    def __init__(self, native: Any, algorithm: _Single) -> None:
         super().__init__(native, algorithm)
         assert isinstance(algorithm, LocalSearch)
         self._neighbor = algorithm.neighbor
@@ -1399,7 +1538,7 @@ class RunningIslands(Running):
 
     __slots__ = ("_islands",)
 
-    def __init__(self, native: Any, algorithm: _SingleObjective) -> None:
+    def __init__(self, native: Any, algorithm: _Single) -> None:
         super().__init__(native, algorithm)
         assert isinstance(algorithm, Islands)
         self._islands = tuple(
@@ -1457,7 +1596,8 @@ def _check_callable(function: Any, name: str = "the fitness function") -> None:
 
 
 def _on_generation(
-    callback: Callable[[Any], Any] | None, progress: type[Progress] | type[MultiProgress]
+    callback: Callable[[Any], Any] | None,
+    progress: type[Progress] | type[MultiProgress] | type[NeatProgress],
 ) -> Callable[..., bool] | None:
     """The callback, called with the generation, the evaluations, the seconds, the best fitness
     or the size of the front, and the run's copies of the population (and of the front), as a
@@ -1474,7 +1614,9 @@ def _on_generation(
 
 
 def _control(
-    control: Callable[[Any, Progress], Any] | None, algorithm: _SingleObjective
+    control: Callable[[Any, Any], Any] | None,
+    algorithm: _Single,
+    progress: type[Progress] | type[NeatProgress] = Progress,
 ) -> Callable[..., None] | None:
     """The control callback, called with the native handle of the running algorithm and the
     arguments of ``on_generation``, as ``control(running, progress)``, with the same
@@ -1488,7 +1630,7 @@ def _control(
         nonlocal running
         if running is None:
             running = algorithm._running(native, algorithm)
-        control(running, Progress(*state))
+        control(running, progress(*state))
 
     return call
 
@@ -1625,7 +1767,10 @@ class _Algorithm:
         )
 
 
-class _SingleObjective(_Algorithm):
+class _Single(_Algorithm):
+    """A single-objective algorithm, without its `run`: the genome it gives a fitness function
+    decides what `run` takes and returns."""
+
     _objective: ObjectiveName
     # the handle that its control gets
     _running: type[Running]
@@ -1635,6 +1780,8 @@ class _SingleObjective(_Algorithm):
             raise ValueError(f'objective is "maximize" or "minimize", not {self._objective!r}')
         return [self._objective]
 
+
+class _SingleObjective(_Single):
     def run(
         self,
         fitness: Callable[[np.ndarray], Any],
@@ -2161,6 +2308,12 @@ class Cmaes(_SingleObjective):
         sep-CMA-ES (Ros and Hansen, 2008): only each gene's variance is learned, with larger
         learning rates, and each sample costs O(n). It suits separable problems and hundreds to
         thousands of genes, but can't learn correlations between genes.
+    min_step : float, default 0
+        A lower bound on the step size, as a fraction of each gene's range, 0 to
+        ``initial_step``: the search goes on exploring around its mean instead of converging,
+        for a fitness that stops pointing at the goal near its best, such as a control task
+        scored on short episodes but solved by long ones (Igel 2003). The convergence on the step
+        size, and a restart through it, can't happen with a bound.
     objective : {"maximize", "minimize"}, default "maximize"
         Whether higher or lower scores are better.
     seed : int, optional
@@ -2178,6 +2331,7 @@ class Cmaes(_SingleObjective):
         restarts: Literal["never", "ipop", "bipop"] | None = None,
         initial_step: float | None = None,
         covariance: Literal["full", "diagonal"] | None = None,
+        min_step: float | None = None,
         objective: ObjectiveName = "maximize",
         seed: int | None = None,
     ) -> None:
@@ -2187,6 +2341,7 @@ class Cmaes(_SingleObjective):
         self.restarts = restarts
         self.initial_step = initial_step
         self.covariance = covariance
+        self.min_step = min_step
         self.seed = seed
 
     def _describe(self) -> dict[str, Any]:
@@ -2201,6 +2356,7 @@ class Cmaes(_SingleObjective):
             "restarts": self.restarts,
             "initial_step": _optional_number("initial_step", self.initial_step),
             "covariance": self.covariance,
+            "min_step": _optional_number("min_step", self.min_step),
         }
 
 
@@ -2350,6 +2506,274 @@ class OpenEs(_SingleObjective):
             "parallel_breeding": _flag("parallel_breeding", self.parallel_breeding),
             "seed": _optional_whole("seed", self.seed),
         }
+
+
+@dataclass(frozen=True)
+class _Networks:
+    """NEAT's genome: networks of ``inputs`` inputs, a bias and ``outputs`` outputs."""
+
+    inputs: Any
+    outputs: Any
+
+    def _describe(self) -> dict[str, Any]:
+        return {
+            "type": "network",
+            "inputs": _whole("inputs", self.inputs, minimum=1, maximum=2**24),
+            "outputs": _whole("outputs", self.outputs, minimum=1, maximum=2**24),
+        }
+
+
+def _numbers(name: str, value: Any, form: str, wholes: Sequence[bool]) -> list[Any] | None:
+    """A setting of several numbers, e.g. ``compatibility=(1.0, 1.0, 0.4, 3.0)``, as a list:
+    whole numbers where ``wholes`` says so, real ones elsewhere; None for its default."""
+    if value is None:
+        return None
+    if isinstance(value, (str, bytes)) or not isinstance(value, (Sequence, np.ndarray)):
+        raise ValueError(f"{name} is {form}, not {value!r}")
+    if len(value) != len(wholes):
+        raise ValueError(f"{name} is {form}, {len(wholes)} numbers, not {value!r}")
+    return [
+        _whole(name, item, plural=True) if whole else _number(name, item, plural=True)
+        for item, whole in zip(value, wholes)
+    ]
+
+
+_NEAT_ACTIVATIONS = ("identity", "tanh", "sigmoid", "relu", "steep_sigmoid")
+
+
+class Neat(_Single):
+    """NEAT, NeuroEvolution of Augmenting Topologies (Stanley and Miikkulainen, 2002): networks
+    whose structure evolves with their weights, from minimal networks up.
+
+    Each genome is a :class:`genoxide.neat.Network`: node genes and connection genes, each
+    connection with an innovation number that records its history, so crossover aligns the genes
+    of networks of different shapes. Mutations perturb weights, add connections, and add nodes
+    that split a connection. Speciation groups similar networks by the compatibility distance
+    ``c1 E / N + c2 D / N + c3 W`` (excess and disjoint genes, mean weight difference), and
+    explicit fitness sharing gives each species offspring in proportion to its members' mean
+    fitness, which protects new structure while its weights are tuned. The settings default to
+    the paper's.
+
+    The fitness function takes a network and returns a score, as for the other algorithms;
+    evaluate it with ``network.feed_forward()`` (or ``network.recurrent()`` with
+    ``feed_forward=False``), whose ``activate`` runs in Rust. Both evaluators, and their
+    ``policy(scale=2, offset=-1)`` (NEAT's sigmoid outputs, in (0, 1), as forces in (-1, 1)),
+    drive the tasks of :mod:`genoxide.problems.control` in Rust, without the GIL::
+
+        import genoxide as gx
+
+        CASES = [((0.0, 0.0), 0.0), ((0.0, 1.0), 1.0), ((1.0, 0.0), 1.0), ((1.0, 1.0), 0.0)]
+
+        def xor(network):
+            evaluator = network.feed_forward()
+            error = sum(abs(evaluator.activate(x)[0] - y) for x, y in CASES)
+            return (4.0 - error) ** 2
+
+        neat = gx.Neat(2, 1, sharing="raw", seed=1)
+        result = neat.run(xor, target=15.0, generations=500)
+        print(result.best_genome.hidden(), result.best_fitness)
+
+    Parameters
+    ----------
+    inputs, outputs : int
+        The networks' inputs (a bias input is added) and outputs, each 1 to 2^24.
+    population_size : int, default 150
+        The number of networks, 1 to 2^24.
+    compatibility : (float, float, float, float), default (1.0, 1.0, 0.4, 3.0)
+        The compatibility coefficients ``c1`` (excess genes), ``c2`` (disjoint genes) and ``c3``
+        (the mean weight difference), each at least 0, and the threshold, greater than 0, of the
+        distance under which a network joins a species. The paper used ``c3 = 3`` and a threshold
+        of 4 with a population of 1000.
+    weight_mutation : (float, float), default (0.8, 0.1)
+        The probability that a child's weights are mutated, and that each of them is then
+        replaced by a new random weight rather than perturbed, both in [0, 1].
+    weight_deviations : (float, float), default (1.0, 1.0)
+        The standard deviations of a weight's normal perturbation and of a new weight, both
+        greater than 0.
+    structural_mutation : (float, float), default (0.03, 0.05)
+        The probabilities that a child gets a new node and a new connection, in [0, 1]. The paper
+        used 0.3 for new connections in its population of 1000.
+    reproduction : (float, float, float), default (0.25, 0.001, 0.75)
+        The fraction of offspring made by mutation alone, the probability that a crossover takes
+        its second parent from another species, and that a gene disabled in either parent is
+        disabled in the child, each in [0, 1].
+    selection : (int, float), default (5, 0.2)
+        The size a species must exceed for its champion to be copied unchanged, and the fraction
+        of each species, its best, that breeds, in (0, 1].
+    stagnation : int, default 15
+        The generations without improvement after which a species stops reproducing, at least 1.
+        The species with the best network never stops.
+    activation : str, default "steep_sigmoid"
+        The activation of the outputs and the hidden nodes, as in :mod:`genoxide.nn`: "identity",
+        "tanh", "sigmoid", "relu" or "steep_sigmoid", the paper's ``1 / (1 + exp(-4.9 x))``.
+    feed_forward : bool, default True
+        Whether the networks stay feed-forward: a new connection never closes a cycle, so every
+        network has a ``feed_forward()`` evaluator. False allows recurrent connections and loops,
+        for ``recurrent()``.
+    initial : {"fully_connected", "unconnected"}, default "fully_connected"
+        The initial networks: every input and the bias connected to every output with random
+        weights, as in the paper, or no connections.
+    sharing : {"normalized", "raw"}, default "normalized"
+        How fitness is shared within species. "normalized": each network's score normalized in
+        its generation, 0 for the worst and 1 for the best in the objective's direction (0 for
+        an invalid or infeasible one), then divided by its species' size, for any objective and
+        any scores. "raw": the paper's, the score divided by the species' size, which needs the
+        objective "maximize" and valid, non-negative scores.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers, 0 to 2^64 - 1. None is a random seed. The same seed
+        repeats the run.
+    """
+
+    _running = RunningNeat
+
+    def __init__(
+        self,
+        inputs: int,
+        outputs: int,
+        *,
+        population_size: int | None = None,
+        compatibility: tuple[float, float, float, float] | None = None,
+        weight_mutation: tuple[float, float] | None = None,
+        weight_deviations: tuple[float, float] | None = None,
+        structural_mutation: tuple[float, float] | None = None,
+        reproduction: tuple[float, float, float] | None = None,
+        selection: tuple[int, float] | None = None,
+        stagnation: int | None = None,
+        activation: nn.Activation | None = None,
+        feed_forward: bool | None = None,
+        initial: Literal["fully_connected", "unconnected"] | None = None,
+        sharing: Literal["normalized", "raw"] | None = None,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self.inputs = inputs
+        self.outputs = outputs
+        self._objective = objective
+        self.population_size = population_size
+        self.compatibility = compatibility
+        self.weight_mutation = weight_mutation
+        self.weight_deviations = weight_deviations
+        self.structural_mutation = structural_mutation
+        self.reproduction = reproduction
+        self.selection = selection
+        self.stagnation = stagnation
+        self.activation = activation
+        self.feed_forward = feed_forward
+        self.initial = initial
+        self.sharing = sharing
+        self.seed = seed
+
+    @property
+    def _genome(self) -> _Networks:  # type: ignore[override]
+        return _Networks(self.inputs, self.outputs)
+
+    def _describe(self) -> dict[str, Any]:
+        if self.activation is not None and self.activation not in _NEAT_ACTIVATIONS:
+            names = ", ".join(f'"{name}"' for name in _NEAT_ACTIVATIONS)
+            raise ValueError(f"activation is one of {names}, not {self.activation!r}")
+        if self.initial not in (None, "fully_connected", "unconnected"):
+            raise ValueError(
+                f'initial is "fully_connected" or "unconnected", not {self.initial!r}'
+            )
+        if self.sharing not in (None, "normalized", "raw"):
+            raise ValueError(f'sharing is "normalized" or "raw", not {self.sharing!r}')
+        return {
+            "type": "neat",
+            "population_size": _optional_whole("population_size", self.population_size),
+            "compatibility": _numbers(
+                "compatibility",
+                self.compatibility,
+                "(c1, c2, c3, threshold)",
+                [False, False, False, False],
+            ),
+            "weight_mutation": _numbers(
+                "weight_mutation", self.weight_mutation, "(rate, replace)", [False, False]
+            ),
+            "weight_deviations": _numbers(
+                "weight_deviations", self.weight_deviations, "(perturbation, new)", [False, False]
+            ),
+            "structural_mutation": _numbers(
+                "structural_mutation",
+                self.structural_mutation,
+                "(add_node, add_connection)",
+                [False, False],
+            ),
+            "reproduction": _numbers(
+                "reproduction",
+                self.reproduction,
+                "(mutation_only, interspecies, disable)",
+                [False, False, False],
+            ),
+            "selection": _numbers(
+                "selection", self.selection, "(elitism_size, survival)", [True, False]
+            ),
+            "stagnation": _optional_whole("stagnation", self.stagnation),
+            "activation": self.activation,
+            "feed_forward": _flag("feed_forward", self.feed_forward),
+            "initial": self.initial,
+            "sharing": self.sharing,
+            "seed": _optional_whole("seed", self.seed),
+        }
+
+    def run(
+        self,
+        fitness: Callable[[neat.Network], Any],
+        *,
+        generations: int | None = None,
+        evaluations: int | None = None,
+        target: float | None = None,
+        time: float | None = None,
+        stagnation: int | None = None,
+        batch: bool = False,
+        parallel: bool = False,
+        on_generation: Callable[[NeatProgress], bool | None] | None = None,
+        control: Callable[[RunningNeat, NeatProgress], Any] | None = None,
+        checkpoint: str | os.PathLike[str] | None = None,
+        checkpoint_every: int | None = None,
+        resume: str | os.PathLike[str] | None = None,
+    ) -> NeatResult:
+        """Runs NEAT until the first stop condition, as :meth:`Ga.run` runs a GA.
+
+        ``fitness`` takes a :class:`genoxide.neat.Network` and returns a number, None or NaN (an
+        invalid solution), or a tuple ``(score, constraint_violation)``; with ``batch=True``, it
+        takes a tuple of the generation's networks and returns an array of scores. The test
+        problems of :mod:`genoxide.problems` and ``Balance`` take weights, not networks: write
+        the fitness with ``network.feed_forward()`` and a task's ``run``, which runs in Rust.
+
+        ``on_generation`` gets a :class:`NeatProgress`, and ``control`` a :class:`RunningNeat`
+        (the species) and a :class:`NeatProgress`. The other parameters, the errors and the
+        checkpoints are :meth:`Ga.run`'s.
+
+        Returns
+        -------
+        NeatResult
+            The best network found, and what the run took.
+        """
+        _check_callable(fitness)
+        if isinstance(fitness, (problems.Problem, problems.MultiProblem, problems.control.Balance)):
+            raise ValueError(
+                f"Neat's fitness function takes a gx.neat.Network, but {type(fitness).__name__} "
+                "evaluates an array of numbers: evaluate the network with feed_forward() instead"
+            )
+        stop = _stop(generations, evaluations, target, time, stagnation)
+        callback = _on_generation(on_generation, NeatProgress)
+        controls = _control(control, self, NeatProgress)
+        saving = _checkpoints(checkpoint, checkpoint_every, resume)
+        function = _batch_scores(cast(Callable[[np.ndarray], Any], fitness)) if batch else fitness
+        return NeatResult(
+            **self._run(
+                cast(Callable[[np.ndarray], Any], function),
+                stop,
+                batch,
+                parallel,
+                callback,
+                None,
+                controls,
+                saving,
+            )
+        )
 
 
 class Pso(_SingleObjective):

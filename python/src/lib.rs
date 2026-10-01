@@ -11,6 +11,7 @@ mod errors;
 mod fitness;
 mod genes;
 mod indicators;
+mod neat;
 mod networks;
 mod operators;
 mod portable;
@@ -37,6 +38,15 @@ fn _genoxide(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(indicators::indicator, module)?)?;
     module.add_class::<networks::PyNetwork>()?;
     module.add_class::<networks::NetworkPolicy>()?;
+    module.add("NeatNetwork", module.py().get_type::<neat::NeatNetwork>())?;
+    module.add("NodeGene", module.py().get_type::<neat::NodeGene>())?;
+    module.add(
+        "ConnectionGene",
+        module.py().get_type::<neat::ConnectionGene>(),
+    )?;
+    module.add("FeedForward", module.py().get_type::<neat::PyFeedForward>())?;
+    module.add("Recurrent", module.py().get_type::<neat::PyRecurrent>())?;
+    module.add_function(wrap_pyfunction!(neat::neat_network, module)?)?;
     module.add_class::<tasks::PyTask>()?;
     module.add_function(wrap_pyfunction!(tasks::balance_evaluate, module)?)?;
     module.add("SUCCESS_STEPS", genoxide::problems::control::SUCCESS_STEPS)?;
