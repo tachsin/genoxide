@@ -1,8 +1,9 @@
 # Plan: general optimization methods
 
 A working plan, removed when the work is done. Of batch A1, `Algorithm::is_finished` with
-`StopReason::Converged`, `local::Restarts` and Nelder-Mead are implemented; the linear algebra and
-the later batches aren't yet. genoxide has
+`StopReason::Converged`, `local::Restarts` and Nelder-Mead are implemented, and of batch A2 the
+Moré-Thuente line search (crate-private until L-BFGS-B uses it); the linear algebra, the rest of
+A2 and the later batches aren't yet. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
 optimization library: local derivative-free methods, gradient-based methods, constrained
@@ -41,6 +42,35 @@ tested, and orders the work in batches.
   it. The termination test (simplex size against a tolerance, relative to each gene's first step,
   #375) and the mirroring of trial points at the bounds (#386) are genoxide's own: Lagarias et
   al. define one iteration, without bounds or a stop.
+- **Batch A2, read on 2026-10-01.** Moré and Thuente (1994), read in its preprint, Argonne
+  MCS-P330-1092 (October 1992): **verified**, with the notes below; the line search follows its
+  sections 1-4. As implemented: the conditions (1.1) and (1.2) and the bounds (1.4); ψ and
+  Theorem 2.1's endpoint conditions (2.1); the updating algorithm, cases U1-U3 (section 2), and
+  the modified one on φ, cases a-c, from the first trial with ψ(α_k) ≤ 0 and φ′(α_k) > 0
+  (section 3, Theorem 3.3); the safeguards: extrapolation by δ ∈ [1.1, 4] (2.2), (2.5) with
+  δ_min = 7/12 (case 1's bound |α_t⁺ − α_l| ≤ 7/12 |α_u − α_l|), and a bisection when the
+  interval doesn't shrink by δ = 0.66 in two trials; the termination at α_min and α_max; the four
+  cases of the trial selection (section 4), with δ = 0.66 in case 3; the test functions
+  (5.1)-(5.4). Notes: the preprint's case 4 breaks off after "the minimizer of the cubic that
+  interpolates f_u, f_t, g_u, and g_t,", so the step before bracketing (the farthest extrapolation
+  allowed, as (2.2) requires) is the authors' implementation's; section 4 states the switch to φ
+  as ψ′(α_k) ≥ 0 and section 3 as φ′(α_k) > 0, and genoxide follows section 3. Two rules of the
+  text don't give the tables: genoxide follows the authors' implementation, which uses ψ before
+  the switch only for a trial with a value of φ no larger than at α_l and without sufficient
+  decrease, and in case 3 before bracketing takes the farther of α_c and α_s, with a cubic without
+  a minimizer beyond α_t replaced by the extrapolation limit (with the text's rules, 11 of the 24
+  counts of tables 5.1-5.6 differ). Equal derivatives at α_l and α_t go to case 4, as in the
+  implementation (the secant step of case 3 doesn't exist). Reproduced (`line_search` tests): all
+  24 counts of tables 5.1-5.6, α_m and φ′(α_m) to the printed digits but one φ′ (table 5.2 from
+  10⁻³: 3.8e-9, printed 7.1e-9; the same trials, the last cubic step 1.6e-10 away, from rounding),
+  and the counts quoted in section 5's text but one (table 5.1's function with η = 0.001 from
+  10⁻³: 9, the text says 8, under every reading tried). The authors' implementation, MINPACK-2's
+  `dcsrch` and `dcstep` (Moré, Thuente, Averick and Carter, in L-BFGS-B 3.0, BSD-3-Clause), was
+  read to compare behavior, not copied; its `xtol` and the warnings are there too. genoxide's
+  own: the default `xtol` (10⁻¹⁰) and limit of 20 trials, and failed steps (φ or φ′ not finite:
+  the next trial halfway back to α_l). Nocedal and Wright (2006), ch. 3: **not re-read** (no copy
+  at hand); μ = c₁ = 10⁻⁴ and η = c₂ = 0.9 or 0.1 as recorded in this plan. Wolfe (1969): **not
+  re-read**; the conditions as Moré and Thuente state them.
 - The methods are general. The docs and examples motivate them with generic cases (expensive
   simulations, engineering design, black-box functions, model fitting), not with an application
   domain.
