@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.1](https://github.com/tachsin/genoxide/compare/v0.11.0...v0.11.1) - 2026-10-01
+
+### <!-- 0 -->Added
+
+- *(nelder_mead)* add Nelder-Mead, convergence as a stop reason, and random restarts ([#371](https://github.com/tachsin/genoxide/pull/371))
+- *(cmaes)* opt-in Restarts::Stop ends a run when it converges ([#388](https://github.com/tachsin/genoxide/pull/388))
+- *(line_search)* the Moré-Thuente line search, resumable, reproducing the paper's tables ([#397](https://github.com/tachsin/genoxide/pull/397))
+- *(gradient)* gradients through the engine, finite differences and the test problems' analytic gradients ([#398](https://github.com/tachsin/genoxide/pull/398))
+- *(linalg)* in-crate linear algebra with the same bits on every platform and thread count ([#399](https://github.com/tachsin/genoxide/pull/399))
+- *(lbfgsb)* add L-BFGS-B, completing batch A2 ([#400](https://github.com/tachsin/genoxide/pull/400))
+- *(first_order)* gradient descent, momentum, Nesterov, Adam and AdamW ([#403](https://github.com/tachsin/genoxide/pull/403))
+- conceptual marine design, the tenth problem of batch 9, with its example ([#401](https://github.com/tachsin/genoxide/pull/401))
+- *(mma)* the method of moving asymptotes and GCMMA, for many variables and few constraints ([#404](https://github.com/tachsin/genoxide/pull/404))
+- *(continuation)* stages of one problem with the optimizer's state kept, completing batch A3 ([#408](https://github.com/tachsin/genoxide/pull/408))
+
+### <!-- 4 -->Documentation
+
+- *(plan)* batch A3, first-order methods for millions of variables ([#396](https://github.com/tachsin/genoxide/pull/396))
+- describe genoxide as it is now, with a method table and an llms.txt for AI assistants ([#407](https://github.com/tachsin/genoxide/pull/407))
+
 ## [0.11.0](https://github.com/tachsin/genoxide/compare/v0.10.0...v0.11.0) - 2026-10-01
 
 ### <!-- 0 -->Added
