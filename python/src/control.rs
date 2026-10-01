@@ -14,6 +14,7 @@ use crate::run::{de_control, de_strategy};
 use genoxide::algorithm::islands::Migrate;
 use genoxide::algorithm::{Islands, Reevaluate};
 use genoxide::genome::Representation;
+use genoxide::neat::Neat;
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -203,6 +204,41 @@ impl Settings<Es> for EsSettings {
     }
 
     fn set(&self, _: &mut Es, name: &str, _: &str) -> Result<()> {
+        Err(unknown(name))
+    }
+}
+
+/// NEAT's state, to read: its species (each with its representative network, as genoxide
+/// serializes it) and the innovation numbers given so far. It has nothing to change.
+pub struct NeatSettings;
+
+impl Settings<Neat> for NeatSettings {
+    fn get(&self, neat: &Neat, name: &str) -> Result<Value> {
+        match name {
+            "species" => neat
+                .species()
+                .iter()
+                .map(|species| {
+                    let representative = serde_json::to_value(species.representative())
+                        .map_err(|error| error.to_string())?;
+                    Ok(json!({
+                        "id": species.id(),
+                        "members": species.members(),
+                        "best_fitness": species.best().and_then(Fitness::score),
+                        "improved": species.improved(),
+                        "created": species.created(),
+                        "representative": representative,
+                    }))
+                })
+                .collect::<Result<Vec<Value>>>()
+                .map(Value::Array),
+            "innovations" => Ok(json!(neat.innovations())),
+            "seed" => Ok(json!(neat.seed())),
+            _ => Err(unknown(name)),
+        }
+    }
+
+    fn set(&self, _: &mut Neat, name: &str, _: &str) -> Result<()> {
         Err(unknown(name))
     }
 }

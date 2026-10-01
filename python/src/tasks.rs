@@ -3,10 +3,11 @@
 //! of a network's weights on a task, evaluated in Rust.
 
 use crate::config;
+use crate::neat::{PyFeedForward, PyRecurrent};
 use crate::networks::{Network, NetworkConfig, NetworkPolicy};
 use genoxide::Fitness;
 use genoxide::problems::control::{CartPole, DoublePole, Policy};
-use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray2};
+use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use serde::Deserialize;
@@ -76,18 +77,61 @@ impl Task {
         }
     }
 
-    // an error unless a network fits the task: an input per observation, and one output
-    fn check(&self, network: &Network) -> Result<()> {
+    // an error unless a network of `inputs` inputs and `outputs` outputs fits the task: an
+    // input per observation, and one output
+    fn check(&self, inputs: usize, outputs: usize) -> Result<()> {
         let observations = self.observations();
-        if network.inputs() != observations || network.outputs() != 1 {
+        if inputs != observations || outputs != 1 {
             return Err(format!(
-                "{} needs a network of {observations} inputs and 1 output, not {} inputs and {} outputs",
+                "{} needs a network of {observations} inputs and 1 output, not {inputs} inputs and {outputs} outputs",
                 self.name(),
-                network.inputs(),
-                network.outputs()
             ));
         }
         Ok(())
+    }
+
+    /// The state after each step of an episode of at most `steps` steps from the initial state,
+    /// after resetting `policy`, the step that failed included, one after the other.
+    fn episode(&self, policy: &mut dyn Policy, steps: u32) -> Vec<f64> {
+        let mut states = Vec::new();
+        policy.reset();
+        let mut action = [0.0];
+        match self {
+            Task::CartPole(task) => {
+                let (mut task, mut observation) = (*task, [0.0; 4]);
+                for _ in 0..steps {
+                    task.observe(&mut observation);
+                    policy.act(&observation, &mut action);
+                    let balanced = task.step(action[0]);
+                    states.extend(task.state());
+                    if !balanced {
+                        break;
+                    }
+                }
+            }
+            Task::DoublePole(task) => {
+                let (mut task, mut observation) = (*task, [0.0; 6]);
+                let observation = &mut observation[..task.observations()];
+                for _ in 0..steps {
+                    task.observe(observation);
+                    policy.act(observation, &mut action);
+                    let balanced = task.step(action[0]);
+                    states.extend(task.state());
+                    if !balanced {
+                        break;
+                    }
+                }
+            }
+        }
+        states
+    }
+
+    // the number of variables of a state
+    fn state_len(&self) -> usize {
+        match self {
+            Task::CartPole(_) => 4,
+            Task::DoublePole(_) => 6,
+        }
     }
 }
 
@@ -108,17 +152,29 @@ fn with_policy<'py, R: Send>(
     policy: &Bound<'py, PyAny>,
     act: impl FnOnce(&mut dyn Policy) -> R + Send,
 ) -> PyResult<R> {
-    if let Ok(policy) = policy.cast::<NetworkPolicy>() {
-        let policy = policy.get();
-        task.check(&policy.network).map_err(PyValueError::new_err)?;
+    // a network's policy, or a NEAT network's evaluator, whose outputs are the actions; a copy,
+    // run without the GIL
+    let driver = if let Ok(policy) = policy.cast::<NetworkPolicy>() {
+        Some(policy.get().driver.clone())
+    } else if let Ok(evaluator) = policy.cast::<PyFeedForward>() {
+        Some(evaluator.borrow().driver(1.0, 0.0))
+    } else if let Ok(evaluator) = policy.cast::<PyRecurrent>() {
+        Some(evaluator.borrow().driver(1.0, 0.0))
+    } else {
+        None
+    };
+    if let Some(mut driver) = driver {
+        task.check(driver.inputs(), driver.outputs())
+            .map_err(PyValueError::new_err)?;
         return py
-            .detach(|| policy.network.with_policy(&policy.weights, act))
+            .detach(move || driver.act(act))
             .map_err(PyValueError::new_err);
     }
     if !policy.is_callable() {
         return Err(pyo3::exceptions::PyTypeError::new_err(format!(
-            "a policy is a network's policy, e.g. mlp.policy(weights), or a callable \
-             policy(observation, action), not {}",
+            "a policy is a network's policy, e.g. mlp.policy(weights), a NEAT network's \
+             evaluator, e.g. network.feed_forward(), or a callable policy(observation, action), \
+             not {}",
             policy.repr()?
         )));
     }
@@ -172,6 +228,20 @@ impl PyTask {
     fn run(&self, py: Python<'_>, policy: &Bound<'_, PyAny>, steps: u32) -> PyResult<u32> {
         let task = self.task;
         with_policy(py, &task, policy, |policy| task.run(policy, steps))
+    }
+
+    /// The state after each step of an episode of at most `steps` steps, a row each, until the
+    /// step that failed, included.
+    fn episode<'py>(
+        &self,
+        py: Python<'py>,
+        policy: &Bound<'py, PyAny>,
+        steps: u32,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let task = self.task;
+        let states = with_policy(py, &task, policy, |policy| task.episode(policy, steps))?;
+        let rows = states.len() / task.state_len();
+        PyArray1::from_vec(py, states).reshape([rows, task.state_len()])
     }
 
     /// Whether `policy` solves the task.
@@ -240,7 +310,8 @@ impl Balance {
         })?;
         let task = Task::build(config.task);
         let network = Network::build(config.network).map_err(PyValueError::new_err)?;
-        task.check(&network).map_err(PyValueError::new_err)?;
+        task.check(network.inputs(), network.outputs())
+            .map_err(PyValueError::new_err)?;
         if let BalanceFitness::Damping = config.fitness {
             task.double_pole("the damping fitness")
                 .map_err(PyValueError::new_err)?;

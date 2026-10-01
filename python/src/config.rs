@@ -34,6 +34,11 @@ pub enum Genome {
         bounds: Vec<(f64, f64)>,
         initial_step: f64,
     },
+    /// NEAT's networks, of `inputs` inputs (and a bias) and `outputs` outputs.
+    Network {
+        inputs: usize,
+        outputs: usize,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -48,6 +53,8 @@ pub enum Objective {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Algorithm {
     Ga(Ga),
+    /// NEAT, on the networks of the `network` genome.
+    Neat(Neat),
     De(De),
     Es {
         parents: usize,
@@ -78,6 +85,8 @@ pub enum Algorithm {
         /// The initial step size, as a fraction of each gene's range.
         initial_step: Option<f64>,
         covariance: Option<Covariance>,
+        /// The lower bound of the step size, as a fraction of each gene's range.
+        min_step: Option<f64>,
     },
     Pso {
         population_size: Option<usize>,
@@ -224,6 +233,47 @@ pub struct Variation {
 pub enum Decomposition {
     Tchebycheff {},
     Pbi { theta: f64 },
+}
+
+/// NEAT, with its settings as `genoxide::neat::NeatBuilder` groups them; the paper's by default.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Neat {
+    pub population_size: Option<usize>,
+    /// c₁, c₂, c₃ and the threshold.
+    pub compatibility: Option<(f64, f64, f64, f64)>,
+    /// The rate and the probability of a new weight.
+    pub weight_mutation: Option<(f64, f64)>,
+    /// The deviations of a perturbation and of a new weight.
+    pub weight_deviations: Option<(f64, f64)>,
+    /// The probabilities of a new node and of a new connection.
+    pub structural_mutation: Option<(f64, f64)>,
+    /// Mutation only, interspecies mating, and disabling an inherited disabled gene.
+    pub reproduction: Option<(f64, f64, f64)>,
+    /// The elitism size and the survival fraction.
+    pub selection: Option<(usize, f64)>,
+    pub stagnation: Option<u64>,
+    pub activation: Option<crate::networks::ActivationName>,
+    pub feed_forward: Option<bool>,
+    pub initial: Option<NeatInitial>,
+    pub sharing: Option<NeatSharing>,
+    pub seed: Option<u64>,
+}
+
+/// NEAT's initial networks.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NeatInitial {
+    FullyConnected,
+    Unconnected,
+}
+
+/// NEAT's fitness sharing.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NeatSharing {
+    Normalized,
+    Raw,
 }
 
 /// A genetic algorithm.

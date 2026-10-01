@@ -40,7 +40,7 @@ def test_the_module_docstring_example_runs():
 
 
 def test_the_submodule_docstring_examples_run():
-    modules = (gx.problems, gx.problems.cec2006, gx.problems.engineering)
+    modules = (gx.problems, gx.problems.cec2006, gx.problems.engineering, gx.neat)
     for module in modules + (gx.problems.multi_engineering, gx.indicators):
         # later examples use what earlier ones define
         namespace = {}
