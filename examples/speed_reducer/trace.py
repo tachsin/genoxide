@@ -1,7 +1,8 @@
 """The trace of the run for the plot on the example's page, written to the file that
 ``GENOXIDE_TRACE`` names: the best design so far and the value g of each of its constraints
-(satisfied at g ≤ 0, on its limit at 0), in at most 100 generations. The Rust example writes
-the same file."""
+(satisfied at g ≤ 0, on its limit at 0), in at most 100 generations. Its progress curve is the
+error to the best known weight: how much heavier the best and the median design are, on a log
+scale. The Rust example writes the same file."""
 
 import json
 import math
@@ -47,9 +48,9 @@ class Trace:
                 "example": "speed_reducer",
                 "objective": "minimize",
                 "x_label": "evaluations",
-                "y_label": "weight",
-                "log_y": False,
-                "optimum": self.problem.optimum.value,
+                "y_label": "error to the best known weight",
+                "log_y": True,
+                "optimum": 0.0,
                 "plot": "design",
                 "problem": {
                     "variables": [
@@ -59,15 +60,31 @@ class Trace:
                     "constraints": [f"g{g}" for g in range(1, 12)],
                 },
             }
-            write(self.path, settings, self.frames.to_list())
+            optimum = self.problem.optimum.value
+            write(self.path, settings, errors(self.frames.to_list(), optimum))
+
+
+def errors(frames, optimum):
+    """The frames with their best and median weights as errors to the optimum: how much heavier,
+    at least 0."""
+
+    def error(weight):
+        return None if weight is None else max(weight - optimum, 0.0)
+
+    return [
+        {**frame, "best": error(frame["best"]), "median": error(frame["median"])} for frame in frames
+    ]
 
 
 # ---- the same in every example's trace ----------------------------------------------------------
 
 
 class Frames:
-    """The frames of at most ``most`` generations: every ``every``-th one, with ``every`` doubling
-    whenever there are ``most``, and the last one."""
+    """The frames of at most ``most`` generations, from the part of the run where what the page
+    plots changes: the frames after the last change are left out (a run that reached its target,
+    or a front that no longer moves), and the rest are spread evenly over the generations up to
+    it. While the run goes, up to 8 × ``most`` frames are kept: every ``every``-th generation,
+    with ``every`` doubling whenever there are that many, and the last one."""
 
     def __init__(self, most):
         self.most, self.every, self.kept, self.last = most, 1, [], None
@@ -78,12 +95,65 @@ class Frames:
             return
         self.kept.append(frame)
         self.last = None
-        if len(self.kept) == self.most:
+        if len(self.kept) == 8 * self.most:
             self.every *= 2
             self.kept = [kept for kept in self.kept if kept["generation"] % self.every == 0]
 
     def to_list(self):
-        return self.kept + ([self.last] if self.last else [])
+        frames = self.kept + ([self.last] if self.last else [])
+        active = frames[: last_change(frames) + 1]
+        count, most = len(active), max(self.most, 2)
+        if count <= most:
+            return active
+        return [active[(i * (count - 1) + (most - 1) // 2) // (most - 1)] for i in range(most)]
+
+
+def last_change(frames):
+    """The index of the frame after which nothing the page plots changes. To 3 significant
+    digits, as a plot shows them: the best, the median and, for a single objective (a numeric
+    best), the state; to within a thousandth of their range over the run: a front's
+    hypervolumes, in the state or in a grid's series."""
+    if not frames:
+        return 0
+    last = len(frames) - 1
+    number = lambda value: isinstance(value, (int, float)) and not isinstance(value, bool)
+    single = any(number(frame.get("best")) for frame in frames)
+
+    def measures(frame):
+        values = []
+        state = frame.get("state")
+        hypervolume = state.get("hypervolume") if isinstance(state, dict) else None
+        for value in (hypervolume, frame.get("series")):
+            if number(value):
+                values.append(float(value))
+            elif isinstance(value, dict):
+                values.extend(float(v) for _, v in sorted(value.items()) if number(v))
+        return values
+
+    measured = [measures(frame) for frame in frames]
+    end = measured[last]
+    tolerance = []
+    for k in range(len(end)):
+        values = [values[k] for values in measured if k < len(values)]
+        tolerance.append((max(values) - min(values)) / 1000.0)
+
+    def same(frame, final, key, flush=False):
+        return coarse(frame.get(key), flush) == coarse(final.get(key), flush)
+
+    def settled(i):
+        frame, final = frames[i], frames[last]
+        return (
+            same(frame, final, "best")
+            and same(frame, final, "median")
+            and (not single or same(frame, final, "state", flush=True))
+            and len(measured[i]) == len(end)
+            and all(abs(v - e) <= t for v, e, t in zip(measured[i], end, tolerance))
+        )
+
+    first = last
+    while first > 0 and settled(first - 1):
+        first -= 1
+    return first
 
 
 def frame(progress, state):
@@ -105,6 +175,22 @@ def median(scores):
     if not scores:
         return None
     return scores[middle] if len(scores) % 2 else (scores[middle - 1] + scores[middle]) / 2
+
+
+def coarse(value, flush=False):
+    """``value`` with its numbers to 3 significant digits, as precisely as a plot shows them: two
+    frames whose plotted values agree to that precision look the same. With ``flush``, for the
+    solutions a plot draws on their ranges, numbers below 1e-6 in size count as 0."""
+    if isinstance(value, float):
+        if flush and abs(value) < 1e-6:
+            value = 0.0
+        return f"{value:.2e}"
+    if isinstance(value, (list, tuple)):
+        return "[" + ",".join(coarse(item, flush) for item in value) + "]"
+    if isinstance(value, dict):
+        items = sorted(value.items())
+        return "{" + ",".join(f"{key}:{coarse(item, flush)}" for key, item in items) + "}"
+    return json.dumps(value)
 
 
 def write(path, settings, frames):

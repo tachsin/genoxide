@@ -23,6 +23,7 @@ use genoxide::problems::engineering::CantileverBeam;
 fn main() -> Result<()> {
     let problem = CantileverBeam;
     let optimum = problem.optimum().expect("known");
+    let minimum = optimum.value();
     let cmaes = Cmaes::builder(problem.representation())
         .minimize()
         .seed(1)
@@ -30,13 +31,12 @@ fn main() -> Result<()> {
     // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
     let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(cmaes, problem)
-        .stop_when(Stop::evaluations(8_000))
+        .stop_when(Stop::target(minimum * (1.0 + 1e-10)).or(Stop::evaluations(8_000)))
         .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
     let best = outcome.best_fitness();
     let weight = best.score().unwrap_or(f64::NAN);
-    let minimum = optimum.value();
     println!(
         "weight {weight:.9} after {} evaluations (the minimum: {minimum:.9})",
         outcome.evaluations()

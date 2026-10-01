@@ -4,7 +4,7 @@ category: constrained
 summary: The cheapest welded beam under stress, buckling and deflection limits, in the two forms of the literature.
 reference: "Ragsdell, K. M. and Phillips, D. T. (1976). Optimal design of a class of welded structures using geometric programming. Journal of Engineering for Industry 98(3): 1021-1025."
 reference_url: https://doi.org/10.1115/1.3438995
-optimum: "1.724852 (seven constraints) and 2.3811341 (five constraints), best known"
+optimum: "1.7248523085993899 (seven constraints) and 2.3811341169090015 (five constraints), best known"
 languages: [rust, python]
 order: 91
 trace_note: "Recorded from the seeded run below, on the first form, WeldedBeam."
@@ -33,10 +33,14 @@ Two forms of the problem circulate in the literature:
 - `WeldedBeam` has seven constraints: the five above, a limit on a cost-like term, 0.10471 h² +
   0.04811 t b (14 + l) ≤ 5, and h ≥ 0.125. It follows Rao (1996, Engineering Optimization, Wiley) as
   restated by Coello Coello (2000, Computers in Industry 41(2): 113-127). Its best known cost is
-  1.724852 (Cagnina, Esquivel and Coello Coello, 2008, Informatica 32: 319-326).
+  1.7248523085993899: Cagnina, Esquivel and Coello Coello (2008, Informatica 32: 319-326) report
+  1.724852, and a local solver (SLSQP) started from their design, printed to 6 digits and slightly
+  infeasible, reaches it to full precision with every constraint met.
 - `WeldedBeamRagsdell` has five, after Ragsdell and Phillips (1976) as restated by Deb (2000,
   Computer Methods in Applied Mechanics and Engineering 186: 311-338). Its best known cost is
-  2.3811341, a feasible design found with genoxide's SHADE. Reklaitis, Ravindran and Ragsdell
+  2.3811341169090015, a local solver's (SLSQP) minimum started from the design that genoxide's
+  SHADE finds, with the active constraints tightened by 1e-7 and h = b, so that it meets them
+  exactly. It isn't proven optimal. Reklaitis, Ravindran and Ragsdell
   (1983, Engineering Optimization: Methods and Applications, Wiley) report 2.38116.
 
 The two forms also differ in the constants of their shear stress and buckling formulas, so the same
@@ -62,21 +66,28 @@ by violation.
 
 SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), a differential evolution that adapts its
 scale factor and crossover rate from successful trials, with genoxide's defaults: its published
-population of 100, and a restart after 200 generations without progress. It runs for 40,000
-evaluations on each form.
+population of 100, and a restart after 200 generations without progress. On each form, it stops
+once the cost is within 1e-10 of the best known, relative to its size, or after 100,000
+evaluations.
 
 ## Output
 
 Two lines per form. The first gives the form, the cost of the best design, its constraint violation
-(0 means feasible) and the best known cost. The second gives the design: h, l, t and b. In both, h
+(0 means feasible), the evaluations the run took and the best known cost. The second gives the design: h, l, t and b. In both, h
 equals b: the constraint h ≤ b binds. In Python, `run` evaluates the problems in Rust, so both
 versions print the same.
 
-[The project page](https://tachsin.gr/projects/genoxide/examples/welded-beam) plays back the first form's run.
+[The project page](https://tachsin.gr/projects/genoxide/examples/welded-beam) plays back the first form's run. Its
+progress curve is the cost's error to the best known cost, on a log axis.
 
 ## Good results
 
-On the seven-constraint form, the run reaches the best known cost, 1.724852, with no violation. On
-the five-constraint form, it reaches the best known cost, 2.381134, also with no violation. That's
+On the seven-constraint form, the run meets the target after 45,000 evaluations, at 1.724852 to 7
+digits, with no violation. On the five-constraint form, it meets it after 53,800, at 2.381134, also
+with no violation. That's
 below the 2.38116 that Reklaitis, Ravindran and Ragsdell report, whose design, published to 4
 digits, costs 2.38151 as printed.
+
+With seeds 1 to 20, every run meets its target: after 42,100 to 48,000 evaluations on the
+seven-constraint form, 45,700 at the median, and after 49,700 to 56,700 on the five-constraint
+form, 52,350 at the median.

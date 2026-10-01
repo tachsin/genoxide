@@ -1,4 +1,4 @@
-weight 0.0126653 (the best known: 0.012665)
+weight 0.0126652 after 86900 evaluations (the best known: 0.01266523278831971)
 violation 0.000000
-d 0.051747, D 0.358122, N 11.207099
+d 0.051689, D 0.356723, N 11.288641
 active constraints: g1, g2

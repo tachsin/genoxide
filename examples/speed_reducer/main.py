@@ -27,12 +27,20 @@ best_known = problem.optimum.value
 de = gx.De(problem.genome, objective=problem.objective, seed=1)
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(problem)
-result = de.run(problem, evaluations=50_000, on_generation=trace.on_generation)
+result = de.run(
+    problem,
+    target=best_known * (1.0 + 1e-10),
+    evaluations=50_000,
+    on_generation=trace.on_generation,
+)
 
 b, m, z, l1, l2, d1, d2 = problem.design(result.best_genome).tolist()
 constraints = problem.constraints(result.best_genome).tolist()
 active = [f"g{i + 1}" for i, g in enumerate(constraints) if abs(g) <= ACTIVE]
-print(f"weight {result.best_fitness:.6f} (the best known: {best_known:.6f})")
+print(
+    f"weight {result.best_fitness:.6f} after {result.evaluations} evaluations "
+    f"(the best known: {best_known:.6f})"
+)
 print(f"violation {result.violation:.6f}")
 print(f"face width {b:.6f}, module {m:.6f}, teeth {z:.0f}")
 print(f"shaft 1: length {l1:.6f}, diameter {d1:.6f}")

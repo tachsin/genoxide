@@ -5,8 +5,8 @@
 //! `WeldedBeam` is the form with seven constraints (Rao, 1996, as restated by Coello Coello,
 //! 2000), `WeldedBeamRagsdell` the one with five (Ragsdell and Phillips, 1976, as restated by
 //! Deb, 2000). Their fitness is the cost and the constraint violation, which Deb's feasibility
-//! rules compare. SHADE, a differential evolution, solves each with the same budget, and the
-//! example prints the best design next to the best known cost.
+//! rules compare. SHADE, a differential evolution, solves each until it reaches the best known
+//! cost, and the example prints the best design, the evaluations it took and the best known cost.
 //!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
 //! page, with `trace.rs`.
@@ -33,16 +33,17 @@ fn main() -> Result<()> {
         let best_known = problem.optimum().expect("known").value();
         let de = De::builder(problem.real()).minimize().seed(1).build()?;
         let outcome = Engine::new(de, |x: &Reals| problem.evaluate(x))
-            .stop_when(Stop::evaluations(40_000))
+            .stop_when(Stop::target(best_known * (1.0 + 1e-10)).or(Stop::evaluations(100_000)))
             .on_generation(|snapshot| trace.record(snapshot))
             .run()?;
         let best = outcome.best_fitness();
         let x = outcome.best_genome();
         println!(
-            "{}: cost {:.6}, violation {:.6} (the best known: {best_known})",
+            "{}: cost {:.6}, violation {:.6}, after {} evaluations (the best known: {best_known})",
             problem.name(),
             best.score().unwrap_or(f64::NAN),
-            best.violation()
+            best.violation(),
+            outcome.evaluations()
         );
         println!(
             "  h {:.6}, l {:.6}, t {:.6}, b {:.6}",

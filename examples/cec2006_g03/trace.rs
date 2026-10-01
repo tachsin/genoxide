@@ -118,8 +118,11 @@ fn frame<G: Genome>(
 
 // ---- the same in every example's trace ---------------------------------------------------------
 
-// the frames of at most `most` generations: every `every`-th one, with `every` doubling whenever
-// there are `most`, and the last one
+// the frames of at most `most` generations, from the part of the run where what the page plots
+// changes: the frames after the last change are left out (a run that reached its target, or a
+// front that no longer moves), and the rest are spread evenly over the generations up to it. While
+// the run goes, up to 8 × `most` frames are kept: every `every`-th generation, with `every`
+// doubling whenever there are that many, and the last one.
 struct Frames {
     most: usize,
     every: u64,
@@ -146,7 +149,7 @@ impl Frames {
         }
         self.kept.push((generation, frame));
         self.last = None;
-        if self.kept.len() == self.most {
+        if self.kept.len() == 8 * self.most {
             self.every *= 2;
             let every = self.every;
             self.kept.retain(|(generation, _)| generation % every == 0);
@@ -155,7 +158,95 @@ impl Frames {
 
     fn into_vec(self) -> Vec<Value> {
         let frames = self.kept.into_iter().chain(self.last);
-        frames.map(|(_, frame)| frame).collect()
+        let frames: Vec<Value> = frames.map(|(_, frame)| frame).collect();
+        let active = &frames[..=last_change(&frames)];
+        let (count, most) = (active.len(), self.most.max(2));
+        if count <= most {
+            return active.to_vec();
+        }
+        let at = |i: usize| active[(i * (count - 1) + (most - 1) / 2) / (most - 1)].clone();
+        (0..most).map(at).collect()
+    }
+}
+
+// the index of the frame after which nothing the page plots changes. To 3 significant digits, as
+// a plot shows them: the best, the median and, for a single objective (a numeric best), the state;
+// to within a thousandth of their range over the run: a front's hypervolumes, in the state or in a
+// grid's series
+fn last_change(frames: &[Value]) -> usize {
+    let Some(last) = frames.len().checked_sub(1) else {
+        return 0;
+    };
+    let single = frames.iter().any(|frame| frame["best"].is_number());
+    let measures = |frame: &Value| -> Vec<f64> {
+        let mut values = Vec::new();
+        for value in [&frame["state"]["hypervolume"], &frame["series"]] {
+            match value {
+                Value::Number(number) => values.extend(number.as_f64()),
+                Value::Object(map) => values.extend(map.values().filter_map(Value::as_f64)),
+                _ => {}
+            }
+        }
+        values
+    };
+    let measured: Vec<Vec<f64>> = frames.iter().map(measures).collect();
+    let end = &measured[last];
+    let tolerance: Vec<f64> = (0..end.len())
+        .map(|k| {
+            let values = measured.iter().filter_map(|values| values.get(k).copied());
+            let (low, high) = values.fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), v| {
+                (low.min(v), high.max(v))
+            });
+            (high - low) / 1000.0
+        })
+        .collect();
+    let settled = |i: usize| {
+        let (frame, final_frame) = (&frames[i], &frames[last]);
+        let same =
+            |key: &str, flush: bool| coarse(&frame[key], flush) == coarse(&final_frame[key], flush);
+        same("best", false)
+            && same("median", false)
+            && (!single || same("state", true))
+            && measured[i].len() == end.len()
+            && measured[i]
+                .iter()
+                .zip(end)
+                .zip(&tolerance)
+                .all(|((value, end), tolerance)| (value - end).abs() <= *tolerance)
+    };
+    let mut first = last;
+    while first > 0 && settled(first - 1) {
+        first -= 1;
+    }
+    first
+}
+
+// `value` with its numbers to 3 significant digits, as precisely as a plot shows them: two frames
+// whose plotted values agree to that precision look the same. With `flush`, for the solutions a
+// plot draws on their ranges, numbers below 1e-6 in size count as 0
+fn coarse(value: &Value, flush: bool) -> String {
+    let join = |items: Vec<String>| items.join(",");
+    match value {
+        Value::Number(number) if number.is_f64() => {
+            let number = number.as_f64().expect("f64");
+            let number = if flush && number.abs() < 1e-6 {
+                0.0
+            } else {
+                number
+            };
+            format!("{number:.2e}")
+        }
+        Value::Array(items) => {
+            format!(
+                "[{}]",
+                join(items.iter().map(|item| coarse(item, flush)).collect())
+            )
+        }
+        Value::Object(map) => {
+            let entry = |(key, item): (&String, &Value)| format!("{key}:{}", coarse(item, flush));
+            format!("{{{}}}", join(map.iter().map(entry).collect()))
+        }
+        other => other.to_string(),
     }
 }
 

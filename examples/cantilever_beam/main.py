@@ -22,7 +22,12 @@ optimum = problem.optimum
 cmaes = gx.Cmaes(problem.genome, objective=problem.objective, seed=1)
 # with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
 trace = Trace(problem)
-result = cmaes.run(problem, evaluations=8_000, on_generation=trace.on_generation)
+result = cmaes.run(
+    problem,
+    target=optimum.value * (1.0 + 1e-10),
+    evaluations=8_000,
+    on_generation=trace.on_generation,
+)
 
 weight, minimum = result.best_fitness, optimum.value
 print(f"weight {weight:.9f} after {result.evaluations} evaluations (the minimum: {minimum:.9f})")

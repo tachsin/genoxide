@@ -94,11 +94,13 @@ run is a minimization of the violation, and f plays no part.
 
 SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78) is genoxide's default differential
 evolution: current-to-pbest/1 mutation with an archive, and a memory of the scale factor F and the
-crossover rate CR that worked. It uses genoxide's defaults: a population of 100, restarts when the
-population has converged or stagnated, and a trial outside the bounds brought back halfway between
-its parent and the bound. Deb's rules decide between a trial and its parent.
+crossover rate CR that worked. It uses genoxide's defaults, a population of 100 and a trial outside
+the bounds brought back halfway between its parent and the bound, without restarts: on g20 they
+bring new random solutions into the population and find nothing better. Deb's rules decide between
+a trial and its parent.
 
-The run has the report's budget of 500,000 evaluations, and no target: it runs to the end.
+There is no target, since no solution is feasible: the run stops after 200 generations without a
+better best, or at the report's budget of 500,000 evaluations.
 
 Why SHADE: with 25 seeds, 24 runs ended at the same violation, 0.1437119 to 7 digits, and the other
 at 0.1437121, a little below the report's 0.14375. L-SHADE, whose population shrinks over the
@@ -128,13 +130,14 @@ solution, the error f − f* has no meaning.
 
 No run is feasible. A good run ends at a violation of 0.14371, a little below the 0.14375 of the
 report's solution. The example's run gets there: with seeds 1 to 100, SHADE ends between 0.14371188
-and 0.14371293 every time, at 0.14371188 in 96 runs, and L-SHADE at 0.1437118794 on all 100, the
-least violation found.
+and 0.14371293 every time, at 0.1437118794, the least violation found, in 99 runs, and stops after
+274,800 to 477,400 evaluations (357,300 at the median). With restarts and the whole budget, 96 runs
+of 100 ended at 0.14371188; L-SHADE ends at 0.1437118794 on all 100.
 
 With seed 1, the violation falls from 169 in the first random population to 0.33 after 32,100
 evaluations and 0.150 after 64,100. The run passes the report's solution after 91,200 evaluations
-and settles at 0.14371 after about 115,000. The rest of the budget goes to restarts, which bring new
-random solutions into the population and don't find anything better. The solution is the report's,
+and settles at 0.14371 after about 115,000; it improves in the eighth digit and beyond until it
+stops, after 295,200 evaluations. The solution is the report's,
 to 3 or 4 digits: x13 = 0.1581, x17 = 0.5309, x22 = 0.3110, x23 and x24 near 6·10⁻⁵, x1 to x12 below
 1·10⁻¹², g1 = 0.1437 and every other constraint met. Its value is 0.204975, just below the report's
 0.204979, which doesn't count under Deb's rules.

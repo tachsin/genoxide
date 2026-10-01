@@ -24,6 +24,8 @@ use genoxide::problems::cec2006::{EQUALITY_TOLERANCE, G20};
 
 // the CEC 2006 report's budget of evaluations per run
 const BUDGET: u64 = 500_000;
+// generations without a better best before the run stops
+const STAGNATION: u64 = 200;
 // a constraint within this of its boundary is active
 const ACTIVE: f64 = 1e-6;
 
@@ -34,6 +36,8 @@ fn main() -> Result<()> {
     // the violation of the report's best known solution
     let (_, reported) = problem.evaluate(&optimum.solutions()[0]);
     let shade = De::builder(problem.representation())
+        // no restarts: on g20 they find nothing better than the run they start over from
+        .restarts(de::Restarts::Never)
         .minimize()
         .seed(1)
         .build()?;
@@ -42,7 +46,9 @@ fn main() -> Result<()> {
     // the evaluations when the best is first less infeasible than the report's solution
     let mut below = None;
     let outcome = Engine::new(shade, problem)
-        .stop_when(Stop::evaluations(BUDGET))
+        // the report's budget, or 200 generations without a better best: the run settles long
+        // before the budget ends
+        .stop_when(Stop::evaluations(BUDGET).or(Stop::stagnation(STAGNATION)))
         .on_generation(|snapshot| {
             let progress = snapshot.progress();
             if progress

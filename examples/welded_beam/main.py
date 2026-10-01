@@ -5,8 +5,8 @@ constrained continuous problem, in the two forms of the literature.
 ``WeldedBeam`` is the form with seven constraints (Rao, 1996, as restated by Coello Coello, 2000),
 ``WeldedBeamRagsdell`` the one with five (Ragsdell and Phillips, 1976, as restated by Deb, 2000).
 Their fitness is the cost and the constraint violation, which Deb's feasibility rules compare.
-SHADE, a differential evolution, solves each with the same budget, and the example prints the best
-design next to the best known cost.
+SHADE, a differential evolution, solves each until it reaches the best known cost, and the example
+prints the best design, the evaluations it took and the best known cost.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
 page, with trace.py.
@@ -24,11 +24,16 @@ trace = Trace(forms[0])
 for problem in forms:
     best_known = problem.optimum.value
     de = gx.De(problem.genome, objective=problem.objective, seed=1)
-    result = de.run(problem, evaluations=40_000, on_generation=trace.on_generation)
+    result = de.run(
+        problem,
+        target=best_known * (1.0 + 1e-10),
+        evaluations=100_000,
+        on_generation=trace.on_generation,
+    )
     h, l, t, b = result.best_genome.tolist()
     print(
-        f"{problem.name}: cost {result.best_fitness:.6f}, violation {result.violation:.6f} "
-        f"(the best known: {best_known})"
+        f"{problem.name}: cost {result.best_fitness:.6f}, violation {result.violation:.6f}, "
+        f"after {result.evaluations} evaluations (the best known: {best_known})"
     )
     print(f"  h {h:.6f}, l {l:.6f}, t {t:.6f}, b {b:.6f}")
 trace.write()

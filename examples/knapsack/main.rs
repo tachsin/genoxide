@@ -84,8 +84,14 @@ fn main() -> Result<()> {
 
     // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
     let mut trace = trace::Trace::from_env();
+    // stops at the optimum that dynamic programming finds, or once the search stalls
+    let target = Stop::target(f64::from(optimum()));
     let outcome = Engine::new(ga, value)
-        .stop_when(Stop::stagnation(200).or(Stop::generations(2_000)))
+        .stop_when(
+            target
+                .or(Stop::stagnation(200))
+                .or(Stop::generations(2_000)),
+        )
         .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 

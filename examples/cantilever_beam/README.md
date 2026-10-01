@@ -73,11 +73,13 @@ CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195) sam
 from a normal distribution, and adapts its mean, its step size and its covariance matrix, which
 learns how the genes interact. It uses genoxide's defaults: a population of 4 + ⌊3 ln 5⌋ = 8, a
 step size of 0.3 of each gene's range, a random start and no restarts. It ranks each population by
-Deb's rules, and runs for 8,000 evaluations.
+Deb's rules, and stops once the weight is within 1e-10 of the minimum, relative to it, or after
+8,000 evaluations.
 
 CMA-ES suits a smooth problem with a single minimum, where the widths interact through the
 constraint. With seeds 1 to 5, it comes within 1e-8 of the minimum, relative to it, after 2,900 to
-4,900 evaluations, and within 1e-12 after 5,000 to 6,500. SHADE (Tanabe and Fukunaga, 2013, IEEE
+4,900 evaluations, within 1e-10, where the example stops, after 4,136 to 5,920, and within 1e-12
+after 5,000 to 6,500. SHADE (Tanabe and Fukunaga, 2013, IEEE
 CEC 2013: 71-78), with genoxide's defaults as in the welded beam example, needs 30,200 to 34,300
 evaluations for 1e-8 and 43,300 to 46,300 for 1e-12, and after 100,000 evaluations it's within
 2e-16 of the minimum. L-SHADE (Tanabe and Fukunaga, 2014, IEEE CEC 2014: 1658-1665), with a
@@ -96,8 +98,11 @@ so both versions print the same.
 ## Good results
 
 The minimum weight is 1.339956361, at widths 6.016016, 5.309174, 4.494330, 3.501475 and 2.152665,
-from the support to the free end. The run reaches it to the 9 printed decimals, with every width
-right to the 6 printed decimals and no violation. The deflection constraint is exactly at its
+from the support to the free end. The run stops after 4,240 evaluations, within 1e-10 of it,
+relative to it: the weight is right to the 9 printed decimals, with no violation, but the widths
+only to within 5e-5. As the section on what makes it hard explains, along the boundary the weight
+grows only with the square of the widths' error. Without the target, the run goes on to 8,000
+evaluations and gets every width right to the 6 printed decimals. The deflection constraint is exactly at its
 limit, 1.000000. The first feasible beam comes with the first population: the search approaches
 the boundary from inside.
 

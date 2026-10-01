@@ -35,7 +35,7 @@ fn main() -> Result<()> {
     // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
     let mut trace = trace::Trace::from_env();
     let outcome = Engine::new(de, problem)
-        .stop_when(Stop::evaluations(50_000))
+        .stop_when(Stop::target(best_known * (1.0 + 1e-10)).or(Stop::evaluations(50_000)))
         .on_generation(|snapshot| trace.record(snapshot))
         .run()?;
 
@@ -47,8 +47,9 @@ fn main() -> Result<()> {
         .map(|(i, _)| format!("g{}", i + 1))
         .collect();
     println!(
-        "weight {:.6} (the best known: {best_known:.6})",
-        best.score().unwrap_or(f64::NAN)
+        "weight {:.6} after {} evaluations (the best known: {best_known:.6})",
+        best.score().unwrap_or(f64::NAN),
+        outcome.evaluations()
     );
     println!("violation {:.6}", best.violation());
     println!("face width {b:.6}, module {m:.6}, teeth {z}");

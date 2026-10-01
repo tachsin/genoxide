@@ -97,8 +97,8 @@ The rules need no penalty weights.
 
 SHADE (Tanabe and Fukunaga, 2013, IEEE CEC 2013: 71-78), a differential evolution that adapts its
 scale factor and crossover rate from successful trials, with genoxide's defaults: its published
-population of 100, and a restart after 200 generations without progress. It runs for 50,000
-evaluations.
+population of 100, and a restart after 200 generations without progress. It stops once the weight
+is within 1e-10 of the best known weight, relative to it, or after 50,000 evaluations.
 
 Differential evolution suits a minimum at the bounds: genoxide's DE sets a trial gene that falls
 outside its bounds halfway between its parent's gene and the bound. The population can then close
@@ -106,7 +106,7 @@ in on a bound, halving the distance at each such step, without leaving the box.
 
 ## Output
 
-The first line gives the weight of the best design and the best known weight. The second gives its
+The first line gives the weight of the best design, the evaluations, and the best known weight. The second gives its
 constraint violation; 0 means it's feasible. The next three give the design: the face width, the
 module and the number of teeth, then each shaft's length and diameter. The last names the
 constraints at their limit, within 1e-6 of 0. In Python, `run` evaluates the problem in Rust, so
@@ -117,8 +117,10 @@ active (within 1e-6 of its limit) or violated. The best of the first 100 random 
 the stress in shaft 1; within 300 evaluations, the best design is feasible. Between about 10,500 and
 13,000 evaluations, g8, then g5 and g6, reach their limits, where all three stay from about 13,000
 on. After about 16,000 evaluations, the design matches the best known one to the 6 digits that the
-plot shows; the median weight has matched it since about 13,000. The population goes on refining
-the design to the end of the run, without a restart.
+plot shows. The progress curve shows the weight's error to the best known weight, on a log scale:
+the best design's falls to about 1e-4 by 16,000 evaluations, and the population goes on
+refining the design, without a restart, until the run stops after 23,200 evaluations, 2.9e-7
+above the best known weight.
 
 [The project page](https://tachsin.gr/projects/genoxide/examples/speed-reducer) plays this run back.
 
@@ -129,4 +131,4 @@ m = 0.7, z = 17, l₁ = 7.3, l₂ = 7.8, d₁ = 3.350215 and d₂ = 5.286683. Th
 and the least face width (g8) are at their limits, and d₁ and d₂ hold g5 and g6 exactly: that's
 the minimum at this vertex.
 
-Runs with seeds 2 to 5 end at the same design and weight.
+Runs with seeds 2 to 5 end at the same design and weight, after 22,200 to 23,700 evaluations.
