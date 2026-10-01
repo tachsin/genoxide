@@ -73,6 +73,11 @@ name = "accuracy_and_size"
 path = "examples/accuracy_and_size/main.rs"
 required-features = ["parallel"]
 
+[[example]]
+name = "two_spirals"
+path = "examples/two_spirals/main.rs"
+required-features = ["parallel"]
+
 [[bin]]
 name = "genoxide"
 required-features = ["cli"]

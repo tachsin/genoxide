@@ -38,7 +38,7 @@ fn main() -> genoxide::Result<()> {
 | Reals with an adaptive step size | `AdaptiveReal::new(Real::..., initial_step)` | `AdaptiveReals` (`[f64]`, `.step()`) | `NoCrossover` (an ES), `UniformCrossover`, `PointCrossover` | `SelfAdaptiveMutation` |
 | An order of `0..n` (tours, sequencing) | `Permutation::new(n)` | `Order` (`[usize]`) | `OrderCrossover` (sequences), `EdgeRecombinationCrossover` (tours), `PartiallyMappedCrossover`, `CycleCrossover` | `InversionMutation` (tours), `SwapMutation`, `InsertionMutation`, `ScrambleMutation` |
 | Programs and formulas: trees of typed functions (genetic programming) | `gp::Gp::builder(set)` ([template](#genetic-programming)) | `gp::Tree` (nodes in prefix order) | `gp::SubtreeCrossover`, `gp::OnePointCrossover` | `gp::SubtreeMutation`, `gp::PointMutation`, `gp::HoistMutation`, `gp::ShrinkMutation`, `gp::ConstantMutation`, a mix: `gp::Mutations` |
-| A neural network's weights (neuroevolution) | `nn::Mlp::new([4, 8, 1], nn::Activation::Tanh)?.representation(-1.0..=1.0)?`, `nn::Elman` (recurrent) ([template](#neuroevolution-a-networks-weights-by-cma-es)) | `Reals` | none: `Cmaes` | none: `Cmaes` |
+| A neural network's weights (neuroevolution) | `nn::Mlp::new([4, 8, 1], nn::Activation::Tanh)?.representation(-1.0..=1.0)?`, `nn::Elman` (recurrent) ([template](#neuroevolution-a-networks-weights-by-cma-es)) | `Reals` | none: `Cmaes` (up to a few hundred weights), `OpenEs` (thousands and more) | none |
 
 Any selection fits any representation; usually `Tournament` of size 2 to 5. For trees, a selection against bloat (growth without better fitness): `DoubleTournament::new(7, 1.4)?`, `LexicographicTournament::new(7)?` (ties in fitness to the smaller), or `Tarpeian::new(select, rate)?`; size is `genome.len()`.
 
@@ -401,6 +401,31 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+
+### Neuroevolution: thousands of weights by OpenAI's evolution strategy
+
+`OpenEs::builder(real)` (Salimans et al. 2017): mirrored samples `mean ± σ ε`, centered ranks, and an optimizer step along the gradient estimate, O(genes) per sample. `.population_size(n)` required, even; `.sigma(0.02)` and the learning rate are fractions of each gene's range; `.optimizer(open_es::Optimizer::adam(0.01))` (default) or `Optimizer::sgd(rate, momentum)`; `.weight_decay(d)` (0); `.evaluate_mean(true)` asks for the mean too each generation (often the best network); `.initial_mean(genome)` (random by default: small weights, e.g. from `Real::uniform(n, -0.25..=0.25)?`, suit networks); `.parallel_breeding(true)` for thousands of genes. `open_es.mean()`; `set_sigma`, `set_learning_rate` in `.control`. Adam steps about the learning rate per gene even near the optimum: lower it for precise answers. See `examples/two_spirals`.
+
+```rust
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    let sphere = |x: &Reals| x.iter().map(|xi| xi * xi).sum::<f64>();
+    let open_es = OpenEs::builder(Real::uniform(100, -5.0..=5.0)?)
+        .population_size(50)
+        .sigma(0.01)
+        .optimizer(open_es::Optimizer::adam(0.003))
+        .evaluate_mean(true)
+        .minimize()
+        .seed(1)
+        .build()?;
+    let outcome = Engine::new(open_es, sphere)
+        .stop_when(Stop::target(0.1).or(Stop::generations(2_000)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    Ok(())
+}
+```
 
 ### Neuroevolution: a network's structure by NEAT
 

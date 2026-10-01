@@ -50,6 +50,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - **Control tasks** (`problems::control`): the cart-pole and the double pole, with and without velocities, with Florian's corrected equations and the settings of Gomez et al. (2008), integrated by Runge-Kutta with portable `sin` and `cos`; their success criteria, and Gruau et al.'s damping fitness and generalization test. Driven by a `Policy`: a network or a closure.
 - **NEAT** (`neat`): networks whose structure evolves with their weights (Stanley and Miikkulainen 2002), from minimal networks up: innovation numbers that align genes in crossover, speciation by compatibility distance, explicit fitness sharing (normalized for any objective, or the paper's raw form), species champions and stagnation, and new nodes and connections. The paper's settings by default; feed-forward and recurrent networks compiled once for evaluation without allocation, and usable as control policies. Seeded runs and checkpoints are reproducible.
 - CMA-ES's step size can be bounded below (Igel 2003), for fitness functions that stop pointing at the goal near their best.
+- **OpenAI's evolution strategy** (`OpenEs`, Salimans et al. 2017): for networks of thousands of weights and more, where CMA-ES's covariance can't be afforded. Mirrored samples, centered-rank fitness shaping, Adam or SGD with momentum, weight decay, the mean optionally evaluated; linear cost per sample, and parallel breeding with the same results on any thread count.
 
 ## Other single-objective methods
 
@@ -120,6 +121,7 @@ cargo run --release --example xor_neat            # NEAT evolves a network's str
 cargo run --release --example koza_quartic        # genetic programming finds x^4 + x^3 + x^2 + x exactly
 cargo run --release --example double_pole         # a network balances two poles for 100,000 steps, CMA-ES
 cargo run --release --example double_pole_no_velocities  # the same with a recurrent network, no velocities
+cargo run --release --example two_spirals         # 2,545 weights tell two spirals apart, OpenAI's ES
 cargo run --release --example multiplexer_11      # Koza's 11-multiplexer, all 2048 cases, double tournament
 cargo run --release --example abs_typed           # strongly typed GP: |x| from a comparison and a conditional
 cargo run --release --example nguyen_all          # Nguyen's twelve regression problems, with and without linear scaling

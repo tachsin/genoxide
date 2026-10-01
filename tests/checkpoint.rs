@@ -282,6 +282,31 @@ fn other_algorithms_resume_exactly() {
             .unwrap()
     };
     resumes(diagonal, rastrigin, 20, 60);
+    // the mean and Adam's moments, with the mean evaluated and parallel breeding
+    for parallel in [false, true] {
+        let open_es = || {
+            OpenEs::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+                .population_size(20)
+                .sigma(0.01)
+                .evaluate_mean(true)
+                .parallel_breeding(parallel)
+                .minimize()
+                .seed(9)
+                .build()
+                .unwrap()
+        };
+        resumes(open_es, rastrigin, 10, 30);
+    }
+    let sgd = || {
+        OpenEs::builder(Real::uniform(10, -5.12..=5.12).unwrap())
+            .population_size(20)
+            .optimizer(genoxide::algorithm::open_es::Optimizer::sgd(0.01, 0.9))
+            .minimize()
+            .seed(10)
+            .build()
+            .unwrap()
+    };
+    resumes(sgd, rastrigin, 10, 30);
 }
 
 #[test]
