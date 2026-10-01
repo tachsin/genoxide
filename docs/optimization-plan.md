@@ -321,6 +321,18 @@ picks the next points, so that tens to a few hundred evaluations suffice.
 | TPE | Bergstra, J., Bardenet, R., Bengio, Y. and Kégl, B. (2011). Algorithms for hyper-parameter optimization. NeurIPS 24. Watanabe, S. (2023). Tree-structured Parzen estimator: understanding its algorithm components and their roles for better empirical performance. arXiv:2304.11127 | Cheaper than a GP per step (linear in the observations), any number of evaluations, integer and categorical genes natively; the multivariate kernel as in Falkner, S., Klein, A. and Hutter, F. (2018). BOHB. ICML 2018. arXiv:1807.01774 | E |
 | Trust-region BO (TuRBO-1, TuRBO-m) | Eriksson, D., Pearce, M., Gardner, J., Turner, R. and Poloczek, M. (2019). Scalable global optimization via local Bayesian optimization. NeurIPS 2019. arXiv:1910.01739 | Tens to a few hundred variables and thousands of evaluations: local GPs on the points in a trust region that grows on success and shrinks on failure. Thompson sampling needs a joint posterior sample at thousands of candidates (a Cholesky of that size): fewer candidates, or random Fourier features, decided in batch E | E |
 
+**Batch B's first part, read on 2026-10-01** (the acquisition functions, `erfcx` and the Latin
+hypercube, which need neither linear algebra nor L-BFGS-B). Ament et al. (2023): **verified**,
+section 4.1 (eq. 8 and 9) and appendix A.1 (eq. 12 to 14): `LogEI = log_h(z) + ln σ` with
+`z = (μ − y*)/σ` (maximizing), the three cases of `log_h` with their thresholds −1 and −1/√ε, the
+constants c₁ = ln(2π)/2 and c₂ = ln(π/2)/2, and `log1mexp` as implemented. EI, PI and UCB are
+their closed forms, not re-read from Močkus, Jones et al., Kushner and Srinivas et al.; the tests
+check them against hand derivations (EI = φ(0) at μ = y*, σ = 1) and mpmath. McKay et al. (1979):
+not re-read; the Latin hypercube is the standard construction (one point per stratum per gene,
+independent permutations), which the tests check directly. `erfcx` is genoxide's own: libm's
+`erfc` times an exactly split `e^(x²)` below 26, the asymptotic series of Abramowitz and Stegun
+7.1.23 above, checked against mpmath (`tests/reference/special_functions.py`) within 4 ulps.
+
 ### 1.6 Surrogate-assisted evolution, multi-fidelity, hybrids
 
 Brief and later: each needs the GP (batch B) and a design settled on real use.

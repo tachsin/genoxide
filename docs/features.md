@@ -17,6 +17,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - Integer and real, bounded per gene
 - Permutation
 - Real with a self-adaptive step size
+- Latin hypercube samples of real genomes (`Real::latin_hypercube`, McKay et al. 1979), for initial designs and starting populations
 - Trees of a genetic program, strongly typed
 
 ## Genetic algorithms
@@ -91,6 +92,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - **A fitness function that changes during a run:** the algorithms re-evaluate what they keep, e.g. after adapting penalty weights, without comparing old and new values, in Rust and Python.
 - **Extras with the fitness:** a fitness function returns what it computed along with the fitness (`Evaluated`), e.g. the terms of a penalty or a secondary measure; the engines keep it for the population and the best, for observers, the hall of fame and the outcome, without evaluating again and without changing the search.
 - **Gradients for gradient-based methods:** a fitness function supplies the gradient of its score along with it (`Differentiable` wraps a closure; a batch form takes a generation's gradients in one flat buffer), or an algorithm estimates it by forward or central differences, with the steps of Gill, Murray, Saunders and Wright, every point inside the bounds and fixed genes skipped, evaluated in one parallel or batch round; `gradient::check` tests a hand-written gradient against central differences. Algorithms ask for gradients only when they need them: the engine's path for every other algorithm is unchanged.
+- **Acquisition functions** (`algorithm::bo::acquisition`), the building blocks of Bayesian optimization for any surrogate model that gives a mean and a standard deviation: expected improvement, its logarithm computed stably where it underflows (Ament et al. 2023's LogEI), the probability of improvement and the upper confidence bound. Portable `erf`, `erfc` and the scaled `erfcx` in `genoxide::math`.
 - **Constraints:** Deb's feasibility rules (a fitness function returns a score and a constraint violation), and penalty functions. A fitness function can also give each inequality constraint's value and the constraint Jacobian (`Constrained`, a closure), for the methods that use them, such as MMA, while every other algorithm takes it as a score and a violation.
 - **Cancellation**, and **checkpoints** to resume a run (`serde` feature).
 - **Observers:** statistics per generation, hall of fame, progress lines, `tracing`.

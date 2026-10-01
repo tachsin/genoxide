@@ -226,7 +226,8 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [x] Continuation in stages that keeps the optimizer's state, in Python (`Continuation`, `Continue`; batch A3)
 
 ### 0.13: Bayesian optimization
-- [ ] Gaussian processes; EI, log-EI, UCB and PI; batch, constrained and integer-variable Bayesian optimization, also on the asynchronous engine (batch B)
+- [x] EI, log-EI, UCB and PI; Latin hypercube designs; portable `erf`, `erfc` and `erfcx` (batch B, the parts that need neither linear algebra nor L-BFGS-B)
+- [ ] Gaussian processes; batch, constrained and integer-variable Bayesian optimization, also on the asynchronous engine (batch B; after the linear algebra, [#373](https://github.com/tachsin/genoxide/issues/373), and L-BFGS-B)
 
 ### 0.14: Constrained nonlinear programming
 - [ ] SQP and the augmented Lagrangian, on the constrained test problems (batch C)
