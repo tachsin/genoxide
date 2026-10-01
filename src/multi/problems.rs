@@ -40,6 +40,7 @@
 //! | [`Dtlz1`], [`Dtlz2`], [`Dtlz3`], [`Dtlz4`] | M or more (M + 4, M + 9) | any M ≥ 2 | | linear; spherical |
 //! | [`Dtlz5`], [`Dtlz6`] | M or more (M + 9) | any M ≥ 2 | | a curve for M ≤ 3; not known for more |
 //! | [`Dtlz7`] | M or more (M + 19) | any M ≥ 2 | | 2^(M−1) disconnected regions |
+//! | [`Dtlz8`], [`Dtlz9`] | M or more (10 M) | M ≥ 3; any M ≥ 2 | M; M − 1 | a line and part of a plane; a curve |
 //! | [`ConvexDtlz2`], [`ScaledDtlz2`] | M or more (M + 9) | any M ≥ 2 | | convex; a scaled sphere |
 //! | [`ScaledDtlz1`], [`InvertedDtlz1`] | M or more (M + 4) | any M ≥ 2 | | a scaled plane; an inverted simplex |
 //! | [`Wfg1`], [`Wfg2`], [`Wfg3`] | k + l (k = 4 or 2(M − 1), l = 20) | any M ≥ 2 | | convex and mixed; convex, disconnected; linear for M = 2 |
@@ -91,6 +92,7 @@ mod cdtlz;
 mod classic;
 mod ctp;
 mod dtlz;
+mod dtlz_constrained;
 mod dtlz_variants;
 pub mod engineering;
 mod mw;
@@ -104,6 +106,7 @@ pub use classic::{
 };
 pub use ctp::{Ctp1, Ctp2, Ctp3, Ctp4, Ctp5, Ctp6, Ctp7, Ctp8};
 pub use dtlz::{Dtlz1, Dtlz2, Dtlz3, Dtlz4, Dtlz5, Dtlz6, Dtlz7};
+pub use dtlz_constrained::{Dtlz8, Dtlz9};
 pub use dtlz_variants::{ConvexDtlz2, InvertedDtlz1, ScaledDtlz1, ScaledDtlz2};
 pub use mw::{Mw1, Mw2, Mw3, Mw4, Mw5, Mw6, Mw7, Mw8, Mw9, Mw10, Mw11, Mw12, Mw13, Mw14};
 pub use wfg::{Wfg1, Wfg2, Wfg3, Wfg4, Wfg5, Wfg6, Wfg7, Wfg8, Wfg9};
@@ -309,7 +312,7 @@ where
 /// the convex, scaled and inverted DTLZ problems, WFG1-9, MW4, MW8
 /// and MW14 for any `M` from 2 on, then the constrained DTLZ problems (C1-DTLZ3 and convex
 /// C2-DTLZ2 only for the numbers of objectives their paper gives a radius for: 3, 5, 8, 10 and
-/// 15). [`Zdt5`], on bit strings, isn't in it.
+/// 15), then DTLZ8 (from 3 objectives on) and DTLZ9. [`Zdt5`], on bit strings, isn't in it.
 pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
     let fixed = [
         try_boxed::<_, 2, M>(Zdt1::default()),
@@ -388,6 +391,12 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
     }
     if M >= 2 {
         problems.extend(cdtlz::all::<M>());
+    }
+    if M >= 3 {
+        problems.push(boxed(Dtlz8::<M>::default()));
+    }
+    if M >= 2 {
+        problems.push(boxed(Dtlz9::<M>::default()));
     }
     problems
 }
@@ -688,7 +697,7 @@ mod tests {
     #[test]
     fn the_registries_describe_every_problem() {
         let two = all::<2>();
-        assert_eq!(two.len(), 66);
+        assert_eq!(two.len(), 67);
         check_registry(two);
         let three = all::<3>();
         assert_eq!(
@@ -730,6 +739,8 @@ mod tests {
                 "convex C2-DTLZ2",
                 "C3-DTLZ1",
                 "C3-DTLZ4",
+                "DTLZ8",
+                "DTLZ9",
             ]
         );
         check_registry(three);
