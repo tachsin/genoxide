@@ -6,7 +6,7 @@ use crate::operators::{
     bit_flip, integer_mutation,
 };
 use crate::process::{Genes, Multi, Pool, Single, Timeout};
-use genoxide::algorithm::{Incremental, cmaes, pso};
+use genoxide::algorithm::{Incremental, cmaes, local, pso};
 use genoxide::checkpoint;
 use genoxide::engine::asynchronous::MAX_WORKERS;
 use genoxide::genome::Representation;
@@ -262,6 +262,30 @@ fn de_restarts(restarts: config::DeRestarts) -> de::Restarts {
     }
 }
 
+fn nelder_mead_coefficients(
+    coefficients: config::NelderMeadCoefficients,
+) -> nelder_mead::Coefficients {
+    match coefficients {
+        config::NelderMeadCoefficients::Named(config::NelderMeadCoefficientsName::Adaptive) => {
+            nelder_mead::Coefficients::Adaptive
+        }
+        config::NelderMeadCoefficients::Named(config::NelderMeadCoefficientsName::Standard) => {
+            nelder_mead::Coefficients::Standard
+        }
+        config::NelderMeadCoefficients::Custom(config::CustomCoefficients {
+            reflection,
+            expansion,
+            contraction,
+            shrink,
+        }) => nelder_mead::Coefficients::Custom {
+            reflection,
+            expansion,
+            contraction,
+            shrink,
+        },
+    }
+}
+
 // the algorithms only for real genomes, and the others
 fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -> Result<Value> {
     match algorithm {
@@ -341,6 +365,42 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             }
             if let Some(neighbors) = ring {
                 builder = builder.topology(pso::Topology::Ring { neighbors });
+            }
+            generational(setting(builder.build())?, context)
+        }
+        config::Algorithm::NelderMead {
+            seed,
+            coefficients,
+            initial_step,
+            tolerance,
+            restarts,
+            speculative,
+        } => {
+            let mut builder = NelderMead::builder(real).objective(context.single_objective()?);
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            if let Some(coefficients) = coefficients {
+                builder = builder.coefficients(nelder_mead_coefficients(coefficients));
+            }
+            if let Some(step) = initial_step {
+                builder = builder.initial_step(step);
+            }
+            if let Some(tolerance) = tolerance {
+                builder = builder.tolerance(tolerance);
+            }
+            match restarts {
+                Some(0) => {
+                    return Err(
+                        "`algorithm.restarts` must be at least 1; leave it out for none"
+                            .to_string(),
+                    );
+                }
+                Some(times) => builder = builder.restarts(local::Restarts::Random { times }),
+                None => {}
+            }
+            if let Some(speculative) = speculative {
+                builder = builder.speculative(speculative);
             }
             generational(setting(builder.build())?, context)
         }
@@ -443,6 +503,9 @@ where
         config::Algorithm::De { .. } => Err("`de` needs a real genome".to_string()),
         config::Algorithm::Cmaes { .. } => Err("`cmaes` needs a real genome".to_string()),
         config::Algorithm::Pso { .. } => Err("`pso` needs a real genome".to_string()),
+        config::Algorithm::NelderMead { .. } => {
+            Err("`nelder-mead` needs a real genome".to_string())
+        }
     }
 }
 

@@ -187,6 +187,19 @@ pub enum Algorithm {
         /// Iterated local search: `[patience, kicks]`.
         restart: Option<(u64, usize)>,
     },
+    NelderMead {
+        seed: Option<u64>,
+        #[serde(default, deserialize_with = "nelder_mead_coefficients")]
+        coefficients: Option<NelderMeadCoefficients>,
+        /// The size of the first simplex, as a fraction of each gene's range.
+        initial_step: Option<f64>,
+        /// The simplex size at which a run has converged, as a fraction of each gene's range.
+        tolerance: Option<f64>,
+        /// Random restarts after convergence; none if unset.
+        restarts: Option<u64>,
+        /// The reflection, expansion and both contractions in one round.
+        speculative: Option<bool>,
+    },
     Nsga2 {
         population_size: usize,
         seed: Option<u64>,
@@ -239,6 +252,7 @@ named! {
     de_strategy: Option<DeStrategy> = "strategy";
     de_control: Option<DeControl> = "control";
     de_restarts: Option<DeRestarts> = "restarts";
+    nelder_mead_coefficients: Option<NelderMeadCoefficients> = "coefficients";
 }
 
 /// How differential evolution builds its mutant vectors: `"rand1"`, `"best1"`,
@@ -336,6 +350,34 @@ pub enum DeRestartsName {
 pub struct OnStagnation {
     pub tolerance: f64,
     pub patience: u64,
+}
+
+/// Nelder-Mead's coefficients: `"adaptive"`, `"standard"` or
+/// `{ reflection, expansion, contraction, shrink }`.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(
+    untagged,
+    expecting = "\"adaptive\", \"standard\" or { reflection, expansion, contraction, shrink }"
+)]
+pub enum NelderMeadCoefficients {
+    Named(NelderMeadCoefficientsName),
+    Custom(CustomCoefficients),
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NelderMeadCoefficientsName {
+    Adaptive,
+    Standard,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CustomCoefficients {
+    pub reflection: f64,
+    pub expansion: f64,
+    pub contraction: f64,
+    pub shrink: f64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]

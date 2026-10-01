@@ -843,7 +843,7 @@ command = ["python3", "fitness.py"]   # or builtin = "rastrigin"
 objectives = ["minimize"]
 
 [algorithm]
-type = "ga"            # ga, steady-ga, de, cmaes, pso, local-search, nsga2
+type = "ga"            # ga, steady-ga, de, cmaes, pso, local-search, nelder-mead, nsga2
 population_size = 50
 select = { type = "tournament", size = 3 }
 crossover = { type = "simulated-binary", eta = 15.0 }

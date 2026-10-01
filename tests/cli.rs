@@ -729,3 +729,195 @@ fn stop_and_report_mistakes_are_found_by_check() {
     assert!(error.contains("the constraint violation"), "{error}");
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+const NELDER_MEAD: &str = r#"
+report = "off"
+[genome]
+type = "real"
+length = 4
+bounds = [-5.0, 5.0]
+[fitness]
+builtin = "rosenbrock"
+objectives = ["minimize"]
+workers = 2
+[algorithm]
+type = "nelder-mead"
+seed = 1
+[stop]
+evaluations = 100000
+"#;
+
+// a run file of `NELDER_MEAD` with these settings
+fn nelder_mead(settings: &str) -> String {
+    NELDER_MEAD.replace(
+        "type = \"nelder-mead\"",
+        &format!("type = \"nelder-mead\"\n{settings}"),
+    )
+}
+
+// a result without its time, to compare runs
+fn untimed(mut result: Value) -> Value {
+    result["seconds"] = Value::Null;
+    result
+}
+
+#[test]
+fn nelder_mead_runs_until_it_converges() {
+    let directory = directory("nelder-mead");
+    let run = |text: &str| untimed(run(&directory, "run.toml", text, &[]).unwrap());
+    let default = run(NELDER_MEAD);
+    assert_eq!(default["stop_reason"], "converged");
+    assert!(default["fitness"].as_f64().unwrap() < 1e-15, "{default}");
+    assert!(default["evaluations"].as_u64().unwrap() < 100_000);
+    for gene in default["genome"].as_array().unwrap() {
+        assert!((gene.as_f64().unwrap() - 1.0).abs() < 1e-8, "{default}");
+    }
+    // the settings' defaults
+    let explicit = run(&nelder_mead(
+        "coefficients = \"adaptive\"\ninitial_step = 0.1\ntolerance = 1e-10\nspeculative = false",
+    ));
+    assert_eq!(explicit, default);
+    // the standard coefficients, by name or as a table
+    let standard = run(&nelder_mead("coefficients = \"standard\""));
+    assert_eq!(standard["stop_reason"], "converged");
+    assert_ne!(standard["evaluations"], default["evaluations"]);
+    let table = run(&nelder_mead(
+        "coefficients = { reflection = 1.0, expansion = 2.0, contraction = 0.5, shrink = 0.5 }",
+    ));
+    assert_eq!(table, standard);
+    // restarts: more runs, each to convergence
+    let restarts = run(&nelder_mead("restarts = 3"));
+    assert_eq!(restarts["stop_reason"], "converged");
+    assert!(restarts["evaluations"].as_u64().unwrap() > default["evaluations"].as_u64().unwrap());
+    assert!(restarts["fitness"].as_f64().unwrap() < 1e-15, "{restarts}");
+    // speculative: the same kind of search, in fewer rounds of more evaluations
+    let speculative = run(&nelder_mead("speculative = true"));
+    assert_eq!(speculative["stop_reason"], "converged");
+    assert!(
+        speculative["fitness"].as_f64().unwrap() < 1e-15,
+        "{speculative}"
+    );
+    assert!(
+        speculative["evaluations"].as_u64().unwrap()
+            > speculative["generations"].as_u64().unwrap() * 2
+    );
+    // a stop condition can still come first
+    let short = run(&NELDER_MEAD.replace("evaluations = 100000", "generations = 10"));
+    assert_eq!(short["stop_reason"], "generations");
+    assert_eq!(short["generations"], 10);
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn nelder_mead_resumes_from_checkpoints() {
+    let directory = directory("nelder-mead-resume");
+    let text = |generations: u64| {
+        format!(
+            "{}[checkpoint]\npath = \"run.ckpt\"\nevery = 25\n",
+            nelder_mead("restarts = 2\nspeculative = true").replace(
+                "evaluations = 100000",
+                &format!("generations = {generations}")
+            )
+        )
+    };
+    let whole = run(&directory, "whole.toml", &text(100_000), &[]).unwrap();
+    assert_eq!(whole["stop_reason"], "converged");
+    let first = run(&directory, "part.toml", &text(60), &[]).unwrap();
+    assert_eq!(first["generations"], 60);
+    let resumed = run(&directory, "part.toml", &text(100_000), &["--resume"]).unwrap();
+    assert_eq!(untimed(resumed), untimed(whole));
+    // other settings are an error
+    let other = text(100_000).replace("restarts = 2", "restarts = 3");
+    let error = run(&directory, "part.toml", &other, &["--resume"]).unwrap_err();
+    assert!(
+        error.contains("other genome, objectives or algorithm settings"),
+        "{error}"
+    );
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn nelder_mead_settings_are_checked() {
+    let directory = directory("nelder-mead-check");
+    let expect = |text: &str, message: &str| {
+        let error = check(&directory, text).unwrap_err();
+        assert!(error.contains(message), "{message}: {error}");
+    };
+    assert_eq!(
+        check(
+            &directory,
+            &nelder_mead(
+                "coefficients = { reflection = 1.0, expansion = 2.5, contraction = 0.4, shrink = 0.6 }\ninitial_step = 0.5\ntolerance = 1e-6\nrestarts = 1\nspeculative = true"
+            )
+        ),
+        Ok(())
+    );
+    expect(
+        &nelder_mead("restarts = 0"),
+        "`algorithm.restarts` must be at least 1; leave it out for none",
+    );
+    expect(
+        &nelder_mead("tolerance = 0.1"),
+        "invalid setting `tolerance`: must be greater than 0 and smaller than the initial step 0.1",
+    );
+    expect(
+        &nelder_mead("initial_step = 0.001\ntolerance = 0.01"),
+        "invalid setting `tolerance`",
+    );
+    expect(
+        &nelder_mead("tolerance = 0.0"),
+        "invalid setting `tolerance`",
+    );
+    expect(
+        &nelder_mead("initial_step = 1.5"),
+        "invalid setting `initial_step`",
+    );
+    expect(
+        &nelder_mead("coefficients = \"golden\""),
+        "`algorithm.coefficients`: \"adaptive\", \"standard\" or { reflection, expansion, contraction, shrink }",
+    );
+    expect(
+        &nelder_mead("coefficients = { reflection = 1.0, expansion = 2.0 }"),
+        "`algorithm.coefficients`",
+    );
+    expect(
+        &nelder_mead(
+            "coefficients = { reflection = 1.0, expansion = 2.0, contraction = 0.5, shrink = 1.5 }",
+        ),
+        "invalid setting `coefficients`",
+    );
+    expect(&nelder_mead("restarts = -1"), "expected u64");
+    expect(&nelder_mead("color = 1"), "unknown field `color`");
+    expect(&nelder_mead("neighbors = 4"), "unknown field `neighbors`");
+    expect(
+        &NELDER_MEAD
+            .replace("type = \"real\"", "type = \"binary\"")
+            .replace("bounds = [-5.0, 5.0]\n", ""),
+        "`nelder-mead` needs a real genome",
+    );
+    expect(
+        &NELDER_MEAD
+            .replace("type = \"real\"", "type = \"permutation\"")
+            .replace("bounds = [-5.0, 5.0]\n", ""),
+        "`nelder-mead` needs a real genome",
+    );
+    expect(
+        &NELDER_MEAD.replace("[\"minimize\"]", "[\"minimize\", \"minimize\"]"),
+        "use `nsga2` for several",
+    );
+    // every gene fixed: nothing to search
+    expect(
+        &NELDER_MEAD.replace("bounds = [-5.0, 5.0]", "bounds = [1.0, 1.0]"),
+        "Nelder-Mead needs a gene with more than one value",
+    );
+    // the list of types names it
+    expect(
+        &NELDER_MEAD.replace("type = \"nelder-mead\"", "type = \"simplex\""),
+        "nelder-mead",
+    );
+    expect(
+        &NELDER_MEAD.replace("evaluations = 100000", ""),
+        "`stop` needs at least one",
+    );
+    std::fs::remove_dir_all(&directory).unwrap();
+}
