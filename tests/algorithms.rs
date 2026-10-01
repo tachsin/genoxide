@@ -245,6 +245,34 @@ fn portable_run<A: Algorithm<Genome = Reals>>(algorithm: A) -> Vec<f64> {
         .into_vec()
 }
 
+// the same for the methods that need a constraint's values and the gradients: Rosenbrock's
+// function, with the genes' sum at most 1
+fn portable_constrained_run(algorithm: Mma) -> Vec<f64> {
+    let rosenbrock = Constrained::differentiable(
+        1,
+        |x: &Reals, gradient: &mut [f64], g: &mut [f64], jacobian: &mut [f64]| {
+            let mut value = 0.0;
+            gradient.fill(0.0);
+            for i in 0..x.len() - 1 {
+                let (a, b) = (x[i + 1] - x[i] * x[i], 1.0 - x[i]);
+                value += 100.0 * a * a + b * b;
+                gradient[i] += -400.0 * a * x[i] - 2.0 * b;
+                gradient[i + 1] += 200.0 * a;
+            }
+            g[0] = x.iter().sum::<f64>() - 1.0;
+            jacobian.fill(1.0);
+            value
+        },
+    );
+    Engine::new(algorithm, rosenbrock)
+        .stop_when(Stop::generations(30))
+        .run()
+        .unwrap()
+        .into_best()
+        .into_genome()
+        .into_vec()
+}
+
 #[test]
 fn portable_runs() {
     let real = || Real::uniform(4, -5.12..=5.12).unwrap();
@@ -337,8 +365,17 @@ fn portable_runs() {
                 .build()
                 .unwrap(),
         ),
+        portable_constrained_run(Mma::builder(real()).minimize().seed(1).build().unwrap()),
+        portable_constrained_run(
+            Mma::builder(real())
+                .method(mma::Method::Gcmma)
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
     ];
-    let expected: [[f64; 4]; 11] = [
+    let expected: [[f64; 4]; 13] = [
         // L-SHADE
         [
             0.5886518163542276,
@@ -416,9 +453,23 @@ fn portable_runs() {
             0.9887762527729134,
             -2.874116295845887,
         ],
+        // MMA, the genes' sum at most 1
+        [
+            -0.4277873319263924,
+            0.2310265139269608,
+            0.10914038419999017,
+            0.0012034094553207975,
+        ],
+        // GCMMA, the genes' sum at most 1
+        [
+            0.050640279572221975,
+            0.01228299951717058,
+            0.009594958407758064,
+            0.017415965745941873,
+        ],
     ];
     for (run, expected) in runs.iter().zip(expected) {
-        assert_eq!(run[..], expected);
+        assert_eq!(run[..], expected, "{run:?}");
     }
 }
 

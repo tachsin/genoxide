@@ -108,6 +108,12 @@ harness = false
 name = "first_order"
 harness = false
 
+# MMA's iterations at 10³ to 10⁶ genes, with the dual's sums in parallel too
+[[bench]]
+name = "mma"
+harness = false
+required-features = ["parallel"]
+
 # the Python package's wheels: `profile` in python/pyproject.toml. Thin LTO, on every codegen unit:
 # measured on 4 cores, it builds the bindings in 130 s against fat LTO's 458 s with one unit, and
 # the Python examples run as fast (within 3% either way)

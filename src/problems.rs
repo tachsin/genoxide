@@ -85,7 +85,7 @@
 //! [`Problem::constraints`] gives a constrained problem's constraint values, as `g(x) <= 0` and
 //! `h(x) = 0`. The problems with inequalities only (g01, g02, g04, g06 to g10, g12, g16, g18,
 //! g19, g24 and the engineering problems on [`Real`] genomes) also give their values to the
-//! algorithms that use them: their
+//! algorithms that use them, such as [`Mma`](crate::algorithm::Mma): their
 //! [`provides`](FitnessFunction::provides) declares them, and
 //! [`evaluate_with`](FitnessFunction::evaluate_with) writes them. Their gradients aren't given:
 //! [`Constrained::differentiable`](crate::constraint::Constrained::differentiable) adds them.

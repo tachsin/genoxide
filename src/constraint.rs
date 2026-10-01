@@ -34,8 +34,9 @@
 //! [`Penalty`] is the alternative: a single score, worse by a multiple of the violation.
 //!
 //! [`Constrained`] gives the constraints' values one by one, `gᵢ(x) ≤ 0`, and optionally the
-//! gradient and the constraint Jacobian, to the algorithms that use them; for every other
-//! algorithm it's a fitness function returning `(score, violation)`.
+//! gradient and the constraint Jacobian, to the algorithms that use them, such as
+//! [`Mma`](crate::algorithm::Mma); for every other algorithm it's a fitness function returning
+//! `(score, violation)`.
 
 use crate::engine::{Extras, FitnessFunction, Provided};
 use crate::genome::Reals;
@@ -43,8 +44,8 @@ use crate::gradient::with_scratch;
 use crate::{Error, Fitness, Objective, Result};
 
 /// A fitness function on [`Real`](crate::genome::Real) genomes with `m` inequality constraints
-/// `gᵢ(x) ≤ 0` whose values it gives one by one: for algorithms that use each constraint, which
-/// read them through [`Extras`].
+/// `gᵢ(x) ≤ 0` whose values it gives one by one: for algorithms that use each constraint, such
+/// as [`Mma`](crate::algorithm::Mma), which read them through [`Extras`].
 ///
 /// - [`Constrained::new`] wraps a closure `|x: &Reals, g: &mut [f64]| score` that writes `gᵢ(x)`
 ///   into `g[i]`.
@@ -76,6 +77,15 @@ use crate::{Error, Fitness, Objective, Result};
 ///     },
 /// );
 /// assert_eq!(problem.evaluate(&Reals::from(vec![1.0, 1.0])), (1.0, 1.0));
+///
+/// let mma = Mma::builder(Real::uniform(2, -5.0..=5.0)?)
+///     .initial_genome(Reals::from(vec![-3.0, 4.0]))
+///     .minimize()
+///     .build()?;
+/// let outcome = Engine::new(mma, problem).stop_when(Stop::evaluations(200)).run()?;
+/// assert_eq!(outcome.stop_reason(), StopReason::Converged);
+/// let x = outcome.best_genome();
+/// assert!((x[0] - 1.0).abs() < 1e-6 && x[1].abs() < 1e-6);
 /// # Ok::<(), genoxide::Error>(())
 /// ```
 #[derive(Clone, Copy, Debug)]
