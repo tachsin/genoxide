@@ -20,6 +20,7 @@ const PLOTS = {
   surface: lazy(() => import("./plots/SurfacePlot")),
   timeline: lazy(() => import("./plots/TimelinePlot")),
   grid: lazy(() => import("./plots/GridPlot")),
+  cart_poles: lazy(() => import("./plots/CartPolesPlot")),
 };
 
 const TITLES = {
@@ -35,6 +36,7 @@ const TITLES = {
   "front-3d": "The front",
   surface: "The network's output",
   timeline: "Evaluations over time",
+  cart_poles: "The best network at the controls",
 };
 
 // the titles of a grid, by the kind of its panels
