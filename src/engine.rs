@@ -421,6 +421,10 @@ impl<G: Genome> Outcome<G> {
 /// evaluate in [`STALL_GENERATIONS`] generations in a row, e.g. a genetic algorithm whose children
 /// are all copies of their parents.
 ///
+/// A run whose algorithm has converged with nothing more to do, such as a
+/// [`NelderMead`](crate::algorithm::NelderMead) without restarts left, stops with
+/// [`StopReason::Converged`] (see [`Algorithm::is_finished`]).
+///
 /// ```
 /// use genoxide::prelude::*;
 ///
@@ -709,7 +713,8 @@ where
     /// If the algorithm has run before and a stop condition is already met, it returns that
     /// outcome without another generation. A run whose stop conditions need new evaluations stops
     /// with [`StopReason::Stalled`] after [`STALL_GENERATIONS`] generations in a row without a
-    /// genome to evaluate.
+    /// genome to evaluate, and a run whose algorithm [has finished](Algorithm::is_finished) with
+    /// [`StopReason::Converged`].
     ///
     /// # Panics
     ///
