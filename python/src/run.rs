@@ -3,9 +3,9 @@
 use crate::checkpoint::Checkpoints;
 use crate::config;
 use crate::control::{
-    CmaesSettings, DeSettings, EsSettings, GaSettings, IslandsSettings, LbfgsbSettings,
-    LocalSearchSettings, NeatSettings, NelderMeadSettings, OpenEsSettings, PsoSettings, Running,
-    Settings, Slot,
+    CmaesSettings, DeSettings, EsSettings, FirstOrderSettings, GaSettings, IslandsSettings,
+    LbfgsbSettings, LocalSearchSettings, NeatSettings, NelderMeadSettings, OpenEsSettings,
+    PsoSettings, Running, Settings, Slot,
 };
 use crate::errors::{genome_setting, setting};
 use crate::fitness::{Gradient, Multi, Native, Shared, Single};
@@ -496,6 +496,87 @@ pub fn de_control(control: config::DeControl) -> de::Control {
     }
 }
 
+// where a gradient-based method's gradients come from, with the relative step of finite
+// differences
+fn gradient_source(
+    source: Option<config::GradientSource>,
+    difference_step: Option<f64>,
+) -> Result<Gradients> {
+    let source = source.unwrap_or(config::GradientSource::Auto);
+    Ok(match source {
+        config::GradientSource::Auto | config::GradientSource::Supplied
+            if difference_step.is_some() =>
+        {
+            return Err("difference_step needs gradients=\"forward\" or \"central\"".to_string());
+        }
+        config::GradientSource::Auto => Gradients::Auto,
+        config::GradientSource::Supplied => Gradients::Supplied,
+        config::GradientSource::Forward => Gradients::Forward {
+            step: difference_step,
+        },
+        config::GradientSource::Central => Gradients::Central {
+            step: difference_step,
+        },
+    })
+}
+
+fn first_order_step(step: config::FirstOrderStep) -> first_order::Step {
+    use first_order::Step;
+    // Adam's settings default to Kingma and Ba's, as `Step::adam(0.001)`'s
+    let adam = |learning_rate: Option<f64>,
+                beta1: Option<f64>,
+                beta2: Option<f64>,
+                epsilon: Option<f64>| {
+        (
+            learning_rate.unwrap_or(0.001),
+            beta1.unwrap_or(0.9),
+            beta2.unwrap_or(0.999),
+            epsilon.unwrap_or(1e-8),
+        )
+    };
+    match step {
+        config::FirstOrderStep::Gradient { learning_rate } => Step::gradient(learning_rate),
+        config::FirstOrderStep::Momentum {
+            learning_rate,
+            momentum,
+        } => Step::momentum(learning_rate, momentum),
+        config::FirstOrderStep::Nesterov {
+            learning_rate,
+            momentum,
+        } => Step::nesterov(learning_rate, momentum),
+        config::FirstOrderStep::Adam {
+            learning_rate,
+            beta1,
+            beta2,
+            epsilon,
+        } => {
+            let (learning_rate, beta1, beta2, epsilon) = adam(learning_rate, beta1, beta2, epsilon);
+            Step::Adam {
+                learning_rate,
+                beta1,
+                beta2,
+                epsilon,
+            }
+        }
+        config::FirstOrderStep::Adamw {
+            learning_rate,
+            beta1,
+            beta2,
+            epsilon,
+            weight_decay,
+        } => {
+            let (learning_rate, beta1, beta2, epsilon) = adam(learning_rate, beta1, beta2, epsilon);
+            Step::AdamW {
+                learning_rate,
+                beta1,
+                beta2,
+                epsilon,
+                weight_decay,
+            }
+        }
+    }
+}
+
 fn nelder_mead_coefficients(coefficients: config::NelderMeadCoefficients) -> Coefficients {
     match coefficients {
         config::NelderMeadCoefficients::Named(config::NelderMeadCoefficientsName::Adaptive) => {
@@ -799,6 +880,45 @@ fn real_algorithm<'py>(
             }))?;
             generational(py, nelder_mead, NelderMeadSettings, context)
         }
+        config::Algorithm::FirstOrder {
+            step,
+            gradients,
+            difference_step,
+            gradient_tolerance,
+            step_tolerance,
+            restarts,
+            initial_genome,
+            seed,
+        } => {
+            let mut builder = FirstOrder::builder(real)
+                .step(first_order_step(step))
+                .objective(context.single_objective()?)
+                .gradients(gradient_source(gradients, difference_step)?);
+            if let Some(tolerance) = gradient_tolerance {
+                builder = builder.gradient_tolerance(tolerance);
+            }
+            if let Some(tolerance) = step_tolerance {
+                builder = builder.step_tolerance(tolerance);
+            }
+            if let Some(times) = restarts {
+                builder = builder.restarts(local::Restarts::Random { times });
+            }
+            if let Some(genome) = initial_genome {
+                builder = builder.initial_genome(Reals::from(genome));
+            }
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            // the only genome the builder checks is the initial one
+            let first_order = setting(builder.build().map_err(|error| match error {
+                genoxide::Error::InvalidGenome { reason } => genoxide::Error::InvalidSetting {
+                    setting: "initial_genome",
+                    reason,
+                },
+                error => error,
+            }))?;
+            generational(py, first_order, FirstOrderSettings, context)
+        }
         config::Algorithm::Lbfgsb {
             memory,
             gradients,
@@ -814,27 +934,7 @@ fn real_algorithm<'py>(
             if let Some(memory) = memory {
                 builder = builder.memory(memory);
             }
-            let source = gradients.unwrap_or(config::GradientSource::Auto);
-            if difference_step.is_some()
-                && !matches!(
-                    source,
-                    config::GradientSource::Forward | config::GradientSource::Central
-                )
-            {
-                return Err("difference_step needs gradients=\"forward\" or \"central\""
-                    .to_string()
-                    .into());
-            }
-            builder = builder.gradients(match source {
-                config::GradientSource::Auto => Gradients::Auto,
-                config::GradientSource::Supplied => Gradients::Supplied,
-                config::GradientSource::Forward => Gradients::Forward {
-                    step: difference_step,
-                },
-                config::GradientSource::Central => Gradients::Central {
-                    step: difference_step,
-                },
-            });
+            builder = builder.gradients(gradient_source(gradients, difference_step)?);
             if let Some(tolerance) = gradient_tolerance {
                 builder = builder.gradient_tolerance(tolerance);
             }
@@ -1048,6 +1148,9 @@ where
             Err("NelderMead needs a Real genome".to_string().into())
         }
         config::Algorithm::Lbfgsb { .. } => Err("Lbfgsb needs a Real genome".to_string().into()),
+        config::Algorithm::FirstOrder { .. } => {
+            Err("FirstOrder needs a Real genome".to_string().into())
+        }
     }
 }
 

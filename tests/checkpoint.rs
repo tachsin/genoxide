@@ -342,6 +342,37 @@ fn other_algorithms_resume_exactly() {
             .unwrap()
     };
     resumes(sgd, rastrigin, 10, 30);
+    // a first-order method's memory: with finite differences and random restarts, each rule
+    for step in [
+        first_order::Step::gradient(0.001),
+        first_order::Step::momentum(0.001, 0.9),
+        first_order::Step::nesterov(0.001, 0.9),
+        first_order::Step::adam(0.05),
+        first_order::Step::adamw(0.05, 0.01),
+    ] {
+        let first_order = || {
+            FirstOrder::builder(Real::uniform(4, -5.12..=5.12).unwrap())
+                .step(step)
+                .restarts(local::Restarts::Random { times: 1_000 })
+                .minimize()
+                .seed(12)
+                .build()
+                .unwrap()
+        };
+        resumes(first_order, rastrigin, 150, 400);
+    }
+    // and with the gradients supplied
+    let problem = genoxide::problems::Rosenbrock::new(10);
+    let first_order = || {
+        use genoxide::problems::Problem;
+        FirstOrder::builder(problem.representation())
+            .step(first_order::Step::adam(0.01))
+            .minimize()
+            .seed(13)
+            .build()
+            .unwrap()
+    };
+    resumes(first_order, problem, 100, 300);
 }
 
 #[test]

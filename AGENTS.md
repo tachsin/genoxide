@@ -40,6 +40,7 @@ fn main() -> genoxide::Result<()> {
 | Programs and formulas: trees of typed functions (genetic programming) | `gp::Gp::builder(set)` ([template](#genetic-programming)) | `gp::Tree` (nodes in prefix order) | `gp::SubtreeCrossover`, `gp::OnePointCrossover` | `gp::SubtreeMutation`, `gp::PointMutation`, `gp::HoistMutation`, `gp::ShrinkMutation`, `gp::ConstantMutation`, a mix: `gp::Mutations` |
 | A smooth function of reals, a local minimum to many digits, any number of genes | `Real::new(...)`, its box the bounds | `Reals` | none: `Lbfgsb` with the gradient ([template](#l-bfgs-b-smooth-functions-with-a-gradient)) | none |
 | A neural network's weights (neuroevolution) | `nn::Mlp::new([4, 8, 1], nn::Activation::Tanh)?.representation(-1.0..=1.0)?`, `nn::Elman` (recurrent) ([template](#neuroevolution-a-networks-weights-by-cma-es)) | `Reals` | none: `Cmaes` (up to a few hundred weights), `OpenEs` (thousands and more) | none |
+| A smooth function of many reals, its gradient noisy (mini-batches) or a step set by a learning-rate schedule (model fitting, up to millions of parameters) | `Real::uniform(n, lo..=hi)` ([template](#first-order-methods-adam-momentum-nesterov)) | `Reals` | none: `FirstOrder` | none |
 
 | Continuous problem | Method |
 |---|---|
@@ -896,7 +897,7 @@ Python: `gx.Lbfgsb(real, memory=10, gradients="auto", ...)`, `lbfgsb.run(f, grad
 
 ### Gradients: supplying them
 
-How fitness functions give gradients to gradient-based methods ([L-BFGS-B](#l-bfgs-b-smooth-functions-with-a-gradient)). A gradient is of the score as returned (`∂score/∂xᵢ`), whatever the objective: no sign change when maximizing.
+How fitness functions give gradients to gradient-based methods ([L-BFGS-B](#l-bfgs-b-smooth-functions-with-a-gradient), [first-order methods](#first-order-methods-adam-momentum-nesterov)). A gradient is of the score as returned (`∂score/∂xᵢ`), whatever the objective: no sign change when maximizing.
 
 - `Differentiable(|x: &Reals, gradient: &mut [f64]| value)` writes the gradient (zeroed, one value per gene) and returns the value; any algorithm takes it as a plain fitness function. `Batch(Differentiable(|xs: &[&Reals], gradients: &mut [f64]| values))`: flat, row-major, a row per genome.
 - A `FitnessFunction` declares it with `fn provides(&self) -> Provided { Provided::GRADIENT }` and writes it in `fn evaluate_with(&self, x, extras: &mut Extras<'_>)` when `extras.gradient()` is `Some` (`genoxide::engine::{Extras, Provided}`); the value must be `evaluate`'s, to the bit.
@@ -928,6 +929,53 @@ fn main() -> genoxide::Result<()> {
         .stop_when(Stop::target(1e-10).or(Stop::evaluations(10_000)))
         .run()?;
     assert_eq!(outcome.stop_reason(), StopReason::Target);
+    Ok(())
+}
+```
+
+### First-order methods: Adam, momentum, Nesterov
+
+`FirstOrder::builder(real)` steps along the gradient by a rule, without a line search: for smooth problems with many parameters, up to millions (O(n) memory and work per step, no allocation after the first). One gradient per generation (supplied, or finite differences in the same round, up to `gradient::AUTO_LIMIT` genes with `Auto`); points projected onto the bounds; it stops as `StopReason::Converged` when the projected gradient's largest component is within `.gradient_tolerance(1e-6)` or a step moves no gene by more than `.step_tolerance(1e-12)` relative to max(1, |x|) (`first_order.converged()` says which). Adam with a constant learning rate hovers near the minimum: lower it over the run in `.control` (a schedule) for precise answers.
+
+| `.step(first_order::Step::...)` | Rule |
+|---|---|
+| `adam(lr)` (default, `adam(0.001)`), `Adam { learning_rate, beta1, beta2, epsilon }` | Kingma and Ba's Algorithm 1 with bias correction; steps of about `lr` per gene, whatever the gradient's scale |
+| `adamw(lr, weight_decay)` | Loshchilov and Hutter's decoupled weight decay: `x -= η (lr m̂ / (√v̂ + ε) + λ x)`, not L2 in the gradient |
+| `momentum(lr, mu)`, `nesterov(lr, mu)` | Polyak's heavy ball; Nesterov's accelerated gradient in Sutskever et al.'s form (the look-ahead point is evaluated); `0 <= mu < 1` |
+| `gradient(lr)` | `x -= lr g` |
+
+Also `.gradients(gradient::Gradients::...)`, `.restarts(local::Restarts::Random { times })` (memory reset), `.initial_genome(...)`. During a run: `set_learning_rate(lr)?`, `set_multiplier(eta)?` (the schedule multiplier, which also scales AdamW's decay), `reevaluate()?` (keeps the velocity and Adam's averages); `gradient()`, `gradient_norm()`, `iterations()`, `steps()` (Adam's t), `gradients()` (the resolved source). An invalid point (fitness, or a gradient that isn't finite) is stepped back from, halfway to the last valid one. The rules are scale-sensitive: scale the genes alike. For a smooth deterministic function, `Lbfgsb` or Nesterov usually needs fewer steps; Adam suits noisy (mini-batch) gradients. See `examples/adam`. Python: `gx.FirstOrder(real, step="adam", learning_rate=..., momentum=..., weight_decay=..., gradients="auto", ...)` with `run(f, gradient=g)` or `run(f_and_g, gradient=True)`; `gx.RunningFirstOrder` (`learning_rate`, `multiplier`) in `control`. CLI: `type = "first-order"`, with the gradient protocol (`fitness.gradient = true`) or finite differences.
+
+```rust
+use genoxide::algorithm::first_order::Step;
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    // least squares: 1,000 parameters w, residuals rᵢ = wᵢ − i / 1000, loss Σ rᵢ² with its gradient
+    let loss = Differentiable(|w: &Reals, gradient: &mut [f64]| {
+        let mut value = 0.0;
+        for (i, (g, &wi)) in gradient.iter_mut().zip(w.iter()).enumerate() {
+            let r = wi - i as f64 / 1000.0;
+            *g = 2.0 * r;
+            value += r * r;
+        }
+        value
+    });
+    let adam = FirstOrder::builder(Real::uniform(1_000, -5.0..=5.0)?)
+        .step(Step::adam(0.05))
+        .initial_genome(Reals::from(vec![0.0; 1_000])) // random by default
+        .minimize()
+        .seed(1)
+        .build()?;
+    let mut engine = Engine::new(adam, loss)
+        .stop_when(Stop::generations(10_000))
+        // a schedule: the learning rate halved every 100 steps
+        .control(|adam: &mut FirstOrder, progress| {
+            adam.set_learning_rate(0.05 * 0.5f64.powi((progress.generation() / 100) as i32))
+        });
+    let outcome = engine.run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Converged);
+    assert!(outcome.best_fitness().score().unwrap() < 1e-9);
     Ok(())
 }
 ```
@@ -979,7 +1027,7 @@ command = ["python3", "fitness.py"]   # or builtin = "rastrigin"
 objectives = ["minimize"]
 
 [algorithm]
-type = "ga"            # ga, steady-ga, de, cmaes, pso, local-search, nelder-mead, lbfgsb, nsga2
+type = "ga"            # ga, steady-ga, de, cmaes, pso, local-search, nelder-mead, lbfgsb, first-order, nsga2
 population_size = 50
 select = { type = "tournament", size = 3 }
 crossover = { type = "simulated-binary", eta = 15.0 }
@@ -1013,6 +1061,8 @@ every = 50
 | `Error::InvalidFitness` | A violation must be ≥ 0: use `constraint::at_most` and friends |
 | `Error::TellWithoutAsk` / `Error::FitnessCount` | One `tell` per `ask`, one fitness per asked genome, in order |
 | Best solution infeasible | Run longer, check the constraints, or add a feasible genome with `.initial_genomes(...)` |
+| Adam hovers near the minimum and doesn't converge | Lower the learning rate over the run in `.control` (`set_learning_rate`), e.g. halved every few hundred steps |
+| `FirstOrder` diverges to the bounds, or its loss grows | A smaller learning rate (gradient descent and momentum need `lr` below 2 / the largest curvature), or Adam, whose steps don't scale with the gradient |
 | Nelder-Mead converges to a local minimum, or crawls in many genes | `.restarts(local::Restarts::Random { times })`; above about 10 genes, CMA-ES first, then Nelder-Mead from its best (`.initial_genome(...)`) |
 | L-BFGS-B ends with `converged()` = `Some(Criterion::LineSearch)` far from a minimum | Check the gradient with `gradient::check(&f, &x)?`; with forward differences, a `gradient_tolerance` above their accuracy (about 1e-7 of f's scale), or `Gradients::Central` |
 | L-BFGS-B takes many evaluations per iteration | Forward differences cost n + 1 per round: supply the gradient (`Differentiable`, `FitnessFunction::provides`) |

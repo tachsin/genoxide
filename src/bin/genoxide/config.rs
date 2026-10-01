@@ -220,6 +220,20 @@ pub enum Algorithm {
         /// The reflection, expansion and both contractions in one round.
         speculative: Option<bool>,
     },
+    FirstOrder {
+        seed: Option<u64>,
+        /// The step rule; Adam with a learning rate of 0.001 if unset.
+        #[serde(default, deserialize_with = "first_order_step")]
+        step: Option<FirstOrderStep>,
+        /// Where the gradients come from: `auto` by default.
+        gradients: Option<GradientSource>,
+        /// The relative step of the finite differences.
+        difference_step: Option<f64>,
+        gradient_tolerance: Option<f64>,
+        step_tolerance: Option<f64>,
+        /// Random restarts after convergence; none if unset.
+        restarts: Option<u64>,
+    },
     Nsga2 {
         population_size: usize,
         seed: Option<u64>,
@@ -273,6 +287,37 @@ named! {
     de_control: Option<DeControl> = "control";
     de_restarts: Option<DeRestarts> = "restarts";
     nelder_mead_coefficients: Option<NelderMeadCoefficients> = "coefficients";
+    first_order_step: Option<FirstOrderStep> = "step";
+}
+
+/// A first-order method's step rule; Adam's settings default to Kingma and Ba's.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum FirstOrderStep {
+    Gradient {
+        learning_rate: f64,
+    },
+    Momentum {
+        learning_rate: f64,
+        momentum: f64,
+    },
+    Nesterov {
+        learning_rate: f64,
+        momentum: f64,
+    },
+    Adam {
+        learning_rate: Option<f64>,
+        beta1: Option<f64>,
+        beta2: Option<f64>,
+        epsilon: Option<f64>,
+    },
+    Adamw {
+        learning_rate: Option<f64>,
+        beta1: Option<f64>,
+        beta2: Option<f64>,
+        epsilon: Option<f64>,
+        weight_decay: f64,
+    },
 }
 
 /// How differential evolution builds its mutant vectors: `"rand1"`, `"best1"`,
@@ -372,7 +417,7 @@ pub struct OnStagnation {
     pub patience: u64,
 }
 
-/// Where L-BFGS-B's gradients come from.
+/// Where a gradient-based method's gradients come from.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum GradientSource {

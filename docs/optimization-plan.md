@@ -8,8 +8,10 @@ linear algebra (without QR, which comes with its first user); of A2, the Moré-T
 `gradient::Gradients`, finite-difference stencils, `gradient::check`, the analytic gradients of
 the smooth problems, and L-BFGS-B (`Lbfgsb`, with the scale requirements of 2.13: O(m · n) memory
 and work per iteration, the counting-allocator test at n = 10⁶ and the benchmark at 10³, 10⁵ and
-10⁶), in Python and the `genoxide` program, with its three examples. The later batches aren't
-yet. genoxide has
+10⁶), in Python and the `genoxide` program, with its three examples. Of batch A3, the first-order
+methods (`FirstOrder`: gradient descent, momentum, Nesterov, Adam and AdamW, with the allocation
+test and the benchmarks of 2.13); the rest of A3 (MMA, GCMMA, continuation) and the later batches
+aren't yet. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
 optimization library: local derivative-free methods, gradient-based methods, constrained
@@ -131,6 +133,30 @@ tested, and orders the work in batches.
   with n = 2, 10, 100 and 1000, the iterations and evaluations are within a few percent of SciPy
   1.18.1's L-BFGS-B, which wraps the authors' code (n = 100: 551 and 651 against 539 and 636).
   Memory at n = 10⁶: about 44 values per gene (the authors' code needs (12 + 2m) n = 32 n).
+- **Batch A3, first-order methods, read on 2026-10-01.** Kingma and Ba (2015), read in
+  arXiv:1412.6980v9: **verified**. Algorithm 1 as implemented: m ← β₁ m + (1 − β₁) g,
+  v ← β₂ v + (1 − β₂) g², m̂ = m / (1 − β₁ᵗ), v̂ = v / (1 − β₂ᵗ), θ ← θ − α m̂ / (√v̂ + ε), with
+  β₁, β₂ ∈ [0, 1), and the defaults α = 0.001, β₁ = 0.9, β₂ = 0.999, ε = 1e-8 (β₁ᵗ and β₂ᵗ kept
+  as running products). Section 2's more efficient order, α_t = α √(1 − β₂ᵗ) / (1 − β₁ᵗ) and
+  θ ← θ − α_t m / (√v + ε̂), is the one `OpenEs` has used since 0.11, and it keeps it for its
+  seeded results; the two differ only in where ε enters. Loshchilov and Hutter (2019), read in
+  arXiv:1711.05101v3: **verified**. Algorithm 2, line 12: θ ← θ − η_t (α m̂ / (√v̂ + ε) + λ θ), the
+  decay multiplied by the schedule multiplier η_t and not by α, with line 1's defaults; η_t is
+  `FirstOrder::set_multiplier`, α `set_learning_rate`. Adam with L2 regularization (line 6, λ θ
+  added to the gradient) is another method, as Proposition 2 states; a test checks that the two
+  differ, and that AdamW with λ = 0 is Adam. Sutskever, Martens, Dahl and Hinton (2013), ICML,
+  PMLR 28(3): **verified**, the forms implemented: classical momentum, eqs. 1-2,
+  v ← μ v − ε ∇f(θ), θ ← θ + v, and Nesterov's accelerated gradient, eqs. 3-4,
+  v ← μ v − ε ∇f(θ + μ v), θ ← θ + v, whose look-ahead point θ + μ v is the point genoxide
+  evaluates. The paper allows μ ∈ [0, 1]; genoxide requires μ < 1. Polyak (1964) and Nesterov
+  (1983): **not re-read** (Polyak's is behind Elsevier's paywall, and Nesterov's note in Soviet
+  Math. Dokl. wasn't at hand): the methods are Sutskever et al.'s statement of them, which cites
+  both. genoxide's own: the projection onto the bounds (where it moves a gene, the velocity
+  becomes the step taken), the iterate kept apart from Nesterov's evaluated look-ahead point, the
+  schedule multiplier for every rule (Loshchilov and Hutter define it for SGD with momentum,
+  Algorithm 1 line 8, and for Adam), the default tolerances (1e-6 on the projected gradient's
+  largest component, 1e-12 on a step relative to max(1, |xᵢ|)), and the step halfway back from an
+  invalid point.
 - The methods are general. The docs and examples motivate them with generic cases (expensive
   simulations, engineering design, black-box functions, model fitting), not with an application
   domain.
@@ -538,7 +564,8 @@ let outcome = Engine::new(bo, problems::Branin).parallel(true).stop_when(Stop::e
 ```
 
 Names follow the existing short ones (`Ga`, `De`, `Es`, `Pso`, `Cmaes`): `NelderMead`, `Lbfgsb`,
-`Bfgs`, `ConjugateGradient`, `TrustRegion`, `LevenbergMarquardt`, `Adam`, `Bobyqa`, `Cobyla`,
+`Bfgs`, `ConjugateGradient`, `TrustRegion`, `LevenbergMarquardt`, `FirstOrder` (Adam and the other
+first-order rules, as a `first_order::Step` setting), `Bobyqa`, `Cobyla`,
 `Mads`, `Sqp`, `AugmentedLagrangian`, `Bo`, `Tpe`, `Turbo`, `ParEgo`, `Ehvi`. Modules as today:
 `algorithm::lbfgsb::{Lbfgsb, LbfgsbBuilder}`, re-exported in the prelude; line searches in
 `algorithm::line_search`, the GP in a public `model::gp` (a surrogate users can fit and query on

@@ -306,6 +306,95 @@ fn nelder_mead_coefficients(
     }
 }
 
+// where a gradient-based method's gradients come from, with the relative step of finite
+// differences
+fn gradient_source(
+    source: Option<config::GradientSource>,
+    difference_step: Option<f64>,
+    context: &Context,
+) -> Result<Gradients> {
+    Ok(match source.unwrap_or(config::GradientSource::Auto) {
+        config::GradientSource::Auto | config::GradientSource::Supplied
+            if difference_step.is_some() =>
+        {
+            return Err(
+                "`algorithm.difference_step` needs `gradients = \"forward\"` or `\"central\"`"
+                    .to_string(),
+            );
+        }
+        config::GradientSource::Auto => Gradients::Auto,
+        config::GradientSource::Supplied if !context.gradient => {
+            return Err(
+                "`algorithm.gradients = \"supplied\"` needs `fitness.gradient = true`".to_string(),
+            );
+        }
+        config::GradientSource::Supplied => Gradients::Supplied,
+        config::GradientSource::Forward => Gradients::Forward {
+            step: difference_step,
+        },
+        config::GradientSource::Central => Gradients::Central {
+            step: difference_step,
+        },
+    })
+}
+
+fn first_order_step(step: config::FirstOrderStep) -> first_order::Step {
+    use first_order::Step;
+    // Kingma and Ba's, as `Step::adam(0.001)`'s
+    let adam = |learning_rate: Option<f64>,
+                beta1: Option<f64>,
+                beta2: Option<f64>,
+                epsilon: Option<f64>| {
+        (
+            learning_rate.unwrap_or(0.001),
+            beta1.unwrap_or(0.9),
+            beta2.unwrap_or(0.999),
+            epsilon.unwrap_or(1e-8),
+        )
+    };
+    match step {
+        config::FirstOrderStep::Gradient { learning_rate } => Step::gradient(learning_rate),
+        config::FirstOrderStep::Momentum {
+            learning_rate,
+            momentum,
+        } => Step::momentum(learning_rate, momentum),
+        config::FirstOrderStep::Nesterov {
+            learning_rate,
+            momentum,
+        } => Step::nesterov(learning_rate, momentum),
+        config::FirstOrderStep::Adam {
+            learning_rate,
+            beta1,
+            beta2,
+            epsilon,
+        } => {
+            let (learning_rate, beta1, beta2, epsilon) = adam(learning_rate, beta1, beta2, epsilon);
+            Step::Adam {
+                learning_rate,
+                beta1,
+                beta2,
+                epsilon,
+            }
+        }
+        config::FirstOrderStep::Adamw {
+            learning_rate,
+            beta1,
+            beta2,
+            epsilon,
+            weight_decay,
+        } => {
+            let (learning_rate, beta1, beta2, epsilon) = adam(learning_rate, beta1, beta2, epsilon);
+            Step::AdamW {
+                learning_rate,
+                beta1,
+                beta2,
+                epsilon,
+                weight_decay,
+            }
+        }
+    }
+}
+
 // the algorithms only for real genomes, and the others
 fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -> Result<Value> {
     match algorithm {
@@ -406,32 +495,7 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             if let Some(memory) = memory {
                 builder = builder.memory(memory);
             }
-            let source = gradients.unwrap_or(config::GradientSource::Auto);
-            builder = builder.gradients(match source {
-                config::GradientSource::Auto | config::GradientSource::Supplied
-                    if difference_step.is_some() =>
-                {
-                    return Err(
-                        "`algorithm.difference_step` needs `gradients = \"forward\"` or \
-                         `\"central\"`"
-                            .to_string(),
-                    );
-                }
-                config::GradientSource::Auto => Gradients::Auto,
-                config::GradientSource::Supplied if !context.gradient => {
-                    return Err(
-                        "`algorithm.gradients = \"supplied\"` needs `fitness.gradient = true`"
-                            .to_string(),
-                    );
-                }
-                config::GradientSource::Supplied => Gradients::Supplied,
-                config::GradientSource::Forward => Gradients::Forward {
-                    step: difference_step,
-                },
-                config::GradientSource::Central => Gradients::Central {
-                    step: difference_step,
-                },
-            });
+            builder = builder.gradients(gradient_source(gradients, difference_step, context)?);
             if let Some(tolerance) = gradient_tolerance {
                 builder = builder.gradient_tolerance(tolerance);
             }
@@ -496,6 +560,41 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             }
             if let Some(speculative) = speculative {
                 builder = builder.speculative(speculative);
+            }
+            generational(setting(builder.build())?, context)
+        }
+        config::Algorithm::FirstOrder {
+            seed,
+            step,
+            gradients,
+            difference_step,
+            gradient_tolerance,
+            step_tolerance,
+            restarts,
+        } => {
+            let mut builder = FirstOrder::builder(real).objective(context.single_objective()?);
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            if let Some(step) = step {
+                builder = builder.step(first_order_step(step));
+            }
+            builder = builder.gradients(gradient_source(gradients, difference_step, context)?);
+            if let Some(tolerance) = gradient_tolerance {
+                builder = builder.gradient_tolerance(tolerance);
+            }
+            if let Some(tolerance) = step_tolerance {
+                builder = builder.step_tolerance(tolerance);
+            }
+            match restarts {
+                Some(0) => {
+                    return Err(
+                        "`algorithm.restarts` must be at least 1; leave it out for none"
+                            .to_string(),
+                    );
+                }
+                Some(times) => builder = builder.restarts(local::Restarts::Random { times }),
+                None => {}
             }
             generational(setting(builder.build())?, context)
         }
@@ -602,6 +701,9 @@ where
             Err("`nelder-mead` needs a real genome".to_string())
         }
         config::Algorithm::Lbfgsb { .. } => Err("`lbfgsb` needs a real genome".to_string()),
+        config::Algorithm::FirstOrder { .. } => {
+            Err("`first-order` needs a real genome".to_string())
+        }
     }
 }
 
