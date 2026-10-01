@@ -8,7 +8,7 @@ The algorithms of [genoxide](https://github.com/tachsin/genoxide), a Rust librar
 
 - genetic algorithms and local search
 - differential evolution, evolution strategies, CMA-ES and particle swarm optimization
-- OpenAI's evolution strategy, neural networks and pole-balancing tasks, for neuroevolution
+- NEAT, OpenAI's evolution strategy, neural networks and pole-balancing tasks, for neuroevolution
 - the island model, and checkpoints to resume a long run
 - NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives
 
@@ -109,6 +109,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | An order (tours, sequencing) | `Permutation` | `LocalSearch`, which often beats a GA on permutations; `Ga` with `OrderCrossover()` (sequences) or `EdgeRecombinationCrossover()` (tours) |
 | Reals in ranges | `Real` | `Cmaes`; `De`; `Es`; `Ga` with `SimulatedBinaryCrossover(eta)` and `PolynomialMutation(eta)` |
 | A neural network's weights | `Real`, from `network.representation(bounds)` | `Cmaes` up to a few hundred weights; `OpenEs` for thousands and more |
+| A neural network's structure and weights | `gx.neat.Network`, NEAT's own | `Neat` |
 | Several objectives | any | `Nsga2` for 2 or 3 objectives; `Nsga3` or `Moead` for more |
 
 - `Cmaes` is the strongest general choice for continuous problems with up to a few hundred genes, especially when the genes interact. Its defaults need no tuning. For multimodal functions, add `restarts="ipop"` or `"bipop"`. For thousands of genes or separable problems, `covariance="diagonal"` (sep-CMA-ES): O(n) per sample, no correlations between genes.
@@ -126,8 +127,9 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | `LocalSearch` | all | `neighbor` (a mutation), `neighbors` (1), `acceptance`, `restart=(patience, kicks)` |
 | `De` | real | `population_size` (100; with `l_shade`, 18 × genes, at least 4), `l_shade` (a budget of evaluations, for L-SHADE), `strategy` (`{"max_p": 0.2, "archive": 1.0}`; `"rand1"`, `"best1"`, `{"p", "archive"}`), `control` (`{"memory": 100}`; `{"f", "cr"}`, `{"min_f", "max_f", "cr"}`, `{"c"}`), `restarts` (`{"tolerance": 1e-12, "patience": 200}`; `"never"`), `parallel_breeding` (False) |
 | `Es` | real | `parents` (μ), `offspring` (λ, 5 to 7 times μ), `recombination` (`"intermediate"`; `"dominant"`), `rho` (the parents per offspring, all by default), `selection` (`"comma"`; `"plus"`), `step_sizes` (`"per_gene"`; `"one"`), `initial_step` (0.3 of each range), `parallel_breeding` (False) |
-| `Cmaes` | real | `population_size`, `restarts` (`"ipop"`, `"bipop"`), `initial_step`, `covariance` (`"full"`; `"diagonal"`) |
+| `Cmaes` | real | `population_size`, `restarts` (`"ipop"`, `"bipop"`), `initial_step`, `covariance` (`"full"`; `"diagonal"`), `min_step` (0) |
 | `OpenEs` | real | `population_size` (even, needed), `sigma` (0.02 of each range), `optimizer` (`Adam(0.01)`; `Adam(learning_rate, beta1, beta2)`, `Sgd(learning_rate, momentum)`), `weight_decay` (0), `evaluate_mean` (False), `initial_mean` (random), `parallel_breeding` (False) |
+| `Neat` | its networks | `inputs`, `outputs` (needed), `population_size` (150), `compatibility` (`(1.0, 1.0, 0.4, 3.0)`: c1, c2, c3, threshold), `weight_mutation` (`(0.8, 0.1)`: rate, replace), `weight_deviations` (`(1.0, 1.0)`), `structural_mutation` (`(0.03, 0.05)`: add node, add connection), `reproduction` (`(0.25, 0.001, 0.75)`), `selection` (`(5, 0.2)`: elitism size, survival), `stagnation` (15), `activation` (`"steep_sigmoid"`), `feed_forward` (True), `initial` (`"fully_connected"`; `"unconnected"`), `sharing` (`"normalized"`; `"raw"`, the paper's) |
 | `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
 | `Islands` | those of its islands | `islands` (a list of `Ga` or of `De`, with the same genome and objective, and seeds of their own), `topology` (`"ring"`; `"fully_connected"`, `"random"`, `"isolated"`), `interval` (10 generations between migrations), `migrants` (2 copies of each island's best), `seed` (of the random topology) |
 | `Nsga2` | all | `objectives`, `population_size`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1) |
@@ -329,6 +331,45 @@ seed, and `gx.math` has genoxide's portable math (`sin`, `cos`, `exp`, `tanh`, .
 arrays), the same bits on every platform, which the networks use: a Python program then repeats
 a Rust one exactly, as `examples/two_spirals` does.
 
+`gx.Neat(inputs, outputs, ...)` is NEAT (Stanley and Miikkulainen 2002), which evolves a
+network's structure with its weights, from minimal networks up, with the paper's settings by
+default. Its genomes are `gx.neat.Network`s, Rust objects: the fitness function gets one, the
+result's `best_genome` is one, and `on_generation` and `control` get a `NeatProgress`, whose
+`population` is a tuple of them. A network has `inputs`, `outputs`, `hidden()`, `enabled()`,
+`nodes()` and `connections()`; `feed_forward()` and `recurrent()` (with `feed_forward=False`)
+compile it into an evaluator whose `activate(input)` computes the outputs in Rust, for an input
+or a row per input (for `recurrent()`, the steps of a sequence; `reset()` between sequences).
+The evaluators are policies of the control tasks too, run in Rust without the GIL; NEAT's sigmoid
+outputs are in (0, 1), so `policy(scale=2.0, offset=-1.0)` makes them forces in (-1, 1). A
+control's `RunningNeat` has the species.
+
+```python
+from genoxide.problems.control import CartPole
+
+CASES = [((0.0, 0.0), 0.0), ((0.0, 1.0), 1.0), ((1.0, 0.0), 1.0), ((1.0, 1.0), 0.0)]
+
+# XOR, with the paper's fitness and fitness sharing: networks grow a hidden node
+def xor(network):
+    evaluator = network.feed_forward()
+    error = sum(abs(evaluator.activate(inputs)[0] - target) for inputs, target in CASES)
+    return (4.0 - error) ** 2
+
+result = gx.Neat(2, 1, sharing="raw", seed=1).run(xor, target=15.0, generations=500)
+print(result.best_genome.hidden(), result.best_genome.enabled(), result.generations)
+
+# the cart-pole, the network's output as a force: 2 output - 1
+task = CartPole()
+steps = lambda network: task.run(
+    network.feed_forward().policy(scale=2.0, offset=-1.0), SUCCESS_STEPS
+)
+result = gx.Neat(4, 1, seed=1).run(steps, target=SUCCESS_STEPS, evaluations=100_000)
+print(result.best_fitness, result.evaluations)
+```
+
+`task.episode(policy, steps)` gives the states of an episode, a row per step, for plots and
+measures such as the largest angle; `examples/xor_neat`, `cart_pole`, `double_pole` and
+`double_pole_no_velocities` repeat the Rust examples exactly.
+
 ## Stopping
 
 `run` stops at the first of its stop conditions, and needs at least one:
@@ -371,6 +412,7 @@ result = ga.run(lambda bits: bits.sum(), generations=1_000, on_generation=report
 | `Cmaes` | `RunningCmaes` | none: CMA-ES adapts its own |
 | `Es` | `RunningEs` | none: an evolution strategy adapts its own step sizes |
 | `OpenEs` | `RunningOpenEs` | `sigma`, `learning_rate`, e.g. both decayed over the run |
+| `Neat` | `RunningNeat` | none to change; `species` (each a `gx.neat.Species`: `id`, `members`, `best_fitness`, `representative`, ...) and `innovations` to read |
 | `Islands` | `RunningIslands` | `islands`: a `RunningGa` or `RunningDe` per island, each with its settings, e.g. a mutation step per island |
 
 - Reading a setting gives the one in use, the defaults included.
