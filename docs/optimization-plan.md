@@ -98,7 +98,7 @@ doi:10.1007/978-0-387-40065-5 (**NW**).
 | Line search: strong Wolfe conditions, Moré-Thuente | Wolfe, P. (1969). Convergence conditions for ascent methods. *SIAM Review* 11(2): 226-235. doi:10.1137/1011036. Moré, J. J. and Thuente, D. J. (1994). Line search algorithms with guaranteed sufficient decrease. *ACM TOMS* 20(3): 286-307. doi:10.1145/192115.192132 | The line search of L-BFGS(-B) and BFGS | c₁ = 1e-4, c₂ = 0.9 for quasi-Newton, 0.1 for CG (NW ch. 3); every trial step is an ask. With finite differences, a trial needs f and the directional derivative only: 2 evaluations, not n + 1; the full gradient only at the accepted point | A2 |
 | Line search: Hager-Zhang (approximate Wolfe) | Hager, W. W. and Zhang, H. (2005). A new conjugate gradient method with guaranteed descent and an efficient line search. *SIAM J. Optim.* 16(1): 170-192. doi:10.1137/030601880. Hager, W. W. and Zhang, H. (2006). Algorithm 851: CG_DESCENT. *ACM TOMS* 32(1): 113-137. doi:10.1145/1132973.1132979 | CG, and near the optimum where the Wolfe test fails from rounding | | D1 |
 | Gradient descent with backtracking (Armijo) | NW ch. 3 | Teaching, a baseline in tests | Part of the line search module, not a separate algorithm unless cheap | D1 |
-| Momentum, Nesterov, Adam, AdamW | Polyak, B. T. (1964). Some methods of speeding up the convergence of iteration methods. *USSR Comput. Math. Math. Phys.* 4(5): 1-17. doi:10.1016/0041-5553(64)90137-5. Nesterov, Y. (1983). A method for solving the convex programming problem with convergence rate O(1/k²). *Soviet Math. Dokl.* 27: 372-376. Kingma, D. P. and Ba, J. (2015). Adam: a method for stochastic optimization. ICLR 2015. arXiv:1412.6980. Loshchilov, I. and Hutter, F. (2019). Decoupled weight decay regularization. ICLR 2019. arXiv:1711.05101 | Differentiable models with many parameters, where a line search costs too much; the step as a setting | One gradient per ask. Mini-batches: the fitness function reads its batch index from state that `Engine::control` advances, as the penalty example of `control` does; `best()` is then by mini-batch loss, documented. Full-batch runs are the tested case | D1 |
+| Momentum, Nesterov, Adam, AdamW | Polyak, B. T. (1964). Some methods of speeding up the convergence of iteration methods. *USSR Comput. Math. Math. Phys.* 4(5): 1-17. doi:10.1016/0041-5553(64)90137-5. Nesterov, Y. (1983). A method for solving the convex programming problem with convergence rate O(1/k²). *Soviet Math. Dokl.* 27: 372-376. Kingma, D. P. and Ba, J. (2015). Adam: a method for stochastic optimization. ICLR 2015. arXiv:1412.6980. Loshchilov, I. and Hutter, F. (2019). Decoupled weight decay regularization. ICLR 2019. arXiv:1711.05101 | Differentiable models with many parameters, where a line search costs too much; the step as a setting | One gradient per ask. Mini-batches: the fitness function reads its batch index from state that `Engine::control` advances, as the penalty example of `control` does; `best()` is then by mini-batch loss, documented. Full-batch runs are the tested case | A3 |
 | Nonlinear conjugate gradient: PR+ and Hager-Zhang | Polak, E. and Ribière, G. (1969). Note sur la convergence de méthodes de directions conjuguées. *Revue française d'informatique et de recherche opérationnelle* 3(16): 35-43. Gilbert, J. C. and Nocedal, J. (1992). Global convergence properties of conjugate gradient methods for optimization. *SIAM J. Optim.* 2(1): 21-42. doi:10.1137/0802003. Hager and Zhang (2005) above | Very many variables, O(n) memory | Hager-Zhang's β and line search by default | D1 |
 | BFGS (dense) | Broyden, C. G. (1970). *J. Inst. Math. Appl.* 6(1): 76-90. doi:10.1093/imamat/6.1.76. Fletcher, R. (1970). *The Computer Journal* 13(3): 317-322. doi:10.1093/comjnl/13.3.317. Goldfarb, D. (1970). *Math. Comp.* 24: 23-26. doi:10.1090/S0025-5718-1970-0258249-6. Shanno, D. F. (1970). *Math. Comp.* 24: 647-656. doi:10.1090/S0025-5718-1970-0274029-X | Up to a few hundred variables, unconstrained; the inverse Hessian is also an estimate of the covariance at the optimum | NW ch. 6's scaling of the first update | D1 |
 | L-BFGS | Nocedal, J. (1980). Updating quasi-Newton matrices with limited storage. *Math. Comp.* 35(151): 773-782. doi:10.1090/S0025-5718-1980-0572855-7. Liu, D. C. and Nocedal, J. (1989). On the limited memory BFGS method for large scale optimization. *Math. Programming* 45: 503-528. doi:10.1007/BF01589116 | The default for smooth problems of any size | L-BFGS-B without active bounds: one implementation, not two (the box of `Real` is always there; see section 2.6) | A2 |
@@ -122,6 +122,7 @@ where Deb's rules only compare aggregate violations.
 
 | Method | Primary reference | For | Design notes | Batch |
 |---|---|---|---|---|
+| MMA, the method of moving asymptotes, and its globally convergent form GCMMA | Svanberg, K. (1987). The method of moving asymptotes: a new method for structural optimization. *International Journal for Numerical Methods in Engineering* 24(2): 359-373. doi:10.1002/nme.1620240207. Svanberg, K. (2002). A class of globally convergent optimization methods based on conservative convex separable approximations. *SIAM J. Optim.* 12(2): 555-573. doi:10.1137/S1052623499362822 | Smooth problems with very many variables (up to millions) and few inequality constraints (up to a few hundred), with gradients of the objective and of every constraint | Each iteration replaces the objective and constraints by convex, separable approximations around the current point, built from their values and gradients and from two asymptotes per variable that move with the iterates' history; the subproblem is solved through its dual, in the constraints' multipliers, so an iteration costs O(n · m) for n variables and m constraints, and needs no n × n matrix. Bounds are the `Real` box. GCMMA adds inner iterations that make the approximations conservative, for convergence from any start; MMA is the default for speed. The asymptote rules and subproblem solver as in Svanberg's own descriptions, to read before the batch | A3 |
 | SQP (SLSQP-style): BFGS Hessian, ℓ₁ merit function, line search | Han, S.-P. (1977). A globally convergent method for nonlinear programming. *JOTA* 22(3): 297-309. doi:10.1007/BF00932858. Powell, M. J. D. (1978). A fast algorithm for nonlinearly constrained optimization calculations. *Numerical Analysis*, LNM 630: 144-157. doi:10.1007/BFb0067703. Kraft, D. (1988). *A software package for sequential quadratic programming.* DFVLR-FB 88-28. QP: Goldfarb, D. and Idnani, A. (1983). A numerically stable dual method for solving strictly convex quadratic programs. *Math. Programming* 27: 1-33. doi:10.1007/BF02591962. NW ch. 18 | Small and medium dense problems with equalities and inequalities: the most-used constrained local method | Powell's damped BFGS keeps the Hessian positive definite, so the QP is strictly convex and Goldfarb-Idnani applies; an infeasible linearization is relaxed by an elastic variable; bounds as QP bounds | C |
 | Augmented Lagrangian (PHR, safeguarded, ALGENCAN-style) | Hestenes, M. R. (1969). Multiplier and gradient methods. *JOTA* 4(5): 303-320. doi:10.1007/BF00927673. Powell, M. J. D. (1969). A method for nonlinear constraints in minimization problems. In *Optimization* (R. Fletcher, ed.), Academic Press: 283-298. Andreani, R., Birgin, E. G., Martínez, J. M. and Schuverdt, M. L. (2008). On augmented Lagrangian methods with general lower-level constraints. *SIAM J. Optim.* 18(4): 1286-1309. doi:10.1137/060654797. Birgin, E. G. and Martínez, J. M. (2014). *Practical Augmented Lagrangian Methods for Constrained Optimization.* SIAM. doi:10.1137/1.9781611973365 | Many constraints, degenerate problems, and any inner solver: L-BFGS-B by default, BOBYQA or a population method for a derivative-free variant | Bounds stay in the subproblem (L-BFGS-B), the other constraints move into the Lagrangian; multipliers safeguarded in a box, the penalty raised ×10 when the infeasibility doesn't fall by half (the book's defaults, to check). The subproblem is a changing fitness function, so an inner population method re-evaluates through `Reevaluate` | C |
 | Interior point with a filter line search | Wächter, A. and Biegler, L. T. (2006). On the implementation of an interior-point filter line-search algorithm for large-scale nonlinear programming. *Math. Programming* 106(1): 25-57. doi:10.1007/s10107-004-0559-y. Fletcher, R. and Leyffer, S. (2002). Nonlinear programming without a penalty function. *Math. Programming* 91(2): 239-269. doi:10.1007/s101070100244. Byrd, R. H., Hribar, M. E. and Nocedal, J. (1999). An interior point algorithm for large-scale nonlinear programming. *SIAM J. Optim.* 9(4): 877-900. doi:10.1137/S1052623497325107. Fiacco, A. V. and McCormick, G. P. (1968). *Nonlinear Programming: Sequential Unconstrained Minimization Techniques.* Wiley; SIAM reprint 1990. doi:10.1137/1.9781611971316 | Many inequalities; iterates strictly feasible for the inequalities, which matters when the function is undefined outside them | Dense KKT systems with an LDLᵀ (Bunch-Kaufman) factorization and inertia correction; no sparse linear algebra, so small and medium problems only. The largest item of the plan: optional, after SQP and the augmented Lagrangian | F (optional) |
@@ -606,6 +607,55 @@ protocol extends by declaration: `gradient = true` (the program prints the value
 components), `constraints = { inequalities = 2, equalities = 1 }` (value, then g, then h). With
 `bo`, `workers` > 1 runs `AsyncEngine`. docs/cli.md documents each.
 
+### 2.12 Continuation: stages of one problem, with the optimizer's state kept
+
+Some problems are solved best in stages: a smooth version first, then sharper ones, each started
+from the last stage's result. Between stages a parameter of the fitness function changes (a
+sharpness or projection steepness, a penalty weight, a filter radius), and the optimizer must
+carry on where it was: Adam's moment estimates, MMA's asymptotes and step count, not restart
+from scratch.
+
+- **A wrapper algorithm `Continuation<A>`.** It runs `A` through a list of stages. A stage ends
+  when `A` has [finished](#27-stop-conditions-and-convergence) (`is_finished`) or after its own
+  iteration budget; then a closure of the user's sets the next stage's parameters (shared with the
+  fitness function, as the penalty example of `Engine::control` shares its weight), and `A`
+  continues on the changed function. `Continuation` finishes after the last stage, so the engine
+  stops then, not at the first stage's convergence. It's a wrapper rather than an `Engine`
+  feature because the engine checks convergence before `control` runs: a stage that converges
+  would end the run.
+- **What carries over is the method's to define, in a trait `Continue: Reevaluate`** with
+  `next_stage(&mut self, keep: Keep)`: the current point (and population) is re-evaluated on the
+  new function, as `reevaluate` does today, and `Keep::State` (the default) keeps the optimizer's
+  state, `Keep::Point` keeps only the point. Per method: Adam and momentum keep their moments and
+  step count; MMA and GCMMA keep their asymptotes and the last iterates their update rule reads;
+  L-BFGS-B drops its curvature pairs by default (they describe the old function; keeping them is
+  an option); Nelder-Mead keeps its simplex; CMA-ES keeps its distribution.
+- **Each stage reports** its iterations, evaluations and final value through a
+  `stage_finished` callback and the outcome, so a run's stages can be compared and plotted.
+- **Checkpoints** hold the stage index and the wrapped algorithm's state, so a resumed run
+  continues in its stage.
+
+### 2.13 Scale: millions of variables
+
+The first-order methods (batch A2's L-BFGS-B, batch A3's Adam family and MMA) must handle up to
+millions of variables: **O(n) memory and O(n) work per step**, apart from the fitness function.
+
+- **No n × n matrix anywhere in them.** L-BFGS-B keeps m pairs (O(m · n), m = 10) and works on
+  2m × 2m matrices; MMA's subproblem is solved in its m constraint multipliers (O(n · m), m small);
+  Adam and momentum keep one or two vectors.
+- **No allocation per step:** the genome, gradient and Jacobian buffers are allocated once and
+  reused, the next point is written in place, and `Candidates` lends rather than copies. A test
+  with a counting allocator runs each method at n = 10⁶ and checks that steps after the first
+  allocate nothing.
+- **Gradients are supplied at this scale.** Finite differences cost n + 1 evaluations per
+  gradient; with `Gradients::Auto` and no supplied gradient, `prepare` fails above 10⁴ variables
+  with a reason that points to `Differentiable`, unless finite differences are asked for
+  explicitly.
+- **The engine path stays O(n):** observers that copy genomes (a hall of fame) are the user's
+  choice, and the default run copies none; Python passes genomes and gradients as zero-copy numpy
+  views.
+- **Benchmarked** at n = 10³, 10⁵ and 10⁶: time per step and peak memory, in `benches/`.
+
 ## 3. Test problems and validation
 
 ### 3.1 Existing problems per family
@@ -698,9 +748,10 @@ own on the site (e.g. `local`, `bayesian`), to settle with the site.
 |---|---|
 | A1 | `nelder_mead`: Rosenbrock in 2-D from (−1.2, 1), the simplex drawn on the contour; `nelder_mead_himmelblau`: restarts find all four minima |
 | A2 | `lbfgsb`: Rosenbrock in 100-D, analytic gradient against forward differences (evaluations to 1e-10); `lbfgsb_bounds`: a problem whose optimum is on the bound; `polish`: SHADE on Rastrigin 10-D, then L-BFGS-B from its best to the exact minimum |
+| A3 | `adam`: a smooth fit of many parameters with a learning-rate schedule by `control`, against L-BFGS-B; `mma`: minimize Σ cⱼ / xⱼ subject to Σ xⱼ ≤ V over 10⁶ variables in a box, whose optimum xⱼ ∝ √cⱼ is known in closed form; `continuation`: a smoothed max (a p-norm) minimized for p = 2, 4, 8, 16, each stage from the last, to the true minimax optimum |
 | B | `bayesian_optimization`: Branin in 2-D, posterior and acquisition drawn per step, to f* + 1e-4 with a final L-BFGS-B polish on the GP mean then one evaluation; `bo_hartmann6`: batch BO (q = 4) with `parallel(true)`; `bo_asynchronous`: `AsyncEngine` with evaluations of random duration; `bo_constrained`: Gramacy et al.'s toy problem |
 | C | `sqp`: CEC 2006 g07 (or g09) from a random start to the report's f*; `sqp_welded_beam`; `augmented_lagrangian`: a problem with many constraints (g16 or g19); an ε-feasibility comparison with SHADE on the same problem |
-| D1 | `conjugate_gradient` on a large quadratic or Rosenbrock 1000-D; `trust_region` on an MGH problem with a Hessian; `levenberg_marquardt`: fitting a model to data (an MGH problem such as Osborne 2, or Bard); `adam`: a small model fit with a learning-rate schedule by `control`; `dual_numbers` (if the feature lands) |
+| D1 | `conjugate_gradient` on a large quadratic or Rosenbrock 1000-D; `trust_region` on an MGH problem with a Hessian; `levenberg_marquardt`: fitting a model to data (an MGH problem such as Osborne 2, or Bard); `dual_numbers` (if the feature lands) |
 | D2 | `bobyqa` on Rosenbrock 10-D against Nelder-Mead; `cobyla` on a constrained engineering problem; `mads` on a non-smooth or integer problem (the gear train) |
 | E | `parego` and `ehvi` on ZDT1 in few variables; `tpe` on an integer or mixed problem; `turbo` on a 20-D or larger problem (Ackley or Rosenbrock) |
 | F | `surrogate_cmaes`; `multi_fidelity`; `direct` on the low-dimensional classics |
@@ -737,12 +788,15 @@ a batch isn't done until every example reaches its optimum on the three platform
 |---|---|---|---|
 | A1 | `linalg` (Cholesky, triangular solves, QR, the eigendecomposition moved from CMA-ES) with the dependency check of 2.8; `Algorithm::is_finished` and `StopReason::Converged`; `Restarts` for local methods; Nelder-Mead (Gao-Han, 1965 option, speculative asks) | | `nelder_mead`, `nelder_mead_himmelblau` |
 | A2 | The extras of 2.3 (`Provided`, `Wanted`, `Extras`, `Evaluations`, `prepare`, `tell_evaluations`) in `Engine`; `Differentiable`, `gradient::Gradients`, finite differences, `gradient::check`; analytic gradients for the smooth problems; Moré-Thuente; L-BFGS-B | A1 | `lbfgsb`, `lbfgsb_bounds`, `polish` |
+| A3 | Momentum, Nesterov, Adam and AdamW (moved from D1); MMA and GCMMA, with supplied constraint values and Jacobians in `Extras` (the supplied half of batch C's constraint Jacobians; finite differences of constraints stay in C); `Continuation` and the `Continue` trait (2.12); the scale requirements of 2.13 for A2's and A3's methods, with the allocation test and the benchmarks | A2 | `adam`, `mma`, `continuation` |
 | B | `model::gp` (kernels, hyperparameters by L-BFGS-B), portable `erf`/`erfc`/`erfcx` in `math`; `Bo` with EI, log-EI, UCB, PI; Latin hypercube; batch BO (Kriging believer, constant liar); `Incremental` for `AsyncEngine`; `Constrained` values (`constraint::Constraints`) and constrained BO; integer genes | A2 | `bayesian_optimization`, `bo_hartmann6`, `bo_asynchronous`, `bo_constrained` |
 | C | Constraint Jacobians in `Extras` (supplied or by finite differences); the dense QP (Goldfarb-Idnani); SQP; the augmented Lagrangian (L-BFGS-B inner); `provides()` for CEC 2006 and the engineering problems; the Hock-Schittkowski selection | A2, B's `Constrained` | `sqp`, `sqp_welded_beam`, `augmented_lagrangian` |
-| D1 | BFGS, nonlinear CG with Hager-Zhang, trust-region Newton (Steihaug-CG and exact), Levenberg-Marquardt with `LeastSquares`, momentum / Nesterov / Adam / AdamW; optional `dual` feature; MGH test set | A2 | `conjugate_gradient`, `trust_region`, `levenberg_marquardt`, `adam`, `dual_numbers` |
+| D1 | BFGS, nonlinear CG with Hager-Zhang, trust-region Newton (Steihaug-CG and exact), Levenberg-Marquardt with `LeastSquares`; optional `dual` feature; MGH test set | A2 | `conjugate_gradient`, `trust_region`, `levenberg_marquardt`, `dual_numbers` |
 | D2 | BOBYQA, COBYLA, compass search / GPS, MADS with the progressive barrier, Powell's method (optional); basin hopping | A1, C's constraint values | `bobyqa`, `cobyla`, `mads` |
 | E | ParEGO and EHVI (`MultiEngine`); TPE; TuRBO; local penalization; knowledge gradient (optional); mixed-variable BO once the mixed genome exists | B; the mixed genome | `parego`, `ehvi`, `tpe`, `turbo` |
 | F | Surrogate-assisted evolution (pre-screening, lq-CMA-ES), multi-fidelity BO, DIRECT, interior point (optional) | B, C | `surrogate_cmaes`, `multi_fidelity`, `direct` |
+
+**A3 comes right after A2 (decided 2026-10-01).** Smooth problems with up to millions of variables and few constraints need first-order methods that scale: the Adam family, where a line search costs too much, and MMA, the standard method for many variables with few constraints; and continuation, solving such problems in stages. All of them reuse A2's gradients and `Extras`. They come before Bayesian optimization, in 0.12.
 
 **Recommendation and rationale.** A1 and A2 first: they build what everything else uses (the
 linear algebra, convergence as a stop reason, the extras path of the engine, L-BFGS-B as the inner
@@ -757,7 +811,10 @@ mixed genome.
 ## 7. Open questions
 
 1. **Linear algebra.** Decided (2026-09-29): a dependency, faer or nalgebra, pinned to a portable
-   path; batch A1 checks it first (2.8).
+   path; batch A1 checks it first (2.8). Revised (2026-10-01, #373): in-crate code. faer's
+   native path can't be pinned (other bits without FMA, on aarch64 and across thread counts), and
+   blocked in-crate code with a fixed order per element is portable at 1.4× faer's time on one
+   thread and on par on eight.
 2. **Gradient source default.** `Gradients::Auto` (supplied if the function provides one,
    forward differences otherwise), or an explicit setting validated against the function (no
    magic, one more line in every example)?
@@ -788,7 +845,7 @@ mixed genome.
    crate-private until the API settles?
 9. **Milestones.** Decided (2026-09-29, revised the same day): 0.10 is Rust 1.88 and the
    performance work, 0.11 genetic programming and neuroevolution, then these batches: 0.12 local
-   methods (A1, A2), 0.13 Bayesian optimization (B), 0.14 constrained nonlinear programming (C),
+   methods (A1, A2, and from 2026-10-01 A3), 0.13 Bayesian optimization (B), 0.14 constrained nonlinear programming (C),
    0.15 more local methods (D1, D2), 0.16 advanced Bayesian optimization and surrogates (E, F);
    quality-diversity after them. A1 and A2 stay first among them: L-BFGS-B optimizes the Gaussian
    processes' hyperparameters and the acquisition functions of batch B.
