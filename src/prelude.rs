@@ -17,7 +17,7 @@ pub use crate::algorithm::{
     Acceptance, Algorithm, Ga, Incremental, Islands, LocalSearch, Migrate, Reevaluate, Scheme,
     SteadyGa,
 };
-pub use crate::constraint::{self, Penalty};
+pub use crate::constraint::{self, Constrained, Penalty};
 pub use crate::engine::{
     AsyncEngine, Batch, Engine, Evaluated, FitnessFunction, NanPolicy, Outcome, Stop, StopReason,
 };

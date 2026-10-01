@@ -646,7 +646,7 @@ thread_local! {
 }
 
 // `f` with a zeroed scratch buffer of `len` values
-fn with_scratch<R>(len: usize, f: impl FnOnce(&mut [f64]) -> R) -> R {
+pub(crate) fn with_scratch<R>(len: usize, f: impl FnOnce(&mut [f64]) -> R) -> R {
     // taken out of its cell, so that a fitness function that evaluates another gets one of its own
     let mut scratch = SCRATCH.take();
     scratch.clear();
