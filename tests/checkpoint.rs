@@ -295,6 +295,28 @@ fn other_algorithms_resume_exactly() {
         };
         resumes(nelder_mead, rastrigin, 150, 400);
     }
+    // L-BFGS-B: its pairs, a line search under way and random restarts, with finite differences
+    // and with a supplied gradient
+    let lbfgsb = || {
+        Lbfgsb::builder(Real::uniform(4, -5.12..=5.12).unwrap())
+            .restarts(local::Restarts::Random { times: 1_000 })
+            .minimize()
+            .seed(12)
+            .build()
+            .unwrap()
+    };
+    resumes(lbfgsb, rastrigin, 37, 150);
+    let rosenbrock = Differentiable(|x: &Reals, gradient: &mut [f64]| {
+        let mut value = 0.0;
+        for i in 0..x.len() - 1 {
+            let (a, b) = (x[i + 1] - x[i] * x[i], 1.0 - x[i]);
+            gradient[i] += -400.0 * x[i] * a - 2.0 * b;
+            gradient[i + 1] += 200.0 * a;
+            value += 100.0 * a * a + b * b;
+        }
+        value
+    });
+    resumes(lbfgsb, rosenbrock, 23, 80);
     // the mean and Adam's moments, with the mean evaluated and parallel breeding
     for parallel in [false, true] {
         let open_es = || {
@@ -320,6 +342,37 @@ fn other_algorithms_resume_exactly() {
             .unwrap()
     };
     resumes(sgd, rastrigin, 10, 30);
+    // a first-order method's memory: with finite differences and random restarts, each rule
+    for step in [
+        first_order::Step::gradient(0.001),
+        first_order::Step::momentum(0.001, 0.9),
+        first_order::Step::nesterov(0.001, 0.9),
+        first_order::Step::adam(0.05),
+        first_order::Step::adamw(0.05, 0.01),
+    ] {
+        let first_order = || {
+            FirstOrder::builder(Real::uniform(4, -5.12..=5.12).unwrap())
+                .step(step)
+                .restarts(local::Restarts::Random { times: 1_000 })
+                .minimize()
+                .seed(12)
+                .build()
+                .unwrap()
+        };
+        resumes(first_order, rastrigin, 150, 400);
+    }
+    // and with the gradients supplied
+    let problem = genoxide::problems::Rosenbrock::new(10);
+    let first_order = || {
+        use genoxide::problems::Problem;
+        FirstOrder::builder(problem.representation())
+            .step(first_order::Step::adam(0.01))
+            .minimize()
+            .seed(13)
+            .build()
+            .unwrap()
+    };
+    resumes(first_order, problem, 100, 300);
 }
 
 #[test]
@@ -912,4 +965,26 @@ fn genetic_programs_resume_exactly() {
         };
         resumes(make, error, 6, 15);
     }
+}
+
+#[test]
+fn an_lbfgsb_saved_between_an_ask_and_its_tell_resumes() {
+    let sphere = |x: &[f64]| Fitness::new(x.iter().map(|xi| xi * xi).sum());
+    let mut lbfgsb = Lbfgsb::builder(Real::uniform(3, -5.0..=5.0).unwrap())
+        .minimize()
+        .seed(3)
+        .build()
+        .unwrap();
+    for _ in 0..4 {
+        let fitness: Vec<Fitness> = lbfgsb.ask().iter().map(|x| sphere(x)).collect();
+        lbfgsb.tell(&fitness).unwrap();
+    }
+    let asked: Vec<Vec<f64>> = lbfgsb.ask().iter().map(|x| x.to_vec()).collect();
+    let mut resumed: Lbfgsb = checkpoint::load(bytes(&lbfgsb).as_slice()).unwrap();
+    let again: Vec<Vec<f64>> = resumed.ask().iter().map(|x| x.to_vec()).collect();
+    assert_eq!(again, asked);
+    let fitness: Vec<Fitness> = asked.iter().map(|x| sphere(x)).collect();
+    lbfgsb.tell(&fitness).unwrap();
+    resumed.tell(&fitness).unwrap();
+    assert_eq!(bytes(&resumed), bytes(&lbfgsb));
 }

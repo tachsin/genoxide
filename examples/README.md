@@ -205,6 +205,10 @@ python examples/tsp_berlin52/main.py
 | [Neuroevolution on the GPU](gpu/) | engine | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/gpu) |
 | [Nelder-Mead on Rosenbrock](nelder_mead/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nelder-mead) |
 | [Nelder-Mead with restarts on Himmelblau](nelder_mead_himmelblau/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nelder-mead-himmelblau) |
+| [L-BFGS-B on Rosenbrock in 100 dimensions](lbfgsb/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/lbfgsb) |
+| [L-BFGS-B on a minimum at the bound](lbfgsb_bounds/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/lbfgsb-bounds) |
+| [SHADE, then L-BFGS-B](polish/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/polish) |
+| [Adam with a learning-rate schedule](adam/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/adam) |
 
 The GPU example is a crate of its own, with wgpu as a dependency:
 `cargo run --release --manifest-path examples/gpu/Cargo.toml`.

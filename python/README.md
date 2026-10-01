@@ -7,6 +7,8 @@
 The algorithms of [genoxide](https://github.com/tachsin/genoxide), a Rust library, with fitness functions in Python and numpy:
 
 - genetic algorithms, local search and the Nelder-Mead simplex method
+- L-BFGS-B for smooth functions with a gradient, yours, finite differences or the test problems' own
+- first-order gradient methods for up to millions of parameters: gradient descent, momentum, Nesterov, Adam and AdamW
 - differential evolution, evolution strategies, CMA-ES and particle swarm optimization
 - NEAT, OpenAI's evolution strategy, neural networks and pole-balancing tasks, for neuroevolution
 - genetic programming: formulas and Boolean functions as trees, with symbolic regression and Koza's problems evaluated in Rust
@@ -109,7 +111,8 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 |---|---|---|
 | Yes / no choices (subsets) | `Binary` | `Ga` with `UniformCrossover()` or `PointCrossover(points)`, and `BitFlip` |
 | An order (tours, sequencing) | `Permutation` | `LocalSearch`, which often beats a GA on permutations; `Ga` with `OrderCrossover()` (sequences) or `EdgeRecombinationCrossover()` (tours) |
-| Reals in ranges | `Real` | `Cmaes`; `De`; `Es`; `Ga` with `SimulatedBinaryCrossover(eta)` and `PolynomialMutation(eta)`; `NelderMead` for a local minimum in a few dimensions |
+| Reals in ranges | `Real` | `Cmaes`; `De`; `Es`; `Ga` with `SimulatedBinaryCrossover(eta)` and `PolynomialMutation(eta)`; `Lbfgsb` for a local minimum of a smooth function, any number of genes; `NelderMead` for a local minimum in a few dimensions |
+| A smooth function of many reals, with its gradient | `Real` | `FirstOrder` (Adam, momentum, Nesterov), up to millions of genes |
 | A neural network's weights | `Real`, from `network.representation(bounds)` | `Cmaes` up to a few hundred weights; `OpenEs` for thousands and more |
 | A neural network's structure and weights | `gx.neat.Network`, NEAT's own | `Neat` |
 | A formula or a Boolean function (genetic programming) | `gx.gp.Gp`, trees | `Ga` with `gx.gp.SubtreeCrossover()` and `gx.gp.SubtreeMutation()`, or `Islands` of them; `Nsga2` for accuracy against size |
@@ -121,6 +124,8 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 - `Es`, an evolution strategy whose step sizes evolve with its solutions, suits smooth problems that need precise answers. A `Ga` on an `AdaptiveReal` genome with `SelfAdaptiveMutation()` is one too.
 - `OpenEs`, OpenAI's evolution strategy, follows a gradient estimated from mirrored samples, at a cost per sample linear in the genes: for thousands of genes and more, such as a network's weights.
 - `NelderMead` is a local method without derivatives: it converges to the minimum of the basin it starts in, from `initial_genome` or a random point, and stops there (the stop reason `"converged"`). It suits up to about 10 genes, and functions that are non-smooth or noisy in their last digits. `restarts=n` starts again `n` times from random points, for multimodal functions; `speculative=True` evaluates the steps of an iteration in one round, for a slow function evaluated in parallel.
+- `Lbfgsb` (L-BFGS-B) is the local method for smooth functions: with the gradient, it reaches the minimum in the bounds to many digits in far fewer evaluations than the others, from a few genes to millions. Give it with `run(f, gradient=g)` (or `gradient=True` and `f` returning `(value, gradient)`); without one, it uses forward differences, a point more per gene for each gradient; a problem of `gx.problems` gives its own, in Rust. It stops on its own once converged (the stop reason `"converged"`). It polishes what a global method found: `initial_genome=result.best_genome`.
+- `FirstOrder` steps along the gradient of a smooth function by a step rule, without a line search: `step="adam"` (Kingma and Ba's, the default), `"adamw"` (with decoupled weight decay), `"momentum"`, `"nesterov"` or `"gradient"`. One gradient per generation, from `run(..., gradient=...)` as for `Lbfgsb`, from a problem of `genoxide.problems` in Rust, or by finite differences (`n` more evaluations per generation, up to 10,000 genes). Memory and work per step are linear in the genes, for up to millions of them. It stops with the stop reason `"converged"` when the gradient vanishes; a `control` lowers the learning rate over the run (a schedule), which Adam needs to settle on the minimum.
 - `Islands` of `Ga`s or `De`s evolve apart and exchange their best: more diverse than one large population, and often faster on multimodal problems.
 
 ## Algorithms
@@ -136,6 +141,8 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | `Neat` | its networks | `inputs`, `outputs` (needed), `population_size` (150), `compatibility` (`(1.0, 1.0, 0.4, 3.0)`: c1, c2, c3, threshold), `weight_mutation` (`(0.8, 0.1)`: rate, replace), `weight_deviations` (`(1.0, 1.0)`), `structural_mutation` (`(0.03, 0.05)`: add node, add connection), `reproduction` (`(0.25, 0.001, 0.75)`), `selection` (`(5, 0.2)`: elitism size, survival), `stagnation` (15), `activation` (`"steep_sigmoid"`), `feed_forward` (True), `initial` (`"fully_connected"`; `"unconnected"`), `sharing` (`"normalized"`; `"raw"`, the paper's) |
 | `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
 | `NelderMead` | real | `coefficients` (`"adaptive"`, Gao and Han's; `"standard"`; `(reflection, expansion, contraction, shrink)`), `initial_step` (0.1 of each range) or `initial_step_absolute` (a distance), `tolerance` (1e-9 of the initial step), `restarts` (none; random restarts), `speculative` (False), `initial_genome` (a random point) |
+| `Lbfgsb` | real | `memory` (10), `gradients` (`"auto"`; `"supplied"`, `"forward"`, `"central"`), `difference_step` (√ε forward, ε^(1/3) central), `gradient_tolerance` (1e-5), `function_tolerance` (2.2e-9), `max_line_search` (20), `restarts` (none; random restarts), `initial_genome` (a random point) |
+| `FirstOrder` | real | `step` (`"adam"`; `"adamw"`, `"momentum"`, `"nesterov"`, `"gradient"`), `learning_rate` (0.001 for Adam; needed for the others), `momentum` (needed for `"momentum"` and `"nesterov"`), `beta1` (0.9), `beta2` (0.999), `epsilon` (1e-8), `weight_decay` (needed for `"adamw"`), `gradients` (`"auto"`; `"supplied"`, `"forward"`, `"central"`), `difference_step`, `gradient_tolerance` (1e-6), `step_tolerance` (1e-12), `restarts` (none), `initial_genome` (a random point) |
 | `Islands` | those of its islands | `islands` (a list of `Ga` or of `De`, with the same genome and objective, and seeds of their own), `topology` (`"ring"`; `"fully_connected"`, `"random"`, `"isolated"`), `interval` (10 generations between migrations), `migrants` (2 copies of each island's best), `seed` (of the random topology) |
 | `Nsga2` | all | `objectives`, `population_size`, `crossover`, `mutation`, `crossover_rate` (0.9), `mutation_rate` (1), `initial_genomes` (trees of a `gx.gp.Gp`) |
 | `Nsga3` | all | `objectives`, `reference_directions`, `crossover`, `mutation`, `population_size` (the number of reference directions), `crossover_rate` (1), `mutation_rate` (1) |
@@ -488,7 +495,7 @@ print(result.best_genome)  # |x| at every point, by a comparison and a condition
 - `time`: seconds (`math.inf` for no limit)
 - `stagnation`: generations without improvement
 
-The result has the condition that stopped it, `stop_reason`, and the `generations`, `evaluations` and `seconds` it took. A `NelderMead` also stops on its own once it has converged, with no restart left, and so does a `Cmaes` with `restarts="stop"`: its stop reason is then `"converged"`. It still needs a stop condition, in case it doesn't converge within it:
+The result has the condition that stopped it, `stop_reason`, and the `generations`, `evaluations` and `seconds` it took. A `NelderMead`, an `Lbfgsb` or a `FirstOrder` method also stops on its own once it has converged, with no restart left, and so does a `Cmaes` with `restarts="stop"`: its stop reason is then `"converged"`. It still needs a stop condition, in case it doesn't converge within it:
 
 ```python
 def rosenbrock(x):
@@ -497,6 +504,37 @@ def rosenbrock(x):
 nelder_mead = gx.NelderMead(gx.Real((-5, 5), length=2), initial_genome=[-1.2, 1], objective="minimize")
 result = nelder_mead.run(rosenbrock, evaluations=1_000)
 print(result.stop_reason, result.best_genome, result.evaluations)  # converged [1. 1.] 250
+```
+
+`Lbfgsb.run` also takes the gradient: a function of the genome returning a derivative per gene, or `gradient=True` with a fitness function returning `(value, gradient)`. With `batch=True`, they take the genomes as a 2-D array and return a row per genome. A problem of `gx.problems` has its own, computed in Rust:
+
+```python
+def sphere(x):
+    return float(x @ x), 2 * x
+
+lbfgsb = gx.Lbfgsb(gx.Real((-5, 5), length=20), objective="minimize", seed=1)
+result = lbfgsb.run(sphere, gradient=True, evaluations=1_000)
+print(result.stop_reason, result.evaluations)  # converged 4
+```
+
+`FirstOrder.run` takes the gradient the same way; a `control` lowers its learning rate:
+
+```python
+t = np.linspace(0, 1, 100)
+basis = np.vstack([np.sin(2 * np.pi * t), np.cos(2 * np.pi * t), np.ones_like(t)])
+y = np.array([3.0, -2.0, 0.5]) @ basis
+
+def loss_and_gradient(p):  # a least-squares fit: its value and its gradient
+    residual = p @ basis - y
+    return float(residual @ residual), 2 * basis @ residual
+
+def halve(adam, progress):  # the learning rate halved every 500 steps
+    adam.learning_rate = 0.05 * 0.5 ** (progress.generation // 500)
+
+adam = gx.FirstOrder(gx.Real((-10, 10), length=3), step="adam", learning_rate=0.05,
+                     initial_genome=np.zeros(3), objective="minimize")
+result = adam.run(loss_and_gradient, gradient=True, generations=10_000, control=halve)
+print(result.stop_reason, result.best_genome)  # converged, near [3, -2, 0.5]
 ```
 
 ## Progress
@@ -528,6 +566,8 @@ result = ga.run(lambda bits: bits.sum(), generations=1_000, on_generation=report
 | `Pso` | `RunningPso` | `inertia`, `acceleration` (`(cognitive, social)`) |
 | `LocalSearch` | `RunningLocalSearch` | `neighbor`, `neighbors` |
 | `NelderMead` | `RunningNelderMead` | none: its steps follow from its simplex. It reads `converged`, `size` (of the simplex, a fraction of each range), `iterations` and `restart_count` |
+| `Lbfgsb` | `RunningLbfgsb` | `memory`. It reads `pairs`, `converged` (the criterion), `projected_gradient`, `iterations`, `gradients` (the source in use), `gradient_evaluations` and `stencil_evaluations` (the cost of finite differences), `skipped_pairs`, `memory_resets` and `restart_count` |
+| `FirstOrder` | `RunningFirstOrder` | `learning_rate`, and `multiplier`, Loshchilov and Hutter's schedule multiplier, which also scales AdamW's decay; it reads `converged` (`"gradient"`, `"step"`, `"invalid"` or None), `gradient_norm`, `gradient`, `iterations`, `steps` (Adam's t), `restart_count` and `gradients` |
 | `Cmaes` | `RunningCmaes` | none: CMA-ES adapts its own |
 | `Es` | `RunningEs` | none: an evolution strategy adapts its own step sizes |
 | `OpenEs` | `RunningOpenEs` | `sigma`, `learning_rate`, e.g. both decayed over the run |
@@ -565,7 +605,7 @@ result = ga.run(sphere, generations=300, control=anneal)
 print(result.best_fitness)
 ```
 
-`algorithm.reevaluate()` scores again what the algorithm keeps, for a fitness function that changed during the run: adaptive penalty weights, a retrained surrogate, a moving optimum. The next generation evaluates the population again instead of breeding: `on_generation` is called again with the same generation number, `control` isn't, and the best solution is then the best by the new function. Every single-objective algorithm has it: a particle swarm also scores its personal bests again, a local search its current and best solution, and Nelder-Mead its simplex.
+`algorithm.reevaluate()` scores again what the algorithm keeps, for a fitness function that changed during the run: adaptive penalty weights, a retrained surrogate, a moving optimum. The next generation evaluates the population again instead of breeding: `on_generation` is called again with the same generation number, `control` isn't, and the best solution is then the best by the new function. Every single-objective algorithm has it: a particle swarm also scores its personal bests again, a local search its current and best solution, Nelder-Mead its simplex, L-BFGS-B its current point, dropping its correction pairs, and a first-order method its point and gradient, keeping its velocity or Adam's averages.
 
 ```python
 # maximize the ones, with at most 10 of them allowed: the penalty's weight rises while the best
@@ -674,6 +714,9 @@ Some names differ:
 | `NelderMead(coefficients="standard")`, `NelderMead(coefficients=(1.0, 2.0, 0.5, 0.5))` | `.coefficients(nelder_mead::Coefficients::Standard)`, `.coefficients(nelder_mead::Coefficients::Custom { reflection: 1.0, expansion: 2.0, contraction: 0.5, shrink: 0.5 })` |
 | `NelderMead(restarts=n)` | `.restarts(local::Restarts::Random { times: n })` |
 | `NelderMead(initial_genome=[...])` | `.initial_genome(Reals::from(vec![...]))` |
+| `Lbfgsb(gradients="central", difference_step=h)` | `.gradients(Gradients::Central { step: Some(h) })` |
+| `Lbfgsb.run(f, gradient=g)`, `gradient=True` | `Differentiable(\|x, gradient\| ...)` |
+| `FirstOrder(step="adam", learning_rate=a)`, `FirstOrder(step="nesterov", learning_rate=a, momentum=m)`, `FirstOrder(step="adamw", learning_rate=a, weight_decay=w)` | `.step(first_order::Step::adam(a))`, `.step(first_order::Step::nesterov(a, m))`, `.step(first_order::Step::adamw(a, w))` |
 | `De(l_shade=n)` | `De::l_shade(real, n)` |
 | `De(strategy="rand1")`, `De(strategy={"p": 0.1, "archive": 1.0})` | `.strategy(de::Strategy::Rand1)`, `.strategy(de::Strategy::CurrentToPBest { p: 0.1, archive: 1.0 })`, and `{"max_p", "archive"}` for `CurrentToPBestRandomP` |
 | `De(control={"f": 0.5, "cr": 0.9})` | `.control(de::Control::Fixed { f: 0.5, cr: 0.9 })`; `{"min_f", "max_f", "cr"}` for `Dither`, `{"c"}` for `Jade`, `{"memory"}` for `Shade` |

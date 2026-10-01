@@ -124,6 +124,10 @@ pub struct Fitness {
     /// The longest wait for an answer; `stop.time` if unset.
     #[serde(default, with = "duration")]
     pub timeout: Option<Duration>,
+    /// Whether the program writes the gradient after the value: a value and then a derivative
+    /// per gene on each line.
+    #[serde(default)]
+    pub gradient: bool,
 }
 
 fn maximize() -> Vec<Objective> {
@@ -187,6 +191,20 @@ pub enum Algorithm {
         /// Iterated local search: `[patience, kicks]`.
         restart: Option<(u64, usize)>,
     },
+    Lbfgsb {
+        seed: Option<u64>,
+        /// The correction pairs kept.
+        memory: Option<usize>,
+        /// Where the gradients come from: `auto` by default.
+        gradients: Option<GradientSource>,
+        /// The relative step of finite differences.
+        difference_step: Option<f64>,
+        gradient_tolerance: Option<f64>,
+        function_tolerance: Option<f64>,
+        max_line_search: Option<usize>,
+        /// Random restarts after convergence; none if unset.
+        restarts: Option<u64>,
+    },
     NelderMead {
         seed: Option<u64>,
         #[serde(default, deserialize_with = "nelder_mead_coefficients")]
@@ -201,6 +219,20 @@ pub enum Algorithm {
         restarts: Option<u64>,
         /// The reflection, expansion and both contractions in one round.
         speculative: Option<bool>,
+    },
+    FirstOrder {
+        seed: Option<u64>,
+        /// The step rule; Adam with a learning rate of 0.001 if unset.
+        #[serde(default, deserialize_with = "first_order_step")]
+        step: Option<FirstOrderStep>,
+        /// Where the gradients come from: `auto` by default.
+        gradients: Option<GradientSource>,
+        /// The relative step of the finite differences.
+        difference_step: Option<f64>,
+        gradient_tolerance: Option<f64>,
+        step_tolerance: Option<f64>,
+        /// Random restarts after convergence; none if unset.
+        restarts: Option<u64>,
     },
     Nsga2 {
         population_size: usize,
@@ -255,6 +287,37 @@ named! {
     de_control: Option<DeControl> = "control";
     de_restarts: Option<DeRestarts> = "restarts";
     nelder_mead_coefficients: Option<NelderMeadCoefficients> = "coefficients";
+    first_order_step: Option<FirstOrderStep> = "step";
+}
+
+/// A first-order method's step rule; Adam's settings default to Kingma and Ba's.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum FirstOrderStep {
+    Gradient {
+        learning_rate: f64,
+    },
+    Momentum {
+        learning_rate: f64,
+        momentum: f64,
+    },
+    Nesterov {
+        learning_rate: f64,
+        momentum: f64,
+    },
+    Adam {
+        learning_rate: Option<f64>,
+        beta1: Option<f64>,
+        beta2: Option<f64>,
+        epsilon: Option<f64>,
+    },
+    Adamw {
+        learning_rate: Option<f64>,
+        beta1: Option<f64>,
+        beta2: Option<f64>,
+        epsilon: Option<f64>,
+        weight_decay: f64,
+    },
 }
 
 /// How differential evolution builds its mutant vectors: `"rand1"`, `"best1"`,
@@ -352,6 +415,16 @@ pub enum DeRestartsName {
 pub struct OnStagnation {
     pub tolerance: f64,
     pub patience: u64,
+}
+
+/// Where a gradient-based method's gradients come from.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum GradientSource {
+    Auto,
+    Supplied,
+    Forward,
+    Central,
 }
 
 /// Nelder-Mead's coefficients: `"adaptive"`, `"standard"` or

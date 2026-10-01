@@ -2,6 +2,7 @@
 //! gradient estimated from mirrored samples, for problems of thousands of genes and more, such as
 //! a neural network's weights.
 
+use super::first_order::{Moments, update_moments};
 use super::{Algorithm, Candidates, Reevaluate, breed_in_parallel, breeding_streams};
 use crate::genome::{Real, Reals, Representation};
 use crate::operator::check_size;
@@ -91,17 +92,6 @@ impl Optimizer {
 // Adam's denominator term, against a division by 0
 const ADAM_EPSILON: f64 = 1e-8;
 
-// the optimizer's memory: the average gradient (SGD's velocity, Adam's first moment), Adam's
-// second moment, and Adam's β₁ᵗ and β₂ᵗ, as products so as to be exact
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-struct Moments {
-    first: Vec<f64>,
-    second: Vec<f64>,
-    beta1_power: f64,
-    beta2_power: f64,
-}
-
 /// OpenAI's evolution strategy (Salimans, Ho, Chen, Sidor and Sutskever, 2017) on [`Real`]
 /// genomes, as an ask / tell [`Algorithm`]: the baseline of neuroevolution at scale.
 ///
@@ -157,6 +147,8 @@ pub struct OpenEs {
     seed: u64,
     rng: StreamRng,
     mean: Vec<f64>,
+    // the optimizer's memory: the average gradient (SGD's velocity, Adam's first moment), Adam's
+    // second moment, and Adam's β₁ᵗ and β₂ᵗ
     moments: Moments,
     // the perturbations of the samples, one per pair
     noise: Vec<Vec<f64>>,
@@ -394,17 +386,13 @@ impl OpenEs {
     // the optimizer's step along `gradient`, and the mean moved by it within the bounds
     fn step(&mut self, gradient: &[f64]) {
         let bounds = self.real.bounds();
-        let Moments {
-            first,
-            second,
-            beta1_power,
-            beta2_power,
-        } = &mut self.moments;
+        let moments = &mut self.moments;
         let steps: Vec<f64> = match self.optimizer {
             Optimizer::Sgd {
                 learning_rate,
                 momentum,
-            } => first
+            } => moments
+                .first
                 .iter_mut()
                 .zip(gradient)
                 .map(|(v, &g)| {
@@ -417,16 +405,17 @@ impl OpenEs {
                 beta1,
                 beta2,
             } => {
-                *beta1_power *= beta1;
-                *beta2_power *= beta2;
-                let rate = learning_rate * (1.0 - *beta2_power).sqrt() / (1.0 - *beta1_power);
-                first
+                moments.advance(beta1, beta2);
+                // Kingma and Ba's more efficient order of computation (section 2), with ε̂
+                let rate = learning_rate * (1.0 - moments.beta2_power).sqrt()
+                    / (1.0 - moments.beta1_power);
+                moments
+                    .first
                     .iter_mut()
-                    .zip(second.iter_mut())
+                    .zip(moments.second.iter_mut())
                     .zip(gradient)
                     .map(|((m, v), &g)| {
-                        *m = beta1 * *m + (1.0 - beta1) * g;
-                        *v = beta2 * *v + (1.0 - beta2) * g * g;
+                        update_moments(m, v, g, beta1, beta2);
                         rate * *m / (v.sqrt() + ADAM_EPSILON)
                     })
                     .collect()
@@ -696,12 +685,7 @@ impl OpenEsBuilder {
             seed,
             rng,
             mean,
-            moments: Moments {
-                first: vec![0.0; genes],
-                second: vec![0.0; genes],
-                beta1_power: 1.0,
-                beta2_power: 1.0,
-            },
+            moments: Moments::new(genes),
             noise: Vec::new(),
             population: Population::new(Vec::new()),
             reevaluating: false,

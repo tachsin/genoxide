@@ -1,0 +1,16 @@
+Smoothing 100000 noisy points: the misfit plus 50 times the roughness
+Adam from a flat curve, its learning rate 0.05 halved every 500 steps
+  step  learning rate  loss         largest gradient  distance to the answer
+     0         5.0e-2  1.0544890e5             6.4e0                   1.3e0
+   100         5.0e-2  5.0613069e4             2.5e0                  2.4e-2
+   200         5.0e-2  5.0612759e4             3.3e0                  9.5e-3
+   300         5.0e-2  5.0615543e4             3.9e0                  1.2e-2
+   400         5.0e-2  5.0619309e4             4.8e0                  1.3e-2
+   500         5.0e-2  5.0621841e4             4.6e0                  1.4e-2
+   600         2.5e-2  5.0609073e4            2.0e-2                  5.8e-5
+   700         2.5e-2  5.0609073e4            1.2e-4                  3.3e-7
+   800         2.5e-2  5.0609073e4            6.3e-7                  1.8e-9
+   900         2.5e-2  5.0609073e4            3.1e-9                 1.0e-11
+   925         2.5e-2  5.0609073e4           8.5e-10                 2.5e-12
+converged after 925 steps and 926 evaluations: every value within 2.5e-12 of the answer
+the learning rate kept at 0.05, after the same 925 steps: within 1.3e-2 of the answer

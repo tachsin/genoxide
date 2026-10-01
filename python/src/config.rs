@@ -138,6 +138,20 @@ pub enum Algorithm {
         /// Iterated local search: `[patience, kicks]`.
         restart: Option<(u64, usize)>,
     },
+    /// Gradient descent, momentum, Nesterov, Adam or AdamW.
+    FirstOrder {
+        step: FirstOrderStep,
+        /// Where the gradients come from.
+        gradients: Option<GradientSource>,
+        /// The relative step of finite differences.
+        difference_step: Option<f64>,
+        gradient_tolerance: Option<f64>,
+        step_tolerance: Option<f64>,
+        /// The number of random restarts; none by default.
+        restarts: Option<u64>,
+        initial_genome: Option<Vec<f64>>,
+        seed: Option<u64>,
+    },
     NelderMead {
         coefficients: Option<NelderMeadCoefficients>,
         /// The size of the first simplex, as a fraction of each gene's range.
@@ -150,6 +164,21 @@ pub enum Algorithm {
         restarts: Option<u64>,
         /// The reflection, expansion and both contractions evaluated in one round.
         speculative: Option<bool>,
+        initial_genome: Option<Vec<f64>>,
+        seed: Option<u64>,
+    },
+    Lbfgsb {
+        /// The correction pairs kept, m.
+        memory: Option<usize>,
+        /// Where the gradients come from.
+        gradients: Option<GradientSource>,
+        /// The relative step of finite differences.
+        difference_step: Option<f64>,
+        gradient_tolerance: Option<f64>,
+        function_tolerance: Option<f64>,
+        max_line_search: Option<usize>,
+        /// The number of random restarts; none by default.
+        restarts: Option<u64>,
         initial_genome: Option<Vec<f64>>,
         seed: Option<u64>,
     },
@@ -241,6 +270,36 @@ pub enum Optimizer {
     Sgd {
         learning_rate: f64,
         momentum: f64,
+    },
+}
+
+/// A first-order method's step rule; Adam's settings default to Kingma and Ba's.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FirstOrderStep {
+    Gradient {
+        learning_rate: f64,
+    },
+    Momentum {
+        learning_rate: f64,
+        momentum: f64,
+    },
+    Nesterov {
+        learning_rate: f64,
+        momentum: f64,
+    },
+    Adam {
+        learning_rate: Option<f64>,
+        beta1: Option<f64>,
+        beta2: Option<f64>,
+        epsilon: Option<f64>,
+    },
+    Adamw {
+        learning_rate: Option<f64>,
+        beta1: Option<f64>,
+        beta2: Option<f64>,
+        epsilon: Option<f64>,
+        weight_decay: f64,
     },
 }
 
@@ -473,6 +532,17 @@ pub enum Restarts {
 pub enum Covariance {
     Full,
     Diagonal,
+}
+
+/// Where a gradient-based method's gradients come from: `"auto"`, `"supplied"`, `"forward"` or
+/// `"central"`.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GradientSource {
+    Auto,
+    Supplied,
+    Forward,
+    Central,
 }
 
 /// Nelder-Mead's coefficients: `"adaptive"` (Gao and Han's), `"standard"` (Nelder and Mead's) or

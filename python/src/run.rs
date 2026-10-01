@@ -3,11 +3,12 @@
 use crate::checkpoint::Checkpoints;
 use crate::config;
 use crate::control::{
-    CmaesSettings, DeSettings, EsSettings, GaSettings, IslandsSettings, LocalSearchSettings,
-    NeatSettings, NelderMeadSettings, OpenEsSettings, PsoSettings, Running, Settings, Slot,
+    CmaesSettings, DeSettings, EsSettings, FirstOrderSettings, GaSettings, IslandsSettings,
+    LbfgsbSettings, LocalSearchSettings, NeatSettings, NelderMeadSettings, OpenEsSettings,
+    PsoSettings, Running, Settings, Slot,
 };
 use crate::errors::{genome_setting, setting};
-use crate::fitness::{Multi, Native, Shared, Single};
+use crate::fitness::{Gradient, Multi, Native, Shared, Single};
 use crate::genes::{GenomeContext, PyGenome};
 use crate::operators::{
     AnySelect, ListCrossover, OrderCrossovers, OrderMutation, RealCrossover, RealMutation,
@@ -23,6 +24,7 @@ use genoxide::algorithm::nelder_mead::Coefficients;
 use genoxide::algorithm::{GaBuilder, Islands, Reevaluate, cmaes, es, pso};
 use genoxide::engine::Progress;
 use genoxide::genome::{AdaptiveReal, Representation};
+use genoxide::gradient::Gradients;
 use genoxide::multi::{self, Decomposition, MultiObjectiveAlgorithm, MultiSnapshot, SmsEmoa};
 use genoxide::neat::{self, Neat};
 use genoxide::operator::{Crossover, Mutate};
@@ -54,7 +56,7 @@ type Result<T> = std::result::Result<T, String>;
 /// and when it stops; with `resume`, it continues from the checkpoint there, saved with the same
 /// settings. Returns the result as a dict.
 #[pyfunction]
-#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None, control = None, checkpoint = None, checkpoint_every = None, resume = None))]
+#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None, control = None, checkpoint = None, checkpoint_every = None, resume = None, gradient = None, combined_gradient = false))]
 #[allow(clippy::too_many_arguments)]
 pub fn run<'py>(
     py: Python<'py>,
@@ -68,6 +70,8 @@ pub fn run<'py>(
     checkpoint: Option<PathBuf>,
     checkpoint_every: Option<u64>,
     resume: Option<PathBuf>,
+    gradient: Option<Py<PyAny>>,
+    combined_gradient: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     // the error names the setting, e.g. `stop.generations`
     let mut json = serde_json::Deserializer::from_str(config);
@@ -99,7 +103,18 @@ pub fn run<'py>(
         _ => GenomeContext::None,
     };
     let context = Context {
-        shared: Shared::new(fitness, batch, parallel, on_generation, genome_context),
+        shared: Shared::new(
+            fitness,
+            match (gradient, combined_gradient) {
+                (Some(function), _) => Gradient::Function(function),
+                (None, true) => Gradient::Combined,
+                (None, false) => Gradient::None,
+            },
+            batch,
+            parallel,
+            on_generation,
+            genome_context,
+        ),
         objectives: run
             .objectives
             .iter()
@@ -481,6 +496,87 @@ pub fn de_control(control: config::DeControl) -> de::Control {
     }
 }
 
+// where a gradient-based method's gradients come from, with the relative step of finite
+// differences
+fn gradient_source(
+    source: Option<config::GradientSource>,
+    difference_step: Option<f64>,
+) -> Result<Gradients> {
+    let source = source.unwrap_or(config::GradientSource::Auto);
+    Ok(match source {
+        config::GradientSource::Auto | config::GradientSource::Supplied
+            if difference_step.is_some() =>
+        {
+            return Err("difference_step needs gradients=\"forward\" or \"central\"".to_string());
+        }
+        config::GradientSource::Auto => Gradients::Auto,
+        config::GradientSource::Supplied => Gradients::Supplied,
+        config::GradientSource::Forward => Gradients::Forward {
+            step: difference_step,
+        },
+        config::GradientSource::Central => Gradients::Central {
+            step: difference_step,
+        },
+    })
+}
+
+fn first_order_step(step: config::FirstOrderStep) -> first_order::Step {
+    use first_order::Step;
+    // Adam's settings default to Kingma and Ba's, as `Step::adam(0.001)`'s
+    let adam = |learning_rate: Option<f64>,
+                beta1: Option<f64>,
+                beta2: Option<f64>,
+                epsilon: Option<f64>| {
+        (
+            learning_rate.unwrap_or(0.001),
+            beta1.unwrap_or(0.9),
+            beta2.unwrap_or(0.999),
+            epsilon.unwrap_or(1e-8),
+        )
+    };
+    match step {
+        config::FirstOrderStep::Gradient { learning_rate } => Step::gradient(learning_rate),
+        config::FirstOrderStep::Momentum {
+            learning_rate,
+            momentum,
+        } => Step::momentum(learning_rate, momentum),
+        config::FirstOrderStep::Nesterov {
+            learning_rate,
+            momentum,
+        } => Step::nesterov(learning_rate, momentum),
+        config::FirstOrderStep::Adam {
+            learning_rate,
+            beta1,
+            beta2,
+            epsilon,
+        } => {
+            let (learning_rate, beta1, beta2, epsilon) = adam(learning_rate, beta1, beta2, epsilon);
+            Step::Adam {
+                learning_rate,
+                beta1,
+                beta2,
+                epsilon,
+            }
+        }
+        config::FirstOrderStep::Adamw {
+            learning_rate,
+            beta1,
+            beta2,
+            epsilon,
+            weight_decay,
+        } => {
+            let (learning_rate, beta1, beta2, epsilon) = adam(learning_rate, beta1, beta2, epsilon);
+            Step::AdamW {
+                learning_rate,
+                beta1,
+                beta2,
+                epsilon,
+                weight_decay,
+            }
+        }
+    }
+}
+
 fn nelder_mead_coefficients(coefficients: config::NelderMeadCoefficients) -> Coefficients {
     match coefficients {
         config::NelderMeadCoefficients::Named(config::NelderMeadCoefficientsName::Adaptive) => {
@@ -784,6 +880,89 @@ fn real_algorithm<'py>(
             }))?;
             generational(py, nelder_mead, NelderMeadSettings, context)
         }
+        config::Algorithm::FirstOrder {
+            step,
+            gradients,
+            difference_step,
+            gradient_tolerance,
+            step_tolerance,
+            restarts,
+            initial_genome,
+            seed,
+        } => {
+            let mut builder = FirstOrder::builder(real)
+                .step(first_order_step(step))
+                .objective(context.single_objective()?)
+                .gradients(gradient_source(gradients, difference_step)?);
+            if let Some(tolerance) = gradient_tolerance {
+                builder = builder.gradient_tolerance(tolerance);
+            }
+            if let Some(tolerance) = step_tolerance {
+                builder = builder.step_tolerance(tolerance);
+            }
+            if let Some(times) = restarts {
+                builder = builder.restarts(local::Restarts::Random { times });
+            }
+            if let Some(genome) = initial_genome {
+                builder = builder.initial_genome(Reals::from(genome));
+            }
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            // the only genome the builder checks is the initial one
+            let first_order = setting(builder.build().map_err(|error| match error {
+                genoxide::Error::InvalidGenome { reason } => genoxide::Error::InvalidSetting {
+                    setting: "initial_genome",
+                    reason,
+                },
+                error => error,
+            }))?;
+            generational(py, first_order, FirstOrderSettings, context)
+        }
+        config::Algorithm::Lbfgsb {
+            memory,
+            gradients,
+            difference_step,
+            gradient_tolerance,
+            function_tolerance,
+            max_line_search,
+            restarts,
+            initial_genome,
+            seed,
+        } => {
+            let mut builder = Lbfgsb::builder(real).objective(context.single_objective()?);
+            if let Some(memory) = memory {
+                builder = builder.memory(memory);
+            }
+            builder = builder.gradients(gradient_source(gradients, difference_step)?);
+            if let Some(tolerance) = gradient_tolerance {
+                builder = builder.gradient_tolerance(tolerance);
+            }
+            if let Some(tolerance) = function_tolerance {
+                builder = builder.function_tolerance(tolerance);
+            }
+            if let Some(trials) = max_line_search {
+                builder = builder.max_line_search(trials);
+            }
+            if let Some(times) = restarts {
+                builder = builder.restarts(local::Restarts::Random { times });
+            }
+            if let Some(genome) = initial_genome {
+                builder = builder.initial_genome(Reals::from(genome));
+            }
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            // the only genome the builder checks is the initial one
+            let lbfgsb = setting(builder.build().map_err(|error| match error {
+                genoxide::Error::InvalidGenome { reason } => genoxide::Error::InvalidSetting {
+                    setting: "initial_genome",
+                    reason,
+                },
+                error => error,
+            }))?;
+            generational(py, lbfgsb, LbfgsbSettings, context)
+        }
         algorithm => with_operators(
             py,
             Ok(real),
@@ -967,6 +1146,10 @@ where
         config::Algorithm::Neat(_) => Err(NEAT_GENOME.to_string().into()),
         config::Algorithm::NelderMead { .. } => {
             Err("NelderMead needs a Real genome".to_string().into())
+        }
+        config::Algorithm::Lbfgsb { .. } => Err("Lbfgsb needs a Real genome".to_string().into()),
+        config::Algorithm::FirstOrder { .. } => {
+            Err("FirstOrder needs a Real genome".to_string().into())
         }
     }
 }

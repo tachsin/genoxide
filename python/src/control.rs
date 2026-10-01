@@ -263,6 +263,98 @@ impl Settings<NelderMead> for NelderMeadSettings {
     }
 }
 
+/// L-BFGS-B: its memory, which a control can change, and its state, read-only.
+pub struct LbfgsbSettings;
+
+impl Settings<Lbfgsb> for LbfgsbSettings {
+    fn get(&self, lbfgsb: &Lbfgsb, name: &str) -> Result<Value> {
+        match name {
+            "memory" => Ok(json!(lbfgsb.memory())),
+            "pairs" => Ok(json!(lbfgsb.pairs())),
+            "converged" => Ok(json!(lbfgsb.converged().map(criterion))),
+            "projected_gradient" => Ok(json!(lbfgsb.projected_gradient())),
+            "iterations" => Ok(json!(lbfgsb.iterations())),
+            "gradients" => Ok(json!(gradient_source(lbfgsb.gradients()))),
+            "gradient_evaluations" => Ok(json!(lbfgsb.gradient_evaluations())),
+            "stencil_evaluations" => Ok(json!(lbfgsb.stencil_evaluations())),
+            "skipped_pairs" => Ok(json!(lbfgsb.skipped_pairs())),
+            "memory_resets" => Ok(json!(lbfgsb.memory_resets())),
+            "restart_count" => Ok(json!(lbfgsb.restart_count())),
+            _ => Err(unknown(name)),
+        }
+    }
+
+    fn set(&self, lbfgsb: &mut Lbfgsb, name: &str, value: &str) -> Result<()> {
+        match name {
+            "memory" => setting(lbfgsb.set_memory(parse(name, value)?)),
+            _ => Err(unknown(name)),
+        }
+    }
+}
+
+// a convergence criterion's Python name
+fn criterion(criterion: lbfgsb::Criterion) -> &'static str {
+    match criterion {
+        lbfgsb::Criterion::ProjectedGradient => "projected_gradient",
+        lbfgsb::Criterion::RelativeDecrease => "relative_decrease",
+        lbfgsb::Criterion::LineSearch => "line_search",
+        lbfgsb::Criterion::NotFinite => "not_finite",
+        _ => "other",
+    }
+}
+
+// where the gradients come from, by its Python name
+fn gradient_source(gradients: genoxide::gradient::Gradients) -> &'static str {
+    use genoxide::gradient::Gradients;
+    match gradients {
+        Gradients::Supplied => "supplied",
+        Gradients::Forward { .. } => "forward",
+        Gradients::Central { .. } => "central",
+        _ => "auto",
+    }
+}
+
+/// A first-order method: its learning rate and schedule multiplier, and its state, read-only.
+pub struct FirstOrderSettings;
+
+impl Settings<FirstOrder> for FirstOrderSettings {
+    fn get(&self, first_order: &FirstOrder, name: &str) -> Result<Value> {
+        match name {
+            "learning_rate" => Ok(json!(first_order.step().learning_rate())),
+            "multiplier" => Ok(json!(first_order.multiplier())),
+            "converged" => Ok(json!(first_order.converged().map(convergence))),
+            // infinite before the first tell, which JSON can't hold
+            "gradient_norm" => Ok(json!(
+                Some(first_order.gradient_norm()).filter(|norm| norm.is_finite())
+            )),
+            "gradient" => Ok(json!(first_order.gradient())),
+            "iterations" => Ok(json!(first_order.iterations())),
+            "steps" => Ok(json!(first_order.steps())),
+            "restart_count" => Ok(json!(first_order.restart_count())),
+            "gradients" => Ok(json!(gradient_source(first_order.gradients()))),
+            _ => Err(unknown(name)),
+        }
+    }
+
+    fn set(&self, first_order: &mut FirstOrder, name: &str, value: &str) -> Result<()> {
+        match name {
+            "learning_rate" => setting(first_order.set_learning_rate(parse(name, value)?)),
+            "multiplier" => setting(first_order.set_multiplier(parse(name, value)?)),
+            _ => Err(unknown(name)),
+        }
+    }
+}
+
+// why a first-order method converged, by its Python name
+fn convergence(convergence: first_order::Convergence) -> &'static str {
+    match convergence {
+        first_order::Convergence::Gradient => "gradient",
+        first_order::Convergence::Step => "step",
+        first_order::Convergence::Invalid => "invalid",
+        _ => "other",
+    }
+}
+
 /// OpenAI's evolution strategy's step: σ and the learning rate.
 pub struct OpenEsSettings;
 

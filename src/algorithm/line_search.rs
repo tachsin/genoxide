@@ -91,9 +91,6 @@
 //! - Nocedal, J. and Wright, S. J. (2006). *Numerical Optimization*, 2nd ed., chapter 3.
 //!   Springer. doi:10.1007/978-0-387-40065-5.
 
-// L-BFGS-B (batch A2 of docs/optimization-plan.md) uses the line search next.
-#![allow(dead_code)]
-
 use crate::{Error, Result};
 
 /// δ of the paper, 0.66: the factor by which the interval must shrink in two trials, else a
@@ -145,6 +142,8 @@ impl Settings {
 
     /// For nonlinear conjugate gradients: as [`QUASI_NEWTON`](Settings::QUASI_NEWTON), with
     /// η = 0.1 (Nocedal and Wright, 2006, section 3.1).
+    // for nonlinear conjugate gradients (batch D1 of docs/optimization-plan.md)
+    #[allow(dead_code)]
     pub(crate) const CONJUGATE_GRADIENT: Settings = Settings {
         gtol: 0.1,
         ..Settings::QUASI_NEWTON
@@ -342,6 +341,7 @@ impl MoreThuente {
     }
 
     /// The step to evaluate next, or `None` once the search has stopped.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn next(&self) -> Option<f64> {
         match self.stopped {
             None => Some(self.trial),
@@ -350,6 +350,7 @@ impl MoreThuente {
     }
 
     /// The number of steps told so far.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn trials(&self) -> usize {
         self.trials
     }

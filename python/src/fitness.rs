@@ -26,7 +26,7 @@ use crate::problems::{IntegerProblem, MultiNative};
 use crate::tasks::Balance;
 use crate::tree_problems::TreeFitness;
 use genoxide::Fitness;
-use genoxide::engine::{FitnessFunction, IntoFitness, Progress};
+use genoxide::engine::{BatchExtras, Extras, FitnessFunction, IntoFitness, Progress, Provided};
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
 use genoxide::problems::DynProblem;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
@@ -42,9 +42,19 @@ use std::time::Duration;
 // how often the thread that called `run` checks for Ctrl+C while a parallel run's calls go on
 const SIGNAL_CHECK: Duration = Duration::from_millis(50);
 
+/// Where a Python fitness function's gradient comes from, for L-BFGS-B: nowhere, a function of
+/// its own (`gradient=g`), or the fitness function itself, which returns `(value, gradient)`
+/// (`gradient=True`).
+pub enum Gradient {
+    None,
+    Function(Py<PyAny>),
+    Combined,
+}
+
 /// The fitness function and progress callback of a run, and what went wrong in them.
 pub struct Shared {
     function: Py<PyAny>,
+    gradient: Gradient,
     batch: bool,
     parallel: bool,
     on_generation: Option<Py<PyAny>>,
@@ -59,6 +69,7 @@ pub struct Shared {
 impl Shared {
     pub fn new(
         function: Py<PyAny>,
+        gradient: Gradient,
         batch: bool,
         parallel: bool,
         on_generation: Option<Py<PyAny>>,
@@ -66,6 +77,7 @@ impl Shared {
     ) -> Self {
         Self {
             function,
+            gradient,
             batch,
             parallel,
             on_generation,
@@ -283,6 +295,151 @@ impl Shared {
     }
 }
 
+impl Shared {
+    /// Whether the Python function gives a gradient.
+    pub fn provides_gradient(&self) -> bool {
+        !matches!(self.gradient, Gradient::None)
+    }
+
+    // the value of one genome and its gradient into `gradient`, a call of the function (and of
+    // the gradient's function); `None` after an error or Ctrl+C
+    fn call_with_gradient<G: PyGenome>(
+        &self,
+        py: Python<'_>,
+        genome: &G,
+        gradient: &mut [f64],
+    ) -> Option<Value> {
+        if self.aborted() {
+            return None;
+        }
+        let argument = genome.object(py, &self.context);
+        match &self.gradient {
+            Gradient::Function(function) => {
+                let argument = argument.map_err(|error| self.fail(error)).ok()?;
+                let value = self.call(py, Ok(argument.clone()), value)?;
+                let written = function
+                    .bind(py)
+                    .call1((argument,))
+                    .and_then(|result| gradient_into(&result, gradient));
+                written.map_err(|error| self.fail(error)).ok()?;
+                Some(value)
+            }
+            Gradient::Combined => self.call(py, argument, |result| {
+                value_with_gradient(result, Some(gradient))
+            }),
+            Gradient::None => self.call(py, argument, value),
+        }
+    }
+
+    // the values of a batch and their gradients into `gradients`, a row per genome
+    fn call_batch_with_gradients<G: PyGenome>(
+        &self,
+        py: Python<'_>,
+        genomes: &[&G],
+        gradients: &mut [f64],
+    ) -> Option<Vec<Value>> {
+        if self.aborted() {
+            return None;
+        }
+        let matrix = G::batch(py, genomes, &self.context);
+        match &self.gradient {
+            Gradient::Function(function) => {
+                let matrix = matrix.map_err(|error| self.fail(error)).ok()?;
+                let values = self.call(py, Ok(matrix.clone()), |result| {
+                    values(result, genomes.len())
+                })?;
+                let written = function
+                    .bind(py)
+                    .call1((matrix,))
+                    .and_then(|result| gradient_rows(&result, gradients, genomes.len()));
+                written.map_err(|error| self.fail(error)).ok()?;
+                Some(values)
+            }
+            Gradient::Combined => self.call(py, matrix, |result| {
+                values_with_gradients(result, genomes.len(), Some(gradients))
+            }),
+            Gradient::None => self.call(py, matrix, |result| values(result, genomes.len())),
+        }
+    }
+}
+
+// the value of `(value, gradient)`, the gradient written into `gradient` if it's given: what a
+// function with `gradient=True` returns (the Python package makes the gradient a float64 array)
+fn value_with_gradient(result: &Bound<'_, PyAny>, gradient: Option<&mut [f64]>) -> PyResult<Value> {
+    let pair = result
+        .cast::<PyTuple>()
+        .ok()
+        .filter(|tuple| tuple.len() == 2)
+        .ok_or_else(|| {
+            PyTypeError::new_err(format!(
+                "with gradient=True, the fitness function returns a tuple (value, gradient), not {}",
+                type_name(result)
+            ))
+        })?;
+    let value = value(&pair.get_item(0)?)?;
+    if let Some(gradient) = gradient {
+        gradient_into(&pair.get_item(1)?, gradient)?;
+    }
+    Ok(value)
+}
+
+// `value_with_gradient` without the gradient: a function with `gradient=True` called where no
+// gradient is wanted (finite differences)
+fn value_without_gradient(result: &Bound<'_, PyAny>) -> PyResult<Value> {
+    value_with_gradient(result, None)
+}
+
+// a gradient, a float64 array of a value per gene, into `gradient`
+fn gradient_into(result: &Bound<'_, PyAny>, gradient: &mut [f64]) -> PyResult<()> {
+    let array = result.extract::<PyReadonlyArray1<'_, f64>>()?;
+    let array = array.as_array();
+    if array.len() != gradient.len() {
+        return Err(PyValueError::new_err(format!(
+            "the gradient has {} values, for {} genes",
+            array.len(),
+            gradient.len()
+        )));
+    }
+    for (gradient, &value) in gradient.iter_mut().zip(array.iter()) {
+        *gradient = value;
+    }
+    Ok(())
+}
+
+// the gradients of a batch, a float64 array of a row per genome, into `gradients`
+fn gradient_rows(result: &Bound<'_, PyAny>, gradients: &mut [f64], genomes: usize) -> PyResult<()> {
+    let array = result.extract::<PyReadonlyArray2<'_, f64>>()?;
+    let array = array.as_array();
+    let genes = gradients.len().checked_div(genomes).unwrap_or(0);
+    if array.nrows() != genomes || array.ncols() != genes {
+        return Err(PyValueError::new_err(format!(
+            "the gradients have shape ({}, {}), for {genomes} genomes of {genes} genes",
+            array.nrows(),
+            array.ncols()
+        )));
+    }
+    for (gradient, &value) in gradients.iter_mut().zip(array.iter()) {
+        *gradient = value;
+    }
+    Ok(())
+}
+
+// the scores and gradients of a batch with `gradient=True`: (scores, gradients), float64 arrays
+// the Python package makes, the gradients written into `gradients` if they're given
+fn values_with_gradients(
+    result: &Bound<'_, PyAny>,
+    genomes: usize,
+    gradients: Option<&mut [f64]>,
+) -> PyResult<Vec<Value>> {
+    let (scores, rows) = result.extract::<(PyReadonlyArray1<'_, f64>, Bound<'_, PyAny>)>()?;
+    let scores = scores.as_array();
+    check_count(scores.len(), genomes)?;
+    if let Some(gradients) = gradients {
+        gradient_rows(&rows, gradients, genomes)?;
+    }
+    Ok(scores.iter().map(|&score| Value::Score(score)).collect())
+}
+
 // whether `object` is referenced by the caller only: Python kept no reference to it. (pyo3
 // deprecates `get_refcnt` for `ffi::Py_REFCNT`, which is unsafe, and this crate has no unsafe
 // code.)
@@ -452,13 +609,73 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
             }
             None => {}
         }
-        Python::attach(|py| shared.call_genome(py, genome, value)).unwrap_or(Value::Invalid)
+        let convert = match shared.gradient {
+            Gradient::Combined => value_without_gradient,
+            _ => value,
+        };
+        Python::attach(|py| shared.call_genome(py, genome, convert)).unwrap_or(Value::Invalid)
     }
 
     // a Python function gets a generation at a time (`Shared::call_genomes`); a test problem is
     // evaluated a genome at a time, by the engine, in parallel if asked
     fn is_batch(&self) -> bool {
         self.problem.is_none()
+    }
+
+    // the analytic gradients of the smooth test problems, and a Python function's
+    fn provides(&self) -> Provided {
+        match self.problem {
+            Some(Native::Real(problem)) => problem.provides(),
+            Some(_) => Provided::NOTHING,
+            None if self.shared.provides_gradient() => Provided::GRADIENT,
+            None => Provided::NOTHING,
+        }
+    }
+
+    fn evaluate_with(&self, genome: &G, extras: &mut Extras<'_>) -> Value {
+        let shared = self.shared;
+        let Some(gradient) = extras.gradient() else {
+            return FitnessFunction::<G>::evaluate(self, genome);
+        };
+        if shared.aborted() {
+            return Value::Invalid;
+        }
+        match self.problem {
+            Some(Native::Real(problem)) => genome.reals().map_or(Value::Invalid, |genome| {
+                Value::Native(problem.evaluate_with(genome, &mut Extras::with_gradient(gradient)))
+            }),
+            Some(_) => FitnessFunction::<G>::evaluate(self, genome),
+            None => Python::attach(|py| shared.call_with_gradient(py, genome, gradient))
+                .unwrap_or(Value::Invalid),
+        }
+    }
+
+    // with gradients, a Python function is called a genome at a time on this thread, or once
+    // with the batch
+    fn evaluate_batch_with(&self, genomes: &[&G], extras: &mut BatchExtras<'_>) -> Vec<Value> {
+        let shared = self.shared;
+        let dimensions = extras.dimensions();
+        let Some(gradients) = extras.gradients() else {
+            return FitnessFunction::<G>::evaluate_batch(self, genomes);
+        };
+        if self.problem.is_some() || !shared.batch {
+            return genomes
+                .iter()
+                .zip(gradients.chunks_mut(dimensions.max(1)))
+                .map(|(genome, row)| {
+                    FitnessFunction::<G>::evaluate_with(
+                        self,
+                        genome,
+                        &mut Extras::with_gradient(row),
+                    )
+                })
+                .collect();
+        }
+        if shared.aborted() || genomes.is_empty() {
+            return vec![Value::Invalid; genomes.len()];
+        }
+        Python::attach(|py| shared.call_batch_with_gradients(py, genomes, gradients))
+            .unwrap_or_else(|| vec![Value::Invalid; genomes.len()])
     }
 
     fn evaluate_batch(&self, genomes: &[&G]) -> Vec<Value> {
@@ -473,12 +690,24 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
         if shared.aborted() || genomes.is_empty() {
             return vec![Value::Invalid; genomes.len()];
         }
+        let combined = matches!(shared.gradient, Gradient::Combined);
         if !shared.batch {
-            return shared.call_genomes(genomes, value, Value::Invalid);
+            let convert = if combined {
+                value_without_gradient
+            } else {
+                value
+            };
+            return shared.call_genomes(genomes, convert, Value::Invalid);
         }
         Python::attach(|py| {
             shared
-                .call_batch(py, genomes, |result| values(result, genomes.len()))
+                .call_batch(py, genomes, |result| {
+                    if combined {
+                        values_with_gradients(result, genomes.len(), None)
+                    } else {
+                        values(result, genomes.len())
+                    }
+                })
                 .unwrap_or_else(|| vec![Value::Invalid; genomes.len()])
         })
     }

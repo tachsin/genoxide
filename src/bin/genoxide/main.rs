@@ -23,7 +23,8 @@ The fitness program (`fitness.command` in the run file) runs once per worker, in
 directory. It reads a genome per line on stdin, the genes separated by spaces (bits as 0 and 1),
 and writes a line per genome on stdout: its objective values, then optionally a constraint
 violation (0 when feasible), separated by spaces, and flushes. `nan` marks a genome that can't
-be scored.
+be scored. With `gradient = true` in `[fitness]`, a line is the value, then a derivative per
+gene (`genoxide fitness <name> --gradient` for the built-in smooth ones).
 
 A minimal run file:
 
@@ -107,7 +108,8 @@ fn execute(arguments: &[String]) -> Result<(), String> {
             }
             Ok(())
         }
-        ["fitness", name] => builtin::serve(name),
+        ["fitness", name] => builtin::serve(name, false),
+        ["fitness", name, "--gradient"] => builtin::serve(name, true),
         _ => Err(format!(
             "unknown command `{}`; see genoxide --help",
             arguments.join(" ")

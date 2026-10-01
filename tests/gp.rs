@@ -148,11 +148,11 @@ fn invalid_primitive_sets_are_errors() {
         f(&mut set, real);
         set.build(real)
     };
-    let foreign = Type::clone(&{
+    let foreign: Type = {
         let mut other = PrimitiveSet::<Op>::builder();
         other.new_type("a");
         other.new_type("b")
-    });
+    };
     let cases: [&Change<'_>; 9] = [
         &|set, real| {
             set.function("add", Op::Add, [real, foreign], real);

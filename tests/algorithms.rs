@@ -318,8 +318,27 @@ fn portable_runs() {
                 .build()
                 .unwrap(),
         ),
+        // forward differences: the trial points and their stencils
+        portable_run(Lbfgsb::builder(real()).minimize().seed(1).build().unwrap()),
+        portable_run(
+            FirstOrder::builder(real())
+                .step(first_order::Step::adam(0.05))
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
+        portable_run(
+            FirstOrder::builder(real())
+                .step(first_order::Step::nesterov(0.0005, 0.9))
+                .gradients(genoxide::gradient::Gradients::Central { step: None })
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
     ];
-    let expected: [[f64; 4]; 8] = [
+    let expected: [[f64; 4]; 11] = [
         // L-SHADE
         [
             0.5886518163542276,
@@ -375,6 +394,27 @@ fn portable_runs() {
             -0.867373269448164,
             -0.27176836817948113,
             -1.087568298282683,
+        ],
+        // L-BFGS-B, forward differences
+        [
+            0.5988088458914269,
+            0.28669497148242135,
+            0.07699164601971455,
+            0.012765658807016292,
+        ],
+        // Adam, forward differences
+        [
+            0.06201319067514992,
+            -2.9684459972223216,
+            1.3518228963997165,
+            -1.3667172812746686,
+        ],
+        // Nesterov's accelerated gradient, central differences
+        [
+            -0.9985468040719558,
+            -4.29684480105349,
+            0.9887762527729134,
+            -2.874116295845887,
         ],
     ];
     for (run, expected) in runs.iter().zip(expected) {

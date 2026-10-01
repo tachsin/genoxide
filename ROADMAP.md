@@ -43,7 +43,7 @@ From a review of existing libraries (e.g. genetic_algorithm, [issues #11 to #78]
 - **`Genome`:** the representation: bits (bit-packed), integers, bounded reals, permutations; planned: mixed (per-gene types), trees (GP), graphs (NEAT).
 - **`Fitness`:** totally ordered `f64`, single or multi-objective (`[f64; M]`, with the number of objectives fixed at compile time), optional constraint violation; batch and async evaluation.
 - **Operators:** `Select`, `Crossover`, `Mutate`, generic over the genome; survival is each algorithm's scheme.
-- **`Algorithm`:** ask / tell state machines (GA, ES, CMA-ES, DE, PSO, NSGA-II, …; planned: Nelder-Mead, L-BFGS-B, SQP, Bayesian optimization).
+- **`Algorithm`:** ask / tell state machines (GA, ES, CMA-ES, DE, PSO, NSGA-II, …; Nelder-Mead, L-BFGS-B; planned: SQP, Bayesian optimization).
 - **Derivatives (planned):** supplied gradients, finite differences, constraint and residual Jacobians, declared by the fitness function.
 - **Models (planned):** Gaussian processes for Bayesian and surrogate-assisted optimization.
 - **`Engine`:** termination, parallel evaluation, observers, cancellation, and a hook that changes the algorithm between generations (parameter control, re-evaluation).
@@ -220,8 +220,9 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 ### 0.12: Local and large-scale optimization
 - [x] Convergence as a stop reason (`StopReason::Converged`), random restarts for local methods, Nelder-Mead with adaptive coefficients and speculative asks ([#371](https://github.com/tachsin/genoxide/pull/371); [docs/optimization-plan.md](docs/optimization-plan.md), batch A1)
 - [x] Linear algebra in the crate, the same bits on every platform and thread count ([#373](https://github.com/tachsin/genoxide/issues/373); batch A1)
-- [ ] Gradients (supplied, or by finite differences evaluated as one batch), line searches, L-BFGS-B (batch A2)
-- [ ] For up to millions of variables, with O(n) memory and work per step: momentum, Nesterov, Adam and AdamW; MMA and GCMMA for many variables with few constraints; continuation in stages that keeps the optimizer's state (batch A3)
+- [x] Gradients (supplied, or by finite differences evaluated as one batch), line searches, L-BFGS-B, in Python and the `genoxide` program (batch A2)
+- [x] For up to millions of variables, with O(n) memory and work per step: gradient descent, momentum, Nesterov, Adam and AdamW, with learning-rate schedules by `control` (`FirstOrder`; batch A3)
+- [ ] MMA and GCMMA for many variables with few constraints; continuation in stages that keeps the optimizer's state (batch A3)
 
 ### 0.13: Bayesian optimization
 - [ ] Gaussian processes; EI, log-EI, UCB and PI; batch, constrained and integer-variable Bayesian optimization, also on the asynchronous engine (batch B)

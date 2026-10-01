@@ -1,0 +1,22 @@
+Rastrigin's function in 10 dimensions, its minimum 0 at the origin
+SHADE, 100 individuals, seed 1, for 40000 evaluations
+evaluations  best value
+       5000       2.0e1
+      10000       1.9e1
+      15000       1.1e1
+      20000       7.5e0
+      25000       4.7e0
+      30000       1.3e0
+      35000      5.0e-1
+      40000      1.5e-2
+SHADE's best: f = 1.5e-2, every gene within 5.0e-3 of 0: in the global minimum's basin
+L-BFGS-B from SHADE's best, with the analytic gradient
+round  evaluations  best value
+    0            1      1.5e-2
+    1            2      1.5e-2
+    2            3      3.7e-4
+    3            4     7.3e-12
+    4            5       0.0e0
+L-BFGS-B: f = 0.0 after 5 evaluations, every gene within 5.8e-13 of 0 (converged: a projected gradient below 1e-5)
+in all, 40005 evaluations to the minimum
+SHADE alone, for contrast: f = 6.0e-13 after 68300 evaluations

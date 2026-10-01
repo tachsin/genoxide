@@ -36,6 +36,9 @@ def algorithms():
             genome, neighbor=gx.GaussianMutation(0.05, rate=0.5), objective="minimize", seed=1
         ),
         "nelder_mead": gx.NelderMead(genome, objective="minimize", seed=1),
+        "first_order": gx.FirstOrder(
+            genome, step="adam", learning_rate=0.05, objective="minimize", seed=1
+        ),
     }
 
 
@@ -46,6 +49,7 @@ RUNNING = {
     "pso": gx.RunningPso,
     "local_search": gx.RunningLocalSearch,
     "nelder_mead": gx.RunningNelderMead,
+    "first_order": gx.RunningFirstOrder,
 }
 
 
@@ -179,6 +183,22 @@ def test_the_settings_in_use_are_read_back():
         "size": pytest.approx(1.0),
         "iterations": 0,
         "restart_count": 0,
+    }
+
+    # the start's gradient, by forward differences: no step yet
+    first_order = seen["first_order"]
+    assert np.allclose(first_order.pop("gradient"), 2 * first_order_start(), atol=1e-6)
+    assert first_order.pop("gradient_norm") == pytest.approx(
+        np.max(np.abs(2 * first_order_start())), abs=1e-6
+    )
+    assert first_order == {
+        "learning_rate": 0.05,
+        "multiplier": 1.0,
+        "converged": None,
+        "iterations": 0,
+        "steps": 0,
+        "restart_count": 0,
+        "gradients": "forward",
     }
 
     de = gx.De(
@@ -428,9 +448,19 @@ def test_reevaluate_scores_the_algorithm_again(name):
     assert result.best_fitness == pytest.approx(moving(result.best_genome))
     # then it moves toward the new optimum
     assert result.best_fitness < rescored.best_fitness
-    # the local methods evaluate a point or two per generation: they move, but don't get there
-    if name not in ("local_search", "nelder_mead"):
+    # the local methods evaluate a point or two per generation, or take steps of a set length:
+    # they move, but don't get there
+    if name not in ("local_search", "nelder_mead", "first_order"):
         assert np.allclose(result.best_genome, 1.0, atol=0.3)
+
+
+def first_order_start():
+    """The random start of the first-order method of `algorithms()`."""
+    seen = []
+    algorithms()["first_order"].run(
+        sphere, generations=0, on_generation=lambda progress: seen.append(progress.population[0])
+    )
+    return seen[0]
 
 
 def test_an_adaptive_penalty():
