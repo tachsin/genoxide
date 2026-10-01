@@ -114,7 +114,7 @@ During a run (parameter control, e.g. an annealed mutation step): `ga.set_crosso
 | `.abort_flag(Arc<AtomicBool>)` | stops after the current generation once set |
 | `.nan_policy(NanPolicy::Error)` | NaN is an error, not invalid (`NanPolicy::Invalid`, default) |
 
-Stops: `Stop::target(score)` (at least as good), `generations(n)`, `evaluations(n)`, `time(duration)`, `stagnation(n)`, `custom(|progress| ...)`, combined with `.or(...)` and `.and(...)`, checked after every generation. With only targets and evaluation limits, a run stops as `StopReason::Stalled` after `genoxide::engine::STALL_GENERATIONS` (10 000) generations with nothing to evaluate. A local method that has converged with no restart left (`Algorithm::is_finished`) stops it as `StopReason::Converged`, unless a stop condition is met in the same generation.
+Stops: `Stop::target(score)` (at least as good), `generations(n)`, `evaluations(n)`, `time(duration)`, `stagnation(n)`, `custom(|progress| ...)`, combined with `.or(...)` and `.and(...)`, checked after every generation. With only targets and evaluation limits, a run stops as `StopReason::Stalled` after `genoxide::engine::STALL_GENERATIONS` (10 000) generations with nothing to evaluate. An algorithm that has finished (`Algorithm::is_finished`: a local method that has converged with no restart left, or a CMA-ES with `cmaes::Restarts::Stop` that has converged) stops it as `StopReason::Converged`, unless a stop condition is met in the same generation.
 
 ## Fitness functions
 
@@ -546,7 +546,7 @@ fn main() -> genoxide::Result<()> {
 
 ### CMA-ES
 
-The strongest general choice for continuous problems with up to a few hundred `Real` genes, especially when the genes interact (rotated or badly conditioned functions). Nothing needs tuning (initial step: 0.3 of each range). For multimodal functions, add `cmaes::Restarts::Ipop` (growing population) or `Bipop` (large and small in turn). For thousands of genes or separable problems: `.covariance(cmaes::Covariance::Diagonal)` (sep-CMA-ES, O(n) per sample, no correlations). `.min_step(fraction)` (0 to the initial step, 0 by default) bounds the step size below, so the search keeps exploring when the fitness stops pointing at the goal (Igel 2003, on control tasks scored on short episodes).
+The strongest general choice for continuous problems with up to a few hundred `Real` genes, especially when the genes interact (rotated or badly conditioned functions). Nothing needs tuning (initial step: 0.3 of each range). For multimodal functions, add `cmaes::Restarts::Ipop` (growing population) or `Bipop` (large and small in turn). For thousands of genes or separable problems: `.covariance(cmaes::Covariance::Diagonal)` (sep-CMA-ES, O(n) per sample, no correlations). `.min_step(fraction)` (0 to the initial step, 0 by default) bounds the step size below, so the search keeps exploring when the fitness stops pointing at the goal (Igel 2003, on control tasks scored on short episodes). Without restarts, a converged run goes on sampling around its point until a stop condition (`Restarts::Never`, the default); `cmaes::Restarts::Stop` ends it there instead, as `StopReason::Converged`, like Hansen's reference code. That saves most of a budget on smooth problems without constraints; on flat or quantized fitness (plateaus) and with constraints, the criteria can fire while the best would still improve, so keep `Never` there, or stop with a target.
 
 ```rust
 use genoxide::prelude::*;
@@ -917,7 +917,7 @@ every = 50
 | Nelder-Mead converges to a local minimum, or crawls in many genes | `.restarts(local::Restarts::Random { times })`; above about 10 genes, CMA-ES first, then Nelder-Mead from its best (`.initial_genome(...)`) |
 | Hill climbing stops at a local optimum | `.restart(patience, kicks)`, `Acceptance::Tabu { tenure }` with several neighbors, or `Acceptance::Annealing` (initial temperature ≈ typical fitness differences, `cooling` ≈ 0.999) |
 | DE collapses far from the optimum | `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, `de::Strategy::Rand1`, or `CurrentToPBest` with an archive |
-| CMA-ES converged without restarts (`cmaes.converged()` says why) | `.restarts(cmaes::Restarts::Ipop)` or `Bipop`, or a larger `.initial_step(...)` or `.population_size(...)` |
+| CMA-ES converged without restarts (`cmaes.converged()` says why) | `.restarts(cmaes::Restarts::Ipop)` or `Bipop`, or a larger `.initial_step(...)` or `.population_size(...)`; to end the run there instead of sampling on, `cmaes::Restarts::Stop` |
 | PSO gathers early at a local optimum | `.topology(pso::Topology::Ring { neighbors: 1 })`, or more particles |
 | Trees grow large without getting better (bloat) | `DoubleTournament::new(7, 1.4)?` as the selection, hoist and shrink in `gp::Mutations`; a smaller `.max_size(...)` |
 | Real-valued GA stuck in a local minimum | `PolynomialMutation` with eta 20, or a larger `GaussianMutation` sigma |

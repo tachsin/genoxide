@@ -681,6 +681,7 @@ fn real_algorithm<'py>(
                     config::Restarts::Never => cmaes::Restarts::Never,
                     config::Restarts::Ipop => cmaes::Restarts::Ipop,
                     config::Restarts::Bipop => cmaes::Restarts::Bipop,
+                    config::Restarts::Stop => cmaes::Restarts::Stop,
                 });
             }
             if let Some(step) = initial_step {

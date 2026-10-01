@@ -422,7 +422,9 @@ impl<G: Genome> Outcome<G> {
 /// are all copies of their parents.
 ///
 /// A run whose algorithm has converged with nothing more to do, such as a
-/// [`NelderMead`](crate::algorithm::NelderMead) without restarts left, stops with
+/// [`NelderMead`](crate::algorithm::NelderMead) without restarts left or a
+/// [`Cmaes`](crate::algorithm::Cmaes) with
+/// [`Restarts::Stop`](crate::algorithm::cmaes::Restarts::Stop), stops with
 /// [`StopReason::Converged`] (see [`Algorithm::is_finished`]).
 ///
 /// ```

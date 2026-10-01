@@ -55,6 +55,7 @@ ALGORITHMS = {
         real, population_size=20, evaluate_mean=True, objective="minimize", seed=1
     ),
     "neat": lambda: gx.Neat(2, 1, population_size=30, seed=1),
+    "stopping cmaes": lambda: gx.Cmaes(real, restarts="stop", objective="minimize", seed=1),
     "pso": lambda: gx.Pso(real, population_size=20, objective="minimize", seed=1),
     "local search": lambda: gx.LocalSearch(
         real, neighbor=gx.GaussianMutation(0.1, rate=0.5), neighbors=3, objective="minimize", seed=1

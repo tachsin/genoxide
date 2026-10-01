@@ -69,7 +69,9 @@ pub enum StopReason {
     /// The algorithm has converged and has nothing more to do
     /// ([`is_finished`](crate::Algorithm::is_finished)), e.g. a
     /// [`NelderMead`](crate::algorithm::NelderMead) whose simplex has collapsed, with no restart
-    /// left. A stop condition met in the same generation is reported instead.
+    /// left, or a [`Cmaes`](crate::algorithm::Cmaes) with
+    /// [`Restarts::Stop`](crate::algorithm::cmaes::Restarts::Stop) whose run has met a stop
+    /// criterion. A stop condition met in the same generation is reported instead.
     Converged,
 }
 

@@ -168,13 +168,13 @@ pub trait Algorithm {
     fn best_generation(&self) -> u64;
 
     /// Whether the algorithm has converged and has nothing more to do, e.g. a local method at a
-    /// minimum with no restart left. The engines stop with
-    /// [`StopReason::Converged`](crate::StopReason::Converged) after a generation in which it's
-    /// true, unless a stop condition is met in the same generation. Asked again, the algorithm
-    /// goes on, as it would without this method.
+    /// minimum with no restart left, or a [`Cmaes`] with [`cmaes::Restarts::Stop`] whose run has
+    /// converged. The engines stop with [`StopReason::Converged`](crate::StopReason::Converged)
+    /// after a generation in which it's true, unless a stop condition is met in the same
+    /// generation. Asked again, the algorithm goes on, as it would without this method.
     ///
-    /// `false` by default: the population-based algorithms never finish on their own, and stop by
-    /// their stop conditions.
+    /// `false` by default: the other population-based algorithms never finish on their own, and
+    /// stop by their stop conditions.
     fn is_finished(&self) -> bool {
         false
     }

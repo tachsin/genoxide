@@ -504,8 +504,8 @@ its own), derivatives in `gradient`.
   included (a supplied-gradient evaluation counts as one; `gradient_evaluations()` counts them
   separately); `Stop::target`, `time`, `stagnation`, `custom` as today.
 - **CMA-ES and the others** don't implement `is_finished` in this plan: a CMA-ES without restarts
-  keeps sampling around its point, as its docs say. Whether it should stop as converged is open
-  question 5 (it changes when seeded runs end).
+  keeps sampling around its point, as its docs say. Whether it should stop as converged was open
+  question 5: decided as an opt-in `cmaes::Restarts::Stop`, so seeded runs end where they did.
 
 ### 2.8 Reproducibility and linear algebra
 
@@ -768,10 +768,14 @@ mixed genome.
    it, so a wide box gives the same run as a narrow one.
 4. **Names.** `Bo` or `BayesianOptimization` (and `Lbfgsb` or `LBfgsB`); `model::gp` or
    `surrogate::gp`; `Differentiable` or `WithGradient`. The crate name stays genoxide.
-5. **Convergence for existing algorithms.** Should CMA-ES without restarts, and DE and PSO when
-   collapsed, report `is_finished` and stop as `Converged`? It changes when seeded runs end, so
-   it's a breaking change of results (`feat!:`), and the benchmark definitions exclude convergence
-   criteria (rule 6.4).
+5. **Convergence for existing algorithms.** Decided (2026-10-01): opt-in `cmaes::Restarts::Stop`
+   (see [#377](https://github.com/tachsin/genoxide/issues/377)). A CMA-ES with it has finished
+   (`is_finished`) once its run meets a stop criterion, and stops as `Converged`; the default,
+   `Restarts::Never`, and every seeded run stay as they were, and the benchmarks need nothing
+   (rule 6.4). Not on by default: on flat or quantized fitness and constrained problems, the
+   criteria can fire while the best would still improve (Easom; CEC 2006's G06 and G21). DE and
+   PSO stay as they are: DE's restarts already act on its collapse, and a PSO criterion would
+   stop runs early.
 6. **Feasibility of active inequalities.** Deb's rules count gᵢ = 1e-15 as infeasible. Options: a
    feasibility tolerance on inequalities in `Constrained` (breaking the CEC 2006 report's
    definition, which has a tolerance on equalities only, unless it defaults to 0 for the
