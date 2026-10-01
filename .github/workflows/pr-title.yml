@@ -28,7 +28,8 @@ jobs:
             build
             chore
           # the changelog line starts with the subject: a sentence, not a single word
-          subjectPattern: ^[a-z].{9,}$
+          # a capital first letter is fine: subjects often start with a name (NSGA-II, Koza)
+          subjectPattern: ^\S.{9,}$
           subjectPatternError: |
-            The subject "{subject}" should be a lowercase sentence of at least 10 characters
-            describing the change, e.g. "add tournament selection with configurable size".
+            The subject "{subject}" should be a sentence of at least 10 characters describing
+            the change, e.g. "add tournament selection with configurable size".
