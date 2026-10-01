@@ -5,7 +5,7 @@ summary: Find the absolute value |x| from 20 points of it, with a comparison tha
 reference: "Montana, D. J. (1995). Strongly typed genetic programming. Evolutionary Computation 3(2): 199-230."
 reference_url: https://doi.org/10.1162/evco.1995.3.2.199
 optimum: "|x| exactly (an RMSE of 0, up to rounding)"
-languages: [rust]
+languages: [rust, python]
 order: 257
 ---
 
@@ -25,8 +25,10 @@ negative, else x. So the formulas are built from two types of values, real numbe
 function says what types its arguments and its result have, and the search only makes programs in
 which they fit.
 
-There's no Python version: the Python package has genoxide's built-in primitives, for symbolic
-regression and the Boolean problems, but no primitives of your own, such as this typed set, yet.
+The Python version declares the same typed set with `gx.gp.PrimitiveSetBuilder` and evaluates
+each tree with numpy, `tree.evaluate({"x": xs}, functions)`: one call per node on the columns of
+all the points (`np.add`, `np.less`, `np.where` for `if`), whose IEEE arithmetic gives the bits that
+Rust computes point by point. It prints the same output and writes the same trace.
 
 ## What makes it hard
 
