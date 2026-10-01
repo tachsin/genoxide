@@ -61,6 +61,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 - **Differential evolution:** rand/1, best/1, and current-to-pbest/1 with an archive. Fixed, dithered or adaptive parameters (JADE, SHADE, L-SHADE).
 - **Particle swarm optimization:** global or ring topology, constriction coefficients, velocity limits.
 - **Local search:** hill climbing (first-improvement or best-of-k, with plateau moves), simulated annealing, tabu search, iterated local search. Any mutation serves as the neighborhood.
+- **Nelder-Mead** (`NelderMead`): the simplex method without derivatives, with the steps and tie rules of Lagarias et al. (1998) and Gao and Han's (2012) adaptive coefficients by default; points kept in the bounds, convergence by the simplex's size (`StopReason::Converged`), random restarts, and speculative asks that evaluate an iteration's four trial points in one parallel round.
 - **Test problems** (`problems`): Sphere, the axis-parallel ellipsoid, Schwefel 1.2 and 2.26, Rastrigin, Rosenbrock, Ackley, Griewank, Levy, Zakharov, Styblinski-Tang, Michalewicz, Himmelblau, Branin, Goldstein-Price, the six-hump camel, Hartmann's functions in 3 and 6 dimensions, Shekel's with 5, 7 and 10 wells, Easom, the eggholder, Schaffer's F6, Schwefel 2.21 and 2.22, Dixon-Price, Trid, Powell's singular function, Beale, Booth, Matyas, Bohachevsky's three functions, the three-hump camel, Langermann, Shekel's foxholes and Kowalik, each with its bounds, known optimum (or best known, for those found numerically) and reference, in Rust and Python.
 - **Constrained test problems:** CEC 2006's g01-g24 (`problems::cec2006`), and the engineering design problems (`problems::engineering`): the welded beam in two forms, the pressure vessel, the tension/compression spring, the speed reducer, the gear train (integer), the three-bar truss, the cantilever beam and the car side impact, each with its optimum or best known solution and references, in Rust and Python.
 
@@ -111,6 +112,8 @@ cargo run --release --example tsp_berlin52        # TSPLIB berlin52, simulated a
 cargo run --release --example jobshop_ft06        # job shop ft06, permutation with repetition
 cargo run --release --example rastrigin           # real-valued, CMA-ES with IPOP restarts and L-SHADE
 cargo run --release --example himmelblau          # four global minima, by restarts of a local search
+cargo run --release --example nelder_mead         # Rosenbrock from (-1.2, 1), the Nelder-Mead simplex method
+cargo run --release --example nelder_mead_himmelblau  # four global minima, by Nelder-Mead with random restarts
 cargo run --release --example pressure_vessel     # constrained mixed discrete-continuous design, SHADE
 cargo run --release --example welded_beam         # constrained design in two forms, SHADE
 cargo run --release --example gear_train          # integer genome, genetic algorithm

@@ -1,6 +1,8 @@
 # Plan: general optimization methods
 
-A working plan, removed when the work is done. Nothing in it is implemented yet. genoxide has
+A working plan, removed when the work is done. Of batch A1, `Algorithm::is_finished` with
+`StopReason::Converged`, `local::Restarts` and Nelder-Mead are implemented; the linear algebra and
+the later batches aren't yet. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
 optimization library: local derivative-free methods, gradient-based methods, constrained
@@ -23,6 +25,18 @@ tested, and orders the work in batches.
   planning, not re-read (**U** in the problem plan's terms). Before a batch starts, the primary
   sources of its methods are read, and each entry is marked verified or corrected here, with the
   algorithm or equation numbers the implementation follows.
+- **Batch A1, read on 2026-10-01.** Lagarias et al. (1998), section 2 (pp. 114-117): **verified**.
+  The coefficients' conditions (eq. 2.1), the standard values (2.2), the five steps of an iteration
+  with their strict and non-strict inequalities, and the two ordering rules are as implemented. The
+  non-shrink rule prints the new vertex's place as `j = max{ℓ | f(v) < f(x_{ℓ+1})}`, which read
+  literally is always n; the implementation follows the rule as the paper states it in words, "the
+  highest possible index consistent with the ordering": after every vertex at least as good.
+  Gao and Han (2012): **not re-read**, behind a paywall with no open copy found; the adaptive
+  coefficients are as recorded here, and the docs cite the paper for them. They give the standard
+  ones for n = 2, and for n = 1 they'd shrink to a point (σ = 0), so the standard ones are used
+  there. Nelder and Mead (1965): **not re-read**; the method follows Lagarias et al.'s statement of
+  it. The termination test (simplex size against a tolerance, relative to each gene's range) is
+  genoxide's own: Lagarias et al. define one iteration, not when to stop.
 - The methods are general. The docs and examples motivate them with generic cases (expensive
   simulations, engineering design, black-box functions, model fitting), not with an application
   domain.

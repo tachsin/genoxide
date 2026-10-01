@@ -1,0 +1,7 @@
+20 runs of Nelder-Mead in [-5, 5] x [-5, 5]: one, then 19 restarts from random points
+minimum                  runs  values reached
+( 3.000000,  2.000000)     5  2.1e-18 to 3.5e-18
+(-2.805118,  3.131313)     5  2.5e-18 to 6.7e-18
+(-3.779310, -3.283186)     6  3.0e-18 to 6.6e-18
+( 3.584428, -1.848127)     4  2.4e-18 to 4.8e-18
+2815 evaluations in all, 140.8 per run

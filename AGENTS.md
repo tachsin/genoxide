@@ -114,7 +114,7 @@ During a run (parameter control, e.g. an annealed mutation step): `ga.set_crosso
 | `.abort_flag(Arc<AtomicBool>)` | stops after the current generation once set |
 | `.nan_policy(NanPolicy::Error)` | NaN is an error, not invalid (`NanPolicy::Invalid`, default) |
 
-Stops: `Stop::target(score)` (at least as good), `generations(n)`, `evaluations(n)`, `time(duration)`, `stagnation(n)`, `custom(|progress| ...)`, combined with `.or(...)` and `.and(...)`, checked after every generation. With only targets and evaluation limits, a run stops as `StopReason::Stalled` after `genoxide::engine::STALL_GENERATIONS` (10 000) generations with nothing to evaluate.
+Stops: `Stop::target(score)` (at least as good), `generations(n)`, `evaluations(n)`, `time(duration)`, `stagnation(n)`, `custom(|progress| ...)`, combined with `.or(...)` and `.and(...)`, checked after every generation. With only targets and evaluation limits, a run stops as `StopReason::Stalled` after `genoxide::engine::STALL_GENERATIONS` (10 000) generations with nothing to evaluate. A local method that has converged with no restart left (`Algorithm::is_finished`) stops it as `StopReason::Converged`, unless a stop condition is met in the same generation.
 
 ## Fitness functions
 
@@ -796,6 +796,42 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+### Nelder-Mead: a local method without derivatives
+
+`NelderMead` on `Real` genomes: a simplex of n + 1 points that reflects, expands, contracts and shrinks to a minimum (Lagarias et al. 1998's steps, Gao and Han's coefficients). For low dimensions (up to about 10 genes), non-smooth or noisy functions, a few hundred evaluations, and polishing what a global method found (`.initial_genome(outcome.best_genome().clone())`). It converges to the minimum of the basin it starts in, then stops as `StopReason::Converged`; restarts find other minima. It only compares values, so invalid and constrained fitness work as everywhere.
+
+| Setting | Default |
+|---|---|
+| `.coefficients(nelder_mead::Coefficients::...)` | `Adaptive` (Gao and Han), `Standard` (1, 2, 1/2, 1/2), `Custom { reflection, expansion, contraction, shrink }` |
+| `.initial_step(fraction)` | 0.1 of each gene's range, 0 < fraction ≤ 1 |
+| `.tolerance(fraction)` | 1e-10: converged when every vertex is this close to the best in each gene, relative to its range; below the initial step |
+| `.restarts(local::Restarts::Random { times })` | `Never`; each restart from a random point |
+| `.speculative(true)` | off: the reflection, expansion and both contractions in one round, the same path in fewer rounds, for `.parallel(true)` |
+| `.initial_genome(genome)` | random |
+
+A generation is a round of evaluations: n + 1 for a new simplex, 1 trial point (4 speculative), or n for a shrink. Points outside the bounds move onto them. `nelder_mead.converged()`, `size()`, `iterations()`, `restart_count()`.
+
+```rust
+use genoxide::prelude::*;
+
+fn main() -> genoxide::Result<()> {
+    // Rosenbrock's valley, from the classic start
+    let rosenbrock = |x: &Reals| 100.0 * (x[1] - x[0] * x[0]).powi(2) + (1.0 - x[0]).powi(2);
+    let nelder_mead = NelderMead::builder(Real::uniform(2, -5.0..=5.0)?)
+        .initial_genome(Reals::from(vec![-1.2, 1.0])) // random by default
+        .restarts(local::Restarts::Random { times: 3 }) // then 3 runs from random points
+        .minimize()
+        .seed(1)
+        .build()?;
+    let outcome = Engine::new(nelder_mead, rosenbrock)
+        .stop_when(Stop::evaluations(10_000)) // a stop condition is still required
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Converged);
+    assert!(outcome.best_fitness().score().unwrap() < 1e-15);
+    Ok(())
+}
+```
+
 ### Ask / tell: evaluating outside the engine
 
 For fitness computed elsewhere (another process, async code).
@@ -877,6 +913,7 @@ every = 50
 | `Error::InvalidFitness` | A violation must be ≥ 0: use `constraint::at_most` and friends |
 | `Error::TellWithoutAsk` / `Error::FitnessCount` | One `tell` per `ask`, one fitness per asked genome, in order |
 | Best solution infeasible | Run longer, check the constraints, or add a feasible genome with `.initial_genomes(...)` |
+| Nelder-Mead converges to a local minimum, or crawls in many genes | `.restarts(local::Restarts::Random { times })`; above about 10 genes, CMA-ES first, then Nelder-Mead from its best (`.initial_genome(...)`) |
 | Hill climbing stops at a local optimum | `.restart(patience, kicks)`, `Acceptance::Tabu { tenure }` with several neighbors, or `Acceptance::Annealing` (initial temperature ≈ typical fitness differences, `cooling` ≈ 0.999) |
 | DE collapses far from the optimum | `de::Control::Dither { min_f: 0.5, max_f: 1.0, cr }`, `de::Strategy::Rand1`, or `CurrentToPBest` with an archive |
 | CMA-ES converged without restarts (`cmaes.converged()` says why) | `.restarts(cmaes::Restarts::Ipop)` or `Bipop`, or a larger `.initial_step(...)` or `.population_size(...)` |

@@ -15,6 +15,9 @@ const LEVELS = [0.12, 0.24, 0.36, 0.48, 0.6, 0.72, 0.84];
  * `problem.labels` names the axes and the field (`{ x, y, f }`: a function
  * of more than 2 variables is drawn as a slice or a projection), and
  * `problem.minima_label` the minima, when they aren't proven global.
+ * A local method's frames can add `state.simplex` (its vertices, drawn as a
+ * polygon: Nelder-Mead's triangle) and `state.ends` (where its runs before
+ * converged), and `problem.population_label` names the points (e.g. "simplex").
  */
 export default function ContourPlot({ trace, frame, dark, compact = false }) {
   const [hover, setHover] = useState(null);
@@ -30,6 +33,8 @@ export default function ContourPlot({ trace, frame, dark, compact = false }) {
   const labels = { x: "x₁", y: "x₂", f: "f", ...problem.labels };
   const population = frame.state?.population ?? [];
   const best = frame.state?.best ?? null;
+  const simplex = frame.state?.simplex ?? null;
+  const ends = frame.state?.ends ?? null;
   const palette = categorical(dark);
 
   // The landscape on a log scale, normalized to [0, 1].
@@ -63,7 +68,14 @@ export default function ContourPlot({ trace, frame, dark, compact = false }) {
 
   return (
     <div>
-      {compact ? null : <Legend className="mb-2" items={contourLegend({ best, minima: minima.length, palette, minimaLabel: problem.minima_label })} />}
+      {compact ? null : <Legend className="mb-2" items={contourLegend({
+            best,
+            minima: minima.length,
+            palette,
+            minimaLabel: problem.minima_label,
+            populationLabel: problem.population_label,
+            ends: ends !== null,
+          })} />}
       <PlotBox
         aspect={1}
         minHeight={compact ? 220 : 280}
@@ -132,6 +144,19 @@ export default function ContourPlot({ trace, frame, dark, compact = false }) {
                 {minima.map((m) => (
                   <circle key={`${m[0]},${m[1]}`} cx={x(m[0])} cy={y(m[1])} r={7} fill="none" className="stroke-base-content" strokeWidth={1.5} />
                 ))}
+                {(ends ?? []).map((p, k) => (
+                  <Marker key={`end${k}`} x={x(p[0])} y={y(p[1])} r={4.5} color={palette[2]} hollow />
+                ))}
+                {simplex && simplex.length > 1 ? (
+                  <polygon
+                    points={simplex.map((p) => `${x(p[0])},${y(p[1])}`).join(" ")}
+                    fill={palette[1]}
+                    fillOpacity={0.12}
+                    stroke={palette[1]}
+                    strokeWidth={1.5}
+                    strokeLinejoin="round"
+                  />
+                ) : null}
                 {points.map((q, k) => (
                   <Marker key={k} x={q.px} y={q.py} r={3.5} color={palette[1]} />
                 ))}
