@@ -77,21 +77,41 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # every examples/<name>/main.rs, which Cargo finds as the example <name>, printing what its
-      # output.txt has. The asynchronous example's numbers depend on the machine (its thread count
-      # and how long each evaluation takes): its output is compared with every number replaced by #.
+      # output.txt has. They are built once, then run as many at a time as the runner has cores:
+      # most are single-threaded, and the ones that use rayon give the same results on any number
+      # of threads. The asynchronous example's numbers depend on the machine (its thread count and
+      # how long each evaluation takes): its output is compared with every number replaced by #.
+      # Every example is checked, and the step fails at the end if any differs.
+      - run: cargo build --release --examples
       - run: |
           numbers() { sed -E 's/[0-9]+(\.[0-9]+)?/#/g' "$@"; }
-          for main in examples/*/main.rs; do
-            example=$(basename "$(dirname "$main")")
-            echo "::group::$example"
-            cargo run --release --example "$example" | tee output.actual
+          mkdir -p actual
+          examples=$(for main in examples/*/main.rs; do basename "$(dirname "$main")"; done)
+          # each example's output, errors, exit status and run time, in files of its own
+          echo "$examples" | xargs -P "$(nproc)" -I{} sh -c '
+            start=$(date +%s%N)
+            target/release/examples/{} > actual/{}.txt 2> actual/{}.err
+            echo $? > actual/{}.status
+            echo $(( ($(date +%s%N) - start) / 1000000 )) > actual/{}.ms'
+          failed=""
+          for example in $examples; do
+            echo "::group::$example ($(cat "actual/$example.ms") ms)"
+            cat "actual/$example.txt" "actual/$example.err"
             echo "::endgroup::"
-            if [ "$example" = asynchronous ]; then
-              diff <(numbers "examples/$example/output.txt") <(numbers output.actual)
+            if [ "$(cat "actual/$example.status")" != 0 ]; then
+              echo "::error::$example exited with status $(cat "actual/$example.status")"
+              failed="$failed $example"
+            elif [ "$example" = asynchronous ]; then
+              diff <(numbers "examples/$example/output.txt") <(numbers "actual/$example.txt") \
+                || failed="$failed $example"
             else
-              diff "examples/$example/output.txt" output.actual
+              diff "examples/$example/output.txt" "actual/$example.txt" || failed="$failed $example"
             fi
           done
+          if [ -n "$failed" ]; then
+            echo "::error::output differs from output.txt:$failed"
+            exit 1
+          fi
       # the GPU example needs a GPU to run: it's only compiled, and its output.txt is from a run on
       # a GPU
       - run: cargo check --manifest-path examples/gpu/Cargo.toml
