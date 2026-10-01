@@ -1266,3 +1266,123 @@ fn first_order_settings_are_checked() {
     );
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+const MMA: &str = r#"
+report = "off"
+[genome]
+type = "real"
+length = 100
+bounds = [0.01, 10.0]
+[fitness]
+builtin = "volume"
+gradient = true
+constraints = 1
+objectives = ["minimize"]
+workers = 1
+[algorithm]
+type = "mma"
+seed = 1
+[stop]
+evaluations = 1000
+"#;
+
+// a run file of `MMA` with these settings
+fn mma(settings: &str) -> String {
+    MMA.replace("type = \"mma\"", &format!("type = \"mma\"\n{settings}"))
+}
+
+// the built-in `volume`, the sum of c_j / x_j subject to sum(x) <= n, with its gradient and the
+// constraint's, to the closed-form minimum x_j = n sqrt(c_j) / sum(sqrt(c_k))
+#[test]
+fn mma_reads_the_gradient_and_the_constraints_of_a_program() {
+    let directory = directory("mma");
+    let run = |text: &str| untimed(run(&directory, "mma.toml", text, &[]).unwrap());
+    let result = run(MMA);
+    assert_eq!(result["stop_reason"], "converged");
+    assert_eq!(result["violation"], 0.0);
+    let roots: Vec<f64> = (0..100).map(|j| (1.0 + (j % 9) as f64).sqrt()).collect();
+    let total: f64 = roots.iter().sum();
+    for (gene, root) in result["genome"].as_array().unwrap().iter().zip(&roots) {
+        let exact = 100.0 * root / total;
+        assert!(
+            (gene.as_f64().unwrap() - exact).abs() < 1e-7 * exact,
+            "{result}"
+        );
+    }
+    // a program of the protocol, and the same run as the built-in
+    let command = MMA.replace(
+        "builtin = \"volume\"",
+        &format!("command = [{GENOXIDE:?}, \"fitness\", \"volume\", \"--gradient\"]"),
+    );
+    assert_eq!(run(&command), result);
+    // GCMMA, from the same start: the same minimum, in more evaluations
+    let gcmma = run(&mma("method = \"gcmma\""));
+    assert_eq!(gcmma["stop_reason"], "converged");
+    assert!(gcmma["evaluations"].as_u64() > result["evaluations"].as_u64());
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn mma_settings_and_constraints_are_checked() {
+    let directory = directory("mma-check");
+    let expect = |text: &str, message: &str| {
+        let error = check(&directory, text).unwrap_err();
+        assert!(error.contains(message), "{message}: {error}");
+    };
+    assert_eq!(
+        check(
+            &directory,
+            &mma(
+                "method = \"gcmma\"\nasymptote_initial = 0.3\nasymptote_decrease = 0.6\nasymptote_increase = 1.3\nmove_limit = 0.2\nconstraint_cost = 1e4\nkkt_tolerance = 1e-8\nstep_tolerance = 1e-9\nrestoration = false\nparallel_sums = true"
+            )
+        ),
+        Ok(())
+    );
+    expect(&mma("move_limit = 0.0"), "move_limit");
+    expect(&mma("method = \"sqp\""), "unknown variant");
+    expect(
+        &MMA.replace("type = \"real\"", "type = \"binary\"")
+            .replace("bounds = [0.01, 10.0]\n", ""),
+        "`mma` needs a real genome",
+    );
+    expect(
+        &MMA.replace("gradient = true\nconstraints = 1\n", ""),
+        "`mma` needs `fitness.gradient = true`",
+    );
+    expect(
+        &MMA.replace("gradient = true\n", ""),
+        "`fitness.constraints` needs `fitness.gradient = true`",
+    );
+    expect(
+        &MMA.replace("constraints = 1\n", ""),
+        "the built-in fitness `volume` writes 1 constraint",
+    );
+    expect(
+        &MMA.replace("builtin = \"volume\"", "builtin = \"sphere\""),
+        "the built-in fitness `sphere` writes 0 constraints",
+    );
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+// a program that writes the score and gradient only, where the constraint is expected too: an
+// error naming what's missing
+#[test]
+fn a_missing_constraint_is_an_error() {
+    let directory = directory("mma-missing");
+    let error = run(
+        &directory,
+        "mma.toml",
+        &MMA.replace(
+            "builtin = \"volume\"",
+            &format!("command = [{GENOXIDE:?}, \"fitness\", \"sphere\", \"--gradient\"]"),
+        ),
+        &[],
+    )
+    .unwrap_err();
+    assert!(error.contains("expected 202 numbers"), "{error}");
+    assert!(
+        error.contains("the constraint's value and its gradient (100)"),
+        "{error}"
+    );
+    std::fs::remove_dir_all(&directory).unwrap();
+}

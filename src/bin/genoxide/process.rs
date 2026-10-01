@@ -1,6 +1,7 @@
 //! Fitness programs: long-lived processes, one per worker, that read a genome per line on stdin
 //! and write its fitness per line on stdout.
 
+use genoxide::constraint::at_most;
 use genoxide::engine::{Extras, FitnessFunction, Provided};
 use genoxide::genome::{Bits, Integers, Order, Reals};
 use genoxide::multi::MultiFitnessFunction;
@@ -151,11 +152,14 @@ pub struct Pool {
     timeout: Option<Timeout>,
     // whether each answer has the gradient after the value
     gradient: bool,
+    // the inequality constraints whose values and Jacobian each answer has after the gradient
+    constraints: usize,
 }
 
 impl Pool {
     /// Starts `workers` copies of `command`, in `directory`, each answer awaited at most
-    /// `timeout`, with the gradient after the value if `gradient`.
+    /// `timeout`, with the gradient after the value if `gradient`, then the values and the
+    /// Jacobian of `constraints` inequality constraints.
     pub fn start(
         command: &[String],
         directory: &Path,
@@ -163,6 +167,7 @@ impl Pool {
         abort: Arc<AtomicBool>,
         timeout: Option<Timeout>,
         gradient: bool,
+        constraints: usize,
     ) -> Result<Self, String> {
         let (program, arguments) = command.split_first().ok_or("`fitness.command` is empty")?;
         // absolute: a relative program path joined to a relative directory would be resolved
@@ -222,6 +227,7 @@ impl Pool {
             abort,
             timeout,
             gradient,
+            constraints,
         })
     }
 
@@ -231,19 +237,19 @@ impl Pool {
     }
 
     // the objective values and the constraint violation of a genome, and with the gradient
-    // protocol its gradient into `gradient` (if it's wanted); NaN after a failure
+    // protocol its gradient and constraints into `extras` (what's wanted); NaN after a failure
     fn evaluate<G: Genes>(
         &self,
         genome: &G,
         values: &mut [f64],
-        gradient: Option<&mut [f64]>,
+        extras: Option<&mut Extras<'_>>,
     ) -> f64 {
         if self.abort.load(Ordering::Relaxed) && self.failure().is_some() {
             values.fill(f64::NAN);
             return 0.0;
         }
         let index = self.checkout();
-        let result = self.ask(index, genome, values, gradient);
+        let result = self.ask(index, genome, values, extras);
         self.checkin(index);
         match result {
             Ok(violation) => violation,
@@ -280,7 +286,7 @@ impl Pool {
         index: usize,
         genome: &G,
         values: &mut [f64],
-        gradient: Option<&mut [f64]>,
+        extras: Option<&mut Extras<'_>>,
     ) -> Result<f64, String> {
         let mut process = self.processes[index]
             .lock()
@@ -340,7 +346,13 @@ impl Pool {
             }
         };
         let parsed = if self.gradient {
-            parse_gradient(&process.line, genome.count(), values, gradient)
+            parse_gradient(
+                &process.line,
+                genome.count(),
+                self.constraints,
+                values,
+                extras,
+            )
         } else {
             parse(&process.line, values)
         };
@@ -414,38 +426,64 @@ pub fn parse(line: &str, values: &mut [f64]) -> Result<f64, String> {
     }
 }
 
-/// Parses an answer of the gradient protocol: the value, then a derivative per gene, into
-/// `values` (one value) and `gradient` if it's given. Returns the violation, 0.
+/// Parses an answer of the gradient protocol: the value, then a derivative per gene, then the
+/// values of `constraints` inequality constraints g(x) <= 0 and their Jacobian, a row of a
+/// derivative per gene for each, into `values` (one value) and the buffers of `extras` that are
+/// wanted. Returns the violation: the sum of the positive constraint values.
 pub fn parse_gradient(
     line: &str,
     genes: usize,
+    constraints: usize,
     values: &mut [f64],
-    gradient: Option<&mut [f64]>,
+    extras: Option<&mut Extras<'_>>,
 ) -> Result<f64, String> {
+    let mut extras = extras;
+    let (constraint_start, jacobian_start) = (1 + genes, 1 + genes + constraints);
+    let expected = jacobian_start + constraints * genes;
     let mut count = 0;
-    let mut gradient = gradient;
+    let mut violation = 0.0;
     for word in line.split_whitespace() {
         let number: f64 = word
             .parse()
             .map_err(|_| format!("`{word}` isn't a number"))?;
-        match count {
-            0 => values[0] = number,
-            k if k <= genes => {
-                if let Some(gradient) = gradient.as_deref_mut() {
-                    gradient[k - 1] = number;
-                }
+        let buffer = match count {
+            0 => {
+                values[0] = number;
+                None
             }
-            _ => {}
+            k if k < constraint_start => extras
+                .as_deref_mut()
+                .and_then(Extras::gradient)
+                .map(|gradient| (gradient, k - 1)),
+            k if k < jacobian_start => {
+                violation += at_most(number, 0.0);
+                extras
+                    .as_deref_mut()
+                    .and_then(Extras::inequalities)
+                    .map(|inequalities| (inequalities, k - constraint_start))
+            }
+            k if k < expected => extras
+                .as_deref_mut()
+                .and_then(Extras::constraint_jacobian)
+                .map(|jacobian| (jacobian, k - jacobian_start)),
+            _ => None,
+        };
+        if let Some((buffer, index)) = buffer {
+            buffer[index] = number;
         }
         count += 1;
     }
-    if count != genes + 1 {
+    if count != expected {
+        let constraints = match constraints {
+            0 => String::new(),
+            1 => format!(", the constraint's value and its gradient ({genes})"),
+            m => format!(", the {m} constraints' values and their Jacobian ({m} × {genes})"),
+        };
         return Err(format!(
-            "expected {} numbers (the value, then the gradient's {genes} components), got {count}",
-            genes + 1
+            "expected {expected} numbers (the value, its gradient ({genes}){constraints}), got {count}"
         ));
     }
-    Ok(0.0)
+    Ok(violation)
 }
 
 impl Pool {
@@ -517,18 +555,21 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
         (value[0], violation)
     }
 
-    // the gradient, with `fitness.gradient`
+    // the gradient, with `fitness.gradient`, and the constraints' values and Jacobian, with
+    // `fitness.constraints`
     fn provides(&self) -> Provided {
-        if self.0.gradient {
-            Provided::GRADIENT
-        } else {
-            Provided::NOTHING
+        match (self.0.gradient, self.0.constraints) {
+            (false, _) => Provided::NOTHING,
+            (true, 0) => Provided::GRADIENT,
+            (true, m) => Provided::GRADIENT
+                .with_inequalities(m)
+                .with_constraint_jacobian(),
         }
     }
 
     fn evaluate_with(&self, genome: &G, extras: &mut Extras<'_>) -> (f64, f64) {
         let mut value = [0.0];
-        let violation = self.0.evaluate(genome, &mut value, extras.gradient());
+        let violation = self.0.evaluate(genome, &mut value, Some(extras));
         (value[0], violation)
     }
 }
@@ -584,22 +625,60 @@ mod tests {
     fn gradient_answers_parse() {
         let (mut value, mut gradient) = ([0.0], [0.0; 2]);
         assert_eq!(
-            parse_gradient("1.5 -2 3e-1\n", 2, &mut value, Some(&mut gradient)),
+            parse_gradient(
+                "1.5 -2 3e-1\n",
+                2,
+                0,
+                &mut value,
+                Some(&mut Extras::with_gradient(&mut gradient))
+            ),
             Ok(0.0)
         );
         assert_eq!((value, gradient), ([1.5], [-2.0, 0.3]));
-        assert_eq!(parse_gradient("4 1 2", 2, &mut value, None), Ok(0.0));
+        assert_eq!(parse_gradient("4 1 2", 2, 0, &mut value, None), Ok(0.0));
         assert_eq!(value, [4.0]);
         assert!(
-            parse_gradient("1 2", 2, &mut value, None)
+            parse_gradient("1 2", 2, 0, &mut value, None)
                 .unwrap_err()
                 .contains("expected 3 numbers")
         );
         assert!(
-            parse_gradient("1 2 x", 2, &mut value, None)
+            parse_gradient("1 2 x", 2, 0, &mut value, None)
                 .unwrap_err()
                 .contains("`x` isn't a number")
         );
+    }
+
+    #[test]
+    fn answers_with_constraints_parse() {
+        // the value, the gradient (2), the values of 2 constraints, their Jacobian (2 × 2)
+        let line = "1.5 -2 0.5 0.25 -1 1 2 3 4";
+        let (mut value, mut gradient, mut g, mut jacobian) = ([0.0], [0.0; 2], [0.0; 2], [0.0; 4]);
+        let mut extras = Extras::new(Some(&mut gradient), Some(&mut g), Some(&mut jacobian));
+        assert_eq!(
+            parse_gradient(line, 2, 2, &mut value, Some(&mut extras)),
+            Ok(0.25)
+        );
+        assert_eq!(value, [1.5]);
+        assert_eq!(
+            (gradient, g, jacobian),
+            ([-2.0, 0.5], [0.25, -1.0], [1.0, 2.0, 3.0, 4.0])
+        );
+        // the values only, as a restoration step asks, or nothing
+        let mut g = [0.0; 2];
+        let mut extras = Extras::new(None, Some(&mut g), None);
+        assert_eq!(
+            parse_gradient(line, 2, 2, &mut value, Some(&mut extras)),
+            Ok(0.25)
+        );
+        assert_eq!(g, [0.25, -1.0]);
+        assert_eq!(parse_gradient(line, 2, 2, &mut value, None), Ok(0.25));
+        let error = parse_gradient("1 2 3 4", 2, 2, &mut value, None).unwrap_err();
+        assert!(error.contains("expected 9 numbers"), "{error}");
+        assert!(error.contains("Jacobian (2 × 2)"), "{error}");
+        let error = parse_gradient("1 2 3", 2, 1, &mut value, None).unwrap_err();
+        assert!(error.contains("expected 6 numbers"), "{error}");
+        assert!(error.contains("the constraint's value"), "{error}");
     }
 
     #[test]

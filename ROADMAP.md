@@ -222,7 +222,7 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [x] Linear algebra in the crate, the same bits on every platform and thread count ([#373](https://github.com/tachsin/genoxide/issues/373); batch A1)
 - [x] Gradients (supplied, or by finite differences evaluated as one batch), line searches, L-BFGS-B, in Python and the `genoxide` program (batch A2)
 - [x] For up to millions of variables, with O(n) memory and work per step: gradient descent, momentum, Nesterov, Adam and AdamW, with learning-rate schedules by `control` (`FirstOrder`; batch A3)
-- [x] MMA and GCMMA for many variables with few constraints, with the inequality constraints' values and Jacobian supplied through the engine (`Mma`, `Constrained`; batch A3)
+- [x] MMA and GCMMA for many variables with few constraints, with the inequality constraints' values and Jacobian supplied through the engine, in Python and the `genoxide` program (`Mma`, `Constrained`; batch A3)
 - [ ] Continuation in stages that keeps the optimizer's state (batch A3)
 
 ### 0.13: Bayesian optimization

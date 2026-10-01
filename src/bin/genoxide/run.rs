@@ -6,7 +6,7 @@ use crate::operators::{
     bit_flip, integer_mutation,
 };
 use crate::process::{Genes, Multi, Pool, Single, Timeout};
-use genoxide::algorithm::{Incremental, cmaes, local, pso};
+use genoxide::algorithm::{Incremental, cmaes, local, mma, pso};
 use genoxide::checkpoint;
 use genoxide::engine::asynchronous::MAX_WORKERS;
 use genoxide::genome::Representation;
@@ -55,6 +55,8 @@ struct Context {
     checkpoint: Option<(PathBuf, u64)>,
     // whether the fitness program writes the gradient after the value
     gradient: bool,
+    // the inequality constraints whose values and Jacobian it writes after the gradient
+    constraints: usize,
     // the genome and algorithm settings, as JSON: a checkpoint resumes only with the same
     settings: String,
     options: Options,
@@ -72,6 +74,14 @@ struct Saved<A> {
 pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
     let directory = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let gradient = run.fitness.gradient;
+    let constraints = run.fitness.constraints;
+    if constraints > 0 && !gradient {
+        return Err(
+            "`fitness.constraints` needs `fitness.gradient = true`: the program writes the \
+             constraints' values and Jacobian after the gradient"
+                .to_string(),
+        );
+    }
     let command = match (run.fitness.command, run.fitness.builtin) {
         (Some(command), None) if !command.is_empty() => command,
         (None, Some(name)) => {
@@ -87,7 +97,15 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
             if gradient && crate::builtin::gradient_of(&name).is_none() {
                 return Err(format!(
                     "`fitness.gradient`: the built-in fitness `{name}` has no gradient; sphere, \
-                     rastrigin, rosenbrock and ackley do"
+                     rastrigin, rosenbrock, ackley and volume do"
+                ));
+            }
+            let builtin = crate::builtin::constraints_of(&name);
+            if gradient && constraints != builtin {
+                return Err(format!(
+                    "`fitness.constraints`: the built-in fitness `{name}` writes {builtin} \
+                     constraint{} with its gradient",
+                    if builtin == 1 { "" } else { "s" }
                 ));
             }
             let program = std::env::current_exe()
@@ -206,6 +224,7 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
             .checkpoint
             .map(|checkpoint| (directory.join(checkpoint.path), checkpoint.every)),
         gradient,
+        constraints,
         directory,
         options,
     };
@@ -478,6 +497,64 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             }
             generational(setting(builder.build())?, context)
         }
+        config::Algorithm::Mma {
+            seed,
+            method,
+            asymptote_initial,
+            asymptote_decrease,
+            asymptote_increase,
+            move_limit,
+            constraint_cost,
+            kkt_tolerance,
+            step_tolerance,
+            restoration,
+            parallel_sums,
+        } => {
+            if !context.gradient {
+                return Err(
+                    "`mma` needs `fitness.gradient = true`: it uses the gradient, and the                      constraints' Jacobian with `fitness.constraints`"
+                        .to_string(),
+                );
+            }
+            let mut builder = Mma::builder(real).objective(context.single_objective()?);
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            if let Some(method) = method {
+                builder = builder.method(match method {
+                    config::MmaMethod::Mma => mma::Method::Mma,
+                    config::MmaMethod::Gcmma => mma::Method::Gcmma,
+                });
+            }
+            if let Some(fraction) = asymptote_initial {
+                builder = builder.asymptote_initial(fraction);
+            }
+            if let Some(factor) = asymptote_decrease {
+                builder = builder.asymptote_decrease(factor);
+            }
+            if let Some(factor) = asymptote_increase {
+                builder = builder.asymptote_increase(factor);
+            }
+            if let Some(fraction) = move_limit {
+                builder = builder.move_limit(fraction);
+            }
+            if let Some(cost) = constraint_cost {
+                builder = builder.constraint_cost(cost);
+            }
+            if let Some(tolerance) = kkt_tolerance {
+                builder = builder.kkt_tolerance(tolerance);
+            }
+            if let Some(tolerance) = step_tolerance {
+                builder = builder.step_tolerance(tolerance);
+            }
+            if let Some(restoration) = restoration {
+                builder = builder.restoration(restoration);
+            }
+            if let Some(parallel) = parallel_sums {
+                builder = builder.parallel_sums(parallel);
+            }
+            generational(setting(builder.build())?, context)
+        }
         config::Algorithm::Lbfgsb {
             seed,
             memory,
@@ -701,6 +778,7 @@ where
             Err("`nelder-mead` needs a real genome".to_string())
         }
         config::Algorithm::Lbfgsb { .. } => Err("`lbfgsb` needs a real genome".to_string()),
+        config::Algorithm::Mma { .. } => Err("`mma` needs a real genome".to_string()),
         config::Algorithm::FirstOrder { .. } => {
             Err("`first-order` needs a real genome".to_string())
         }
@@ -892,6 +970,7 @@ impl Context {
             abort.clone(),
             self.timeout,
             self.gradient,
+            self.constraints,
         )?;
         Ok((pool, abort))
     }
