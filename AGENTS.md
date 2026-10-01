@@ -49,6 +49,7 @@ fn main() -> genoxide::Result<()> {
 | Smooth or not, a few genes, no gradient | `NelderMead` |
 | Multimodal, rotated or badly conditioned, up to a few hundred genes | `Cmaes` (with `Restarts::Ipop`), `De`; then `Lbfgsb` from the best to polish it |
 | Smooth, gradients of the score and of each constraint, very many genes and few inequality constraints | `Mma` (`Method::Gcmma` to converge from any start) |
+| Smooth, solved best in stages (a smoothing, sharpness or penalty changed step by step) | `Continuation` around `FirstOrder`, `Lbfgsb`, `Mma`, `NelderMead` or `Cmaes` ([template](#continuation-stages-of-one-problem-the-state-kept)) |
 | Constrained beyond the box, without gradients | `De` or `Ga` with `(score, violation)` (Deb's rules) |
 
 Any selection fits any representation; usually `Tournament` of size 2 to 5. For trees, a selection against bloat (growth without better fitness): `DoubleTournament::new(7, 1.4)?`, `LexicographicTournament::new(7)?` (ties in fitness to the smaller), or `Tarpeian::new(select, rate)?`; size is `genome.len()`.
@@ -1032,6 +1033,67 @@ fn main() -> genoxide::Result<()> {
     let roots: f64 = c.iter().map(|c| c.sqrt()).sum();
     let multiplier = engine.algorithm().multipliers()[0]; // (Σ √cₖ / n)²
     assert!((multiplier - (roots / n as f64).powi(2)).abs() < 1e-6);
+    Ok(())
+}
+```
+
+### Continuation: stages of one problem, the state kept
+
+`Continuation` runs a local method through stages of one problem: a smooth version first, then sharper ones (a smoothing that shrinks, a p-norm's p that grows, a penalty weight raised), each from the last stage's result. A stage ends when the method has converged (`is_finished`), or after `.generations(n)`; then the `on_stage` closure sets the next stage's parameters in state shared with the fitness function (an `Arc<AtomicU64>` of an `f64`'s bits), the method's point is evaluated again on the changed function, and it goes on with its state. The run stops as `StopReason::Converged` after the last stage, not at the first stage's convergence.
+
+| `.keep(...)` | Kept between stages |
+|---|---|
+| `continuation::Keep::State` (default) | `FirstOrder`: the velocity, Adam's averages and step count; `Mma`: the asymptotes and the iterates they're updated from; `NelderMead`: the simplex; `Cmaes`: the distribution; `Lbfgsb`: nothing (its pairs describe the old function), unless built with `.keep_pairs(true)` |
+| `continuation::Keep::Point` | only the point: the state starts again as at a run's start |
+
+- `on_stage(|stage, algorithm| ...)` is called with the current stage when a run starts (the first, or the one a checkpoint resumes in) and with each next stage as it begins: set everything from the index alone. It gets the method mutably, e.g. for a learning rate per stage.
+- `.on_stage_finished(|stage, algorithm| ...)`, and `continuation.stages()` after the run: each stage's `index()`, `generations()`, `evaluations()`, `best()` (by its own function) and `end()` (`StageEnd::Finished` or `Generations`).
+- Checkpoints hold the stage, not the closures: after `checkpoint::load_file`, `set_on_stage(...)` (and `set_on_stage_finished`); a run without one fails with `Error::MissingSetting { setting: "on_stage" }`.
+- Python: `gx.Continuation(method, stages=4, on_stage=lambda index: ..., generations=None, keep="state", on_stage_finished=None)` around `FirstOrder`, `Lbfgsb` or `Mma`; `result.stages`. See `examples/continuation`.
+
+```rust
+use genoxide::prelude::*;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+fn main() -> genoxide::Result<()> {
+    // Σ √((xᵢ − cᵢ)² + ε²), a smoothed Σ |xᵢ − cᵢ|, sharper as ε shrinks
+    const EPSILON: [f64; 3] = [1.0, 0.1, 0.01];
+    let c = [0.3, -1.2, 2.0];
+    let epsilon = Arc::new(AtomicU64::new(EPSILON[0].to_bits()));
+    let shared = Arc::clone(&epsilon);
+    let smoothed = Differentiable(move |x: &Reals, gradient: &mut [f64]| {
+        let e = f64::from_bits(shared.load(Ordering::Relaxed));
+        let mut value = 0.0;
+        for i in 0..x.len() {
+            let root = ((x[i] - c[i]) * (x[i] - c[i]) + e * e).sqrt();
+            gradient[i] = (x[i] - c[i]) / root;
+            value += root;
+        }
+        value
+    });
+    let adam = FirstOrder::builder(Real::uniform(3, -5.0..=5.0)?)
+        .step(first_order::Step::adam(0.01))
+        .gradient_tolerance(1e-9)
+        .minimize()
+        .seed(1)
+        .build()?;
+    let continuation = Continuation::builder(adam)
+        .stages(EPSILON.len())
+        .on_stage(move |stage, _| {
+            epsilon.store(EPSILON[stage].to_bits(), Ordering::Relaxed);
+            Ok(())
+        })
+        .build()?;
+    let mut engine = Engine::new(continuation, smoothed).stop_when(Stop::generations(100_000));
+    let outcome = engine.run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Converged);
+    for stage in engine.algorithm().stages() {
+        println!("stage {}: {} steps", stage.index(), stage.generations());
+    }
+    for (x, c) in outcome.best_genome().iter().zip(c) {
+        assert!((x - c).abs() < 1e-6);
+    }
     Ok(())
 }
 ```

@@ -28,6 +28,7 @@
 //! ```
 
 pub mod cmaes;
+pub mod continuation;
 pub mod de;
 pub mod es;
 pub mod first_order;
@@ -44,6 +45,7 @@ pub mod pso;
 pub mod steady;
 
 pub use cmaes::{Cmaes, CmaesBuilder, Covariance, Restarts};
+pub use continuation::{Continuation, ContinuationBuilder, Continue, Keep};
 pub use de::{De, DeBuilder};
 pub use es::{Es, EsBuilder};
 pub use first_order::{FirstOrder, FirstOrderBuilder};

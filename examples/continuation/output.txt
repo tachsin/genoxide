@@ -1,0 +1,13 @@
+A tilted Rastrigin function in 10 dimensions, Σ (xᵢ − aᵢ)² + 10 (1 − cos 2πxᵢ), from xᵢ = -3
+L-BFGS-B through 6 stages of the function smoothed by a Gaussian of σ, each from the last
+ stage     σ  rounds  evaluations  value of the stage  distance to the global minimum
+     1  0.60       7            8      103.6083820481                         3.8e-1
+     2  0.40       6            7       98.0869311788                         4.1e-2
+     3  0.30       5            6       84.7785592764                         9.6e-3
+     4  0.20       4            5       55.8118222263                         2.4e-3
+     5  0.10       4            5       18.8330678713                         4.4e-4
+     6  0.00       4            5        0.8208415338                        2.7e-15
+converged after 30 rounds and 36 evaluations: f = 0.82084153378296, within 2.7e-15 of the global minimum
+the global minimum, gene by gene by bisection: f* = 0.82084153378296
+σ = 0 from the start: 5 rounds and 6 evaluations, trapped at f = 146.38192099, 145.56107945 above f*, 6.0e0 from the global minimum
+the stages with L-BFGS-B's curvature pairs kept: 50 rounds and 56 evaluations, within 4.4e-9

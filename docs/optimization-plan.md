@@ -13,8 +13,11 @@ methods (`FirstOrder`: gradient descent, momentum, Nesterov, Adam and AdamW, wit
 test and the benchmarks of 2.13), and MMA and GCMMA (`Mma`) with the inequality constraints'
 values and Jacobian as extras (`Provided::inequalities`, `constraint_jacobian`,
 `constraint::Constrained`) and the restoration step of open question 6 for MMA, in Python and
-the `genoxide` program, with its example; the rest of A3 (continuation) and the later batches
-aren't yet. genoxide has
+the `genoxide` program, with its example; and continuation (`Continuation` and the `Continue`
+trait of 2.12, for `FirstOrder`, `Mma`, `Lbfgsb`, `NelderMead` and `Cmaes`), in Python (around the
+three gradient methods) but not the `genoxide` program, whose configuration has no form for a
+stage's closure (a fitness program would have to be told its stage), with its example. Batch A3 is
+done; the later batches aren't yet. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
 optimization library: local derivative-free methods, gradient-based methods, constrained
@@ -798,6 +801,26 @@ from scratch.
   `stage_finished` callback and the outcome, so a run's stages can be compared and plotted.
 - **Checkpoints** hold the stage index and the wrapped algorithm's state, so a resumed run
   continues in its stage.
+- **As implemented (batch A3).** The closure, `on_stage(stage, &mut algorithm)`, sets everything a
+  stage needs from its index alone: it's called at the start of every run (`prepare`) with the
+  current stage, and as each next stage begins. It's `Fn + Send + Sync + 'static`, held in an
+  `Arc`, so a continuation is `Clone` and `Send` like the algorithms; the closures aren't
+  serialized, like an engine's observers and controls, and a loaded continuation gets them again
+  (`set_on_stage`), or its run fails at the start with `MissingSetting`. Calling the closure at
+  each run's start is what lets a resumed run (or one continued by another engine) set the
+  parameters of the stage it's in. The budget is one number of generations for every stage
+  (`.generations(n)`); `Lbfgsb`'s pairs are kept under `Keep::State` only when it's built with
+  `.keep_pairs(true)`; `next_stage` drops a restart that was due, so a stage goes on from the
+  point. Each stage's record (generations, evaluations, best fitness, why it ended) has its room
+  from the start: nothing is allocated per step (`tests/allocations.rs`, `FirstOrder` and `Mma`
+  at 10⁶ genes, stage transitions included). The `continuation` example isn't the p-norm one
+  planned below: a p-norm of convex distances is convex at every p, so p = 16 from a cold start
+  needs no stages, and measured cheaper than them. It is graduated smoothing instead, on a
+  Rastrigin function tilted off its lattice in 10 dimensions, Σ (xᵢ − aᵢ)² + 10 (1 − cos 2πxᵢ),
+  through its closed-form Gaussian smoothings for σ = 0.6 (convex) to 0 with L-BFGS-B: 36
+  evaluations to the global minimum, computed gene by gene by bisection (within 2.7e-15), where
+  L-BFGS-B on the function alone from the same start stops in the nearest well, 145.56 above it
+  (6 evaluations), and the stages with the pairs kept take 56 evaluations, within 4.4e-9.
 
 ### 2.13 Scale: millions of variables
 
@@ -912,7 +935,7 @@ own on the site (e.g. `local`, `bayesian`), to settle with the site.
 |---|---|
 | A1 | `nelder_mead`: Rosenbrock in 2-D from (−1.2, 1), the simplex drawn on the contour; `nelder_mead_himmelblau`: restarts find all four minima |
 | A2 | `lbfgsb`: Rosenbrock in 100-D, analytic gradient against forward differences (evaluations to 1e-10); `lbfgsb_bounds`: a problem whose optimum is on the bound; `polish`: SHADE on Rastrigin 10-D, then L-BFGS-B from its best to the exact minimum |
-| A3 | `adam`: a smooth fit of many parameters with a learning-rate schedule by `control`, against L-BFGS-B; `mma`: minimize Σ cⱼ / xⱼ subject to Σ xⱼ ≤ V over 10⁶ variables in a box, whose optimum xⱼ ∝ √cⱼ is known in closed form; `continuation`: a smoothed max (a p-norm) minimized for p = 2, 4, 8, 16, each stage from the last, to the true minimax optimum |
+| A3 | `adam`: a smooth fit of many parameters with a learning-rate schedule by `control`, against L-BFGS-B; `mma`: minimize Σ cⱼ / xⱼ subject to Σ xⱼ ≤ V over 10⁶ variables in a box, whose optimum xⱼ ∝ √cⱼ is known in closed form; `continuation`: a tilted Rastrigin function minimized through its Gaussian smoothings, σ from convex to 0, each stage from the last, to the global minimum, where a cold start stays in the nearest well (planned as a p-norm smoothing of a maximum; see 2.12) |
 | B | `bayesian_optimization`: Branin in 2-D, posterior and acquisition drawn per step, to f* + 1e-4 with a final L-BFGS-B polish on the GP mean then one evaluation; `bo_hartmann6`: batch BO (q = 4) with `parallel(true)`; `bo_asynchronous`: `AsyncEngine` with evaluations of random duration; `bo_constrained`: Gramacy et al.'s toy problem |
 | C | `sqp`: CEC 2006 g07 (or g09) from a random start to the report's f*; `sqp_welded_beam`; `augmented_lagrangian`: a problem with many constraints (g16 or g19); an ε-feasibility comparison with SHADE on the same problem |
 | D1 | `conjugate_gradient` on a large quadratic or Rosenbrock 1000-D; `trust_region` on an MGH problem with a Hessian; `levenberg_marquardt`: fitting a model to data (an MGH problem such as Osborne 2, or Bard); `dual_numbers` (if the feature lands) |

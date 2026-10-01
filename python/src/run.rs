@@ -3,9 +3,9 @@
 use crate::checkpoint::Checkpoints;
 use crate::config;
 use crate::control::{
-    CmaesSettings, DeSettings, EsSettings, FirstOrderSettings, GaSettings, IslandsSettings,
-    LbfgsbSettings, LocalSearchSettings, MmaSettings, NeatSettings, NelderMeadSettings,
-    OpenEsSettings, PsoSettings, Running, Settings, Slot,
+    CmaesSettings, ContinuationSettings, DeSettings, EsSettings, FirstOrderSettings, GaSettings,
+    IslandsSettings, LbfgsbSettings, LocalSearchSettings, MmaSettings, NeatSettings,
+    NelderMeadSettings, OpenEsSettings, PsoSettings, Running, Settings, Slot,
 };
 use crate::errors::{genome_setting, setting};
 use crate::fitness::{Gradient, Multi, Native, Shared, Single};
@@ -19,6 +19,7 @@ use crate::snapshot::{Snapshot, objective_values};
 use crate::tasks::Balance;
 use crate::tree_problems::TreeFitness;
 use crate::trees::tree_algorithm;
+use genoxide::algorithm::continuation::{Keep, Stage, StageEnd};
 use genoxide::algorithm::islands::{Migrate, Topology};
 use genoxide::algorithm::nelder_mead::Coefficients;
 use genoxide::algorithm::{GaBuilder, Islands, Reevaluate, cmaes, es, mma, pso};
@@ -37,7 +38,7 @@ use pyo3::types::PyDict;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 type Result<T> = std::result::Result<T, String>;
@@ -57,9 +58,11 @@ type Result<T> = std::result::Result<T, String>;
 /// settings. With `combined_gradient` and `constraints` m > 0, `fitness` returns
 /// `(value, gradient, g, jacobian)`, the values of m inequality constraints `gᵢ(x) <= 0` and their
 /// Jacobian after the gradient, numpy arrays of float64 the Python package makes, for MMA.
-/// Returns the result as a dict.
+/// For a continuation, `on_stage` is called with the index of each stage as it starts (and of the
+/// current one when the run starts), and `on_stage_finished`, if any, with a dict of what each
+/// stage did and its last point. Returns the result as a dict.
 #[pyfunction]
-#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None, control = None, checkpoint = None, checkpoint_every = None, resume = None, gradient = None, combined_gradient = false, constraints = 0))]
+#[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None, control = None, checkpoint = None, checkpoint_every = None, resume = None, gradient = None, combined_gradient = false, constraints = 0, on_stage = None, on_stage_finished = None))]
 #[allow(clippy::too_many_arguments)]
 pub fn run<'py>(
     py: Python<'py>,
@@ -76,6 +79,8 @@ pub fn run<'py>(
     gradient: Option<Py<PyAny>>,
     combined_gradient: bool,
     constraints: usize,
+    on_stage: Option<Py<PyAny>>,
+    on_stage_finished: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     // the error names the setting, e.g. `stop.generations`
     let mut json = serde_json::Deserializer::from_str(config);
@@ -135,6 +140,8 @@ pub fn run<'py>(
         tree,
         control,
         checkpoints,
+        on_stage,
+        on_stage_finished,
     };
     let result = match run.genome {
         config::Genome::Binary { length } => with_operators(
@@ -358,6 +365,9 @@ pub(crate) struct Context {
     // called with the running algorithm once per generation
     control: Option<Py<PyAny>>,
     checkpoints: Checkpoints,
+    // a continuation's callbacks: with each stage's index, and with each finished stage
+    on_stage: Option<Py<PyAny>>,
+    on_stage_finished: Option<Py<PyAny>>,
 }
 
 impl Context {
@@ -885,6 +895,62 @@ fn real_algorithm<'py>(
             }))?;
             generational(py, nelder_mead, NelderMeadSettings, context)
         }
+        algorithm @ (config::Algorithm::FirstOrder { .. }
+        | config::Algorithm::Mma { .. }
+        | config::Algorithm::Lbfgsb { .. }) => match gradient_method(real, algorithm, context)? {
+            GradientMethod::FirstOrder(first_order) => {
+                generational(py, first_order, FirstOrderSettings, context)
+            }
+            GradientMethod::Lbfgsb(lbfgsb) => generational(py, lbfgsb, LbfgsbSettings, context),
+            GradientMethod::Mma(mma) => generational(py, mma, MmaSettings, context),
+        },
+        config::Algorithm::Continuation {
+            algorithm,
+            stages,
+            generations,
+            keep,
+        } => {
+            let stages = Stages {
+                count: stages,
+                generations,
+                keep,
+            };
+            match gradient_method(real, *algorithm, context)? {
+                GradientMethod::FirstOrder(first_order) => {
+                    continuation(py, first_order, FirstOrderSettings, stages, context)
+                }
+                GradientMethod::Lbfgsb(lbfgsb) => {
+                    continuation(py, lbfgsb, LbfgsbSettings, stages, context)
+                }
+                GradientMethod::Mma(mma) => continuation(py, mma, MmaSettings, stages, context),
+            }
+        }
+        algorithm => with_operators(
+            py,
+            Ok(real),
+            algorithm,
+            context,
+            RealCrossover::new,
+            RealMutation::new,
+        ),
+    }
+}
+
+// a gradient method, built from its settings: once per run, its size doesn't matter
+#[allow(clippy::large_enum_variant)]
+enum GradientMethod {
+    FirstOrder(FirstOrder),
+    Lbfgsb(Lbfgsb),
+    Mma(Mma),
+}
+
+// the gradient method that `algorithm` describes: FirstOrder, Lbfgsb or Mma
+fn gradient_method(
+    real: Real,
+    algorithm: config::Algorithm,
+    context: &Context,
+) -> std::result::Result<GradientMethod, Failure> {
+    match algorithm {
         config::Algorithm::FirstOrder {
             step,
             gradients,
@@ -922,7 +988,7 @@ fn real_algorithm<'py>(
                 },
                 error => error,
             }))?;
-            generational(py, first_order, FirstOrderSettings, context)
+            Ok(GradientMethod::FirstOrder(first_order))
         }
         config::Algorithm::Mma {
             method,
@@ -986,7 +1052,7 @@ fn real_algorithm<'py>(
                 },
                 error => error,
             }))?;
-            generational(py, mma, MmaSettings, context)
+            Ok(GradientMethod::Mma(mma))
         }
         config::Algorithm::Lbfgsb {
             memory,
@@ -996,6 +1062,7 @@ fn real_algorithm<'py>(
             function_tolerance,
             max_line_search,
             restarts,
+            keep_pairs,
             initial_genome,
             seed,
         } => {
@@ -1016,6 +1083,9 @@ fn real_algorithm<'py>(
             if let Some(times) = restarts {
                 builder = builder.restarts(local::Restarts::Random { times });
             }
+            if let Some(keep) = keep_pairs {
+                builder = builder.keep_pairs(keep);
+            }
             if let Some(genome) = initial_genome {
                 builder = builder.initial_genome(Reals::from(genome));
             }
@@ -1030,15 +1100,12 @@ fn real_algorithm<'py>(
                 },
                 error => error,
             }))?;
-            generational(py, lbfgsb, LbfgsbSettings, context)
+            Ok(GradientMethod::Lbfgsb(lbfgsb))
         }
-        algorithm => with_operators(
-            py,
-            Ok(real),
-            algorithm,
-            context,
-            RealCrossover::new,
-            RealMutation::new,
+        _ => Err(
+            "Continuation wraps a gradient method: FirstOrder, Lbfgsb or Mma"
+                .to_string()
+                .into(),
         ),
     }
 }
@@ -1218,6 +1285,9 @@ where
         }
         config::Algorithm::Lbfgsb { .. } => Err("Lbfgsb needs a Real genome".to_string().into()),
         config::Algorithm::Mma { .. } => Err("Mma needs a Real genome".to_string().into()),
+        config::Algorithm::Continuation { .. } => {
+            Err("Continuation needs a Real genome".to_string().into())
+        }
         config::Algorithm::FirstOrder { .. } => {
             Err("FirstOrder needs a Real genome".to_string().into())
         }
@@ -1536,8 +1606,25 @@ where
     A::Genome: PyGenome,
     S: Settings<A>,
 {
-    let stop = context.stop(true)?;
     let algorithm = context.checkpoints.resume(algorithm)?;
+    run_single(py, algorithm, settings, context, |_, _| Ok(()))
+}
+
+// runs a single-objective algorithm as `generational` does, the checkpoint already resumed;
+// `finish` adds what's particular to the algorithm to the result
+fn run_single<'py, A, S>(
+    py: Python<'py>,
+    algorithm: A,
+    settings: S,
+    context: &Context,
+    finish: impl FnOnce(&A, &Bound<'py, PyDict>) -> PyResult<()>,
+) -> Returns<'py>
+where
+    A: Algorithm + Reevaluate + Clone + Send + Serialize + DeserializeOwned + 'static,
+    A::Genome: PyGenome,
+    S: Settings<A>,
+{
+    let stop = context.stop(true)?;
     let shared = &context.shared;
     let cx = shared.context();
     let parallel = context.parallel;
@@ -1608,8 +1695,10 @@ where
         if let Some((path, every)) = &context.checkpoints.save {
             engine = engine.checkpoint_every(*every, |algorithm| save(context, algorithm, path));
         }
-        engine.run()
+        let outcome = engine.run();
+        (outcome, engine.into_algorithm())
     });
+    let (outcome, algorithm) = outcome;
     if let Some(error) = shared.take_error() {
         return Err(error.into());
     }
@@ -1625,7 +1714,132 @@ where
     result.set_item("evaluations", outcome.evaluations())?;
     result.set_item("seconds", outcome.elapsed().as_secs_f64())?;
     result.set_item("stop_reason", stop_reason(outcome.stop_reason()))?;
+    finish(&algorithm, &result)?;
     Ok(result)
+}
+
+// the stages of a continuation, from its settings
+struct Stages {
+    count: usize,
+    generations: Option<u64>,
+    keep: Option<config::Keep>,
+}
+
+// the exception of a continuation's callback, which stops the run and is raised after it
+type CallbackError = Arc<Mutex<Option<PyErr>>>;
+
+fn failed(error: &CallbackError) -> MutexGuard<'_, Option<PyErr>> {
+    error.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+// what a stage did, as the dict the Python package makes a `Stage` of
+fn stage_dict<'py>(py: Python<'py>, stage: &Stage) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    dict.set_item("index", stage.index())?;
+    dict.set_item("generations", stage.generations())?;
+    dict.set_item("evaluations", stage.evaluations())?;
+    dict.set_item("best_fitness", stage.best().score())?;
+    let end = match stage.end() {
+        StageEnd::Finished => "finished",
+        StageEnd::Generations => "generations",
+        _ => "other",
+    };
+    dict.set_item("end", end)?;
+    Ok(dict)
+}
+
+// runs a gradient method through the stages of a continuation, with the Python callbacks: as
+// `generational`, a continuation resumed from a checkpoint given its callbacks again; the result
+// has the stages
+fn continuation<'py, A, S>(
+    py: Python<'py>,
+    algorithm: A,
+    settings: S,
+    stages: Stages,
+    context: &Context,
+) -> Returns<'py>
+where
+    A: Continue<Genome = Reals> + Clone + Send + Sync + Serialize + DeserializeOwned + 'static,
+    S: Settings<A>,
+{
+    let on_stage = context
+        .on_stage
+        .as_ref()
+        .ok_or_else(|| "a Continuation needs on_stage".to_string())?
+        .clone_ref(py);
+    let error: CallbackError = Arc::default();
+    let stage_error = Arc::clone(&error);
+    let mut builder = Continuation::builder(algorithm)
+        .stages(stages.count)
+        .on_stage(move |stage, _| {
+            // an exception of on_stage_finished stops the run here, before the next stage
+            if failed(&stage_error).is_some() {
+                return Err(callback_failed("on_stage_finished"));
+            }
+            Python::attach(|py| match on_stage.bind(py).call1((stage,)) {
+                Ok(_) => Ok(()),
+                Err(exception) => {
+                    *failed(&stage_error) = Some(exception);
+                    Err(callback_failed("on_stage"))
+                }
+            })
+        });
+    if let Some(generations) = stages.generations {
+        builder = builder.generations(generations);
+    }
+    if let Some(keep) = stages.keep {
+        builder = builder.keep(match keep {
+            config::Keep::State => Keep::State,
+            config::Keep::Point => Keep::Point,
+        });
+    }
+    if let Some(callback) = &context.on_stage_finished {
+        let (callback, finished_error) = (callback.clone_ref(py), Arc::clone(&error));
+        builder = builder.on_stage_finished(move |stage, algorithm: &A| {
+            if failed(&finished_error).is_some() {
+                return;
+            }
+            Python::attach(|py| {
+                let called = stage_dict(py, stage).and_then(|dict| {
+                    let point = PyArray1::from_slice(py, algorithm.population()[0].genome());
+                    callback.bind(py).call1((dict, point))
+                });
+                if let Err(exception) = called {
+                    *failed(&finished_error) = Some(exception);
+                }
+            });
+        });
+    }
+    let built = setting(builder.build())?;
+    let mut resumed = context.checkpoints.resume(built.clone())?;
+    resumed.set_closures_of(&built);
+    let result = run_single(
+        py,
+        resumed,
+        ContinuationSettings(settings),
+        context,
+        |continuation, result| {
+            let stages = continuation
+                .stages()
+                .iter()
+                .map(|stage| stage_dict(py, stage))
+                .collect::<PyResult<Vec<_>>>()?;
+            result.set_item("stages", stages)
+        },
+    );
+    // the callbacks' exception, raised whatever the run returned
+    if let Some(exception) = failed(&error).take() {
+        return Err(exception.into());
+    }
+    result
+}
+
+// the error that stops an engine after a callback's exception, which the run raises instead
+fn callback_failed(callback: &'static str) -> genoxide::Error {
+    genoxide::Error::InvalidSetting {
+        setting: callback,
+        reason: format!("the {callback} callback raised an exception"),
+    }
 }
 
 // runs a multi-objective algorithm, detached from Python like `generational`

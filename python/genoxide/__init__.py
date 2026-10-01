@@ -137,6 +137,7 @@ __all__ = [
     "FirstOrder",
     "Lbfgsb",
     "Mma",
+    "Continuation",
     "Islands",
     "Nsga2",
     "Nsga3",
@@ -146,6 +147,7 @@ __all__ = [
     "das_dennis",
     # results and progress
     "Result",
+    "Stage",
     "MultiResult",
     "Progress",
     "MultiProgress",
@@ -938,6 +940,25 @@ Decomposition = Union[Tchebycheff, Pbi]
 # --- results -------------------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class Stage:
+    """What a finished stage of a :class:`Continuation` did."""
+
+    index: int
+    """The stage's index, from 0."""
+    generations: int
+    """The generations of the wrapped method in the stage, its iterations; the re-evaluation that
+    starts a stage isn't one."""
+    evaluations: int
+    """The evaluations of the stage, the re-evaluation that starts it included."""
+    best_fitness: float | None
+    """The best score at the end of the stage, by the stage's fitness function; None if it has
+    no valid solution."""
+    end: str
+    """Why the stage ended: "finished", the method converged; or "generations", the stage's
+    budget ran out."""
+
+
 @dataclass(frozen=True, eq=False)
 class Result:
     """The result of a single-objective run."""
@@ -964,11 +985,14 @@ class Result:
     - "converged": the algorithm converged with nothing more to do, e.g. a :class:`NelderMead`
       whose simplex shrank within its tolerance, an :class:`Lbfgsb` or :class:`FirstOrder` at a
       minimum, with no restart
-      left, or a :class:`Cmaes` with ``restarts="stop"`` whose run met a stop criterion;
+      left, a :class:`Cmaes` with ``restarts="stop"`` whose run met a stop criterion, or a
+      :class:`Continuation` after its last stage;
     - "stalled": nothing new to evaluate for 10,000 generations in a row (e.g. every child was a
       copy of a parent), while only ``target`` or ``evaluations`` could stop the run;
     - "other": a reason that the stop conditions of the package don't produce.
     """
+    stages: tuple[Stage, ...] = ()
+    """For a :class:`Continuation`, what each finished stage did, in order; empty otherwise."""
 
 
 @dataclass(frozen=True, eq=False)
@@ -2175,7 +2199,7 @@ class _Algorithm:
         }
         # NaN and infinity aren't JSON: the settings are finite, or an error names them
         description = json.dumps(run, default=_json_number, allow_nan=False)
-        return _genoxide.run(
+        result = _genoxide.run(
             description,
             fitness,
             bool(batch),
@@ -2187,7 +2211,15 @@ class _Algorithm:
             gradient=gradient,
             combined_gradient=combined_gradient,
             constraints=constraints,
+            **self._stage_callbacks(),
         )
+        if "stages" in result:
+            result["stages"] = tuple(Stage(**stage) for stage in result["stages"])
+        return result
+
+    def _stage_callbacks(self) -> dict[str, Any]:
+        """A continuation's callbacks, for ``_genoxide.run``: none for other algorithms."""
+        return {}
 
 
 class _Single(_Algorithm):
@@ -3570,8 +3602,61 @@ class _GradientMethod(_SingleObjective):
             As :meth:`Ga.run`; and if ``gradient`` isn't callable, True or None, or a function
             with ``gradient=True`` doesn't return a pair.
         """
+        return self._run_gradient(
+            fitness,
+            gradient=gradient,
+            constraints=0,
+            generations=generations,
+            evaluations=evaluations,
+            target=target,
+            time=time,
+            stagnation=stagnation,
+            batch=batch,
+            parallel=parallel,
+            on_generation=on_generation,
+            control=control,
+            checkpoint=checkpoint,
+            checkpoint_every=checkpoint_every,
+            resume=resume,
+        )
+
+    def _run_gradient(
+        self,
+        fitness: Callable[[np.ndarray], Any],
+        *,
+        gradient: Callable[[np.ndarray], Any] | bool | None,
+        constraints: int,
+        generations: int | None,
+        evaluations: int | None,
+        target: float | None,
+        time: float | None,
+        stagnation: int | None,
+        batch: bool,
+        parallel: bool,
+        on_generation: Callable[[Progress], bool | None] | None,
+        control: Callable[[Any, Progress], Any] | None,
+        checkpoint: str | os.PathLike[str] | None,
+        checkpoint_every: int | None,
+        resume: str | os.PathLike[str] | None,
+    ) -> Result:
+        """``run`` with the gradient, and for MMA the values and Jacobian of ``constraints``
+        inequality constraints."""
+        count = _whole("constraints", constraints)
+        if count > 0:
+            return self._run_constrained(
+                fitness,
+                count,
+                gradient,
+                batch,
+                parallel,
+                on_generation,
+                control,
+                lambda: _stop(generations, evaluations, target, time, stagnation),
+                lambda: _checkpoints(checkpoint, checkpoint_every, resume),
+            )
         if gradient is None:
-            return super().run(
+            return _SingleObjective.run(
+                self,
                 fitness,
                 generations=generations,
                 evaluations=evaluations,
@@ -3621,6 +3706,52 @@ class _GradientMethod(_SingleObjective):
                 saving,
                 gradient=derivative,
                 combined_gradient=combined,
+            )
+        )
+
+
+    def _run_constrained(
+        self,
+        fitness: Callable[[np.ndarray], Any],
+        count: int,
+        gradient: Callable[[np.ndarray], Any] | bool | None,
+        batch: bool,
+        parallel: bool,
+        on_generation: Callable[[Progress], bool | None] | None,
+        control: Callable[[Any, Progress], Any] | None,
+        stop_conditions: Callable[[], dict[str, Any]],
+        checkpoints: Callable[[], dict[str, Any]],
+    ) -> Result:
+        """``run`` with ``count`` inequality constraints, for MMA: the stop conditions and the
+        checkpoints checked after the constraints' settings."""
+        if gradient is not True:
+            raise ValueError(
+                "with constraints, gradient=True: the fitness function returns (value, gradient, "
+                "constraint values, jacobian)"
+            )
+        if batch:
+            raise ValueError("constraints need batch=False: MMA evaluates one point at a time")
+        _check_callable(fitness)
+        if isinstance(fitness, (problems.Problem, problems.MultiProblem, problems.control.Balance)):
+            raise ValueError(
+                f"{type(fitness).__name__} is evaluated in Rust: leave gradient and constraints out"
+            )
+        stop = stop_conditions()
+        callback = _on_generation(on_generation, Progress)
+        controls = _control(control, self)
+        saving = checkpoints()
+        return Result(
+            **self._run(
+                _with_constraints(fitness, count),
+                stop,
+                False,
+                parallel,
+                callback,
+                None,
+                controls,
+                saving,
+                combined_gradient=True,
+                constraints=count,
             )
         )
 
@@ -3695,6 +3826,10 @@ class Lbfgsb(_GradientMethod):
     restarts : int, optional
         Random restarts after a run converges, at least 1, each from a new random point in the
         bounds. None is no restarts.
+    keep_pairs : bool, default False
+        In a :class:`Continuation` that keeps the state (``keep="state"``), whether the next
+        stage keeps the correction pairs, which describe the old function's curvature: for
+        stages whose functions differ little.
     initial_genome : array-like of float, optional
         The point to start from, a number per gene within the bounds, e.g. the best of a global
         method, to polish it. None is a random point. Restarts start from random points.
@@ -3727,12 +3862,14 @@ class Lbfgsb(_GradientMethod):
         function_tolerance: float = 2.220446049250313e-9,
         max_line_search: int = 20,
         restarts: int | None = None,
+        keep_pairs: bool = False,
         initial_genome: Sequence[float] | np.ndarray | None = None,
         objective: ObjectiveName = "maximize",
         seed: int | None = None,
     ) -> None:
         self._genome = genome
         self._objective = objective
+        self.keep_pairs = keep_pairs
         self.memory = memory
         self.gradients = gradients
         self.difference_step = difference_step
@@ -3772,6 +3909,7 @@ class Lbfgsb(_GradientMethod):
             "function_tolerance": _number("function_tolerance", self.function_tolerance),
             "max_line_search": _whole("max_line_search", self.max_line_search, minimum=None),
             "restarts": restarts,
+            "keep_pairs": _flag("keep_pairs", self.keep_pairs),
             "initial_genome": initial_genome,
             "seed": _optional_whole("seed", self.seed),
         }
@@ -4208,53 +4346,227 @@ class Mma(_GradientMethod):
             As :meth:`Lbfgsb.run`; and if a function with constraints doesn't return a tuple of
             four.
         """
-        count = _whole("constraints", constraints)
-        if count == 0:
-            return super().run(
-                fitness,
-                gradient=gradient,
-                generations=generations,
-                evaluations=evaluations,
-                target=target,
-                time=time,
-                stagnation=stagnation,
-                batch=batch,
-                parallel=parallel,
-                on_generation=on_generation,
-                control=control,
-                checkpoint=checkpoint,
-                checkpoint_every=checkpoint_every,
-                resume=resume,
-            )
-        if gradient is not True:
+        return self._run_gradient(
+            fitness,
+            gradient=gradient,
+            constraints=constraints,
+            generations=generations,
+            evaluations=evaluations,
+            target=target,
+            time=time,
+            stagnation=stagnation,
+            batch=batch,
+            parallel=parallel,
+            on_generation=on_generation,
+            control=control,
+            checkpoint=checkpoint,
+            checkpoint_every=checkpoint_every,
+            resume=resume,
+        )
+
+
+class Continuation(_GradientMethod):
+    """A gradient method run through stages of one problem, its state kept between them. Real
+    genomes.
+
+    Some smooth problems are solved best in stages: a smooth version first, then sharper ones,
+    each started from the last stage's result. Between stages a parameter of the fitness function
+    changes (the sharpness of a smoothed maximum or absolute value, the steepness of a projection,
+    a penalty weight), and the method goes on where it was: :class:`FirstOrder` with its velocity
+    or Adam's averages and step count, :class:`Mma` with its asymptotes, :class:`Lbfgsb` along
+    steepest descent again (its curvature pairs dropped, unless ``keep_pairs``).
+
+    A stage ends when the method has converged, or after ``generations`` generations. Then
+    ``on_stage`` is called with the next stage's index, to set its parameters, which the fitness
+    function reads; the method's point is evaluated again on the changed function, and it goes on
+    from there. The run stops with the stop reason "converged" after the last stage, not when a
+    stage converges; the stop conditions of ``run`` apply to the whole run. The result's
+    ``stages`` say what each stage did.
+
+    The smoothed maximum of ``|x - a|`` over a few points, sharper in each stage::
+
+        import numpy as np
+
+        import genoxide as gx
+
+        points = np.array([[1.0, 0.0], [-1.0, 0.0], [0.0, 1.0], [0.0, -1.0]])
+        p = 2
+
+        def smoothed(x):
+            # (Σ |x − a|^2p)^(1/p): the largest squared distance, smoothed
+            g = np.sum((x - points) ** 2, axis=1)
+            total = np.sum(g**p)
+            gradient = total ** (1 / p - 1) * (g ** (p - 1)) @ (2 * (x - points))
+            return float(total ** (1 / p)), gradient
+
+        def stage(index):
+            global p
+            p = [2, 4, 8, 16][index]
+
+        adam = gx.FirstOrder(gx.Real((-2, 2), length=2), step="adam", learning_rate=0.05,
+                             initial_genome=[1.5, -0.5], objective="minimize")
+        continuation = gx.Continuation(adam, stages=4, on_stage=stage)
+        result = continuation.run(smoothed, gradient=True, generations=10_000)
+        print(result.stop_reason, [s.generations for s in result.stages])
+
+    Parameters
+    ----------
+    algorithm : FirstOrder, Lbfgsb or Mma
+        The method, with its settings: the first stage starts as it would.
+    stages : int
+        The number of stages, at least 1.
+    on_stage : callable
+        Called as ``on_stage(index)`` with a stage's index, from 0, to set its parameters, e.g. a
+        variable the fitness function reads: when a run starts (with the stage it's in: 0, or the
+        stage of the checkpoint it resumes from), and when each next stage begins, before its
+        first evaluation. It must set everything from the index alone. An exception stops the run,
+        and ``run`` raises it.
+    generations : int, optional
+        The most generations of each stage, at least 1: the method's iterations, without the
+        re-evaluation that starts a stage. None runs each stage until the method converges.
+    keep : {"state", "point"}, default "state"
+        What the method keeps between stages: its state (Adam's averages and step count, the
+        velocity of momentum, MMA's asymptotes and the iterates they're updated from), or only the
+        point, the state starting again as at the start of a run.
+    on_stage_finished : callable, optional
+        Called as ``on_stage_finished(stage, point)`` with each finished :class:`Stage` and the
+        method's last point, a 1-D array, before the next stage's ``on_stage``. An exception stops
+        the run, and ``run`` raises it.
+
+    A ``control`` gets the wrapped method's handle (:class:`RunningFirstOrder`,
+    :class:`RunningLbfgsb` or :class:`RunningMma`). A checkpoint holds the stage and resumes in
+    it, with the results the run would have had without the interruption: ``on_stage`` is called
+    with that stage when the resumed run starts.
+    """
+
+    def __init__(
+        self,
+        algorithm: FirstOrder | Lbfgsb | Mma,
+        *,
+        stages: int,
+        on_stage: Callable[[int], Any],
+        generations: int | None = None,
+        keep: Literal["state", "point"] = "state",
+        on_stage_finished: Callable[[Stage, np.ndarray], Any] | None = None,
+    ) -> None:
+        self.algorithm = algorithm
+        self.stages = stages
+        self.on_stage = on_stage
+        self.generations = generations
+        self.keep = keep
+        self.on_stage_finished = on_stage_finished
+
+    @property
+    def _genome(self) -> Genome:  # type: ignore[override]
+        return self.algorithm._genome
+
+    @property
+    def _objective(self) -> ObjectiveName:  # type: ignore[override]
+        return self.algorithm._objective
+
+    @property
+    def _running(self) -> type[Running]:  # type: ignore[override]
+        return self.algorithm._running
+
+    def _describe(self) -> dict[str, Any]:
+        if not isinstance(self.algorithm, (FirstOrder, Lbfgsb, Mma)):
             raise ValueError(
-                "with constraints, gradient=True: the fitness function returns (value, gradient, "
-                "constraint values, jacobian)"
+                f"algorithm is a gx.FirstOrder, gx.Lbfgsb or gx.Mma, not {self.algorithm!r}"
             )
-        if batch:
-            raise ValueError("constraints need batch=False: MMA evaluates one point at a time")
-        _check_callable(fitness)
-        if isinstance(fitness, (problems.Problem, problems.MultiProblem, problems.control.Balance)):
-            raise ValueError(
-                f"{type(fitness).__name__} is evaluated in Rust: leave gradient and constraints out"
-            )
-        stop = _stop(generations, evaluations, target, time, stagnation)
-        callback = _on_generation(on_generation, Progress)
-        controls = _control(control, self)
-        saving = _checkpoints(checkpoint, checkpoint_every, resume)
-        return Result(
-            **self._run(
-                _with_constraints(fitness, count),
-                stop,
-                False,
-                parallel,
-                callback,
-                None,
-                controls,
-                saving,
-                combined_gradient=True,
-                constraints=count,
-            )
+        if self.keep not in ("state", "point"):
+            raise ValueError(f'keep is "state" or "point", not {self.keep!r}')
+        stages = _whole("stages", self.stages, minimum=1)
+        generations = None
+        if self.generations is not None:
+            generations = _whole("generations", self.generations, minimum=1)
+        return {
+            "type": "continuation",
+            "algorithm": self.algorithm._describe(),
+            "stages": stages,
+            "generations": generations,
+            "keep": self.keep,
+        }
+
+    def _stage_callbacks(self) -> dict[str, Any]:
+        _check_callable(self.on_stage, "on_stage")
+        callbacks: dict[str, Any] = {"on_stage": self.on_stage}
+        finished = self.on_stage_finished
+        if finished is not None:
+            _check_callable(finished, "on_stage_finished")
+
+            def on_stage_finished(stage: dict[str, Any], point: np.ndarray) -> None:
+                finished(Stage(**stage), point)
+
+            callbacks["on_stage_finished"] = on_stage_finished
+        return callbacks
+
+    def run(
+        self,
+        fitness: Callable[[np.ndarray], Any],
+        *,
+        gradient: Callable[[np.ndarray], Any] | bool | None = None,
+        constraints: int = 0,
+        generations: int | None = None,
+        evaluations: int | None = None,
+        target: float | None = None,
+        time: float | None = None,
+        stagnation: int | None = None,
+        batch: bool = False,
+        parallel: bool = False,
+        on_generation: Callable[[Progress], bool | None] | None = None,
+        control: Callable[[Any, Progress], Any] | None = None,
+        checkpoint: str | os.PathLike[str] | None = None,
+        checkpoint_every: int | None = None,
+        resume: str | os.PathLike[str] | None = None,
+    ) -> Result:
+        """Runs the method through the stages, until the last has ended or the first stop
+        condition, as the wrapped method's ``run``.
+
+        Parameters
+        ----------
+        fitness : callable
+            As for :meth:`Lbfgsb.run`: a function that reads the stage's parameters, which
+            ``on_stage`` sets.
+        gradient : callable or True, optional
+            As for :meth:`Lbfgsb.run`.
+        constraints : int, default 0
+            With an :class:`Mma`, as for :meth:`Mma.run`.
+
+        The other parameters are those of :meth:`Ga.run`. ``generations`` here is the run's,
+        not a stage's.
+
+        Returns
+        -------
+        Result
+            The best solution of the last stage the run reached, by its function, what the run
+            took, and its ``stages``.
+
+        Raises
+        ------
+        ValueError
+            As the wrapped method's ``run``; and for constraints without an :class:`Mma`.
+        TypeError
+            As the wrapped method's ``run``; and if ``on_stage`` or ``on_stage_finished`` isn't
+            callable.
+        """
+        if constraints != 0 and not isinstance(self.algorithm, Mma):
+            raise ValueError("constraints need a gx.Mma")
+        return self._run_gradient(
+            fitness,
+            gradient=gradient,
+            constraints=constraints,
+            generations=generations,
+            evaluations=evaluations,
+            target=target,
+            time=time,
+            stagnation=stagnation,
+            batch=batch,
+            parallel=parallel,
+            on_generation=on_generation,
+            control=control,
+            checkpoint=checkpoint,
+            checkpoint_every=checkpoint_every,
+            resume=resume,
         )
 
 

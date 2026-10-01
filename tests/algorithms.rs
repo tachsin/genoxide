@@ -273,6 +273,40 @@ fn portable_constrained_run(algorithm: Mma) -> Vec<f64> {
         .into_vec()
 }
 
+// the same for a continuation: Rosenbrock's function with the weight of its valley's walls raised
+// from 1 to 10 and 100, in 3 stages of 10 generations, the weight shared through an atomic
+fn portable_continuation_run(algorithm: FirstOrder) -> Vec<f64> {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    const WEIGHTS: [f64; 3] = [1.0, 10.0, 100.0];
+    let weight = Arc::new(AtomicU64::new(0));
+    let shared = Arc::clone(&weight);
+    let rosenbrock = move |x: &Reals| {
+        let w = f64::from_bits(shared.load(Ordering::Relaxed));
+        x.windows(2)
+            .map(|pair| {
+                let (a, b) = (pair[1] - pair[0] * pair[0], 1.0 - pair[0]);
+                w * a * a + b * b
+            })
+            .sum::<f64>()
+    };
+    let continuation = Continuation::builder(algorithm)
+        .stages(WEIGHTS.len())
+        .generations(10)
+        .on_stage(move |stage, _| {
+            weight.store(WEIGHTS[stage].to_bits(), Ordering::Relaxed);
+            Ok(())
+        })
+        .build()
+        .unwrap();
+    let outcome = Engine::new(continuation, rosenbrock)
+        .stop_when(Stop::generations(1_000))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.generations(), 30);
+    outcome.into_best().into_genome().into_vec()
+}
+
 #[test]
 fn portable_runs() {
     let real = || Real::uniform(4, -5.12..=5.12).unwrap();
@@ -374,8 +408,16 @@ fn portable_runs() {
                 .build()
                 .unwrap(),
         ),
+        portable_continuation_run(
+            FirstOrder::builder(real())
+                .step(first_order::Step::adam(0.05))
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
     ];
-    let expected: [[f64; 4]; 13] = [
+    let expected: [[f64; 4]; 14] = [
         // L-SHADE
         [
             0.5886518163542276,
@@ -466,6 +508,13 @@ fn portable_runs() {
             0.01228299951717058,
             0.009594958407758064,
             0.017415965745941873,
+        ],
+        // a continuation of Adam, forward differences, the weight raised in 3 stages
+        [
+            -0.01396419948840609,
+            -2.7974966575791904,
+            1.1930722176383557,
+            -1.3732603836128217,
         ],
     ];
     for (run, expected) in runs.iter().zip(expected) {

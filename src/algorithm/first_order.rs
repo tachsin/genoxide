@@ -2,6 +2,7 @@
 //! Gradient descent, Polyak's momentum, Nesterov's accelerated gradient, Adam and AdamW, for
 //! smooth problems with up to millions of variables where a line search costs too much.
 
+use super::continuation::{Continue, Keep};
 use super::local::Restarts;
 use super::{Algorithm, Candidates, Reevaluate};
 use crate::engine::{Evaluations, Provided, Wanted};
@@ -930,6 +931,22 @@ impl Reevaluate for FirstOrder {
     /// As [`FirstOrder::reevaluate`]: the next ask gives the point.
     fn reevaluate(&mut self) -> Result<()> {
         FirstOrder::reevaluate(self)
+    }
+}
+
+impl Continue for FirstOrder {
+    /// The point evaluated again, as [`FirstOrder::reevaluate`] does, and the run goes on from
+    /// it: with [`Keep::State`], with the velocity of momentum, Adam's averages and the step
+    /// count t of its corrections; with [`Keep::Point`], with all three reset, as at a start.
+    /// The convergence is decided again by the new gradient, and a restart that was due is
+    /// dropped.
+    fn next_stage(&mut self, keep: Keep) -> Result<()> {
+        self.reevaluate()?;
+        if keep == Keep::Point {
+            self.memory.reset();
+        }
+        self.converged = None;
+        Ok(())
     }
 }
 

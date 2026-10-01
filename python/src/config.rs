@@ -200,8 +200,18 @@ pub enum Algorithm {
         max_line_search: Option<usize>,
         /// The number of random restarts; none by default.
         restarts: Option<u64>,
+        /// Whether a continuation's next stage that keeps the state keeps the pairs.
+        keep_pairs: Option<bool>,
         initial_genome: Option<Vec<f64>>,
         seed: Option<u64>,
+    },
+    /// A gradient method run through stages of one problem, its state kept between them.
+    Continuation {
+        algorithm: Box<Algorithm>,
+        stages: usize,
+        /// The most generations of each stage.
+        generations: Option<u64>,
+        keep: Option<Keep>,
     },
     Nsga2 {
         population_size: usize,
@@ -238,6 +248,14 @@ pub enum Algorithm {
         seed: Option<u64>,
         variation: Variation,
     },
+}
+
+/// What a continuation's algorithm keeps between stages.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Keep {
+    State,
+    Point,
 }
 
 /// Differential evolution.

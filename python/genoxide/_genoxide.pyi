@@ -21,6 +21,8 @@ def run(
     gradient: Callable[[Any], Any] | None = None,
     combined_gradient: bool = False,
     constraints: int = 0,
+    on_stage: Callable[[int], Any] | None = None,
+    on_stage_finished: Callable[[dict[str, Any], Any], Any] | None = None,
 ) -> dict[str, Any]: ...
 
 class Running:
