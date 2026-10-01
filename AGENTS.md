@@ -124,6 +124,7 @@ Stops: `Stop::target(score)` (at least as good), `generations(n)`, `evaluations(
 - **Constraints:** return `(score, violation)`, 0 when feasible, adding up `constraint::at_most(value, limit)`, `at_least`, `equal(value, target, tolerance)`. Deb's rules: feasible beats infeasible, then score or violation decides. Select with `Tournament` or `Rank`: roulette and SUS give infeasible solutions no weight. `Penalty::new(weight)?.fitness(objective, score, violation)` is a static penalty instead.
 - **Test problems:** `problems::{Sphere, AxisParallelEllipsoid, Schwefel1_2, Rastrigin, Rosenbrock, Ackley, Griewank, Schwefel2_26, Levy, Zakharov, StyblinskiTang, Michalewicz, Schwefel2_21, Schwefel2_22, DixonPrice, Trid, Powell}::new(n)` (`Powell` takes a multiple of 4) and `problems::{Himmelblau, Branin, GoldsteinPrice, SixHumpCamel, Hartmann3, Hartmann6, Shekel5, Shekel7, Shekel10, Easom, Eggholder, SchafferF6, Beale, Booth, Matyas, Bohachevsky1, Bohachevsky2, Bohachevsky3, ThreeHumpCamel, Langermann, ShekelFoxholes, Kowalik}` are fitness functions for `Engine::new(algorithm, problem)`, all minimized. The `problems::Problem` trait gives `representation()` (the bounds), `optimum()` (`value()`, `solutions()`), `reference()`; `problems::all()` lists them as `Box<dyn DynProblem>`. Constrained, with fitness `(score, violation)` and `constraints(&x)` (`g <= 0`, then `h = 0`): `problems::cec2006::{G01, …, G24}` (equalities met within `EQUALITY_TOLERANCE` = 1e-4; `with_tolerance(δ)` for the problems with equalities, e.g. `G03::with_tolerance(δ)`), and `problems::engineering::{WeldedBeam, WeldedBeamRagsdell, PressureVessel, TensionCompressionSpring, SpeedReducer, ThreeBarTruss, CantileverBeam, CarSideImpact}`. `PressureVessel` and `SpeedReducer` round their discrete genes when evaluated; `design(&x)` gives the rounded design. `engineering::GearTrain` has an `Integer` genome and isn't in `all()`. `Optimum::is_proven()` is false for a best known value.
 - **Extras:** return `Evaluated::new(value, info)` (`value` any of the above, `info` any `Send + Sync + 'static` type, e.g. a struct with a penalty's terms) to keep what the fitness function computed. Read it by type: `outcome.best_info::<T>()`, `snapshot.info::<T>(genome)` and `snapshot.best_info::<T>()` in `.on_generation`, `hall_of_fame.info::<T>(genome)`, and in `MultiEngine` `snapshot.info` and `outcome.info(genome)` for the front; `None` for another type. Never used by the search. Kept by genome for the population, the discarded and the best (copies share it); not in checkpoints.
+- **Gradients:** `Differentiable(|x: &Reals, gradient: &mut [f64]| value)`, for gradient-based methods; see [Gradients](#gradients-supplying-them).
 - **Batch:** `Batch(|genomes: &[&G]| -> Vec<T>)` scores a generation in one call, in order (SIMD, GPU, remote), in `Engine` or `MultiEngine`; the slice can be empty. A wrong count is `Error::FitnessCount`. See `examples/gpu` (wgpu).
 
 ## Templates
@@ -833,6 +834,44 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+### Gradients: supplying them
+
+How fitness functions give gradients to gradient-based methods (the first, L-BFGS-B, comes in a later version). A gradient is of the score as returned (`∂score/∂xᵢ`), whatever the objective: no sign change when maximizing.
+
+- `Differentiable(|x: &Reals, gradient: &mut [f64]| value)` writes the gradient (zeroed, one value per gene) and returns the value; any algorithm takes it as a plain fitness function. `Batch(Differentiable(|xs: &[&Reals], gradients: &mut [f64]| values))`: flat, row-major, a row per genome.
+- A `FitnessFunction` declares it with `fn provides(&self) -> Provided { Provided::GRADIENT }` and writes it in `fn evaluate_with(&self, x, extras: &mut Extras<'_>)` when `extras.gradient()` is `Some` (`genoxide::engine::{Extras, Provided}`); the value must be `evaluate`'s, to the bit.
+- The smooth test problems supply theirs: every classic function in `problems` but `Eggholder`, `Schwefel2_21` and `Schwefel2_22`; `problem.provides().gradient`.
+- `gradient::check(&function, &x)?` compares a supplied gradient with central differences: `.largest()` about 1e-10 when right, `.worst_gene()`.
+- An algorithm's `gradient::Gradients` setting: `Auto` (default: supplied if provided, else forward differences, n evaluations per gradient, up to `gradient::AUTO_LIMIT` = 10⁴ genes), `Supplied` (an error at the start of a run without one), `Forward { step: None }`, `Central { step: None }` (2n per gradient, more accurate). Finite differences count towards `Stop::evaluations`.
+- A NaN in a gradient follows the `NanPolicy`: invalid fitness, or `Error::NanFitness`.
+- Writing an algorithm that uses gradients: `prepare(provided)` (call `gradients.resolve(provided, &real)?`), `wants()` (`Wanted::GRADIENT` for supplied ones), `tell_evaluations(&evaluations)` (`evaluations.gradient(i)`); for finite differences, ask the points of a `gradient::Stencil` with the current point in one round, and `stencil.gradient(f_x, &values, &mut gradient)?`.
+
+```rust
+use genoxide::gradient::{self, Differentiable};
+use genoxide::prelude::*;
+use genoxide::problems::Rosenbrock;
+
+fn main() -> genoxide::Result<()> {
+    let rosenbrock = Differentiable(|x: &Reals, gradient: &mut [f64]| {
+        let (a, b) = (x[1] - x[0] * x[0], 1.0 - x[0]);
+        gradient[0] = -400.0 * x[0] * a - 2.0 * b;
+        gradient[1] = 200.0 * a;
+        100.0 * a * a + b * b
+    });
+    // a hand-written gradient, against central differences
+    assert!(gradient::check(&rosenbrock, &Reals::from(vec![-1.2, 1.0]))?.largest() < 1e-8);
+    // the test problems' own
+    assert!(Rosenbrock::new(10).provides().gradient);
+    // a plain fitness function for any other algorithm
+    let cmaes = Cmaes::builder(Real::uniform(2, -5.0..=5.0)?).minimize().seed(1).build()?;
+    let outcome = Engine::new(cmaes, rosenbrock)
+        .stop_when(Stop::target(1e-10).or(Stop::evaluations(10_000)))
+        .run()?;
+    assert_eq!(outcome.stop_reason(), StopReason::Target);
+    Ok(())
+}
+```
+
 ### Ask / tell: evaluating outside the engine
 
 For fitness computed elsewhere (another process, async code).
@@ -930,4 +969,4 @@ every = 50
 - **Reproducible:** a seed gives the same results on every platform and thread count, parallel or not. The exception is a fitness function that calls the platform's `sin`, `cos`, `exp` and the like (`f64::sin`, numpy): their last bit can differ between operating systems, and long runs drift apart. `genoxide::math::{sin, cos, tan, exp, ln, powf, powi, atan2, ...}` are the same to the bit everywhere, at native speed; `problems` and `multi::problems` use them.
 - **Ties:** the earlier individual wins.
 - **The best is kept:** `outcome.best()` is the best individual ever evaluated.
-- **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `problems` or `multi::problems` constructor with too few dimensions or variables (or a radius that isn't above 0, or none from the paper for `C1Dtlz3::new` and `ConvexC2Dtlz2::new`), a `Batch` returning no score for a single genome, and an input, output or observation slice of the wrong length for an `nn` network or a `control` task.
+- **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `problems` or `multi::problems` constructor with too few dimensions or variables (or a radius that isn't above 0, or none from the paper for `C1Dtlz3::new` and `ConvexC2Dtlz2::new`), a `Batch` returning no score for a single genome, a gradient slice of the wrong length for a test problem's `evaluate_with`, and an input, output or observation slice of the wrong length for an `nn` network or a `control` task.

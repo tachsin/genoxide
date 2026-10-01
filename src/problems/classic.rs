@@ -1,8 +1,9 @@
 //! The classic continuous functions: scalable ones, which take the number of dimensions, and
 //! two-dimensional ones.
 
+use super::gradients;
 use super::{Optimum, Problem};
-use crate::engine::FitnessFunction;
+use crate::engine::{Extras, FitnessFunction, Provided};
 use crate::genome::{Real, Reals};
 use crate::math;
 use std::f64::consts::{E, PI};
@@ -18,6 +19,31 @@ const STYBLINSKI_TANG_MIN: f64 = -39.166_165_703_771_41;
 const SCHWEFEL_2_26_X: f64 = 420.968_746_359_982_05;
 // the term's value there, −x sin √x, to 40 digits and rounded
 const SCHWEFEL_2_26_MIN: f64 = -418.982_887_272_433_7;
+
+// the gradient of a smooth problem: its `FitnessFunction::provides` and `evaluate_with`, with the
+// value of `evaluate` and the gradient of `$gradient(x, gradient)`
+macro_rules! gradient {
+    ($gradient:expr) => {
+        fn provides(&self) -> Provided {
+            Provided::GRADIENT
+        }
+
+        /// The value at `x`, as [`evaluate`](FitnessFunction::evaluate), and its analytic gradient
+        /// if it's wanted.
+        ///
+        /// # Panics
+        ///
+        /// As `evaluate`, and if the gradient doesn't have a value per gene of `x`.
+        fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> f64 {
+            if let Some(gradient) = extras.gradient() {
+                assert_eq!(gradient.len(), x.len(), "a gradient has a value per gene");
+                gradient.fill(0.0);
+                $gradient(x, gradient);
+            }
+            self.evaluate(x)
+        }
+    };
+}
 
 macro_rules! scalable {
     ($(#[$doc:meta])* $name:ident, $label:literal, $minimum:literal, $default:literal) => {
@@ -417,6 +443,8 @@ impl Default for Powell {
 impl FitnessFunction<Reals> for Sphere {
     type Output = f64;
 
+    gradient!(gradients::sphere);
+
     fn evaluate(&self, x: &Reals) -> f64 {
         x.iter().map(|xi| xi * xi).sum()
     }
@@ -450,6 +478,8 @@ impl Problem for Sphere {
 impl FitnessFunction<Reals> for AxisParallelEllipsoid {
     type Output = f64;
 
+    gradient!(gradients::axis_parallel_ellipsoid);
+
     fn evaluate(&self, x: &Reals) -> f64 {
         x.iter()
             .enumerate()
@@ -480,6 +510,8 @@ impl Problem for AxisParallelEllipsoid {
 
 impl FitnessFunction<Reals> for Schwefel1_2 {
     type Output = f64;
+
+    gradient!(gradients::schwefel_1_2);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let mut prefix = 0.0;
@@ -514,6 +546,8 @@ impl Problem for Schwefel1_2 {
 
 impl FitnessFunction<Reals> for Rastrigin {
     type Output = f64;
+
+    gradient!(gradients::rastrigin);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         10.0 * x.len() as f64
@@ -551,6 +585,8 @@ impl Problem for Rastrigin {
 
 impl FitnessFunction<Reals> for Rosenbrock {
     type Output = f64;
+
+    gradient!(gradients::rosenbrock);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         x.windows(2)
@@ -590,6 +626,8 @@ impl Problem for Rosenbrock {
 impl FitnessFunction<Reals> for Ackley {
     type Output = f64;
 
+    gradient!(gradients::ackley);
+
     fn evaluate(&self, x: &Reals) -> f64 {
         let n = x.len() as f64;
         let squares = x.iter().map(|xi| xi * xi).sum::<f64>() / n;
@@ -627,6 +665,8 @@ impl Problem for Ackley {
 
 impl FitnessFunction<Reals> for Griewank {
     type Output = f64;
+
+    gradient!(gradients::griewank);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let squares = x.iter().map(|xi| xi * xi).sum::<f64>() / 4000.0;
@@ -667,6 +707,8 @@ impl Problem for Griewank {
 impl FitnessFunction<Reals> for Schwefel2_26 {
     type Output = f64;
 
+    gradient!(gradients::schwefel_2_26);
+
     fn evaluate(&self, x: &Reals) -> f64 {
         -x.iter()
             .map(|xi| xi * math::sin(xi.abs().sqrt()))
@@ -700,6 +742,8 @@ impl Problem for Schwefel2_26 {
 
 impl FitnessFunction<Reals> for Levy {
     type Output = f64;
+
+    gradient!(gradients::levy);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let w = |xi: f64| 1.0 + (xi - 1.0) / 4.0;
@@ -749,6 +793,8 @@ impl Problem for Levy {
 impl FitnessFunction<Reals> for Zakharov {
     type Output = f64;
 
+    gradient!(gradients::zakharov);
+
     fn evaluate(&self, x: &Reals) -> f64 {
         let squares: f64 = x.iter().map(|xi| xi * xi).sum();
         let weighted: f64 = x
@@ -789,6 +835,8 @@ impl Problem for Zakharov {
 impl FitnessFunction<Reals> for StyblinskiTang {
     type Output = f64;
 
+    gradient!(gradients::styblinski_tang);
+
     fn evaluate(&self, x: &Reals) -> f64 {
         0.5 * x
             .iter()
@@ -828,7 +876,7 @@ impl Problem for StyblinskiTang {
 }
 
 // Michalewicz's steepness
-const MICHALEWICZ_M: i32 = 10;
+pub(super) const MICHALEWICZ_M: i32 = 10;
 
 // the term of gene `i` (from 0)
 fn michalewicz_term(i: usize, xi: f64) -> f64 {
@@ -913,6 +961,8 @@ fn golden_section(f: impl Fn(f64) -> f64, mut low: f64, mut high: f64) -> f64 {
 
 impl FitnessFunction<Reals> for Michalewicz {
     type Output = f64;
+
+    gradient!(gradients::michalewicz);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         x.iter()
@@ -1018,6 +1068,8 @@ fn dixon_price_minimizer(dimensions: usize) -> Vec<f64> {
 impl FitnessFunction<Reals> for DixonPrice {
     type Output = f64;
 
+    gradient!(gradients::dixon_price);
+
     fn evaluate(&self, x: &Reals) -> f64 {
         let Some(&first) = x.first() else {
             return 0.0;
@@ -1068,6 +1120,8 @@ impl Problem for DixonPrice {
 impl FitnessFunction<Reals> for Trid {
     type Output = f64;
 
+    gradient!(gradients::trid);
+
     fn evaluate(&self, x: &Reals) -> f64 {
         let squares: f64 = x.iter().map(|xi| math::powi(xi - 1.0, 2)).sum();
         let products: f64 = x.windows(2).map(|pair| pair[0] * pair[1]).sum();
@@ -1111,6 +1165,8 @@ impl Problem for Trid {
 
 impl FitnessFunction<Reals> for Powell {
     type Output = f64;
+
+    gradient!(gradients::powell);
 
     /// The value at `x`, over its whole blocks of four genes.
     fn evaluate(&self, x: &Reals) -> f64 {
@@ -1170,6 +1226,8 @@ pub struct Himmelblau;
 impl FitnessFunction<Reals> for Himmelblau {
     type Output = f64;
 
+    gradient!(gradients::himmelblau);
+
     /// The value at `x`.
     ///
     /// # Panics
@@ -1226,6 +1284,8 @@ pub struct Branin;
 
 impl FitnessFunction<Reals> for Branin {
     type Output = f64;
+
+    gradient!(gradients::branin);
 
     /// The value at `x`.
     ///
@@ -1291,6 +1351,8 @@ pub struct GoldsteinPrice;
 impl FitnessFunction<Reals> for GoldsteinPrice {
     type Output = f64;
 
+    gradient!(gradients::goldstein_price);
+
     /// The value at `x`.
     ///
     /// # Panics
@@ -1353,6 +1415,8 @@ pub struct SixHumpCamel;
 impl FitnessFunction<Reals> for SixHumpCamel {
     type Output = f64;
 
+    gradient!(gradients::six_hump_camel);
+
     /// The value at `x`.
     ///
     /// # Panics
@@ -1401,16 +1465,16 @@ const HARTMANN_REFERENCE: &str = "Hartman, J. K. (1973). Some experiments in glo
     Towards Global Optimisation 2, North-Holland: 1-15.";
 
 // Hartmann's weights cᵢ, the same in 3 and 6 dimensions
-const HARTMANN_C: [f64; 4] = [1.0, 1.2, 3.0, 3.2];
+pub(super) const HARTMANN_C: [f64; 4] = [1.0, 1.2, 3.0, 3.2];
 
 // Hartmann's function in 3 dimensions: the widths aᵢⱼ and the centers pᵢⱼ
-const HARTMANN_3_A: [[f64; 3]; 4] = [
+pub(super) const HARTMANN_3_A: [[f64; 3]; 4] = [
     [3.0, 10.0, 30.0],
     [0.1, 10.0, 35.0],
     [3.0, 10.0, 30.0],
     [0.1, 10.0, 35.0],
 ];
-const HARTMANN_3_P: [[f64; 3]; 4] = [
+pub(super) const HARTMANN_3_P: [[f64; 3]; 4] = [
     [0.3689, 0.1170, 0.2673],
     [0.4699, 0.4387, 0.7470],
     [0.1091, 0.8732, 0.5547],
@@ -1418,13 +1482,13 @@ const HARTMANN_3_P: [[f64; 3]; 4] = [
 ];
 
 // Hartmann's function in 6 dimensions: the widths aᵢⱼ and the centers pᵢⱼ
-const HARTMANN_6_A: [[f64; 6]; 4] = [
+pub(super) const HARTMANN_6_A: [[f64; 6]; 4] = [
     [10.0, 3.0, 17.0, 3.5, 1.7, 8.0],
     [0.05, 10.0, 17.0, 0.1, 8.0, 14.0],
     [3.0, 3.5, 1.7, 10.0, 17.0, 8.0],
     [17.0, 8.0, 0.05, 10.0, 0.1, 14.0],
 ];
-const HARTMANN_6_P: [[f64; 6]; 4] = [
+pub(super) const HARTMANN_6_P: [[f64; 6]; 4] = [
     [0.1312, 0.1696, 0.5569, 0.0124, 0.8283, 0.5886],
     [0.2329, 0.4135, 0.8307, 0.3736, 0.1004, 0.9991],
     [0.2348, 0.1451, 0.3522, 0.2883, 0.3047, 0.6650],
@@ -1476,6 +1540,8 @@ pub struct Hartmann3;
 
 impl FitnessFunction<Reals> for Hartmann3 {
     type Output = f64;
+
+    gradient!(gradients::hartmann_3);
 
     /// The value at `x`.
     ///
@@ -1552,6 +1618,8 @@ pub struct Hartmann6;
 impl FitnessFunction<Reals> for Hartmann6 {
     type Output = f64;
 
+    gradient!(gradients::hartmann_6);
+
     /// The value at `x`.
     ///
     /// # Panics
@@ -1597,7 +1665,7 @@ impl Problem for Hartmann6 {
 }
 
 // Shekel's centers aᵢ and widths cᵢ, of which Shekel m uses the first m
-const SHEKEL_A: [[f64; 4]; 10] = [
+pub(super) const SHEKEL_A: [[f64; 4]; 10] = [
     [4.0, 4.0, 4.0, 4.0],
     [1.0, 1.0, 1.0, 1.0],
     [8.0, 8.0, 8.0, 8.0],
@@ -1609,7 +1677,7 @@ const SHEKEL_A: [[f64; 4]; 10] = [
     [6.0, 2.0, 6.0, 2.0],
     [7.0, 3.6, 7.0, 3.6],
 ];
-const SHEKEL_C: [f64; 10] = [0.1, 0.2, 0.2, 0.4, 0.4, 0.6, 0.3, 0.7, 0.5, 0.5];
+pub(super) const SHEKEL_C: [f64; 10] = [0.1, 0.2, 0.2, 0.4, 0.4, 0.6, 0.3, 0.7, 0.5, 0.5];
 
 // −Σᵢ₌₁ᵐ 1 / ((x − aᵢ)ᵀ(x − aᵢ) + cᵢ)
 fn shekel(m: usize, x: &Reals) -> f64 {
@@ -1663,6 +1731,8 @@ macro_rules! shekel {
 
         impl FitnessFunction<Reals> for $name {
             type Output = f64;
+
+            gradient!(|x: &[f64], gradient: &mut [f64]| gradients::shekel($m, x, gradient));
 
             /// The value at `x`.
             ///
@@ -1772,6 +1842,8 @@ pub struct Easom;
 
 impl FitnessFunction<Reals> for Easom {
     type Output = f64;
+
+    gradient!(gradients::easom);
 
     /// The value at `x`.
     ///
@@ -1891,6 +1963,8 @@ pub struct SchafferF6;
 impl FitnessFunction<Reals> for SchafferF6 {
     type Output = f64;
 
+    gradient!(gradients::schaffer_f6);
+
     /// The value at `x`.
     ///
     /// # Panics
@@ -1934,6 +2008,7 @@ macro_rules! two_dimensional {
     (
         $(#[$doc:meta])* $name:ident,
         |$x1:ident, $x2:ident| $value:expr,
+        gradient: $gradient:path,
         bounds: $low:literal ..= $high:literal,
         minimum: $minimum:expr, at: [$($solution:expr),+ $(,)?],
         reference: $reference:literal $(, url: $url:literal)? $(,)?
@@ -1944,6 +2019,8 @@ macro_rules! two_dimensional {
 
         impl FitnessFunction<Reals> for $name {
             type Output = f64;
+
+            gradient!($gradient);
 
             /// The value at `x`.
             ///
@@ -2002,6 +2079,7 @@ two_dimensional!(
     |x1, x2| math::powi(1.5 - x1 + x1 * x2, 2)
         + math::powi(2.25 - x1 + x1 * x2 * x2, 2)
         + math::powi(2.625 - x1 + x1 * math::powi(x2, 3), 2),
+    gradient: gradients::beale,
     bounds: -4.5..=4.5,
     minimum: 0.0, at: [[3.0, 0.5]],
     reference: "Beale, E. M. L. (1958). On an Iterative Method for Finding a Local Minimum of a \
@@ -2021,6 +2099,7 @@ two_dimensional!(
     /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
     Booth,
     |x1, x2| math::powi(x1 + 2.0 * x2 - 7.0, 2) + math::powi(2.0 * x1 + x2 - 5.0, 2),
+    gradient: gradients::booth,
     bounds: -10.0..=10.0,
     minimum: 0.0, at: [[1.0, 3.0]],
     reference: "Jamil, M. and Yang, X.-S. (2013). A literature survey of benchmark functions for \
@@ -2043,6 +2122,7 @@ two_dimensional!(
     /// original ([#168](https://github.com/tachsin/genoxide/issues/168)).
     Matyas,
     |x1, x2| 0.26 * (x1 * x1 + x2 * x2) - 0.48 * x1 * x2,
+    gradient: gradients::matyas,
     bounds: -10.0..=10.0,
     minimum: 0.0, at: [[0.0, 0.0]],
     reference: "Jamil, M. and Yang, X.-S. (2013). A literature survey of benchmark functions for \
@@ -2067,6 +2147,7 @@ two_dimensional!(
     |x1, x2| x1 * x1 + 2.0 * x2 * x2 - 0.3 * math::cos(3.0 * PI * x1)
         - 0.4 * math::cos(4.0 * PI * x2)
         + 0.7,
+    gradient: gradients::bohachevsky_1,
     bounds: -100.0..=100.0,
     minimum: 0.0, at: [[0.0, 0.0]],
     reference: "Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized \
@@ -2091,6 +2172,7 @@ two_dimensional!(
     |x1, x2| x1 * x1 + 2.0 * x2 * x2
         - 0.3 * math::cos(3.0 * PI * x1) * math::cos(4.0 * PI * x2)
         + 0.3,
+    gradient: gradients::bohachevsky_2,
     bounds: -100.0..=100.0,
     minimum: 0.0, at: [[0.0, 0.0]],
     reference: "Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized \
@@ -2112,6 +2194,7 @@ two_dimensional!(
     /// against the original ([#168](https://github.com/tachsin/genoxide/issues/168)).
     Bohachevsky3,
     |x1, x2| x1 * x1 + 2.0 * x2 * x2 - 0.3 * math::cos(3.0 * PI * x1 + 4.0 * PI * x2) + 0.3,
+    gradient: gradients::bohachevsky_3,
     bounds: -100.0..=100.0,
     minimum: 0.0, at: [[0.0, 0.0]],
     reference: "Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generalized \
@@ -2137,6 +2220,7 @@ two_dimensional!(
         let x1_squared = x1 * x1;
         (2.0 - 1.05 * x1_squared + x1_squared * x1_squared / 6.0) * x1_squared + x1 * x2 + x2 * x2
     },
+    gradient: gradients::three_hump_camel,
     bounds: -5.0..=5.0,
     minimum: 0.0, at: [[0.0, 0.0]],
     reference: "Jamil, M. and Yang, X.-S. (2013). A literature survey of benchmark functions for \
@@ -2146,8 +2230,9 @@ two_dimensional!(
 );
 
 // Langermann's centers aᵢ and weights cᵢ, in two dimensions
-const LANGERMANN_A: [[f64; 2]; 5] = [[3.0, 5.0], [5.0, 2.0], [2.0, 1.0], [1.0, 4.0], [7.0, 9.0]];
-const LANGERMANN_C: [f64; 5] = [1.0, 2.0, 5.0, 2.0, 3.0];
+pub(super) const LANGERMANN_A: [[f64; 2]; 5] =
+    [[3.0, 5.0], [5.0, 2.0], [2.0, 1.0], [1.0, 4.0], [7.0, 9.0]];
+pub(super) const LANGERMANN_C: [f64; 5] = [1.0, 2.0, 5.0, 2.0, 3.0];
 
 /// Langermann's function in two dimensions, with m = 5 terms:
 /// `Σᵢ cᵢ exp(−dᵢ / π) cos(π dᵢ)`, where dᵢ = (x₁ − aᵢ₁)² + (x₂ − aᵢ₂)²: rings of ripples
@@ -2176,6 +2261,8 @@ pub struct Langermann;
 
 impl FitnessFunction<Reals> for Langermann {
     type Output = f64;
+
+    gradient!(gradients::langermann);
 
     /// The value at `x`.
     ///
@@ -2226,7 +2313,7 @@ impl Problem for Langermann {
 }
 
 // the centers of Shekel's foxholes: the 5 × 5 grid of (−32, −16, 0, 16, 32)², x₁ varying first
-const FOXHOLES: [f64; 5] = [-32.0, -16.0, 0.0, 16.0, 32.0];
+pub(super) const FOXHOLES: [f64; 5] = [-32.0, -16.0, 0.0, 16.0, 32.0];
 
 /// Shekel's foxholes, De Jong's F5: `1 / (1/500 + Σⱼ₌₁²⁵ 1 / (j + (x₁ − a₁ⱼ)⁶ + (x₂ − a₂ⱼ)⁶))`,
 /// a plane at nearly 500 with 25 narrow holes, one at each point of the grid
@@ -2249,6 +2336,8 @@ pub struct ShekelFoxholes;
 
 impl FitnessFunction<Reals> for ShekelFoxholes {
     type Output = f64;
+
+    gradient!(gradients::shekel_foxholes);
 
     /// The value at `x`.
     ///
@@ -2300,10 +2389,11 @@ impl Problem for ShekelFoxholes {
 }
 
 // Kowalik and Osborne's data: the responses aᵢ, and the reciprocals of the predictors bᵢ
-const KOWALIK_A: [f64; 11] = [
+pub(super) const KOWALIK_A: [f64; 11] = [
     0.1957, 0.1947, 0.1735, 0.1600, 0.0844, 0.0627, 0.0456, 0.0342, 0.0323, 0.0235, 0.0246,
 ];
-const KOWALIK_B_INVERSE: [f64; 11] = [0.25, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0];
+pub(super) const KOWALIK_B_INVERSE: [f64; 11] =
+    [0.25, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0];
 
 /// Kowalik's function, `Σᵢ₌₁¹¹ (aᵢ − x₁ (bᵢ² + bᵢx₂) / (bᵢ² + bᵢx₃ + x₄))²`: the least squares
 /// fit of a rational model to 11 data points, with poles where a denominator is 0.
@@ -2328,6 +2418,8 @@ pub struct Kowalik;
 
 impl FitnessFunction<Reals> for Kowalik {
     type Output = f64;
+
+    gradient!(gradients::kowalik);
 
     /// The value at `x`.
     ///

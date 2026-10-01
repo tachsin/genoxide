@@ -41,6 +41,8 @@
 //!   asynchronous evaluation
 //! - [`Engine`]: runs an algorithm with stop conditions, parallel or [batch](engine::Batch)
 //!   evaluation and cancellation; [`AsyncEngine`](engine::AsyncEngine) evaluates asynchronously
+//! - [`gradient`]: gradients for gradient-based methods, supplied with the fitness
+//!   ([`Differentiable`](gradient::Differentiable)) or by finite differences
 //! - [`gp`]: tree genetic programming, strongly typed: programs and formulas as genomes, with
 //!   subtree crossover and mutation
 //! - [`nn`]: neural networks whose weights are a genome, a multilayer perceptron and an Elman
@@ -87,6 +89,7 @@ pub mod error;
 pub mod fitness;
 pub mod genome;
 pub mod gp;
+pub mod gradient;
 pub mod individual;
 pub mod math;
 pub mod multi;

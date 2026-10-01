@@ -1,9 +1,12 @@
 # Plan: general optimization methods
 
 A working plan, removed when the work is done. Of batch A1, `Algorithm::is_finished` with
-`StopReason::Converged`, `local::Restarts` and Nelder-Mead are implemented, and of batch A2 the
-Moré-Thuente line search (crate-private until L-BFGS-B uses it); the linear algebra, the rest of
-A2 and the later batches aren't yet. genoxide has
+`StopReason::Converged`, `local::Restarts` and Nelder-Mead are implemented; of batch A2, the
+Moré-Thuente line search (crate-private until L-BFGS-B uses it), the extras path of the engine
+limited to gradients (`Provided`, `Wanted`, `Extras`, `BatchExtras`, `Evaluations`, `prepare`,
+`wants`, `tell_evaluations`), `Differentiable`, `gradient::Gradients`, finite-difference stencils,
+`gradient::check` and the analytic gradients of the smooth problems; the linear algebra,
+L-BFGS-B and the later batches aren't yet. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
 optimization library: local derivative-free methods, gradient-based methods, constrained
@@ -71,6 +74,11 @@ tested, and orders the work in batches.
   the next trial halfway back to α_l). Nocedal and Wright (2006), ch. 3: **not re-read** (no copy
   at hand); μ = c₁ = 10⁻⁴ and η = c₂ = 0.9 or 0.1 as recorded in this plan. Wolfe (1969): **not
   re-read**; the conditions as Moré and Thuente state them.
+- **Batch A2, gradients, 2026-10-01.** Gill, Murray, Saunders and Wright (1983) and NW ch. 8:
+  **not re-read** (the paper is behind SIAM's paywall, and the book wasn't at hand). The relative
+  steps √ε and ε^(1/3), the rounding of the step so that x + h − x = h, and the one-sided
+  second-order formula at a bound are the textbook ones, as section 1.3 records them; the
+  `gradient` module says so. To be checked against both before L-BFGS-B's line search uses them.
 - The methods are general. The docs and examples motivate them with generic cases (expensive
   simulations, engineering design, black-box functions, model fitting), not with an application
   domain.

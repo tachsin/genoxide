@@ -65,6 +65,13 @@
 //! | [`ShekelFoxholes`] | 2 | [−65.536, 65.536] | 0.99800 near (−32, −32), best known |
 //! | [`Kowalik`] | 4 | [−5, 5] | 3.07486e-4 at (0.19283, 0.19084, 0.12312, 0.13577), best known |
 //!
+//! The classic functions but [`Eggholder`], [`Schwefel2_21`] and [`Schwefel2_22`], which aren't
+//! differentiable everywhere, supply their analytic gradient to the algorithms that want one (see
+//! [`gradient`](crate::gradient)): [`FitnessFunction::provides`] says so, and
+//! [`FitnessFunction::evaluate_with`] computes it, with [`math`](crate::math)'s functions. Ackley's
+//! has a cone at the origin, where its gradient is taken as 0, and Schwefel 2.26's second
+//! derivative is unbounded at 0.
+//!
 //! Two submodules hold constrained problems, whose fitness is `(score, violation)`:
 //!
 //! - [`cec2006`]: the CEC 2006 constrained problems g01 to g24
@@ -112,6 +119,7 @@ pub mod cec2006;
 mod classic;
 pub mod control;
 pub mod engineering;
+mod gradients;
 
 pub use classic::{
     Ackley, AxisParallelEllipsoid, Branin, GoldsteinPrice, Griewank, Himmelblau, Levy, Michalewicz,
@@ -125,7 +133,7 @@ pub use classic::{
 pub use classic::{Easom, Eggholder, Hartmann3, Hartmann6, SchafferF6, Shekel5, Shekel7, Shekel10};
 
 use crate::constraint::{at_most, equal};
-use crate::engine::{FitnessFunction, IntoFitness};
+use crate::engine::{Extras, FitnessFunction, IntoFitness, Provided};
 use crate::genome::{Real, Reals, Representation};
 use crate::{Fitness, Objective};
 
@@ -329,6 +337,34 @@ pub trait DynProblem: Send + Sync {
 
     /// The constraint values at `genome`, as [`Problem::constraints`].
     fn constraints(&self, genome: &Reals) -> Constraints;
+
+    /// What the problem gives besides the fitness, as [`FitnessFunction::provides`]: the
+    /// gradient, for the smooth classic functions. Nothing by default.
+    fn provides(&self) -> Provided {
+        Provided::NOTHING
+    }
+
+    /// The fitness of `genome`, as [`evaluate`](DynProblem::evaluate), with the extras of
+    /// `extras`, as [`FitnessFunction::evaluate_with`]. By default, `evaluate(genome)`.
+    ///
+    /// ```
+    /// use genoxide::engine::Extras;
+    /// use genoxide::genome::Reals;
+    /// use genoxide::problems;
+    ///
+    /// for problem in problems::all() {
+    ///     if problem.provides().gradient {
+    ///         let mut gradient = vec![0.0; problem.real().bounds().len()];
+    ///         let x = Reals::from(vec![0.5; gradient.len()]);
+    ///         let fitness = problem.evaluate_with(&x, &mut Extras::with_gradient(&mut gradient));
+    ///         assert_eq!(fitness, problem.evaluate(&x));
+    ///     }
+    /// }
+    /// ```
+    fn evaluate_with(&self, genome: &Reals, extras: &mut Extras<'_>) -> Fitness {
+        let _ = extras;
+        self.evaluate(genome)
+    }
 }
 
 // a problem behind `DynProblem`; a wrapper, so that problems don't have the methods of both traits
@@ -371,6 +407,17 @@ where
 
     fn constraints(&self, genome: &Reals) -> Constraints {
         self.0.constraints(genome)
+    }
+
+    fn provides(&self) -> Provided {
+        self.0.provides()
+    }
+
+    fn evaluate_with(&self, genome: &Reals, extras: &mut Extras<'_>) -> Fitness {
+        self.0
+            .evaluate_with(genome, extras)
+            .into_fitness()
+            .unwrap_or_else(|_| Fitness::invalid())
     }
 }
 
