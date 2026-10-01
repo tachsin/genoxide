@@ -21,7 +21,7 @@
 //! genome into a kept array is only safe (without unsafe code) through numpy's borrow checking,
 //! which cost as much as the new array.
 
-use crate::genes::{self, Genes};
+use crate::genes::{GenomeContext, PyGenome};
 use crate::problems::{IntegerProblem, MultiNative};
 use genoxide::Fitness;
 use genoxide::engine::{FitnessFunction, IntoFitness, Progress};
@@ -50,6 +50,8 @@ pub struct Shared {
     abort: Arc<AtomicBool>,
     // the matrix of the last batch, to write the next batch into
     matrix: Mutex<Option<Py<PyAny>>>,
+    // what the genomes need to become Python objects
+    context: GenomeContext,
 }
 
 impl Shared {
@@ -58,6 +60,7 @@ impl Shared {
         batch: bool,
         parallel: bool,
         on_generation: Option<Py<PyAny>>,
+        context: GenomeContext,
     ) -> Self {
         Self {
             function,
@@ -67,7 +70,13 @@ impl Shared {
             error: Mutex::new(None),
             abort: Arc::new(AtomicBool::new(false)),
             matrix: Mutex::new(None),
+            context,
         }
+    }
+
+    /// What the genomes need to become Python objects.
+    pub fn context(&self) -> &GenomeContext {
+        &self.context
     }
 
     /// The flag that stops the run.
@@ -185,7 +194,7 @@ impl Shared {
     }
 
     // calls the function of one genome with `genome`, unless the run is stopping
-    fn call_genome<'py, G: Genes, T>(
+    fn call_genome<'py, G: PyGenome, T>(
         &self,
         py: Python<'py>,
         genome: &G,
@@ -194,12 +203,12 @@ impl Shared {
         if self.aborted() {
             return None;
         }
-        let argument = Ok(genes::array(py, genome).into_any());
+        let argument = genome.object(py, &self.context);
         self.call(py, argument, convert)
     }
 
     // calls the batch function with `genomes`, a genome per row
-    fn call_batch<'py, G: Genes, T>(
+    fn call_batch<'py, G: PyGenome, T>(
         &self,
         py: Python<'py>,
         genomes: &[&G],
@@ -212,10 +221,10 @@ impl Shared {
             .take()
             .map(|matrix| matrix.into_bound(py))
             // the run's reference only: Python kept none
-            .filter(|matrix| only_reference(matrix) && genes::refill_matrix(matrix, genomes));
+            .filter(|matrix| only_reference(matrix) && G::refill(matrix, genomes));
         let matrix = match reused {
             Some(matrix) => Ok(matrix),
-            None => genes::matrix(py, genomes).map(Bound::into_any),
+            None => G::batch(py, genomes, &self.context),
         };
         let kept = matrix.as_ref().ok().cloned();
         let result = self.call(py, matrix, convert);
@@ -228,7 +237,7 @@ impl Shared {
     // a generation's values from the function of one genome: called on this thread, the engine's,
     // attached to Python once; or with `parallel`, on rayon's threads, while this thread checks
     // for Ctrl+C. `invalid` for a genome not called, after an error or Ctrl+C.
-    fn call_genomes<G: Genes, T: Copy + Send + Sync>(
+    fn call_genomes<G: PyGenome, T: Copy + Send + Sync>(
         &self,
         genomes: &[&G],
         convert: for<'py> fn(&Bound<'py, PyAny>) -> PyResult<T>,
@@ -405,7 +414,7 @@ pub enum Native<'a> {
     Integer(&'a dyn IntegerProblem),
 }
 
-impl<G: Genes> FitnessFunction<G> for Single<'_> {
+impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
     type Output = Value;
 
     fn evaluate(&self, genome: &G) -> Value {
@@ -569,7 +578,7 @@ pub struct Multi<'a, const M: usize> {
     pub problem: Option<&'a MultiNative<M>>,
 }
 
-impl<G: Genes, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
+impl<G: PyGenome, const M: usize> MultiFitnessFunction<G, M> for Multi<'_, M> {
     type Output = MultiValue<M>;
 
     fn evaluate(&self, genome: &G) -> MultiValue<M> {

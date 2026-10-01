@@ -1073,7 +1073,7 @@ impl<const M: usize> MultiNative<M> {
 
     /// The scores of `genome`, or invalid ones for a genome of the other kind (the run checks
     /// that the genome is the problem's).
-    pub fn evaluate<G: crate::genes::Genes>(&self, genome: &G) -> Scores<M> {
+    pub fn evaluate<G: crate::genes::PyGenome>(&self, genome: &G) -> Scores<M> {
         let scores = match self {
             Self::Real(p) => genome.reals().map(|genome| p.evaluate(genome)),
             Self::Binary(p) => genome.bits().map(|genome| p.evaluate(genome)),

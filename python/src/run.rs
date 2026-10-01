@@ -8,7 +8,7 @@ use crate::control::{
 };
 use crate::errors::{genome_setting, setting};
 use crate::fitness::{Multi, Native, Shared, Single};
-use crate::genes::{self, Genes};
+use crate::genes::{GenomeContext, PyGenome};
 use crate::operators::{
     AnySelect, ListCrossover, OrderCrossovers, OrderMutation, RealCrossover, RealMutation,
     bit_flip, integer_mutation, self_adaptive,
@@ -76,7 +76,7 @@ pub fn run<'py>(
         check_problem(problem, &run).map_err(PyValueError::new_err)?;
     }
     let context = Context {
-        shared: Shared::new(fitness, batch, parallel, on_generation),
+        shared: Shared::new(fitness, batch, parallel, on_generation, GenomeContext::None),
         objectives: run
             .objectives
             .iter()
@@ -608,7 +608,7 @@ fn with_operators<'py, R, C, M>(
 ) -> Returns<'py>
 where
     R: Representation + Clone + PartialEq + Send + Serialize + DeserializeOwned + 'static,
-    R::Genome: Genes + Serialize + DeserializeOwned,
+    R::Genome: PyGenome + Serialize + DeserializeOwned,
     C: Crossover<R> + Clone + Send + Serialize + DeserializeOwned + 'static,
     M: Mutate<R> + Clone + Send + Serialize + DeserializeOwned + 'static,
 {
@@ -867,7 +867,7 @@ macro_rules! duplicates {
 impl<'py, R, C, X> WithObjectives for MultiObjective<'_, 'py, R, C, X>
 where
     R: Representation + Clone + Serialize + DeserializeOwned,
-    R::Genome: Genes + Serialize + DeserializeOwned,
+    R::Genome: PyGenome + Serialize + DeserializeOwned,
     C: Crossover<R> + Clone + Serialize + DeserializeOwned,
     X: Mutate<R> + Clone + Serialize + DeserializeOwned,
 {
@@ -1007,12 +1007,13 @@ fn generational<'py, A, S>(
 ) -> Returns<'py>
 where
     A: Algorithm + Reevaluate + Clone + Send + Serialize + DeserializeOwned + 'static,
-    A::Genome: Genes,
+    A::Genome: PyGenome,
     S: Settings<A>,
 {
     let stop = context.stop(true)?;
     let algorithm = context.checkpoints.resume(algorithm)?;
     let shared = &context.shared;
+    let cx = shared.context();
     let parallel = context.parallel;
     let problem = match &context.problem {
         Some(problems::Problem::Single(problem)) => Some(Native::Real(problem.as_ref())),
@@ -1043,6 +1044,7 @@ where
                         snapshot.population(),
                         snapshot.best(),
                         snapshot.progress(),
+                        cx,
                     )
                 });
             });
@@ -1051,7 +1053,7 @@ where
             engine = engine.control(move |algorithm, progress| {
                 let called = shared.control(progress, |py, arguments| {
                     let best = algorithm.best().expect("a best individual after a tell");
-                    let state = single_state(py, algorithm.population(), best, progress)?;
+                    let state = single_state(py, algorithm.population(), best, progress, cx)?;
                     // the algorithm moves to the slot for the call, and back
                     let filler = spare.take().expect("the spare is back after each call");
                     slot.fill(std::mem::replace(algorithm, filler));
@@ -1085,7 +1087,7 @@ where
     let outcome = outcome.map_err(engine_error)?;
     let fitness = outcome.best_fitness();
     let result = PyDict::new(py);
-    result.set_item("best_genome", genes::array(py, outcome.best_genome()))?;
+    result.set_item("best_genome", outcome.best_genome().object(py, cx)?)?;
     result.set_item("best_fitness", fitness.score())?;
     // no violation without a valid solution: NaN, as 0 means feasible
     let violation = fitness.score().map_or(f64::NAN, |_| fitness.violation());
@@ -1105,11 +1107,12 @@ fn multi_objective<'py, A, const N: usize>(
 ) -> Returns<'py>
 where
     A: MultiObjectiveAlgorithm<N> + Clone + Send + Serialize + DeserializeOwned,
-    A::Genome: Genes,
+    A::Genome: PyGenome,
 {
     let stop = context.stop(false)?;
     let algorithm = context.checkpoints.resume(algorithm)?;
     let shared = &context.shared;
+    let cx = shared.context();
     let parallel = context.parallel;
     let problem = match &context.problem {
         Some(problems::Problem::Multi(config)) => Some(config.build::<N>()),
@@ -1125,7 +1128,7 @@ where
             .abort_flag(shared.abort_flag())
             .parallel(parallel)
             .on_generation(|snapshot| {
-                shared.after_generation(snapshot.progress(), |py| multi_state(py, snapshot));
+                shared.after_generation(snapshot.progress(), |py| multi_state(py, snapshot, cx));
             });
         if let Some((path, every)) = &context.checkpoints.save {
             engine = engine.checkpoint_every(*every, |algorithm| save(context, algorithm, path));
@@ -1141,7 +1144,7 @@ where
     let genomes: Vec<&A::Genome> = front.iter().map(Individual::genome).collect();
     let (objectives, violations) = objective_rows(py, front)?;
     let result = PyDict::new(py);
-    result.set_item("front_genomes", genes::matrix(py, &genomes)?)?;
+    result.set_item("front_genomes", PyGenome::batch(py, &genomes, cx)?)?;
     result.set_item("front_objectives", objectives)?;
     result.set_item("front_violations", violations)?;
     result.set_item("generations", outcome.generations())?;
@@ -1176,30 +1179,32 @@ fn engine_error(error: genoxide::Error) -> Failure {
 
 // the arguments of the progress callback after a single-objective generation: the best score
 // and genome so far, and the population, made into arrays when Python reads them
-fn single_state<'py, G: Genes>(
+fn single_state<'py, G: PyGenome>(
     py: Python<'py>,
     population: &Population<G>,
     best: &Individual<G>,
     progress: &Progress,
+    cx: &GenomeContext,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let score = progress.best().and_then(Fitness::score);
     Ok(vec![
         score.into_pyobject(py)?.into_any(),
-        genes::array(py, best.genome()).into_any(),
-        Bound::new(py, Snapshot::single(population.iter()))?.into_any(),
+        best.genome().object(py, cx)?,
+        Bound::new(py, Snapshot::single(population.iter(), cx))?.into_any(),
     ])
 }
 
 // the arguments of the progress callback after a multi-objective generation: the size of the
 // front, and the population and the front, made into arrays when Python reads them
-fn multi_state<'py, G: Genes, const N: usize>(
+fn multi_state<'py, G: PyGenome, const N: usize>(
     py: Python<'py>,
     snapshot: &MultiSnapshot<'_, G, N>,
+    cx: &GenomeContext,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     Ok(vec![
         snapshot.front().len().into_pyobject(py)?.into_any(),
-        Bound::new(py, Snapshot::multi(snapshot.population().iter(), true))?.into_any(),
-        Bound::new(py, Snapshot::multi(snapshot.front().iter(), false))?.into_any(),
+        Bound::new(py, Snapshot::multi(snapshot.population().iter(), true, cx))?.into_any(),
+        Bound::new(py, Snapshot::multi(snapshot.front().iter(), false, cx))?.into_any(),
     ])
 }
 
@@ -1208,7 +1213,7 @@ type ObjectiveRows<'py> = (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray1<f64>>)
 
 // the objective values of individuals, a row each, and their constraint violations; NaN for an
 // invalid solution
-fn objective_rows<'a, 'py, G: Genes + 'a, const N: usize>(
+fn objective_rows<'a, 'py, G: Genome + 'a, const N: usize>(
     py: Python<'py>,
     individuals: impl IntoIterator<Item = &'a Individual<G, Scores<N>>>,
 ) -> PyResult<ObjectiveRows<'py>> {
