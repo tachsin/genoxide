@@ -260,6 +260,7 @@ const FAMILY_SUMMARIES = {
   Hartmann: "Hartmann's function, four Gaussian wells in the unit cube, in 3 and 6 dimensions.",
   Shekel: "Shekel's function in 4 dimensions, with 5, 7 or 10 narrow wells.",
   Schwefel: "Two of the problems of Schwefel's book: a rotated ellipsoid and a deceptive function.",
+  Penalized: "Yao, Liu and Lin's two penalized functions: a grid of shallow wells over the box, and a steep wall near its bounds.",
   Schaffer: "One variable and two objectives, from the paper of the first multi-objective genetic algorithm, VEGA.",
   Viennet: "Three objectives of two variables, with curved and split Pareto fronts.",
   "N-Queens":

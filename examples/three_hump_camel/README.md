@@ -6,7 +6,7 @@ reference: "Jamil, M. and Yang, X.-S. (2013). A literature survey of benchmark f
 reference_url: "https://doi.org/10.1504/IJMMNO.2013.055204"
 optimum: "0 at (0, 0)"
 languages: [rust, python]
-order: 62
+order: 72
 ---
 
 # Three-hump camel

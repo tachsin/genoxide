@@ -6,7 +6,7 @@ reference: "Deb, K., Pratap, A. and Moitra, S. (2000). Mechanical component desi
 reference_url: https://doi.org/10.1007/3-540-45356-3_84
 optimum: "not known in closed form; from a cost of 2.3811341 at a deflection of 0.0157592 to a deflection of 0.00043904 at a cost of 36.421245 (best known); genoxide's reference front has a hypervolume of 1.1434 in scaled objectives (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 221
+order: 237
 ---
 
 # Welded beam, two objectives

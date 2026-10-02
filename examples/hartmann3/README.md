@@ -6,7 +6,7 @@ reference: "Hartman, J. K. (1973). Some experiments in global optimization. Nava
 reference_url: "https://doi.org/10.1002/nav.3800200316"
 optimum: "−3.86278 at (0.11461, 0.55565, 0.85255) (best known)"
 languages: [rust, python]
-order: 69
+order: 79
 family: Hartmann
 tab: 3-D
 ---

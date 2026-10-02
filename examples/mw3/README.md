@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "the line f₂ = 1 − f₁ and two stretches of the second constraint's boundary, from (0, 1) to (1, 0); hypervolume 0.6650 (normalized objectives, reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 206
+order: 222
 family: MW
 ---
 

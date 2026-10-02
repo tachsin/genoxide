@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "two pieces, each part constraint boundary and part the parabola f₂ = 1 − f₁², from (0.2325, 1.1350) to (1, 0); hypervolume 0.6883 (normalized objectives, reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 213
+order: 229
 family: MW
 ---
 

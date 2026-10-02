@@ -6,7 +6,7 @@ reference: "Jain, H. and Deb, K. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281534
 optimum: "DTLZ3's front, the unit sphere, all feasible; the 91 target points' hypervolume is 0.7449 (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 174
+order: 194
 family: C-DTLZ
 tab: C1-DTLZ3
 ---

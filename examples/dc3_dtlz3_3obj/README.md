@@ -6,7 +6,7 @@ reference: "Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionar
 reference_url: https://doi.org/10.1109/TEVC.2018.2855411
 optimum: "four patches of DTLZ3's front; ideal point (cos²(7π/18), 0, 0) = (0.117, 0, 0), nadir point (1, sin(7π/18), sin(7π/18)) = (1, 0.9397, 0.9397); hypervolume 0.5488 (normalized objectives, reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 186
+order: 206
 family: DC-DTLZ
 tab: DC3-DTLZ3
 ---

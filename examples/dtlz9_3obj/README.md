@@ -6,7 +6,7 @@ reference: "Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2001). Scalable T
 reference_url: https://sop.tik.ee.ethz.ch/publicationListFiles/dtlz2001a.pdf
 optimum: "the curve f₁ = f₂ = cos θ, f₃ = sin θ, θ in [0, π/2]; ideal point (0, 0, 0), nadir point (1, 1, 1); hypervolume 0.2697 (normalized objectives, reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 180
+order: 200
 family: DTLZ
 tab: DTLZ9
 ---

@@ -6,7 +6,7 @@ reference: "Deb, K., Thiele, L., Laumanns, M. and Zitzler, E. (2001). Scalable T
 reference_url: https://sop.tik.ee.ethz.ch/publicationListFiles/dtlz2001a.pdf
 optimum: "the line f₁ = f₂ = t, f₃ = 1 − 4t, t in [0, 1/6], and the triangle 2f₃ + f₁ + f₂ = 1 with f₁, f₂ ≥ (1 − f₃)/4; ideal point (0, 0, 0), nadir point (3/4, 3/4, 1); hypervolume 0.9724 (normalized objectives, reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 179
+order: 199
 family: DTLZ
 tab: DTLZ8
 ---

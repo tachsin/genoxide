@@ -6,7 +6,7 @@ reference: "Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Go
 reference_url: https://doi.org/10.1162/evco_a_00259
 optimum: "for the difficulty triplet (0.5, 0.5, 0.5), patches of the plane f₁ + f₂ + f₃ = 2.5; ideal point (0.5, 0.5, 0.5), nadir point (1.4479, 1.5, 1.5); hypervolume 1.1300 (normalized objectives, reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 193
+order: 213
 family: DAS-CMOP
 ---
 

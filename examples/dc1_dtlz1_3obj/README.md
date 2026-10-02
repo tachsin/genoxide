@@ -6,7 +6,7 @@ reference: "Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionar
 reference_url: https://doi.org/10.1109/TEVC.2018.2855411
 optimum: "two bands of the triangle f₁ + f₂ + f₃ = 1/2, f₃ in [1/9, 2/9] or [4/9, 1/2]; ideal point (0, 0, 1/9), nadir point (7/18, 7/18, 1/2); hypervolume 1.0709 (normalized objectives, reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 181
+order: 201
 family: DC-DTLZ
 tab: DC1-DTLZ1
 ---

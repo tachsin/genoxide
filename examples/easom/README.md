@@ -6,7 +6,7 @@ reference: "Easom, E. E. (1990). A Survey of Global Optimization Techniques. M.E
 reference_url: ""
 optimum: "−1 at (π, π)"
 languages: [rust, python]
-order: 77
+order: 87
 ---
 
 # Easom

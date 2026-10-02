@@ -6,7 +6,7 @@ reference: "Jain, H. and Deb, K. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281534
 optimum: "the convex front f₃ + √f₁ + √f₂ = 1 outside the cylinder of radius 0.225 around the diagonal; the 47 feasible target points' hypervolume is 1.2546 (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 176
+order: 196
 family: C-DTLZ
 tab: convex C2-DTLZ2
 ---

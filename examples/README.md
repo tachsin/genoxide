@@ -48,6 +48,14 @@ python examples/tsp_berlin52/main.py
 | [Trid](trid/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/trid) |
 | [Dixon-Price](dixon_price/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/dixon-price) |
 | [Powell](powell/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/powell) |
+| [Sum of different powers](sum_of_different_powers/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/sum-of-different-powers) |
+| [Step](step/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/step) |
+| [Quartic](quartic/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/quartic) |
+| [Rotated hyper-ellipsoid](rotated_hyper_ellipsoid/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rotated-hyper-ellipsoid) |
+| [High-conditioned elliptic](high_conditioned_elliptic/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/high-conditioned-elliptic) |
+| [Bent cigar](bent_cigar/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bent-cigar) |
+| [Discus](discus/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/discus) |
+| [Different powers](different_powers/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/different-powers) |
 | [Rosenbrock](rosenbrock/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/rosenbrock) |
 | [Levy](levy/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/levy) |
 | [Styblinski-Tang](styblinski_tang/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/styblinski-tang) |
@@ -78,6 +86,15 @@ python examples/tsp_berlin52/main.py
 | [Easom](easom/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/easom) |
 | [Eggholder](eggholder/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/eggholder) |
 | [Schaffer F6](schaffer_f6/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schaffer-f6) |
+| [Schaffer F7](schaffer_f7/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/schaffer-f7) |
+| [Penalized 1](penalized1/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/penalized1) |
+| [Penalized 2](penalized2/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/penalized2) |
+| [Büche-Rastrigin](buche_rastrigin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/buche-rastrigin) |
+| [Non-continuous Rastrigin](non_continuous_rastrigin/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/non-continuous-rastrigin) |
+| [Weierstrass](weierstrass/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/weierstrass) |
+| [Katsuura](katsuura/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/katsuura) |
+| [HappyCat](happy_cat/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/happy-cat) |
+| [HGBat](hg_bat/) | continuous | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/hg-bat) |
 | [Pressure vessel design](pressure_vessel/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/pressure-vessel) |
 | [Welded beam design](welded_beam/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/welded-beam) |
 | [Tension/compression spring](tension_compression_spring/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/tension-compression-spring) |

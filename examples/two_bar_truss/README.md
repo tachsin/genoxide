@@ -6,7 +6,7 @@ reference: "Deb, K., Pratap, A. and Moitra, S. (2000). Mechanical component desi
 reference_url: https://doi.org/10.1007/3-540-45356-3_84
 optimum: "the front f₁ f₂ = 400 for stresses from 10⁵ down to 4000√5, then x₂ = 0.01 and y from 2 to 3, down to 8000√10/3 ≈ 8432.74; hypervolume 1.0663 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 220
+order: 236
 ---
 
 # Two-bar truss

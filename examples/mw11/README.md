@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "two pieces on constraint boundaries and the isolated point (1, 1), which needs x₁ = 1 and g₃ = 1 exactly; hypervolume 0.8099 (normalized objectives, reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 214
+order: 230
 family: MW
 ---
 

@@ -6,7 +6,7 @@ reference: "Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test probl
 reference_url: https://doi.org/10.1007/3-540-44719-9_20
 optimum: "six pieces of the curve f₂ = 1 − √f₁, the last ending at (1, 0), and the point (0, 1.0446); hypervolume 0.8443 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 171
+order: 191
 family: CTP
 ---
 

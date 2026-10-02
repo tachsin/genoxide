@@ -6,7 +6,7 @@ reference: "Shekel, J. (1971). Test functions for multimodal search techniques. 
 reference_url: ""
 optimum: "−10.53641 near (4, 4, 4, 4) (best known)"
 languages: [rust, python]
-order: 73
+order: 83
 family: Shekel
 tab: Shekel 10
 ---

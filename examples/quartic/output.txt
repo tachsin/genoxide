@@ -1,0 +1,15 @@
+Quartic in 30 dimensions, 300000 evaluations at most
+Quartic without noise: evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES          476      980     1498     1974     2436   5.7e-9
+sep-CMA-ES      434      840     1232     1722     2184   4.8e-9
+DE             2400     5200     7600    10900    13400   9.8e-9
+PSO            2000     4520     7320     9760    12440   9.4e-9
+GA             2845     5774    10672    21396    52845   9.5e-9
+With noise in [0, 1): the best value found, and the quartic there without noise
+algorithm         best   without noise
+CMA-ES          0.1003          9.8e-2
+sep-CMA-ES      0.0964          9.6e-2
+DE              0.0034          3.3e-3
+PSO             0.0026          2.4e-3
+GA              0.0112          1.0e-2

@@ -6,7 +6,7 @@ reference: "Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Go
 reference_url: https://doi.org/10.1162/evco_a_00259
 optimum: "for the difficulty triplet (0, 0.5, 0.5), two pieces of the curve f₂ = 1.5 − (f₁ − 0.5)²; ideal point (0.5, 0.5), nadir point (1.5, 1.5); hypervolume 0.4706 (normalized objectives, reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 187
+order: 207
 family: DAS-CMOP
 ---
 

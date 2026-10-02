@@ -6,7 +6,7 @@ reference: "Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionar
 reference_url: https://doi.org/10.1109/TEVC.2018.2855411
 optimum: "DTLZ3's front, whole; ideal point (0, 0, 0), nadir point (1, 1, 1); hypervolume 0.7971 (normalized objectives, reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 184
+order: 204
 family: DC-DTLZ
 tab: DC2-DTLZ3
 ---

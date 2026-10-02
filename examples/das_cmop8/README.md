@@ -6,7 +6,7 @@ reference: "Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Go
 reference_url: https://doi.org/10.1162/evco_a_00259
 optimum: "for the difficulty triplet (0.5, 0.5, 0.5), patches of the unit sphere's octant moved to (0.5, 0.5, 0.5); ideal point (0.5, 0.5, 0.5), nadir point (1.5, 1.5, 1.4969); hypervolume 0.7853 (normalized objectives, reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 194
+order: 214
 family: DAS-CMOP
 ---
 

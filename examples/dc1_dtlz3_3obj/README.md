@@ -6,7 +6,7 @@ reference: "Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionar
 reference_url: https://doi.org/10.1109/TEVC.2018.2855411
 optimum: "two bands of the unit sphere's octant, f₃ in [0, sin(π/18)] or [sin(5π/18), sin(7π/18)]; ideal point (0, 0, 0), nadir point (1, 1, sin(7π/18)) = (1, 1, 0.9397); hypervolume 0.6529 (normalized objectives, reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 182
+order: 202
 family: DC-DTLZ
 tab: DC1-DTLZ3
 ---

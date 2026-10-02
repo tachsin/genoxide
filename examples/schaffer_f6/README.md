@@ -6,7 +6,7 @@ reference: "Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989).
 reference_url: ""
 optimum: "0 at the origin"
 languages: [rust, python]
-order: 79
+order: 89
 ---
 
 # Schaffer F6

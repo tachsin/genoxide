@@ -1,0 +1,8 @@
+HGBat in 10 dimensions, 10 seeds, 100000 evaluations at most per run
+algorithm         at min  evaluations  median error
+CMA-ES              0/10            -        4.5e-1
+CMA-ES with IPOP    0/10            -        3.4e-1
+DE                  0/10            -        1.3e-1
+PSO                 0/10            -        2.0e-1
+GA                  0/10            -        3.0e-1
+evaluations: the median of the runs that reach the minimum

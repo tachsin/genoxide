@@ -1,0 +1,15 @@
+Discus in 30 dimensions, 300000 evaluations at most
+Discus: evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES        22442    24990    26978    28532    29778   1.0e-8
+sep-CMA-ES     3766     4424     5138     5852     6594   9.0e-9
+DE            14600    19600    24100    29300    33800   9.8e-9
+PSO           12400    16240    20040    23560    27720   8.3e-9
+GA           119237        -        -        -        -   7.5e-2
+Shifted and rotated (seed 1): evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES        23408    25564    26824    28210    29288   9.5e-9
+sep-CMA-ES        -        -        -        -        -    3.7e4
+DE           159900   216600   268800        -        -   6.5e-6
+PSO               -        -        -        -        -    2.5e3
+GA                -        -        -        -        -    6.4e2

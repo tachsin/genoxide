@@ -6,7 +6,7 @@ reference: "Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Go
 reference_url: https://doi.org/10.1162/evco_a_00259
 optimum: "for the difficulty triplet (0.5, 0.5, 0.5), six pieces, some of them points; ideal point (0.5, 0.6056), nadir point (1.3, 1.5); hypervolume 0.7211 (normalized objectives, reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 192
+order: 212
 family: DAS-CMOP
 ---
 

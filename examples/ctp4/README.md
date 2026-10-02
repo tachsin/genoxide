@@ -6,7 +6,7 @@ reference: "Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test probl
 reference_url: https://doi.org/10.1007/3-540-44719-9_20
 optimum: "13 points on the line f₂ = 1 − tan(0.2π) f₁, from (0, 1) to (0.9708, 0.2947); hypervolume 0.6683 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 168
+order: 188
 family: CTP
 ---
 

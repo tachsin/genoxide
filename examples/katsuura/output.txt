@@ -1,0 +1,10 @@
+Katsuura in 10 dimensions, 10 seeds
+algorithm          budget  at min  evaluations  median error
+CMA-ES with IPOP   500000   10/10       230100        8.5e-9
+CMA-ES             100000    0/10            -        1.0e-1
+DE                 100000    0/10            -        5.8e-6
+PSO                100000   10/10          380         0.0e0
+GA                 100000    0/10            -        3.7e-4
+evaluations: the median of the runs that reach the minimum
+CMA-ES with IPOP: from 41990 to 456820 evaluations to the minimum
+PSO: 10 of its 10 runs end on a corner of the box, every gene at a bound

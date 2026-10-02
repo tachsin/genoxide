@@ -1,0 +1,15 @@
+Bent cigar in 30 dimensions, 300000 evaluations at most
+Bent cigar: evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES        10318    11144    11830    12600    13482   8.8e-9
+sep-CMA-ES     5460     6118     6804     7602     8316   9.5e-9
+DE            25200    29600    33900    38300    42800   9.0e-9
+PSO           22200    28080    35240    40720    47600   9.6e-9
+GA                -        -        -        -        -    2.1e2
+Shifted and rotated (seed 1): evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES        10570    11452    12292    13034    13902   5.6e-9
+sep-CMA-ES        -        -        -        -        -    6.8e2
+DE           111700   124400   138800   154500   171700   9.9e-9
+PSO               -        -        -        -        -    5.7e3
+GA                -        -        -        -        -    4.7e2

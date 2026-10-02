@@ -1,0 +1,8 @@
+Weierstrass in 10 dimensions, 10 seeds, 100000 evaluations at most per run
+algorithm         at min  evaluations  median error
+CMA-ES              1/10         4070        2.6e-3
+CMA-ES with IPOP   10/10        10195        8.3e-9
+DE                 10/10        42300        8.8e-9
+PSO                 8/10        17720        9.1e-9
+GA                  0/10            -        1.2e-2
+evaluations: the median of the runs that reach the minimum
