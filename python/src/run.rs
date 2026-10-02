@@ -3,8 +3,8 @@
 use crate::checkpoint::Checkpoints;
 use crate::config;
 use crate::control::{
-    CmaesSettings, ContinuationSettings, DeSettings, EsSettings, FirstOrderSettings, GaSettings,
-    IslandsSettings, LbfgsbSettings, LocalSearchSettings, MmaSettings, NeatSettings,
+    BoSettings, CmaesSettings, ContinuationSettings, DeSettings, EsSettings, FirstOrderSettings,
+    GaSettings, IslandsSettings, LbfgsbSettings, LocalSearchSettings, MmaSettings, NeatSettings,
     NelderMeadSettings, OpenEsSettings, PsoSettings, Running, Settings, Slot,
 };
 use crate::errors::{genome_setting, setting};
@@ -850,6 +850,62 @@ fn real_algorithm<'py>(
             )?;
             generational(py, open_es, OpenEsSettings, context)
         }
+        config::Algorithm::Bo {
+            initial_points,
+            initial_genomes,
+            acquisition,
+            kernel,
+            noise,
+            output,
+            raw_samples,
+            acquisition_starts,
+            hyperparameter_starts,
+            seed,
+        } => {
+            let mut builder = Bo::builder(real).objective(context.single_objective()?);
+            if let Some(points) = initial_points {
+                builder = builder.initial_points(points);
+            }
+            if let Some(genomes) = initial_genomes {
+                builder = builder.initial_genomes(genomes.into_iter().map(Reals::from));
+            }
+            if let Some(acquisition) = acquisition {
+                builder = builder.acquisition(crate::model::acquisition(acquisition));
+            }
+            if let Some(kernel) = kernel {
+                builder = builder.kernel(crate::model::kernel(kernel));
+            }
+            if let Some(noise) = noise {
+                builder = builder.noise(crate::model::noise(noise));
+            }
+            if let Some(output) = output {
+                builder = builder.output(match output {
+                    config::BoOutput::Standardize => bo::Output::Standardize,
+                    config::BoOutput::Log => bo::Output::Log,
+                });
+            }
+            if let Some(samples) = raw_samples {
+                builder = builder.raw_samples(samples);
+            }
+            if let Some(starts) = acquisition_starts {
+                builder = builder.acquisition_starts(starts);
+            }
+            if let Some(starts) = hyperparameter_starts {
+                builder = builder.hyperparameter_starts(starts);
+            }
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            // the only genomes the builder checks are the initial ones
+            let bo = setting(builder.build().map_err(|error| match error {
+                genoxide::Error::InvalidGenome { reason } => genoxide::Error::InvalidSetting {
+                    setting: "initial_genomes",
+                    reason,
+                },
+                error => error,
+            }))?;
+            generational(py, bo, BoSettings, context)
+        }
         config::Algorithm::NelderMead {
             coefficients,
             initial_step,
@@ -1283,6 +1339,7 @@ where
         config::Algorithm::NelderMead { .. } => {
             Err("NelderMead needs a Real genome".to_string().into())
         }
+        config::Algorithm::Bo { .. } => Err("Bo needs a Real genome".to_string().into()),
         config::Algorithm::Lbfgsb { .. } => Err("Lbfgsb needs a Real genome".to_string().into()),
         config::Algorithm::Mma { .. } => Err("Mma needs a Real genome".to_string().into()),
         config::Algorithm::Continuation { .. } => {

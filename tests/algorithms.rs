@@ -416,8 +416,20 @@ fn portable_runs() {
                 .build()
                 .unwrap(),
         ),
+        // the Gaussian process's fits, the acquisition's maximization, the Latin hypercube
+        portable_run(Bo::builder(real()).minimize().seed(1).build().unwrap()),
+        portable_run(
+            Bo::builder(real())
+                .output(bo::Output::Log)
+                .acquisition(bo::Acquisition::ProbabilityOfImprovement { xi: 0.1 })
+                .kernel(genoxide::model::gp::Kernel::SquaredExponential)
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
     ];
-    let expected: [[f64; 4]; 14] = [
+    let expected: [[f64; 4]; 16] = [
         // L-SHADE
         [
             0.5886518163542276,
@@ -515,6 +527,19 @@ fn portable_runs() {
             -2.7974966575791904,
             1.1930722176383557,
             -1.3732603836128217,
+        ], // Bayesian optimization: log-EI, Matérn 5/2
+        [
+            0.7497663253697677,
+            -0.056696340352855756,
+            0.7649350749581538,
+            0.7470392106959753,
+        ],
+        // Bayesian optimization: the log transform, PI, the squared exponential
+        [
+            0.8989959153523532,
+            0.8470798321557886,
+            0.7794047534046049,
+            0.6827343441068123,
         ],
     ];
     for (run, expected) in runs.iter().zip(expected) {

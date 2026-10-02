@@ -211,6 +211,7 @@ python examples/tsp_berlin52/main.py
 | [Adam with a learning-rate schedule](adam/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/adam) |
 | [MMA on a million variables](mma/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mma) |
 | [Continuation by Gaussian smoothing](continuation/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/continuation) |
+| [Bayesian optimization of Branin](bayesian_optimization/) | bayesian | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bayesian-optimization) |
 
 The GPU example is a crate of its own, with wgpu as a dependency:
 `cargo run --release --manifest-path examples/gpu/Cargo.toml`.
@@ -222,4 +223,4 @@ feature it needs, which its README says) and a `README.md` with the front matter
 table above. Cargo finds `main.rs` as the example `<name>`, CI runs every `main.rs` and `main.py`,
 and the docs site makes a page for it, whose build fails if the table lacks the example. The
 categories are binary, permutation, integer, continuous, multi-objective, constrained,
-neuroevolution and engine.
+neuroevolution, genetic programming, engine, local and bayesian.

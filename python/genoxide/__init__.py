@@ -1,7 +1,8 @@
 """Evolutionary computation in Rust, for Python.
 
 Genetic algorithms, local search, the Nelder-Mead simplex method, L-BFGS-B and first-order
-gradient methods (gradient descent, momentum, Nesterov, Adam and AdamW), differential evolution,
+gradient methods (gradient descent, momentum, Nesterov, Adam and AdamW), Bayesian optimization
+(with the Gaussian processes of :mod:`genoxide.model.gp`), differential evolution,
 evolution strategies, CMA-ES, OpenAI's evolution strategy, NEAT, particle swarm optimization, the
 island model, and NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA for several objectives, from
 `genoxide <https://github.com/tachsin/genoxide>`_, with Python fitness functions::
@@ -134,6 +135,9 @@ __all__ = [
     "Pso",
     "LocalSearch",
     "NelderMead",
+    "Bo",
+    "ProbabilityOfImprovement",
+    "UpperConfidenceBound",
     "FirstOrder",
     "Lbfgsb",
     "Mma",
@@ -164,6 +168,7 @@ __all__ = [
     "RunningPso",
     "RunningLocalSearch",
     "RunningNelderMead",
+    "RunningBo",
     "RunningFirstOrder",
     "RunningLbfgsb",
     "RunningMma",
@@ -175,6 +180,7 @@ __all__ = [
     "neat",
     "math",
     "gp",
+    "model",
 ]
 
 ObjectiveName = Literal["maximize", "minimize"]
@@ -1357,9 +1363,10 @@ class Running:
     Each algorithm has a class of its own, with its settings as properties: :class:`RunningGa`,
     :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`, :class:`RunningOpenEs`,
     :class:`RunningNeat`, :class:`RunningPso`, :class:`RunningLocalSearch`,
-    :class:`RunningNelderMead`, :class:`RunningLbfgsb`, :class:`RunningFirstOrder`,
-    :class:`RunningMma` and :class:`RunningIslands`. A new value is checked as in the algorithm's constructor: a wrong one raises a ``ValueError`` and changes nothing. The handle
-    works only during the callback; afterwards it raises a ``RuntimeError``.
+    :class:`RunningNelderMead`, :class:`RunningBo`, :class:`RunningLbfgsb`,
+    :class:`RunningFirstOrder`, :class:`RunningMma` and :class:`RunningIslands`. A new value is
+    checked as in the algorithm's constructor: a wrong one raises a ``ValueError`` and changes
+    nothing. The handle works only during the callback; afterwards it raises a ``RuntimeError``.
 
     A control that changes nothing leaves the run as it is: with a seed, the same result as
     without the control.
@@ -1670,6 +1677,48 @@ class RunningNelderMead(Running):
         """The restarts so far."""
         return int(self._get("restart_count"))
 
+
+class RunningBo(Running):
+    """A running :class:`Bo`, for ``control``: its acquisition function, which can change (e.g.
+    UCB's ``beta`` on a schedule), and the model that chose the last point, with the
+    acquisition's values, e.g. for a plot. ``reevaluate()`` asks every evaluated point again."""
+
+    __slots__ = ()
+
+    @property
+    def acquisition(self) -> BoAcquisition:
+        """The acquisition function: "log-ei", "ei", a :class:`ProbabilityOfImprovement` or an
+        :class:`UpperConfidenceBound`. A new one applies from the next point."""
+        return _acquisition_of(self._get("acquisition"))
+
+    @acquisition.setter
+    def acquisition(self, value: BoAcquisition) -> None:
+        self._set("acquisition", _acquisition(value))
+
+    @property
+    def initial_points(self) -> int:
+        """The points of the initial design."""
+        return int(self._get("initial_points"))
+
+    @property
+    def model(self) -> _surrogate.GaussianProcess | None:
+        """The Gaussian process that chose the last point, fitted to the evaluations before it:
+        a model of the values the search minimizes (the scores, negated when maximizing, through
+        ``output``). None in generation 0, and after resuming from a checkpoint until the next
+        point."""
+        native = self._native.model()
+        return None if native is None else _surrogate.GaussianProcess(native)
+
+    def acquisition_at(self, points: Any) -> np.ndarray:
+        """The acquisition function under :attr:`model` at ``points``, a point per row (a 1-D
+        array is one point), as the search maximizes it: the log expected improvement, the
+        expected improvement, the logarithm of the probability of improvement or the negated
+        lower confidence bound, in the model's standardized units. Raises a ``ValueError``
+        without a model."""
+        rows = np.ascontiguousarray(points, dtype=np.float64)
+        if rows.ndim == 1:
+            rows = rows.reshape(1, -1)
+        return np.asarray(self._native.acquisition(rows))
 
 class RunningLbfgsb(Running):
     """A running :class:`Lbfgsb`, for ``control``: its ``memory``, which can change, and its
@@ -2308,8 +2357,8 @@ class _SingleObjective(_Single):
             ``on_generation``, on the same thread, with the running algorithm (a
             :class:`RunningGa`, :class:`RunningDe`, :class:`RunningEs`, :class:`RunningCmaes`,
             :class:`RunningOpenEs`, :class:`RunningPso`, :class:`RunningLocalSearch`,
-            :class:`RunningNelderMead`, :class:`RunningLbfgsb`, :class:`RunningFirstOrder`,
-            :class:`RunningMma` or :class:`RunningIslands`) and a
+            :class:`RunningNelderMead`, :class:`RunningBo`, :class:`RunningLbfgsb`,
+            :class:`RunningFirstOrder`, :class:`RunningMma` or :class:`RunningIslands`) and a
             :class:`Progress`: to change the algorithm's
             settings for the next generation, or to re-evaluate it after the fitness function
             changed. See :class:`Running`.
@@ -3544,6 +3593,196 @@ class NelderMead(_SingleObjective):
             "restarts": restarts,
             "speculative": _flag("speculative", self.speculative),
             "initial_genome": initial_genome,
+            "seed": _optional_whole("seed", self.seed),
+        }
+
+
+@dataclass(frozen=True)
+class ProbabilityOfImprovement:
+    """Bayesian optimization's probability of improving on the best value by more than ``xi``
+    (Kushner 1964), maximized through its logarithm, which has the same maximizer. ``xi`` is 0 or
+    more, in the units the model fits (the scores, or their logarithm with ``output="log"``):
+    larger explores more."""
+
+    xi: float
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "probability_of_improvement", "xi": _number("xi", self.xi)}
+
+
+@dataclass(frozen=True)
+class UpperConfidenceBound:
+    """Bayesian optimization's confidence bound ``mean - sqrt(beta) sd``, minimized (``mean +
+    sqrt(beta) sd`` maximized when maximizing): Srinivas, Krause, Kakade and Seeger (2010).
+    ``beta`` is 0 or more: 0 exploits the model's mean alone, larger explores more."""
+
+    beta: float
+
+    def _describe(self) -> dict[str, Any]:
+        return {"type": "upper_confidence_bound", "beta": _number("beta", self.beta)}
+
+
+BoAcquisition = Union[Literal["log-ei", "ei"], ProbabilityOfImprovement, UpperConfidenceBound]
+
+
+def _acquisition(acquisition: Any) -> dict[str, Any]:
+    if isinstance(acquisition, (ProbabilityOfImprovement, UpperConfidenceBound)):
+        return acquisition._describe()
+    if isinstance(acquisition, str) and acquisition == "log-ei":
+        return {"type": "log_expected_improvement"}
+    if isinstance(acquisition, str) and acquisition == "ei":
+        return {"type": "expected_improvement"}
+    raise ValueError(
+        'acquisition is "log-ei", "ei", ProbabilityOfImprovement(xi) or '
+        f"UpperConfidenceBound(beta), not {acquisition!r}"
+    )
+
+
+def _acquisition_of(description: dict[str, Any]) -> BoAcquisition:
+    kind = description["type"]
+    if kind == "probability_of_improvement":
+        return ProbabilityOfImprovement(float(description["xi"]))
+    if kind == "upper_confidence_bound":
+        return UpperConfidenceBound(float(description["beta"]))
+    return "ei" if kind == "expected_improvement" else "log-ei"
+
+
+class Bo(_SingleObjective):
+    """Bayesian optimization. Real genomes.
+
+    For expensive black-box functions, such as a simulation that runs for minutes or a physical
+    experiment, where tens to a few hundred evaluations must do. A Gaussian process
+    (:mod:`genoxide.model.gp`) models the function from every evaluation so far, and an
+    acquisition function of its posterior picks the next point, trading the model's best guesses
+    against its uncertainty. Generation 0 evaluates an initial design: the ``initial_genomes``,
+    and a Latin hypercube (McKay, Beckman and Conover 1979) for the rest of ``initial_points``.
+    Each later generation fits the model and evaluates one point, the acquisition's maximum: from
+    ``raw_samples`` random points, then L-BFGS-B with the acquisition's gradient from the best
+    ``acquisition_starts`` of them and from the best point so far. A point is never evaluated
+    twice. The model fits the scores to minimize (negated when maximizing), through ``output``;
+    an invalid score enters it at the worst value of the others, so the search learns to avoid
+    where the function fails, and a constraint violation is ignored by the search (use a
+    penalty). The model's fit costs O(N^3) for N evaluations: up to a few hundred evaluations of
+    a function far more expensive than that, in up to about 10 to 20 genes.
+
+    Branin's function, whose three global minima are 0.397887, in 40 evaluations::
+
+        import genoxide as gx
+
+        problem = gx.problems.Branin()
+        bo = gx.Bo(problem.genome, objective="minimize", seed=1)
+        result = bo.run(problem, evaluations=40)
+        print(result.best_fitness)  # 0.3978873...
+
+    The model, its likelihood's maximization and the acquisition's are seeded and portable: a
+    seed repeats the run on every platform, and gives a Rust program's results.
+
+    Parameters
+    ----------
+    genome : Real
+        The search space. At least one gene needs ``low < high``.
+    initial_points : int, optional
+        The points of the initial design, at least 1. None is 2(n + 1) for the n genes with
+        ``low < high``: a small design leaves most evaluations to the model. 10n is the usual
+        size for an accurate model of the whole box (Loeppky, Sacks and Welch 2009), more than
+        finding a minimum needs.
+    initial_genomes : 2-D array-like of float, optional
+        Genomes evaluated first, in the initial design, a genome per row: at most
+        ``initial_points`` of them, distinct, within the bounds.
+    acquisition : "log-ei", "ei", ProbabilityOfImprovement or UpperConfidenceBound
+        The acquisition function, "log-ei" by default: the logarithm of the expected
+        improvement, computed so that it and its gradient stay finite where the expected
+        improvement underflows (Ament et al. 2023), the same maximizer found far more reliably
+        than with "ei", the expected improvement itself (Mockus 1975; Jones, Schonlau and Welch
+        1998).
+    kernel : "matern52" or "squared_exponential", default "matern52"
+        The model's kernel, with a length scale per gene.
+    noise : float or genoxide.model.gp.Learned, default 0.0
+        The model's noise variance, a fraction of the values' variance: 0 interpolates the
+        values, as suits a deterministic function; :class:`genoxide.model.gp.Learned` learns it,
+        for a noisy one.
+    output : "standardize" or "log", default "standardize"
+        What the model fits: the values themselves, standardized; or ``log(v - v_best + d)`` of
+        the values to minimize, ``d`` the first quartile of their distances above the best, for
+        objectives that span orders of magnitude (Goldstein-Price's 3 to 10^6).
+    raw_samples : int, default 1000
+        The random points at which the acquisition is evaluated before its maximization, at
+        least 1.
+    acquisition_starts : int, default 10
+        The best raw samples from which L-BFGS-B maximizes the acquisition, at least 1 and at
+        most ``raw_samples``.
+    hyperparameter_starts : int, default 5
+        The starts of the likelihood's maximization at each fit, at least 1: the last fit's
+        hyperparameters, then random ones.
+    objective : {"maximize", "minimize"}, default "maximize"
+        Whether higher or lower scores are better.
+    seed : int, optional
+        The seed of the random numbers (the design, the starts of both maximizations), 0 to
+        2^64 - 1. None is a random seed. The same seed repeats the run.
+
+    References: Jones, D. R., Schonlau, M. and Welch, W. J. (1998). Efficient global optimization
+    of expensive black-box functions. *Journal of Global Optimization* 13(4): 455-492. Rasmussen,
+    C. E. and Williams, C. K. I. (2006). *Gaussian Processes for Machine Learning.* MIT Press.
+    Ament, S., Daulton, S., Eriksson, D., Balandat, M. and Bakshy, E. (2023). Unexpected
+    improvements to expected improvement for Bayesian optimization. *NeurIPS 2023*.
+    """
+
+    _running = RunningBo
+
+    def __init__(
+        self,
+        genome: Real,
+        *,
+        initial_points: int | None = None,
+        initial_genomes: Sequence[Sequence[float]] | np.ndarray | None = None,
+        acquisition: BoAcquisition = "log-ei",
+        kernel: Literal["matern52", "squared_exponential"] = "matern52",
+        noise: Any = 0.0,
+        output: Literal["standardize", "log"] = "standardize",
+        raw_samples: int = 1000,
+        acquisition_starts: int = 10,
+        hyperparameter_starts: int = 5,
+        objective: ObjectiveName = "maximize",
+        seed: int | None = None,
+    ) -> None:
+        self._genome = genome
+        self._objective = objective
+        self.initial_points = initial_points
+        self.initial_genomes = initial_genomes
+        self.acquisition = acquisition
+        self.kernel = kernel
+        self.noise = noise
+        self.output = output
+        self.raw_samples = raw_samples
+        self.acquisition_starts = acquisition_starts
+        self.hyperparameter_starts = hyperparameter_starts
+        self.seed = seed
+
+    def _describe(self) -> dict[str, Any]:
+        initial_genomes = None
+        if self.initial_genomes is not None:
+            rows = np.asarray(self.initial_genomes, dtype=object)
+            if rows.ndim != 2:
+                raise ValueError(
+                    "initial_genomes is a genome per row, a number per gene, not "
+                    f"{self.initial_genomes!r}"
+                )
+            initial_genomes = [
+                [_number("initial_genomes", gene, plural=True) for gene in row] for row in rows
+            ]
+        if self.output not in ("standardize", "log"):
+            raise ValueError(f'output is "standardize" or "log", not {self.output!r}')
+        return {
+            "type": "bo",
+            "initial_points": _optional_whole("initial_points", self.initial_points),
+            "initial_genomes": initial_genomes,
+            "acquisition": _acquisition(self.acquisition),
+            "kernel": _surrogate._kernel(self.kernel),
+            "noise": _surrogate._noise(self.noise),
+            "output": self.output,
+            "raw_samples": _whole("raw_samples", self.raw_samples),
+            "acquisition_starts": _whole("acquisition_starts", self.acquisition_starts),
+            "hyperparameter_starts": _whole("hyperparameter_starts", self.hyperparameter_starts),
             "seed": _optional_whole("seed", self.seed),
         }
 
@@ -5261,3 +5500,5 @@ class SmsEmoa(_MultiObjective):
 # the submodules use the classes above
 from . import indicators, math, nn, problems  # noqa: E402
 from . import gp  # noqa: E402
+from . import model  # noqa: E402
+from .model import gp as _surrogate  # noqa: E402

@@ -11,6 +11,7 @@ mod errors;
 mod fitness;
 mod genes;
 mod indicators;
+mod model;
 mod neat;
 mod networks;
 mod operators;
@@ -29,6 +30,7 @@ fn _genoxide(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run::run, module)?)?;
     module.add_class::<control::Running>()?;
     module.add_class::<snapshot::Snapshot>()?;
+    module.add_class::<model::PyGaussianProcess>()?;
     module.add_function(wrap_pyfunction!(run::das_dennis, module)?)?;
     module.add_function(wrap_pyfunction!(problems::problem_info, module)?)?;
     module.add_function(wrap_pyfunction!(problems::evaluate, module)?)?;
