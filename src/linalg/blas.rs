@@ -175,9 +175,9 @@ pub(super) fn gemm_with(
             let mut panel = vec![0.0; height.div_ceil(MR) * depth * MR];
             for r in 0..height {
                 let row = &a[(i0 + r) * k + p0..(i0 + r) * k + p1];
-                let tile = &mut panel[r / MR * depth * MR..];
-                for (kk, &x) in row.iter().enumerate() {
-                    tile[kk * MR + r % MR] = alpha * x;
+                let tile = panel[r / MR * depth * MR..].as_chunks_mut::<MR>().0;
+                for (column, &x) in tile.iter_mut().zip(row) {
+                    column[r % MR] = alpha * x;
                 }
             }
             // each column tile reused by all the row tiles while it's in the cache

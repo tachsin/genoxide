@@ -171,9 +171,9 @@ pub(super) fn factor(
             // L[i][k0..k1] for the chunk's rows, by tiles of MR rows, zero padded
             let mut panel = vec![0.0; height.div_ceil(MR) * size * MR];
             for (r, row) in chunk.chunks_exact(n).enumerate() {
-                let tile = &mut panel[r / MR * size * MR..];
-                for (kk, &x) in row[k0..k1].iter().enumerate() {
-                    tile[kk * MR + r % MR] = x;
+                let tile = panel[r / MR * size * MR..].as_chunks_mut::<MR>().0;
+                for (column, &x) in tile.iter_mut().zip(&row[k0..k1]) {
+                    column[r % MR] = x;
                 }
             }
             // the column tiles up to the diagonal of the last row, each reused by all the row
