@@ -1419,7 +1419,7 @@ class HappyCat(_Scalable):
 @dataclass(frozen=True)
 class HgBat(_Scalable):
     """HGBat, ``|(Σ xᵢ²)² − (Σ xᵢ)²|^(1/2) + (½ Σ xᵢ² + Σ xᵢ) / n + ½``: HappyCat's relative,
-    with a groove along a cone.
+    with a groove along two spheres through the origin, where ``‖x‖² = |Σ xᵢ|``.
 
     Bounds [-5, 5]ⁿ; minimum 0 at (−1, …, −1), the only one. ``dimensions`` is at least 1.
 

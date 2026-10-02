@@ -3281,7 +3281,8 @@ scalable_problem!(
 
 scalable!(
     /// HGBat, `|(Σ xᵢ²)² − (Σ xᵢ)²|^(1/2) + (½ Σ xᵢ² + Σ xᵢ) / n + ½`: HappyCat's relative, whose
-    /// first term is 0 on a cone, `‖x‖² = |Σ xᵢ|`, instead of a sphere.
+    /// first term is 0 where `‖x‖² = |Σ xᵢ|`: on two spheres of radius √n / 2 through the origin,
+    /// centered at ±(½, …, ½), instead of one.
     ///
     /// Bounds [−5, 5]ⁿ; minimum 0 at (−1, …, −1), the only one: the second part is
     /// `Σ (xᵢ + 1)² / (2n)`, 0 only there, where the first is 0 too. 30 dimensions by default.

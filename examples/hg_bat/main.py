@@ -1,4 +1,4 @@
-"""HGBat: minimize HGBat, HappyCat's relative with a groove along a cone, in 10 dimensions.
+"""HGBat: minimize HGBat, HappyCat's relative with a groove along two spheres, in 10 dimensions.
 
 Runs CMA-ES without and with IPOP restarts (a population that doubles at each restart), differential
 evolution (SHADE), particle swarm optimization and a real-coded genetic algorithm from 10 seeds

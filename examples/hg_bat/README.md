@@ -27,9 +27,9 @@ gives no other source; it's usually credited to Beyer and Finck too, whose paper
 
 ## What makes it hard
 
-The first term is 0 where ‖x‖² = |Σ xᵢ|, a curved surface through the origin and (−1, …, −1), and
-rises as a square root away from it: a groove whose floor curves around to the minimum, with a
-gentle slope along it. As on HappyCat, a search falls into the groove at once, then has to follow a
+The first term is 0 where ‖x‖² = |Σ xᵢ|, on two spheres through the origin, one of them through
+(−1, …, −1), and rises as a square root away from them: a groove whose floor curves around to the
+minimum, with a gentle slope along it. As on HappyCat, a search falls into the groove at once, then has to follow a
 curving direction with small steps across it and large ones along it.
 
 ## Representation
