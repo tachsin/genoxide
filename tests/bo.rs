@@ -480,10 +480,7 @@ fn a_batch_counts_rounds_and_evaluations() {
         .seed(1)
         .build()
         .unwrap();
-    assert_eq!(
-        (bo.batch(), bo.fantasy()),
-        (4, Fantasy::ConstantLiar(Lie::Min))
-    );
+    assert_eq!((bo.batch(), bo.fantasy()), (4, Fantasy::KrigingBeliever));
     let outcome = Engine::new(bo, Branin)
         .stop_when(Stop::generations(10))
         .run()

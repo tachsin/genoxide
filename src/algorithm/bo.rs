@@ -122,30 +122,28 @@ pub enum Output {
 ///
 /// With constraints, each constraint's model takes its posterior mean at the point, whatever the
 /// fantasy of the objective.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Fantasy {
-    /// The Kriging believer: the model's posterior mean at the point, which leaves the mean where
-    /// it was and only removes the uncertainty there (Ginsbourger et al.'s Algorithm 1). A point
-    /// predicted below the best value lowers the best, and the next points then tend to cluster
-    /// around it.
+    /// The Kriging believer, the default: the model's posterior mean at the point, which leaves
+    /// the mean where it was and only removes the uncertainty there (Ginsbourger et al.'s
+    /// Algorithm 1). A point predicted below the best value lowers the best, and the next points
+    /// then tend to cluster around it.
+    ///
+    /// Measured with batches of 4 against the constant liars over 20 seeds, to f* + 1e-3: Branin
+    /// within 80 evaluations in 20 runs, a median of 34 evaluations (the lowest lie 34, the mean
+    /// 42, the highest 54); Hartmann 3 in 20, a median of 30 (30, 40, 40); Hartmann 6 within 200 in
+    /// 13 (13, 12, 11), the others in the local minimum −3.2032. Under an
+    /// [`AsyncEngine`](crate::engine::AsyncEngine) with 4 workers, whose every proposal has 3
+    /// points fantasized, Hartmann 3 to f* + 1e-4 within 120 evaluations in all 5 runs tried, from
+    /// 39 to 76 evaluations, against 2 of 5 with the lowest lie, which keeps the region of the
+    /// points being evaluated as good as the best and so pushes the search away from it.
+    #[default]
     KrigingBeliever,
     /// The constant liar: the same value, a [`Lie`], at every such point (Ginsbourger et al.'s
     /// Algorithm 2). The higher the lie, the farther the next points go from the earlier ones.
     ConstantLiar(Lie),
-}
-
-impl Default for Fantasy {
-    fn default() -> Self {
-        Fantasy::DEFAULT
-    }
-}
-
-impl Fantasy {
-    /// The constant liar with the lowest value evaluated, the default: on Branin, Ginsbourger et
-    /// al.'s best strategy of the four, which visited the three minima's regions in 6 points.
-    pub const DEFAULT: Fantasy = Fantasy::ConstantLiar(Lie::Min);
 }
 
 /// The value of a [`Fantasy::ConstantLiar`]: a statistic of the values the model fits (after the
@@ -154,7 +152,9 @@ impl Fantasy {
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Lie {
-    /// The lowest, the best: a soft repulsion, the next points near but not at the earlier ones.
+    /// The lowest, the best: a soft repulsion, the next points near but not at the earlier ones;
+    /// on Branin, Ginsbourger et al.'s best strategy of the four, which visited the three minima's
+    /// regions in 6 points.
     #[default]
     Min,
     /// The mean: the next points spread over the box.
@@ -373,7 +373,7 @@ impl Bo {
             acquisition_starts: 10,
             hyperparameter_starts: 5,
             batch: 1,
-            fantasy: Fantasy::DEFAULT,
+            fantasy: Fantasy::default(),
             objective: Objective::default(),
             seed: None,
         }
@@ -1615,7 +1615,7 @@ impl<R: Space> Bo<R> {
 /// [`Acquisition::LogExpectedImprovement`]; the [Matérn 5/2 kernel](Kernel::Matern52) without
 /// noise, the model interpolating the values; [`Output::Standardize`]; 1000 raw samples and 10
 /// starts for the acquisition's maximization; 5 starts for the hyperparameters'; batches of 1
-/// point, [`Fantasy::DEFAULT`]; a random seed.
+/// point, the [Kriging believer](Fantasy::KrigingBeliever); a random seed.
 #[derive(Clone, Debug)]
 pub struct BoBuilder<R: Space = Real> {
     representation: R,
@@ -1714,8 +1714,8 @@ impl<R: Space> BoBuilder<R> {
     }
 
     /// What the points of a batch, and those still being evaluated under an
-    /// [`AsyncEngine`](crate::engine::AsyncEngine), are taken to be worth:
-    /// [`Fantasy::DEFAULT`], the constant liar with the lowest value, by default.
+    /// [`AsyncEngine`](crate::engine::AsyncEngine), are taken to be worth: the
+    /// [Kriging believer](Fantasy::KrigingBeliever) by default.
     pub fn fantasy(mut self, fantasy: Fantasy) -> Self {
         self.fantasy = fantasy;
         self
