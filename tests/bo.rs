@@ -121,9 +121,13 @@ fn every_acquisition_and_kernel_finds_branin_minima() {
 
 // the evaluated genomes of a run, in order, and its best
 fn run(bo: Bo, parallel: bool, evaluations: u64) -> (Vec<Vec<u64>>, Individual<Reals>) {
-    let mut engine = Engine::new(bo, Branin)
-        .parallel(parallel)
-        .stop_when(Stop::evaluations(evaluations));
+    let engine = Engine::new(bo, Branin).stop_when(Stop::evaluations(evaluations));
+    // without the `parallel` feature, both runs are sequential
+    #[cfg(feature = "parallel")]
+    let engine = engine.parallel(parallel);
+    #[cfg(not(feature = "parallel"))]
+    let _ = parallel;
+    let mut engine = engine;
     let outcome = engine.run().unwrap();
     let genomes = engine
         .algorithm()
