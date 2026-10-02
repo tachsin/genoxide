@@ -64,7 +64,6 @@ the noisy quartic, whose derivative is undefined or 0 on sets of positive measur
 pass the problem's gradient on (turned by the rotation), and a constrained problem's constraint
 values, which :class:`genoxide.Bo` models.
 
-
 :mod:`genoxide.problems.binary` holds problems of bit strings, maximized: OneMax, LeadingOnes,
 the deceptive trap, the royal roads, NK landscapes and the 0/1 knapsack::
 
