@@ -1,7 +1,7 @@
 ---
 title: Weierstrass
 category: continuous
-summary: Minimize the Weierstrass function, continuous but nowhere smooth, in 10 dimensions, with CMA-ES without and with restarts, DE, PSO and a GA from 10 seeds each.
+summary: Minimize the Weierstrass function, rippled at every scale, in 10 dimensions, with CMA-ES without and with restarts, DE, PSO and a GA from 10 seeds each.
 reference: "Suganthan, P. N., Hansen, N., Liang, J. J., Deb, K., Chen, Y.-P., Auger, A. and Tiwari, S. (2005). Problem Definitions and Evaluation Criteria for the CEC 2005 Special Session on Real-Parameter Optimization. Nanyang Technological University and KanGAL report 2005005."
 reference_url: "https://github.com/P-N-Suganthan/CEC2005"
 optimum: "0 (at the origin)"
@@ -30,9 +30,9 @@ another one. It's named after Weierstrass's (1872) continuous, nowhere-different
 ## What makes it hard
 
 Each gene's sum is a fractal: ripples on ripples, each three times faster and half as high as the
-last, down to 3²⁰ ≈ 3.5·10⁹ periods per unit. The function is continuous but differentiable only on
-a set of points, and has local minima at every scale. A search that has found the right valley at
-one scale still has to find it at every finer one.
+last, down to 3²⁰ ≈ 3.5·10⁹ periods per unit. The sum stops there, so the function is smooth, but
+it's steep and has local minima at every scale. A search that has found the right valley at one
+scale still has to find it at every finer one.
 
 ## Representation
 

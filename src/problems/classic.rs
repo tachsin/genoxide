@@ -3136,8 +3136,9 @@ fn weierstrass_sum(x: f64) -> f64 {
 
 scalable!(
     /// The Weierstrass function, `Σᵢ Σₖ aᵏ cos(2π bᵏ (xᵢ + 0.5)) − n Σₖ aᵏ cos(π bᵏ)` with
-    /// a = 0.5, b = 3 and k from 0 to 20: continuous, but differentiable only on a set of
-    /// points, a fractal of ripples within ripples.
+    /// a = 0.5, b = 3 and k from 0 to 20: ripples within ripples, down to 3²⁰ times the first
+    /// one's frequency. The finite sum is smooth, but steep and rippled at every scale; with
+    /// infinitely many terms, it would be differentiable nowhere.
     ///
     /// Bounds [−0.5, 0.5]ⁿ; minimum 0 at the origin (at every integer point without bounds);
     /// 30 dimensions by default. Each gene's sum is at least −Σ aᵏ, reached where every cosine
@@ -3176,7 +3177,8 @@ scalable_problem!(
 scalable!(
     /// Katsuura's function,
     /// `(10 / n²) Πᵢ (1 + i Σⱼ₌₁³² |2ʲxᵢ − round(2ʲxᵢ)| / 2ʲ)^(10 / n^1.2) − 10 / n²`
-    /// (i from 1): rugged everywhere, continuous but nowhere differentiable, and highly
+    /// (i from 1): rugged everywhere, continuous, with kinks at every multiple of 2⁻³³ in each
+    /// gene (with infinitely many terms, it would be differentiable nowhere), and highly
     /// repetitive.
     ///
     /// Bounds [−5, 5]ⁿ; minimum 0 at the origin, and at every point whose genes are multiples

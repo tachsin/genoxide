@@ -30,10 +30,10 @@ Monthly 98(5): 411-416, not read), without BBOB's rotation and scaling, and its 
 
 ## What makes it hard
 
-Each factor is a continuous, nowhere-differentiable function of its gene, rugged at every scale down
-to 2⁻³², and the product couples the genes. The landscape is highly repetitive, with global minima
-on a grid of spacing 1/2 and local minima everywhere between: a search that has found a good region
-gains little from its neighborhood.
+Each factor is a continuous function of its gene, with kinks at every multiple of 2⁻³³, rugged at
+every scale down to 2⁻³², and the product couples the genes. The landscape is highly repetitive,
+with global minima on a grid of spacing 1/2 and local minima everywhere between: a search that has
+found a good region gains little from its neighborhood.
 
 The grid of global minima includes the bounds, ±5. A search that pushes genes onto the bounds, as
 PSO does when a particle would leave the box and stops at the bound, lands on global minima without

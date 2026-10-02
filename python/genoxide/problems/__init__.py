@@ -1366,7 +1366,8 @@ class NonContinuousRastrigin(_Scalable):
 @dataclass(frozen=True)
 class Weierstrass(_Scalable):
     """The Weierstrass function, ``Σᵢ Σₖ aᵏ cos(2π bᵏ (xᵢ + 0.5)) − n Σₖ aᵏ cos(π bᵏ)`` with
-    a = 0.5, b = 3 and k from 0 to 20: continuous, differentiable only on a set of points.
+    a = 0.5, b = 3 and k from 0 to 20: smooth, but rippled at every scale down to 3⁻²⁰ of the
+    first ripple's period.
 
     Bounds [-0.5, 0.5]ⁿ; minimum 0 at the origin. ``dimensions`` is at least 1.
 
@@ -1384,7 +1385,7 @@ class Weierstrass(_Scalable):
 class Katsuura(_Scalable):
     """Katsuura's function,
     ``(10 / n²) Πᵢ (1 + i Σⱼ₌₁³² |2ʲxᵢ − round(2ʲxᵢ)| / 2ʲ)^(10 / n^1.2) − 10 / n²``: rugged
-    everywhere, continuous but nowhere differentiable.
+    everywhere, continuous, with kinks at every multiple of 2⁻³³ in each gene.
 
     Bounds [-5, 5]ⁿ; minimum 0 at the origin, and wherever every gene is a multiple of 1/2.
     ``dimensions`` is at least 1.

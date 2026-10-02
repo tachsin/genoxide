@@ -1,5 +1,4 @@
-//! Weierstrass: minimize the Weierstrass function, continuous but nowhere smooth, in 10
-//! dimensions.
+//! Weierstrass: minimize the Weierstrass function, rippled at every scale, in 10 dimensions.
 //!
 //! Runs CMA-ES without and with IPOP restarts (a population that doubles at each restart),
 //! differential evolution (SHADE), particle swarm optimization and a real-coded genetic algorithm
