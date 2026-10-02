@@ -43,9 +43,9 @@ From a review of existing libraries (e.g. genetic_algorithm, [issues #11 to #78]
 - **`Genome`:** the representation: bits (bit-packed), integers, bounded reals, permutations; planned: mixed (per-gene types), trees (GP), graphs (NEAT).
 - **`Fitness`:** totally ordered `f64`, single or multi-objective (`[f64; M]`, with the number of objectives fixed at compile time), optional constraint violation; batch and async evaluation.
 - **Operators:** `Select`, `Crossover`, `Mutate`, generic over the genome; survival is each algorithm's scheme.
-- **`Algorithm`:** ask / tell state machines (GA, ES, CMA-ES, DE, PSO, NSGA-II, …; Nelder-Mead, L-BFGS-B; planned: SQP, Bayesian optimization).
+- **`Algorithm`:** ask / tell state machines (GA, ES, CMA-ES, DE, PSO, NSGA-II, …; Nelder-Mead, L-BFGS-B, MMA, Bayesian optimization; planned: SQP).
 - **Derivatives (planned):** supplied gradients, finite differences, constraint and residual Jacobians, declared by the fitness function.
-- **Models (planned):** Gaussian processes for Bayesian and surrogate-assisted optimization.
+- **Models:** Gaussian processes (`model::gp`) for Bayesian optimization; planned: for surrogate-assisted evolution.
 - **`Engine`:** termination, parallel evaluation, observers, cancellation, and a hook that changes the algorithm between generations (parameter control, re-evaluation).
 - **`Observer`:** statistics, hall of fame, Pareto archive, logging, checkpoints.
 - **Errors:** one typed error enum; no `&'static str` errors, no panics in library code.
@@ -228,7 +228,7 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 ### 0.13: Bayesian optimization
 - [x] EI, log-EI, UCB and PI; Latin hypercube designs; portable `erf`, `erfc` and `erfcx` (batch B, the parts that need neither linear algebra nor L-BFGS-B)
 - [x] Gaussian processes (`model::gp`, unstable for one release) and Bayesian optimization (`Bo`): an initial Latin hypercube of 2(n + 1) points, log-EI by default, an output transform, in Python (`gx.Bo`, `gx.model.gp`) and the `genoxide` program, with the `bayesian_optimization` example (batch B, its first part)
-- [ ] Batch Bayesian optimization (Kriging believer, constant liar), `Incremental` for the asynchronous engine, constrained Bayesian optimization and integer genes, with the `bo_hartmann6`, `bo_asynchronous` and `bo_constrained` examples (batch B, its second part)
+- [x] Batch Bayesian optimization (Kriging believer, constant liar), `Incremental` for the asynchronous engine, constrained Bayesian optimization and integer genes, with the `bo_hartmann6`, `bo_asynchronous` and `bo_constrained` examples (batch B, its second part)
 
 ### 0.14: Constrained nonlinear programming
 - [ ] SQP and the augmented Lagrangian, on the constrained test problems (batch C)

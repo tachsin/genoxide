@@ -4,7 +4,7 @@
 //!
 //! **Unstable for one release.** This module is public from genoxide 0.13 so that a Gaussian
 //! process can be fitted and queried on its own, but its API and the bits of its fits may still
-//! change in 0.14, as the batch and constrained Bayesian optimization of that release use it.
+//! change in 0.14, as the surrogate-assisted methods planned after it use it.
 //!
 //! A [`GaussianProcess`] models a function `f` of the genes of a [`Real`] genome as
 //! `f(x) ~ GP(m, σ_f² k(x, x′))` (Rasmussen and Williams, 2006, eq. 2.37), observed with
