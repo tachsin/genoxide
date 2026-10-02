@@ -78,7 +78,7 @@ What genoxide has on main; [docs.rs](https://docs.rs/genoxide) documents the lat
 
 ## Multi-objective
 
-- **Algorithms:** NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA.
+- **Algorithms:** NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA; MOEA/D-DE (Li and Zhang, 2009), differential evolution in place of MOEA/D's crossover, for Pareto sets whose genes are linked and for constrained problems, checked against the paper's F2.
 - **With:** constraints, duplicate elimination, a Pareto archive.
 - **Indicators:** hypervolume, IGD, IGD+, GD, spread.
 - **Test problems** (`multi::problems`): ZDT1-6 (ZDT5 on bit strings), DTLZ1-7, WFG1-9 (any number of objectives, checked against the authors' toolkit), Schaffer's two, Fonseca and Fleming's, Kursawe's, Poloni's and Viennet's three, and the constrained BNH, SRN, TNK, OSY and CONSTR, each with its optimal front where it's known and its reference, in Rust and Python.

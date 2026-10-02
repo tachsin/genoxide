@@ -232,7 +232,7 @@ tested, and orders the work in batches.
 | Derivatives | none | supplied gradients, finite differences, gradient-based methods |
 | Constraints | Deb's rules and penalties over an aggregate violation; per-constraint values in `problems::Problem::constraints` | methods that use each constraint's value and gradient (SQP, augmented Lagrangian, interior point) |
 | Expensive functions | `AsyncEngine`, `Batch`, parallel evaluation | surrogate models (Gaussian processes) and Bayesian optimization |
-| Multi-objective | NSGA-II, NSGA-III, SPEA2, MOEA/D, SMS-EMOA | ParEGO, EHVI |
+| Multi-objective | NSGA-II, NSGA-III, SPEA2, MOEA/D (with SBX or differential evolution, MOEA/D-DE), SMS-EMOA | ParEGO, EHVI |
 | Linear algebra | a symmetric eigendecomposition inside CMA-ES (tred2 and tql2 of JAMA) | Cholesky, QR, triangular solves, a dense QP solver |
 
 ### 1.2 Local derivative-free methods
