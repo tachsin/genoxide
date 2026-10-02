@@ -17,7 +17,11 @@ the `genoxide` program, with its example; and continuation (`Continuation` and t
 trait of 2.12, for `FirstOrder`, `Mma`, `Lbfgsb`, `NelderMead` and `Cmaes`), in Python (around the
 three gradient methods) but not the `genoxide` program, whose configuration has no form for a
 stage's closure (a fitness program would have to be told its stage), with its example. Batch A3 is
-done; the later batches aren't yet. genoxide has
+done. Of batch B, the first part (B1): the Gaussian process (`model::gp`, public and documented as
+unstable for one release), `Bo` with EI, log-EI, PI and UCB, the Latin hypercube design and the
+output transform, in Python and the `genoxide` program, with the `bayesian_optimization` example;
+batch BO, `Incremental` for `AsyncEngine`, constrained BO and integer genes (B2) aren't yet, nor
+the later batches. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
 optimization library: local derivative-free methods, gradient-based methods, constrained
@@ -332,6 +336,60 @@ not re-read; the Latin hypercube is the standard construction (one point per str
 independent permutations), which the tests check directly. `erfcx` is genoxide's own: libm's
 `erfc` times an exactly split `e^(x²)` below 26, the asymptotic series of Abramowitz and Stegun
 7.1.23 above, checked against mpmath (`tests/reference/special_functions.py`) within 4 ulps.
+
+**Batch B's first part (B1), read on 2026-10-02.** Rasmussen and Williams (2006), read in the
+authors' PDF: **verified**, the formulas as implemented: the noisy observations (eq. 2.20), the
+predictive mean and variance (2.25, 2.26) computed as Algorithm 2.1 does (L = chol(K + σ²I),
+α = Lᵀ\(L\y), v = L\k*, V = k(x*, x*) − vᵀv, ln |K| from Σ ln Lᵢᵢ), the log marginal likelihood
+(2.30, 5.8), a fixed mean function (2.37, 2.38), the squared exponential (4.9), the Matérn class's
+ν = 5/2 member (4.17), the ARD distance M₂ = diag(ℓ)⁻² (5.1, 5.2) and the likelihood's gradient
+(5.9), ½ tr((ααᵀ − K⁻¹) ∂K/∂θⱼ). The tests check two points worked out by hand against these
+formulas to 1e-13, and the gradient against central differences. Jones, Schonlau and Welch
+(1998), read: **verified**: the constant mean's generalized least squares estimate
+1ᵀR⁻¹y / 1ᵀR⁻¹1 (eq. 5), which genoxide takes for the mean at every set of kernel hyperparameters
+(the likelihood's maximum over the mean, so eq. 5.9 is the gradient of the likelihood so
+maximized), the expected improvement (eq. 15) and its derivatives, −Φ in the prediction and φ in
+its standard error (the bounds of their branch and bound), and the initial design of about 10k
+points, which Loeppky, Sacks and Welch (2009), read, **verified**, study as a rule for prediction
+accuracy (n = 10d), not optimization. Snoek, Larochelle and Adams (2012), read: **verified**, the ARD Matérn
+5/2 kernel proposed for Bayesian optimization (section 3.1, eq. 5). Srinivas et al. (2010), read:
+**verified**, the GP-UCB rule μ + β^½ σ (eq. 6). Log-EI's derivative is genoxide's own derivation
+from Ament et al.'s log_h, log_h′ = Φ/h through the Mills ratio, with the asymptotic series
+−z(1 + 2a − 6a² + 42a³), a = 1/z², below z = −64 (Abramowitz and Stegun 7.1.23, not re-read; the
+coefficients and the next term's 414a⁴ checked with mpmath), where the Mills ratio's difference
+loses ε z² of accuracy. Hvarfner et al.'s (2024) prior on the length scales: not implemented (an
+option for higher dimensions, later). McKay et al. (1979) and Kushner (1964): not re-read.
+
+As implemented, and where it differs from the design notes above: **the noise** is none by
+default (`Noise::Fixed(0.0)`, the jitter the only nugget), not learned from a floor of 1e-6:
+genoxide's fitness functions are deterministic, and learned noise settled above its floor (an
+absolute standard deviation of about 0.03 on Branin), smoothing over the differences near a
+minimum. Over 20 seeds, to f* + 1e-4 within 80 evaluations, Branin was reached in 20 runs, the
+six-hump camel in [−3, 3] × [−2, 2] in 20 and Hartmann 3 in 20, against 14, 17 and 12 with learned
+noise; `Noise::Learned { min }` stays for noisy functions. **The hyperparameters**: the logarithms
+of the length scales in [0.01, 100] of each range, σ_f² in [1e-3, 1e3] and a learned σ_n² from its
+least to 1, all in the standardized units; L-BFGS-B (200 evaluations at most) from the last fit's
+hyperparameters (or fixed values: length scales 0.5, σ_f² 1, σ_n² 1e-4) and 4 random points of the
+box, each from a stream derived from the seed and the generation, the best likelihood winning,
+the earlier start on ties. A narrower box for σ_f² and random starts drawn from a central part of
+the box were measured, no better. **The acquisition's maximization** as planned: 1,000 raw samples,
+L-BFGS-B from the best 10 and from the best point evaluated; the posterior variance floored at
+1e-12 of the standardized variance there. **The output transform** (`bo::Output`), settled here:
+`Standardize` by default, and `Log`, ln(v − v_best + δ) with δ the first quartile of the
+distances above the best. Measured against other δ on Goldstein-Price, with learned noise, then
+the default: the smallest positive distance made the best point an outlier (reached in 0 runs of
+20), the median compressed too little near the best (18 of 20, a median of 52 evaluations), the
+first quartile 20 of 20 (45). With the
+noise-free default, to f* + 1e-3 within 80 evaluations: Goldstein-Price 19 runs of 20 (0 with
+`Standardize`), the six-hump camel in [−5, 5]² 20 (4), Branin a median of 20 evaluations (30), but
+Hartmann 3, whose values span less than an order of magnitude, 13 (20). **Invalid points** enter
+the model at the worst valid value (an invalid fitness, or a score that isn't finite); with no
+valid one, the next point is random. **Reevaluate** is implemented after all, contrary to 2.9: it
+asks every evaluated point again, no random number drawn. `recommendation()` (noisy observations)
+is left for later: with the noise-free default, the best evaluated point is the model's too. The
+#381 evidence's typical counts, as measured here (20 seeds, to f* + 1e-3): Branin a median of 30
+evaluations, the six-hump camel in [−3, 3] × [−2, 2] 50, Hartmann 3 26, all within 80; Hartmann 6
+reached in 6 runs of 10 within 100 (48), the others in its local minimum −3.2032.
 
 ### 1.6 Surrogate-assisted evolution, multi-fidelity, hybrids
 
@@ -988,7 +1046,7 @@ a batch isn't done until every example reaches its optimum on the three platform
 | A1 | `linalg` (Cholesky, triangular solves, QR, the eigendecomposition moved from CMA-ES) with the dependency check of 2.8 (done, in-crate, #373: products, Cholesky with jitter, triangular solves and the eigendecomposition; QR, LDLᵀ and Bunch-Kaufman come with their first users); `Algorithm::is_finished` and `StopReason::Converged`; `Restarts` for local methods; Nelder-Mead (Gao-Han, 1965 option, speculative asks) | | `nelder_mead`, `nelder_mead_himmelblau` |
 | A2 | The extras of 2.3 (`Provided`, `Wanted`, `Extras`, `Evaluations`, `prepare`, `tell_evaluations`) in `Engine`; `Differentiable`, `gradient::Gradients`, finite differences, `gradient::check`; analytic gradients for the smooth problems; Moré-Thuente; L-BFGS-B | A1 | `lbfgsb`, `lbfgsb_bounds`, `polish` |
 | A3 | Momentum, Nesterov, Adam and AdamW (moved from D1); MMA and GCMMA, with supplied constraint values and Jacobians in `Extras` (the supplied half of batch C's constraint Jacobians; finite differences of constraints stay in C); `Continuation` and the `Continue` trait (2.12); the scale requirements of 2.13 for A2's and A3's methods, with the allocation test and the benchmarks | A2 | `adam`, `mma`, `continuation` |
-| B | `model::gp` (kernels, hyperparameters by L-BFGS-B), portable `erf`/`erfc`/`erfcx` in `math`; `Bo` with EI, log-EI, UCB, PI; Latin hypercube; batch BO (Kriging believer, constant liar); `Incremental` for `AsyncEngine`; `Constrained` values (`constraint::Constraints`) and constrained BO; integer genes | A2 | `bayesian_optimization`, `bo_hartmann6`, `bo_asynchronous`, `bo_constrained` |
+| B | B1 (done): `model::gp` (kernels, hyperparameters by L-BFGS-B), portable `erf`/`erfc`/`erfcx` in `math`; `Bo` with EI, log-EI, UCB, PI; Latin hypercube; the output transform. B2: batch BO (Kriging believer, constant liar); `Incremental` for `AsyncEngine`; `Constrained` values (`constraint::Constraints`) and constrained BO; integer genes | A2 | B1: `bayesian_optimization`; B2: `bo_hartmann6`, `bo_asynchronous`, `bo_constrained` |
 | C | Constraint Jacobians in `Extras` (supplied or by finite differences); the dense QP (Goldfarb-Idnani); SQP; the augmented Lagrangian (L-BFGS-B inner); `provides()` for CEC 2006 and the engineering problems; the Hock-Schittkowski selection | A2, B's `Constrained` | `sqp`, `sqp_welded_beam`, `augmented_lagrangian` |
 | D1 | BFGS, nonlinear CG with Hager-Zhang, trust-region Newton (Steihaug-CG and exact), Levenberg-Marquardt with `LeastSquares`; optional `dual` feature; MGH test set | A2 | `conjugate_gradient`, `trust_region`, `levenberg_marquardt`, `dual_numbers` |
 | D2 | BOBYQA, COBYLA, compass search / GPS, MADS with the progressive barrier, Powell's method (optional); basin hopping | A1, C's constraint values | `bobyqa`, `cobyla`, `mads` |

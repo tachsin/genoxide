@@ -10,6 +10,7 @@ The algorithms of [genoxide](https://github.com/tachsin/genoxide), a Rust librar
 - L-BFGS-B for smooth functions with a gradient, yours, finite differences or the test problems' own
 - first-order gradient methods for up to millions of parameters: gradient descent, momentum, Nesterov, Adam and AdamW
 - MMA and GCMMA, the method of moving asymptotes, for millions of variables with few constraints, from gradients
+- Bayesian optimization for expensive functions, with Gaussian processes (`gx.model.gp`) you can also fit on their own
 - continuation: a gradient method through stages of one problem, its state kept between them
 - differential evolution, evolution strategies, CMA-ES and particle swarm optimization
 - NEAT, OpenAI's evolution strategy, neural networks and pole-balancing tasks, for neuroevolution

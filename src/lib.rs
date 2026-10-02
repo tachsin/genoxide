@@ -1,7 +1,7 @@
 //! # genoxide
 //!
-//! Optimization for Rust (and Python): evolutionary, local, gradient-based and multi-objective
-//! methods in one library. A seed gives the same results, to the bit, on every platform and
+//! Optimization for Rust (and Python): evolutionary, local, gradient-based, Bayesian and
+//! multi-objective methods in one library. A seed gives the same results, to the bit, on every platform and
 //! thread count, parallel or not.
 //!
 //! | Problem | Method |
@@ -10,6 +10,7 @@
 //! | Real numbers in a box, no gradient | [`Cmaes`](algorithm::Cmaes), [`De`](algorithm::De), [`Pso`](algorithm::Pso), [`Es`](algorithm::Es), [`NelderMead`](algorithm::NelderMead) |
 //! | Smooth functions with a gradient | [`Lbfgsb`](algorithm::Lbfgsb), and [`FirstOrder`](algorithm::FirstOrder) (Adam, momentum) for millions of variables |
 //! | Many variables, few inequality constraints, with gradients | [`Mma`](algorithm::Mma) (MMA and GCMMA) |
+//! | An expensive function: tens to a few hundred evaluations | [`Bo`](algorithm::Bo), Bayesian optimization, with the Gaussian processes of [`model::gp`] |
 //! | A smooth problem solved in stages (a smoothing, sharpness or penalty changed step by step) | [`Continuation`](algorithm::Continuation) around a local method, its state kept |
 //! | Several objectives at once | [`Nsga2`](multi::Nsga2), [`Nsga3`](multi::Nsga3), [`Moead`](multi::Moead), [`SmsEmoa`](multi::SmsEmoa) |
 //! | Programs and formulas | [`gp`]: tree genetic programming |

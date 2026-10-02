@@ -227,7 +227,8 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 
 ### 0.13: Bayesian optimization
 - [x] EI, log-EI, UCB and PI; Latin hypercube designs; portable `erf`, `erfc` and `erfcx` (batch B, the parts that need neither linear algebra nor L-BFGS-B)
-- [ ] Gaussian processes; batch, constrained and integer-variable Bayesian optimization, also on the asynchronous engine (batch B; after the linear algebra, [#373](https://github.com/tachsin/genoxide/issues/373), and L-BFGS-B)
+- [x] Gaussian processes (`model::gp`, unstable for one release) and Bayesian optimization (`Bo`): an initial Latin hypercube of 2(n + 1) points, log-EI by default, an output transform, in Python (`gx.Bo`, `gx.model.gp`) and the `genoxide` program, with the `bayesian_optimization` example (batch B, its first part)
+- [ ] Batch Bayesian optimization (Kriging believer, constant liar), `Incremental` for the asynchronous engine, constrained Bayesian optimization and integer genes, with the `bo_hartmann6`, `bo_asynchronous` and `bo_constrained` examples (batch B, its second part)
 
 ### 0.14: Constrained nonlinear programming
 - [ ] SQP and the augmented Lagrangian, on the constrained test problems (batch C)

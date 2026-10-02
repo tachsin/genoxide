@@ -42,6 +42,7 @@ fn main() -> genoxide::Result<()> {
 | A neural network's weights (neuroevolution) | `nn::Mlp::new([4, 8, 1], nn::Activation::Tanh)?.representation(-1.0..=1.0)?`, `nn::Elman` (recurrent) ([template](#neuroevolution-a-networks-weights-by-cma-es)) | `Reals` | none: `Cmaes` (up to a few hundred weights), `OpenEs` (thousands and more) | none |
 | A smooth function of many reals, its gradient noisy (mini-batches) or a step set by a learning-rate schedule (model fitting, up to millions of parameters) | `Real::uniform(n, lo..=hi)` ([template](#first-order-methods-adam-momentum-nesterov)) | `Reals` | none: `FirstOrder` | none |
 | Smooth, with gradients: very many reals (up to millions), few inequality constraints | `Real::uniform(n, lo..=hi)` ([template](#many-variables-few-constraints-mma)) | `Reals` | none: `Mma` | none |
+| An expensive function of reals: tens to a few hundred evaluations, up to about 10 to 20 genes | `Real::new(...)` ([template](#bayesian-optimization-expensive-functions)) | `Reals` | none: `Bo` | none |
 
 | Continuous problem | Method |
 |---|---|
@@ -49,6 +50,7 @@ fn main() -> genoxide::Result<()> {
 | Smooth or not, a few genes, no gradient | `NelderMead` |
 | Multimodal, rotated or badly conditioned, up to a few hundred genes | `Cmaes` (with `Restarts::Ipop`), `De`; then `Lbfgsb` from the best to polish it |
 | Smooth, gradients of the score and of each constraint, very many genes and few inequality constraints | `Mma` (`Method::Gcmma` to converge from any start) |
+| Expensive: tens to a few hundred evaluations, up to about 10 to 20 genes | `Bo` (Bayesian optimization); `bo::Output::Log` for values over orders of magnitude |
 | Smooth, solved best in stages (a smoothing, sharpness or penalty changed step by step) | `Continuation` around `FirstOrder`, `Lbfgsb`, `Mma`, `NelderMead` or `Cmaes` ([template](#continuation-stages-of-one-problem-the-state-kept)) |
 | Constrained beyond the box, without gradients | `De` or `Ga` with `(score, violation)` (Deb's rules) |
 
@@ -1098,6 +1100,53 @@ fn main() -> genoxide::Result<()> {
 }
 ```
 
+### Bayesian optimization: expensive functions
+
+`Bo` on `Real` genomes, for functions so expensive that tens to a few hundred evaluations must do (a simulation of minutes, an experiment). A Gaussian process (`model::gp`) models the function from every evaluation, and an acquisition function of its posterior picks the next point. Generation 0 evaluates an initial design: the `.initial_genomes(...)`, and a Latin hypercube for the rest of `.initial_points(n)`, 2(n + 1) for n searched genes by default (Loeppky et al. 2009's 10n is for an accurate model of the whole box, more than a minimum needs). Each later generation evaluates one point: the model is fitted (hyperparameters by maximum likelihood, genoxide's L-BFGS-B with the analytic gradient, from the last fit's and random starts), the acquisition evaluated at 1,000 random points and maximized by L-BFGS-B from the best 10 and the best point so far. A point is never asked twice. The model's fit costs O(N³) for N evaluations: up to a few hundred evaluations, in up to about 10 to 20 genes; for a cheap function, `Cmaes` or `De`.
+
+| Setting | Default |
+|---|---|
+| `.acquisition(bo::Acquisition::...)` | `LogExpectedImprovement` (Ament et al. 2023: finite with its gradient where EI underflows); `ExpectedImprovement`, `ProbabilityOfImprovement { xi }`, `UpperConfidenceBound { beta }` (`set_acquisition` in `.control` for a schedule) |
+| `.kernel(model::gp::Kernel::...)` | `Matern52` (ν = 5/2, a length scale per gene); `SquaredExponential` |
+| `.noise(model::gp::Noise::...)` | `Fixed(0.0)`: the model interpolates the values, as suits a deterministic function; `Learned { min }` (e.g. 1e-6) for a noisy one |
+| `.output(bo::Output::...)` | `Standardize`; `Log` (`ln(v − v_best + δ)`, δ the first quartile of the distances above the best) for values over orders of magnitude (Goldstein-Price's 3 to 10⁶) |
+| `.raw_samples(n)`, `.acquisition_starts(k)`, `.hyperparameter_starts(k)` | 1000, 10, 5 |
+
+The model fits the scores to minimize (negated when maximizing); an invalid fitness enters it at the worst value of the others; a violation is ignored by the search (use a penalty). `bo.model()` is the `GaussianProcess` that chose the last point (`predict(&x)`, `predict_with_gradient`, `hyperparameters()`), `bo.acquisition_at(&x)` its acquisition; `reevaluate()` asks every point again. The model can be fitted on its own: `GaussianProcess::builder(real).fit(&points, &values)?` (unstable for one release). Batch and asynchronous Bayesian optimization, constraints and integer genes come in a later release.
+
+```rust
+use genoxide::model::gp::GaussianProcess;
+use genoxide::prelude::*;
+use genoxide::problems::{Branin, Problem};
+
+fn main() -> genoxide::Result<()> {
+    // Branin's function: three global minima of 0.397887, in tens of evaluations
+    let bo = Bo::builder(Branin.representation()).minimize().seed(1).build()?;
+    let mut engine = Engine::new(bo, Branin).stop_when(Stop::evaluations(30));
+    let outcome = engine.run()?;
+    assert!(outcome.best_fitness().score().unwrap() < 0.397887 + 1e-3);
+
+    // polish: a model of every evaluation, its mean minimized from the best point, evaluated once
+    let evaluated = engine.algorithm().population();
+    let points: Vec<Reals> = evaluated.iter().map(|x| x.genome().clone()).collect();
+    let values: Vec<f64> = evaluated.iter().map(|x| x.fitness().unwrap().score().unwrap()).collect();
+    let model = GaussianProcess::builder(Branin.representation()).fit(&points, &values)?;
+    let mean = Differentiable(|x: &Reals, gradient: &mut [f64]| {
+        model.predict_with_gradient(x, gradient, &mut [0.0; 2]).mean()
+    });
+    let lbfgsb = Lbfgsb::builder(Branin.representation())
+        .initial_genome(outcome.best_genome().clone())
+        .minimize()
+        .seed(1)
+        .build()?;
+    let polished = Engine::new(lbfgsb, mean).stop_when(Stop::evaluations(1_000)).run()?;
+    assert!(Branin.evaluate(polished.best_genome()) < 0.397887 + 1e-4);
+    Ok(())
+}
+```
+
+Python: `gx.Bo(real, initial_points=None, acquisition="log-ei" | "ei" | gx.ProbabilityOfImprovement(xi) | gx.UpperConfidenceBound(beta), kernel="matern52", noise=0.0 | gx.model.gp.Learned(min), output="standardize" | "log", raw_samples=1000, acquisition_starts=10, hyperparameter_starts=5, ...)`; `gx.RunningBo` in `control` (`acquisition`, `model`, `acquisition_at(points)`); `gx.model.gp.GaussianProcess.fit(real, points, values)` (`predict(points)`, `predict_with_gradient(x)`). The `genoxide` program: `type = "bo"`. See `examples/bayesian_optimization`.
+
 ### Ask / tell: evaluating outside the engine
 
 For fitness computed elsewhere (another process, async code).
@@ -1145,7 +1194,7 @@ command = ["python3", "fitness.py"]   # or builtin = "rastrigin"
 objectives = ["minimize"]
 
 [algorithm]
-type = "ga"            # ga, steady-ga, de, cmaes, pso, local-search, nelder-mead, lbfgsb, first-order, mma, nsga2
+type = "ga"            # ga, steady-ga, de, cmaes, pso, local-search, nelder-mead, lbfgsb, first-order, mma, bo, nsga2
 population_size = 50
 select = { type = "tournament", size = 3 }
 crossover = { type = "simulated-binary", eta = 15.0 }
@@ -1195,6 +1244,9 @@ every = 50
 | Real-valued GA stuck in a local minimum | `PolynomialMutation` with eta 20, or a larger `GaussianMutation` sigma |
 | `StopReason::Stalled`: 10 000 generations of copies only (e.g. `mutation_rate(0.0)`) | A mutation rate above 0, or add `Stop::generations(n)` or `Stop::stagnation(n)` |
 | Early stagnation (too little diversity) | A larger population, smaller tournament or higher mutation rate; or `Stop::stagnation` and restart |
+| `Bo` stalls above the minimum of a function whose values span orders of magnitude | `.output(bo::Output::Log)` |
+| `Bo` on a noisy function chases the noise | `.noise(model::gp::Noise::Learned { min: 1e-6 })` |
+| `Bo` takes long per step after hundreds of evaluations | The model costs O(N³) for N evaluations: for a cheap function, `Cmaes` or `De` |
 | Slow with a cheap fitness function | `--release`; `.parallel(true)` only for expensive fitness; `.parallel_breeding(true)` (`Ga`, `De`, `Es`) when breeding takes much of a generation |
 
 ## Guarantees to rely on
@@ -1202,4 +1254,4 @@ every = 50
 - **Reproducible:** a seed gives the same results on every platform and thread count, parallel or not. The exception is a fitness function that calls the platform's `sin`, `cos`, `exp` and the like (`f64::sin`, numpy): their last bit can differ between operating systems, and long runs drift apart. `genoxide::math::{sin, cos, tan, exp, ln, powf, powi, atan2, ...}` are the same to the bit everywhere, at native speed; `problems` and `multi::problems` use them.
 - **Ties:** the earlier individual wins.
 - **The best is kept:** `outcome.best()` is the best individual ever evaluated.
-- **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `problems` or `multi::problems` constructor with too few dimensions or variables (or a radius that isn't above 0, or none from the paper for `C1Dtlz3::new` and `ConvexC2Dtlz2::new`), a `Batch` returning no score for a single genome, a gradient or constraint-values slice of the wrong length for a test problem's `evaluate_with`, and an input, output or observation slice of the wrong length for an `nn` network or a `control` task.
+- **Errors, not panics,** for invalid settings, including sizes above 2^24. The only panics (`# Panics`): an index out of bounds (`Bits::set`, `Order::swap`), a `problems` or `multi::problems` constructor with too few dimensions or variables (or a radius that isn't above 0, or none from the paper for `C1Dtlz3::new` and `ConvexC2Dtlz2::new`), a `Batch` returning no score for a single genome, a gradient or constraint-values slice of the wrong length for a test problem's `evaluate_with`, an input, output or observation slice of the wrong length for an `nn` network or a `control` task, and a point of the wrong length for a `model::gp::GaussianProcess`'s predictions or `Bo::acquisition_at`.
