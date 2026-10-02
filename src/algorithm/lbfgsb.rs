@@ -426,9 +426,11 @@ impl Lbfgsb {
                 if alpha == 1.0 {
                     point.copy_from_slice(&self.target);
                 } else {
+                    // resliced to n: no bounds checks in the loop
+                    let (point, x, direction) = (&mut point[..n], &x[..n], &self.direction[..n]);
+                    let (lower, upper) = (&self.lower[..n], &self.upper[..n]);
                     for i in 0..n {
-                        point[i] =
-                            (x[i] + alpha * self.direction[i]).clamp(self.lower[i], self.upper[i]);
+                        point[i] = (x[i] + alpha * direction[i]).clamp(lower[i], upper[i]);
                     }
                 }
             }
@@ -573,11 +575,14 @@ impl Lbfgsb {
                 &mut self.target,
             )
             .ok()?;
+        let n = x.len();
+        let (target, gradient) = (&self.target[..n], &self.gradient[..n]);
+        let direction = &mut self.direction[..n];
         let mut slope = 0.0;
-        for i in 0..x.len() {
-            let d = self.target[i] - x[i];
-            self.direction[i] = d;
-            slope += self.gradient[i] * d;
+        for i in 0..n {
+            let d = target[i] - x[i];
+            direction[i] = d;
+            slope += gradient[i] * d;
         }
         (slope < 0.0 && slope.is_finite()).then_some(slope)
     }
@@ -588,13 +593,16 @@ impl Lbfgsb {
         let max_step = if self.first_iteration {
             1.0
         } else {
+            let n = x.len();
+            let (direction, lower, upper) =
+                (&self.direction[..n], &self.lower[..n], &self.upper[..n]);
             let mut max_step = f64::MAX;
-            for i in 0..x.len() {
-                let d = self.direction[i];
+            for i in 0..n {
+                let d = direction[i];
                 let room = if d > 0.0 {
-                    (self.upper[i] - x[i]) / d
+                    (upper[i] - x[i]) / d
                 } else if d < 0.0 {
-                    (self.lower[i] - x[i]) / d
+                    (lower[i] - x[i]) / d
                 } else {
                     continue;
                 };
@@ -789,8 +797,10 @@ impl Lbfgsb {
 
 // ‖P(x − g) − x‖∞: the largest move of a projected steepest descent step of length 1
 fn projected_gradient(x: &[f64], g: &[f64], lower: &[f64], upper: &[f64]) -> f64 {
+    let n = x.len();
+    let (g, lower, upper) = (&g[..n], &lower[..n], &upper[..n]);
     let mut largest = 0.0f64;
-    for i in 0..x.len() {
+    for i in 0..n {
         let moved = (x[i] - g[i]).clamp(lower[i], upper[i]) - x[i];
         if moved.is_nan() {
             std::hint::cold_path();

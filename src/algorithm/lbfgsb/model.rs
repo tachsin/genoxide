@@ -128,8 +128,10 @@ impl Memory {
         epsilon: f64,
     ) -> bool {
         // sᵀy and yᵀy first, from the vectors: a skipped pair overwrites nothing
+        let n = self.n;
+        let (x_new, x_old, g_new, g_old) = (&x_new[..n], &x_old[..n], &g_new[..n], &g_old[..n]);
         let (mut sty, mut yty) = (0.0, 0.0);
-        for i in 0..self.n {
+        for i in 0..n {
             let (s, y) = (x_new[i] - x_old[i], g_new[i] - g_old[i]);
             sty += s * y;
             yty += y * y;
@@ -435,6 +437,7 @@ impl Workspace {
         xc: &mut [f64],
     ) {
         let n = x.len();
+        let (g, lower, upper, fixed) = (&g[..n], &lower[..n], &upper[..n], &fixed[..n]);
         let len = memory.len();
         let theta = memory.theta();
         let d = resized(&mut self.d, n);
@@ -542,6 +545,7 @@ impl Workspace {
         }
         let dt_min = if dt_min > 0.0 { dt_min } else { 0.0 };
         let t = t_old + dt_min;
+        let xc = &mut xc[..n];
         for i in 0..n {
             if d[i] != 0.0 {
                 xc[i] = (x[i] + t * d[i]).clamp(lower[i], upper[i]);
@@ -618,6 +622,7 @@ impl Workspace {
         if clipped {
             // the projection, if it's a descent direction (the authors' implementation reverts
             // when (x̄ − x)ᵀg > 0)
+            let (xbar, g) = (&mut xbar[..n], &g[..n]);
             let mut slope = 0.0;
             for i in 0..n {
                 slope += (xbar[i] - x[i]) * g[i];

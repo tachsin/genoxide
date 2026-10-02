@@ -49,6 +49,8 @@ pub(crate) fn gemv(m: usize, n: usize, alpha: f64, a: &[f64], x: &[f64], beta: f
         }
         return;
     }
+    // resliced to n: no bounds checks in the loop over the columns
+    let x = &x[..n];
     // four rows at a time: four independent sums, each in its own order
     let rows = a.chunks_exact(4 * n);
     let rest = rows.remainder();
