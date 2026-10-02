@@ -47,7 +47,9 @@ per run, and a target of 1e-8:
 
 - CMA-ES (Hansen and Ostermeier, 2001, Evolutionary Computation 9(2): 159-195), which samples a
   population of 10 from a normal distribution and adapts its mean, its step size and its covariance
-  matrix, from a step size of 0.3 of each gene's range and a random start;
+  matrix, from a step size of 0.3 of each gene's range and a random start, and stops once it has
+  converged (`cmaes::Restarts::Stop`): sampling on around its point to the end of the budget
+  wouldn't change its best;
 - the same with IPOP restarts (Auger and Hansen, 2005, IEEE CEC 2005: 1769-1776): a run that has
   converged starts again from a random point with twice the population;
 - differential evolution with genoxide's defaults, SHADE (Tanabe and Fukunaga, CEC 2013), with a
@@ -57,6 +59,9 @@ per run, and a target of 1e-8:
 - a real-coded genetic algorithm: a population of 100, tournaments of 3, simulated binary crossover
   (Deb and Agrawal, 1995) with η = 15 and polynomial mutation with η = 20 at a rate of 1/10 per
   gene.
+
+An evaluation is slow, 21 cosines per gene, some of arguments up to 2·10¹⁰, so each generation's
+points are evaluated in parallel, which gives the same results on any number of threads.
 
 ## Output
 

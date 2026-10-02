@@ -3,7 +3,9 @@
 //! Runs CMA-ES without and with IPOP restarts (a population that doubles at each restart),
 //! differential evolution (SHADE), particle swarm optimization and a real-coded genetic algorithm
 //! from 10 seeds each, and counts the runs that reach the minimum, 0 at the origin, to within
-//! 1e-8. The function is genoxide's `problems::Weierstrass`.
+//! 1e-8. The function is genoxide's `problems::Weierstrass`. Its 21 cosines per gene, some of
+//! arguments up to 2·10¹⁰, make each evaluation slow: the runs evaluate in parallel, with the same
+//! results on any number of threads, and CMA-ES without restarts stops once it has converged.
 //!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of a run for the plot on the example's
 //! page, with `trace.rs`.
@@ -67,8 +69,10 @@ fn run(algorithm: &str, problem: Weierstrass, seed: u64, target: f64) -> Result<
     let stop = Stop::target(target).or(Stop::evaluations(BUDGET));
     match algorithm {
         "CMA-ES" | "CMA-ES with IPOP" => {
+            // without restarts, the run ends once it has converged: sampling on around its point
+            // wouldn't change its best
             let restarts = if algorithm == "CMA-ES" {
-                cmaes::Restarts::Never
+                cmaes::Restarts::Stop
             } else {
                 cmaes::Restarts::Ipop
             };
@@ -77,11 +81,17 @@ fn run(algorithm: &str, problem: Weierstrass, seed: u64, target: f64) -> Result<
                 .minimize()
                 .seed(seed)
                 .build()?;
-            Engine::new(cmaes, problem).stop_when(stop).run()
+            Engine::new(cmaes, problem)
+                .stop_when(stop)
+                .parallel(true)
+                .run()
         }
         "DE" => {
             let de = De::builder(real).minimize().seed(seed).build()?;
-            Engine::new(de, problem).stop_when(stop).run()
+            Engine::new(de, problem)
+                .stop_when(stop)
+                .parallel(true)
+                .run()
         }
         "PSO" => {
             let pso = Pso::builder(real)
@@ -89,7 +99,10 @@ fn run(algorithm: &str, problem: Weierstrass, seed: u64, target: f64) -> Result<
                 .minimize()
                 .seed(seed)
                 .build()?;
-            Engine::new(pso, problem).stop_when(stop).run()
+            Engine::new(pso, problem)
+                .stop_when(stop)
+                .parallel(true)
+                .run()
         }
         _ => {
             let ga = Ga::builder(real)
@@ -100,7 +113,10 @@ fn run(algorithm: &str, problem: Weierstrass, seed: u64, target: f64) -> Result<
                 .minimize()
                 .seed(seed)
                 .build()?;
-            Engine::new(ga, problem).stop_when(stop).run()
+            Engine::new(ga, problem)
+                .stop_when(stop)
+                .parallel(true)
+                .run()
         }
     }
 }

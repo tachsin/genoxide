@@ -96,6 +96,12 @@ name = "bo_asynchronous"
 path = "examples/bo_asynchronous/main.rs"
 required-features = ["parallel"]
 
+# slow evaluations, evaluated in parallel for the same results sooner
+[[example]]
+name = "weierstrass"
+path = "examples/weierstrass/main.rs"
+required-features = ["parallel"]
+
 [[bin]]
 name = "genoxide"
 required-features = ["cli"]

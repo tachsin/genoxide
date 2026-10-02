@@ -3,7 +3,9 @@
 Runs CMA-ES without and with IPOP restarts (a population that doubles at each restart), differential
 evolution (SHADE), particle swarm optimization and a real-coded genetic algorithm from 10 seeds
 each, and counts the runs that reach the minimum, 0 at the origin, to within 1e-8. The function is
-genoxide's `problems::Weierstrass`, which run evaluates in Rust.
+genoxide's `problems::Weierstrass`, which run evaluates in Rust. Its 21 cosines per gene, some of
+arguments up to 2·10¹⁰, make each evaluation slow: the runs evaluate in parallel, with the same
+results on any number of threads, and CMA-ES without restarts stops once it has converged.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of a run for the plot on the example's page,
 with trace.py.
@@ -26,7 +28,9 @@ ALGORITHMS = ["CMA-ES", "CMA-ES with IPOP", "DE", "PSO", "GA"]
 def build(name, genome, seed):
     """The algorithm called ``name``, on ``genome``, from ``seed``."""
     if name == "CMA-ES":
-        return gx.Cmaes(genome, objective="minimize", seed=seed)
+        # without restarts, the run ends once it has converged: sampling on around its point
+        # wouldn't change its best
+        return gx.Cmaes(genome, restarts="stop", objective="minimize", seed=seed)
     if name == "CMA-ES with IPOP":
         return gx.Cmaes(genome, restarts="ipop", objective="minimize", seed=seed)
     if name == "DE":
@@ -71,7 +75,7 @@ for name in ALGORITHMS:
     evaluations, errors = [], []
     for seed in range(1, SEEDS + 1):
         result = build(name, problem.genome, seed).run(
-            problem, target=minimum + ERROR, evaluations=BUDGET
+            problem, target=minimum + ERROR, evaluations=BUDGET, parallel=True
         )
         if result.stop_reason == "target":
             evaluations.append(float(result.evaluations))
