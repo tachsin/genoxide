@@ -2546,6 +2546,9 @@ scalable!(
     ///
     /// Bounds [−1, 1]ⁿ; minimum 0 at the origin; 30 dimensions by default.
     ///
+    /// Supplies its analytic gradient, `(i + 1) |xᵢ|^i sign(xᵢ)`, through
+    /// [`evaluate_with`](FitnessFunction::evaluate_with).
+    ///
     /// Its origin is unknown: definition and bounds as Molga and Smutnicki (2005, section 2.8)
     /// give them. Not yet checked against an original
     /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
@@ -2557,6 +2560,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for SumOfDifferentPowers {
     type Output = f64;
+
+    gradient!(gradients::sum_of_different_powers);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         x.iter()
@@ -2579,6 +2584,8 @@ scalable!(
     ///
     /// Bounds [−100, 100]ⁿ; minimum 0 on the whole cube [−0.5, 0.5)ⁿ, here at the origin; 30
     /// dimensions by default.
+    ///
+    /// It supplies no gradient: its derivative is 0 on the steps and undefined at their edges.
     ///
     /// Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made faster. *IEEE
     /// Transactions on Evolutionary Computation* 3(2): 82-102, function f6 (table I and the
@@ -2617,12 +2624,18 @@ scalable_problem!(
 /// Bounds [−1.28, 1.28]ⁿ; minimum 0 at the origin, without noise; 30 dimensions by default. The
 /// function is flat near the minimum: at 0.01 from it in every gene, it's below 10⁻⁵.
 ///
+/// Without noise, it supplies its analytic gradient, `4 i xᵢ³`, through
+/// [`evaluate_with`](FitnessFunction::evaluate_with); with noise, none (see below).
+///
 /// Yao, Liu and Lin (1999, f7) add a uniform random number in [0, 1) to each evaluation, so that
 /// an algorithm can't use differences smaller than the noise. A fitness function is deterministic
 /// in genoxide (a copy of a genome inherits its fitness), so [`noisy`](Quartic::noisy) draws the
 /// noise from a generator seeded with the genome's bits: the same genome always gets the same
 /// noise, and two genomes, however close, independent noises. Its minimum isn't known (it's the
-/// smallest noise near the origin), so [`optimum`](Problem::optimum) is `None`.
+/// smallest noise near the origin), so [`optimum`](Problem::optimum) is `None`. Nor has it a
+/// gradient: its value jumps between any two genomes, so it has no derivative anywhere, and the
+/// noiseless part's gradient would lead a method to that function's minimum, ignoring the noise
+/// that the function is there to test.
 ///
 /// De Jong, K. A. (1975). *An Analysis of the Behavior of a Class of Genetic Adaptive Systems.*
 /// PhD thesis, University of Michigan, function F4, with Gaussian noise, in 30 dimensions on
@@ -2713,6 +2726,33 @@ impl FitnessFunction<Reals> for Quartic {
             quartic
         }
     }
+
+    /// The gradient without noise; nothing with noise, whose value jumps between any two
+    /// genomes, however close, so that it has no derivative anywhere.
+    fn provides(&self) -> Provided {
+        if self.noisy {
+            Provided::NOTHING
+        } else {
+            Provided::GRADIENT
+        }
+    }
+
+    /// The value at `x`, as [`evaluate`](FitnessFunction::evaluate), and, without noise, its
+    /// analytic gradient if it's wanted.
+    ///
+    /// # Panics
+    ///
+    /// If the gradient doesn't have a value per gene of `x`.
+    fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> f64 {
+        if !self.noisy
+            && let Some(gradient) = extras.gradient()
+        {
+            assert_eq!(gradient.len(), x.len(), "a gradient has a value per gene");
+            gradient.fill(0.0);
+            gradients::quartic(x, gradient);
+        }
+        self.evaluate(x)
+    }
 }
 
 impl Problem for Quartic {
@@ -2767,6 +2807,10 @@ scalable!(
     /// Bounds [−50, 50]ⁿ; minimum 0 at (−1, …, −1), where every yᵢ is 1 (every term is at least
     /// 0); 30 dimensions by default.
     ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with):
+    /// the penalty's slope is 0 at ±10, where it starts, so the function is differentiable
+    /// everywhere.
+    ///
     /// Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made faster. *IEEE
     /// Transactions on Evolutionary Computation* 3(2): 82-102, function f12 (table I and the
     /// appendix, read), whose appendix misprints the minimizer as (1, …, 1). The function is
@@ -2779,6 +2823,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for Penalized1 {
     type Output = f64;
+
+    gradient!(gradients::penalized_1);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let n = x.len();
@@ -2813,6 +2859,10 @@ scalable!(
     /// Bounds [−50, 50]ⁿ; minimum 0 at (1, …, 1) (every term is at least 0); 30 dimensions by
     /// default.
     ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with):
+    /// the penalty's slope is 0 at ±5, where it starts, so the function is differentiable
+    /// everywhere.
+    ///
     /// Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made faster. *IEEE
     /// Transactions on Evolutionary Computation* 3(2): 82-102, function f13 (table I and the
     /// appendix, read). Table I prints the last term's `(xₙ − 1)` without its square, which the
@@ -2826,6 +2876,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for Penalized2 {
     type Output = f64;
+
+    gradient!(gradients::penalized_2);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let (Some(&first), Some(&last)) = (x.first(), x.last()) else {
@@ -2851,7 +2903,7 @@ scalable_problem!(
 
 // 10⁶ to the power (i − 1) / (n − 1), for gene i from 0: from 1 for the first gene to 10⁶ for
 // the last
-fn conditioning(i: usize, n: usize) -> f64 {
+pub(super) fn conditioning(i: usize, n: usize) -> f64 {
     math::powf(1e6, i as f64 / (n - 1) as f64)
 }
 
@@ -2860,6 +2912,8 @@ scalable!(
     /// ellipsoid whose axes grow from 1 to 10³ in length, so that its condition number is 10⁶.
     ///
     /// Bounds [−100, 100]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
+    ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with).
     ///
     /// Suganthan, P. N., Hansen, N., Liang, J. J., Deb, K., Chen, Y.-P., Auger, A. and Tiwari, S.
     /// (2005). *Problem Definitions and Evaluation Criteria for the CEC 2005 Special Session on
@@ -2876,6 +2930,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for HighConditionedElliptic {
     type Output = f64;
+
+    gradient!(gradients::high_conditioned_elliptic);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let n = x.len();
@@ -2900,6 +2956,8 @@ scalable!(
     ///
     /// Bounds [−100, 100]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
     ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with).
+    ///
     /// Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box
     /// Optimization Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report
     /// RR-6829, function f12 (read), which composes it with an asymmetric transformation and two
@@ -2915,6 +2973,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for BentCigar {
     type Output = f64;
+
+    gradient!(gradients::bent_cigar);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let Some((first, rest)) = x.split_first() else {
@@ -2938,6 +2998,8 @@ scalable!(
     ///
     /// Bounds [−100, 100]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
     ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with).
+    ///
     /// Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box
     /// Optimization Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report
     /// RR-6829, function f11 (read), which composes it with an oscillation and a rotation. This
@@ -2952,6 +3014,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for Discus {
     type Output = f64;
+
+    gradient!(gradients::discus);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let Some((first, rest)) = x.split_first() else {
@@ -2975,6 +3039,10 @@ scalable!(
     ///
     /// Bounds [−5, 5]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
     ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with).
+    /// The square root makes a cone at the origin, where the gradient is taken as 0, as
+    /// [`Ackley`]'s.
+    ///
     /// Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box
     /// Optimization Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report
     /// RR-6829, function f14 (read): its definition, without the rotation, and its search
@@ -2987,6 +3055,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for DifferentPowers {
     type Output = f64;
+
+    gradient!(gradients::different_powers);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let n = x.len();
@@ -3009,7 +3079,7 @@ scalable_problem!(
 
 // BBOB's oscillation T_osz of one value: the identity, but for small smooth wiggles that scale
 // with the value
-fn oscillation(x: f64) -> f64 {
+pub(super) fn oscillation(x: f64) -> f64 {
     if x == 0.0 {
         return 0.0;
     }
@@ -3031,6 +3101,10 @@ scalable!(
     ///
     /// Bounds [−5, 5]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
     ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with).
+    /// T_osz has no derivative at 0, but each gene's term is O(x²) there, so the function's
+    /// derivative is 0 at 0 and it's differentiable everywhere.
+    ///
     /// Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box
     /// Optimization Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report
     /// RR-6829, function f4 (read): its definition, with its optimum at the origin and no offset
@@ -3043,6 +3117,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for BucheRastrigin {
     type Output = f64;
+
+    gradient!(gradients::buche_rastrigin);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let n = x.len();
@@ -3080,6 +3156,9 @@ scalable!(
     ///
     /// Bounds [−5.12, 5.12]ⁿ; minimum 0 at the origin; 30 dimensions by default. `round` rounds
     /// halves away from 0, as MATLAB's does.
+    ///
+    /// It supplies no gradient: away from the origin's (−½, ½), its derivative is 0 on the flat
+    /// steps and undefined at their jumps.
     ///
     /// Liang, J. J., Qin, A. K., Suganthan, P. N. and Baskar, S. (2006). Comprehensive learning
     /// particle swarm optimizer for global optimization of multimodal functions. *IEEE
@@ -3119,14 +3198,15 @@ scalable_problem!(
     url: "https://doi.org/10.1109/TEVC.2005.857610",
 );
 
-// Weierstrass's a, b and k_max
-const WEIERSTRASS_A: f64 = 0.5;
-const WEIERSTRASS_B: f64 = 3.0;
-const WEIERSTRASS_TERMS: i32 = 21;
+// Weierstrass's a, b and k_max + 1, the number of terms
+pub(super) const WEIERSTRASS_A: f64 = 0.5;
+pub(super) const WEIERSTRASS_B: f64 = 3.0;
+pub(super) const WEIERSTRASS_TERMS: i32 = 21;
 
-// Σₖ aᵏ cos(2π bᵏ (x + 0.5)), k from 0 to k_max
-fn weierstrass_sum(x: f64) -> f64 {
-    (0..WEIERSTRASS_TERMS)
+// Σₖ aᵏ cos(2π bᵏ (x + 0.5)), k from 0 to `terms` − 1: k_max + 1 terms for the function, fewer
+// for the tests of its gradient
+pub(super) fn weierstrass_sum(x: f64, terms: i32) -> f64 {
+    (0..terms)
         .map(|k| {
             let (ak, bk) = (math::powi(WEIERSTRASS_A, k), math::powi(WEIERSTRASS_B, k));
             ak * math::cos(2.0 * PI * bk * (x + 0.5))
@@ -3144,6 +3224,10 @@ scalable!(
     /// 30 dimensions by default. Each gene's sum is at least −Σ aᵏ, reached where every cosine
     /// is −1, at the integers, and the second term is −n Σ aᵏ, since every bᵏ is odd.
     ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with),
+    /// the exact derivative of the finite sum. Its highest terms vary on scales of 10⁻¹⁰, finer
+    /// than any finite difference of the computed function resolves.
+    ///
     /// Suganthan, P. N., Hansen, N., Liang, J. J., Deb, K., Chen, Y.-P., Auger, A. and Tiwari, S.
     /// (2005). *Problem Definitions and Evaluation Criteria for the CEC 2005 Special Session on
     /// Real-Parameter Optimization*, function F11 (read), shifted and rotated there: its
@@ -3159,10 +3243,15 @@ scalable!(
 impl FitnessFunction<Reals> for Weierstrass {
     type Output = f64;
 
+    gradient!(gradients::weierstrass);
+
     fn evaluate(&self, x: &Reals) -> f64 {
         // the same sum at 0, so that the minimum is exactly 0
-        let offset = x.len() as f64 * weierstrass_sum(0.0);
-        x.iter().map(|&xi| weierstrass_sum(xi)).sum::<f64>() - offset
+        let offset = x.len() as f64 * weierstrass_sum(0.0, WEIERSTRASS_TERMS);
+        x.iter()
+            .map(|&xi| weierstrass_sum(xi, WEIERSTRASS_TERMS))
+            .sum::<f64>()
+            - offset
     }
 }
 
@@ -3184,6 +3273,10 @@ scalable!(
     /// Bounds [−5, 5]ⁿ; minimum 0 at the origin, and at every point whose genes are multiples
     /// of 1/2 (where every term of the inner sums is 0): 21ⁿ global minima in the box. 30
     /// dimensions by default.
+    ///
+    /// It supplies no gradient: the function has kinks 2⁻³³ apart in each gene, where its inner
+    /// sums' slopes jump by up to 2, so its derivative changes on scales that no search step
+    /// resolves.
     ///
     /// Hansen, N., Finck, S., Ros, R. and Auger, A. (2009). *Real-Parameter Black-Box
     /// Optimization Benchmarking 2009: Noiseless Functions Definitions.* INRIA research report
@@ -3239,6 +3332,10 @@ scalable!(
     /// Bounds [−5, 5]ⁿ; minimum 0 at (−1, …, −1), the only one: the second part is
     /// `Σ (xᵢ + 1)² / (2n)`, 0 only there, where the first is 0 too. 30 dimensions by default.
     ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with).
+    /// The first term has a cusp on the sphere `Σ xᵢ² = n`, through the minimum, where its gradient
+    /// is taken as 0.
+    ///
     /// Beyer, H.-G. and Finck, S. (2012). HappyCat: a simple function class where well-known
     /// direct search algorithms do fail. *Parallel Problem Solving from Nature, PPSN XII*, LNCS
     /// 7491: 367-376, which couldn't be read. Its function has a parameter α that shapes the
@@ -3263,6 +3360,8 @@ fn squares_and_sum(x: &Reals) -> (f64, f64) {
 
 impl FitnessFunction<Reals> for HappyCat {
     type Output = f64;
+
+    gradient!(gradients::happy_cat);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let n = x.len() as f64;
@@ -3289,6 +3388,10 @@ scalable!(
     /// Bounds [−5, 5]ⁿ; minimum 0 at (−1, …, −1), the only one: the second part is
     /// `Σ (xᵢ + 1)² / (2n)`, 0 only there, where the first is 0 too. 30 dimensions by default.
     ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with).
+    /// The first term has a cusp where `(Σ xᵢ²)² = (Σ xᵢ)²`, through the minimum, where its
+    /// gradient is taken as 0.
+    ///
     /// Liang, J. J., Qu, B. Y. and Suganthan, P. N. (2013). *Problem Definitions and Evaluation
     /// Criteria for the CEC 2014 Special Session and Competition on Single Objective
     /// Real-Parameter Numerical Optimization.* Technical report 201311, Zhengzhou University and
@@ -3303,6 +3406,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for HgBat {
     type Output = f64;
+
+    gradient!(gradients::hg_bat);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let n = x.len() as f64;
@@ -3326,6 +3431,10 @@ scalable!(
     ///
     /// Bounds [−100, 100]ⁿ; minimum 0 at the origin; at least 2 dimensions, 30 by default.
     ///
+    /// Supplies its analytic gradient through [`evaluate_with`](FitnessFunction::evaluate_with). A
+    /// pair's `√sᵢ` has a cusp where both its genes are 0, at the minimum among others, where the
+    /// pair's term of the gradient is taken as 0.
+    ///
     /// Schaffer, J. D., Caruana, R. A., Eshelman, L. J. and Das, R. (1989). A study of control
     /// parameters affecting online performance of genetic algorithms for function optimization.
     /// *Proceedings of the Third International Conference on Genetic Algorithms*, Morgan
@@ -3343,6 +3452,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for SchafferF7 {
     type Output = f64;
+
+    gradient!(gradients::schaffer_f7);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let pairs = x.len().saturating_sub(1).max(1) as f64;
@@ -3378,6 +3489,9 @@ scalable!(
     ///
     /// Bounds [−65.536, 65.536]ⁿ; minimum 0 at the origin; 30 dimensions by default.
     ///
+    /// Supplies its analytic gradient, `2 (n − j + 1) xⱼ`, through
+    /// [`evaluate_with`](FitnessFunction::evaluate_with).
+    ///
     /// Its origin is unknown: definition and bounds as Molga and Smutnicki (2005, section 2.3,
     /// read) give them. Not yet checked against an original
     /// ([#168](https://github.com/tachsin/genoxide/issues/168)).
@@ -3389,6 +3503,8 @@ scalable!(
 
 impl FitnessFunction<Reals> for RotatedHyperEllipsoid {
     type Output = f64;
+
+    gradient!(gradients::rotated_hyper_ellipsoid);
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let mut prefix = 0.0;
