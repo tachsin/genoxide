@@ -1528,7 +1528,7 @@ fn mma_settings_and_constraints_are_checked() {
     );
     expect(
         &MMA.replace("gradient = true\n", ""),
-        "`fitness.constraints` needs `fitness.gradient = true`",
+        "writes its constraints' values with its gradient: set `fitness.gradient = true`",
     );
     expect(
         &MMA.replace("constraints = 1\n", ""),

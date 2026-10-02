@@ -435,18 +435,6 @@ const FANTASIES: [Fantasy; 4] = [
     Fantasy::ConstantLiar(Lie::Max),
 ];
 
-// the least distance between two points of a batch, in the unit square
-fn least_distance(points: &[Reals]) -> f64 {
-    let mut least = f64::INFINITY;
-    for (i, a) in points.iter().enumerate() {
-        for b in &points[..i] {
-            let d = ((a[0] - b[0]) / 15.0).hypot((a[1] - b[1]) / 15.0);
-            least = least.min(d);
-        }
-    }
-    least
-}
-
 #[test]
 fn a_batch_is_new_points_chosen_after_the_fantasies() {
     for seed in 1..=3 {
@@ -812,4 +800,22 @@ fn integer_settings() {
     // no gene with more than one value is an error
     let fixed = Integer::new([3..=3, 3..=3]).unwrap();
     assert!(Bo::builder(fixed).build().is_err());
+}
+
+#[test]
+fn evaluations_without_constraint_values_cant_go_on_with_them() {
+    // a design told by hand, without the constraints' values: a run with them is an error
+    let mut bo = toy_bo(1, 1);
+    let fitness: Vec<Fitness> = bo.ask().iter().map(|x| Fitness::new(x[0] + x[1])).collect();
+    bo.tell(&fitness).unwrap();
+    let result = Engine::new(bo, Constrained::new(2, toy))
+        .stop_when(Stop::evaluations(10))
+        .run();
+    assert!(matches!(
+        result,
+        Err(Error::InvalidSetting {
+            setting: "fitness",
+            ..
+        })
+    ));
 }

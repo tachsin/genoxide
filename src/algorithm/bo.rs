@@ -555,7 +555,7 @@ impl<R: Space> Bo<R> {
         let mut unit = vec![0.0; scaling.dims()];
         scaling.to_unit(genome, &mut unit);
         if self.representation.lattice().is_some() {
-            let nearest = self.representation.from_unit(&scaling, &unit);
+            let nearest = self.representation.genome_at(&scaling, &unit);
             R::to_unit(&scaling, &nearest, &mut unit);
         }
         unit
@@ -905,7 +905,7 @@ impl<R: Space> Bo<R> {
         candidates.sort_by(|a, b| b.0.total_cmp(&a.0));
         candidates
             .iter()
-            .map(|(_, unit)| self.representation.from_unit(scaling, unit))
+            .map(|(_, unit)| self.representation.genome_at(scaling, unit))
             .find(|genome| !self.taken(genome, others))
     }
 
@@ -950,7 +950,7 @@ impl<R: Space> Bo<R> {
         // highest first; stable, so ties keep the earlier sample
         order.sort_by(|&a, &b| raw_values[b].total_cmp(&raw_values[a]));
         let mut starts = Vec::with_capacity(self.acquisition_starts + 1);
-        starts.push(self.representation.from_unit(scaling, start));
+        starts.push(self.representation.genome_at(scaling, start));
         for &i in order.iter().take(self.acquisition_starts) {
             starts.push(raw[i].clone());
         }
@@ -1026,7 +1026,12 @@ impl<R: Space> Bo<R> {
     fn prepare_constraints(&mut self, provided: Provided) -> Result<()> {
         let m = provided.inequalities;
         self.acquisition.check_constrained(m)?;
-        match self.constraints {
+        // evaluations told without a run have no constraint values
+        let known = match self.constraints {
+            None if !self.observations.is_empty() => Some(0),
+            known => known,
+        };
+        match known {
             Some(known) if known != m && !self.observations.is_empty() => {
                 Err(Error::InvalidSetting {
                     setting: "fitness",
@@ -1771,13 +1776,12 @@ impl<R: Space> BoBuilder<R> {
         crate::operator::check_size("initial_points", initial_points)?;
         if let Some(points) = self.representation.lattice()
             && initial_points as u128 > points
+            && self.initial_points.is_some()
         {
-            if self.initial_points.is_some() {
-                return invalid(
-                    "initial_points",
-                    format!("at most the {points} points of the lattice, got {initial_points}"),
-                );
-            }
+            return invalid(
+                "initial_points",
+                format!("at most the {points} points of the lattice, got {initial_points}"),
+            );
         }
         // the default design, on a lattice of fewer points: the whole lattice
         let initial_points = self

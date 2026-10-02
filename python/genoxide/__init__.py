@@ -3764,6 +3764,8 @@ class Bo(_SingleObjective):
 
         import numpy as np
 
+        import genoxide as gx
+
         def disc(x):
             # the sum inside the unit disc: the minimum -1.414... at (-0.707..., -0.707...)
             return x[0] + x[1], np.array([x[0] ** 2 + x[1] ** 2 - 1.0])

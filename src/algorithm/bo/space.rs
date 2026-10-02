@@ -50,7 +50,7 @@ pub(crate) mod sealed {
 
         // the genome at the unit-cube coordinates `unit`, in the bounds: on the lattice, the
         // nearest point
-        fn from_unit(&self, scaling: &Scaling, unit: &[f64]) -> Self::Genome;
+        fn genome_at(&self, scaling: &Scaling, unit: &[f64]) -> Self::Genome;
 
         // the genes of `genome` as reals, for the model's predictions
         fn gene_values(genome: &Self::Genome) -> Vec<f64>;
@@ -85,7 +85,7 @@ impl sealed::Sealed for Real {
         scaling.to_unit(genome, unit);
     }
 
-    fn from_unit(&self, scaling: &Scaling, unit: &[f64]) -> Reals {
+    fn genome_at(&self, scaling: &Scaling, unit: &[f64]) -> Reals {
         scaling.to_genome(unit)
     }
 
@@ -126,7 +126,7 @@ impl sealed::Sealed for Integer {
         scaling.to_unit_by(|i| genome[i] as f64, unit);
     }
 
-    fn from_unit(&self, scaling: &Scaling, unit: &[f64]) -> Integers {
+    fn genome_at(&self, scaling: &Scaling, unit: &[f64]) -> Integers {
         let bounds = self.bounds();
         let mut genome: Vec<i64> = bounds.iter().map(|range| *range.start()).collect();
         for (k, &i) in scaling.variable().iter().enumerate() {
@@ -242,12 +242,12 @@ mod tests {
             let mut unit = [0.0; 2];
             Integer::to_unit(&scaling, &genome, &mut unit);
             assert!(unit.iter().all(|u| (0.0..=1.0).contains(u)));
-            assert_eq!(integer.from_unit(&scaling, &unit), genome);
+            assert_eq!(integer.genome_at(&scaling, &unit), genome);
         }
         assert_eq!(integer.lattice(), Some(16));
         assert_eq!(integer.enumerate(15), None);
         // the nearest lattice point of any unit-cube point
-        let genome = integer.from_unit(&scaling, &[0.5, 0.49]);
+        let genome = integer.genome_at(&scaling, &[0.5, 0.49]);
         assert_eq!(genome[..], [1, 7, 0]);
     }
 
