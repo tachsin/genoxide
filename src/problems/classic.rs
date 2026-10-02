@@ -595,11 +595,8 @@ impl FitnessFunction<Reals> for Rosenbrock {
     gradient!(gradients::rosenbrock);
 
     fn evaluate(&self, x: &Reals) -> f64 {
-        x.windows(2)
-            .map(|pair| {
-                let (xi, next) = (pair[0], pair[1]);
-                100.0 * math::powi(next - xi * xi, 2) + math::powi(xi - 1.0, 2)
-            })
+        x.array_windows()
+            .map(|&[xi, next]| 100.0 * math::powi(next - xi * xi, 2) + math::powi(xi - 1.0, 2))
             .sum()
     }
 }
@@ -1081,9 +1078,9 @@ impl FitnessFunction<Reals> for DixonPrice {
             return 0.0;
         };
         let chain: f64 = x
-            .windows(2)
+            .array_windows()
             .enumerate()
-            .map(|(k, pair)| (k + 2) as f64 * math::powi(2.0 * pair[1] * pair[1] - pair[0], 2))
+            .map(|(k, &[previous, xi])| (k + 2) as f64 * math::powi(2.0 * xi * xi - previous, 2))
             .sum();
         math::powi(first - 1.0, 2) + chain
     }
@@ -1130,7 +1127,7 @@ impl FitnessFunction<Reals> for Trid {
 
     fn evaluate(&self, x: &Reals) -> f64 {
         let squares: f64 = x.iter().map(|xi| math::powi(xi - 1.0, 2)).sum();
-        let products: f64 = x.windows(2).map(|pair| pair[0] * pair[1]).sum();
+        let products: f64 = x.array_windows().map(|&[xi, next]| xi * next).sum();
         squares - products
     }
 }
@@ -2833,8 +2830,8 @@ impl FitnessFunction<Reals> for Penalized1 {
             return 0.0;
         };
         let middle: f64 = y
-            .windows(2)
-            .map(|pair| math::powi(pair[0] - 1.0, 2) * (1.0 + 10.0 * sin_squared(PI * pair[1])))
+            .array_windows()
+            .map(|&[yi, next]| math::powi(yi - 1.0, 2) * (1.0 + 10.0 * sin_squared(PI * next)))
             .sum();
         let levy = 10.0 * sin_squared(PI * first) + middle + math::powi(last - 1.0, 2);
         let penalties: f64 = x.iter().map(|&xi| penalty(xi, 10.0, 100.0, 4)).sum();
@@ -2884,8 +2881,8 @@ impl FitnessFunction<Reals> for Penalized2 {
             return 0.0;
         };
         let middle: f64 = x
-            .windows(2)
-            .map(|pair| math::powi(pair[0] - 1.0, 2) * (1.0 + sin_squared(3.0 * PI * pair[1])))
+            .array_windows()
+            .map(|&[xi, next]| math::powi(xi - 1.0, 2) * (1.0 + sin_squared(3.0 * PI * next)))
             .sum();
         let end = math::powi(last - 1.0, 2) * (1.0 + sin_squared(2.0 * PI * last));
         let penalties: f64 = x.iter().map(|&xi| penalty(xi, 5.0, 100.0, 4)).sum();
@@ -3129,7 +3126,7 @@ impl FitnessFunction<Reals> for BucheRastrigin {
             let oscillated = oscillation(xi);
             let mut scale = math::powf(10.0, 0.5 * i as f64 / (n.max(2) - 1) as f64);
             // i from 0 here: the odd genes from 1 are the even ones from 0
-            if oscillated > 0.0 && i % 2 == 0 {
+            if oscillated > 0.0 && i.is_multiple_of(2) {
                 scale *= 10.0;
             }
             let z = scale * oscillated;
@@ -3458,9 +3455,9 @@ impl FitnessFunction<Reals> for SchafferF7 {
     fn evaluate(&self, x: &Reals) -> f64 {
         let pairs = x.len().saturating_sub(1).max(1) as f64;
         let sum: f64 = x
-            .windows(2)
-            .map(|pair| {
-                let s = (pair[0] * pair[0] + pair[1] * pair[1]).sqrt();
+            .array_windows()
+            .map(|&[xi, next]| {
+                let s = (xi * xi + next * next).sqrt();
                 s.sqrt() * (1.0 + sin_squared(50.0 * math::powf(s, 0.2)))
             })
             .sum();

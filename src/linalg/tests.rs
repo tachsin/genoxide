@@ -94,7 +94,7 @@ fn naive_cholesky(a: &[f64], n: usize) -> Option<Vec<f64>> {
 }
 
 // the textbook triple loop, in gemm's order
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn naive_gemm(
     m: usize,
     k: usize,

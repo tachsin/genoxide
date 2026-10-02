@@ -6,8 +6,8 @@
 //! `0 + a₀b₀ + a₁b₁ + …`, so `gemm` of one column is `gemv`, and a row of `gemv` is `dot`, to the
 //! bit.
 
-// L-BFGS-B (batch A2) and the Gaussian processes (batch B) are the first users
-#![allow(dead_code)]
+// `axpy`, `gemv_t` and `gemm` have no user outside the tests yet
+#![cfg_attr(not(test), expect(dead_code))]
 
 use super::{CHUNK_ROWS, MR, NR, for_each_chunk, tile_add};
 
@@ -49,6 +49,8 @@ pub(crate) fn gemv(m: usize, n: usize, alpha: f64, a: &[f64], x: &[f64], beta: f
         }
         return;
     }
+    // resliced to n: no bounds checks in the loop over the columns
+    let x = &x[..n];
     // four rows at a time: four independent sums, each in its own order
     let rows = a.chunks_exact(4 * n);
     let rest = rows.remainder();
@@ -108,7 +110,7 @@ pub(crate) fn gemv_t(
 /// Blocked and packed, with a register tile of the output; on rayon (the `parallel` feature) by
 /// independent rows of `C` for large products, with the same bits.
 // BLAS's order of the arguments
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub(crate) fn gemm(
     m: usize,
     k: usize,
@@ -124,7 +126,7 @@ pub(crate) fn gemm(
 }
 
 // `gemm`, on rayon or not
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub(super) fn gemm_with(
     m: usize,
     k: usize,
@@ -173,9 +175,9 @@ pub(super) fn gemm_with(
             let mut panel = vec![0.0; height.div_ceil(MR) * depth * MR];
             for r in 0..height {
                 let row = &a[(i0 + r) * k + p0..(i0 + r) * k + p1];
-                let tile = &mut panel[r / MR * depth * MR..];
-                for (kk, &x) in row.iter().enumerate() {
-                    tile[kk * MR + r % MR] = alpha * x;
+                let tile = panel[r / MR * depth * MR..].as_chunks_mut::<MR>().0;
+                for (column, &x) in tile.iter_mut().zip(row) {
+                    column[r % MR] = alpha * x;
                 }
             }
             // each column tile reused by all the row tiles while it's in the cache

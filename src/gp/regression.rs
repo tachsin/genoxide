@@ -367,8 +367,8 @@ pub fn primitives<S: Into<String>>(
         return Err(invalid("at least one variable".to_string()));
     }
     names.sort_unstable();
-    if let Some(pair) = names.windows(2).find(|pair| pair[0] == pair[1]) {
-        return Err(invalid(format!("the name {:?} is used twice", pair[0])));
+    if let Some([name, _]) = names.array_windows().find(|[a, b]| a == b) {
+        return Err(invalid(format!("the name {name:?} is used twice")));
     }
     if let Some(constants) = constants {
         set.constants(real, constants);

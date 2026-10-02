@@ -384,8 +384,8 @@ impl MultiFitnessFunction<Reals, 2> for Kursawe {
     /// The objective values of `x`.
     fn evaluate(&self, x: &Reals) -> [f64; 2] {
         let f1 = x
-            .windows(2)
-            .map(|pair| -10.0 * math::exp(-0.2 * (pair[0] * pair[0] + pair[1] * pair[1]).sqrt()))
+            .array_windows()
+            .map(|&[xi, next]| -10.0 * math::exp(-0.2 * (xi * xi + next * next).sqrt()))
             .sum();
         let f2 = x
             .iter()

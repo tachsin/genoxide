@@ -6,9 +6,6 @@
 //! order. The blocked factorization keeps that order whatever its block size and thread count, so
 //! it gives the bits of the textbook loops.
 
-// L-BFGS-B (batch A2) and the Gaussian processes (batch B) are the first users
-#![allow(dead_code)]
-
 use super::{CHUNK_ROWS, MR, NR, for_each_chunk, tile_sub};
 use std::fmt;
 
@@ -171,9 +168,9 @@ pub(super) fn factor(
             // L[i][k0..k1] for the chunk's rows, by tiles of MR rows, zero padded
             let mut panel = vec![0.0; height.div_ceil(MR) * size * MR];
             for (r, row) in chunk.chunks_exact(n).enumerate() {
-                let tile = &mut panel[r / MR * size * MR..];
-                for (kk, &x) in row[k0..k1].iter().enumerate() {
-                    tile[kk * MR + r % MR] = x;
+                let tile = panel[r / MR * size * MR..].as_chunks_mut::<MR>().0;
+                for (column, &x) in tile.iter_mut().zip(&row[k0..k1]) {
+                    column[r % MR] = x;
                 }
             }
             // the column tiles up to the diagonal of the last row, each reused by all the row
@@ -220,6 +217,7 @@ fn factor_diagonal(
     for j in k0..k1 {
         let d = w[j * n + j];
         if !(d > 0.0 && d < f64::INFINITY) {
+            std::hint::cold_path();
             return Err(NotPositiveDefinite { column: j });
         }
         let ljj = d.sqrt();

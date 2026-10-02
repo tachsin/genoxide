@@ -230,7 +230,7 @@ fn strength_fitness<const M: usize>(
             }
         }
     }
-    let k = ((n as f64).sqrt() as usize).clamp(1, n.saturating_sub(1).max(1));
+    let k = n.isqrt().clamp(1, n.saturating_sub(1).max(1));
     fitness.clear();
     fitness.extend((0..n).map(|i| {
         // the k-th smallest distance: the value a sort would put there, as the order is total

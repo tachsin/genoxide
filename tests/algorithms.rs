@@ -98,8 +98,8 @@ fn adaptive_differential_evolution_solves_rastrigin_without_tuning() {
 }
 
 fn rosenbrock(x: &Reals) -> f64 {
-    x.windows(2)
-        .map(|w| 100.0 * (w[1] - w[0] * w[0]).powi(2) + (1.0 - w[0]).powi(2))
+    x.array_windows()
+        .map(|&[xi, next]| 100.0 * (next - xi * xi).powi(2) + (1.0 - xi).powi(2))
         .sum()
 }
 
@@ -229,9 +229,9 @@ fn evolution_strategy_runs_in_parallel_with_the_same_results() {
 // change for the same major version, on any platform
 fn portable_run<A: Algorithm<Genome = Reals>>(algorithm: A) -> Vec<f64> {
     let rosenbrock = |x: &Reals| {
-        x.windows(2)
-            .map(|w| {
-                let (a, b) = (w[1] - w[0] * w[0], 1.0 - w[0]);
+        x.array_windows()
+            .map(|&[xi, next]| {
+                let (a, b) = (next - xi * xi, 1.0 - xi);
                 100.0 * a * a + b * b
             })
             .sum::<f64>()
@@ -283,9 +283,9 @@ fn portable_continuation_run(algorithm: FirstOrder) -> Vec<f64> {
     let shared = Arc::clone(&weight);
     let rosenbrock = move |x: &Reals| {
         let w = f64::from_bits(shared.load(Ordering::Relaxed));
-        x.windows(2)
-            .map(|pair| {
-                let (a, b) = (pair[1] - pair[0] * pair[0], 1.0 - pair[0]);
+        x.array_windows()
+            .map(|&[xi, next]| {
+                let (a, b) = (next - xi * xi, 1.0 - xi);
                 w * a * a + b * b
             })
             .sum::<f64>()
@@ -317,9 +317,9 @@ where
 {
     let objectives = |x: &Reals| {
         let rosenbrock = x
-            .windows(2)
-            .map(|w| {
-                let (a, b) = (w[1] - w[0] * w[0], 1.0 - w[0]);
+            .array_windows()
+            .map(|&[xi, next]| {
+                let (a, b) = (next - xi * xi, 1.0 - xi);
                 100.0 * a * a + b * b
             })
             .sum::<f64>();

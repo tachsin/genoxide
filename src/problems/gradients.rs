@@ -50,8 +50,7 @@ pub(super) fn rastrigin(x: &[f64], gradient: &mut [f64]) {
 // Σ 100 (xᵢ₊₁ − xᵢ²)² + (xᵢ − 1)²: each term adds −400 xᵢ (xᵢ₊₁ − xᵢ²) + 2 (xᵢ − 1) to gene i
 // and 200 (xᵢ₊₁ − xᵢ²) to gene i + 1
 pub(super) fn rosenbrock(x: &[f64], gradient: &mut [f64]) {
-    for (i, pair) in x.windows(2).enumerate() {
-        let (xi, next) = (pair[0], pair[1]);
+    for (i, &[xi, next]) in x.array_windows().enumerate() {
         let valley = next - xi * xi;
         gradient[i] += -400.0 * xi * valley + 2.0 * (xi - 1.0);
         gradient[i + 1] += 200.0 * valley;
@@ -168,11 +167,11 @@ pub(super) fn dixon_price(x: &[f64], gradient: &mut [f64]) {
         return;
     };
     gradient[0] = 2.0 * (first - 1.0);
-    for (k, pair) in x.windows(2).enumerate() {
+    for (k, &[previous, xi]) in x.array_windows().enumerate() {
         let weight = (k + 2) as f64;
-        let u = 2.0 * pair[1] * pair[1] - pair[0];
+        let u = 2.0 * xi * xi - previous;
         gradient[k] += -2.0 * weight * u;
-        gradient[k + 1] += 8.0 * weight * u * pair[1];
+        gradient[k + 1] += 8.0 * weight * u * xi;
     }
 }
 
@@ -543,7 +542,7 @@ pub(super) fn buche_rastrigin(x: &[f64], gradient: &mut [f64]) {
         }
         let oscillated = oscillation(xi);
         let mut scale = math::powf(10.0, 0.5 * i as f64 / (n.max(2) - 1) as f64);
-        if oscillated > 0.0 && i % 2 == 0 {
+        if oscillated > 0.0 && i.is_multiple_of(2) {
             scale *= 10.0;
         }
         let z = scale * oscillated;
@@ -627,8 +626,8 @@ pub(super) fn hg_bat(x: &[f64], gradient: &mut [f64]) {
 pub(super) fn schaffer_f7(x: &[f64], gradient: &mut [f64]) {
     let pairs = x.len().saturating_sub(1).max(1) as f64;
     let mut sum = 0.0;
-    for (i, pair) in x.windows(2).enumerate() {
-        let s = (pair[0] * pair[0] + pair[1] * pair[1]).sqrt();
+    for (i, &[xi, next]) in x.array_windows().enumerate() {
+        let s = (xi * xi + next * next).sqrt();
         let root = s.sqrt();
         let fifth = math::powf(s, 0.2);
         let (sin, cos) = math::sin_cos(50.0 * fifth);
@@ -636,8 +635,8 @@ pub(super) fn schaffer_f7(x: &[f64], gradient: &mut [f64]) {
         if s > 0.0 {
             // 10 sin(2θ) s^(−3/10) = 20 sin θ cos θ s^(1/5) / √s
             let slope = (1.0 + sin * sin) / (2.0 * root) + 20.0 * sin * cos * fifth / root;
-            gradient[i] += slope * pair[0] / s;
-            gradient[i + 1] += slope * pair[1] / s;
+            gradient[i] += slope * xi / s;
+            gradient[i + 1] += slope * next / s;
         }
     }
     let outer = 2.0 * sum / (pairs * pairs);

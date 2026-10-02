@@ -14,7 +14,7 @@ const CENTER: [f64; 3] = [0.3, -1.2, 2.0];
 const EPSILON: [f64; 4] = [1.0, 0.1, 0.01, 0.001];
 
 // Σ √((xᵢ − cᵢ)² + ε²), a smoothed Σ |xᵢ − cᵢ|, with its gradient, and the cell that holds ε
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 fn smoothed() -> (
     Arc<AtomicU64>,
     Differentiable<impl Fn(&Reals, &mut [f64]) -> f64 + Sync>,

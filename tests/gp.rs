@@ -287,7 +287,7 @@ fn invalid_representations_are_errors() {
     setting_error(Gp::builder(set()).max_size(1 << 25).build(), "max_size");
     setting_error(Gp::builder(set()).max_depth(1 << 25).build(), "max_depth");
     setting_error(Gp::builder(set()).max_depth(5).build(), "init");
-    #[allow(clippy::reversed_empty_ranges)]
+    #[expect(clippy::reversed_empty_ranges)]
     let empty = Init::Grow { depths: 3..=2 };
     setting_error(Gp::builder(set()).init(empty).build(), "init");
     let gp = Gp::builder(set()).build().unwrap();

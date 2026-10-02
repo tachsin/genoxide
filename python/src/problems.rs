@@ -699,7 +699,7 @@ fn check_wfg(
     if distance == 0 {
         return Err(format!("{name} needs at least 1 distance parameter"));
     }
-    if even && distance % 2 == 1 {
+    if even && !distance.is_multiple_of(2) {
         return Err(format!(
             "{name} needs an even number of distance parameters, not {distance}"
         ));

@@ -168,7 +168,7 @@ impl PyGaussianProcess {
     }
 
     /// The posterior mean and variance at `point`, with their gradients.
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     fn predict_with_gradient<'py>(
         &self,
         py: Python<'py>,

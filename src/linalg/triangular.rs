@@ -4,9 +4,6 @@
 //!
 //! Each column of a matrix right-hand side gets the bits of the single-vector solve.
 
-// L-BFGS-B (batch A2) and the Gaussian processes (batch B) are the first users
-#![allow(dead_code)]
-
 /// Solves `L x = b` in place: `xᵢ = (bᵢ − lᵢ₀x₀ − lᵢ₁x₁ − … − lᵢ,ᵢ₋₁xᵢ₋₁) / lᵢᵢ`, the products
 /// subtracted in ascending order.
 pub(crate) fn solve_lower(l: &[f64], n: usize, b: &mut [f64]) {

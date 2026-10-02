@@ -1147,9 +1147,9 @@ mod tests {
     }
 
     fn rosenbrock(x: &Reals) -> f64 {
-        x.windows(2)
-            .map(|w| {
-                let (a, b) = (w[1] - w[0] * w[0], 1.0 - w[0]);
+        x.array_windows()
+            .map(|&[xi, next]| {
+                let (a, b) = (next - xi * xi, 1.0 - xi);
                 100.0 * a * a + b * b
             })
             .sum()

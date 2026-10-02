@@ -92,14 +92,15 @@ impl StreamRng {
     #[inline]
     pub(crate) fn below_u64(&mut self, n: u64) -> u64 {
         debug_assert!(n > 0, "below(0)");
-        let mut product = u128::from(self.next_u64()) * u128::from(n);
-        if (product as u64) < n {
+        // the 128-bit product's low and high halves
+        let (mut low, mut high) = self.next_u64().carrying_mul(n, 0);
+        if low < n {
             let threshold = n.wrapping_neg() % n;
-            while (product as u64) < threshold {
-                product = u128::from(self.next_u64()) * u128::from(n);
+            while low < threshold {
+                (low, high) = self.next_u64().carrying_mul(n, 0);
             }
         }
-        (product >> 64) as u64
+        high
     }
 
     /// A uniformly random `f64` in `[0, 1)`, with 53 random bits.

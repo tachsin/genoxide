@@ -616,7 +616,7 @@ where
     ) {
         let end = offspring.len() + wanted;
         // `as_chunks` measured a few instructions more per generation on real-valued genomes
-        #[allow(clippy::chunks_exact_to_as_chunks)]
+        #[expect(clippy::chunks_exact_to_as_chunks)]
         for pair in parents.chunks_exact(2) {
             let parents = [&self.population[pair[0]], &self.population[pair[1]]];
             let mut a = spare.copy(parents[0].genome());
@@ -1721,9 +1721,9 @@ mod tests {
         generations: u64,
     ) -> (Population<Reals>, Option<Individual<Reals>>, u64) {
         let rosenbrock = |x: &Reals| {
-            x.windows(2)
-                .map(|w| {
-                    let (a, b) = (w[1] - w[0] * w[0], 1.0 - w[0]);
+            x.array_windows()
+                .map(|&[xi, next]| {
+                    let (a, b) = (next - xi * xi, 1.0 - xi);
                     100.0 * a * a + b * b
                 })
                 .sum::<f64>()

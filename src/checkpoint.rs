@@ -118,20 +118,20 @@ pub fn load<A: DeserializeOwned>(mut reader: impl Read) -> Result<A> {
         .read_to_end(&mut bytes)
         .map_err(|error| checkpoint_error(format!("can't read: {error}")))?;
     let mut rest = bytes.as_slice();
-    if take(&mut rest, MAGIC.len()) != Some(MAGIC) {
+    if rest.split_off(..MAGIC.len()) != Some(MAGIC) {
         return Err(checkpoint_error("not a genoxide checkpoint".to_string()));
     }
     // the checksum first, over everything between the magic bytes and it
-    let summed = rest.len().checked_sub(8).ok_or_else(truncated)?;
-    let (content, sum) = rest.split_at(summed);
-    if sum != checksum(content).to_le_bytes() {
+    let (content, sum) = rest.split_last_chunk().ok_or_else(truncated)?;
+    if *sum != checksum(content).to_le_bytes() {
         return Err(checkpoint_error(
             "corrupted or truncated: the checksum doesn't match".to_string(),
         ));
     }
     let mut rest = content;
-    let version = take(&mut rest, 1)
-        .and_then(|len| take(&mut rest, usize::from(len[0])))
+    let version = rest
+        .split_off_first()
+        .and_then(|&len| rest.split_off(..usize::from(len)))
         .ok_or_else(truncated)?;
     if version != VERSION.as_bytes() {
         return Err(checkpoint_error(format!(
@@ -140,9 +140,13 @@ pub fn load<A: DeserializeOwned>(mut reader: impl Read) -> Result<A> {
             String::from_utf8_lossy(version)
         )));
     }
-    let kind_len = take(&mut rest, 2).ok_or_else(truncated)?;
-    let kind_len = u16::from_le_bytes([kind_len[0], kind_len[1]]);
-    let kind = take(&mut rest, usize::from(kind_len)).ok_or_else(truncated)?;
+    let kind_len = rest
+        .split_off(..2)
+        .and_then(<[u8]>::as_array)
+        .ok_or_else(truncated)?;
+    let kind = rest
+        .split_off(..usize::from(u16::from_le_bytes(*kind_len)))
+        .ok_or_else(truncated)?;
     if kind != type_name::<A>().as_bytes() {
         return Err(checkpoint_error(format!(
             "holds a {}, not a {}",
@@ -150,9 +154,11 @@ pub fn load<A: DeserializeOwned>(mut reader: impl Read) -> Result<A> {
             type_name::<A>()
         )));
     }
-    let len = take(&mut rest, 8).ok_or_else(truncated)?;
-    let len = u64::from_le_bytes(len.try_into().map_err(|_| truncated())?);
-    if usize::try_from(len) != Ok(rest.len()) {
+    let len = rest
+        .split_off(..8)
+        .and_then(<[u8]>::as_array)
+        .ok_or_else(truncated)?;
+    if usize::try_from(u64::from_le_bytes(*len)) != Ok(rest.len()) {
         return Err(truncated());
     }
     let payload = rest;
@@ -219,16 +225,6 @@ fn checkpoint_error(reason: String) -> Error {
 
 fn truncated() -> Error {
     checkpoint_error("truncated".to_string())
-}
-
-// the first `len` bytes of `bytes`, which keeps the rest; `None` if there are fewer
-fn take<'a>(bytes: &mut &'a [u8], len: usize) -> Option<&'a [u8]> {
-    if bytes.len() < len {
-        return None;
-    }
-    let (first, rest) = bytes.split_at(len);
-    *bytes = rest;
-    Some(first)
 }
 
 // 64-bit FNV-1a, to detect accidental corruption

@@ -70,7 +70,7 @@ impl<G: Genome, F> Population<G, F> {
         } else {
             // moved one at a time: `append` copies the memory at once, but glibc copies a large
             // population with `rep movsb`, which Callgrind counts per byte
-            #[allow(clippy::extend_with_drain)]
+            #[expect(clippy::extend_with_drain)]
             self.individuals.extend(others.drain(..));
         }
     }

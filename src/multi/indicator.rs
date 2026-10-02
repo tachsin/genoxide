@@ -654,7 +654,7 @@ mod tests {
             let box_volume: f64 = (0..M)
                 .map(|j| (reference[j] - corner[j]).max(0.0))
                 .product();
-            let sign = if subset.count_ones() % 2 == 1 {
+            let sign = if !subset.count_ones().is_multiple_of(2) {
                 1.0
             } else {
                 -1.0

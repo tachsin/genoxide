@@ -433,7 +433,6 @@ impl PyTree {
         hasher.finish()
     }
 
-    #[allow(clippy::type_complexity)]
     fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, (String, String))> {
         let load = py.get_type::<PyTree>().getattr("_from_json")?;
         let set = serde_json::to_string(self.set.as_ref())

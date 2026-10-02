@@ -148,6 +148,7 @@ impl Fitness {
     /// negative violation.
     pub fn try_constrained(score: f64, violation: f64) -> Result<Self> {
         if violation.is_nan() {
+            std::hint::cold_path();
             return Err(Error::NanFitness);
         }
         if violation < 0.0 {
