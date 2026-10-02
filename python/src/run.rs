@@ -12,7 +12,7 @@ use crate::fitness::{Gradient, Multi, Native, Shared, Single};
 use crate::genes::{GenomeContext, PyGenome};
 use crate::operators::{
     AnySelect, ListCrossover, OrderCrossovers, OrderMutation, RealCrossover, RealMutation,
-    bit_flip, integer_mutation, self_adaptive,
+    bit_flip, differential_evolution, integer_mutation, self_adaptive,
 };
 use crate::problems;
 use crate::snapshot::{Snapshot, objective_values};
@@ -26,7 +26,11 @@ use genoxide::algorithm::{GaBuilder, Islands, Reevaluate, cmaes, es, mma, pso};
 use genoxide::engine::Progress;
 use genoxide::genome::{AdaptiveReal, Representation};
 use genoxide::gradient::Gradients;
-use genoxide::multi::{self, Decomposition, MultiObjectiveAlgorithm, MultiSnapshot, SmsEmoa};
+use genoxide::multi::moead::MoeadCrossover;
+use genoxide::multi::{
+    self, Decomposition, DifferentialEvolutionCrossover, MultiObjectiveAlgorithm, MultiSnapshot,
+    SmsEmoa,
+};
 use genoxide::neat::{self, Neat};
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
@@ -1037,6 +1041,26 @@ fn real_algorithm<'py>(
                 GradientMethod::Mma(mma) => continuation(py, mma, MmaSettings, stages, context),
             }
         }
+        config::Algorithm::Moead { ref variation, .. }
+            if matches!(
+                variation.crossover,
+                config::Crossover::DifferentialEvolution { .. }
+            ) =>
+        {
+            let task = MoeadDe {
+                py,
+                real,
+                crossover: differential_evolution(variation.crossover)?,
+                mutate: RealMutation::new(variation.mutate.clone())?,
+                algorithm,
+                context,
+            };
+            with_objectives(context.objectives.len(), task).unwrap_or_else(|count| {
+                let message =
+                    format!("multi-objective algorithms take 2 to 6 objectives, not {count}");
+                Err(message.into())
+            })
+        }
         algorithm => with_operators(
             py,
             Ok(real),
@@ -1634,43 +1658,15 @@ where
                 let builder = duplicates!(builder, variation);
                 multi_objective(py, setting(builder.build())?, context)
             }
-            config::Algorithm::Moead {
-                weights,
-                neighbors,
-                neighbor_mating,
-                max_replacements,
-                decomposition,
-                seed,
-                variation,
-            } => {
-                let mut builder =
-                    Moead::builder(representation, objectives, rows(weights, "weights")?);
-                if let Some(neighbors) = neighbors {
-                    builder = builder.neighbors(neighbors);
-                }
-                if let Some(probability) = neighbor_mating {
-                    builder = builder.neighbor_mating(probability);
-                }
-                if let Some(count) = max_replacements {
-                    builder = builder.max_replacements(count);
-                }
-                if let Some(decomposition) = decomposition {
-                    builder = builder.decomposition(match decomposition {
-                        config::Decomposition::Tchebycheff {} => Decomposition::Tchebycheff,
-                        config::Decomposition::Pbi { theta } => Decomposition::Pbi { theta },
-                    });
-                }
-                if variation.eliminate_duplicates.is_some() {
-                    return Err(
-                        "Moead has no eliminate_duplicates: it replaces its neighbors \
-                                one child at a time"
-                            .to_string()
-                            .into(),
-                    );
-                }
-                let builder = variation!(builder, crossover, mutate, variation, seed);
-                multi_objective(py, setting(builder.build())?, context)
-            }
+            algorithm @ config::Algorithm::Moead { .. } => moead(
+                py,
+                representation,
+                objectives,
+                crossover,
+                mutate,
+                algorithm,
+                context,
+            ),
             config::Algorithm::SmsEmoa {
                 population_size,
                 offspring,
@@ -1688,6 +1684,93 @@ where
             }
             _ => Err("not a multi-objective algorithm".to_string().into()),
         }
+    }
+}
+
+// builds and runs MOEA/D with a crossover or MOEA/D-DE's differential evolution
+fn moead<'py, R, C, X, const N: usize>(
+    py: Python<'py>,
+    representation: R,
+    objectives: [Objective; N],
+    crossover: C,
+    mutate: X,
+    algorithm: config::Algorithm,
+    context: &Context,
+) -> Returns<'py>
+where
+    R: Representation + Clone + Serialize + DeserializeOwned,
+    R::Genome: PyGenome + Serialize + DeserializeOwned,
+    C: MoeadCrossover<R> + Serialize + DeserializeOwned,
+    X: Mutate<R> + Clone + Serialize + DeserializeOwned,
+{
+    let config::Algorithm::Moead {
+        weights,
+        neighbors,
+        neighbor_mating,
+        max_replacements,
+        decomposition,
+        seed,
+        variation,
+    } = algorithm
+    else {
+        return Err("not MOEA/D".to_string().into());
+    };
+    let mut builder = Moead::builder(representation, objectives, rows(weights, "weights")?);
+    if let Some(neighbors) = neighbors {
+        builder = builder.neighbors(neighbors);
+    }
+    if let Some(probability) = neighbor_mating {
+        builder = builder.neighbor_mating(probability);
+    }
+    if let Some(count) = max_replacements {
+        builder = builder.max_replacements(count);
+    }
+    if let Some(decomposition) = decomposition {
+        builder = builder.decomposition(match decomposition {
+            config::Decomposition::Tchebycheff {} => Decomposition::Tchebycheff,
+            config::Decomposition::Pbi { theta } => Decomposition::Pbi { theta },
+        });
+    }
+    if variation.eliminate_duplicates.is_some() {
+        return Err(
+            "Moead has no eliminate_duplicates: it replaces its neighbors one child at a time"
+                .to_string()
+                .into(),
+        );
+    }
+    let builder = variation!(builder, crossover, mutate, variation, seed);
+    multi_objective(py, setting(builder.build())?, context)
+}
+
+// MOEA/D-DE on a real genome: MOEA/D with differential evolution in place of the crossover
+struct MoeadDe<'a, 'py> {
+    py: Python<'py>,
+    real: Real,
+    crossover: DifferentialEvolutionCrossover,
+    mutate: RealMutation,
+    algorithm: config::Algorithm,
+    context: &'a Context,
+}
+
+impl<'py> WithObjectives for MoeadDe<'_, 'py> {
+    type Output = Returns<'py>;
+
+    fn with<const N: usize>(self) -> Returns<'py> {
+        let objectives: [Objective; N] = self
+            .context
+            .objectives
+            .clone()
+            .try_into()
+            .map_err(|_| "the number of objectives changed".to_string())?;
+        moead(
+            self.py,
+            self.real,
+            objectives,
+            self.crossover,
+            self.mutate,
+            self.algorithm,
+            self.context,
+        )
     }
 }
 

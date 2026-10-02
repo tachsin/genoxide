@@ -25,7 +25,7 @@ pub mod spea2;
 pub use algorithm::MultiObjectiveAlgorithm;
 pub use archive::ParetoArchive;
 pub use engine::{IntoScores, MultiEngine, MultiFitnessFunction, MultiOutcome, MultiSnapshot};
-pub use moead::{Decomposition, Moead, MoeadBuilder};
+pub use moead::{Decomposition, DifferentialEvolutionCrossover, Moead, MoeadBuilder};
 pub use nsga2::{Nsga2, Nsga2Builder};
 pub use nsga3::{Nsga3, Nsga3Builder};
 pub use pareto::{crowding_distance, dominates, non_dominated_sort};

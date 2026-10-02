@@ -555,6 +555,17 @@ fn multi_objective_algorithms_resume_exactly() {
             .unwrap()
     };
     resumes_multi(moead, dtlz2, 8, 20);
+    // MOEA/D-DE, half the parents from the whole population
+    let moead_de = || {
+        Moead::builder(dtlz2.representation(), [Minimize; 3], das_dennis::<3>(4))
+            .neighbor_mating(0.5)
+            .crossover(genoxide::multi::DifferentialEvolutionCrossover::new(0.5, 1.0).unwrap())
+            .mutate(mutation(12))
+            .seed(15)
+            .build()
+            .unwrap()
+    };
+    resumes_multi(moead_de, dtlz2, 8, 20);
     let sms_emoa = || {
         SmsEmoa::builder(zdt1.representation(), [Minimize; 2])
             .population_size(20)

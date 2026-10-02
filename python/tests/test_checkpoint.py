@@ -179,6 +179,29 @@ def test_a_resumed_multi_objective_run_equals_an_uninterrupted_one(tmp_path):
     assert (whole.evaluations, whole.generations) == (resumed.evaluations, resumed.generations)
 
 
+def test_a_resumed_moead_de_run_equals_an_uninterrupted_one(tmp_path):
+    moead = gx.Moead(
+        gx.Real((0.0, 1.0), length=5),
+        objectives=["minimize", "minimize"],
+        weights=gx.das_dennis(2, 19),
+        crossover=gx.DifferentialEvolutionCrossover(),
+        mutation=gx.PolynomialMutation(20, rate=0.2),
+        neighbor_mating=0.5,
+        seed=1,
+    )
+
+    def zdt1(x):
+        g = 1 + 9 * float(np.sum(x[1:])) / 4
+        return x[0], g * (1 - np.sqrt(x[0] / g))
+
+    path = tmp_path / "moead.ckpt"
+    whole = moead.run(zdt1, generations=30)
+    moead.run(zdt1, generations=12, checkpoint=str(path), checkpoint_every=4)
+    resumed = moead.run(zdt1, generations=30, resume=str(path))
+    assert np.array_equal(whole.front_objectives, resumed.front_objectives)
+    assert np.array_equal(whole.front_genomes, resumed.front_genomes)
+
+
 def test_a_resumed_run_with_a_problem_evaluated_in_rust(tmp_path):
     problem = gx.problems.Rastrigin(5)
     de = gx.De(problem.genome, population_size=20, objective="minimize", seed=2)

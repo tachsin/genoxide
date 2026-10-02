@@ -4,11 +4,261 @@ use super::breed::{Spares, Variation, distinct_into, scores_of};
 use super::pareto::gains;
 use super::{MultiObjectiveAlgorithm, Scores, non_dominated_sort};
 use crate::algorithm::{Candidates, Unset};
-use crate::genome::Representation;
+use crate::genome::{Real, Reals, Representation};
 use crate::operator::{Crossover, Mutate, check_probability, check_rates, check_size};
 use crate::rng::Chance;
 use crate::{Error, Individual, Objective, Population, Result, StreamRng};
 use rand::Rng;
+use sealed::Sealed;
+use std::fmt::Debug;
+
+/// The differential evolution operator of MOEA/D-DE (Li and Zhang, 2009), for a [`Moead`] on
+/// [`Real`] genomes, in place of a crossover.
+///
+/// A subproblem's child starts from its own solution `x` and moves by a scaled difference of the
+/// two parents `a` and `b` (chosen as for a crossover: from the neighborhood with probability
+/// `neighbor_mating`, else from the whole population, in a random order): each gene `k` becomes
+/// `x_k + F (a_k − b_k)` with probability `CR`, and stays `x_k` otherwise (the paper's eq. 6,
+/// with no gene forced to move). A gene that leaves its bounds is brought back by [`Repair`].
+/// Then the mutation applies; Li and Zhang use polynomial mutation with η 20 at a rate of 1 / the
+/// number of genes.
+///
+/// With this operator, a child whose parents came from the whole population may replace the
+/// solutions of any subproblems, not only of its neighborhood: the paper's update range is its
+/// mating range (step 2.1). The steps are differences between solutions of the population, so
+/// once it lies near the front they point along it, in all the genes together: suited to Pareto
+/// sets whose genes are linked (complicated Pareto sets), where SBX and polynomial mutation, which
+/// change each gene on its own, stall. With `CR` 1 it is invariant under rotations of the genes.
+/// On the paper's F2, with its settings, genoxide's MOEA/D-DE reaches an IGD of 0.0026 to 0.0039
+/// over 10 seeds (the paper's table II: 0.0028 on average, 0.0023 at best), and MOEA/D with SBX
+/// 0.06 to 0.13. On fronts that SBX reaches easily (ZDT, DTLZ), it converges more slowly; on
+/// DTLZ2 a `CR` below 1, such as 0.5, converges far better than 1.
+///
+/// Li and Zhang's settings (section IV-A): `F` 0.5, `CR` 1, 20 neighbors and `neighbor_mating`
+/// 0.9 (the defaults), at most 2 replacements (the default), polynomial mutation with η 20 at a
+/// rate of 1 / n, 300 weight vectors for 2 objectives and 595 for 3, 500 generations. genoxide's
+/// [`Moead`] differs from their algorithm where it does for any crossover: the children of a
+/// generation are bred from the same population and evaluated together, then replace solutions
+/// in a random order; a child replaces a solution only if strictly better (the paper's step 2.5
+/// also replaces an equal one); the ideal point moves to feasible values only. Their polynomial
+/// mutation can leave the bounds and is repaired after; genoxide's
+/// [`PolynomialMutation`](crate::operator::PolynomialMutation) stays within them, so only the
+/// difference step is repaired.
+///
+/// On constrained problems, where a [`Moead`] compares solutions by violation first, a lower
+/// `neighbor_mating`, such as 0.2, keeps the population from collapsing onto the part of the
+/// front it first finds feasible: with it, 300 weight vectors and 1,000 generations reach the
+/// fronts of DAS-CMOP1, 2 and 3 (Fan et al., 2020) in every one of 20 seeds.
+///
+/// Li, H. and Zhang, Q. (2009). Multiobjective optimization problems with complicated Pareto
+/// sets, MOEA/D and NSGA-II. *IEEE Transactions on Evolutionary Computation* 13(2): 284-302.
+/// doi:10.1109/TEVC.2008.925798. Section III-A.
+///
+/// ```
+/// use genoxide::Objective::Minimize;
+/// use genoxide::multi::problems::{MultiProblem, Zdt1};
+/// use genoxide::multi::{DifferentialEvolutionCrossover, Moead, das_dennis};
+/// use genoxide::prelude::*;
+///
+/// let problem = Zdt1::new(30);
+/// let moead = Moead::builder(problem.representation(), [Minimize; 2], das_dennis::<2>(99))
+///     .crossover(DifferentialEvolutionCrossover::new(0.5, 1.0)?)
+///     .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0)?)
+///     .seed(1)
+///     .build()?;
+/// let outcome = MultiEngine::new(moead, problem).stop_when(Stop::generations(150)).run()?;
+/// assert!(outcome.front().len() > 50);
+/// # Ok::<(), genoxide::Error>(())
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct DifferentialEvolutionCrossover {
+    f: f64,
+    cr: f64,
+    chance: Chance,
+    repair: Repair,
+}
+
+/// How a [`DifferentialEvolutionCrossover`] brings back a gene that `x + F (a − b)` takes out of
+/// its bounds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum Repair {
+    /// A uniformly random value between the subproblem's gene `x` and the bound the gene
+    /// crossed: the gene moves toward that bound, never away from it. The default: it reaches
+    /// genes on their bounds, where many fronts' solutions lie (ZDT's distance genes at 0, the
+    /// ends of DAS-CMOP's fronts), and with it genoxide matches the paper's results on its F2.
+    #[default]
+    Bounce,
+    /// A uniformly random value anywhere within the bounds: the repair the paper's text
+    /// describes (step 2.3). Genes on a bound are then hard to reach: on the paper's F2, the
+    /// IGD is 0.007 to 0.031 over 10 seeds, against the paper's 0.0028 on average.
+    Random,
+}
+
+impl DifferentialEvolutionCrossover {
+    /// The operator with the scale factor `f` of the difference, greater than 0 and at most 2,
+    /// and the probability `cr` that a gene moves, between 0 and 1. Li and Zhang use 0.5 and 1.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for an `f` or a `cr` out of range.
+    pub fn new(f: f64, cr: f64) -> Result<Self> {
+        if !(f > 0.0 && f <= 2.0) {
+            return Err(Error::InvalidSetting {
+                setting: "f",
+                reason: format!("must be greater than 0 and at most 2, got {f}"),
+            });
+        }
+        let cr = check_probability("cr", cr)?;
+        Ok(Self {
+            f,
+            cr,
+            chance: Chance::new(cr),
+            repair: Repair::Bounce,
+        })
+    }
+
+    /// The repair of a gene out of its bounds: [`Repair::Bounce`] by default.
+    pub fn with_repair(mut self, repair: Repair) -> Self {
+        self.repair = repair;
+        self
+    }
+
+    /// The repair of a gene out of its bounds.
+    pub fn repair(&self) -> Repair {
+        self.repair
+    }
+
+    /// The scale factor of the difference.
+    pub fn f(&self) -> f64 {
+        self.f
+    }
+
+    /// The probability that a gene moves.
+    pub fn cr(&self) -> f64 {
+        self.cr
+    }
+}
+
+/// The operator that makes a [`Moead`]'s children from parents: any [`Crossover`], or a
+/// [`DifferentialEvolutionCrossover`] on [`Real`] genomes. It is implemented for those only.
+pub trait MoeadCrossover<R: Representation>: Sealed<R> + Clone + Debug + Send + Sync {}
+
+impl<R: Representation, T: Sealed<R> + Clone + Debug + Send + Sync> MoeadCrossover<R> for T {}
+
+mod sealed {
+    use super::{
+        Crossover, DifferentialEvolutionCrossover, Real, Reals, Repair, Representation, Spares,
+    };
+    use crate::StreamRng;
+    use crate::genome::real::random_in;
+
+    // how a child is made: the methods of `MoeadCrossover`, which no other crate implements
+    pub trait Sealed<R: Representation> {
+        // whether it can change the genomes, for the rates' check
+        fn can_recombine(&self) -> bool;
+
+        // whether the child is the subproblem's solution moved by the difference of the parents
+        // (MOEA/D-DE), which may then replace solutions anywhere in its mating range
+        fn differential(&self) -> bool;
+
+        // the child of the subproblem whose solution is `parents[0]`, from the parents
+        // `parents[1]` and `parents[2]` (in a random order), recombined if `recombine`, in a
+        // copy from `spares`
+        fn child(
+            &self,
+            representation: &R,
+            parents: [&R::Genome; 3],
+            recombine: bool,
+            spares: &mut Spares<R::Genome>,
+            rng: &mut StreamRng,
+        ) -> R::Genome;
+    }
+
+    impl<R: Representation, C: Crossover<R>> Sealed<R> for C {
+        fn can_recombine(&self) -> bool {
+            self.recombines()
+        }
+
+        fn differential(&self) -> bool {
+            false
+        }
+
+        // one of the crossover's two children, at random, or a copy of a random parent
+        fn child(
+            &self,
+            representation: &R,
+            [_, first, second]: [&R::Genome; 3],
+            recombine: bool,
+            spares: &mut Spares<R::Genome>,
+            rng: &mut StreamRng,
+        ) -> R::Genome {
+            if recombine {
+                let mut a = spares.copy(first);
+                let mut b = spares.copy(second);
+                self.crossover(representation, &mut a, &mut b, rng);
+                let (child, other) = if rng.below(2) == 0 { (a, b) } else { (b, a) };
+                spares.keep(other);
+                child
+            } else {
+                // a copy of one of the parents: only that one is copied
+                let parent = if rng.below(2) == 0 { first } else { second };
+                spares.copy(parent)
+            }
+        }
+    }
+
+    impl Sealed<Real> for DifferentialEvolutionCrossover {
+        fn can_recombine(&self) -> bool {
+            true
+        }
+
+        fn differential(&self) -> bool {
+            true
+        }
+
+        // `x + F (a − b)` in the genes chosen with probability CR, a gene out of its bounds
+        // repaired; the subproblem's solution if not recombined
+        fn child(
+            &self,
+            real: &Real,
+            [current, first, second]: [&Reals; 3],
+            recombine: bool,
+            spares: &mut Spares<Reals>,
+            rng: &mut StreamRng,
+        ) -> Reals {
+            let mut child = spares.copy(current);
+            if recombine {
+                let bounds = real.bounds();
+                rng.chosen(self.chance, child.len(), |rng, gene| {
+                    let range = &bounds[gene];
+                    let moved = current[gene] + self.f * (first[gene] - second[gene]);
+                    child[gene] = if range.contains(&moved) {
+                        moved
+                    } else {
+                        match self.repair {
+                            Repair::Random => random_in(range, rng),
+                            Repair::Bounce => {
+                                let (start, end) = (*range.start(), *range.end());
+                                let x = current[gene];
+                                let u = rng.unit_f64();
+                                // above the end, or below the start (or NaN)
+                                if moved > end {
+                                    (end - u * (end - x)).max(start)
+                                } else {
+                                    (start + u * (x - start)).min(end)
+                                }
+                            }
+                        }
+                    };
+                });
+            }
+            child
+        }
+    }
+}
 
 /// How a [`Moead`] turns the objectives into one value per subproblem, around the ideal point
 /// `z` (the best value of each objective so far), for a weight vector `w`.
@@ -86,17 +336,21 @@ impl Decomposition {
 ///
 /// 1. Each subproblem gets a child: two parents from its neighborhood (with probability
 ///    `neighbor_mating`, 0.9) or from the whole population, recombined with the crossover (one
-///    of its two children, at random) and mutated.
+///    of its two children, at random) and mutated. With a [`DifferentialEvolutionCrossover`]
+///    (MOEA/D-DE), the child is instead the subproblem's own solution moved by the scaled
+///    difference of the two parents.
 /// 2. The children are evaluated together, so a generation can be evaluated in parallel. The
 ///    ideal point moves to the best feasible values seen.
 /// 3. In a random order, each child replaces the solutions of its neighborhood that it improves
 ///    on, for their subproblems: at most `max_replacements` (2, as in MOEA/D-DE, Li and Zhang,
 ///    2009), visiting the neighbors in a random order. The limit keeps one good child from taking
 ///    over a whole neighborhood, which matters more when a generation's children are applied
-///    together.
+///    together. In MOEA/D-DE, a child whose parents came from the whole population visits the
+///    whole population instead.
 ///
-/// Between solutions with different constraint violations, the smaller violation is better, so
-/// constraints are handled too.
+/// Constraints are handled by Deb's feasibility rules in the comparison of a child with a
+/// solution (MOEA/D-CDP): a feasible solution beats an infeasible one, of two infeasible ones the
+/// smaller violation wins, and of two with the same violation, the subproblem's value decides.
 ///
 /// ```
 /// use genoxide::Objective::Minimize;
@@ -144,6 +398,13 @@ pub struct Moead<R: Representation, C, X, const M: usize> {
     discarded: Vec<Individual<R::Genome, Scores<M>>>,
     #[cfg_attr(feature = "serde", serde(skip))]
     spares: Spares<R::Genome>,
+    // with a differential crossover, whether each child's parents came from the whole population,
+    // which is then where it may replace solutions
+    #[cfg_attr(feature = "serde", serde(default))]
+    from_population: Vec<bool>,
+    // the whole population in the order its solutions are visited by such a child
+    #[cfg_attr(feature = "serde", serde(skip))]
+    visit: Vec<usize>,
     // the best feasible value of each objective so far, minimized
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_arrays::array"))]
     ideal: [f64; M],
@@ -193,7 +454,7 @@ fn minimized<const M: usize>(scores: &Scores<M>, objectives: &[Objective; M]) ->
 impl<R, C, X, const M: usize> Moead<R, C, X, M>
 where
     R: Representation,
-    C: Crossover<R>,
+    C: MoeadCrossover<R>,
     X: Mutate<R>,
 {
     /// The representation.
@@ -234,7 +495,9 @@ where
     // one child per subproblem
     fn breed(&mut self) {
         let size = self.population.len();
+        let differential = self.variation.crossover.differential();
         self.offspring.clear();
+        self.from_population.clear();
         for subproblem in 0..size {
             let neighborhood = &self.neighborhoods[subproblem];
             let from_neighborhood =
@@ -253,37 +516,34 @@ where
                 (b, a)
             };
             let variation = &self.variation;
-            let mut genome = if self.rng.chance(variation.crossover_chance) {
-                let mut first = self.spares.copy(self.population[a].genome());
-                let mut second = self.spares.copy(self.population[b].genome());
-                variation.crossover.crossover(
-                    &variation.representation,
-                    &mut first,
-                    &mut second,
-                    &mut self.rng,
-                );
-                let (child, other) = if self.rng.below(2) == 0 {
-                    (first, second)
-                } else {
-                    (second, first)
-                };
-                self.spares.keep(other);
-                child
-            } else {
-                // a copy of one of the parents: only that one is copied
-                let parent = if self.rng.below(2) == 0 { a } else { b };
-                self.spares.copy(self.population[parent].genome())
-            };
+            let recombine = self.rng.chance(variation.crossover_chance);
+            let parents = [subproblem, a, b].map(|parent| self.population[parent].genome());
+            let mut genome = variation.crossover.child(
+                &variation.representation,
+                parents,
+                recombine,
+                &mut self.spares,
+                &mut self.rng,
+            );
             if self.rng.chance(variation.mutation_chance) {
                 variation
                     .mutate
                     .mutate(&variation.representation, &mut genome, &mut self.rng);
             }
-            let inherited = [a, b]
+            // a differential child starts from the subproblem's solution, which it may equal
+            let others: &[usize] = if differential {
+                &[subproblem, a, b]
+            } else {
+                &[a, b]
+            };
+            let inherited = others
                 .iter()
                 .map(|&parent| &self.population[parent])
                 .find(|parent| parent.genome() == &genome)
                 .and_then(Individual::fitness);
+            if differential {
+                self.from_population.push(!from_neighborhood);
+            }
             let mut child = Individual::unevaluated(genome);
             if let Some(scores) = inherited {
                 child.set_fitness(scores);
@@ -340,15 +600,33 @@ where
         for subproblem in order {
             let child = &children[subproblem];
             let scores = child.fitness().unwrap_or(Scores::invalid());
-            neighbors.clone_from(&self.neighborhoods[subproblem]);
-            for i in (1..neighbors.len()).rev() {
-                neighbors.swap(i, self.rng.below(i + 1));
+            let anywhere = self.from_population.get(subproblem) == Some(&true);
+            if anywhere {
+                // the whole population, in a random order drawn as it's visited: a child seldom
+                // visits all of it
+                self.visit.clear();
+                self.visit.extend(0..size);
+            } else {
+                neighbors.clone_from(&self.neighborhoods[subproblem]);
+                for i in (1..neighbors.len()).rev() {
+                    neighbors.swap(i, self.rng.below(i + 1));
+                }
             }
+            let candidates = if anywhere { size } else { neighbors.len() };
             let mut replaced = 0;
-            for &neighbor in &neighbors {
+            // by index: the whole population's order is drawn at each index as it's visited
+            #[allow(clippy::needless_range_loop)]
+            for visited in 0..candidates {
                 if replaced == self.max_replacements {
                     break;
                 }
+                let neighbor = if anywhere {
+                    let next = visited + self.rng.below(size - visited);
+                    self.visit.swap(visited, next);
+                    self.visit[visited]
+                } else {
+                    neighbors[visited]
+                };
                 let current = self.population[neighbor]
                     .fitness()
                     .unwrap_or(Scores::invalid());
@@ -400,7 +678,7 @@ where
 impl<R, C, X, const M: usize> MultiObjectiveAlgorithm<M> for Moead<R, C, X, M>
 where
     R: Representation,
-    C: Crossover<R>,
+    C: MoeadCrossover<R>,
     X: Mutate<R>,
 {
     type Genome = R::Genome;
@@ -510,7 +788,9 @@ pub struct MoeadBuilder<R: Representation, const M: usize, C = Unset, X = Unset>
 }
 
 impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
-    /// The crossover operator. Required; SBX with η 20 is the usual choice for real genomes.
+    /// The crossover operator: a [`Crossover`], or a [`DifferentialEvolutionCrossover`] for
+    /// MOEA/D-DE on real genomes ([`MoeadCrossover`]). Required; SBX with η 20 is the usual
+    /// choice for real genomes, differential evolution for Pareto sets whose genes are linked.
     pub fn crossover<T>(self, crossover: T) -> MoeadBuilder<R, M, T, X> {
         MoeadBuilder {
             representation: self.representation,
@@ -615,7 +895,7 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
     /// - [`Error::InvalidGenome`] for an initial genome that doesn't fit the representation.
     pub fn build(self) -> Result<Moead<R, C, X, M>>
     where
-        C: Crossover<R>,
+        C: MoeadCrossover<R>,
         X: Mutate<R>,
     {
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
@@ -658,7 +938,7 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
         let (crossover_rate, mutation_rate) = check_rates(
             self.crossover_rate,
             self.mutation_rate,
-            self.crossover.recombines(),
+            self.crossover.can_recombine(),
         )?;
         if self.initial_genomes.len() > size {
             return invalid(
@@ -730,6 +1010,8 @@ impl<R: Representation, const M: usize, C, X> MoeadBuilder<R, M, C, X> {
             front: Vec::new(),
             discarded: Vec::new(),
             spares: Spares::default(),
+            from_population: Vec::new(),
+            visit: Vec::new(),
             ideal: [f64::INFINITY; M],
             started: false,
             asked: false,
@@ -950,6 +1232,200 @@ mod tests {
                 .unwrap();
             for _ in 0..10 {
                 step(&mut moead, |x| Scores::new([x[0], x[1] + x[2]]));
+            }
+            moead.population().clone()
+        };
+        assert_eq!(run(6), run(6));
+        assert_ne!(run(6), run(7));
+    }
+
+    fn differential(
+        crossover: &DifferentialEvolutionCrossover,
+        parents: [&[f64]; 3],
+        recombine: bool,
+        seed: u64,
+    ) -> Vec<f64> {
+        let real = Real::uniform(3, 0.0..=1.0).unwrap();
+        let parents = parents.map(|genes| Reals::from(genes.to_vec()));
+        let child = crossover.child(
+            &real,
+            [&parents[0], &parents[1], &parents[2]],
+            recombine,
+            &mut Spares::default(),
+            &mut StreamRng::seed_from_u64(seed),
+        );
+        child.to_vec()
+    }
+
+    #[test]
+    fn differential_evolution_by_hand() {
+        let x: &[f64] = &[0.5, 0.5, 0.5];
+        let a: &[f64] = &[0.8, 0.2, 0.75];
+        let b: &[f64] = &[0.6, 0.4, 0.25];
+        // x + 0.5 (a − b): every gene with CR 1, and these are exact in binary
+        let de = DifferentialEvolutionCrossover::new(0.5, 1.0).unwrap();
+        let child = differential(&de, [x, a, b], true, 1);
+        let expected = [0.5 + 0.5 * (0.8 - 0.6), 0.5 + 0.5 * (0.2 - 0.4), 0.75];
+        assert_eq!(child, expected);
+        // not recombined, or with CR 0: the subproblem's solution
+        assert_eq!(differential(&de, [x, a, b], false, 1), x);
+        let none = DifferentialEvolutionCrossover::new(0.5, 0.0).unwrap();
+        assert_eq!(differential(&none, [x, a, b], true, 1), x);
+        // with CR 0.5, each gene is x's or the moved one, and both happen
+        let half = DifferentialEvolutionCrossover::new(0.5, 0.5).unwrap();
+        let (mut kept, mut moved) = (0, 0);
+        for seed in 0..50 {
+            for (k, gene) in differential(&half, [x, a, b], true, seed)
+                .into_iter()
+                .enumerate()
+            {
+                if gene == x[k] {
+                    kept += 1;
+                } else {
+                    assert_eq!(gene, expected[k]);
+                    moved += 1;
+                }
+            }
+        }
+        assert!(kept > 50 && moved > 50, "{kept} {moved}");
+        // F 2: the third gene, 0.5 + 2 × 0.5 = 1.5, leaves the bounds and is repaired: anywhere
+        // in them at random, or between x and the upper bound with a bounce
+        let bounce = DifferentialEvolutionCrossover::new(2.0, 1.0).unwrap();
+        let far = bounce.with_repair(Repair::Random);
+        let (mut below, mut above) = (false, false);
+        for seed in 0..50 {
+            let random = differential(&far, [x, a, b], true, seed);
+            let moved = [0.5 + 2.0 * (0.8 - 0.6), 0.5 + 2.0 * (0.2 - 0.4)];
+            assert_eq!(random[..2], moved);
+            assert!((0.0..=1.0).contains(&random[2]));
+            below |= random[2] < 0.5;
+            above |= random[2] > 0.5;
+            let bounced = differential(&bounce, [x, a, b], true, seed);
+            assert_eq!(bounced[..2], moved);
+            assert!((0.5..=1.0).contains(&bounced[2]), "{bounced:?}");
+        }
+        assert!(below && above);
+        // below the lower bound: between it and x
+        let low = differential(&bounce, [x, b, a], true, 3);
+        assert!((0.0..=0.5).contains(&low[2]), "{low:?}");
+    }
+
+    #[test]
+    fn differential_evolution_settings() {
+        for (f, cr, name) in [
+            (0.0, 1.0, "f"),
+            (2.5, 1.0, "f"),
+            (f64::NAN, 1.0, "f"),
+            (0.5, -0.1, "cr"),
+            (0.5, 1.5, "cr"),
+            (0.5, f64::NAN, "cr"),
+        ] {
+            assert_eq!(setting(DifferentialEvolutionCrossover::new(f, cr)), name);
+        }
+        let de = DifferentialEvolutionCrossover::new(2.0, 0.0).unwrap();
+        assert_eq!((de.f(), de.cr(), de.repair()), (2.0, 0.0, Repair::Bounce));
+        assert_eq!(de.with_repair(Repair::Random).repair(), Repair::Random);
+        // a mutation rate of 0 is allowed: the difference changes the genomes
+        let moead = Moead::builder(
+            Real::uniform(3, 0.0..=1.0).unwrap(),
+            [Minimize; 2],
+            das_dennis::<2>(4),
+        )
+        .crossover(de)
+        .mutate(PolynomialMutation::per_gene(0.5, 20.0).unwrap())
+        .mutation_rate(0.0)
+        .build();
+        assert!(moead.is_ok());
+    }
+
+    type RealDe = Moead<Real, DifferentialEvolutionCrossover, PolynomialMutation, 2>;
+
+    fn de_builder(
+        divisions: usize,
+        seed: u64,
+    ) -> MoeadBuilder<Real, 2, DifferentialEvolutionCrossover, PolynomialMutation> {
+        Moead::builder(
+            Real::uniform(3, 0.0..=1.0).unwrap(),
+            [Minimize, Minimize],
+            das_dennis::<2>(divisions),
+        )
+        .crossover(DifferentialEvolutionCrossover::new(0.5, 1.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / 3.0, 20.0).unwrap())
+        .seed(seed)
+    }
+
+    // the slots outside the child's neighborhood that hold a copy of a child after a generation,
+    // over 10 generations of a problem whose violations differ a lot
+    fn replaced_outside<C: MoeadCrossover<Real>>(
+        mut moead: Moead<Real, C, PolynomialMutation, 2>,
+    ) -> usize {
+        let f = |x: &Reals| Scores::constrained([x[0], 1.0 - x[0]], x[1] + x[2]);
+        let told: Vec<Scores<2>> = moead.ask().iter().map(f).collect();
+        moead.tell(&told).unwrap();
+        let mut outside = 0;
+        for _ in 0..10 {
+            let told: Vec<Scores<2>> = moead.ask().iter().map(f).collect();
+            // every subproblem's child, in their order
+            let children: Vec<Reals> = moead.offspring.iter().map(|x| x.genome().clone()).collect();
+            let before: Vec<Reals> = moead
+                .population()
+                .iter()
+                .map(|x| x.genome().clone())
+                .collect();
+            moead.tell(&told).unwrap();
+            for (slot, member) in moead.population().iter().enumerate() {
+                if *member.genome() == before[slot] {
+                    continue;
+                }
+                // the children it may be a copy of: outside if none has the slot in its neighborhood
+                let inside = children
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, child)| *child == member.genome())
+                    .any(|(from, _)| moead.neighborhoods()[from].contains(&slot));
+                if !inside {
+                    outside += 1;
+                }
+            }
+        }
+        outside
+    }
+
+    #[test]
+    fn children_from_the_whole_population_replace_anywhere_with_differential_evolution() {
+        // parents from the whole population: MOEA/D-DE's children replace anywhere, others only
+        // in the neighborhood
+        let de = de_builder(19, 2)
+            .neighbors(3)
+            .neighbor_mating(0.0)
+            .build()
+            .unwrap();
+        assert!(replaced_outside(de) > 0);
+        let sbx = builder(19, 2)
+            .neighbors(3)
+            .neighbor_mating(0.0)
+            .build()
+            .unwrap();
+        assert_eq!(replaced_outside(sbx), 0);
+        let local = de_builder(19, 2)
+            .neighbors(3)
+            .neighbor_mating(1.0)
+            .build()
+            .unwrap();
+        assert_eq!(replaced_outside(local), 0);
+    }
+
+    #[test]
+    fn differential_evolution_same_seed_same_run() {
+        let run = |seed| {
+            let mut moead: RealDe = de_builder(9, seed).neighbor_mating(0.5).build().unwrap();
+            for _ in 0..10 {
+                let told: Vec<Scores<2>> = moead
+                    .ask()
+                    .iter()
+                    .map(|x| Scores::new([x[0], x[1] + x[2]]))
+                    .collect();
+                moead.tell(&told).unwrap();
             }
             moead.population().clone()
         };

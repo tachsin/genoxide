@@ -101,6 +101,7 @@ __all__ = [
     "PartiallyMappedCrossover",
     "CycleCrossover",
     "EdgeRecombinationCrossover",
+    "DifferentialEvolutionCrossover",
     # mutation
     "BitFlip",
     "UniformMutation",
@@ -644,6 +645,38 @@ class EdgeRecombinationCrossover:
         return {"type": "edge_recombination"}
 
 
+@dataclass(frozen=True)
+class DifferentialEvolutionCrossover:
+    """MOEA/D-DE's differential evolution (Li and Zhang, 2009), in place of a crossover: for
+    :class:`Moead` on real genomes only. A subproblem's child is its own solution ``x`` moved by
+    the difference of the two parents: each gene becomes ``x + f * (a - b)`` with probability
+    ``cr``. A child whose parents came from the whole population may replace solutions anywhere
+    in it. Suited to Pareto sets whose genes are linked, where SBX stalls.
+
+    ``f`` is greater than 0 and at most 2, 0.5 by default; ``cr`` is 0 to 1, 1 by default (Li and
+    Zhang's settings, with polynomial mutation with eta 20 at a rate of 1 / n). ``repair`` brings
+    back a gene that leaves its bounds: ``"bounce"`` (the default), a random value between ``x``
+    and the bound it crossed, which reaches genes on their bounds; or ``"random"``, a random
+    value anywhere within the bounds, the repair the paper's text describes."""
+
+    f: float = 0.5
+    cr: float = 1.0
+    repair: Literal["bounce", "random"] = "bounce"
+
+    def _describe(self) -> dict[str, Any]:
+        if self.repair not in ("bounce", "random"):
+            raise ValueError(
+                f'DifferentialEvolutionCrossover.repair is "bounce" or "random", not '
+                f"{self.repair!r}"
+            )
+        return {
+            "type": "differential_evolution",
+            "f": _number("DifferentialEvolutionCrossover.f", self.f),
+            "cr": _number("DifferentialEvolutionCrossover.cr", self.cr),
+            "repair": self.repair,
+        }
+
+
 Crossover = Union[
     UniformCrossover,
     PointCrossover,
@@ -655,6 +688,7 @@ Crossover = Union[
     PartiallyMappedCrossover,
     CycleCrossover,
     EdgeRecombinationCrossover,
+    DifferentialEvolutionCrossover,
     "gp.SubtreeCrossover",
     "gp.OnePointCrossover",
 ]
@@ -5555,9 +5589,11 @@ class Moead(_MultiObjective):
     :class:`Tchebycheff` (the default) or :class:`Pbi`, which spreads fronts of 3 or more
     objectives well. Each generation, every subproblem gets a child, one of the crossover's two.
 
-    For real genomes, SBX with eta 20 is the usual crossover. The fitness function is as for
-    :class:`Nsga2`. MOEA/D has no ``eliminate_duplicates``: it replaces its neighbors one child at
-    a time.
+    For real genomes, SBX with eta 20 is the usual crossover; :class:`DifferentialEvolutionCrossover`
+    makes it MOEA/D-DE (Li and Zhang, 2009), for Pareto sets whose genes are linked. The fitness
+    function is as for :class:`Nsga2`; with a constraint violation, a feasible solution beats an
+    infeasible one and the smaller violation wins (Deb's rules). MOEA/D has no
+    ``eliminate_duplicates``: it replaces its neighbors one child at a time.
 
     Parameters
     ----------
@@ -5569,7 +5605,8 @@ class Moead(_MultiObjective):
         At least 2 weight vectors, a row each with a value per objective: finite, non-negative
         and not all 0. Their number is the population size.
     crossover : a crossover
-        How pairs of parents are combined. It must fit the genome.
+        How pairs of parents are combined. It must fit the genome. For real genomes,
+        :class:`DifferentialEvolutionCrossover` too.
     mutation : a mutation
         How children are changed. It must fit the genome.
     neighbors : int, default 20

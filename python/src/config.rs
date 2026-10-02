@@ -499,6 +499,21 @@ pub enum Crossover {
     },
     /// Trees: subtrees exchanged at a point of the common region.
     OnePoint {},
+    /// Real genomes, MOEA/D only: the subproblem's solution moved by `f` times the difference of
+    /// two parents in each gene with probability `cr` (MOEA/D-DE).
+    DifferentialEvolution {
+        f: f64,
+        cr: f64,
+        repair: Option<DeRepair>,
+    },
+}
+
+/// How MOEA/D-DE brings back a gene that leaves its bounds.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeRepair {
+    Bounce,
+    Random,
 }
 
 /// A mutation: `rate` changes each gene with that probability, `count` exactly that many genes.
