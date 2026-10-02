@@ -307,6 +307,31 @@ fn portable_continuation_run(algorithm: FirstOrder) -> Vec<f64> {
     outcome.into_best().into_genome().into_vec()
 }
 
+// the same for MOEA/D: two objectives, Rosenbrock's function and the distance from (1, 0, 0, 0),
+// with the genes' sum at most 1, for 30 generations; the genome of the fourth of its 10
+// subproblems
+fn portable_moead_run<C, X>(moead: multi::Moead<Real, C, X, 2>) -> Vec<f64>
+where
+    C: genoxide::operator::Crossover<Real>,
+    X: genoxide::operator::Mutate<Real>,
+{
+    let objectives = |x: &Reals| {
+        let rosenbrock = x
+            .windows(2)
+            .map(|w| {
+                let (a, b) = (w[1] - w[0] * w[0], 1.0 - w[0]);
+                100.0 * a * a + b * b
+            })
+            .sum::<f64>();
+        let distance = (x[0] - 1.0) * (x[0] - 1.0) + x[1..].iter().map(|v| v * v).sum::<f64>();
+        let sum = x.iter().sum::<f64>();
+        ([rosenbrock, distance], constraint::at_most(sum, 1.0))
+    };
+    let mut engine = MultiEngine::new(moead, objectives).stop_when(Stop::generations(30));
+    engine.run().unwrap();
+    engine.algorithm().population()[3].genome().to_vec()
+}
+
 #[test]
 fn portable_runs() {
     let real = || Real::uniform(4, -5.12..=5.12).unwrap();
@@ -450,9 +475,19 @@ fn portable_runs() {
         ),
         // a model per constraint, the probability of feasibility
         portable_constrained_run(Bo::builder(real()).minimize().seed(1).build().unwrap()),
+        // MOEA/D, SBX and polynomial mutation, a constraint
+        portable_moead_run(
+            Moead::builder(real(), [Objective::Minimize; 2], multi::das_dennis::<2>(9))
+                .neighbors(4)
+                .crossover(SimulatedBinaryCrossover::new(20.0).unwrap())
+                .mutate(PolynomialMutation::per_gene(0.25, 20.0).unwrap())
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
     ];
 
-    let expected: [[f64; 4]; 19] = [
+    let expected: [[f64; 4]; 20] = [
         // L-SHADE
         [
             0.5886518163542276,
@@ -585,7 +620,15 @@ fn portable_runs() {
             0.10930157616421621,
             -0.17840095840143988,
         ],
+        // MOEA/D, SBX and polynomial mutation, a constraint
+        [
+            0.281495821273559,
+            0.011451771393886454,
+            -0.04080469266299676,
+            0.026023236154947352,
+        ],
     ];
+    assert_eq!(runs.len(), expected.len());
     for (run, expected) in runs.iter().zip(expected) {
         assert_eq!(run[..], expected, "{run:?}");
     }
