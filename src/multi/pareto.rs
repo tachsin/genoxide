@@ -352,8 +352,7 @@ pub fn crowding_distance<const M: usize>(scores: &[Scores<M>], front: &[usize]) 
         }
         distances[first] = f64::INFINITY;
         distances[last] = f64::INFINITY;
-        for window in order.windows(3) {
-            let (previous, middle, next) = (window[0], window[1], window[2]);
+        for &[previous, middle, next] in order.array_windows() {
             distances[middle] += (value(next) - value(previous)) / range;
         }
     }

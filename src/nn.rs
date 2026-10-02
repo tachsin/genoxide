@@ -274,10 +274,12 @@ impl Mlp {
     }
 
     fn count_parameters(&self, bias: bool) -> Option<usize> {
-        self.layers.windows(2).try_fold(0_usize, |sum, pair| {
-            let per_unit = pair[0].checked_add(usize::from(bias))?;
-            sum.checked_add(pair[1].checked_mul(per_unit)?)
-        })
+        self.layers
+            .array_windows()
+            .try_fold(0_usize, |sum, &[inputs, units]| {
+                let per_unit = inputs.checked_add(usize::from(bias))?;
+                sum.checked_add(units.checked_mul(per_unit)?)
+            })
     }
 
     /// The representation of this network's weights, [`parameters`](Mlp::parameters) genes, each

@@ -48,10 +48,9 @@ pub const FUNCTIONS: &[Function] = &[
         description: "real: Rosenbrock's function (minimize, 0 at all ones)",
         score: |x| {
             vec![
-                x.windows(2)
-                    .map(|pair| {
-                        100.0 * math::powi(pair[1] - pair[0] * pair[0], 2)
-                            + math::powi(1.0 - pair[0], 2)
+                x.array_windows()
+                    .map(|&[xi, next]| {
+                        100.0 * math::powi(next - xi * xi, 2) + math::powi(1.0 - xi, 2)
                     })
                     .sum(),
             ]
