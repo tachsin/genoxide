@@ -89,14 +89,25 @@
 //! `Shifted::new(Rastrigin::new(n), seed)` and `Rotated::new(Shifted::new(Rastrigin::new(n), seed), seed)`,
 //! with genoxide's own shift and matrix rather than the report's data files.
 //!
-//! The classic functions of the table up to [`Kowalik`] but [`Eggholder`], [`Schwefel2_21`] and
-//! [`Schwefel2_22`], which aren't differentiable everywhere, supply their analytic gradient to the
-//! algorithms that want one (see [`gradient`](crate::gradient)): [`FitnessFunction::provides`]
-//! says so, and [`FitnessFunction::evaluate_with`] computes it, with [`math`](crate::math)'s
-//! functions. Ackley's has a cone at the origin, where its gradient is taken as 0, and Schwefel
-//! 2.26's second derivative is unbounded at 0. The functions after [`Kowalik`], from
-//! [`SumOfDifferentPowers`] on, and the [`Shifted`] and [`Rotated`] wrappers don't supply one
-//! yet: algorithms estimate it by finite differences.
+//! The classic functions of the table supply their analytic gradient to the algorithms that want
+//! one (see [`gradient`](crate::gradient)): [`FitnessFunction::provides`] says so, and
+//! [`FitnessFunction::evaluate_with`] computes it, with [`math`](crate::math)'s functions. All do
+//! but six, whose derivative is undefined or 0 on sets of positive measure: [`Eggholder`],
+//! [`Schwefel2_21`] and [`Schwefel2_22`] (absolute values and a maximum), [`Step`] and
+//! [`NonContinuousRastrigin`] (flat steps), and [`Katsuura`] (kinks 2⁻³³ apart), and the noisy
+//! [`Quartic`], whose noise jumps between any two genomes; for those, algorithms estimate a
+//! gradient by finite differences. Where a function with a gradient has no derivative, on a set
+//! of measure 0, the gradient of the term with the kink is taken as 0: at the cones of
+//! [`Ackley`] and [`DifferentPowers`] at the origin, the cusps of [`HappyCat`] and [`HgBat`] where
+//! their first term is 0, and those of [`SchafferF7`] where a pair of genes is 0. Schwefel 2.26's
+//! second derivative is unbounded at 0, and [`Weierstrass`]'s gradient has terms that vary on
+//! scales of 10⁻¹⁰.
+//!
+//! The [`Shifted`] and [`Rotated`] wrappers pass on what the wrapped problem provides: its
+//! gradient (at `x − o` for a shift, and `Mᵀ ∇f(c + M (x − c))` for a rotation, by the chain
+//! rule), and a constrained problem's constraint values and their Jacobian (the rows times `M`
+//! for a rotation), so that a shifted or rotated [`G06`](cec2006::G06) still gives
+//! [`Mma`](crate::algorithm::Mma) and [`Bo`](crate::algorithm::Bo) its constraints' values.
 //!
 //! Two submodules hold constrained problems, whose fitness is `(score, violation)`:
 //!
@@ -393,8 +404,8 @@ pub trait DynProblem: Send + Sync {
     fn constraints(&self, genome: &Reals) -> Constraints;
 
     /// What the problem gives besides the fitness, as [`FitnessFunction::provides`]: the
-    /// gradient, for the smooth classic functions, and the constraints' values, for the
-    /// problems with inequalities only. Nothing by default.
+    /// gradient, for the classic functions that are differentiable almost everywhere, and the
+    /// constraints' values, for the problems with inequalities only. Nothing by default.
     fn provides(&self) -> Provided {
         Provided::NOTHING
     }

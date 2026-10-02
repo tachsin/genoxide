@@ -4,7 +4,7 @@
 use super::{Constraints, Optimum, Problem};
 use crate::Objective;
 use crate::StreamRng;
-use crate::engine::FitnessFunction;
+use crate::engine::{Extras, FitnessFunction, Provided};
 use crate::genome::{Real, Reals, Representation};
 
 // the streams of the seed's generator from which the shift and the rotation are drawn, so that a
@@ -65,6 +65,13 @@ fn moved_optimum(
 /// problem's, and so is the constraint violation of a constrained problem, at `x − o`; rounding
 /// in `x − o` can put a shifted solution a few ulps outside a constraint that's active there
 /// (6·10⁻¹⁴ at [`G06`](super::cec2006::G06)'s minimum with seed 3).
+///
+/// It [provides](FitnessFunction::provides) what the wrapped problem provides, and
+/// [`evaluate_with`](FitnessFunction::evaluate_with) gives it at `x − o`: the gradient, the
+/// constraints' values and their Jacobian, unchanged, since a shift moves the function without
+/// turning or stretching it. A shifted smooth function keeps its analytic gradient, and a shifted
+/// constrained problem gives [`Mma`](crate::algorithm::Mma) and [`Bo`](crate::algorithm::Bo) its
+/// constraints' values.
 ///
 /// ```
 /// use genoxide::genome::Representation;
@@ -135,6 +142,21 @@ impl<P: Problem<Representation = Real>> FitnessFunction<Reals> for Shifted<P> {
     fn evaluate(&self, x: &Reals) -> P::Output {
         self.problem.evaluate(&self.unshifted(x))
     }
+
+    /// What the wrapped problem provides.
+    fn provides(&self) -> Provided {
+        self.problem.provides()
+    }
+
+    /// The wrapped problem's [`evaluate_with`](FitnessFunction::evaluate_with) at `x − o`: its
+    /// fitness and extras, the same in `x` as in `x − o`.
+    ///
+    /// # Panics
+    ///
+    /// As the wrapped problem's.
+    fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> P::Output {
+        self.problem.evaluate_with(&self.unshifted(x), extras)
+    }
 }
 
 impl<P: Problem<Representation = Real>> Problem for Shifted<P> {
@@ -195,6 +217,13 @@ impl<P: Problem<Representation = Real>> Problem for Shifted<P> {
 /// the wrapped function must be defined, and a function whose minimum is only the lowest in its
 /// box can have lower values there, as for [`Shifted`]. The name and the reference are the wrapped
 /// problem's, and so is the constraint violation of a constrained problem, at `c + M (x − c)`.
+///
+/// It [provides](FitnessFunction::provides) what the wrapped problem provides, and
+/// [`evaluate_with`](FitnessFunction::evaluate_with) gives it by the chain rule: the gradient
+/// `Mᵀ ∇f(c + M (x − c))`, the constraints' values at `c + M (x − c)`, and their Jacobian `J M`,
+/// each row (a constraint's gradient) turned as the gradient is. A rotated smooth function keeps
+/// its analytic gradient, and a rotated constrained problem gives [`Mma`](crate::algorithm::Mma)
+/// and [`Bo`](crate::algorithm::Bo) its constraints' values.
 ///
 /// Rotating a shifted problem gives CEC 2005's shifted rotated functions, `f((x − o) M)`, e.g. its
 /// F10, the shifted rotated Rastrigin, whose rotation turns about the shifted optimum:
@@ -261,6 +290,18 @@ impl<P: Problem<Representation = Real>> Rotated<P> {
         &self.center
     }
 
+    // `Mᵀ v` into `out`: a gradient at c + M (x − c), or a row of the Jacobian there, as a
+    // gradient in x (∂/∂xⱼ = Σᵢ Mᵢⱼ ∂/∂yᵢ, y = c + M (x − c))
+    fn turn_back(&self, v: &[f64], out: &mut [f64]) {
+        let n = self.center.len();
+        out.fill(0.0);
+        for (row, vi) in self.matrix.chunks_exact(n.max(1)).zip(v) {
+            for (o, m) in out.iter_mut().zip(row) {
+                *o += m * vi;
+            }
+        }
+    }
+
     // the point at which the wrapped problem is evaluated: c + M (x − c)
     fn rotated(&self, x: &Reals) -> Reals {
         let n = self.center.len();
@@ -310,6 +351,55 @@ impl<P: Problem<Representation = Real>> FitnessFunction<Reals> for Rotated<P> {
 
     fn evaluate(&self, x: &Reals) -> P::Output {
         self.problem.evaluate(&self.rotated(x))
+    }
+
+    /// What the wrapped problem provides.
+    fn provides(&self) -> Provided {
+        self.problem.provides()
+    }
+
+    /// The wrapped problem's [`evaluate_with`](FitnessFunction::evaluate_with) at
+    /// `c + M (x − c)`: its fitness and the constraints' values there, its gradient turned back
+    /// by `Mᵀ`, and the Jacobian times `M`.
+    ///
+    /// # Panics
+    ///
+    /// As the wrapped problem's, and if the gradient doesn't have a value per gene or the
+    /// Jacobian a whole number of rows of a value per gene.
+    fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> P::Output {
+        let n = self.center.len();
+        let (gradient, inequalities, jacobian) = extras.buffers();
+        // the wrapped problem's derivatives, in the rotated coordinates
+        let mut turned_gradient = gradient.as_ref().map(|gradient| {
+            assert_eq!(gradient.len(), n, "a gradient has a value per gene");
+            vec![0.0; n]
+        });
+        let mut turned_jacobian = jacobian.as_ref().map(|jacobian| {
+            assert_eq!(
+                jacobian.len() % n.max(1),
+                0,
+                "a Jacobian has a row of a value per gene for each constraint"
+            );
+            vec![0.0; jacobian.len()]
+        });
+        let output = self.problem.evaluate_with(
+            &self.rotated(x),
+            &mut Extras::new(
+                turned_gradient.as_deref_mut(),
+                inequalities,
+                turned_jacobian.as_deref_mut(),
+            ),
+        );
+        if let (Some(gradient), Some(turned)) = (gradient, &turned_gradient) {
+            self.turn_back(turned, gradient);
+        }
+        if let (Some(jacobian), Some(turned)) = (jacobian, &turned_jacobian) {
+            let rows = jacobian.chunks_exact_mut(n.max(1));
+            for (row, turned) in rows.zip(turned.chunks_exact(n.max(1))) {
+                self.turn_back(turned, row);
+            }
+        }
+        output
     }
 }
 
@@ -363,8 +453,13 @@ impl<P: Problem<Representation = Real>> Problem for Rotated<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gradient::Gradients;
+    use crate::prelude::{Engine, Lbfgsb, Stop, StopReason};
     use crate::problems::cec2006::G06;
-    use crate::problems::{Branin, Rastrigin, Rosenbrock, Sphere};
+    use crate::problems::{
+        BentCigar, Branin, HighConditionedElliptic, Katsuura, Quartic, Rastrigin, Rosenbrock,
+        Sphere, Step, boxed,
+    };
 
     fn assert_close(actual: f64, expected: f64, tolerance: f64) {
         assert!(
@@ -506,5 +601,278 @@ mod tests {
         let rotated = Rotated::new(G06, 2);
         let center = Reals::from(rotated.center().to_vec());
         assert_eq!(rotated.constraints(&center), G06.constraints(&center));
+    }
+
+    // a smooth constrained problem with every extra: Σ (xᵢ − 1)² + x₀ x₁, subject to
+    // ‖x‖² − 4 <= 0 and x₀ + 2x₁ − x₂³ <= 0, with its gradient and its constraints' Jacobian
+    #[derive(Clone, Debug, PartialEq)]
+    struct Smooth;
+
+    impl Smooth {
+        fn values(x: &[f64]) -> [f64; 2] {
+            let squares: f64 = x.iter().map(|xi| xi * xi).sum();
+            [squares - 4.0, x[0] + 2.0 * x[1] - x[2] * x[2] * x[2]]
+        }
+    }
+
+    impl FitnessFunction<Reals> for Smooth {
+        type Output = (f64, f64);
+
+        fn evaluate(&self, x: &Reals) -> (f64, f64) {
+            let value = x.iter().map(|xi| (xi - 1.0) * (xi - 1.0)).sum::<f64>() + x[0] * x[1];
+            (value, self.constraints(x).violation(0.0))
+        }
+
+        fn provides(&self) -> Provided {
+            Provided::GRADIENT
+                .with_inequalities(2)
+                .with_constraint_jacobian()
+        }
+
+        fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> (f64, f64) {
+            let (gradient, inequalities, jacobian) = extras.buffers();
+            if let Some(gradient) = gradient {
+                for (g, xi) in gradient.iter_mut().zip(x.iter()) {
+                    *g = 2.0 * (xi - 1.0);
+                }
+                gradient[0] += x[1];
+                gradient[1] += x[0];
+            }
+            if let Some(g) = inequalities {
+                g.copy_from_slice(&Self::values(x));
+            }
+            if let Some(jacobian) = jacobian {
+                let (first, second) = jacobian.split_at_mut(3);
+                for (j, xi) in first.iter_mut().zip(x.iter()) {
+                    *j = 2.0 * xi;
+                }
+                second.copy_from_slice(&[1.0, 2.0, -3.0 * x[2] * x[2]]);
+            }
+            self.evaluate(x)
+        }
+    }
+
+    impl Problem for Smooth {
+        type Representation = Real;
+
+        fn name(&self) -> &'static str {
+            "Smooth"
+        }
+
+        fn representation(&self) -> Real {
+            Real::uniform(3, -2.0..=2.0).expect("valid bounds")
+        }
+
+        fn optimum(&self) -> Option<Optimum<Reals>> {
+            None
+        }
+
+        fn reference(&self) -> &'static str {
+            "a test problem"
+        }
+
+        fn constraints(&self, x: &Reals) -> Constraints {
+            Constraints::new(Self::values(x).to_vec(), Vec::new())
+        }
+    }
+
+    // the gradient, the constraints' values and their Jacobian of `problem` at `x`, all wanted
+    fn extras_of<P>(problem: &P, x: &Reals) -> (P::Output, Vec<f64>, Vec<f64>, Vec<f64>)
+    where
+        P: Problem<Representation = Real>,
+    {
+        let (n, m) = (x.len(), problem.provides().inequalities);
+        let (mut gradient, mut g, mut jacobian) = (vec![0.0; n], vec![0.0; m], vec![0.0; m * n]);
+        let output = problem.evaluate_with(
+            x,
+            &mut Extras::new(Some(&mut gradient), Some(&mut g), Some(&mut jacobian)),
+        );
+        (output, gradient, g, jacobian)
+    }
+
+    // the slope of `f` along gene `gene` at `x`, by central differences with the step 2⁻¹⁸
+    fn slope(f: impl Fn(&Reals) -> f64, x: &Reals, gene: usize) -> f64 {
+        let h = 2f64.powi(-18);
+        let (mut above, mut below) = (x.clone(), x.clone());
+        above[gene] += h;
+        below[gene] -= h;
+        (f(&above) - f(&below)) / (above[gene] - below[gene])
+    }
+
+    // the wrappers' gradients and Jacobians against central differences of their values, and
+    // their values the same to the bit with and without extras
+    #[test]
+    fn the_wrappers_derivatives_match_central_differences() {
+        let mut rng = StreamRng::seed_from_u64(1);
+        for seed in 0..10 {
+            let shifted = Shifted::new(Smooth, seed);
+            let rotated = Rotated::new(Smooth, seed);
+            let both = Rotated::new(Shifted::new(Smooth, seed), seed);
+            for _ in 0..20 {
+                let x = Smooth.representation().random_genome(&mut rng);
+                check_derivatives(&shifted, &x);
+                check_derivatives(&rotated, &x);
+                check_derivatives(&both, &x);
+            }
+        }
+    }
+
+    fn check_derivatives<P>(problem: &P, x: &Reals)
+    where
+        P: Problem<Representation = Real, Output = (f64, f64)>,
+    {
+        let (output, gradient, g, jacobian) = extras_of(problem, x);
+        let plain = problem.evaluate(x);
+        assert_eq!(output.0.to_bits(), plain.0.to_bits());
+        assert_eq!(output.1.to_bits(), plain.1.to_bits());
+        assert_eq!(g, problem.constraints(x).inequalities());
+        let close = |analytic: f64, estimate: f64| {
+            let error = (analytic - estimate).abs() / analytic.abs().max(1.0);
+            assert!(error < 1e-8, "{analytic} against {estimate}");
+        };
+        for gene in 0..x.len() {
+            close(gradient[gene], slope(|x| problem.evaluate(x).0, x, gene));
+            for constraint in 0..2 {
+                let estimate = slope(
+                    |x| problem.constraints(x).inequalities()[constraint],
+                    x,
+                    gene,
+                );
+                close(jacobian[constraint * x.len() + gene], estimate);
+            }
+        }
+    }
+
+    // a shift doesn't change the extras: the wrapped problem's at x − o, to the bit
+    #[test]
+    fn a_shift_passes_the_extras_through() {
+        let problem = Shifted::new(Smooth, 4);
+        let x = Reals::from(vec![0.5, -1.0, 1.5]);
+        let unshifted = problem.unshifted(&x);
+        assert_eq!(extras_of(&problem, &x), extras_of(&Smooth, &unshifted));
+        // a test problem's analytic gradient, shifted
+        let rosenbrock = Shifted::new(Rosenbrock::new(4), 2);
+        let x = Reals::from(vec![0.3, -0.2, 1.1, 2.0]);
+        let mut gradient = [0.0; 4];
+        let mut expected = [0.0; 4];
+        let value = rosenbrock.evaluate_with(&x, &mut Extras::with_gradient(&mut gradient));
+        let wrapped = Rosenbrock::new(4).evaluate_with(
+            &rosenbrock.unshifted(&x),
+            &mut Extras::with_gradient(&mut expected),
+        );
+        assert_eq!((value, gradient), (wrapped, expected));
+    }
+
+    // a rotation turns the gradient back by Mᵀ and the Jacobian's rows likewise
+    #[test]
+    fn a_rotation_turns_the_derivatives_back() {
+        let problem = Rotated::new(Smooth, 6);
+        let x = Reals::from(vec![0.5, -1.0, 1.5]);
+        let y = problem.rotated(&x);
+        let (output, gradient, g, jacobian) = extras_of(&problem, &x);
+        let (wrapped, inner_gradient, inner_g, inner_jacobian) = extras_of(&Smooth, &y);
+        assert_eq!((output, g), (wrapped, inner_g));
+        let m = problem.matrix();
+        let turned = |v: &[f64], j: usize| (0..3).map(|i| m[i * 3 + j] * v[i]).sum::<f64>();
+        for j in 0..3 {
+            assert!((gradient[j] - turned(&inner_gradient, j)).abs() < 1e-14);
+            for row in 0..2 {
+                let expected = turned(&inner_jacobian[row * 3..row * 3 + 3], j);
+                assert!((jacobian[row * 3 + j] - expected).abs() < 1e-14);
+            }
+        }
+        // the gradient of a sphere about its center is turned to the same one: M orthogonal
+        let sphere = Rotated::new(Sphere::new(5), 3);
+        let x = Reals::from(vec![1.0, -2.0, 0.5, 3.0, -1.5]);
+        let mut gradient = [0.0; 5];
+        sphere.evaluate_with(&x, &mut Extras::with_gradient(&mut gradient));
+        for (g, xi) in gradient.iter().zip(x.iter()) {
+            assert!((g - 2.0 * xi).abs() < 1e-13, "{g} {xi}");
+        }
+    }
+
+    // the wrappers provide what they wrap
+    #[test]
+    fn the_wrappers_provide_what_they_wrap() {
+        let gradient = Provided::GRADIENT;
+        assert_eq!(Shifted::new(Sphere::new(3), 1).provides(), gradient);
+        assert_eq!(Rotated::new(Rastrigin::new(3), 1).provides(), gradient);
+        let both = Rotated::new(Shifted::new(BentCigar::new(3), 1), 1);
+        assert_eq!(both.provides(), gradient);
+        assert_eq!(
+            Rotated::new(Shifted::new(Smooth, 1), 1).provides(),
+            Smooth.provides()
+        );
+        let values = Provided::NOTHING.with_inequalities(2);
+        assert_eq!(Shifted::new(G06, 1).provides(), values);
+        assert_eq!(Rotated::new(G06, 1).provides(), values);
+        assert_eq!(Rotated::new(Shifted::new(G06, 1), 1).provides(), values);
+        let nothing = Provided::NOTHING;
+        assert_eq!(Shifted::new(Step::new(3), 1).provides(), nothing);
+        assert_eq!(Rotated::new(Katsuura::new(3), 1).provides(), nothing);
+        assert_eq!(
+            Rotated::new(Shifted::new(Quartic::noisy(3), 1), 1).provides(),
+            nothing
+        );
+        assert_eq!(Shifted::new(Quartic::new(3), 1).provides(), gradient);
+        // and so do they behind DynProblem
+        assert_eq!(boxed(Shifted::new(G06, 1)).provides(), values);
+        assert_eq!(boxed(Rotated::new(Sphere::new(2), 1)).provides(), gradient);
+    }
+
+    // a shifted or rotated G06 gives its constraints' values: those of G06 at the point it's
+    // evaluated at
+    #[test]
+    fn a_wrapped_g06_keeps_its_constraint_values() {
+        let x = Reals::from(vec![20.0, 5.0]);
+        let shifted = Shifted::new(G06, 2);
+        let rotated = Rotated::new(G06, 2);
+        for (problem, at) in [
+            (&shifted as &dyn DynFitness, shifted.unshifted(&x)),
+            (&rotated as &dyn DynFitness, rotated.rotated(&x)),
+        ] {
+            let mut g = [0.0; 2];
+            let fitness = problem.evaluate_with(&x, &mut Extras::new(None, Some(&mut g), None));
+            assert_eq!(fitness, G06.evaluate(&at));
+            assert_eq!(&g[..], G06.constraints(&at).inequalities());
+        }
+    }
+
+    // a fitness function of (score, violation) on Real genomes, as a trait object
+    trait DynFitness {
+        fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> (f64, f64);
+    }
+
+    impl<F: FitnessFunction<Reals, Output = (f64, f64)>> DynFitness for F {
+        fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> (f64, f64) {
+            FitnessFunction::evaluate_with(self, x, extras)
+        }
+    }
+
+    // L-BFGS-B takes the analytic gradient through both wrappers, and needs no differences
+    #[test]
+    fn lbfgsb_runs_on_the_wrapped_gradient() -> crate::Result<()> {
+        let problem = Rotated::new(Shifted::new(HighConditionedElliptic::new(10), 1), 1);
+        let optimum = problem.optimum().expect("known");
+        let lbfgsb = Lbfgsb::builder(problem.representation())
+            .gradients(Gradients::Supplied)
+            .gradient_tolerance(1e-9)
+            .function_tolerance(0.0)
+            .minimize()
+            .seed(1)
+            .build()?;
+        let mut engine = Engine::new(lbfgsb, problem).stop_when(Stop::evaluations(10_000));
+        let outcome = engine.run()?;
+        assert_eq!(outcome.stop_reason(), StopReason::Converged);
+        assert!(outcome.best_fitness().score().expect("valid") < 1e-16);
+        for (x, o) in outcome
+            .best_genome()
+            .iter()
+            .zip(optimum.solutions()[0].iter())
+        {
+            assert!((x - o).abs() < 1e-8, "{x} {o}");
+        }
+        assert_eq!(engine.algorithm().stencil_evaluations(), 0);
+        Ok(())
     }
 }
