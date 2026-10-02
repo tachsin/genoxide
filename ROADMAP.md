@@ -57,7 +57,7 @@ Done means implemented, documented, tested (property tests for operators) and be
 ### 0.0: Project setup ✅
 - [x] Name, repository, dual MIT / Apache-2.0 license
 - [x] README (homepage) and this roadmap
-- [x] Crate skeleton (edition 2024, MSRV 1.86; 1.88 since #314)
+- [x] Crate skeleton (edition 2024, MSRV 1.86; 1.88 since #314; 1.95 since [#402](https://github.com/tachsin/genoxide/issues/402), where it stays)
 
 ### 0.1: Foundations ✅
 
@@ -231,6 +231,7 @@ The plan: [docs/gp-neuroevolution-plan.md](docs/gp-neuroevolution-plan.md).
 - [x] Batch Bayesian optimization (Kriging believer, constant liar), `Incremental` for the asynchronous engine, constrained Bayesian optimization and integer genes, with the `bo_hartmann6`, `bo_asynchronous` and `bo_constrained` examples (batch B, its second part)
 
 ### 0.14: Constrained nonlinear programming
+- [x] Rust 1.95 as the minimum, kept there from now on ([#402](https://github.com/tachsin/genoxide/issues/402))
 - [ ] SQP and the augmented Lagrangian, on the constrained test problems (batch C)
 
 ### 0.15: More local methods
