@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.13.1](https://github.com/tachsin/genoxide/compare/v0.13.0...v0.13.1) - 2026-10-02
+
+### <!-- 0 -->Added
+
+- shift and rotation wrappers and seventeen CEC- and BBOB-style functions, each with its own example ([#409](https://github.com/tachsin/genoxide/pull/409))
+- *(moead)* MOEA/D-DE, differential evolution in place of the crossover (Li and Zhang 2009) ([#418](https://github.com/tachsin/genoxide/pull/418))
+- the constrained DTLZ8 and DTLZ9, the DC-DTLZ and the DAS-CMOP problems, each with its own example ([#414](https://github.com/tachsin/genoxide/pull/414))
+- *(problems)* gradients for batch 10b's functions, and gradients and constraint values through Shifted and Rotated ([#420](https://github.com/tachsin/genoxide/pull/420))
+- *(problems)* binary and combinatorial problems, batch 12, each with its own example ([#421](https://github.com/tachsin/genoxide/pull/421))
+
+### <!-- 4 -->Documentation
+
+- *(ctp)* CTP1-CTP8 checked against the published paper and Deb's 2001 book ([#419](https://github.com/tachsin/genoxide/pull/419))
+
 ## [0.13.0](https://github.com/tachsin/genoxide/compare/v0.12.0...v0.13.0) - 2026-10-02
 
 ### <!-- 0 -->Added
