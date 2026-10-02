@@ -792,6 +792,59 @@ def test_a_front_has_each_genome_once():
     assert dominated.count(False) == 61
 
 
+def test_moead_de():
+    # MOEA/D-DE on ZDT1 in Rust; tests/multi.rs runs it for 499 generations, to a hypervolume
+    # above 0.868
+    problem = gx.problems.Zdt1(30)
+
+    def moead(crossover, **settings):
+        return gx.Moead(
+            problem.genome,
+            objectives=problem.objectives,
+            weights=gx.das_dennis(2, 99),
+            crossover=crossover,
+            mutation=gx.PolynomialMutation(20, rate=1 / 30),
+            seed=0,
+            **settings,
+        )
+
+    result = moead(gx.DifferentialEvolutionCrossover()).run(problem, generations=499)
+    volume = gx.indicators.hypervolume(result.front_objectives, [1.1, 1.1])
+    assert volume > 0.868
+    # the same seed, the same run; the paper's repair, another one
+    again = moead(gx.DifferentialEvolutionCrossover(0.5, 1.0, "bounce")).run(
+        problem, generations=499
+    )
+    assert np.array_equal(result.front_objectives, again.front_objectives)
+    random = moead(gx.DifferentialEvolutionCrossover(repair="random")).run(
+        problem, generations=20
+    )
+    assert len(random.front_objectives) > 0
+    # invalid settings, and other algorithms and genomes
+    with pytest.raises(ValueError, match="DifferentialEvolutionCrossover.f"):
+        moead(gx.DifferentialEvolutionCrossover(f=0.0)).run(problem, generations=1)
+    with pytest.raises(ValueError, match="DifferentialEvolutionCrossover.cr"):
+        moead(gx.DifferentialEvolutionCrossover(cr=1.5)).run(problem, generations=1)
+    with pytest.raises(ValueError, match="repair"):
+        moead(gx.DifferentialEvolutionCrossover(repair="clamp")).run(problem, generations=1)
+    with pytest.raises(ValueError, match="Moead only"):
+        gx.Nsga2(
+            problem.genome,
+            objectives=problem.objectives,
+            population_size=20,
+            crossover=gx.DifferentialEvolutionCrossover(),
+            mutation=gx.PolynomialMutation(20, rate=1 / 30),
+        ).run(problem, generations=1)
+    with pytest.raises(ValueError, match="binary"):
+        gx.Moead(
+            gx.Binary(10),
+            objectives=["minimize", "minimize"],
+            weights=gx.das_dennis(2, 9),
+            crossover=gx.DifferentialEvolutionCrossover(),
+            mutation=gx.BitFlip(rate=0.1),
+        ).run(lambda bits: (bits.sum(), 10 - bits.sum()), generations=1)
+
+
 def test_on_generation_returning_false_aborts():
     result = onemax_ga().run(
         lambda bits: bits.sum(), generations=100, on_generation=lambda state: state.generation < 5
