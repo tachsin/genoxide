@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.14.0](https://github.com/tachsin/genoxide/compare/v0.13.1...v0.14.0) - 2026-10-02
+
+### <!-- 0 -->Added
+
+- [**breaking**] require Rust 1.95, the minimum genoxide keeps from now on ([#422](https://github.com/tachsin/genoxide/pull/422))
+
+### <!-- 2 -->Performance
+
+- Rust 1.95's APIs where they measure better, with every seeded result unchanged ([#424](https://github.com/tachsin/genoxide/pull/424))
+
 ## [0.13.1](https://github.com/tachsin/genoxide/compare/v0.13.0...v0.13.1) - 2026-10-02
 
 ### <!-- 0 -->Added
