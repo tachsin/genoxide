@@ -6,8 +6,8 @@
 //! `0 + a₀b₀ + a₁b₁ + …`, so `gemm` of one column is `gemv`, and a row of `gemv` is `dot`, to the
 //! bit.
 
-// L-BFGS-B (batch A2) and the Gaussian processes (batch B) are the first users
-#![allow(dead_code)]
+// `axpy`, `gemv_t` and `gemm` have no user outside the tests yet
+#![cfg_attr(not(test), expect(dead_code))]
 
 use super::{CHUNK_ROWS, MR, NR, for_each_chunk, tile_add};
 
@@ -110,7 +110,7 @@ pub(crate) fn gemv_t(
 /// Blocked and packed, with a register tile of the output; on rayon (the `parallel` feature) by
 /// independent rows of `C` for large products, with the same bits.
 // BLAS's order of the arguments
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub(crate) fn gemm(
     m: usize,
     k: usize,
@@ -126,7 +126,7 @@ pub(crate) fn gemm(
 }
 
 // `gemm`, on rayon or not
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub(super) fn gemm_with(
     m: usize,
     k: usize,

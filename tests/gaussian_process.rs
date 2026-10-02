@@ -24,7 +24,7 @@ struct TwoPoints {
     log_likelihood: f64,
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn two_points(
     kernel: Kernel,
     x: [f64; 2],

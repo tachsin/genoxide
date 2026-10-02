@@ -67,7 +67,7 @@ type Result<T> = std::result::Result<T, String>;
 /// stage did and its last point. Returns the result as a dict.
 #[pyfunction]
 #[pyo3(signature = (config, fitness, batch = false, parallel = false, on_generation = None, problem = None, control = None, checkpoint = None, checkpoint_every = None, resume = None, gradient = None, combined_gradient = false, constraints = 0, on_stage = None, on_stage_finished = None))]
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub fn run<'py>(
     py: Python<'py>,
     config: &str,
@@ -1101,7 +1101,7 @@ fn real_algorithm<'py>(
 }
 
 // a gradient method, built from its settings: once per run, its size doesn't matter
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum GradientMethod {
     FirstOrder(FirstOrder),
     Lbfgsb(Lbfgsb),
@@ -1275,7 +1275,7 @@ fn gradient_method(
 }
 
 // OpenAI's evolution strategy, with its settings
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn build_open_es(
     real: Real,
     population_size: usize,

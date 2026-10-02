@@ -2,7 +2,7 @@
 //! with their genes rounded inside the kernel.
 
 // the sealed trait's methods take the crate's own unit-cube map: unnameable outside the crate
-#![allow(private_interfaces)]
+#![expect(private_interfaces)]
 
 use crate::genome::{Integer, Integers, Real, Reals, Representation};
 use crate::model::gp::Scaling;

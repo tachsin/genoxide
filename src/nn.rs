@@ -579,7 +579,7 @@ impl ElmanNetwork<'_> {
 
 #[cfg(test)]
 // the weights written out, -1 included
-#[allow(clippy::neg_multiply)]
+#[expect(clippy::neg_multiply)]
 mod tests {
     use super::*;
     use crate::StreamRng;

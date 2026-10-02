@@ -441,7 +441,7 @@ fn type_name<P: Copy>(set: &PrimitiveSet<P>, ty: Type) -> String {
 // by `method`; with `root_function`, the root is a function when one fits (Koza 1992). Needs
 // `set.min_size(ty, depth) <= budget`. Without recursion: a stack of the argument slots still to
 // fill, and the fewest nodes they need, so every choice leaves room to complete the tree.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub(crate) fn generate<P: Copy>(
     set: &PrimitiveSet<P>,
     ty: Type,

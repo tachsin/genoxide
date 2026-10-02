@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn validation() {
         assert!(Integer::new([]).is_err());
-        #[allow(clippy::reversed_empty_ranges)]
+        #[expect(clippy::reversed_empty_ranges)]
         let empty = 1..=0;
         assert!(Integer::new([0..=1, empty]).is_err());
         assert!(Integer::uniform(0, 0..=1).is_err());

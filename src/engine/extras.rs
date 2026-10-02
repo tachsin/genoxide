@@ -296,7 +296,7 @@ impl<'a> Extras<'a> {
     }
 
     // the three buffers at once: the gradient, the inequalities and the Jacobian
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     pub(crate) fn buffers(
         &mut self,
     ) -> (Option<&mut [f64]>, Option<&mut [f64]>, Option<&mut [f64]>) {

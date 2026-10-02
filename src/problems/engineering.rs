@@ -548,7 +548,7 @@ impl SpeedReducer {
     }
 
     // 0.7854 is the paper's constant, which is close to π/4
-    #[allow(clippy::approx_constant)]
+    #[expect(clippy::approx_constant)]
     fn value(&self, x: &Reals) -> f64 {
         let [x1, x2, x3, x4, x5, x6, x7] = self.design(x);
         0.7854 * x1 * x2 * x2 * (3.3333 * x3 * x3 + 14.9334 * x3 - 43.0934)

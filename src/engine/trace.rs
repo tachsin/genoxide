@@ -9,7 +9,7 @@ pub(crate) struct RunSpan {
 }
 
 // enters the span of a run of `A`, at the info level
-#[cfg_attr(not(feature = "tracing"), allow(clippy::extra_unused_type_parameters))]
+#[cfg_attr(not(feature = "tracing"), expect(clippy::extra_unused_type_parameters))]
 pub(crate) fn run<A>() -> RunSpan {
     RunSpan {
         #[cfg(feature = "tracing")]
@@ -20,7 +20,7 @@ pub(crate) fn run<A>() -> RunSpan {
 }
 
 // a generation, at the debug level; `front` is the size of a multi-objective front
-#[cfg_attr(not(feature = "tracing"), allow(unused_variables))]
+#[cfg_attr(not(feature = "tracing"), expect(unused_variables))]
 pub(crate) fn generation(progress: &Progress, front: Option<usize>) {
     #[cfg(feature = "tracing")]
     tracing::debug!(
@@ -36,7 +36,7 @@ pub(crate) fn generation(progress: &Progress, front: Option<usize>) {
 }
 
 // the end of a run, at the info level
-#[cfg_attr(not(feature = "tracing"), allow(unused_variables))]
+#[cfg_attr(not(feature = "tracing"), expect(unused_variables))]
 pub(crate) fn finished(progress: &Progress, reason: StopReason, front: Option<usize>) {
     #[cfg(feature = "tracing")]
     tracing::info!(

@@ -6,9 +6,6 @@
 //! order. The blocked factorization keeps that order whatever its block size and thread count, so
 //! it gives the bits of the textbook loops.
 
-// L-BFGS-B (batch A2) and the Gaussian processes (batch B) are the first users
-#![allow(dead_code)]
-
 use super::{CHUNK_ROWS, MR, NR, for_each_chunk, tile_sub};
 use std::fmt;
 

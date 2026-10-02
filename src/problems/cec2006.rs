@@ -41,7 +41,7 @@
 //! | [`G24`] | 2 | 2 inequalities | −5.50801327159536 |
 
 // the report's solutions keep every digit it prints
-#![allow(clippy::excessive_precision)]
+#![expect(clippy::excessive_precision)]
 
 use super::{Constraints, Optimum, Problem};
 use crate::engine::{Extras, FitnessFunction, Provided};
@@ -1576,7 +1576,7 @@ impl Problem for G17 {
     }
 
     // 0.5236 is the report's bound, which is close to π/6
-    #[allow(clippy::approx_constant)]
+    #[expect(clippy::approx_constant)]
     fn representation(&self) -> Real {
         bounds(&[
             (0.0, 400.0),

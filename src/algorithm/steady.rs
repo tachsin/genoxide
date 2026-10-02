@@ -340,7 +340,7 @@ impl Hasher for Prehashed {
 const ATTEMPTS: usize = 100;
 
 impl<R: Representation, S, C, M> SteadyGa<R, S, C, M> {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub(crate) fn new(
         representation: R,
         select: S,

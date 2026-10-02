@@ -10,7 +10,7 @@
 /// The eigenvalues and eigenvectors (the columns of a row-major matrix) of the symmetric
 /// row-major `n × n` matrix.
 // the trust-region subproblem (batch D1) is its first user outside the tests
-#[allow(dead_code)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn eigen(matrix: &[f64], n: usize) -> (Vec<f64>, Vec<f64>) {
     let (values, transposed) = eigen_transposed(matrix, n);
     let mut vectors = Vec::new();

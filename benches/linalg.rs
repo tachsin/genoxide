@@ -11,7 +11,7 @@
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 
 #[path = "../src"]
-#[allow(dead_code, unused_imports)]
+#[expect(dead_code, unused_imports)]
 mod source {
     pub mod linalg;
 }

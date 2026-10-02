@@ -484,7 +484,7 @@ impl DiscBrake {
     }
 
     // 3.14 is the paper's constant, which is close to π
-    #[allow(clippy::approx_constant)]
+    #[expect(clippy::approx_constant)]
     fn values(&self, x: &Reals) -> [f64; 5] {
         let [r, outer, force, s] = self.design(x);
         let squares = outer * outer - r * r;
@@ -613,7 +613,7 @@ impl SpeedReducer {
     }
 
     // 0.7854 is the paper's constant, which is close to π/4
-    #[allow(clippy::approx_constant)]
+    #[expect(clippy::approx_constant)]
     fn objectives(&self, x: &Reals) -> [f64; 2] {
         let design = self.design(x);
         let [x1, x2, x3, x4, x5, x6, x7] = design;
@@ -1700,7 +1700,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::approx_constant)]
+    #[expect(clippy::approx_constant)]
     fn disc_brake() {
         // the lightest end: r = 55, R = 75, F = 3000, s = 2; R² − r² = 2600 and R³ − r³ = 255,500
         let (f, violation) = DiscBrake.evaluate(&at(&[55.0, 75.0, 3000.0, 2.0]));
@@ -1768,7 +1768,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::approx_constant)]
+    #[expect(clippy::approx_constant)]
     fn speed_reducer() {
         // the design rounds x₃ as the single-objective problem does
         let x = at(&[3.5, 0.7, 17.4, 7.3, 7.8, 3.35, 5.29]);

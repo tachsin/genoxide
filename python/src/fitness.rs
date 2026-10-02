@@ -593,7 +593,7 @@ fn values_with_gradients(
 // whether `object` is referenced by the caller only: Python kept no reference to it. (pyo3
 // deprecates `get_refcnt` for `ffi::Py_REFCNT`, which is unsafe, and this crate has no unsafe
 // code.)
-#[allow(deprecated)]
+#[expect(deprecated)]
 fn only_reference(object: &Bound<'_, PyAny>) -> bool {
     object.get_refcnt() == 1
 }

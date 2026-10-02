@@ -615,7 +615,7 @@ where
             let candidates = if anywhere { size } else { neighbors.len() };
             let mut replaced = 0;
             // by index: the whole population's order is drawn at each index as it's visited
-            #[allow(clippy::needless_range_loop)]
+            #[expect(clippy::needless_range_loop)]
             for visited in 0..candidates {
                 if replaced == self.max_replacements {
                     break;

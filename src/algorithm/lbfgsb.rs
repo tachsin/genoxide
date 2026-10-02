@@ -272,7 +272,7 @@ impl Lbfgsb {
     /// current run, never [`Gradients::Auto`]. Before a run, as an ask without an engine would
     /// resolve it: forward differences for `Auto`.
     // the setting resolved, not the setting itself
-    #[allow(clippy::misnamed_getters)]
+    #[expect(clippy::misnamed_getters)]
     pub fn gradients(&self) -> Gradients {
         self.resolved
     }

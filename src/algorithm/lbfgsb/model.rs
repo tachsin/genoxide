@@ -425,7 +425,7 @@ impl Workspace {
     /// `upper`], by Algorithm CP of Byrd et al. (section 4), with the middle matrix factored.
     /// Afterwards `self.c` = Wᵀ(xc − x) (eq. 4.13) and `self.active` marks the genes held at a
     /// bound: those whose breakpoint the path passed or was at (tᵢ = 0), and the `fixed` ones.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub(super) fn cauchy_point(
         &mut self,
         memory: &Memory,
@@ -561,7 +561,7 @@ impl Workspace {
     /// section 5.1), projected into the box (Morales and Nocedal, 2011), into `xbar`. If the
     /// projection isn't a descent direction from `x`, the step towards x̂ truncated at the box
     /// instead (eq. 5.8, 5.9).
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub(super) fn subspace_step(
         &mut self,
         memory: &Memory,
