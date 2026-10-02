@@ -22,7 +22,7 @@
 //! which cost as much as the new array.
 
 use crate::genes::{GenomeContext, PyGenome};
-use crate::problems::{IntegerProblem, MultiNative};
+use crate::problems::{BinaryProblem, IntegerProblem, MultiNative};
 use crate::tasks::Balance;
 use crate::tree_problems::TreeFitness;
 use genoxide::Fitness;
@@ -716,12 +716,13 @@ pub struct Single<'a> {
     pub problem: Option<Native<'a>>,
 }
 
-/// A single-objective test problem evaluated in Rust: on real or on integer genomes; or a
+/// A single-objective test problem evaluated in Rust: on real, integer or binary genomes; or a
 /// network's weights balancing poles; or a fitness of trees.
 #[derive(Clone, Copy)]
 pub enum Native<'a> {
     Real(&'a dyn DynProblem),
     Integer(&'a dyn IntegerProblem),
+    Binary(&'a dyn BinaryProblem),
     Balance(&'a Balance),
     Tree(&'a TreeFitness),
 }
@@ -743,6 +744,11 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
             }
             Some(Native::Integer(problem)) => {
                 return genome.integers().map_or(Value::Invalid, |genome| {
+                    Value::Native(problem.evaluate(genome))
+                });
+            }
+            Some(Native::Binary(problem)) => {
+                return genome.bits().map_or(Value::Invalid, |genome| {
                     Value::Native(problem.evaluate(genome))
                 });
             }

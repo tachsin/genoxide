@@ -64,13 +64,23 @@ the noisy quartic, whose derivative is undefined or 0 on sets of positive measur
 pass the problem's gradient on (turned by the rotation), and a constrained problem's constraint
 values, which :class:`genoxide.Bo` models.
 
-All problems here are minimized, on :class:`genoxide.Real` genomes except the gear train's
-:class:`genoxide.Integer` and :class:`Zdt5`'s :class:`genoxide.Binary`. Each class's docstring
-gives
-the function, its bounds, its optimum or front and its source. Many originals are books, reports
-or proceedings that aren't online, and some functions have no known origin: their definitions
-are taken from later papers that restate them, named in the docstrings, and are still to be
-checked against the originals (https://github.com/tachsin/genoxide/issues/168), among them:
+
+:mod:`genoxide.problems.binary` holds problems of bit strings, maximized: OneMax, LeadingOnes,
+the deceptive trap, the royal roads, NK landscapes and the 0/1 knapsack::
+
+    problem = gx.problems.binary.NkLandscape(20, 4, seed=1)
+    search = gx.LocalSearch(
+        problem.genome, neighbor=gx.BitFlip(count=1), restart=(100, 5), seed=1
+    )
+    result = search.run(problem, target=problem.optimum.value, evaluations=500_000)
+
+All the other problems here are minimized, on :class:`genoxide.Real` genomes except the gear
+train's :class:`genoxide.Integer` and :class:`Zdt5`'s :class:`genoxide.Binary`. Each class's
+docstring gives the function, its bounds, its optimum or front and its source. Many originals
+are books, reports or proceedings that aren't online, and some functions have no known origin:
+their definitions are taken from later papers that restate them, named in the docstrings, and
+are still to be checked against the originals (https://github.com/tachsin/genoxide/issues/168),
+among them:
 
 - Yao, X., Liu, Y. and Lin, G. (1999). Evolutionary programming made faster. IEEE Transactions on
   Evolutionary Computation 3(2): 82-102. doi:10.1109/4235.771163
@@ -264,7 +274,8 @@ class Optimum:
     known."""
 
 
-# the genome of a problem: Real for most, Integer for the gear train, Binary for ZDT5
+# the genome of a problem: Real for most, Integer for the gear train, Binary for ZDT5 and the
+# problems of `binary`
 _Genome = TypeVar("_Genome", bound="Real | Integer | Binary", covariant=True)
 
 
@@ -364,16 +375,23 @@ class Problem(_Described[_Genome]):
 
     @property
     def objective(self) -> ObjectiveName:
-        """Whether the score is minimized or maximized: "minimize" for every problem here."""
+        """Whether the score is minimized or maximized: "minimize" for every problem but those of
+        :mod:`genoxide.problems.binary`, which are maximized."""
         return cast(ObjectiveName, self._info["objectives"][0])
 
     @property
     def optimum(self) -> Optimum | None:
-        """The global optimum, or None if it isn't known for this size."""
-        optimum = self._info["optimum"]
+        """The global optimum, or None if it isn't known for this size. The NK landscapes and
+        the knapsack of :mod:`genoxide.problems.binary` compute theirs, once, when it's first
+        asked for."""
+        optimum = self._info["optimum"] if "optimum" in self._info else self._computed_optimum
         if optimum is None:
             return None
         return Optimum(optimum["value"], optimum["solutions"], optimum["proven"])
+
+    @cached_property
+    def _computed_optimum(self) -> dict[str, Any] | None:
+        return _genoxide.problem_optimum(self._json())
 
     def evaluate(self, genomes: Any) -> Any:
         """The scores of ``genomes``, a 2-D array with a genome per row, as a 1-D array; for a
@@ -3402,4 +3420,4 @@ class DasCmop9(_DasCmop):
     _least: ClassVar[int] = 3
 
 
-from . import cec2006, control, engineering, multi_engineering  # noqa: E402
+from . import binary, cec2006, control, engineering, multi_engineering  # noqa: E402

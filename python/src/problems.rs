@@ -7,6 +7,7 @@ use genoxide::engine::{Extras, FitnessFunction, IntoFitness, Provided};
 use genoxide::genome::{Binary, Bits, Integer, Integers, Real, Reals, Representation};
 use genoxide::multi::problems::{self as multi, DynMultiProblem, MultiProblem, try_boxed};
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
+use genoxide::problems::binary::{self, Knapsack, KnapsackClass, NkLandscape};
 use genoxide::problems::{
     self, Constraints, DynProblem, Optimum, Problem as _, cec2006, engineering,
 };
@@ -217,8 +218,139 @@ pub enum Config {
     ThreeBarTruss {},
     CantileverBeam {},
     CarSideImpact {},
+    OneMax {
+        bits: usize,
+    },
+    LeadingOnes {
+        bits: usize,
+    },
+    Trap {
+        blocks: usize,
+        k: usize,
+        a: Option<f64>,
+        b: Option<f64>,
+        z: Option<usize>,
+    },
+    RoyalRoad {
+        blocks: usize,
+        block_size: usize,
+        hierarchical: bool,
+    },
+    NkLandscape {
+        n: usize,
+        k: usize,
+        neighborhood: NeighborhoodConfig,
+        seed: u64,
+    },
+    Knapsack {
+        class: KnapsackClassConfig,
+        items: usize,
+        range: u64,
+        instance: u64,
+        instances: u64,
+        seed: u64,
+    },
+    KnapsackItems {
+        weights: Vec<u64>,
+        profits: Vec<u64>,
+        capacity: u64,
+    },
     #[serde(untagged)]
     Multi(MultiConfig),
+}
+
+/// The neighborhoods of an NK landscape.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NeighborhoodConfig {
+    Adjacent,
+    Random,
+}
+
+impl NeighborhoodConfig {
+    fn neighborhood(self) -> binary::Neighborhood {
+        match self {
+            Self::Adjacent => binary::Neighborhood::Adjacent,
+            Self::Random => binary::Neighborhood::Random,
+        }
+    }
+}
+
+/// How the spanner set of a spanner knapsack instance is drawn.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpannerConfig {
+    Uncorrelated,
+    WeaklyCorrelated,
+    StronglyCorrelated,
+}
+
+/// A class of generated knapsack instances.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum KnapsackClassConfig {
+    Uncorrelated {},
+    WeaklyCorrelated {},
+    StronglyCorrelated {},
+    InverseStronglyCorrelated {},
+    AlmostStronglyCorrelated {},
+    SubsetSum {},
+    UncorrelatedSimilarWeights {},
+    Spanner {
+        v: usize,
+        m: u64,
+        distribution: SpannerConfig,
+    },
+    MultipleStronglyCorrelated {
+        k1: u64,
+        k2: u64,
+        d: u64,
+    },
+    ProfitCeiling {
+        d: u64,
+    },
+    Circle {
+        numerator: u64,
+        denominator: u64,
+    },
+}
+
+impl KnapsackClassConfig {
+    fn class(self) -> KnapsackClass {
+        match self {
+            Self::Uncorrelated {} => KnapsackClass::Uncorrelated,
+            Self::WeaklyCorrelated {} => KnapsackClass::WeaklyCorrelated,
+            Self::StronglyCorrelated {} => KnapsackClass::StronglyCorrelated,
+            Self::InverseStronglyCorrelated {} => KnapsackClass::InverseStronglyCorrelated,
+            Self::AlmostStronglyCorrelated {} => KnapsackClass::AlmostStronglyCorrelated,
+            Self::SubsetSum {} => KnapsackClass::SubsetSum,
+            Self::UncorrelatedSimilarWeights {} => KnapsackClass::UncorrelatedSimilarWeights,
+            Self::Spanner { v, m, distribution } => KnapsackClass::Spanner {
+                v,
+                m,
+                distribution: match distribution {
+                    SpannerConfig::Uncorrelated => binary::SpannerDistribution::Uncorrelated,
+                    SpannerConfig::WeaklyCorrelated => {
+                        binary::SpannerDistribution::WeaklyCorrelated
+                    }
+                    SpannerConfig::StronglyCorrelated => {
+                        binary::SpannerDistribution::StronglyCorrelated
+                    }
+                },
+            },
+            Self::MultipleStronglyCorrelated { k1, k2, d } => {
+                KnapsackClass::MultipleStronglyCorrelated { k1, k2, d }
+            }
+            Self::ProfitCeiling { d } => KnapsackClass::ProfitCeiling { d },
+            Self::Circle {
+                numerator,
+                denominator,
+            } => KnapsackClass::Circle {
+                numerator,
+                denominator,
+            },
+        }
+    }
 }
 
 /// A multi-objective problem, as `_describe()` of a `gx.problems` class gives it.
@@ -1517,7 +1649,156 @@ pub enum Problem {
     Single(Box<dyn DynProblem>),
     /// A single-objective problem on integer genomes.
     Integer(Box<dyn IntegerProblem>),
+    /// A single-objective problem on binary genomes.
+    Binary(Box<dyn BinaryProblem>),
     Multi(MultiConfig),
+}
+
+/// A single-objective problem on [`Binary`] genomes, as a trait object: what [`DynProblem`] is
+/// for real genomes.
+pub trait BinaryProblem: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn binary(&self) -> Binary;
+    fn objective(&self) -> Objective;
+    fn evaluate(&self, genome: &Bits) -> Fitness;
+    fn optimum(&self) -> Option<Optimum<Bits>>;
+    fn reference(&self) -> &'static str;
+    fn reference_url(&self) -> Option<&'static str>;
+    fn constraints(&self, genome: &Bits) -> Constraints;
+}
+
+impl<P> BinaryProblem for P
+where
+    P: problems::Problem<Representation = Binary> + Send + Sync,
+{
+    fn name(&self) -> &'static str {
+        problems::Problem::name(self)
+    }
+
+    fn binary(&self) -> Binary {
+        self.representation()
+    }
+
+    fn objective(&self) -> Objective {
+        problems::Problem::objective(self)
+    }
+
+    fn evaluate(&self, genome: &Bits) -> Fitness {
+        FitnessFunction::evaluate(self, genome)
+            .into_fitness()
+            .unwrap_or_else(|_| Fitness::invalid())
+    }
+
+    fn optimum(&self) -> Option<Optimum<Bits>> {
+        problems::Problem::optimum(self)
+    }
+
+    fn reference(&self) -> &'static str {
+        problems::Problem::reference(self)
+    }
+
+    fn reference_url(&self) -> Option<&'static str> {
+        problems::Problem::reference_url(self)
+    }
+
+    fn constraints(&self, genome: &Bits) -> Constraints {
+        problems::Problem::constraints(self, genome)
+    }
+}
+
+// the knapsack that `config` describes, if it's one: an error for settings out of bounds
+fn knapsack(config: &Config) -> Option<Result<Knapsack, String>> {
+    let knapsack = match config {
+        &Config::Knapsack {
+            class,
+            items,
+            range,
+            instance,
+            instances,
+            seed,
+        } => Knapsack::generator(class.class(), items)
+            .range(range)
+            .instance(instance)
+            .instances(instances)
+            .seed(seed)
+            .generate(),
+        Config::KnapsackItems {
+            weights,
+            profits,
+            capacity,
+        } => Knapsack::new(weights.clone(), profits.clone(), *capacity),
+        _ => return None,
+    };
+    Some(knapsack.map_err(|error| error.to_string()))
+}
+
+// the binary problem that `config` describes, if it's one; a size out of bounds is an error, not
+// the panic of the constructor
+fn build_binary(config: &Config) -> Option<Result<Problem, String>> {
+    fn boxed<P>(problem: P) -> Problem
+    where
+        P: problems::Problem<Representation = Binary> + Send + Sync + 'static,
+    {
+        Problem::Binary(Box::new(problem))
+    }
+    let message = |error: genoxide::Error| error.to_string();
+    let problem = match config {
+        &Config::OneMax { bits } => {
+            at_least(bits, 1, "OneMax", "bits").map(|bits| boxed(binary::OneMax::new(bits)))
+        }
+        &Config::LeadingOnes { bits } => at_least(bits, 1, "LeadingOnes", "bits")
+            .map(|bits| boxed(binary::LeadingOnes::new(bits))),
+        &Config::Trap { blocks, k, a, b, z } => {
+            // a = k − 1, b = k and z = k − 1 unless given
+            let a = a.unwrap_or(k.saturating_sub(1) as f64);
+            let b = b.unwrap_or(k as f64);
+            let z = z.unwrap_or(k.saturating_sub(1));
+            binary::Trap::with_values(blocks, k, a, b, z)
+                .map(boxed)
+                .map_err(message)
+        }
+        &Config::RoyalRoad {
+            blocks,
+            block_size,
+            hierarchical,
+        } => royal_road(blocks, block_size, hierarchical),
+        &Config::NkLandscape {
+            n,
+            k,
+            neighborhood,
+            seed,
+        } => NkLandscape::new(n, k, neighborhood.neighborhood(), seed)
+            .map(boxed)
+            .map_err(message),
+        Config::Knapsack { .. } | Config::KnapsackItems { .. } => {
+            knapsack(config).expect("a knapsack").map(boxed)
+        }
+        _ => return None,
+    };
+    Some(problem)
+}
+
+// a royal road, its sizes checked
+fn royal_road(blocks: usize, block_size: usize, hierarchical: bool) -> Result<Problem, String> {
+    at_least(blocks, 1, "RoyalRoad", "blocks")?;
+    at_least(block_size, 1, "RoyalRoad", "bits per block")?;
+    let bits = blocks.saturating_mul(block_size);
+    if bits > MAX_GENES {
+        return Err(format!(
+            "RoyalRoad takes at most {MAX_GENES} (2^24) bits, not {bits}"
+        ));
+    }
+    if hierarchical && !blocks.is_power_of_two() {
+        return Err(format!(
+            "a hierarchical royal road needs a power of 2 blocks, not {blocks}"
+        ));
+    }
+    let road = if hierarchical {
+        binary::RoyalRoad::hierarchical(blocks, block_size)
+    } else {
+        binary::RoyalRoad::new(blocks, block_size)
+    };
+    Ok(Problem::Binary(Box::new(road)))
 }
 
 /// A single-objective problem on [`Integer`] genomes, as a trait object: what [`DynProblem`] is
@@ -1570,6 +1851,9 @@ where
 // the problem that `config` describes; a size below the minimum is an error, not the panic of
 // the constructor
 fn build(config: Config) -> Result<Problem, String> {
+    if let Some(problem) = build_binary(&config) {
+        return problem;
+    }
     let at_least = |dimensions: usize, minimum: usize, name: &str| {
         at_least(dimensions, minimum, name, "dimensions")
     };
@@ -1800,6 +2084,13 @@ fn build(config: Config) -> Result<Problem, String> {
             config.check()?;
             return Ok(Problem::Multi(config));
         }
+        Config::OneMax { .. }
+        | Config::LeadingOnes { .. }
+        | Config::Trap { .. }
+        | Config::RoyalRoad { .. }
+        | Config::NkLandscape { .. }
+        | Config::Knapsack { .. }
+        | Config::KnapsackItems { .. } => unreachable!("built above"),
     }))
 }
 
@@ -2025,6 +2316,27 @@ pub fn problem_info<'py>(py: Python<'py>, problem: &str) -> PyResult<Bound<'py, 
             info.set_item("reference", problem.reference())?;
             info.set_item("reference_url", problem.reference_url())?;
         }
+        Problem::Binary(problem) => {
+            info.set_item("name", problem.name())?;
+            info.set_item("genome", "binary")?;
+            let bits = problem.binary().genome_len();
+            info.set_item("bounds", vec![(0, 1); bits])?;
+            let objective = match problem.objective() {
+                Objective::Maximize => "maximize",
+                Objective::Minimize => "minimize",
+            };
+            info.set_item("objectives", vec![objective])?;
+            info.set_item("constraints", problem.constraints(&Bits::zeros(bits)).len())?;
+            info.set_item("reference", problem.reference())?;
+            info.set_item("reference_url", problem.reference_url())?;
+            // the optimum can take seconds to compute: `problem_optimum` gives it
+            if let Some(knapsack) = knapsack(&config(description)?) {
+                let knapsack = knapsack.map_err(PyValueError::new_err)?;
+                info.set_item("weights", knapsack.weights().to_vec())?;
+                info.set_item("profits", knapsack.profits().to_vec())?;
+                info.set_item("capacity", knapsack.capacity())?;
+            }
+        }
         Problem::Multi(config) => {
             let task = MultiInfo {
                 py,
@@ -2128,6 +2440,29 @@ pub fn evaluate<'py>(
                     .collect()
             });
             Ok(PyArray1::from_vec(py, scores).into_any())
+        }
+        Problem::Binary(problem) => {
+            let genomes = bit_rows(problem.name(), &problem.binary(), &genomes)?;
+            let bits = problem.binary().genome_len();
+            let constrained = !problem.constraints(&Bits::zeros(bits)).is_empty();
+            let (scores, violations): (Vec<f64>, Vec<f64>) = py.detach(|| {
+                genomes
+                    .iter()
+                    .map(|genome| {
+                        let fitness = problem.evaluate(genome);
+                        match fitness.score() {
+                            Some(score) => (score, fitness.violation()),
+                            None => (f64::NAN, f64::NAN),
+                        }
+                    })
+                    .unzip()
+            });
+            let scores = PyArray1::from_vec(py, scores).into_any();
+            if constrained {
+                (scores, PyArray1::from_vec(py, violations)).into_bound_py_any(py)
+            } else {
+                Ok(scores)
+            }
         }
         Problem::Multi(config) => run_with(
             config,
@@ -2275,6 +2610,20 @@ pub fn constraints<'py>(
             }
             Constraints::none()
         }
+        Problem::Binary(problem) => {
+            let (name, bits) = (problem.name(), problem.binary().genome_len());
+            let genome = genome
+                .iter()
+                .map(|&gene| bit(name, gene))
+                .collect::<PyResult<Bits>>()?;
+            if genome.len() != bits {
+                return Err(PyValueError::new_err(format!(
+                    "{name} takes genomes of {bits} bits, not {}",
+                    genome.len()
+                )));
+            }
+            problem.constraints(&genome)
+        }
         Problem::Multi(config) => run_with(
             config,
             MultiConstraints {
@@ -2354,6 +2703,10 @@ pub fn optimal_front<'py>(
             "{} has one objective, and an optimum instead of a front",
             problem.name()
         ))),
+        Problem::Binary(problem) => Err(PyValueError::new_err(format!(
+            "{} has one objective, and an optimum instead of a front",
+            problem.name()
+        ))),
         Problem::Multi(config) => run_with(config, MultiFront { py, config, points })?,
     }
 }
@@ -2420,6 +2773,67 @@ pub fn design<'py>(
         }
     };
     Ok(PyArray1::from_vec(py, design))
+}
+
+/// The optimum of the binary problem that `problem` (JSON) describes: None, or its value,
+/// solutions a row each (booleans), and whether it's proven. Computed at each call, without the
+/// GIL: by dynamic programming or exhaustive search for the NK landscapes and the knapsack.
+#[pyfunction]
+pub fn problem_optimum<'py>(py: Python<'py>, problem: &str) -> PyResult<Bound<'py, PyAny>> {
+    let Problem::Binary(problem) = parse(problem)? else {
+        return Err(PyValueError::new_err(
+            "problem_optimum is for the problems of genoxide.problems.binary",
+        ));
+    };
+    let Some(optimum) = py.detach(|| problem.optimum()) else {
+        return Ok(py.None().into_bound(py));
+    };
+    let bits = problem.binary().genome_len();
+    let genes: Vec<bool> = optimum.solutions().iter().flat_map(|x| x.iter()).collect();
+    let solutions = Array2::from_shape_vec((optimum.solutions().len(), bits), genes)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let description = PyDict::new(py);
+    description.set_item("value", optimum.value())?;
+    description.set_item("solutions", solutions.into_pyarray(py))?;
+    description.set_item("proven", optimum.is_proven())?;
+    Ok(description.into_any())
+}
+
+/// The neighbors of each site of the NK landscape that `problem` (JSON) describes, a row per
+/// site (2-D, int64), and its contributions, a row per site with a value per index of its table
+/// (2-D, float64).
+#[pyfunction]
+pub fn nk_tables<'py>(
+    py: Python<'py>,
+    problem: &str,
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+    let Config::NkLandscape {
+        n,
+        k,
+        neighborhood,
+        seed,
+    } = config(problem)?
+    else {
+        return Err(PyValueError::new_err("nk_tables is for an NK landscape"));
+    };
+    let landscape = NkLandscape::new(n, k, neighborhood.neighborhood(), seed)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let neighbors: Vec<i64> = (0..n)
+        .flat_map(|site| landscape.neighbors(site).iter().map(|&j| j as i64))
+        .collect();
+    let entries = 1usize << (k + 1);
+    let tables: Vec<f64> = (0..n)
+        .flat_map(|site| (0..entries).map(move |index| (site, index)))
+        .map(|(site, index)| landscape.contribution(site, index))
+        .collect();
+    let neighbors = Array2::from_shape_vec((n, k), neighbors)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let tables = Array2::from_shape_vec((n, entries), tables)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    Ok((
+        neighbors.into_pyarray(py).into_any(),
+        tables.into_pyarray(py).into_any(),
+    ))
 }
 
 /// The names of the problems of `genoxide::problems::all()`, in its order.

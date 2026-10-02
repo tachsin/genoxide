@@ -11,7 +11,7 @@ const NK_STREAM: u64 = 3;
 // the most table entries, N 2^(K+1): 128 MiB of them
 const MAX_ENTRIES: usize = 1 << 24;
 // the most steps `optimum` takes, exhaustively or by dynamic programming
-const MAX_WORK: u128 = 1 << 32;
+const MAX_WORK: u128 = 1 << 30;
 // a contribution c stands for c / 2^53
 const UNIT: f64 = 1.0 / (1u64 << 53) as f64;
 
@@ -46,8 +46,9 @@ pub enum Neighborhood {
 /// The optimum isn't known in closed form: [`optimum`](Problem::optimum) computes it, by dynamic
 /// programming over the circle for [`Adjacent`](Neighborhood::Adjacent) neighborhoods, in
 /// O(N 4^K) steps, or by evaluating every string, changed one bit at a time in Gray code order,
-/// in O(2^N K) steps, whichever is less work; and gives `None` when both take more than 2^32
-/// steps. The work is done at each call.
+/// in O(2^N K) steps, whichever is less work; and gives `None` when both take more than 2^30
+/// steps (N above 25 to 30 with random neighborhoods, depending on K; K above 10 or so with
+/// adjacent ones, depending on N). The work is done at each call: up to a few seconds.
 ///
 /// Kauffman, S. A. and Weinberger, E. D. (1989). The NK model of rugged fitness landscapes and
 /// its application to maturation of the immune response. *Journal of Theoretical Biology*
@@ -379,7 +380,7 @@ impl Problem for NkLandscape {
 
     /// The global maximum and a string that reaches it (the first found, if several tie), by
     /// dynamic programming or exhaustive search, whichever takes fewer steps; `None` if both take
-    /// more than 2^32.
+    /// more than 2^30.
     fn optimum(&self) -> Option<Optimum<Bits>> {
         let (n, k) = (self.n as u128, self.k as u32);
         let exhaustive = (n < 64).then(|| (1u128 << n) * u128::from(k + 1));
