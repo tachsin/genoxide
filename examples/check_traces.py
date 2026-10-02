@@ -5,8 +5,8 @@ import glob
 import json
 import sys
 
-# an example whose numbers depend on the machine
-SKIP = {"asynchronous"}
+# the examples whose numbers depend on the machine
+SKIP = {"asynchronous", "bo_asynchronous"}
 
 failed = []
 for path in sorted(glob.glob("examples/*/trace.json")):

@@ -17,7 +17,10 @@ const LEVELS = [0.12, 0.24, 0.36, 0.48, 0.6, 0.72, 0.84];
  * (`state.polished`). Right, the acquisition function that chose the newest
  * point (`state.acquisition`, thousandths of its shaded range), darker where
  * the point is more worth evaluating. Generation 0, the initial design, has no
- * model: the left panel shows the points alone.
+ * model: the left panel shows the points alone. `problem.panels`, if given,
+ * names what the two grids are (each `{ title, shading }`), e.g. a model's
+ * probability of feasibility on the left; `problem.minima_label` names the
+ * known minima.
  */
 export default function SurrogatePlot({ trace, frame, dark }) {
   const problem = trace.problem ?? {};
@@ -26,6 +29,10 @@ export default function SurrogatePlot({ trace, frame, dark }) {
     [0, 1],
   ];
   const minima = problem.minima ?? [];
+  const [left, right] = [
+    { title: "The model's mean", shading: "shading: higher mean (log)", ...problem.panels?.[0] },
+    { title: "The log expected improvement", shading: "shading: more worth evaluating", ...problem.panels?.[1] },
+  ];
   const state = frame.state ?? {};
   const palette = categorical(dark);
   const legend = [
@@ -33,15 +40,15 @@ export default function SurrogatePlot({ trace, frame, dark }) {
     { label: "newest", color: palette[2], shape: "square" },
     { label: "best", color: palette[0], shape: "diamond" },
     ...(state.polished ? [{ label: "the mean's minimum", color: palette[3], shape: "triangle" }] : []),
-    ...(minima.length ? [{ label: "global minima", shape: "ring", className: "text-base-content" }] : []),
+    ...(minima.length ? [{ label: problem.minima_label ?? "global minima", shape: "ring", className: "text-base-content" }] : []),
   ];
   return (
     <div>
       <Legend className="mb-2" items={legend} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Panel
-          title="The model's mean"
-          shading="shading: higher mean (log)"
+          title={left.title}
+          shading={left.shading}
           grid={state.mean ?? null}
           bounds={bounds}
           minima={minima}
@@ -51,8 +58,8 @@ export default function SurrogatePlot({ trace, frame, dark }) {
           lines
         />
         <Panel
-          title="The log expected improvement"
-          shading="shading: more worth evaluating"
+          title={right.title}
+          shading={right.shading}
           grid={state.acquisition ?? null}
           bounds={bounds}
           minima={[]}
