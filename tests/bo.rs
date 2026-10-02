@@ -334,7 +334,7 @@ fn invalid_settings_are_errors() {
         other => panic!("not an invalid setting: {other:?}"),
     };
     let fixed = Real::uniform(2, 1.0..=1.0).unwrap();
-    assert_eq!(setting(Bo::builder(fixed).build()), "real");
+    assert_eq!(setting(Bo::builder(fixed).build()), "representation");
     assert_eq!(
         setting(Bo::builder(real()).initial_points(0).build()),
         "initial_points"
