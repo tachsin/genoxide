@@ -1,7 +1,7 @@
 //! CTP4: minimize two objectives over two variables subject to one constraint, with
 //! a front of 13 separate points, each at the end of a long, narrow feasible tunnel.
 //!
-//! NSGA-II with the settings of the report's experiments, a population of 100 for 500
+//! NSGA-II with the settings of the paper's experiments, a population of 100 for 500
 //! generations, and MOEA/D with the same operators for 70,000. Prints, for each, how many
 //! solutions of the final front are feasible, how many of the optimal points they reach, their
 //! IGD+ to the front and their hypervolume.
@@ -25,7 +25,7 @@ const REACH: f64 = 0.02;
 
 fn main() -> Result<()> {
     let problem = Ctp4;
-    // the settings of the report's experiments: a population of 100 for 500 generations, SBX
+    // the settings of the paper's experiments: a population of 100 for 500 generations, SBX
     // and polynomial mutation with η = 20, crossover at 0.9 and mutation at 1/n per gene
     let nsga2 = Nsga2::builder(problem.representation(), [Minimize; 2])
         .population_size(100)

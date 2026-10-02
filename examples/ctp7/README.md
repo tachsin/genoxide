@@ -38,21 +38,26 @@ feasible f₂ is 1.0446, on the edge of a band, and that point is optimal too, s
 smaller f₁. The front was found by sampling the
 boundaries of the feasible region.
 
-The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
-eq. 5 on p. 7 and CTP7's parameters on pp. 10-11. The report leaves g, the number of variables and
-their bounds open, and prints f₂ as g (1 − f₁/g); its figures draw the unconstrained front as the
-curve 1 − √f₁, and the authors' NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g))
-with g = 1 + x₂, x₁ in [0, 1] and x₂ in [0, 10], which genoxide follows.
+The definitions are the paper's: eq. 5 (p. 290) and CTP7's parameters (pp. 293-294). Its preprint,
+the authors' KanGAL report 200005 (October 2000, pp. 10-11), and Deb's 2001 book (*Multi-Objective
+Optimization Using Evolutionary Algorithms*, Wiley, eq. 8.46 on p. 354 and the parameters on p. 358)
+give the same. All three leave g, the number of variables and their bounds open, and print f₂ as g
+(1 − f₁/g); their figures draw the unconstrained front as the curve 1 − √f₁, and the authors'
+NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with g = 1 + x₂, the g the book names
+on p. 360, and x₁ in [0, 1] and x₂ in [0, 10], which genoxide follows. The book shows CTP7's
+decision space with x₂ in [0, 1] (p. 360); the front is the same. The paper's figure 11 (the book's
+231) marks the five inner pieces, not the sixth at f₁ = 1 or the point at f₁ = 0, on the plot's
+edges.
 
 ## What makes it hard
 
-The report: "In order to find all such disconnected regions, an algorithm has to maintain an
+The paper: "In order to find all such disconnected regions, an algorithm has to maintain an
 adequate diversity right from the beginning of a simulation run. Moreover, the algorithm also has
 to maintain its solutions feasible as it proceeds towards the Pareto-optimal region." A group of
 solutions that converges in one band can't cross into the next: the bands run from far above the
 front down to it. 47% of random genomes are feasible.
 
-In the report's experiments, with five variables and a Rastrigin g, CTP7 was the hardest problem:
+In the paper's experiments, with five variables and a Rastrigin g, CTP7 was the hardest problem:
 neither algorithm got close to the front. With the two variables and g = 1 + x₂ of the authors'
 code, converging is easy, since x₂ = 0 is optimal everywhere, and the difficulty is the diversity
 alone.
@@ -68,7 +73,7 @@ Pareto dominance decides.
 
 ## Algorithm
 
-NSGA-II with the settings of the report's experiments:
+NSGA-II with the settings of the paper's experiments:
 
 - a population of 100, for 500 generations;
 - simulated binary crossover with η = 20, at a rate of 0.9;

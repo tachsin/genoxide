@@ -32,16 +32,18 @@ and e = 1. The left side, u, measures the distance above the line f₂ = 1 − t
 square root, and every point of it near them is dominated by the point itself.
 
 The optimal front is 13 points, one per touch, from (0, 1) to (0.9708, 0.2947), derived from the
-definition: (cos θ v, 1 + sin θ v) for v = k/10. The report calls them "a singular feasible
+definition: (cos θ v, 1 + sin θ v) for v = k/10. The paper calls them "a singular feasible
 Pareto-optimal solution" in each region. At the points themselves the constraint is exactly 0;
 in floating point, sin(kπ) is about 1e-15 and its square root 3e-8, so the points are barely
 infeasible to the computer, and the best solutions sit next to them.
 
-The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
-eq. 5 on p. 7 and CTP3's parameters on p. 8. The report leaves g, the number of variables and their
-bounds open, and prints f₂ as g (1 − f₁/g); its figures draw the unconstrained front as the curve
-1 − √f₁, and the authors' NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with
-g = 1 + x₂ and two variables in [0, 1], which genoxide follows.
+The definitions are the paper's: eq. 5 (p. 290) and CTP3's parameters (p. 291). Its preprint, the
+authors' KanGAL report 200005 (October 2000, p. 8), and Deb's 2001 book (*Multi-Objective
+Optimization Using Evolutionary Algorithms*, Wiley, eq. 8.46 on p. 354 and the parameters on p. 355)
+give the same. All three leave g, the number of variables and their bounds open, and print f₂ as g
+(1 − f₁/g); their figures draw the unconstrained front as the curve 1 − √f₁, and the authors'
+NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with g = 1 + x₂, the g the book names
+on p. 360, and two variables in [0, 1], which genoxide follows.
 
 ## What makes it hard
 
@@ -62,9 +64,9 @@ Pareto dominance decides.
 
 ## Algorithm
 
-NSGA-II with the settings of the report's experiments, run twice:
+NSGA-II with the settings of the paper's experiments, run twice:
 
-- a population of 100, for 500 generations as in the report, then for 3,000;
+- a population of 100, for 500 generations as in the paper, then for 3,000;
 - simulated binary crossover with η = 20, at a rate of 0.9;
 - polynomial mutation with η = 20, at a rate of 1/n per gene for n genes: 0.5.
 
@@ -93,10 +95,10 @@ back.
 A good front has a solution next to each of the 13 points, and an IGD+ under 0.01. No finite set
 of feasible solutions reaches the points' hypervolume, since the points themselves are the limit.
 
-After 500 generations, the report's budget, the front has 45 solutions near 11 of the 13 points,
+After 500 generations, the paper's budget, the front has 45 solutions near 11 of the 13 points,
 an IGD+ of 0.0155 and 96.68% of the hypervolume: the solutions are in the right wedges, not yet at
 their tips. After 3,000, it has 100 solutions near all 13 points, an IGD+ of 0.0060 and 98.70% of
 the hypervolume. Over seeds 1 to 20, the 500-generation runs end with an IGD+ from 0.010 to 0.016,
 none under 0.01, and 13 of them near all 13 points; the 3,000-generation runs all reach every
-point, with an IGD+ from 0.0046 to 0.0063. The report saw NSGA-II find a solution very close to
+point, with an IGD+ from 0.0046 to 0.0063. The paper saw NSGA-II find a solution very close to
 each point with its five variables.

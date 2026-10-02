@@ -2426,9 +2426,9 @@ class Ctp1(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
-    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
-    open and prints f₂ without the root that its figures and the code have.
+    284-298, eq. 4, the same in the authors' KanGAL report 200005 and in Deb's 2001 book (eq.
+    8.45); g = 1 + x₂, the two variables and their bounds as in the authors' NSGA-II code,
+    since all three leave them open.
     """
 
     _type: ClassVar[str] = "ctp1"
@@ -2445,9 +2445,10 @@ class Ctp2(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
-    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
-    open and prints f₂ without the root that its figures and the code have.
+    284-298, the same in the authors' KanGAL report 200005 and in Deb's 2001 book (section
+    8.3.5); g = 1 + x₂, the two variables, their bounds and f₂'s square root as in the authors'
+    NSGA-II code, since all three leave them open and print f₂ without the root that their
+    figures and the code have.
     """
 
     _type: ClassVar[str] = "ctp2"
@@ -2460,9 +2461,10 @@ class Ctp3(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
-    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
-    open and prints f₂ without the root that its figures and the code have.
+    284-298, the same in the authors' KanGAL report 200005 and in Deb's 2001 book (section
+    8.3.5); g = 1 + x₂, the two variables, their bounds and f₂'s square root as in the authors'
+    NSGA-II code, since all three leave them open and print f₂ without the root that their
+    figures and the code have.
     """
 
     _type: ClassVar[str] = "ctp3"
@@ -2475,9 +2477,10 @@ class Ctp4(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
-    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
-    open and prints f₂ without the root that its figures and the code have.
+    284-298, the same in the authors' KanGAL report 200005 and in Deb's 2001 book (section
+    8.3.5); g = 1 + x₂, the two variables, their bounds and f₂'s square root as in the authors'
+    NSGA-II code, since all three leave them open and print f₂ without the root that their
+    figures and the code have.
     """
 
     _type: ClassVar[str] = "ctp4"
@@ -2491,9 +2494,10 @@ class Ctp5(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
-    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
-    open and prints f₂ without the root that its figures and the code have.
+    284-298, the same in the authors' KanGAL report 200005 and in Deb's 2001 book (section
+    8.3.5); g = 1 + x₂, the two variables, their bounds and f₂'s square root as in the authors'
+    NSGA-II code, since all three leave them open and print f₂ without the root that their
+    figures and the code have.
     """
 
     _type: ClassVar[str] = "ctp5"
@@ -2508,9 +2512,10 @@ class Ctp6(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
-    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
-    open and prints f₂ without the root that its figures and the code have.
+    284-298, the same in the authors' KanGAL report 200005 and in Deb's 2001 book (section
+    8.3.5); g = 1 + x₂, the two variables, their bounds and f₂'s square root as in the authors'
+    NSGA-II code, since all three leave them open and print f₂ without the root that their
+    figures and the code have.
     """
 
     _type: ClassVar[str] = "ctp6"
@@ -2525,9 +2530,10 @@ class Ctp7(MultiProblem[Real]):
 
     Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
     evolutionary optimization. Evolutionary Multi-Criterion Optimization (EMO 2001), LNCS 1993:
-    284-298, checked in the authors' KanGAL report 200005; g = 1 + x₂, the two variables, their
-    bounds and f₂'s square root as in the authors' NSGA-II code, since the report leaves them
-    open and prints f₂ without the root that its figures and the code have.
+    284-298, the same in the authors' KanGAL report 200005 and in Deb's 2001 book (section
+    8.3.5); g = 1 + x₂, the two variables, their bounds and f₂'s square root as in the authors'
+    NSGA-II code, since all three leave them open and print f₂ without the root that their
+    figures and the code have.
     """
 
     _type: ClassVar[str] = "ctp7"
@@ -2539,9 +2545,11 @@ class Ctp8(MultiProblem[Real]):
     x₁ in [0, 1], x₂ in [0, 10]. The front is three disconnected pieces of CTP6's, from about
     (0, 3.6958) to (0.8229, 1.3727).
 
-    Deb, K. (2001). Multi-Objective Optimization Using Evolutionary Algorithms. Wiley, as later
-    papers credit it; the book wasn't read, and the definition is the one in the NSGA-II code
-    of Deb's group. Not in the EMO 2001 paper, which has CTP1-CTP7.
+    Deb, K. (2001). Multi-Objective Optimization Using Evolutionary Algorithms. Wiley, section
+    8.3.5: eq. 8.46 with the two constraints of p. 358, the parameters of the NSGA-II code of
+    Deb's group too; the book's figure 232 marks the three pieces. Not in the EMO 2001 paper,
+    which has CTP1-CTP7. g = 1 + x₂, the variables, their bounds and f₂'s square root as for
+    :class:`Ctp6`.
     """
 
     _type: ClassVar[str] = "ctp8"

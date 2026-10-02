@@ -2,7 +2,7 @@
 title: CTP8
 category: multi-objective
 summary: Minimize two objectives subject to two constraints, bands parallel to the front and bands across it, which leave feasible patches and a front of three disconnected pieces, with NSGA-II.
-reference: "Deb, K. (2001). Multi-Objective Optimization Using Evolutionary Algorithms. Wiley, Chichester."
+reference: "Deb, K. (2001). Multi-Objective Optimization Using Evolutionary Algorithms. Wiley, Chichester. Section 8.3.5, eq. 8.46 and p. 358."
 reference_url: ""
 optimum: "three pieces of CTP6's front, from (0, 3.6958) to (0.1345, 3.3128), (0.3263, 2.7686) to (0.4790, 2.3372) and (0.6823, 1.7654) to (0.8229, 1.3727); hypervolume 0.6540 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
@@ -37,12 +37,15 @@ front is the parts of CTP6's front that the second constraint allows: three piec
 (0.6823, 1.7654) to (0.8229, 1.3727), found by sampling the boundaries of the feasible region.
 Only 10% of random genomes are feasible.
 
-CTP8 isn't in the EMO 2001 paper, which has CTP1 to CTP7. Later papers credit it to Deb's book
-(2001, *Multi-Objective Optimization Using Evolutionary Algorithms*, Wiley), which I couldn't
-read. The definition here is the one in the NSGA-II code of Deb's group (version 1.1.6, KanGAL),
-with the same g, variables and bounds as its CTP6 and CTP7; the parameters of the two constraints
-come from there. The constraint's form is the one of the EMO 2001 paper, checked in the authors'
-KanGAL report 200005 (eq. 5).
+CTP8 isn't in the EMO 2001 paper, which has CTP1 to CTP7: it's in Deb's book (2001, *Multi-Objective
+Optimization Using Evolutionary Algorithms*, Wiley), section 8.3.5, as the two constraints above
+(its C₁ and C₂, p. 358), of the form of eq. 8.46 (p. 354), which the book names "CTP2-CTP8". The
+NSGA-II code of Deb's group (version 1.1.6, KanGAL) has the same parameters. The book's figure 232
+(p. 359) marks three Pareto-optimal regions, at f₁ from 0 to about 0.13, 0.33 to 0.48 and 0.68 to
+0.82: the three pieces above. Like the paper for CTP2 to CTP7, the book leaves g, the number of
+variables and their bounds open, and prints f₂ as g (1 − f₁/g), while its figures draw the curve 1 −
+√f₁; genoxide takes g (1 − √(f₁/g)), g = 1 + x₂ (the g the book names on p. 360), x₁ in [0, 1] and
+x₂ in [0, 10] from the code, as for CTP6 and CTP7.
 
 ## What makes it hard
 

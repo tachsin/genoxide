@@ -1,9 +1,9 @@
 //! CTP8: minimize two objectives over two variables subject to two constraints, with
 //! a front of three disconnected pieces, behind two kinds of infeasible bands.
 //!
-//! NSGA-II with the settings of the report's experiments, a population of 100 for 500
-//! generations. Prints how many solutions of the final front are feasible, how many pieces of
-//! the optimal front they reach, their IGD+ to it and their hypervolume.
+//! NSGA-II with the settings of the EMO 2001 paper's experiments, a population of 100 for
+//! 500 generations. Prints how many solutions of the final front are feasible, how many pieces
+//! of the optimal front they reach, their IGD+ to it and their hypervolume.
 //!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on
 //! the example's page, with `trace.rs`.
@@ -24,8 +24,9 @@ const REACH: f64 = 0.02;
 
 fn main() -> Result<()> {
     let problem = Ctp8;
-    // the settings of the report's experiments: a population of 100 for 500 generations, SBX
-    // and polynomial mutation with η = 20, crossover at 0.9 and mutation at 1/n per gene
+    // the settings of the EMO 2001 paper's experiments: a population of 100 for 500
+    // generations, SBX and polynomial mutation with η = 20, crossover at 0.9 and mutation at 1/n
+    // per gene
     let nsga2 = Nsga2::builder(problem.representation(), [Minimize; 2])
         .population_size(100)
         .crossover(SimulatedBinaryCrossover::new(20.0)?)

@@ -36,15 +36,17 @@ The optimal front is the same as CTP3's: 13 points, (cos θ v, 1 + sin θ v) for
 is exactly 0; in floating point, sin(kπ) is about 1e-15 and its square root 3e-8, so the best
 feasible solutions sit next to them.
 
-The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
-eq. 5 on p. 7 and CTP4's parameters on p. 8. The report leaves g, the number of variables and their
-bounds open, and prints f₂ as g (1 − f₁/g); its figures draw the unconstrained front as the curve
-1 − √f₁, and the authors' NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with
-g = 1 + x₂ and two variables in [0, 1], which genoxide follows.
+The definitions are the paper's: eq. 5 (p. 290) and CTP4's parameters (p. 291). Its preprint, the
+authors' KanGAL report 200005 (October 2000, p. 8), and Deb's 2001 book (*Multi-Objective
+Optimization Using Evolutionary Algorithms*, Wiley, eq. 8.46 on p. 354 and the parameters on p. 356)
+give the same. All three leave g, the number of variables and their bounds open, and print f₂ as g
+(1 − f₁/g); their figures draw the unconstrained front as the curve 1 − √f₁, and the authors'
+NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with g = 1 + x₂, the g the book names
+on p. 360, and two variables in [0, 1], which genoxide follows.
 
 ## What makes it hard
 
-The report puts it this way: "an algorithm now has to travel through a long narrow feasible
+The paper puts it this way: "an algorithm now has to travel through a long narrow feasible
 tunnel in search of the lone Pareto-optimal solution at the end of tunnel". At a height u above the
 line, a tunnel reaches only about (u/a)²/(bπ) to each side: 6e-6 at u = 0.01, 60 times less than
 CTP3's. Only 3% of random genomes are feasible, and the tunnels near f₁ = 1 don't connect to the
@@ -52,7 +54,7 @@ open region above: the population has to land in each of them. Every step closer
 an offspring inside a narrower sliver than the last, and the steps of crossover and mutation,
 which change x₁ and x₂ each on its own, rarely follow a tunnel's slant.
 
-The report found that neither NSGA-II nor Ray et al.'s algorithm got near the 13 points.
+The paper found that neither NSGA-II nor Ray et al.'s algorithm got near the 13 points.
 
 ## Representation
 
@@ -68,7 +70,7 @@ MOEA/D the subproblem's value, decides.
 Two runs with the same operators: simulated binary crossover with η = 20, at a rate of 0.9, and
 polynomial mutation with η = 20, at a rate of 1/n per gene for n genes, 0.5.
 
-- NSGA-II with the settings of the report's experiments, a population of 100 for 500
+- NSGA-II with the settings of the paper's experiments, a population of 100 for 500
   generations.
 - MOEA/D (Zhang and Li, 2007) with 100 subproblems, weight vectors evenly spread on the simplex,
   Tchebycheff decomposition and genoxide's default neighborhoods of 20, for 70,000 generations:
@@ -103,9 +105,9 @@ shades; the tunnels near their tips are narrower than its cells.
 A good front has a solution next to each of the 13 points, and an IGD+ under 0.01. No finite set
 of feasible solutions reaches the points' hypervolume, since the points themselves are the limit.
 
-NSGA-II with the report's budget ends in the tunnels, far from their tips: 22 solutions, none
+NSGA-II with the paper's budget ends in the tunnels, far from their tips: 22 solutions, none
 within 0.02 of a point, an IGD+ of 0.097 and 79.18% of the hypervolume. Over seeds 1 to 20 its
-IGD+ is 0.070 to 0.139, and only one run comes within 0.02 of a single point: the report's
+IGD+ is 0.070 to 0.139, and only one run comes within 0.02 of a single point: the paper's
 finding again.
 
 MOEA/D reaches all 13: 16 solutions, an IGD+ of 0.0066 and 98.57% of the hypervolume. Over seeds

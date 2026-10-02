@@ -28,20 +28,22 @@ x₁, x₂ in [0, 1]
 
 Without the constraints, the best solutions have g = 1 (x₂ = 0), and the front is the curve
 f₂ = exp(−f₁). Each constraint asks f₂ to stay above another exponential curve,
-aⱼ exp(−bⱼ f₁), flatter than the front. The report builds a and b so that the first curve meets
+aⱼ exp(−bⱼ f₁), flatter than the front. The paper builds a and b so that the first curve meets
 the front at f₁ = 1/3 and the second meets the first at f₁ = 2/3, and prints them to three
 digits, the values used here. With those, the curves cross at f₁ = 0.33367 and 0.66789.
 
 The optimal front, derived from the definition, is the highest of the three curves at g = 1: the
 unconstrained front up to f₁ = 0.33367, the first constraint's boundary up to 0.66789, and the
 second's up to f₁ = 1, where f₂ = 0.728 e^−0.295 = 0.5420. Two thirds of it lies on constraint
-boundaries, as the report says; the rest of the unconstrained front, below them, is infeasible.
+boundaries, as the paper says; the rest of the unconstrained front, below them, is infeasible.
 
-The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
-CTP1 is its eq. 4, with the table of a and b on p. 6. The report leaves g, the number of variables
-and their bounds open; genoxide takes them from the authors' NSGA-II code (version 1.1.6, KanGAL),
-which has g = 1 + x₂ and two variables in [0, 1]. The report's own experiments used five variables
-and a Rastrigin function for g, without giving its formula.
+The definitions are the paper's: CTP1 is its eq. 4, with the table of a and b on p. 289. Its
+preprint, the authors' KanGAL report 200005 (October 2000, p. 6), and Deb's 2001 book
+(*Multi-Objective Optimization Using Evolutionary Algorithms*, Wiley, eq. 8.45 on p. 353) give the
+same. All three leave g, the number of variables and their bounds open; genoxide takes them from the
+authors' NSGA-II code (version 1.1.6, KanGAL), which has g = 1 + x₂, the g the book names on p. 360,
+and two variables in [0, 1]. The paper's own experiments used five variables and a Rastrigin
+function for g, without giving its formula.
 
 ## What makes it hard
 
@@ -64,7 +66,7 @@ Pareto dominance decides.
 
 ## Algorithm
 
-NSGA-II with the settings of the report's experiments:
+NSGA-II with the settings of the paper's experiments:
 
 - a population of 100, for 500 generations;
 - simulated binary crossover with η = 20, at a rate of 0.9;

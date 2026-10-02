@@ -2,19 +2,27 @@
 //! two constraints each, whose constraints make the optimal front disconnected, a set of points,
 //! or hidden behind infeasible bands.
 //!
-//! The definitions were checked in the authors' KanGAL report 200005 (October 2000), the preprint
-//! of the EMO 2001 paper (the number in KanGAL's list of reports; the file's title page misprints
-//! 200002, the number of Deb, Pratap and Moitra's report of the same year): CTP1 is its eq. 4
-//! (p. 6) with the table of a and b on p. 6, and CTP2 to CTP7 its eq. 5 (p. 7) with the
-//! parameters on pp. 7-11. The report leaves the function g, the number of variables and their
-//! bounds open (its experiments use "Rastrigin's function as the g functional" and five
-//! variables, without the formula); genoxide takes them from the authors'
-//! NSGA-II code (version 1.1.6, KanGAL), which defines every CTP problem with two variables,
-//! `g = 1 + x₂`, x₁ in [0, 1] and x₂ in [0, 1] (CTP1-CTP5) or [0, 10] (CTP6-CTP8). The report's
-//! eq. 5 prints `f₂ = g (1 − f₁/g)`; its figures 6-11 draw the unconstrained front as the curve
-//! `f₂ = 1 − √f₁`, and the authors' code computes `f₂ = g (1 − √(f₁/g))`, which genoxide uses.
-//! CTP8 isn't in the report: it's credited to Deb's 2001 book (not read), and its definition
-//! here is the authors' code's, CTP6's constraint with a second one like CTP7's (b = 2).
+//! The definitions were checked in three sources, which agree. The published EMO 2001 paper
+//! (LNCS 1993: 284-298) has CTP1 as its eq. 4 with the table of a and b (p. 289), and CTP2 to
+//! CTP7 as its eq. 5 (p. 290) with the parameters on pp. 290-294; its preprint, the authors'
+//! KanGAL report 200005 (October 2000; the number in KanGAL's list of reports, the file's title
+//! page misprints 200002, the number of Deb, Pratap and Moitra's report of the same year), has
+//! the same equations on pp. 6-11. Deb's 2001 book restates them in section 8.3.5, pp. 352-360:
+//! CTP1 as eq. 8.45 (p. 353), the generator as eq. 8.46 (p. 354), named "CTP2-CTP8" there, the
+//! parameters of CTP2 to CTP7 on pp. 355-358, and CTP8, which the paper doesn't have, as two
+//! constraints of that form (p. 358, figure 232 on p. 359).
+//!
+//! None of them fixes the number of variables or their bounds (the paper's experiments use
+//! "Rastrigin's function as the g functional" and five variables, without the formula, and the
+//! book says that the bounds of the variables other than x₁ "depend on the chosen g(x)
+//! function"); genoxide takes them from the authors' NSGA-II code (version 1.1.6, KanGAL),
+//! which defines every CTP problem with two variables, `g = 1 + x₂`, x₁ in [0, 1] and x₂ in
+//! [0, 1] (CTP1-CTP5) or [0, 10] (CTP6-CTP8). The book names that g, `g₁(x) = 1 + x₂` (p. 360),
+//! and shows CTP7's decision space with x₂ in [0, 1]; CTP6's and CTP8's fronts need x₂ up to
+//! 2.7, so [0, 10] is kept, and CTP7's front is the same either way. The paper's eq. 5, the
+//! report's and the book's eq. 8.46 all print `f₂ = g (1 − f₁/g)`; their figures draw the
+//! unconstrained front as the curve `f₂ = 1 − √f₁`, and the authors' code computes
+//! `f₂ = g (1 − √(f₁/g))`, which genoxide uses.
 
 use super::{MultiProblem, Piece, evenly, non_dominated, pieces_front};
 use crate::constraint::at_most;
@@ -31,7 +39,7 @@ const REFERENCE: &str = "Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrain
 const REFERENCE_URL: &str = "https://doi.org/10.1007/3-540-44719-9_20";
 
 const BOOK: &str = "Deb, K. (2001). Multi-Objective Optimization Using Evolutionary Algorithms. \
-                    Wiley, Chichester.";
+                    Wiley, Chichester. Section 8.3.5, eq. 8.46 and p. 358.";
 
 // bounds that are valid by construction: x₁ in [0, 1], x₂ in [0, `x2`]
 fn bounds(x2: f64) -> Real {
@@ -45,7 +53,7 @@ fn violation(values: &[f64]) -> f64 {
 
 // ---- the constraint of CTP2-CTP8 -----------------------------------------------------------------
 
-// the constraint of the report's eq. 5, `cos θ (f₂ − e) − sin θ f₁ ≥ a |sin(bπ (sin θ (f₂ − e) +
+// the constraint of the paper's eq. 5, `cos θ (f₂ − e) − sin θ f₁ ≥ a |sin(bπ (sin θ (f₂ − e) +
 // cos θ f₁)^c)|^d`, with sin θ and cos θ computed once
 #[derive(Clone, Copy, Debug)]
 struct Wave {
@@ -320,7 +328,8 @@ fn extremes(front: &[[f64; 2]]) -> ([f64; 2], [f64; 2]) {
 
 // ---- CTP1 ----------------------------------------------------------------------------------------
 
-// CTP1's a and b, the table of the report (p. 6), which the authors' code uses too
+// CTP1's a and b, the table of the paper (p. 289), the report (p. 6) and the book (p. 353),
+// which the authors' code uses too
 const CTP1_A: [f64; 2] = [0.858, 0.728];
 const CTP1_B: [f64; 2] = [0.541, 0.295];
 
@@ -332,29 +341,32 @@ const CTP1_B: [f64; 2] = [0.541, 0.295];
 /// the three curves `exp(−f₁)`, `0.858 exp(−0.541 f₁)` and `0.728 exp(−0.295 f₁)`, at g = 1 up to
 /// f₁ = ln(0.858)/(−0.459) ≈ 0.33367, on the first constraint's boundary up to
 /// f₁ = ln(0.858/0.728)/0.246 ≈ 0.66789, and on the second's to f₁ = 1: from (0, 1) to
-/// (1, 0.728 e^−0.295), a front whose two thirds lie on constraint boundaries, as the report says.
+/// (1, 0.728 e^−0.295), a front whose two thirds lie on constraint boundaries, as the paper says.
 ///
 /// [`constraints`](MultiProblem::constraints) gives `aⱼ exp(−bⱼ f₁) − f₂` for j = 1, 2.
 ///
 /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for multi-objective
 /// evolutionary optimization. *Evolutionary Multi-Criterion Optimization (EMO 2001)*, LNCS 1993:
-/// 284-298, eq. 4 and its table of a and b, checked in the authors' KanGAL report 200005
-/// (p. 6). The report builds a and b by a procedure for J constraints, and prints them to three
-/// digits, the values the authors' code uses and genoxide too.
+/// 284-298, eq. 4 and its table of a and b (p. 289), the same in the authors' KanGAL report
+/// 200005 (p. 6) and in Deb's 2001 book (eq. 8.45, p. 353). They build a and b by a procedure
+/// for J constraints, and print them to three digits, the values the authors' code uses and
+/// genoxide too.
 ///
-/// What was checked where, for all the CTP problems: the definitions in the authors' KanGAL
-/// report 200005 (October 2000, the EMO paper's preprint, whose title page misprints 200002; the
-/// published paper wasn't compared):
-/// CTP1 is its eq. 4 with the table of a and b (p. 6), and CTP2-CTP7 its eq. 5 (p. 7) with the
-/// parameters on pp. 7-11. The report leaves g, the number of variables and their bounds open
-/// (its experiments use "Rastrigin's function as the g functional" and five variables, without
-/// the formula); genoxide takes them from the authors' NSGA-II code (version 1.1.6, KanGAL),
-/// which defines every CTP problem with two variables, `g = 1 + x₂`, x₁ in [0, 1] and x₂ in
-/// [0, 1] (CTP1-CTP5) or [0, 10] (CTP6-CTP8). The report's eq. 5 prints `f₂ = g (1 − f₁/g)`;
-/// its figures 6-11 draw the unconstrained front as the curve `f₂ = 1 − √f₁`, and the authors'
-/// code computes `f₂ = g (1 − √(f₁/g))`, which CTP2-CTP8 use. The code writes each constraint
-/// as a ratio, `left/right − 1 ≥ 0`; genoxide keeps the report's difference, which is feasible
-/// at the same points and finite where the right-hand side is 0.
+/// What was checked where, for all the CTP problems: the definitions in the published paper
+/// (pp. 289-294), its preprint, the authors' KanGAL report 200005 (October 2000, whose title
+/// page misprints 200002; pp. 6-11), and Deb's 2001 book (section 8.3.5, pp. 352-360), which
+/// agree: CTP1 is eq. 4 (the book's eq. 8.45) with the table of a and b, and CTP2-CTP7 eq. 5
+/// (the book's eq. 8.46) with the parameters that follow it; CTP8 is the book's alone (p. 358).
+/// None of them fixes the number of variables or their bounds (the paper's experiments use
+/// "Rastrigin's function as the g functional" and five variables, without the formula);
+/// genoxide takes them from the authors' NSGA-II code (version 1.1.6, KanGAL), which defines
+/// every CTP problem with two variables, `g = 1 + x₂`, x₁ in [0, 1] and x₂ in [0, 1]
+/// (CTP1-CTP5) or [0, 10] (CTP6-CTP8); the book names that g, `g₁(x) = 1 + x₂` (p. 360). The
+/// paper's eq. 5, like the report's and the book's eq. 8.46, prints `f₂ = g (1 − f₁/g)`; their
+/// figures draw the unconstrained front as the curve `f₂ = 1 − √f₁`, and the authors' code
+/// computes `f₂ = g (1 − √(f₁/g))`, which CTP2-CTP8 use. The code writes each constraint as a
+/// ratio, `left/right − 1 ≥ 0`; genoxide keeps the paper's difference, which is feasible at the
+/// same points and finite where the right-hand side is 0.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Ctp1;
 
@@ -579,7 +591,7 @@ ctp!(
     /// a = 0.2, b = 10, c = 1, d = 6 and e = 1.
     ///
     /// Bounds [0, 1]². The constraint's boundary waves above the line `(f₂ − e) cos θ = f₁ sin θ`
-    /// (the report's eq. 6), `f₂ = 1 − 0.7265 f₁`, and touches it where the sine is 0: the
+    /// (the paper's eq. 6), `f₂ = 1 − 0.7265 f₁`, and touches it where the sine is 0: the
     /// unconstrained front below the line is infeasible, and the front is 13 disconnected pieces
     /// of the boundary, each starting on the line, from (0, 1) to about (0.9845, 0.2872).
     /// [`optimal_front`](MultiProblem::optimal_front) samples the boundaries of the feasible
@@ -590,9 +602,10 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5 and the parameters that follow it, checked in the
-    /// authors' KanGAL report 200005 (p. 7); f₂'s square root, g, the variables and their bounds
-    /// as in the authors' code (see [`Ctp1`]'s notes).
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5 and the parameters that follow it (p. 290), the
+    /// same in the authors' KanGAL report 200005 (p. 7) and in Deb's 2001 book (eq. 8.46, p. 355);
+    /// f₂'s square root, g, the variables and their bounds as in the authors' code (see
+    /// [`Ctp1`]'s notes).
     Ctp2, "CTP2", REFERENCE, x2 in [0, 1.0],
     [wave(-0.2, 0.2, 10.0, 1, 6.0, 1.0)]
 );
@@ -610,9 +623,10 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200005
-    /// (p. 8: d = 0.5 and a = 0.1, the rest as CTP2); f₂'s square root, g, the variables and
-    /// their bounds as in the authors' code (see [`Ctp1`]'s notes).
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5 (p. 291: d = 0.5 and a = 0.1, the rest as CTP2),
+    /// the same in the authors' KanGAL report 200005 (p. 8) and in Deb's 2001 book (p. 355), whose
+    /// figures (the paper's 7, the book's 227) mark the 13 points; f₂'s square root, g, the
+    /// variables and their bounds as in the authors' code (see [`Ctp1`]'s notes).
     Ctp3, "CTP3", REFERENCE, x2 in [0, 1.0],
     [wave(-0.2, 0.1, 10.0, 1, 0.5, 1.0)]
 );
@@ -625,9 +639,9 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200005
-    /// (p. 8: a = 0.75, the rest as CTP3); f₂'s square root, g, the variables and their bounds as
-    /// in the authors' code (see [`Ctp1`]'s notes).
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5 (p. 291: a = 0.75, the rest as CTP3), the same in
+    /// the authors' KanGAL report 200005 (p. 8) and in Deb's 2001 book (p. 356); f₂'s square root,
+    /// g, the variables and their bounds as in the authors' code (see [`Ctp1`]'s notes).
     Ctp4, "CTP4", REFERENCE, x2 in [0, 1.0],
     [wave(-0.2, 0.75, 10.0, 1, 0.5, 1.0)]
 );
@@ -644,9 +658,11 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200005
-    /// (p. 9: c = 2, the rest as CTP3); f₂'s square root, g, the variables and their bounds as in
-    /// the authors' code (see [`Ctp1`]'s notes).
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5 (p. 292: c = 2, the rest as CTP3), the same in the
+    /// authors' KanGAL report 200005 (p. 9) and in Deb's 2001 book (p. 357); f₂'s square root, g,
+    /// the variables and their bounds as in the authors' code (see [`Ctp1`]'s notes). The
+    /// paper's figure 9 (the book's 229) draws the first stretch and marks the points for
+    /// k = 1, …, 14, not the last one, at f₁ ≈ 0.9908, which is feasible and optimal too.
     Ctp5, "CTP5", REFERENCE, x2 in [0, 1.0],
     [wave(-0.2, 0.1, 10.0, 2, 0.5, 1.0)]
 );
@@ -662,11 +678,11 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200005
-    /// (p. 10); f₂'s square root, g, the variables and their bounds as in the authors' code (see
-    /// [`Ctp1`]'s notes). The report says the front is where
-    /// `1 ≤ (f₂ − e) sin θ + f₁ cos θ ≤ 2`; on the front found here, that coordinate runs from
-    /// 1.76 to 1.84.
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5 (p. 293), the same in the authors' KanGAL report
+    /// 200005 (p. 10) and in Deb's 2001 book (p. 357); f₂'s square root, g, the variables and
+    /// their bounds as in the authors' code (see [`Ctp1`]'s notes). The paper and the report say
+    /// the front is where `1 ≤ (f₂ − e) sin θ + f₁ cos θ ≤ 2` (the book leaves it out); on the
+    /// front found here, that coordinate runs from 1.76 to 1.84.
     Ctp6, "CTP6", REFERENCE, x2 in [0, 10.0],
     [wave(0.1, 40.0, 0.5, 1, 2.0, -2.0)]
 );
@@ -684,9 +700,12 @@ ctp!(
     ///
     /// Deb, K., Pratap, A. and Meyarivan, T. (2001). Constrained test problems for
     /// multi-objective evolutionary optimization. *Evolutionary Multi-Criterion Optimization
-    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5, checked in the authors' KanGAL report 200005
-    /// (pp. 10-11); f₂'s square root, g, the variables and their bounds as in the authors' code
-    /// (see [`Ctp1`]'s notes).
+    /// (EMO 2001)*, LNCS 1993: 284-298, eq. 5 (pp. 293-294), the same in the authors' KanGAL
+    /// report 200005 (pp. 10-11) and in Deb's 2001 book (p. 358); f₂'s square root, g, the
+    /// variables and their bounds as in the authors' code (see [`Ctp1`]'s notes). The paper's
+    /// figure 11 (the book's 231) marks the five inner pieces; the sixth, at f₁ = 1, and the point
+    /// at f₁ = 0 lie on the plot's edges. The book shows CTP7's decision space with g = 1 + x₂ and
+    /// x₂ in [0, 1] (p. 360); the front is the same with x₂ in [0, 10].
     Ctp7, "CTP7", REFERENCE, x2 in [0, 10.0],
     [wave(-0.05, 40.0, 5.0, 1, 6.0, 0.0)]
 );
@@ -696,15 +715,19 @@ ctp!(
     /// the front and bands across it.
     ///
     /// Bounds x₁ in [0, 1], x₂ in [0, 10]. The front is three disconnected pieces of CTP6's,
-    /// from about (0, 3.6958) to (0.1341, 3.3139), (0.3264, 2.7696) to (0.4787, 2.3379) and
-    /// (0.6824, 1.7656) to (0.8228, 1.3728) (derived by sampling the boundaries of the feasible
+    /// from about (0, 3.6958) to (0.1345, 3.3128), (0.3263, 2.7686) to (0.4790, 2.3372) and
+    /// (0.6823, 1.7654) to (0.8229, 1.3727) (derived by sampling the boundaries of the feasible
     /// region).
     ///
-    /// CTP8 isn't in the EMO 2001 paper, which has CTP1-CTP7; later papers credit it to
     /// Deb, K. (2001). *Multi-Objective Optimization Using Evolutionary Algorithms.* Wiley,
-    /// which wasn't read. The definition here is the one in the NSGA-II code of Deb's group
-    /// (version 1.1.6, KanGAL), with CTP6's g, variables and bounds; not yet checked against the
-    /// book ([#168](https://github.com/tachsin/genoxide/issues/168)).
+    /// section 8.3.5: the form of eq. 8.46 (p. 354) with the two constraints C₁ (θ = 0.1π, a = 40,
+    /// b = 0.5, c = 1, d = 2, e = −2) and C₂ (θ = −0.05π, a = 40, b = 2.0, c = 1, d = 6, e = 0)
+    /// of p. 358, the parameters of the NSGA-II code of Deb's group (version 1.1.6, KanGAL) too.
+    /// The book's figure 232 (p. 359) marks three Pareto-optimal regions, at f₁ from 0 to about
+    /// 0.13, 0.33 to 0.48 and 0.68 to 0.82, the pieces derived here. CTP8 isn't in the EMO 2001
+    /// paper, which has CTP1-CTP7. The book leaves g, the variables and their bounds open, as for
+    /// CTP2-CTP7, and prints f₂ without the square root; they're the code's, as for CTP6 (see
+    /// [`Ctp1`]'s notes).
     Ctp8, "CTP8", BOOK, x2 in [0, 10.0],
     [
         wave(0.1, 40.0, 0.5, 1, 2.0, -2.0),
@@ -754,7 +777,7 @@ mod tests {
         ]
     }
 
-    // the report's procedure for CTP1's a and b (p. 6), for J constraints: its table gives them
+    // the paper's procedure for CTP1's a and b (p. 289), for J constraints: its table gives them
     // for J = 2, to three digits
     #[test]
     fn ctp1_parameters_follow_the_reports_procedure() {
@@ -818,7 +841,7 @@ mod tests {
         assert_eq!(Ctp1.representation().bounds()[1], 0.0..=1.0);
     }
 
-    // the report's eq. 6: the optimal solutions of CTP2-CTP5 lie on the line
+    // the paper's eq. 6: the optimal solutions of CTP2-CTP5 lie on the line
     // (f₂ − e) cos θ = f₁ sin θ, where the constraint's right-hand side is 0: v = k/b
     #[test]
     fn the_points_on_the_line_are_on_the_boundary() {
@@ -898,7 +921,8 @@ mod tests {
 
     #[test]
     fn the_fronts_have_their_shapes() {
-        // (pieces, of which single points), as the report's figures 6-11 draw them
+        // (pieces, of which single points), derived; the paper's figures 6-11 and the book's
+        // 226-232 draw the same, but don't mark CTP5's last point or CTP7's pieces at the edges
         assert_eq!(pieces(Ctp2::front()), (13, 0));
         assert_eq!(pieces(Ctp3::front()), (13, 13));
         assert_eq!(pieces(Ctp4::front()), (13, 13));
@@ -910,7 +934,7 @@ mod tests {
         assert_eq!(Ctp3::front(), Ctp4::front());
         assert_eq!(Ctp3::front().len(), 13);
         assert_eq!(Ctp3::front()[12], Ctp3::waves()[0].on_line(1.2));
-        // CTP6's lies where 1 ≤ (f₂ − e) sin θ + f₁ cos θ ≤ 2, as the report says: 1.76 to 1.84
+        // CTP6's lies where 1 ≤ (f₂ − e) sin θ + f₁ cos θ ≤ 2, as the paper says: 1.76 to 1.84
         let (sin, cos) = Ctp6::waves()[0].angle();
         for [f1, f2] in Ctp6::front() {
             let v = sin * (f2 + 2.0) + cos * f1;

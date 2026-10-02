@@ -36,11 +36,13 @@ is 13 pieces of the wave, each starting on the line and ending where the next pi
 from (0, 1) to about (0.9845, 0.2872). genoxide's `optimal_front` samples the boundaries of the
 feasible region densely and keeps the feasible non-dominated points.
 
-The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
-eq. 5 and the parameters that follow it on p. 7. The report leaves g, the number of variables and
-their bounds open, and prints f₂ as g (1 − f₁/g); its figures draw the unconstrained front as the
-curve 1 − √f₁, and the authors' NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with
-g = 1 + x₂ and two variables in [0, 1], which genoxide follows. The report's own experiments used
+The definitions are the paper's: eq. 5 and the parameters that follow it, on p. 290. Its preprint,
+the authors' KanGAL report 200005 (October 2000, p. 7), and Deb's 2001 book (*Multi-Objective
+Optimization Using Evolutionary Algorithms*, Wiley, eq. 8.46 on p. 354 and the parameters on p. 355)
+give the same. All three leave g, the number of variables and their bounds open, and print f₂ as g
+(1 − f₁/g); their figures draw the unconstrained front as the curve 1 − √f₁, and the authors'
+NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with g = 1 + x₂, the g the book names
+on p. 360, and two variables in [0, 1], which genoxide follows. The paper's own experiments used
 five variables and a Rastrigin function for g, without giving its formula.
 
 ## What makes it hard
@@ -48,7 +50,7 @@ five variables and a Rastrigin function for g, without giving its formula.
 The front is disconnected: 13 pieces, each about 0.025 wide in f₁, with gaps of about 0.055
 between them. An algorithm has to find every piece and keep solutions on all of them, and it
 can't slide from one piece to the next, since the feasible region between them rises into waves.
-The larger b, the more pieces; the report calls finding them all the task.
+The larger b, the more pieces; the paper calls finding them all the task.
 
 About 45% of random genomes are feasible: the waves cut the region near the front, not far from
 it.
@@ -64,7 +66,7 @@ Pareto dominance decides.
 
 ## Algorithm
 
-NSGA-II with the settings of the report's experiments:
+NSGA-II with the settings of the paper's experiments:
 
 - a population of 100, for 500 generations;
 - simulated binary crossover with η = 20, at a rate of 0.9;
@@ -97,5 +99,5 @@ their lengths, give 99.90% of its hypervolume and an IGD+ of 0.0010.
 
 The run's front has 100 solutions, all feasible, on all 13 pieces, with an IGD+ of 0.0016 and
 99.78% of the whole front's hypervolume. Over seeds 1 to 20, every run reaches all 13 pieces, with
-an IGD+ from 0.0015 to 0.0019 and 99.75% to 99.82% of the hypervolume. The report found the same
+an IGD+ from 0.0015 to 0.0019 and 99.75% to 99.82% of the hypervolume. The paper found the same
 with its five variables: NSGA-II found all the disconnected pieces.
