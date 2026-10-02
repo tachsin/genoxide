@@ -1,0 +1,5 @@
+MOEA/D-DE, 1000 generations: 196 solutions, 196 feasible, IGD+ 0.0158, hypervolume 0.7484, 97.9% of the sample's; from the front: 0.0018 (median), 0.0200 (farthest)
+NSGA-II, 1000 generations: 300 solutions, 300 feasible, IGD+ 0.2006, hypervolume 0.4880, 63.8% of the sample's; from the front: 0.0017 (median), 0.0471 (farthest)
+the best point of the front for each of 300 weight vectors: 223 points, IGD+ 0.0184, hypervolume 0.7397, 96.7% of the sample's
+the best point of the front for each of 666 weight vectors: 492 points, IGD+ 0.0121, hypervolume 0.7597, 99.4% of the sample's
+the whole front: hypervolume 0.7853; a sample of 346 of its points: 0.7647

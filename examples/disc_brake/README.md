@@ -6,7 +6,7 @@ reference: "Osyczka, A. and Kundu, S. (1995). A new method to solve generalized 
 reference_url: https://doi.org/10.1007/BF01743536
 optimum: "not known in closed form; from 0.1274 kg stopping in 16.654925 s to 2.0710401 s at 2.793 kg, both ends derived; genoxide's reference front has a hypervolume of 1.0853 in scaled objectives (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 222
+order: 238
 ---
 
 # Disc brake

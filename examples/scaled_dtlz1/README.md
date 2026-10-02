@@ -6,7 +6,7 @@ reference: "Deb, K. and Jain, H. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281535
 optimum: "the plane f₁ + f₂/10 + f₃/100 = 0.5 with every fᵢ ≥ 0; hypervolume 1.1577 (objectives divided by the nadir point (0.5, 5, 50), reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 201
+order: 217
 family: DTLZ
 tab: Scaled DTLZ1
 ---

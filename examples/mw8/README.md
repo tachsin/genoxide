@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "the unit sphere with non-negative coordinates where arcsin f₃ is in [0, π/24], [π/8, 5π/24], [7π/24, 3π/8] or [11π/24, π/2]; hypervolume 0.7677 (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 211
+order: 227
 family: MW
 ---
 

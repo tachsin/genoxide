@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "the boundary T₁ = 0 from (0, 1) to (1.3164, 0.0039); hypervolume 0.7397 (normalized objectives, reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 215
+order: 231
 family: MW
 ---
 

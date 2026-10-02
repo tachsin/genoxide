@@ -40,6 +40,7 @@
 //! | [`Dtlz1`], [`Dtlz2`], [`Dtlz3`], [`Dtlz4`] | M or more (M + 4, M + 9) | any M ≥ 2 | | linear; spherical |
 //! | [`Dtlz5`], [`Dtlz6`] | M or more (M + 9) | any M ≥ 2 | | a curve for M ≤ 3; not known for more |
 //! | [`Dtlz7`] | M or more (M + 19) | any M ≥ 2 | | 2^(M−1) disconnected regions |
+//! | [`Dtlz8`], [`Dtlz9`] | M or more (10 M) | M ≥ 3; any M ≥ 2 | M; M − 1 | a line and part of a plane; a curve |
 //! | [`ConvexDtlz2`], [`ScaledDtlz2`] | M or more (M + 9) | any M ≥ 2 | | convex; a scaled sphere |
 //! | [`ScaledDtlz1`], [`InvertedDtlz1`] | M or more (M + 4) | any M ≥ 2 | | a scaled plane; an inverted simplex |
 //! | [`Wfg1`], [`Wfg2`], [`Wfg3`] | k + l (k = 4 or 2(M − 1), l = 20) | any M ≥ 2 | | convex and mixed; convex, disconnected; linear for M = 2 |
@@ -61,8 +62,13 @@
 //! | [`C1Dtlz1`], [`C1Dtlz3`] | M or more (M + 4, M + 9) | any M ≥ 2 | 1 | DTLZ1's, DTLZ3's, behind infeasible barriers |
 //! | [`C2Dtlz2`], [`ConvexC2Dtlz2`] | M or more (M + 9) | any M ≥ 2 | 1 | parts of DTLZ2's, of convex DTLZ2's |
 //! | [`C3Dtlz1`], [`C3Dtlz4`] | M or more (M + 4) | any M ≥ 2 | M | on the constraints' boundaries |
+//! | [`Dc1Dtlz1`], [`Dc1Dtlz3`] | M or more (M + 4, M + 9) | any M ≥ 2 | 1 | DTLZ1's, DTLZ3's, in cones |
+//! | [`Dc2Dtlz1`], [`Dc2Dtlz3`] | M or more (M + 4, M + 9) | any M ≥ 2 | 2 | DTLZ1's, DTLZ3's, nearly all else infeasible |
+//! | [`Dc3Dtlz1`], [`Dc3Dtlz3`] | M or more (M + 4, M + 9) | any M ≥ 2 | M | DTLZ1's, DTLZ3's, in patches |
 //! | [`Mw1`] to [`Mw3`], [`Mw5`] to [`Mw7`], [`Mw9`] to [`Mw13`] | 3 or more (15) | 2 | 1 to 4 | disconnected, points, or on constraint boundaries |
 //! | [`Mw4`], [`Mw8`], [`Mw14`] | M + 1 or more (M + 12) | any M ≥ 2 | 1 | linear; spherical in four bands; 2^(M−1) patches |
+//! | [`DasCmop1`] to [`DasCmop6`] | 2 or more (30) | 2 | 11 | sampled; per [`Difficulty`] triplet |
+//! | [`DasCmop7`] to [`DasCmop9`] | 3 or more (30) | 3 | 7 | sampled; per [`Difficulty`] triplet |
 //! | [`engineering`]: two-bar and four-bar trusses, welded beam, disc brake, speed reducer | 3 to 7 | 2 | 0 to 11 | the trusses' derived; the others not known |
 //! | [`engineering`]: car side impact, rocket injector, vehicle crashworthiness, marine design; water resource planning | 3 to 7 | 3; 5 | 0, 9 or 10; 7 | not known; derived |
 //!
@@ -75,7 +81,10 @@
 //! DTLZ problems are Deb and Jain's (2014, *IEEE Transactions on Evolutionary Computation* 18(4):
 //! 577-601 and 602-622), CTP Deb, Pratap and Meyarivan's (2001, EMO 2001, LNCS 1993: 284-298),
 //! C-DTLZ Jain and Deb's (2014, *IEEE Transactions on Evolutionary Computation* 18(4): 602-622),
-//! and MW Ma and Wang's (2019, *IEEE Transactions on Evolutionary Computation* 23(6): 972-986).
+//! MW Ma and Wang's (2019, *IEEE Transactions on Evolutionary Computation* 23(6): 972-986),
+//! DC-DTLZ Li, Chen, Fu and Yao's (2019, *IEEE Transactions on Evolutionary Computation* 23(2):
+//! 303-315), and DAS-CMOP Fan et al.'s (2020, *Evolutionary Computation* 28(3): 339-378); DTLZ8
+//! and DTLZ9 are the DTLZ report's.
 //! [`Zdt5`] has
 //! [`Binary`](crate::genome::Binary) genomes, and so isn't in [`all`], whose problems have
 //! [`Real`] ones. Each other problem's docs give its definition and cite its original authors.
@@ -90,7 +99,10 @@
 mod cdtlz;
 mod classic;
 mod ctp;
+mod das_cmop;
+mod dcdtlz;
 mod dtlz;
+mod dtlz_constrained;
 mod dtlz_variants;
 pub mod engineering;
 mod mw;
@@ -103,7 +115,13 @@ pub use classic::{
     Viennet2, Viennet3,
 };
 pub use ctp::{Ctp1, Ctp2, Ctp3, Ctp4, Ctp5, Ctp6, Ctp7, Ctp8};
+pub use das_cmop::{
+    DasCmop1, DasCmop2, DasCmop3, DasCmop4, DasCmop5, DasCmop6, DasCmop7, DasCmop8, DasCmop9,
+    Difficulty,
+};
+pub use dcdtlz::{Dc1Dtlz1, Dc1Dtlz3, Dc2Dtlz1, Dc2Dtlz3, Dc3Dtlz1, Dc3Dtlz3};
 pub use dtlz::{Dtlz1, Dtlz2, Dtlz3, Dtlz4, Dtlz5, Dtlz6, Dtlz7};
+pub use dtlz_constrained::{Dtlz8, Dtlz9};
 pub use dtlz_variants::{ConvexDtlz2, InvertedDtlz1, ScaledDtlz1, ScaledDtlz2};
 pub use mw::{Mw1, Mw2, Mw3, Mw4, Mw5, Mw6, Mw7, Mw8, Mw9, Mw10, Mw11, Mw12, Mw13, Mw14};
 pub use wfg::{Wfg1, Wfg2, Wfg3, Wfg4, Wfg5, Wfg6, Wfg7, Wfg8, Wfg9};
@@ -304,12 +322,12 @@ where
 }
 
 /// Every problem of this module with `M` objectives and [`Real`] genomes, at its default size:
-/// the two-objective problems for `M = 2`, the Viennet problems for `M = 3`, and the
+/// the two-objective problems for `M = 2`, the Viennet problems and DAS-CMOP7-9 for `M = 3`, and the
 /// [`engineering`] problems with `M` objectives, in the order of the table above, then DTLZ1-7,
 /// the convex, scaled and inverted DTLZ problems, WFG1-9, MW4, MW8
 /// and MW14 for any `M` from 2 on, then the constrained DTLZ problems (C1-DTLZ3 and convex
 /// C2-DTLZ2 only for the numbers of objectives their paper gives a radius for: 3, 5, 8, 10 and
-/// 15). [`Zdt5`], on bit strings, isn't in it.
+/// 15), then DTLZ8 (from 3 objectives on), DTLZ9 and the DC-DTLZ problems. [`Zdt5`], on bit strings, isn't in it.
 pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
     let fixed = [
         try_boxed::<_, 2, M>(Zdt1::default()),
@@ -349,6 +367,15 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
         try_boxed::<_, 2, M>(Mw11::default()),
         try_boxed::<_, 2, M>(Mw12::default()),
         try_boxed::<_, 2, M>(Mw13::default()),
+        try_boxed::<_, 2, M>(DasCmop1::default()),
+        try_boxed::<_, 2, M>(DasCmop2::default()),
+        try_boxed::<_, 2, M>(DasCmop3::default()),
+        try_boxed::<_, 2, M>(DasCmop4::default()),
+        try_boxed::<_, 2, M>(DasCmop5::default()),
+        try_boxed::<_, 2, M>(DasCmop6::default()),
+        try_boxed::<_, 3, M>(DasCmop7::default()),
+        try_boxed::<_, 3, M>(DasCmop8::default()),
+        try_boxed::<_, 3, M>(DasCmop9::default()),
         try_boxed::<_, 2, M>(engineering::TwoBarTruss),
         try_boxed::<_, 2, M>(engineering::WeldedBeam),
         try_boxed::<_, 2, M>(engineering::DiscBrake),
@@ -388,6 +415,13 @@ pub fn all<const M: usize>() -> Vec<Box<dyn DynMultiProblem<M>>> {
     }
     if M >= 2 {
         problems.extend(cdtlz::all::<M>());
+    }
+    if M >= 3 {
+        problems.push(boxed(Dtlz8::<M>::default()));
+    }
+    if M >= 2 {
+        problems.push(boxed(Dtlz9::<M>::default()));
+        problems.extend(dcdtlz::all::<M>());
     }
     problems
 }
@@ -688,7 +722,7 @@ mod tests {
     #[test]
     fn the_registries_describe_every_problem() {
         let two = all::<2>();
-        assert_eq!(two.len(), 66);
+        assert_eq!(two.len(), 79);
         check_registry(two);
         let three = all::<3>();
         assert_eq!(
@@ -697,6 +731,9 @@ mod tests {
                 "VNT1",
                 "VNT2",
                 "VNT3",
+                "DAS-CMOP7",
+                "DAS-CMOP8",
+                "DAS-CMOP9",
                 "CarSideImpact",
                 "RocketInjector",
                 "VehicleCrashworthiness",
@@ -730,6 +767,14 @@ mod tests {
                 "convex C2-DTLZ2",
                 "C3-DTLZ1",
                 "C3-DTLZ4",
+                "DTLZ8",
+                "DTLZ9",
+                "DC1-DTLZ1",
+                "DC1-DTLZ3",
+                "DC2-DTLZ1",
+                "DC2-DTLZ3",
+                "DC3-DTLZ1",
+                "DC3-DTLZ3",
             ]
         );
         check_registry(three);

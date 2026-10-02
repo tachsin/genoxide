@@ -6,7 +6,7 @@ reference: "Deb, K. and Jain, H. (2014). An evolutionary many-objective optimiza
 reference_url: https://doi.org/10.1109/TEVC.2013.2281535
 optimum: "the surface f₃ + √f₁ + √f₂ = 1 with fᵢ in [0, 1]; hypervolume 1.2943 (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 200
+order: 216
 family: DTLZ
 tab: Convex DTLZ2
 ---

@@ -243,7 +243,7 @@ fn distance(a: [f64; 2], b: [f64; 2]) -> f64 {
 // front's extent is a gap between two pieces, and each piece gets points in proportion to its
 // length and half of the gaps beside it, at least one; within a piece, they're spread evenly by
 // length, and a piece that is a single point repeats it. Each is a point of the front.
-fn spread_by_length(front: &[[f64; 2]], points: usize) -> Vec<[f64; 2]> {
+pub(super) fn spread_by_length(front: &[[f64; 2]], points: usize) -> Vec<[f64; 2]> {
     if points == 0 || front.is_empty() {
         return Vec::new();
     }

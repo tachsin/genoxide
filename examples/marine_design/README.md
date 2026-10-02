@@ -6,7 +6,7 @@ reference: "Parsons, M. G. and Scott, R. L. (2004). Formulation of multicriterio
 reference_url: https://doi.org/10.5957/jsr.2004.48.1.61
 optimum: "not known in closed form; ideal point (8.376894, 5240.3356, −700,552.76); genoxide's reference front has a hypervolume of 0.8624 in objectives scaled by the ideal point and its estimated nadir point (11.0662, 12,435.8, −386,500) (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 229
+order: 245
 ---
 
 # Conceptual marine design

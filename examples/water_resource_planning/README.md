@@ -6,7 +6,7 @@ reference: "Musselman, K. and Talavage, J. (1980). A tradeoff cut approach to mu
 reference_url: https://doi.org/10.1287/opre.28.6.1424
 optimum: "the image of every design with x₃ = 0.01 and x₁x₂ ≥ 0.00139 / 1.0306; ideal point (63840.28, 40.46, 285346.9, 183749.97, 7.22), nadir point (73450.51, 1350, 2853469.0, 6575303.1, 25000)"
 languages: [rust, python]
-order: 228
+order: 244
 ---
 
 # Water resource planning

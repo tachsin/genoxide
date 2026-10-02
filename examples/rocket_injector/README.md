@@ -6,7 +6,7 @@ reference: "Vaidyanathan, R., Tucker, P. K., Papila, N. and Shyy, W. (2003). CFD
 reference_url: https://doi.org/10.2514/6.2003-296
 optimum: "not known in closed form; ideal point (0.0088934, −0.4315, 0.00488); genoxide's reference front has a hypervolume of 0.9019 in objectives scaled by the ideal point and its estimated nadir point (1.002, 1.0965, 1.0539) (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 226
+order: 242
 ---
 
 # Rocket injector

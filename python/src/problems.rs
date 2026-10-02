@@ -442,6 +442,86 @@ pub enum MultiConfig {
         objectives: usize,
         variables: Option<usize>,
     },
+    Dtlz8 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    Dtlz9 {
+        objectives: usize,
+        variables: Option<usize>,
+    },
+    Dc1Dtlz1 {
+        objectives: usize,
+        variables: Option<usize>,
+        a: Option<f64>,
+        b: Option<f64>,
+    },
+    Dc1Dtlz3 {
+        objectives: usize,
+        variables: Option<usize>,
+        a: Option<f64>,
+        b: Option<f64>,
+    },
+    Dc2Dtlz1 {
+        objectives: usize,
+        variables: Option<usize>,
+        a: Option<f64>,
+        b: Option<f64>,
+    },
+    Dc2Dtlz3 {
+        objectives: usize,
+        variables: Option<usize>,
+        a: Option<f64>,
+        b: Option<f64>,
+    },
+    Dc3Dtlz1 {
+        objectives: usize,
+        variables: Option<usize>,
+        a: Option<f64>,
+        b: Option<f64>,
+    },
+    Dc3Dtlz3 {
+        objectives: usize,
+        variables: Option<usize>,
+        a: Option<f64>,
+        b: Option<f64>,
+    },
+    DasCmop1 {
+        variables: usize,
+        difficulty: Option<[f64; 3]>,
+    },
+    DasCmop2 {
+        variables: usize,
+        difficulty: Option<[f64; 3]>,
+    },
+    DasCmop3 {
+        variables: usize,
+        difficulty: Option<[f64; 3]>,
+    },
+    DasCmop4 {
+        variables: usize,
+        difficulty: Option<[f64; 3]>,
+    },
+    DasCmop5 {
+        variables: usize,
+        difficulty: Option<[f64; 3]>,
+    },
+    DasCmop6 {
+        variables: usize,
+        difficulty: Option<[f64; 3]>,
+    },
+    DasCmop7 {
+        variables: usize,
+        difficulty: Option<[f64; 3]>,
+    },
+    DasCmop8 {
+        variables: usize,
+        difficulty: Option<[f64; 3]>,
+    },
+    DasCmop9 {
+        variables: usize,
+        difficulty: Option<[f64; 3]>,
+    },
 }
 
 // a size of at least `minimum`, or an error that names it; the constructors panic instead
@@ -585,6 +665,65 @@ fn check_constrained_dtlz(
     }
 }
 
+// the settings of a DC-DTLZ problem, checked: 2 to 6 objectives, at least as many variables, an
+// a that is finite and above 0, and a b between −1 and 1
+fn check_dc_dtlz(
+    name: &str,
+    objectives: usize,
+    variables: Option<usize>,
+    a: Option<f64>,
+    b: Option<f64>,
+) -> Result<(), String> {
+    check_constrained_dtlz(objectives, variables, None, None)?;
+    if let Some(a) = a.filter(|a| !(a.is_finite() && *a > 0.0)) {
+        return Err(format!("{name} needs a finite a above 0, not {a}"));
+    }
+    if let Some(b) = b.filter(|b| !(b.is_finite() && *b > -1.0 && *b < 1.0)) {
+        return Err(format!("{name} needs a b between -1 and 1, not {b}"));
+    }
+    Ok(())
+}
+
+// a DAS-CMOP problem's difficulty triplet, checked: each level in [0, 1]
+fn check_difficulty(name: &str, difficulty: Option<[f64; 3]>) -> Result<(), String> {
+    for level in difficulty.into_iter().flatten() {
+        if !(0.0..=1.0).contains(&level) {
+            return Err(format!(
+                "{name}'s difficulty levels are in [0, 1], not {level}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+// a DC-DTLZ problem with M objectives, `variables` variables (the default if None) and the
+// parameters a and b (the default's if None)
+macro_rules! dc_dtlz {
+    ($problem:ident, $variables:expr, $a:expr, $b:expr) => {{
+        let default = multi::$problem::<M>::default();
+        let variables = $variables.unwrap_or(default.variables());
+        let a = $a.unwrap_or(multi::$problem::<M>::A);
+        let b = $b.unwrap_or(multi::$problem::<M>::B);
+        Some(multi::boxed(multi::$problem::<M>::with_parameters(
+            variables, a, b,
+        )))
+    }};
+}
+
+// a DAS-CMOP problem with `variables` variables and the triplet `difficulty` (the paper's figure
+// 6's if None)
+macro_rules! das_cmop {
+    ($problem:ident, $objectives:literal, $variables:expr, $difficulty:expr) => {{
+        let difficulty = match $difficulty {
+            Some([diversity, feasibility, convergence]) => {
+                multi::Difficulty::new(diversity, feasibility, convergence)
+            }
+            None => multi::$problem::figure_difficulty(),
+        };
+        try_boxed::<_, $objectives, M>(multi::$problem::new($variables, difficulty))
+    }};
+}
+
 impl MultiConfig {
     /// The number of objectives.
     pub fn objectives(&self) -> usize {
@@ -618,6 +757,14 @@ impl MultiConfig {
             Self::Mw4 { objectives, .. }
             | Self::Mw8 { objectives, .. }
             | Self::Mw14 { objectives, .. } => objectives,
+            Self::Dtlz8 { objectives, .. } | Self::Dtlz9 { objectives, .. } => objectives,
+            Self::Dc1Dtlz1 { objectives, .. }
+            | Self::Dc1Dtlz3 { objectives, .. }
+            | Self::Dc2Dtlz1 { objectives, .. }
+            | Self::Dc2Dtlz3 { objectives, .. }
+            | Self::Dc3Dtlz1 { objectives, .. }
+            | Self::Dc3Dtlz3 { objectives, .. } => objectives,
+            Self::DasCmop7 { .. } | Self::DasCmop8 { .. } | Self::DasCmop9 { .. } => 3,
             Self::Viennet1 {} | Self::Viennet2 {} | Self::Viennet3 {} => 3,
             Self::MultiCarSideImpact {}
             | Self::RocketInjector {}
@@ -828,6 +975,133 @@ impl MultiConfig {
                     None => Ok(()),
                 }
             }
+            Self::Dtlz8 {
+                objectives,
+                variables: n,
+            } => {
+                if !(3..=6).contains(&objectives) {
+                    return Err(format!(
+                        "DTLZ8 takes 3 to 6 objectives in Python, not {objectives}"
+                    ));
+                }
+                match n {
+                    Some(n) => variables(n, objectives, "DTLZ8 with this many objectives"),
+                    None => Ok(()),
+                }
+            }
+            Self::Dtlz9 {
+                objectives,
+                variables: n,
+            } => {
+                if !(2..=6).contains(&objectives) {
+                    return Err(format!(
+                        "DTLZ9 takes 2 to 6 objectives in Python, not {objectives}"
+                    ));
+                }
+                match n {
+                    Some(n) => variables(n, objectives, "DTLZ9 with this many objectives"),
+                    None => Ok(()),
+                }
+            }
+            Self::Dc1Dtlz1 {
+                objectives,
+                variables,
+                a,
+                b,
+            } => check_dc_dtlz("DC1-DTLZ1", objectives, variables, a, b),
+            Self::Dc1Dtlz3 {
+                objectives,
+                variables,
+                a,
+                b,
+            } => check_dc_dtlz("DC1-DTLZ3", objectives, variables, a, b),
+            Self::Dc2Dtlz1 {
+                objectives,
+                variables,
+                a,
+                b,
+            } => check_dc_dtlz("DC2-DTLZ1", objectives, variables, a, b),
+            Self::Dc2Dtlz3 {
+                objectives,
+                variables,
+                a,
+                b,
+            } => check_dc_dtlz("DC2-DTLZ3", objectives, variables, a, b),
+            Self::Dc3Dtlz1 {
+                objectives,
+                variables,
+                a,
+                b,
+            } => check_dc_dtlz("DC3-DTLZ1", objectives, variables, a, b),
+            Self::Dc3Dtlz3 {
+                objectives,
+                variables,
+                a,
+                b,
+            } => check_dc_dtlz("DC3-DTLZ3", objectives, variables, a, b),
+            Self::DasCmop1 {
+                variables: n,
+                difficulty,
+            } => {
+                variables(n, 2, "DAS-CMOP1")?;
+                check_difficulty("DAS-CMOP1", difficulty)
+            }
+            Self::DasCmop2 {
+                variables: n,
+                difficulty,
+            } => {
+                variables(n, 2, "DAS-CMOP2")?;
+                check_difficulty("DAS-CMOP2", difficulty)
+            }
+            Self::DasCmop3 {
+                variables: n,
+                difficulty,
+            } => {
+                variables(n, 2, "DAS-CMOP3")?;
+                check_difficulty("DAS-CMOP3", difficulty)
+            }
+            Self::DasCmop4 {
+                variables: n,
+                difficulty,
+            } => {
+                variables(n, 2, "DAS-CMOP4")?;
+                check_difficulty("DAS-CMOP4", difficulty)
+            }
+            Self::DasCmop5 {
+                variables: n,
+                difficulty,
+            } => {
+                variables(n, 2, "DAS-CMOP5")?;
+                check_difficulty("DAS-CMOP5", difficulty)
+            }
+            Self::DasCmop6 {
+                variables: n,
+                difficulty,
+            } => {
+                variables(n, 2, "DAS-CMOP6")?;
+                check_difficulty("DAS-CMOP6", difficulty)
+            }
+            Self::DasCmop7 {
+                variables: n,
+                difficulty,
+            } => {
+                variables(n, 3, "DAS-CMOP7")?;
+                check_difficulty("DAS-CMOP7", difficulty)
+            }
+            Self::DasCmop8 {
+                variables: n,
+                difficulty,
+            } => {
+                variables(n, 3, "DAS-CMOP8")?;
+                check_difficulty("DAS-CMOP8", difficulty)
+            }
+            Self::DasCmop9 {
+                variables: n,
+                difficulty,
+            } => {
+                variables(n, 3, "DAS-CMOP9")?;
+                check_difficulty("DAS-CMOP9", difficulty)
+            }
             _ => Ok(()),
         }
     }
@@ -1005,6 +1279,66 @@ impl MultiConfig {
             Self::Mw14 { variables, .. } => Some(multi::boxed(
                 variables.map_or_else(multi::Mw14::<M>::default, multi::Mw14::<M>::new),
             )),
+            Self::Dtlz8 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::Dtlz8::<M>::default, multi::Dtlz8::<M>::new),
+            )),
+            Self::Dtlz9 { variables, .. } => Some(multi::boxed(
+                variables.map_or_else(multi::Dtlz9::<M>::default, multi::Dtlz9::<M>::new),
+            )),
+            Self::Dc1Dtlz1 {
+                variables, a, b, ..
+            } => dc_dtlz!(Dc1Dtlz1, variables, a, b),
+            Self::Dc1Dtlz3 {
+                variables, a, b, ..
+            } => dc_dtlz!(Dc1Dtlz3, variables, a, b),
+            Self::Dc2Dtlz1 {
+                variables, a, b, ..
+            } => dc_dtlz!(Dc2Dtlz1, variables, a, b),
+            Self::Dc2Dtlz3 {
+                variables, a, b, ..
+            } => dc_dtlz!(Dc2Dtlz3, variables, a, b),
+            Self::Dc3Dtlz1 {
+                variables, a, b, ..
+            } => dc_dtlz!(Dc3Dtlz1, variables, a, b),
+            Self::Dc3Dtlz3 {
+                variables, a, b, ..
+            } => dc_dtlz!(Dc3Dtlz3, variables, a, b),
+            Self::DasCmop1 {
+                variables,
+                difficulty,
+            } => das_cmop!(DasCmop1, 2, variables, difficulty),
+            Self::DasCmop2 {
+                variables,
+                difficulty,
+            } => das_cmop!(DasCmop2, 2, variables, difficulty),
+            Self::DasCmop3 {
+                variables,
+                difficulty,
+            } => das_cmop!(DasCmop3, 2, variables, difficulty),
+            Self::DasCmop4 {
+                variables,
+                difficulty,
+            } => das_cmop!(DasCmop4, 2, variables, difficulty),
+            Self::DasCmop5 {
+                variables,
+                difficulty,
+            } => das_cmop!(DasCmop5, 2, variables, difficulty),
+            Self::DasCmop6 {
+                variables,
+                difficulty,
+            } => das_cmop!(DasCmop6, 2, variables, difficulty),
+            Self::DasCmop7 {
+                variables,
+                difficulty,
+            } => das_cmop!(DasCmop7, 3, variables, difficulty),
+            Self::DasCmop8 {
+                variables,
+                difficulty,
+            } => das_cmop!(DasCmop8, 3, variables, difficulty),
+            Self::DasCmop9 {
+                variables,
+                difficulty,
+            } => das_cmop!(DasCmop9, 3, variables, difficulty),
             // built above
             Self::Zdt5 { .. } => None,
         };

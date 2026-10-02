@@ -6,7 +6,7 @@ reference: "Kurpati, A., Azarm, S. and Wu, J. (2002). Constraint handling improv
 reference_url: https://doi.org/10.1007/s00158-002-0178-2
 optimum: "not known in closed form; from a volume of 2771.9151 at the stress limit of 1300 to a stress of 694.70574 at a volume of 5777.9203 (best known); genoxide's reference front has a hypervolume of 1.1804 in scaled objectives (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 223
+order: 239
 ---
 
 # Speed reducer, two objectives

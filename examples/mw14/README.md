@@ -6,7 +6,7 @@ reference: "Ma, Z. and Wang, Y. (2019). Evolutionary constrained multiobjective 
 reference_url: https://doi.org/10.1109/TEVC.2019.2896967
 optimum: "f₃ = (φ(f₁) + φ(f₂))/2, φ(t) = 6 − eᵗ − 1.5 sin(1.1πt²), with f₁ and f₂ each in [0, 0.7314] or (1.3296, 1.5]; hypervolume 0.6742 (objectives normalized by the ideal and nadir points, reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 217
+order: 233
 family: MW
 ---
 

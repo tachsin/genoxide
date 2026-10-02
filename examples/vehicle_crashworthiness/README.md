@@ -6,7 +6,7 @@ reference: "Liao, X., Li, Q., Yang, X., Zhang, W. and Li, W. (2008). Multiobject
 reference_url: https://doi.org/10.1007/s00158-007-0163-x
 optimum: "not known in closed form; ideal point (1661.7078, 6.1428, 0.0394), at bounds; genoxide's reference front has a hypervolume of 1.0525 in objectives scaled by the ideal point and its estimated nadir point (1695.161, 10.736, 0.264) (reference point (1.1, 1.1, 1.1))"
 languages: [rust, python]
-order: 227
+order: 243
 ---
 
 # Vehicle crashworthiness

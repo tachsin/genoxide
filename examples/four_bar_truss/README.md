@@ -6,7 +6,7 @@ reference: "Stadler, W. and Dauer, J. (1993). Multicriteria optimization in engi
 reference_url: https://doi.org/10.2514/5.9781600866234.0209.0249
 optimum: "the front from (1400, 0.04) to (2200 + 600√2, (2√2 − 2)/300) ≈ (3048.53, 0.0027614), in three pieces with x₃ = √2; hypervolume 0.8891 in objectives scaled by the ideal and nadir points (reference point (1.1, 1.1))"
 languages: [rust, python]
-order: 224
+order: 240
 ---
 
 # Four-bar truss

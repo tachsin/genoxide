@@ -160,6 +160,15 @@ MULTI_PROBLEMS = [
     gx.problems.Mw11,
     gx.problems.Mw12,
     gx.problems.Mw13,
+    gx.problems.DasCmop1,
+    gx.problems.DasCmop2,
+    gx.problems.DasCmop3,
+    gx.problems.DasCmop4,
+    gx.problems.DasCmop5,
+    gx.problems.DasCmop6,
+    gx.problems.DasCmop7,
+    gx.problems.DasCmop8,
+    gx.problems.DasCmop9,
     gx.problems.Dtlz1,
     gx.problems.Dtlz2,
     gx.problems.Dtlz3,
@@ -189,12 +198,20 @@ MULTI_PROBLEMS = [
     gx.problems.ConvexC2Dtlz2,
     gx.problems.C3Dtlz1,
     gx.problems.C3Dtlz4,
+    gx.problems.Dtlz8,
+    gx.problems.Dtlz9,
+    gx.problems.Dc1Dtlz1,
+    gx.problems.Dc1Dtlz3,
+    gx.problems.Dc2Dtlz1,
+    gx.problems.Dc2Dtlz3,
+    gx.problems.Dc3Dtlz1,
+    gx.problems.Dc3Dtlz3,
 ]
 
 # on bit strings, and so not in the registry of real problems
 BINARY_PROBLEMS = [gx.problems.Zdt5]
 
-# gx.problems.multi_engineering, in the registry after MW13
+# gx.problems.multi_engineering, in the registry after DAS-CMOP9
 MULTI_ENGINEERING = [
     gx.problems.multi_engineering.TwoBarTruss,
     gx.problems.multi_engineering.WeldedBeam,
@@ -209,8 +226,10 @@ MULTI_ENGINEERING = [
 ]
 
 # every real multi-objective problem, in the registry's order
-_AFTER_MW13 = MULTI_PROBLEMS.index(gx.problems.Mw13) + 1
-MULTI_ALL = MULTI_PROBLEMS[:_AFTER_MW13] + MULTI_ENGINEERING + MULTI_PROBLEMS[_AFTER_MW13:]
+_AFTER_DAS_CMOP9 = MULTI_PROBLEMS.index(gx.problems.DasCmop9) + 1
+MULTI_ALL = (
+    MULTI_PROBLEMS[:_AFTER_DAS_CMOP9] + MULTI_ENGINEERING + MULTI_PROBLEMS[_AFTER_DAS_CMOP9:]
+)
 
 
 def test_the_classes_are_the_rust_registry():
@@ -1119,6 +1138,106 @@ def test_mw_and_dtlz_variant_sizes_are_checked_in_rust_too():
         gx._genoxide.problem_info(description)
     description = '{"type": "scaled_dtlz1", "objectives": 3, "variables": null, "factor": -1.0}'
     with pytest.raises(ValueError, match="a scaling factor is finite and positive"):
+        gx._genoxide.problem_info(description)
+
+
+# ---- batch 11: DTLZ8, DTLZ9, DC-DTLZ and DAS-CMOP -----------------------------------------------
+
+
+def test_dtlz8_and_dtlz9_at_chosen_points():
+    # DTLZ8 (M = 3, n = 30): blocks at 1/8, 1/4 and 5/8, all feasible
+    x = np.repeat([0.125, 0.25, 0.625], 10)
+    objectives, violation = gx.problems.Dtlz8()(x)
+    assert list(objectives) == pytest.approx([0.125, 0.25, 0.625]) and violation == 0.0
+    assert list(gx.problems.Dtlz8().constraints(x)) == pytest.approx([-0.125, -0.625, -0.625])
+    front = gx.problems.Dtlz8().optimal_front(100)
+    assert len(front) >= 100
+    assert gx.problems.Dtlz8().nadir_point == pytest.approx([0.75, 0.75, 1.0])
+    # DTLZ9: a block of 10 genes at 2⁻¹⁰ sums to 5; the front on the unit circle
+    x = np.ones(30)
+    x[:10] = 0.5**10
+    objectives, violation = gx.problems.Dtlz9()(x)
+    assert list(objectives) == pytest.approx([5.0, 10.0, 10.0]) and violation == 0.0
+    front = gx.problems.Dtlz9().optimal_front(50)
+    assert np.allclose(front[:, 0] ** 2 + front[:, 2] ** 2, 1) and np.all(front[:, 0] == front[:, 1])
+    assert gx.problems.Dtlz9(objectives=2).dimensions == 20
+    assert gx.problems.Dtlz8(objectives=4).constraint_count == 4
+
+
+def test_dc_dtlz_at_chosen_points():
+    # DC1-DTLZ1: x₁ = 1/3 breaks cos(3πx₁) ≥ 0.5 by 1.5
+    x = np.full(7, 0.5)
+    x[0] = 1 / 3
+    objectives, violation = gx.problems.Dc1Dtlz1()(x)
+    assert list(objectives) == pytest.approx([1 / 12, 1 / 12, 1 / 3])
+    assert violation == pytest.approx(1.5)
+    # DC2-DTLZ1 (b = 0.9) at g = 0: feasible by 0.1 twice; with a = 2, b = 0.5 by 0.5
+    assert list(gx.problems.Dc2Dtlz1().constraints(np.full(7, 0.5))) == pytest.approx([-0.1, -0.1])
+    problem = gx.problems.Dc2Dtlz1(a=2, b=0.5)
+    assert list(problem.constraints(np.full(7, 0.5))) == pytest.approx([-0.5, -0.5])
+    # DC3: M constraints
+    assert gx.problems.Dc3Dtlz3(objectives=5).constraint_count == 5
+    assert gx.problems.Dc3Dtlz3().dimensions == 12
+    # the fronts: on DTLZ's, with the derived ideal and nadir points
+    front = gx.problems.Dc1Dtlz1().optimal_front(91)
+    assert np.allclose(front.sum(axis=1), 0.5)
+    assert gx.problems.Dc1Dtlz1().ideal_point == pytest.approx([0, 0, 1 / 9])
+    assert gx.problems.Dc1Dtlz1().nadir_point == pytest.approx([7 / 18, 7 / 18, 0.5])
+    front = gx.problems.Dc3Dtlz3().optimal_front(91)
+    assert np.allclose((front**2).sum(axis=1), 1)
+    assert gx.problems.Dc2Dtlz3(objectives=2).optimal_front(10).shape == (10, 2)
+
+
+def test_das_cmop_at_chosen_points():
+    # DAS-CMOP4 at x₁ = 0.25 with the distance variables at 0.5: g = 0, on the concave front
+    x = np.full(30, 0.5)
+    x[0] = 0.25
+    objectives, violation = gx.problems.DasCmop4()(x)
+    assert list(objectives) == pytest.approx([0.25, 0.9375])
+    # the default triplet (0.5, 0.5, 0.5) asks g ≥ 0.5: broken by (e − 0)(0.5 − 0) and more
+    assert violation > 0
+    assert gx.problems.DasCmop4().constraint_count == 11
+    assert gx.problems.DasCmop7().constraint_count == 7
+    # the triplet by number or by value, the same problem
+    first = gx.problems.DasCmop1(difficulty=8).optimal_front(50)
+    assert np.array_equal(first, gx.problems.DasCmop1(difficulty=(0.5, 0.5, 0.5)).optimal_front(50))
+    # with no constraint, the unconstrained front f₂ = 1 − f₁²
+    front = gx.problems.DasCmop1(difficulty=(0, 0, 0)).optimal_front(101)
+    assert np.allclose(front[:, 1], 1 - front[:, 0] ** 2)
+    front = gx.problems.DasCmop8(difficulty=(0, 0, 0)).optimal_front(91)
+    assert len(front) >= 91 and np.allclose((front**2).sum(axis=1), 1)
+    assert gx.problems.DasCmop9(variables=10).dimensions == 10
+
+
+@pytest.mark.parametrize(
+    "problem, message",
+    [
+        (gx.problems.Dtlz8(objectives=2), "Dtlz8.objectives is at least 3, not 2"),
+        (gx.problems.Dtlz9(objectives=7), "Dtlz9.objectives is at most 6, not 7"),
+        (gx.problems.Dtlz9(variables=2), "Dtlz9.variables is at least 3, not 2"),
+        (gx.problems.Dc1Dtlz1(a=0), "DC1-DTLZ1 needs a finite a above 0, not 0"),
+        (gx.problems.Dc2Dtlz3(b=1), "DC2-DTLZ3 needs a b between -1 and 1, not 1"),
+        (gx.problems.Dc3Dtlz1(a="a"), "Dc3Dtlz1.a is a number"),
+        (gx.problems.DasCmop1(difficulty=17), "DasCmop1.difficulty is a triplet or 1 to 16"),
+        (gx.problems.DasCmop2(difficulty=(0, 2, 0)), "DasCmop2.difficulty's levels are in"),
+        (gx.problems.DasCmop3(difficulty=(0, 0)), "DasCmop3.difficulty is three numbers"),
+        (gx.problems.DasCmop7(variables=2), "DasCmop7.variables is at least 3, not 2"),
+    ],
+)
+def test_wrong_batch_11_settings_are_errors(problem, message):
+    with pytest.raises((ValueError, TypeError), match=message):
+        problem.genome
+
+
+def test_batch_11_settings_are_checked_in_rust_too():
+    description = '{"type": "das_cmop1", "variables": 30, "difficulty": [0.0, 1.5, 0.0]}'
+    with pytest.raises(ValueError, match="DAS-CMOP1's difficulty levels are in"):
+        gx._genoxide.problem_info(description)
+    description = '{"type": "dtlz8", "objectives": 2, "variables": null}'
+    with pytest.raises(ValueError, match="DTLZ8 takes 3 to 6 objectives"):
+        gx._genoxide.problem_info(description)
+    description = '{"type": "dc1_dtlz1", "objectives": 3, "variables": null, "a": -1, "b": null}'
+    with pytest.raises(ValueError, match="DC1-DTLZ1 needs a finite a above 0"):
         gx._genoxide.problem_info(description)
 
 
