@@ -152,6 +152,22 @@ pub enum Algorithm {
         initial_genome: Option<Vec<f64>>,
         seed: Option<u64>,
     },
+    /// Bayesian optimization.
+    Bo {
+        /// The points of the initial design.
+        initial_points: Option<usize>,
+        /// Genomes evaluated first, in the initial design.
+        initial_genomes: Option<Vec<Vec<f64>>>,
+        acquisition: Option<Acquisition>,
+        kernel: Option<KernelName>,
+        noise: Option<NoiseConfig>,
+        output: Option<BoOutput>,
+        /// The random points at which the acquisition is evaluated before its maximization.
+        raw_samples: Option<usize>,
+        acquisition_starts: Option<usize>,
+        hyperparameter_starts: Option<usize>,
+        seed: Option<u64>,
+    },
     NelderMead {
         coefficients: Option<NelderMeadCoefficients>,
         /// The size of the first simplex, as a fraction of each gene's range.
@@ -590,6 +606,41 @@ pub enum GradientSource {
     Supplied,
     Forward,
     Central,
+}
+
+/// An acquisition function of Bayesian optimization.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Acquisition {
+    ExpectedImprovement,
+    LogExpectedImprovement,
+    ProbabilityOfImprovement { xi: f64 },
+    UpperConfidenceBound { beta: f64 },
+}
+
+/// The kernel of a Gaussian process.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KernelName {
+    Matern52,
+    SquaredExponential,
+}
+
+/// The noise of a Gaussian process: a fixed variance, or learned from a least one, as fractions
+/// of the values' variance.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NoiseConfig {
+    Fixed { variance: f64 },
+    Learned { min: f64 },
+}
+
+/// What the model of Bayesian optimization fits.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BoOutput {
+    Standardize,
+    Log,
 }
 
 /// Nelder-Mead's coefficients: `"adaptive"` (Gao and Han's), `"standard"` (Nelder and Mead's) or

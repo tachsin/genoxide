@@ -9,6 +9,7 @@
 
 use crate::config;
 use crate::errors::setting;
+use crate::model::PyGaussianProcess;
 use crate::operators::AnySelect;
 use crate::run::{de_control, de_strategy};
 use genoxide::algorithm::islands::Migrate;
@@ -17,6 +18,8 @@ use genoxide::genome::Representation;
 use genoxide::neat::Neat;
 use genoxide::operator::{Crossover, Mutate};
 use genoxide::prelude::*;
+use numpy::ndarray::ArrayView2;
+use numpy::{PyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use serde::de::DeserializeOwned;
@@ -32,6 +35,19 @@ pub trait Settings<A>: Send + Sync + 'static {
 
     /// Changes a setting to `value`, JSON; nothing changes on errors.
     fn set(&self, algorithm: &mut A, name: &str, value: &str) -> Result<()>;
+
+    /// The surrogate model that chose the last point, and its number of genes, for the
+    /// algorithms that have one: Bayesian optimization's. None by default.
+    fn model(&self, algorithm: &A) -> Option<PyGaussianProcess> {
+        let _ = algorithm;
+        None
+    }
+
+    /// The acquisition function at `points`, a point per row, for the algorithms that have one.
+    fn acquisition(&self, algorithm: &A, points: ArrayView2<'_, f64>) -> Result<Vec<f64>> {
+        let _ = (algorithm, points);
+        Err("the algorithm has no acquisition function".to_string())
+    }
 }
 
 fn unknown(name: &str) -> String {
@@ -432,6 +448,76 @@ where
     }
 }
 
+/// Bayesian optimization's acquisition function, which can change, its model and its
+/// acquisition's values, for a plot.
+pub struct BoSettings;
+
+impl Settings<Bo> for BoSettings {
+    fn get(&self, bo: &Bo, name: &str) -> Result<Value> {
+        match name {
+            "acquisition" => Ok(match bo.acquisition() {
+                bo::Acquisition::ExpectedImprovement => json!({"type": "expected_improvement"}),
+                bo::Acquisition::LogExpectedImprovement => {
+                    json!({"type": "log_expected_improvement"})
+                }
+                bo::Acquisition::ProbabilityOfImprovement { xi } => {
+                    json!({"type": "probability_of_improvement", "xi": xi})
+                }
+                bo::Acquisition::UpperConfidenceBound { beta } => {
+                    json!({"type": "upper_confidence_bound", "beta": beta})
+                }
+                acquisition => {
+                    return Err(format!(
+                        "an acquisition the package doesn't know: {acquisition:?}"
+                    ));
+                }
+            }),
+            "initial_points" => Ok(json!(bo.initial_points())),
+            _ => Err(unknown(name)),
+        }
+    }
+
+    fn set(&self, bo: &mut Bo, name: &str, value: &str) -> Result<()> {
+        match name {
+            "acquisition" => {
+                let acquisition: config::Acquisition = parse(name, value)?;
+                setting(bo.set_acquisition(crate::model::acquisition(acquisition)))
+            }
+            _ => Err(unknown(name)),
+        }
+    }
+
+    fn model(&self, bo: &Bo) -> Option<PyGaussianProcess> {
+        let genes = bo.real().genome_len();
+        bo.model()
+            .map(|model| PyGaussianProcess::new(model.clone(), genes))
+    }
+
+    fn acquisition(&self, bo: &Bo, points: ArrayView2<'_, f64>) -> Result<Vec<f64>> {
+        let genes = bo.real().genome_len();
+        if points.ncols() != genes {
+            return Err(format!(
+                "points is a point per row, a value per gene of the genome's {genes}, not of                  shape ({}, {})",
+                points.nrows(),
+                points.ncols()
+            ));
+        }
+        let mut point = vec![0.0; genes];
+        let mut values = Vec::with_capacity(points.nrows());
+        for row in points.rows() {
+            for (x, &value) in point.iter_mut().zip(row.iter()) {
+                *x = value;
+            }
+            match bo.acquisition_at(&point) {
+                Some(value) => values.push(value),
+                None => return Err("no model yet: the first point after the initial design                      has its model"
+                    .to_string()),
+            }
+        }
+        Ok(values)
+    }
+}
+
 /// Where the algorithm is while the control runs, and its settings.
 pub struct Slot<A, S> {
     algorithm: Mutex<Option<A>>,
@@ -482,6 +568,8 @@ trait AnySlot: Send + Sync {
     fn get(&self, name: &str) -> PyResult<String>;
     fn set(&self, name: &str, value: &str) -> PyResult<()>;
     fn reevaluate(&self) -> PyResult<()>;
+    fn model(&self) -> PyResult<Option<PyGaussianProcess>>;
+    fn acquisition(&self, points: ArrayView2<'_, f64>) -> PyResult<Vec<f64>>;
 }
 
 impl<A, S> AnySlot for Slot<A, S>
@@ -500,6 +588,14 @@ where
 
     fn reevaluate(&self) -> PyResult<()> {
         self.with(|algorithm, _| setting(algorithm.reevaluate()))
+    }
+
+    fn model(&self) -> PyResult<Option<PyGaussianProcess>> {
+        self.with(|algorithm, settings| Ok(settings.model(algorithm)))
+    }
+
+    fn acquisition(&self, points: ArrayView2<'_, f64>) -> PyResult<Vec<f64>> {
+        self.with(|algorithm, settings| settings.acquisition(algorithm, points))
     }
 }
 
@@ -535,6 +631,21 @@ impl Running {
     /// Marks what the algorithm keeps for evaluation by the next generation's ask.
     fn reevaluate(&self) -> PyResult<()> {
         self.slot.reevaluate()
+    }
+
+    /// The surrogate model that chose the last point, or None.
+    fn model(&self) -> PyResult<Option<PyGaussianProcess>> {
+        self.slot.model()
+    }
+
+    /// The acquisition function at `points`, a point per row.
+    fn acquisition<'py>(
+        &self,
+        py: Python<'py>,
+        points: PyReadonlyArray2<'py, f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let values = self.slot.acquisition(points.as_array())?;
+        Ok(PyArray1::from_vec(py, values))
     }
 }
 

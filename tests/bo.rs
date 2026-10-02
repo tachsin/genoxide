@@ -154,6 +154,20 @@ fn reproducible_sequentially_and_in_parallel() {
 }
 
 #[test]
+fn the_python_package_gives_the_same_run() {
+    // python/tests/test_bo.py has the same run, and the bayesian_optimization example prints it
+    let outcome = Engine::new(branin_bo(1), Branin)
+        .stop_when(Stop::evaluations(30))
+        .run()
+        .unwrap();
+    assert_eq!(outcome.best_fitness().score(), Some(0.39798370755715595));
+    assert_eq!(
+        outcome.best_genome()[..],
+        [9.424508858501198, 2.484571084777484]
+    );
+}
+
+#[test]
 fn no_point_is_asked_twice() {
     let (genomes, _) = run(branin_bo(2), false, 40);
     assert_eq!(genomes.len(), 40);
