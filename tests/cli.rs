@@ -849,7 +849,70 @@ length = 4",
         )
         .replace("builtin = \"sphere\"", "builtin = \"one-max\""),
     );
-    assert!(error.contains("`bo` needs a real genome"), "{error}");
+    assert!(
+        error.contains("`bo` needs a real or an integer genome"),
+        "{error}"
+    );
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn bayesian_optimization_in_batches_asynchronously_and_on_integers() {
+    let directory = directory("bo-batch");
+    let run = |text: &str| untimed(run(&directory, "run.toml", text, &[]).unwrap());
+    let default = run(BO);
+    // batches of 3, evaluated by the 2 workers: whole generations, past the 25 evaluations
+    for fantasy in ["believer", "liar-min", "liar-mean", "liar-max"] {
+        let batch = run(&bo(&format!("batch = 3\nfantasy = \"{fantasy}\"")));
+        assert_eq!(batch["evaluations"], 27, "{fantasy}");
+        assert!(
+            batch["fitness"].as_f64().unwrap() < 0.1,
+            "{fantasy}: {batch}"
+        );
+        assert_ne!(batch, default, "{fantasy}");
+    }
+    // asynchronously, each worker given a point as soon as it's done: exactly the budget
+    let asynchronous = run(&bo("asynchronous = true"));
+    assert_eq!(asynchronous["evaluations"], 25);
+    assert!(
+        asynchronous["fitness"].as_f64().unwrap() < 0.1,
+        "{asynchronous}"
+    );
+    // on an integer genome, to the sphere's minimum 0 at the origin
+    let integer = run(&BO.replace(
+        "type = \"real\"\nlength = 2\nbounds = [-5.0, 5.0]",
+        "type = \"integer\"\nlength = 3\nbounds = [-6, 6]",
+    ));
+    assert_eq!(integer["fitness"], 0.0, "{integer}");
+    assert_eq!(integer["genome"], serde_json::json!([0, 0, 0]));
+    // a program's constraints: the built-in `volume`, read without its gradient by `bo`
+    let volume = MMA
+        .replace("length = 100", "length = 2")
+        .replace("type = \"mma\"", "type = \"bo\"")
+        .replace("evaluations = 1000", "evaluations = 30");
+    let constrained = run(&volume);
+    assert_eq!(constrained["violation"], 0.0, "{constrained}");
+    // the minimum of 1/x₀ + 2/x₁ subject to x₀ + x₁ <= 2: (1 + √2)² / 2
+    let minimum = (1.0 + 2f64.sqrt()).powi(2) / 2.0;
+    let found = constrained["fitness"].as_f64().unwrap();
+    assert!(found - minimum < 1e-2, "{constrained}");
+    // invalid settings
+    for (settings, message) in [
+        ("batch = 0", "batch"),
+        ("fantasy = \"liar\"", "`liar-min`"),
+        (
+            "acquisition = { type = \"ucb\", beta = 1.0 }",
+            "acquisition",
+        ),
+    ] {
+        let text = if message == "acquisition" {
+            volume.replace("type = \"bo\"", &format!("type = \"bo\"\n{settings}"))
+        } else {
+            bo(settings)
+        };
+        let error = run_error(&directory, &text);
+        assert!(error.contains(message), "{settings}: {error}");
+    }
     std::fs::remove_dir_all(&directory).unwrap();
 }
 

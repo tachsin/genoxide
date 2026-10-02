@@ -353,6 +353,8 @@ impl Pool {
                 values,
                 extras,
             )
+        } else if self.constraints > 0 {
+            parse_constrained(&process.line, self.constraints, values, extras)
         } else {
             parse(&process.line, values)
         };
@@ -424,6 +426,48 @@ pub fn parse(line: &str, values: &mut [f64]) -> Result<f64, String> {
             if expected == 1 { "" } else { "s" },
         )),
     }
+}
+
+/// Parses an answer with constraints and without a gradient: the value, then the values of
+/// `constraints` inequality constraints g(x) <= 0, into `values` (one value) and the buffer of
+/// `extras` if it's wanted. Returns the violation: the sum of the positive constraint values.
+pub fn parse_constrained(
+    line: &str,
+    constraints: usize,
+    values: &mut [f64],
+    extras: Option<&mut Extras<'_>>,
+) -> Result<f64, String> {
+    let mut inequalities = extras.and_then(Extras::inequalities);
+    let mut count = 0;
+    let mut violation = 0.0;
+    for word in line.split_whitespace() {
+        let number: f64 = word
+            .parse()
+            .map_err(|_| format!("`{word}` isn't a number"))?;
+        match count {
+            0 => values[0] = number,
+            k if k <= constraints => {
+                violation += at_most(number, 0.0);
+                if let Some(inequalities) = inequalities.as_deref_mut() {
+                    inequalities[k - 1] = number;
+                }
+            }
+            _ => {}
+        }
+        count += 1;
+    }
+    if count != 1 + constraints {
+        let what = if constraints == 1 {
+            "the constraint's value".to_string()
+        } else {
+            format!("the {constraints} constraints' values")
+        };
+        return Err(format!(
+            "expected {} numbers (the value and {what}), got {count}",
+            1 + constraints
+        ));
+    }
+    Ok(violation)
 }
 
 /// Parses an answer of the gradient protocol: the value, then a derivative per gene, then the
@@ -555,11 +599,11 @@ impl<G: Genes> FitnessFunction<G> for Single<'_> {
         (value[0], violation)
     }
 
-    // the gradient, with `fitness.gradient`, and the constraints' values and Jacobian, with
-    // `fitness.constraints`
+    // the gradient, with `fitness.gradient`, and the constraints' values (and with the gradient,
+    // their Jacobian), with `fitness.constraints`
     fn provides(&self) -> Provided {
         match (self.0.gradient, self.0.constraints) {
-            (false, _) => Provided::NOTHING,
+            (false, m) => Provided::NOTHING.with_inequalities(m),
             (true, 0) => Provided::GRADIENT,
             (true, m) => Provided::GRADIENT
                 .with_inequalities(m)
@@ -618,6 +662,28 @@ mod tests {
             parse("1", &mut two)
                 .unwrap_err()
                 .contains("expected 2 numbers")
+        );
+    }
+
+    #[test]
+    fn constrained_answers_parse() {
+        let (mut value, mut g) = ([0.0], [0.0; 2]);
+        let mut extras = Extras::new(None, Some(&mut g), None);
+        assert_eq!(
+            parse_constrained("1.5 -0.5 2\n", 2, &mut value, Some(&mut extras)),
+            Ok(2.0)
+        );
+        assert_eq!((value, g), ([1.5], [-0.5, 2.0]));
+        assert_eq!(parse_constrained("4 1 1", 2, &mut value, None), Ok(2.0));
+        assert!(
+            parse_constrained("4 1", 2, &mut value, None)
+                .unwrap_err()
+                .contains("expected 3 numbers (the value and the 2 constraints' values), got 2")
+        );
+        assert!(
+            parse_constrained("4", 1, &mut value, None)
+                .unwrap_err()
+                .contains("the value and the constraint's value")
         );
     }
 
