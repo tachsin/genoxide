@@ -11,6 +11,7 @@ use genoxide::checkpoint;
 use genoxide::engine::asynchronous::MAX_WORKERS;
 use genoxide::genome::Representation;
 use genoxide::gradient::Gradients;
+use genoxide::model::gp;
 use genoxide::multi::MultiObjectiveAlgorithm;
 use genoxide::observer::Report;
 use genoxide::operator::{Crossover, Mutate};
@@ -594,6 +595,69 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             }
             generational(setting(builder.build())?, context)
         }
+        config::Algorithm::Bo {
+            seed,
+            initial_points,
+            acquisition,
+            kernel,
+            noise,
+            output,
+            raw_samples,
+            acquisition_starts,
+            hyperparameter_starts,
+        } => {
+            let mut builder = Bo::builder(real).objective(context.single_objective()?);
+            if let Some(seed) = seed {
+                builder = builder.seed(seed);
+            }
+            if let Some(points) = initial_points {
+                builder = builder.initial_points(points);
+            }
+            if let Some(acquisition) = acquisition {
+                builder = builder.acquisition(match acquisition {
+                    config::BoAcquisition::Named(config::BoAcquisitionName::LogEi) => {
+                        bo::Acquisition::LogExpectedImprovement
+                    }
+                    config::BoAcquisition::Named(config::BoAcquisitionName::Ei) => {
+                        bo::Acquisition::ExpectedImprovement
+                    }
+                    config::BoAcquisition::Table(config::BoAcquisitionTable::Pi { xi }) => {
+                        bo::Acquisition::ProbabilityOfImprovement { xi }
+                    }
+                    config::BoAcquisition::Table(config::BoAcquisitionTable::Ucb { beta }) => {
+                        bo::Acquisition::UpperConfidenceBound { beta }
+                    }
+                });
+            }
+            if let Some(kernel) = kernel {
+                builder = builder.kernel(match kernel {
+                    config::Kernel::Matern52 => gp::Kernel::Matern52,
+                    config::Kernel::SquaredExponential => gp::Kernel::SquaredExponential,
+                });
+            }
+            if let Some(noise) = noise {
+                builder = builder.noise(match noise {
+                    config::BoNoise::Fixed(variance) => gp::Noise::Fixed(variance),
+                    config::BoNoise::Learned { learned } => gp::Noise::Learned { min: learned },
+                });
+            }
+            if let Some(output) = output {
+                builder = builder.output(match output {
+                    config::BoOutput::Standardize => bo::Output::Standardize,
+                    config::BoOutput::Log => bo::Output::Log,
+                });
+            }
+            if let Some(samples) = raw_samples {
+                builder = builder.raw_samples(samples);
+            }
+            if let Some(starts) = acquisition_starts {
+                builder = builder.acquisition_starts(starts);
+            }
+            if let Some(starts) = hyperparameter_starts {
+                builder = builder.hyperparameter_starts(starts);
+            }
+            generational(setting(builder.build())?, context)
+        }
         config::Algorithm::NelderMead {
             seed,
             coefficients,
@@ -777,6 +841,7 @@ where
         config::Algorithm::NelderMead { .. } => {
             Err("`nelder-mead` needs a real genome".to_string())
         }
+        config::Algorithm::Bo { .. } => Err("`bo` needs a real genome".to_string()),
         config::Algorithm::Lbfgsb { .. } => Err("`lbfgsb` needs a real genome".to_string()),
         config::Algorithm::Mma { .. } => Err("`mma` needs a real genome".to_string()),
         config::Algorithm::FirstOrder { .. } => {

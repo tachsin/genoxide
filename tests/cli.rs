@@ -764,6 +764,120 @@ fn stop_and_report_mistakes_are_found_by_check() {
     std::fs::remove_dir_all(&directory).unwrap();
 }
 
+const BO: &str = r#"
+report = "off"
+[genome]
+type = "real"
+length = 2
+bounds = [-5.0, 5.0]
+[fitness]
+builtin = "sphere"
+objectives = ["minimize"]
+workers = 2
+[algorithm]
+type = "bo"
+seed = 1
+[stop]
+evaluations = 25
+"#;
+
+// a run file of `BO` with these settings
+fn bo(settings: &str) -> String {
+    BO.replace(
+        "type = \"bo\"",
+        &format!(
+            "type = \"bo\"
+{settings}"
+        ),
+    )
+}
+
+#[test]
+fn bayesian_optimization_runs() {
+    let directory = directory("bo");
+    let run = |text: &str| untimed(run(&directory, "run.toml", text, &[]).unwrap());
+    let default = run(BO);
+    assert_eq!(default["stop_reason"], "evaluations");
+    assert_eq!(default["evaluations"], 25);
+    assert!(default["fitness"].as_f64().unwrap() < 1e-6, "{default}");
+    // the settings' defaults
+    let explicit = run(&bo("initial_points = 6
+acquisition = \"log-ei\"
+kernel = \"matern52\"
+         noise = 0.0
+output = \"standardize\"
+raw_samples = 1000
+acquisition_starts = 10
+         hyperparameter_starts = 5"));
+    assert_eq!(explicit, default);
+    // the other settings
+    for settings in [
+        "acquisition = \"ei\"",
+        "acquisition = { type = \"pi\", xi = 0.01 }",
+        "acquisition = { type = \"ucb\", beta = 4.0 }",
+        "kernel = \"squared-exponential\"",
+        "noise = { learned = 1e-6 }",
+        "output = \"log\"",
+    ] {
+        let other = run(&bo(settings));
+        assert_eq!(other["evaluations"], 25, "{settings}");
+        assert!(
+            other["fitness"].as_f64().unwrap() < 0.1,
+            "{settings}: {other}"
+        );
+        assert_ne!(other, default, "{settings}");
+    }
+    // invalid settings
+    for (settings, message) in [
+        ("acquisition = \"ucb\"", "acquisition"),
+        ("acquisition = { type = \"ucb\", beta = -1.0 }", "beta"),
+        ("noise = { learned = 0.0 }", "noise"),
+        ("initial_points = 0", "initial_points"),
+        ("raw_samples = 0", "raw_samples"),
+    ] {
+        let error = run_error(&directory, &bo(settings));
+        assert!(error.contains(message), "{settings}: {error}");
+    }
+    let error = run_error(
+        &directory,
+        &BO.replace(
+            "type = \"real\"
+length = 2
+bounds = [-5.0, 5.0]",
+            "type = \"binary\"
+length = 4",
+        )
+        .replace("builtin = \"sphere\"", "builtin = \"one-max\""),
+    );
+    assert!(error.contains("`bo` needs a real genome"), "{error}");
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+// the error of a run file that doesn't run
+fn run_error(directory: &Path, text: &str) -> String {
+    run(directory, "error.toml", text, &[]).unwrap_err()
+}
+
+#[test]
+fn bayesian_optimization_resumes_from_checkpoints() {
+    let directory = directory("bo-resume");
+    let text = |evaluations: u64| {
+        format!(
+            "{}[checkpoint]
+path = \"run.ckpt\"
+every = 3
+",
+            BO.replace("evaluations = 25", &format!("evaluations = {evaluations}"))
+        )
+    };
+    let whole = run(&directory, "whole.toml", &text(20), &[]).unwrap();
+    let first = run(&directory, "part.toml", &text(12), &[]).unwrap();
+    assert_eq!(first["evaluations"], 12);
+    let resumed = run(&directory, "part.toml", &text(20), &["--resume"]).unwrap();
+    assert_eq!(untimed(resumed), untimed(whole));
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
 const NELDER_MEAD: &str = r#"
 report = "off"
 [genome]
