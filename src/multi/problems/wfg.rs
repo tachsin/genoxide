@@ -718,12 +718,12 @@ fn bisect(f: impl Fn(f64) -> f64, mut lo: f64, mut hi: f64) -> f64 {
 fn wfg2_intervals() -> Vec<(f64, f64)> {
     // the local minima, where x cos²(5πx) peaks: cos(5πx) = 10πx sin(5πx), once in each
     // (j/5, j/5 + 1/10); then x₁ = 1, where the shape is 0
-    let mut ends: Vec<f64> = (0..5)
+    let mut ends: Vec<f64> = (0..5_u32)
         .map(|j| {
-            let sign = if j % 2 == 0 { 1.0 } else { -1.0 };
+            let sign = if j.is_multiple_of(2) { 1.0 } else { -1.0 };
             let slope =
                 |x: f64| sign * (10.0 * PI * x * math::sin(5.0 * PI * x) - math::cos(5.0 * PI * x));
-            let start = j as f64 / 5.0;
+            let start = f64::from(j) / 5.0;
             bisect(slope, start, start + 0.1)
         })
         .collect();

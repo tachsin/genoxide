@@ -358,7 +358,9 @@ impl EvenParity {
             set.terminal(format!("d{bit}"), Logic::Input(bit as u16), boolean);
         }
         let primitives = set.build(boolean)?;
-        let table = Table::new(primitives, inputs, |case| case.count_ones() % 2 == 0);
+        let table = Table::new(primitives, inputs, |case| {
+            case.count_ones().is_multiple_of(2)
+        });
         Ok(Self { table })
     }
 

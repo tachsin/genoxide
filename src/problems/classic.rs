@@ -3126,7 +3126,7 @@ impl FitnessFunction<Reals> for BucheRastrigin {
             let oscillated = oscillation(xi);
             let mut scale = math::powf(10.0, 0.5 * i as f64 / (n.max(2) - 1) as f64);
             // i from 0 here: the odd genes from 1 are the even ones from 0
-            if oscillated > 0.0 && i % 2 == 0 {
+            if oscillated > 0.0 && i.is_multiple_of(2) {
                 scale *= 10.0;
             }
             let z = scale * oscillated;

@@ -646,7 +646,7 @@ impl OpenEsBuilder {
             setting: "population_size",
         })?;
         let invalid = |setting, reason: String| Err(Error::InvalidSetting { setting, reason });
-        if size < 2 || size % 2 != 0 {
+        if size < 2 || !size.is_multiple_of(2) {
             return invalid(
                 "population_size",
                 format!("must be even and at least 2 (mirrored pairs), got {size}"),

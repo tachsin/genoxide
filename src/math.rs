@@ -338,7 +338,11 @@ pub fn erfcx(x: f64) -> f64 {
     ];
     let mut sum = 0.0;
     for (n, factorial) in DOUBLE_FACTORIALS.iter().enumerate().rev() {
-        let term = if n % 2 == 0 { *factorial } else { -factorial };
+        let term = if n.is_multiple_of(2) {
+            *factorial
+        } else {
+            -factorial
+        };
         sum = sum * t + term;
     }
     inverse * std::f64::consts::FRAC_2_SQRT_PI * 0.5 * sum
