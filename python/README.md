@@ -169,7 +169,7 @@ A solution that couldn't be scored has NaN objective values and a NaN violation.
 
 - `Nsga2` spreads the front by crowding distance, which works poorly beyond 2 or 3 objectives.
 - `Nsga3` spreads it along reference directions instead.
-- `Moead` solves a single-objective subproblem per weight vector.
+- `Moead` solves a single-objective subproblem per weight vector. With `crossover=gx.DifferentialEvolutionCrossover()` it is MOEA/D-DE (Li and Zhang, 2009): each child is its subproblem's solution moved by the difference of two parents, for Pareto sets whose genes are linked. Constraint violations are compared first (Deb's rules); on constrained problems, a lower `neighbor_mating` such as 0.2 keeps the population spread.
 - `das_dennis(objectives, divisions)` gives evenly spread directions or weights for `Nsga3` and `Moead`, a row each: 91 for 3 objectives and 12 divisions.
 - `Spea2` keeps an archive of the best solutions, the non-dominated ones first, truncated by the distance to their nearest neighbors.
 - `Nsga2`, `Nsga3`, `Spea2` and `SmsEmoa` drop a child that equals a member of the population or an earlier child, and breed another. `eliminate_duplicates=False` keeps copies.
@@ -220,7 +220,7 @@ Operators:
 - **Selection:** `Tournament(size)`, `Rank(pressure)`, `Roulette()`, `StochasticUniversalSampling()`, `Truncation(fraction)`, `RandomSelection()`; against bloat (trees that grow without getting better), selections that see a genome's size, a tree's nodes: `DoubleTournament(fitness_size, parsimony)` (7 and 1.4, Luke and Panait's best), `LexicographicTournament(size, bucket_ratio=None)` (of equal fitness, the smaller wins), `Tarpeian(select, rate)` (genomes larger than the mean count as invalid with probability `rate`)
 - **Crossover:**
   - any list genome: `UniformCrossover()`, `PointCrossover(points)`, `NoCrossover()`
-  - real genomes: `SimulatedBinaryCrossover(eta)`, `BlendCrossover(alpha)`, `ArithmeticCrossover()`
+  - real genomes: `SimulatedBinaryCrossover(eta)`, `BlendCrossover(alpha)`, `ArithmeticCrossover()`; with `Moead` only, `DifferentialEvolutionCrossover(f, cr, repair)` (0.5, 1 and `"bounce"` by default: MOEA/D-DE, for Pareto sets whose genes are linked)
   - permutations: `OrderCrossover()`, `PartiallyMappedCrossover()`, `CycleCrossover()`, `EdgeRecombinationCrossover()`
 - **Mutation:**
   - binary genomes: `BitFlip(rate=... | count=...)`
@@ -809,6 +809,7 @@ Some names differ:
 | `De(control={"f": 0.5, "cr": 0.9})` | `.control(de::Control::Fixed { f: 0.5, cr: 0.9 })`; `{"min_f", "max_f", "cr"}` for `Dither`, `{"c"}` for `Jade`, `{"memory"}` for `Shade` |
 | `De(restarts="never")`, `De(restarts={"tolerance": 1e-12, "patience": 200})` | `.restarts(de::Restarts::Never)`, `.restarts(de::Restarts::OnStagnation { tolerance: 1e-12, patience: 200 })` |
 | `Pbi(theta)` | `Decomposition::Pbi { theta }` |
+| `Moead(crossover=gx.DifferentialEvolutionCrossover(f, cr, repair="random"))` | `.crossover(DifferentialEvolutionCrossover::new(f, cr)?.with_repair(moead::Repair::Random))` |
 | `gx.gp.Gp(primitives, init=gx.gp.Full((2, 6)))` | `Gp::builder(set).init(Init::Full { depths: 2..=6 }).build()?` |
 | `gx.gp.PointMutation(rate=...)`, `gx.gp.ConstantMutation(sigma)` | `PointMutation::per_node(rate)`, `ConstantMutation::gaussian(sigma)` |
 | `gx.gp.Mutations([(0.5, gx.gp.SubtreeMutation()), (0.5, gx.gp.HoistMutation())])` | `Mutations::builder().subtree(0.5).hoist(0.5).build()?` |

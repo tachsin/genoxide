@@ -4,6 +4,8 @@
 use crate::config;
 use crate::errors::{setting, setting_named};
 use genoxide::genome::{AdaptiveReal, Binary, Genome, Integer, Permutation, Real, Representation};
+use genoxide::multi::DifferentialEvolutionCrossover;
+use genoxide::multi::moead::Repair;
 use genoxide::operator::{
     ArithmeticCrossover, BitFlip, BlendCrossover, Crossover, CycleCrossover, DoubleTournament,
     EdgeRecombinationCrossover, GaussianMutation, InsertionMutation, InversionMutation,
@@ -160,6 +162,7 @@ fn crossover_name(crossover: config::Crossover) -> &'static str {
         config::Crossover::EdgeRecombination {} => "EdgeRecombinationCrossover",
         config::Crossover::Subtree { .. } => "SubtreeCrossover",
         config::Crossover::OnePoint {} => "OnePointCrossover",
+        config::Crossover::DifferentialEvolution { .. } => "DifferentialEvolutionCrossover",
     }
 }
 
@@ -290,6 +293,10 @@ impl RealCrossover {
                 Ok(Self::Blend(setting(BlendCrossover::new(alpha))?))
             }
             config::Crossover::Arithmetic {} => Ok(Self::Arithmetic(ArithmeticCrossover::new())),
+            config::Crossover::DifferentialEvolution { .. } => Err(
+                "DifferentialEvolutionCrossover works with Moead only; use SimulatedBinaryCrossover"
+                    .to_string(),
+            ),
             _ => Err(wrong_crossover(
                 crossover,
                 "real",
@@ -319,6 +326,26 @@ impl Crossover<Real> for RealCrossover {
 
     fn recombines(&self) -> bool {
         !matches!(self, Self::None(_))
+    }
+}
+
+/// MOEA/D-DE's differential evolution, from its settings.
+pub fn differential_evolution(
+    crossover: config::Crossover,
+) -> Result<DifferentialEvolutionCrossover> {
+    match crossover {
+        config::Crossover::DifferentialEvolution { f, cr, repair } => {
+            let names = [
+                ("f", "DifferentialEvolutionCrossover.f"),
+                ("cr", "DifferentialEvolutionCrossover.cr"),
+            ];
+            let crossover = setting_named(DifferentialEvolutionCrossover::new(f, cr), &names)?;
+            Ok(match repair {
+                None | Some(config::DeRepair::Bounce) => crossover.with_repair(Repair::Bounce),
+                Some(config::DeRepair::Random) => crossover.with_repair(Repair::Random),
+            })
+        }
+        _ => Err("not a differential evolution crossover".to_string()),
     }
 }
 
