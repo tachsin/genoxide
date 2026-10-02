@@ -57,6 +57,13 @@ interact::
     cmaes = gx.Cmaes(problem.genome, restarts="ipop", objective="minimize", seed=1)
     result = cmaes.run(problem, target=problem.optimum.value + 1e-8, evaluations=200_000)
 
+The gradient methods (:class:`genoxide.Lbfgsb`, :class:`genoxide.FirstOrder`, :class:`genoxide.Mma`)
+take a problem's analytic gradient, computed in Rust. Every classic function has one but the
+eggholder, Schwefel 2.21 and 2.22, the step function, the non-continuous Rastrigin, Katsuura and
+the noisy quartic, whose derivative is undefined or 0 on sets of positive measure. The wrappers
+pass the problem's gradient on (turned by the rotation), and a constrained problem's constraint
+values, which :class:`genoxide.Bo` models.
+
 All problems here are minimized, on :class:`genoxide.Real` genomes except the gear train's
 :class:`genoxide.Integer` and :class:`Zdt5`'s :class:`genoxide.Binary`. Each class's docstring
 gives
@@ -1507,7 +1514,8 @@ class Shifted(Problem[Real]):
     value, its solutions shifted (those that leave the box are dropped). That holds when the
     problem's minimum is its minimum over all of ℝⁿ, as for the functions that CEC and BBOB shift,
     not for one whose minimum is only the lowest in its box, such as :class:`Schwefel2_26`. The
-    same seed gives the same shift as Rust's ``problems::Shifted`` on every platform.
+    problem's analytic gradient and constraint values pass through, those at ``x − o``. The same
+    seed gives the same shift as Rust's ``problems::Shifted`` on every platform.
     """
 
     problem: Problem[Real]
@@ -1535,8 +1543,9 @@ class Rotated(Problem[Real]):
     turns about the optimum, as CEC 2005 and BBOB do, so the optimum stays in place with its
     value. Rotating a :class:`Shifted` problem gives CEC 2005's shifted rotated functions, such as
     its F10, ``Rotated(Shifted(Rastrigin(n), seed), seed)``. The bounds, the name and the
-    reference are the problem's. The same seed gives the same matrix as Rust's
-    ``problems::Rotated`` on every platform.
+    reference are the problem's. The problem's analytic gradient passes through by the chain rule,
+    ``Mᵀ ∇f(c + M (x − c))``, and so do the constraint values at ``c + M (x − c)``. The same seed
+    gives the same matrix as Rust's ``problems::Rotated`` on every platform.
     """
 
     problem: Problem[Real]

@@ -46,6 +46,36 @@ def test_a_problem_converges_with_its_gradient_in_rust():
     assert result.evaluations < 1_000
 
 
+def test_a_shifted_and_rotated_problem_keeps_its_gradient_in_rust():
+    elliptic = gx.problems.HighConditionedElliptic(10)
+    problem = gx.problems.Rotated(gx.problems.Shifted(elliptic, seed=1), seed=1)
+    result = gx.Lbfgsb(
+        problem.genome,
+        gradients="supplied",
+        gradient_tolerance=1e-9,
+        function_tolerance=0.0,
+        objective="minimize",
+        seed=1,
+    ).run(problem, evaluations=10_000)
+    assert result.stop_reason == "converged"
+    assert result.best_fitness < 1e-16
+    assert np.allclose(result.best_genome, problem.optimum.solutions[0], rtol=0.0, atol=1e-8)
+    # one evaluation per iteration or line-search trial, the gradient with it
+    assert result.evaluations < 1_000
+
+
+def test_a_problem_without_a_gradient_has_none_through_the_wrappers():
+    for problem in [
+        gx.problems.Shifted(gx.problems.Katsuura(5), seed=1),
+        gx.problems.Rotated(gx.problems.Step(5), seed=1),
+        gx.problems.Rotated(gx.problems.Shifted(gx.problems.Quartic(5, noisy=True), seed=1), seed=1),
+    ]:
+        with pytest.raises(ValueError, match="gradient"):
+            gx.Lbfgsb(problem.genome, gradients="supplied", objective="minimize").run(
+                problem, evaluations=100
+            )
+
+
 def test_every_way_to_give_the_gradient_takes_the_same_path():
     def both(x):
         return rosenbrock(x), rosenbrock_gradient(x)

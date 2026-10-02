@@ -1,10 +1,13 @@
-//! The analytic gradients of the smooth classic functions: `∂f / ∂xᵢ` into `gradient[i]`, with
-//! `gradient` as long as `x` and zeroed. Each is the derivative of the formula in its problem's
-//! docs, written out by hand, and tested against central differences.
+//! The analytic gradients of the classic functions that are differentiable almost everywhere:
+//! `∂f / ∂xᵢ` into `gradient[i]`, with `gradient` as long as `x` and zeroed. Each is the
+//! derivative of the formula in its problem's docs, written out by hand, and tested against
+//! central differences. Where a function has no derivative, on a set of measure 0 (a cone's or a
+//! cusp's apex), the gradient of the term with the kink is taken as 0, as Ackley's at its cone.
 
 use super::classic::{
     FOXHOLES, HARTMANN_3_A, HARTMANN_3_P, HARTMANN_6_A, HARTMANN_6_P, HARTMANN_C, KOWALIK_A,
     KOWALIK_B_INVERSE, LANGERMANN_A, LANGERMANN_C, MICHALEWICZ_M, SHEKEL_A, SHEKEL_C,
+    WEIERSTRASS_A, WEIERSTRASS_B, WEIERSTRASS_TERMS, conditioning, oscillation,
 };
 use crate::math;
 use std::f64::consts::PI;
@@ -406,6 +409,248 @@ pub(super) fn kowalik(x: &[f64], gradient: &mut [f64]) {
         gradient[1] += residual * x[0] * b / denominator;
         gradient[2] += residual * -ratio * b;
         gradient[3] += residual * -ratio;
+    }
+}
+
+// ---- the CEC- and BBOB-style functions -----------------------------------------------------------
+
+// Σ |xᵢ|^(i+1) (i from 1): (i + 1) |xᵢ|^i sign(xᵢ), 0 at 0
+pub(super) fn sum_of_different_powers(x: &[f64], gradient: &mut [f64]) {
+    for (i, (g, &xi)) in gradient.iter_mut().zip(x).enumerate() {
+        let power = i as i32 + 2;
+        *g = f64::from(power) * math::powi(xi.abs(), power - 1) * xi.signum();
+    }
+}
+
+// Σ i xᵢ⁴: 4 i xᵢ³
+pub(super) fn quartic(x: &[f64], gradient: &mut [f64]) {
+    for (i, (g, &xi)) in gradient.iter_mut().zip(x).enumerate() {
+        *g = 4.0 * (i + 1) as f64 * math::powi(xi, 3);
+    }
+}
+
+// the slope of Yao, Liu and Lin's penalty k (|x| − a)^m outside [−a, a]: k m (|x| − a)^(m − 1)
+// sign(x), and 0 inside, where the penalty meets 0 with that slope
+fn penalty_slope(x: f64, a: f64, k: f64, m: i32) -> f64 {
+    if x.abs() > a {
+        k * f64::from(m) * math::powi(x.abs() - a, m - 1) * x.signum()
+    } else {
+        0.0
+    }
+}
+
+// (π / n) L + Σ u(xᵢ, 10, 100, 4), with yᵢ = 1 + (xᵢ + 1) / 4 and L = 10 sin²(πy₁)
+// + Σ (yᵢ − 1)² (1 + 10 sin²(πyᵢ₊₁)) + (yₙ − 1)²: the derivatives of L in y, with
+// d sin²(πy) / dy = π sin 2πy, times (π / n) dy/dx = π / (4n)
+pub(super) fn penalized_1(x: &[f64], gradient: &mut [f64]) {
+    let n = x.len();
+    if n == 0 {
+        return;
+    }
+    let y = |i: usize| 1.0 + (x[i] + 1.0) / 4.0;
+    gradient[0] += 10.0 * PI * math::sin(2.0 * PI * y(0));
+    for i in 0..n - 1 {
+        let (yi, next) = (y(i), y(i + 1));
+        gradient[i] += 2.0 * (yi - 1.0) * (1.0 + 10.0 * math::powi(math::sin(PI * next), 2));
+        gradient[i + 1] += math::powi(yi - 1.0, 2) * 10.0 * PI * math::sin(2.0 * PI * next);
+    }
+    gradient[n - 1] += 2.0 * (y(n - 1) - 1.0);
+    let scale = PI / (4.0 * n as f64);
+    for (g, &xi) in gradient.iter_mut().zip(x) {
+        *g = scale * *g + penalty_slope(xi, 10.0, 100.0, 4);
+    }
+}
+
+// 0.1 {sin²(3πx₁) + Σ (xᵢ − 1)² (1 + sin²(3πxᵢ₊₁)) + (xₙ − 1)² (1 + sin²(2πxₙ))}
+// + Σ u(xᵢ, 5, 100, 4), with d sin²(cx) / dx = c sin 2cx
+pub(super) fn penalized_2(x: &[f64], gradient: &mut [f64]) {
+    let n = x.len();
+    if n == 0 {
+        return;
+    }
+    let three_pi = 3.0 * PI;
+    gradient[0] += three_pi * math::sin(2.0 * three_pi * x[0]);
+    for i in 0..n - 1 {
+        let (xi, next) = (x[i], x[i + 1]);
+        gradient[i] += 2.0 * (xi - 1.0) * (1.0 + math::powi(math::sin(three_pi * next), 2));
+        gradient[i + 1] += math::powi(xi - 1.0, 2) * three_pi * math::sin(2.0 * three_pi * next);
+    }
+    let last = x[n - 1];
+    let (sin, cos) = math::sin_cos(2.0 * PI * last);
+    gradient[n - 1] +=
+        2.0 * (last - 1.0) * (1.0 + sin * sin) + math::powi(last - 1.0, 2) * 4.0 * PI * sin * cos;
+    for (g, &xi) in gradient.iter_mut().zip(x) {
+        *g = 0.1 * *g + penalty_slope(xi, 5.0, 100.0, 4);
+    }
+}
+
+// Σ cᵢ xᵢ², cᵢ = (10⁶)^((i−1)/(n−1)): 2 cᵢ xᵢ
+pub(super) fn high_conditioned_elliptic(x: &[f64], gradient: &mut [f64]) {
+    let n = x.len();
+    for (i, (g, xi)) in gradient.iter_mut().zip(x).enumerate() {
+        *g = 2.0 * conditioning(i, n) * xi;
+    }
+}
+
+// x₁² + 10⁶ Σᵢ₌₂ⁿ xᵢ²
+pub(super) fn bent_cigar(x: &[f64], gradient: &mut [f64]) {
+    for (i, (g, xi)) in gradient.iter_mut().zip(x).enumerate() {
+        *g = if i == 0 { 2.0 * xi } else { 2e6 * xi };
+    }
+}
+
+// 10⁶ x₁² + Σᵢ₌₂ⁿ xᵢ²
+pub(super) fn discus(x: &[f64], gradient: &mut [f64]) {
+    for (i, (g, xi)) in gradient.iter_mut().zip(x).enumerate() {
+        *g = if i == 0 { 2e6 * xi } else { 2.0 * xi };
+    }
+}
+
+// √S, S = Σ |xᵢ|^pᵢ, pᵢ = 2 + 4 (i−1)/(n−1): pᵢ |xᵢ|^(pᵢ−1) sign(xᵢ) / (2√S). At the origin, the
+// only point where S is 0, √S has a cone (along the first axis, it's |x₁|): its gradient is
+// taken as 0 there
+pub(super) fn different_powers(x: &[f64], gradient: &mut [f64]) {
+    let n = x.len();
+    let exponent = |i: usize| 2.0 + 4.0 * i as f64 / (n.max(2) - 1) as f64;
+    let sum: f64 = x
+        .iter()
+        .enumerate()
+        .map(|(i, xi)| math::powf(xi.abs(), exponent(i)))
+        .sum();
+    if sum <= 0.0 {
+        return;
+    }
+    let scale = 0.5 / sum.sqrt();
+    for (i, (g, &xi)) in gradient.iter_mut().zip(x).enumerate() {
+        let p = exponent(i);
+        *g = scale * p * math::powf(xi.abs(), p - 1.0) * xi.signum();
+    }
+}
+
+// 10 (n − Σ cos 2πzᵢ) + Σ zᵢ² + 100 Σ max(0, |xᵢ| − 5)², zᵢ = sᵢ T_osz(xᵢ):
+// (20π sin 2πzᵢ + 2zᵢ) sᵢ T'(xᵢ) + 200 max(0, |xᵢ| − 5) sign(xᵢ). With x̂ = ln |x| and
+// T(x) = sign(x) exp(x̂ + w(x̂)), w(x̂) = 0.049 (sin c₁x̂ + sin c₂x̂), T'(x) = T(x) (1 + w'(x̂)) / x
+// = exp(w(x̂)) (1 + w'(x̂)), between 0.11 and 2.1: T is increasing. At 0, where T has no
+// derivative (T(x) / x oscillates as x goes to 0), the term 10 (1 − cos 2πz) + z² is O(z²) =
+// O(x²) on either side, so its derivative is 0
+pub(super) fn buche_rastrigin(x: &[f64], gradient: &mut [f64]) {
+    let n = x.len();
+    for (i, (g, &xi)) in gradient.iter_mut().zip(x).enumerate() {
+        let penalty = 200.0 * (xi.abs() - 5.0).max(0.0) * xi.signum();
+        if xi == 0.0 {
+            *g = penalty;
+            continue;
+        }
+        let oscillated = oscillation(xi);
+        let mut scale = math::powf(10.0, 0.5 * i as f64 / (n.max(2) - 1) as f64);
+        if oscillated > 0.0 && i % 2 == 0 {
+            scale *= 10.0;
+        }
+        let z = scale * oscillated;
+        let logarithm = math::ln(xi.abs());
+        let (c1, c2) = if xi > 0.0 { (10.0, 7.9) } else { (5.5, 3.1) };
+        let (sin1, cos1) = math::sin_cos(c1 * logarithm);
+        let (sin2, cos2) = math::sin_cos(c2 * logarithm);
+        let wiggle = 0.049 * (sin1 + sin2);
+        let slope = 0.049 * (c1 * cos1 + c2 * cos2);
+        let derivative = math::exp(wiggle) * (1.0 + slope);
+        let outer = 20.0 * PI * math::sin(2.0 * PI * z) + 2.0 * z;
+        *g = outer * scale * derivative + penalty;
+    }
+}
+
+// the derivative of Weierstrass's sum of its first `terms` terms, Σₖ aᵏ cos(2π bᵏ (x + 0.5)):
+// −Σₖ aᵏ 2π bᵏ sin(2π bᵏ (x + 0.5)) = Σₖ aᵏ 2π bᵏ sin(2π bᵏ x), since every bᵏ is odd and
+// sin(θ + π bᵏ) = −sin θ. The phase from x, not x + 0.5, is rounded the less the nearer x is to
+// the minimum at 0, where every term is 0
+pub(super) fn weierstrass_slope(x: f64, terms: i32) -> f64 {
+    (0..terms)
+        .map(|k| {
+            let (ak, bk) = (math::powi(WEIERSTRASS_A, k), math::powi(WEIERSTRASS_B, k));
+            ak * 2.0 * PI * bk * math::sin(2.0 * PI * bk * x)
+        })
+        .sum()
+}
+
+// Σᵢ Σₖ aᵏ cos(2π bᵏ (xᵢ + 0.5)) − n Σₖ aᵏ cos(π bᵏ): each gene's sum's derivative
+pub(super) fn weierstrass(x: &[f64], gradient: &mut [f64]) {
+    for (g, &xi) in gradient.iter_mut().zip(x) {
+        *g = weierstrass_slope(xi, WEIERSTRASS_TERMS);
+    }
+}
+
+// Σ xᵢ² and Σ xᵢ, in the order of the functions' own sums
+fn squares_and_sum(x: &[f64]) -> (f64, f64) {
+    x.iter().fold((0.0, 0.0), |(squares, sum), xi| {
+        (squares + xi * xi, sum + xi)
+    })
+}
+
+// |S − n|^(1/4) + (S / 2 + T) / n + 1/2, S = Σ xᵢ², T = Σ xᵢ: (1/4) |S − n|^(−3/4) sign(S − n) 2xᵢ
+// = xᵢ |S − n|^(1/4) / (2 (S − n)), plus (xᵢ + 1) / n. On the sphere S = n, where the first term
+// has a cusp (one-sided slopes of −∞ and +∞ across it), its gradient is taken as 0
+pub(super) fn happy_cat(x: &[f64], gradient: &mut [f64]) {
+    let n = x.len() as f64;
+    let (squares, _) = squares_and_sum(x);
+    let difference = squares - n;
+    let groove = if difference != 0.0 {
+        0.5 * math::powf(difference.abs(), 0.25) / difference
+    } else {
+        0.0
+    };
+    for (g, &xi) in gradient.iter_mut().zip(x) {
+        *g = groove * xi + (xi + 1.0) / n;
+    }
+}
+
+// |S² − T²|^(1/2) + (S / 2 + T) / n + 1/2, S = Σ xᵢ², T = Σ xᵢ: with U = S² − T²,
+// sign(U) (4S xᵢ − 2T) / (2 √|U|) = (2S xᵢ − T) √|U| / U, plus (xᵢ + 1) / n. Where U is 0, where
+// the first term has a cusp, its gradient is taken as 0
+pub(super) fn hg_bat(x: &[f64], gradient: &mut [f64]) {
+    let n = x.len() as f64;
+    let (squares, sum) = squares_and_sum(x);
+    let difference = squares * squares - sum * sum;
+    let groove = if difference != 0.0 {
+        difference.abs().sqrt() / difference
+    } else {
+        0.0
+    };
+    for (g, &xi) in gradient.iter_mut().zip(x) {
+        *g = groove * (2.0 * squares * xi - sum) + (xi + 1.0) / n;
+    }
+}
+
+// (S / P)², S = Σᵢ h(sᵢ), P = n − 1 pairs, sᵢ = √(xᵢ² + xᵢ₊₁²), h(s) = √s (1 + sin²(50 s^(1/5))):
+// 2 S / P² Σᵢ h'(sᵢ) ∂sᵢ/∂x, with h'(s) = (1 + sin²θ) / (2√s) + 10 sin(2θ) s^(−3/10),
+// θ = 50 s^(1/5), and ∂sᵢ/∂xⱼ = xⱼ / sᵢ for the pair's two genes. Where a pair's genes are both
+// 0, its √s has a cusp, and its term of the gradient is taken as 0
+pub(super) fn schaffer_f7(x: &[f64], gradient: &mut [f64]) {
+    let pairs = x.len().saturating_sub(1).max(1) as f64;
+    let mut sum = 0.0;
+    for (i, pair) in x.windows(2).enumerate() {
+        let s = (pair[0] * pair[0] + pair[1] * pair[1]).sqrt();
+        let root = s.sqrt();
+        let fifth = math::powf(s, 0.2);
+        let (sin, cos) = math::sin_cos(50.0 * fifth);
+        sum += root * (1.0 + sin * sin);
+        if s > 0.0 {
+            // 10 sin(2θ) s^(−3/10) = 20 sin θ cos θ s^(1/5) / √s
+            let slope = (1.0 + sin * sin) / (2.0 * root) + 20.0 * sin * cos * fifth / root;
+            gradient[i] += slope * pair[0] / s;
+            gradient[i + 1] += slope * pair[1] / s;
+        }
+    }
+    let outer = 2.0 * sum / (pairs * pairs);
+    for g in gradient.iter_mut() {
+        *g *= outer;
+    }
+}
+
+// Σⱼ (n − j + 1) xⱼ² (j from 1): 2 (n − j + 1) xⱼ
+pub(super) fn rotated_hyper_ellipsoid(x: &[f64], gradient: &mut [f64]) {
+    let n = x.len();
+    for (j, (g, xi)) in gradient.iter_mut().zip(x).enumerate() {
+        *g = 2.0 * (n - j) as f64 * xi;
     }
 }
 
