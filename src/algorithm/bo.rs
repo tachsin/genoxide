@@ -82,10 +82,11 @@ pub enum Output {
     /// best, so the best point is never an outlier far below the others (as it would be with a
     /// tiny `δ`), and shrinks as the search closes in.
     ///
-    /// Measured on 20 seeds per problem (default settings otherwise, to f* + 1e-3): Goldstein-Price
-    /// in [−2, 2]² reached in 20 runs of 20 within 80 evaluations (0 with
-    /// [`Standardize`](Output::Standardize)), the six-hump camel in [−5, 5]² in 20 (6), Branin in
-    /// a median of 25 evaluations (30).
+    /// Measured on 20 seeds per problem, with the other settings' defaults, to f* + 1e-3 within 80
+    /// evaluations: Goldstein-Price in [−2, 2]² reached in 19 runs (0 with
+    /// [`Standardize`](Output::Standardize)), the six-hump camel in [−5, 5]² in 20 (4), Branin in
+    /// a median of 20 evaluations (30). Not for every function: on Hartmann 3, whose values span
+    /// less than an order of magnitude, 13 runs (20).
     Log,
 }
 
@@ -712,9 +713,8 @@ fn update_best(
 /// A builder for a [`Bo`], from [`Bo::builder`].
 ///
 /// Defaults: maximize; an initial design of 2(n + 1) points for n searched genes;
-/// [`Acquisition::LogExpectedImprovement`]; the [Matérn 5/2 kernel](Kernel::Matern52) with
-/// [learned noise](Noise::Learned) of at least 1e-6 of the values' variance;
-/// [`Output::Standardize`]; 1000 raw samples and 10 starts for the acquisition's maximization;
+/// [`Acquisition::LogExpectedImprovement`]; the [Matérn 5/2 kernel](Kernel::Matern52) without
+/// noise, the model interpolating the values; [`Output::Standardize`]; 1000 raw samples and 10 starts for the acquisition's maximization;
 /// 5 starts for the hyperparameters'; a random seed.
 #[derive(Clone, Debug)]
 pub struct BoBuilder {
@@ -762,8 +762,9 @@ impl BoBuilder {
         self
     }
 
-    /// The model's observation noise: [`Noise::Learned`] with a least variance of 1e-6 of the
-    /// values' variance by default.
+    /// The model's observation noise: none by default ([`Noise::Fixed`] of 0), the model
+    /// interpolating the values of a deterministic function; [`Noise::Learned`] for a noisy one.
+    /// See [`Noise`] for the evidence.
     pub fn noise(mut self, noise: Noise) -> Self {
         self.noise = noise;
         self

@@ -22,7 +22,7 @@ fn evaluations_to_target(
 
 #[test]
 fn branin_in_tens_of_evaluations() {
-    // three global minima of 0.397887; a median of 30 evaluations over 20 seeds
+    // three global minima of 0.397887: a median of 30 evaluations over 20 seeds, all within 50
     for seed in 1..=3 {
         let bo = Bo::builder(Branin.representation())
             .minimize()
@@ -37,13 +37,14 @@ fn branin_in_tens_of_evaluations() {
 #[test]
 fn six_hump_camel_in_tens_of_evaluations() {
     let optimum = SixHumpCamel.optimum().unwrap().value();
-    // the usual box for Bayesian optimization, [−3, 3] × [−2, 2]: a median of 49 evaluations
+    // the usual box for Bayesian optimization, [−3, 3] × [−2, 2]: a median of 50 evaluations
+    // over 20 seeds, all within 80
     let narrow = Real::new([-3.0..=3.0, -2.0..=2.0]).unwrap();
     let bo = Bo::builder(narrow).minimize().seed(1).build().unwrap();
     assert!(evaluations_to_target(bo, SixHumpCamel, optimum, 70).is_some());
     // genoxide's box, [−5, 5]², whose corners reach 6,400: the log transform resolves the
-    // minima where the standardized values can't (a median of 34 evaluations against 6 of 20
-    // runs within 80)
+    // minima where the standardized values can't (every seed of 20 within 80 evaluations, a
+    // median of 31, against 4 of 20)
     let bo = Bo::builder(SixHumpCamel.representation())
         .output(Output::Log)
         .minimize()
@@ -55,21 +56,23 @@ fn six_hump_camel_in_tens_of_evaluations() {
 
 #[test]
 fn hartmann_3_in_tens_of_evaluations() {
-    // 12 of 20 seeds within 80 evaluations, a median of 24; the others stall where the model
-    // judges x₁ irrelevant, at x₁ = 0, 0.008 above the minimum
+    // every seed of 20 within 80 evaluations, a median of 26
     let optimum = Hartmann3.optimum().unwrap().value();
-    let bo = Bo::builder(Hartmann3.representation())
-        .minimize()
-        .seed(3)
-        .build()
-        .unwrap();
-    assert!(evaluations_to_target(bo, Hartmann3, optimum, 50).is_some());
+    for seed in 1..=3 {
+        let bo = Bo::builder(Hartmann3.representation())
+            .minimize()
+            .seed(seed)
+            .build()
+            .unwrap();
+        let evaluations = evaluations_to_target(bo, Hartmann3, optimum, 60);
+        assert!(evaluations.is_some(), "seed {seed}");
+    }
 }
 
 #[test]
 fn goldstein_price_with_the_log_transform() {
     // values from 3 to 10⁶: no seed of 20 reaches the target within 80 evaluations with
-    // standardized values, every one with the log transform
+    // standardized values, 19 with the log transform, a median of 39
     let bo = Bo::builder(GoldsteinPrice.representation())
         .output(Output::Log)
         .minimize()

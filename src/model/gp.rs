@@ -42,8 +42,9 @@
 //!   distance `r² = Σᵢ (xᵢ − x′ᵢ)² / ℓᵢ²`. The Matérn kernel with ν = 5/2 by default (eq. 4.17),
 //!   twice differentiable, as Snoek, Larochelle and Adams (2012) advise for Bayesian optimization
 //!   against the squared exponential's infinitely smooth functions (eq. 4.9; Stein, 1999).
-//! - **The noise** ([`Noise`]) is learned with the other hyperparameters by default, at least
-//!   1e-6 of the values' variance; or fixed, e.g. for interpolation.
+//! - **The noise** ([`Noise`]) is none by default: the model interpolates the values, as suits
+//!   the deterministic functions genoxide optimizes, with the jitter below as the only nugget.
+//!   For a noisy function, it's learned with the other hyperparameters, or fixed.
 //! - **The constant mean** `m` is, for given kernel hyperparameters, the one that maximizes the
 //!   marginal likelihood: the generalized least squares estimate `m = 1ᵀK⁻¹y / 1ᵀK⁻¹1` (setting
 //!   the derivative of eq. 2.30 with `y − m` for `y` to zero, as eq. 2.38 models a fixed mean).
@@ -58,7 +59,7 @@
 //! [`Lbfgsb`](crate::algorithm::Lbfgsb) and the analytic gradient of eq. 5.9,
 //! `∂/∂θⱼ ln p = ½ tr((ααᵀ − K_y⁻¹) ∂K_y/∂θⱼ)`, `α = K_y⁻¹(y − m)`. The search runs from
 //! [several starts](GaussianProcessBuilder::starts): the first from fixed values (length scales of
-//! 0.5 of each range, `σ_f²` the values' variance, `σ_n²` 1e-4 of it, or the noise's least), the
+//! 0.5 of each range, `σ_f²` the values' variance, a learned `σ_n²` 1e-4 of it or its least), the
 //! others from random points of the box below, drawn from streams derived from the
 //! [seed](GaussianProcessBuilder::seed), independent of each other. The likelihood's best wins,
 //! the earlier start on ties, so the fit is the same on any number of threads (with the
@@ -125,25 +126,31 @@ impl Kernel {
 
 /// The observation noise of a [`GaussianProcess`]: its variance `σ_n²`, as a fraction of the
 /// values' variance (the model's outputs are standardized).
+///
+/// None by default (`Fixed(0.0)`): genoxide's fitness functions are deterministic, and a model
+/// that interpolates them resolves the small differences near a minimum that a learned noise
+/// smooths over. Measured with [`Bo`](crate::algorithm::Bo) over 20 seeds and 80 evaluations, to
+/// f* + 1e-4: Branin reached in 20 runs, the six-hump camel in [−3, 3] × [−2, 2] in 20 and
+/// Hartmann 3 in 20, against 14, 17 and 12 with noise learned from a least of 1e-6, which settles
+/// above that least, at an absolute standard deviation of about 0.03 on Branin.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Noise {
-    /// Learned with the other hyperparameters, at least `min` (0 < `min` < 1). The default is
-    /// `min` = 1e-6: for a deterministic function, the model then nearly interpolates its values,
-    /// while the floor keeps the kernel matrix well conditioned.
+    /// Learned with the other hyperparameters, at least `min` (0 < `min` < 1), e.g. 1e-6: for a
+    /// noisy function, whose values the model shouldn't interpolate.
     Learned {
         /// The least noise variance, a fraction of the values' variance.
         min: f64,
     },
-    /// A fixed variance, at least 0: 0 interpolates the values (with the jitter the Cholesky
-    /// factorization may need).
+    /// A fixed variance, at least 0: 0 (the default) interpolates the values, with the jitter the
+    /// Cholesky factorization may need.
     Fixed(f64),
 }
 
 impl Default for Noise {
     fn default() -> Self {
-        Noise::Learned { min: 1e-6 }
+        Noise::Fixed(0.0)
     }
 }
 
@@ -906,8 +913,8 @@ impl Data<'_> {
 
 /// A builder for a [`GaussianProcess`], from [`GaussianProcess::builder`].
 ///
-/// Defaults: the [Matérn 5/2 kernel](Kernel::Matern52), [learned noise](Noise::Learned) of at
-/// least 1e-6 of the values' variance, 5 starts of the likelihood's maximization, seed 0.
+/// Defaults: the [Matérn 5/2 kernel](Kernel::Matern52), no noise ([`Noise::Fixed`] of 0), 5 starts
+/// of the likelihood's maximization, seed 0.
 #[derive(Clone, Debug)]
 pub struct GaussianProcessBuilder {
     real: Real,
@@ -925,8 +932,8 @@ impl GaussianProcessBuilder {
         self
     }
 
-    /// The observation noise: [`Noise::Learned`] with a least variance of 1e-6 of the values'
-    /// variance by default.
+    /// The observation noise: none by default ([`Noise::Fixed`] of 0), the model interpolating
+    /// the values; [`Noise::Learned`] for a noisy function.
     pub fn noise(mut self, noise: Noise) -> Self {
         self.noise = noise;
         self

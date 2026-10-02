@@ -1059,7 +1059,10 @@ fn bayesian_optimization_saved_between_an_ask_and_its_tell_resumes() {
     let mut resumed: Bo = checkpoint::load(bytes(&bo).as_slice()).unwrap();
     let again: Vec<Vec<f64>> = resumed.ask().iter().map(|x| x.to_vec()).collect();
     assert_eq!(again, asked);
-    let fitness: Vec<Fitness> = asked.iter().map(|x| Fitness::new(branin(&Reals::from(x.clone())))).collect();
+    let fitness: Vec<Fitness> = asked
+        .iter()
+        .map(|x| Fitness::new(branin(&Reals::from(x.clone()))))
+        .collect();
     bo.tell(&fitness).unwrap();
     resumed.tell(&fitness).unwrap();
     assert_eq!(bytes(&resumed), bytes(&bo));
@@ -1067,7 +1070,10 @@ fn bayesian_optimization_saved_between_an_ask_and_its_tell_resumes() {
         let a: Vec<Vec<f64>> = bo.ask().iter().map(|x| x.to_vec()).collect();
         let b: Vec<Vec<f64>> = resumed.ask().iter().map(|x| x.to_vec()).collect();
         assert_eq!(a, b);
-        let fitness: Vec<Fitness> = a.iter().map(|x| Fitness::new(branin(&Reals::from(x.clone())))).collect();
+        let fitness: Vec<Fitness> = a
+            .iter()
+            .map(|x| Fitness::new(branin(&Reals::from(x.clone()))))
+            .collect();
         bo.tell(&fitness).unwrap();
         resumed.tell(&fitness).unwrap();
     }
