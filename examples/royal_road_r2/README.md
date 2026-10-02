@@ -3,6 +3,7 @@ title: Royal road R2
 category: binary
 summary: Maximize 8 blocks of 8 ones and their pairs, quadruples and whole, each scoring when complete, with the genetic algorithm of Mitchell, Forrest and Holland's settings.
 reference: "Mitchell, M., Forrest, S. and Holland, J. H. (1992). The royal road for genetic algorithms: fitness landscapes and GA performance. Proceedings of the First European Conference on Artificial Life: 245-254."
+reference_url: https://www.osti.gov/biblio/6107786
 optimum: "256 (all ones)"
 languages: [rust, python]
 order: 14
