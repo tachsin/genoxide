@@ -50,8 +50,8 @@ type Fingerprints = HashMap<u64, usize, BuildHasherDefault<Identity>>;
 
 // genomes no longer in use, which breeding copies parents into rather than allocating: the
 // parents that didn't survive and the children discarded a generation before. Neither a clone nor
-// a checkpoint keeps them.
-pub(crate) struct Spares<G>(Vec<G>);
+// a checkpoint keeps them. Public in a private module: MOEA/D's sealed crossover trait takes it.
+pub struct Spares<G>(Vec<G>);
 
 impl<G> Default for Spares<G> {
     fn default() -> Self {

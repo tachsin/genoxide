@@ -312,7 +312,7 @@ fn portable_continuation_run(algorithm: FirstOrder) -> Vec<f64> {
 // subproblems
 fn portable_moead_run<C, X>(moead: multi::Moead<Real, C, X, 2>) -> Vec<f64>
 where
-    C: genoxide::operator::Crossover<Real>,
+    C: multi::moead::MoeadCrossover<Real>,
     X: genoxide::operator::Mutate<Real>,
 {
     let objectives = |x: &Reals| {
@@ -485,9 +485,20 @@ fn portable_runs() {
                 .build()
                 .unwrap(),
         ),
+        // MOEA/D-DE: the difference, the bounce at the bounds, children replacing anywhere
+        portable_moead_run(
+            Moead::builder(real(), [Objective::Minimize; 2], multi::das_dennis::<2>(9))
+                .neighbors(4)
+                .neighbor_mating(0.5)
+                .crossover(multi::DifferentialEvolutionCrossover::new(0.5, 1.0).unwrap())
+                .mutate(PolynomialMutation::per_gene(0.25, 20.0).unwrap())
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
     ];
 
-    let expected: [[f64; 4]; 20] = [
+    let expected: [[f64; 4]; 21] = [
         // L-SHADE
         [
             0.5886518163542276,
@@ -626,6 +637,13 @@ fn portable_runs() {
             0.011451771393886454,
             -0.04080469266299676,
             0.026023236154947352,
+        ],
+        // MOEA/D-DE, the bounce at the bounds, half the parents from the whole population
+        [
+            -0.13719653731926562,
+            0.06751346922755136,
+            0.20061038090932337,
+            -0.1413363342369776,
         ],
     ];
     assert_eq!(runs.len(), expected.len());

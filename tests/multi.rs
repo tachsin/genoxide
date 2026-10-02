@@ -345,6 +345,90 @@ fn moead_approximates_two_and_three_objective_fronts() {
     assert!(distance < 0.0012, "{distance}");
 }
 
+// Li and Zhang's F2 (2009, table I): ZDT1's front, with a Pareto set where every gene but the
+// first follows a sine of the first, x_j = sin(6πx₁ + jπ/n)
+fn lz09_f2(x: &Reals) -> [f64; 2] {
+    let n = x.len();
+    let (mut odd, mut odd_count, mut even, mut even_count) = (0.0, 0.0, 0.0, 0.0);
+    for j in 2..=n {
+        let y = x[j - 1]
+            - (6.0 * std::f64::consts::PI * x[0] + j as f64 * std::f64::consts::PI / n as f64)
+                .sin();
+        if j % 2 == 1 {
+            odd += y * y;
+            odd_count += 1.0;
+        } else {
+            even += y * y;
+            even_count += 1.0;
+        }
+    }
+    [
+        x[0] + 2.0 * odd / odd_count,
+        1.0 - x[0].sqrt() + 2.0 * even / even_count,
+    ]
+}
+
+// the IGD of MOEA/D's front on F2 to 500 points of the optimal front, with the paper's settings:
+// 30 genes, 300 weight vectors, 20 neighbors, 500 generations, polynomial mutation with η 20 at
+// 1 / n
+fn lz09_f2_igd<C: genoxide::multi::moead::MoeadCrossover<Real>>(crossover: C) -> f64 {
+    use genoxide::multi::indicator::igd;
+    use genoxide::multi::problems::{MultiProblem, Zdt1};
+    use genoxide::multi::{Moead, das_dennis};
+    let mut bounds = vec![0.0..=1.0];
+    bounds.extend(std::iter::repeat_n(-1.0..=1.0, 29));
+    let moead = Moead::builder(
+        Real::new(bounds).unwrap(),
+        [Minimize; 2],
+        das_dennis::<2>(299),
+    )
+    .crossover(crossover)
+    .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0).unwrap())
+    .seed(1)
+    .build()
+    .unwrap();
+    let outcome = MultiEngine::new(moead, lz09_f2)
+        .stop_when(Stop::generations(500))
+        .run()
+        .unwrap();
+    igd(
+        &outcome.front_values(),
+        &Zdt1::new(30).optimal_front(500).expect("known"),
+    )
+}
+
+#[test]
+fn moead_de_matches_the_paper_on_a_complicated_pareto_set() {
+    use genoxide::multi::DifferentialEvolutionCrossover;
+    // the paper's MOEA/D-DE: 0.0028 on average over 20 runs, 0.0023 at best (table II);
+    // genoxide's: 0.0026 to 0.0039 over 10 seeds
+    let de = lz09_f2_igd(DifferentialEvolutionCrossover::new(0.5, 1.0).unwrap());
+    assert!(de < 0.004, "{de}");
+    // MOEA/D with SBX: 0.06 to 0.13
+    let sbx = lz09_f2_igd(SimulatedBinaryCrossover::new(20.0).unwrap());
+    assert!(sbx > 0.04, "{sbx}");
+}
+
+#[test]
+fn moead_de_approximates_the_zdt1_front() {
+    use genoxide::multi::problems::{MultiProblem, Zdt1};
+    use genoxide::multi::{DifferentialEvolutionCrossover, Moead, das_dennis};
+    // a hypervolume of 0.8690 to 0.8699 over 5 seeds, where SBX reaches 0.8704 to 0.8713
+    let problem = Zdt1::new(30);
+    let moead = Moead::builder(problem.representation(), [Minimize; 2], das_dennis::<2>(99))
+        .crossover(DifferentialEvolutionCrossover::new(0.5, 1.0).unwrap())
+        .mutate(PolynomialMutation::per_gene(1.0 / 30.0, 20.0).unwrap())
+        .seed(0)
+        .build()
+        .unwrap();
+    let outcome = MultiEngine::new(moead, problem)
+        .stop_when(Stop::generations(499))
+        .run()
+        .unwrap();
+    let volume = hypervolume(&outcome.front_values(), &[1.1, 1.1], &[Minimize; 2]);
+    assert!(volume > 0.868, "{volume}");
+}
+
 #[test]
 fn a_front_has_each_genome_once() {
     use genoxide::multi::problems::{MultiProblem, Zdt1};
