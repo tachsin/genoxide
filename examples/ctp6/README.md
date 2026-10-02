@@ -25,7 +25,7 @@ subject to cos θ (f₂ − e) − sin θ f₁ ≥ a |sin(bπ (sin θ (f₂ − 
 x₁ in [0, 1], x₂ in [0, 10]
 ```
 
-The report's section on difficulty in the whole search space gives CTP6 very different
+The paper's section on difficulty in the whole search space gives CTP6 very different
 parameters: θ = 0.1π, a = 40, b = 0.5, c = 1, d = 2 and e = −2. Turned by θ = 0.1π, the
 coordinate v = sin θ (f₂ + 2) + cos θ f₁ runs across the objective space, and the wave
 40 sin²(πv/2) is 0 only where v is an even number. The left side, u, stays between 1.6 and 12.4
@@ -35,18 +35,20 @@ v = 2, 4, 6, …, parallel to the front and to each other, with infeasible bands
 The unconstrained front, f₂ = 1 − √f₁ at g = 1, lies in the infeasible band below v = 2. The
 optimal front is the lower edge of the first feasible band, one continuous piece from (0, 3.6958)
 to (1, 0.8813), found by sampling the boundaries of the feasible region. On it, v runs from 1.76
-to 1.84; the report puts the front where v is between 1 and 2.
+to 1.84; the paper puts the front where v is between 1 and 2.
 
-The definitions come from the authors' KanGAL report 200005 (October 2000), the paper's preprint:
-eq. 5 on p. 7 and CTP6's parameters on p. 10. The report leaves g, the number of variables and
-their bounds open, and prints f₂ as g (1 − f₁/g); its figures draw the unconstrained front as the
-curve 1 − √f₁, and the authors' NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g))
-with g = 1 + x₂, x₁ in [0, 1] and x₂ in [0, 10], which genoxide follows.
+The definitions are the paper's: eq. 5 (p. 290) and CTP6's parameters (p. 293). Its preprint, the
+authors' KanGAL report 200005 (October 2000, p. 10), and Deb's 2001 book (*Multi-Objective
+Optimization Using Evolutionary Algorithms*, Wiley, eq. 8.46 on p. 354 and the parameters on p. 357)
+give the same. All three leave g, the number of variables and their bounds open, and print f₂ as g
+(1 − f₁/g); their figures draw the unconstrained front as the curve 1 − √f₁, and the authors'
+NSGA-II code (version 1.1.6, KanGAL) computes g (1 − √(f₁/g)) with g = 1 + x₂, the g the book names
+on p. 360, and x₁ in [0, 1] and x₂ in [0, 10], which genoxide follows.
 
 ## What makes it hard
 
 Solutions in the upper feasible bands have to cross the infeasible bands between them,
-"infeasible holes of differing widths", in the report's words, to reach the band that holds the
+"infeasible holes of differing widths", in the paper's words, to reach the band that holds the
 front. 22% of random genomes are feasible. Once
 the population is in the right band, the front is its lower edge: every optimal solution meets
 the constraint exactly, and just below it lies infeasible space.
@@ -63,7 +65,7 @@ violation, which leads the search across the infeasible bands.
 
 ## Algorithm
 
-NSGA-II with the settings of the report's experiments:
+NSGA-II with the settings of the paper's experiments:
 
 - a population of 100, for 500 generations;
 - simulated binary crossover with η = 20, at a rate of 0.9;
@@ -95,5 +97,5 @@ of the optimal front, spread evenly along it, give 99.31% of its hypervolume and
 
 The run's front has 100 solutions, all feasible, an IGD+ of 0.0052 and 98.61% of the whole
 front's hypervolume. Over seeds 1 to 20, every run reaches the front, with an IGD+ from 0.0046 to
-0.0053 and 98.56% to 98.75% of the hypervolume. The report found NSGA-II "very near to the true
+0.0053 and 98.56% to 98.75% of the hypervolume. The paper found NSGA-II "very near to the true
 Pareto-optimal front" with its five variables too.

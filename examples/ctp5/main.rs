@@ -1,7 +1,7 @@
 //! CTP5: minimize two objectives over two variables subject to one constraint, with
 //! a front of one continuous piece and 15 separate points, unevenly spaced.
 //!
-//! NSGA-II with the settings of the report's experiments, a population of 100 for 500
+//! NSGA-II with the settings of the paper's experiments, a population of 100 for 500
 //! generations, and the same for 10,000. Prints, for each, how many solutions of the final front
 //! are feasible, how many of the optimal points they reach, their IGD+ to the front and their
 //! hypervolume.
@@ -25,7 +25,7 @@ const REACH: f64 = 0.02;
 
 fn main() -> Result<()> {
     let problem = Ctp5;
-    // the settings of the report's experiments: a population of 100 for 500 generations, SBX
+    // the settings of the paper's experiments: a population of 100 for 500 generations, SBX
     // and polynomial mutation with η = 20, crossover at 0.9 and mutation at 1/n per gene; then
     // the same for 10,000 generations
     for generations in [500, 10000] {

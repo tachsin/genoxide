@@ -1,9 +1,9 @@
 """CTP8: minimize two objectives over two variables subject to two constraints, with
 a front of three disconnected pieces, behind two kinds of infeasible bands.
 
-NSGA-II with the settings of the report's experiments, a population of 100 for 500
-generations. Prints how many solutions of the final front are feasible, how many pieces of
-the optimal front they reach, their IGD+ to it and their hypervolume.
+NSGA-II with the settings of the EMO 2001 paper's experiments, a population of 100 for
+500 generations. Prints how many solutions of the final front are feasible, how many pieces
+of the optimal front they reach, their IGD+ to it and their hypervolume.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on
 the example's page, with trace.py.
@@ -52,8 +52,8 @@ def report(name, generations, result):
 
 
 def nsga2():
-    """NSGA-II with the settings of the report's experiments: a population of 100, SBX and
-    polynomial mutation with η = 20, crossover at 0.9 and mutation at 1/n per gene."""
+    """NSGA-II with the settings of the EMO 2001 paper's experiments: a population of 100,
+    SBX and polynomial mutation with η = 20, crossover at 0.9 and mutation at 1/n per gene."""
     return gx.Nsga2(
         problem.genome,
         objectives=problem.objectives,
