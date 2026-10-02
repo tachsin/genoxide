@@ -128,8 +128,8 @@ pub struct Fitness {
     /// per gene on each line.
     #[serde(default)]
     pub gradient: bool,
-    /// The number of inequality constraints g(x) <= 0 whose values, then Jacobian, the program
-    /// writes after the gradient.
+    /// The number of inequality constraints g(x) <= 0 whose values the program writes after the
+    /// value (then, with `gradient`, after the gradient, and their Jacobian).
     #[serde(default)]
     pub constraints: usize,
 }
@@ -228,20 +228,7 @@ pub enum Algorithm {
         /// Random restarts after convergence; none if unset.
         restarts: Option<u64>,
     },
-    Bo {
-        seed: Option<u64>,
-        /// The points of the initial design; 2(n + 1) if unset.
-        initial_points: Option<usize>,
-        #[serde(default, deserialize_with = "bo_acquisition")]
-        acquisition: Option<BoAcquisition>,
-        kernel: Option<Kernel>,
-        #[serde(default, deserialize_with = "bo_noise")]
-        noise: Option<BoNoise>,
-        output: Option<BoOutput>,
-        raw_samples: Option<usize>,
-        acquisition_starts: Option<usize>,
-        hyperparameter_starts: Option<usize>,
-    },
+    Bo(Bo),
     NelderMead {
         seed: Option<u64>,
         #[serde(default, deserialize_with = "nelder_mead_coefficients")]
@@ -500,6 +487,44 @@ pub enum Kernel {
 pub enum BoNoise {
     Fixed(f64),
     Learned { learned: f64 },
+}
+
+/// Bayesian optimization, on a real or an integer genome.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Bo {
+    pub seed: Option<u64>,
+    /// The points of the initial design; 2(n + 1) if unset.
+    pub initial_points: Option<usize>,
+    #[serde(default, deserialize_with = "bo_acquisition")]
+    pub acquisition: Option<BoAcquisition>,
+    pub kernel: Option<Kernel>,
+    #[serde(default, deserialize_with = "bo_noise")]
+    pub noise: Option<BoNoise>,
+    pub output: Option<BoOutput>,
+    pub raw_samples: Option<usize>,
+    pub acquisition_starts: Option<usize>,
+    pub hyperparameter_starts: Option<usize>,
+    /// The points of each generation after the initial design; 1 if unset.
+    pub batch: Option<usize>,
+    /// What a point not evaluated yet is taken to be worth; the Kriging believer if unset.
+    pub fantasy: Option<BoFantasy>,
+    /// An asynchronous run: each worker gets a new point as soon as it's done, chosen with the
+    /// points still being evaluated fantasized. Off if unset: a generation of `batch` points at a
+    /// time.
+    #[serde(default)]
+    pub asynchronous: bool,
+}
+
+/// What Bayesian optimization takes a point not evaluated yet to be worth: `"believer"`,
+/// `"liar-min"`, `"liar-mean"` or `"liar-max"`.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BoFantasy {
+    Believer,
+    LiarMin,
+    LiarMean,
+    LiarMax,
 }
 
 /// What Bayesian optimization's model fits: `"standardize"` or `"log"`.

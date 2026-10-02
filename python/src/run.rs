@@ -152,17 +152,27 @@ pub fn run<'py>(
             |crossover| ListCrossover::new(crossover, "binary"),
             bit_flip,
         ),
-        config::Genome::Integer { bounds } => with_operators(
-            py,
-            genome_setting(
+        config::Genome::Integer { bounds } => {
+            let integer = genome_setting(
                 Integer::new(bounds.iter().map(|&(low, high)| low..=high)),
                 "Integer",
-            ),
-            run.algorithm,
-            &context,
-            |crossover| ListCrossover::new(crossover, "integer"),
-            integer_mutation,
-        ),
+            );
+            match run.algorithm {
+                // Bayesian optimization on the integer lattice
+                config::Algorithm::Bo(settings) => (|| {
+                    let bo = build_bo(integer?, settings, &context, integer_genome)?;
+                    generational(py, bo, BoSettings, &context)
+                })(),
+                algorithm => with_operators(
+                    py,
+                    integer,
+                    algorithm,
+                    &context,
+                    |crossover| ListCrossover::new(crossover, "integer"),
+                    integer_mutation,
+                ),
+            }
+        }
         config::Genome::Real { bounds } => {
             let real = genome_setting(
                 Real::new(bounds.iter().map(|&(low, high)| low..=high)),
@@ -421,6 +431,104 @@ impl Context {
 }
 
 // differential evolution, as `de` describes it
+// Bayesian optimization on `representation`, its initial genomes made by `genome`
+fn build_bo<R: bo::Space>(
+    representation: R,
+    settings: config::Bo,
+    context: &Context,
+    genome: fn(Vec<f64>) -> Result<R::Genome>,
+) -> std::result::Result<Bo<R>, Failure> {
+    let config::Bo {
+        initial_points,
+        initial_genomes,
+        acquisition,
+        kernel,
+        noise,
+        output,
+        raw_samples,
+        acquisition_starts,
+        hyperparameter_starts,
+        batch,
+        fantasy,
+        seed,
+    } = settings;
+    let mut builder = Bo::builder(representation).objective(context.single_objective()?);
+    if let Some(points) = initial_points {
+        builder = builder.initial_points(points);
+    }
+    if let Some(genomes) = initial_genomes {
+        let genomes: Result<Vec<R::Genome>> = genomes.into_iter().map(genome).collect();
+        builder = builder.initial_genomes(genomes?);
+    }
+    if let Some(acquisition) = acquisition {
+        builder = builder.acquisition(crate::model::acquisition(acquisition));
+    }
+    if let Some(kernel) = kernel {
+        builder = builder.kernel(crate::model::kernel(kernel));
+    }
+    if let Some(noise) = noise {
+        builder = builder.noise(crate::model::noise(noise));
+    }
+    if let Some(output) = output {
+        builder = builder.output(match output {
+            config::BoOutput::Standardize => bo::Output::Standardize,
+            config::BoOutput::Log => bo::Output::Log,
+        });
+    }
+    if let Some(samples) = raw_samples {
+        builder = builder.raw_samples(samples);
+    }
+    if let Some(starts) = acquisition_starts {
+        builder = builder.acquisition_starts(starts);
+    }
+    if let Some(starts) = hyperparameter_starts {
+        builder = builder.hyperparameter_starts(starts);
+    }
+    if let Some(batch) = batch {
+        builder = builder.batch(batch);
+    }
+    if let Some(fantasy) = fantasy {
+        builder = builder.fantasy(bo_fantasy(fantasy));
+    }
+    if let Some(seed) = seed {
+        builder = builder.seed(seed);
+    }
+    // the only genomes the builder checks are the initial ones
+    Ok(setting(builder.build().map_err(|error| match error {
+        genoxide::Error::InvalidGenome { reason } => genoxide::Error::InvalidSetting {
+            setting: "initial_genomes",
+            reason,
+        },
+        error => error,
+    }))?)
+}
+
+/// Bayesian optimization's fantasy of a configuration.
+pub fn bo_fantasy(fantasy: config::BoFantasy) -> bo::Fantasy {
+    match fantasy {
+        config::BoFantasy::Believer => bo::Fantasy::KrigingBeliever,
+        config::BoFantasy::LiarMin => bo::Fantasy::ConstantLiar(bo::Lie::Min),
+        config::BoFantasy::LiarMean => bo::Fantasy::ConstantLiar(bo::Lie::Mean),
+        config::BoFantasy::LiarMax => bo::Fantasy::ConstantLiar(bo::Lie::Max),
+    }
+}
+
+// an integer genome of whole numbers, for Bayesian optimization's initial genomes
+fn integer_genome(genes: Vec<f64>) -> Result<Integers> {
+    genes
+        .into_iter()
+        .map(|gene| {
+            if gene.fract() == 0.0 && gene.abs() <= 2f64.powi(53) {
+                Ok(gene as i64)
+            } else {
+                Err(format!(
+                    "the initial genomes of an Integer genome are whole numbers, not {gene}"
+                ))
+            }
+        })
+        .collect()
+}
+
 fn build_de(real: Real, de: config::De, context: &Context) -> std::result::Result<De, Failure> {
     let config::De {
         population_size,
@@ -850,60 +958,8 @@ fn real_algorithm<'py>(
             )?;
             generational(py, open_es, OpenEsSettings, context)
         }
-        config::Algorithm::Bo {
-            initial_points,
-            initial_genomes,
-            acquisition,
-            kernel,
-            noise,
-            output,
-            raw_samples,
-            acquisition_starts,
-            hyperparameter_starts,
-            seed,
-        } => {
-            let mut builder = Bo::builder(real).objective(context.single_objective()?);
-            if let Some(points) = initial_points {
-                builder = builder.initial_points(points);
-            }
-            if let Some(genomes) = initial_genomes {
-                builder = builder.initial_genomes(genomes.into_iter().map(Reals::from));
-            }
-            if let Some(acquisition) = acquisition {
-                builder = builder.acquisition(crate::model::acquisition(acquisition));
-            }
-            if let Some(kernel) = kernel {
-                builder = builder.kernel(crate::model::kernel(kernel));
-            }
-            if let Some(noise) = noise {
-                builder = builder.noise(crate::model::noise(noise));
-            }
-            if let Some(output) = output {
-                builder = builder.output(match output {
-                    config::BoOutput::Standardize => bo::Output::Standardize,
-                    config::BoOutput::Log => bo::Output::Log,
-                });
-            }
-            if let Some(samples) = raw_samples {
-                builder = builder.raw_samples(samples);
-            }
-            if let Some(starts) = acquisition_starts {
-                builder = builder.acquisition_starts(starts);
-            }
-            if let Some(starts) = hyperparameter_starts {
-                builder = builder.hyperparameter_starts(starts);
-            }
-            if let Some(seed) = seed {
-                builder = builder.seed(seed);
-            }
-            // the only genomes the builder checks are the initial ones
-            let bo = setting(builder.build().map_err(|error| match error {
-                genoxide::Error::InvalidGenome { reason } => genoxide::Error::InvalidSetting {
-                    setting: "initial_genomes",
-                    reason,
-                },
-                error => error,
-            }))?;
+        config::Algorithm::Bo(settings) => {
+            let bo = build_bo(real, settings, context, |genome| Ok(Reals::from(genome)))?;
             generational(py, bo, BoSettings, context)
         }
         config::Algorithm::NelderMead {
@@ -1339,7 +1395,7 @@ where
         config::Algorithm::NelderMead { .. } => {
             Err("NelderMead needs a Real genome".to_string().into())
         }
-        config::Algorithm::Bo { .. } => Err("Bo needs a Real genome".to_string().into()),
+        config::Algorithm::Bo(_) => Err("Bo needs a Real or an Integer genome".to_string().into()),
         config::Algorithm::Lbfgsb { .. } => Err("Lbfgsb needs a Real genome".to_string().into()),
         config::Algorithm::Mma { .. } => Err("Mma needs a Real genome".to_string().into()),
         config::Algorithm::Continuation { .. } => {

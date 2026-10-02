@@ -212,6 +212,9 @@ python examples/tsp_berlin52/main.py
 | [MMA on a million variables](mma/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/mma) |
 | [Continuation by Gaussian smoothing](continuation/) | local | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/continuation) |
 | [Bayesian optimization of Branin](bayesian_optimization/) | bayesian | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bayesian-optimization) |
+| [Bayesian optimization in batches on Hartmann 6-D](bo_hartmann6/) | bayesian | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bo-hartmann6) |
+| [Asynchronous Bayesian optimization](bo_asynchronous/) | bayesian | Rust | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bo-asynchronous) |
+| [Constrained Bayesian optimization](bo_constrained/) | bayesian | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/bo-constrained) |
 
 The GPU example is a crate of its own, with wgpu as a dependency:
 `cargo run --release --manifest-path examples/gpu/Cargo.toml`.

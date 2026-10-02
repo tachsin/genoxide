@@ -153,21 +153,7 @@ pub enum Algorithm {
         seed: Option<u64>,
     },
     /// Bayesian optimization.
-    Bo {
-        /// The points of the initial design.
-        initial_points: Option<usize>,
-        /// Genomes evaluated first, in the initial design.
-        initial_genomes: Option<Vec<Vec<f64>>>,
-        acquisition: Option<Acquisition>,
-        kernel: Option<KernelName>,
-        noise: Option<NoiseConfig>,
-        output: Option<BoOutput>,
-        /// The random points at which the acquisition is evaluated before its maximization.
-        raw_samples: Option<usize>,
-        acquisition_starts: Option<usize>,
-        hyperparameter_starts: Option<usize>,
-        seed: Option<u64>,
-    },
+    Bo(Bo),
     NelderMead {
         coefficients: Option<NelderMeadCoefficients>,
         /// The size of the first simplex, as a fraction of each gene's range.
@@ -633,6 +619,41 @@ pub enum KernelName {
 pub enum NoiseConfig {
     Fixed { variance: f64 },
     Learned { min: f64 },
+}
+
+/// Bayesian optimization's settings, for a Real or an Integer genome.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Bo {
+    /// The points of the initial design.
+    pub initial_points: Option<usize>,
+    /// Genomes evaluated first, in the initial design.
+    pub initial_genomes: Option<Vec<Vec<f64>>>,
+    pub acquisition: Option<Acquisition>,
+    pub kernel: Option<KernelName>,
+    pub noise: Option<NoiseConfig>,
+    pub output: Option<BoOutput>,
+    /// The random points at which the acquisition is evaluated before its maximization.
+    pub raw_samples: Option<usize>,
+    pub acquisition_starts: Option<usize>,
+    pub hyperparameter_starts: Option<usize>,
+    /// The points of each generation after the initial design.
+    pub batch: Option<usize>,
+    pub fantasy: Option<BoFantasy>,
+    pub seed: Option<u64>,
+}
+
+/// What Bayesian optimization takes a point not evaluated yet to be worth.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub enum BoFantasy {
+    #[serde(rename = "believer")]
+    Believer,
+    #[serde(rename = "liar-min")]
+    LiarMin,
+    #[serde(rename = "liar-mean")]
+    LiarMean,
+    #[serde(rename = "liar-max")]
+    LiarMax,
 }
 
 /// What the model of Bayesian optimization fits.

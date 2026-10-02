@@ -1197,3 +1197,94 @@ mod continuation {
         }));
     }
 }
+
+#[test]
+fn bayesian_optimization_in_batches_resumes() {
+    use genoxide::algorithm::bo::{Fantasy, Lie};
+    use genoxide::problems::{Branin, Problem};
+    for fantasy in [Fantasy::KrigingBeliever, Fantasy::ConstantLiar(Lie::Max)] {
+        let batch = || {
+            Bo::builder(Branin.representation())
+                .batch(3)
+                .fantasy(fantasy)
+                .minimize()
+                .seed(4)
+                .build()
+                .unwrap()
+        };
+        resumes(batch, branin, 3, 7);
+    }
+}
+
+// Gramacy et al.'s (2016) toy problem, its two constraints' values one by one
+fn toy(x: &Reals, g: &mut [f64]) -> f64 {
+    let wave = genoxide::math::sin(TAU * (x[0] * x[0] - 2.0 * x[1]));
+    g[0] = 1.5 - x[0] - 2.0 * x[1] - 0.5 * wave;
+    g[1] = x[0] * x[0] + x[1] * x[1] - 1.5;
+    x[0] + x[1]
+}
+
+#[test]
+fn constrained_bayesian_optimization_resumes() {
+    use genoxide::constraint::Constrained;
+    // the constraints' values of every point and their models' warm starts are saved
+    let toy_bo = || {
+        Bo::builder(Real::uniform(2, 0.0..=1.0).unwrap())
+            .batch(2)
+            .minimize()
+            .seed(5)
+            .build()
+            .unwrap()
+    };
+    resumes(toy_bo, Constrained::new(2, toy), 3, 8);
+}
+
+#[test]
+fn asynchronous_bayesian_optimization_resumes_with_its_pending_points() {
+    use genoxide::algorithm::Incremental;
+    use genoxide::engine::Provided;
+    // prepared at the start of its run, as an engine does
+    let mut bo = bo(6);
+    Incremental::prepare(&mut bo, Provided::NOTHING).unwrap();
+    let design: Vec<Reals> = (0..6).map(|_| bo.propose()).collect();
+    for x in &design {
+        bo.receive(x.clone(), Fitness::new(branin(x))).unwrap();
+    }
+    // three points being evaluated, then one result
+    let pending: Vec<Reals> = (0..3).map(|_| bo.propose()).collect();
+    bo.receive(pending[0].clone(), Fitness::new(branin(&pending[0])))
+        .unwrap();
+    // the checkpoint holds the two points still being evaluated
+    let mut resumed: Bo = checkpoint::load(bytes(&bo).as_slice()).unwrap();
+    assert_eq!(resumed.proposed(), &pending[1..]);
+    // a new run's engine has lost their evaluations: they are proposed again first
+    Incremental::prepare(&mut resumed, Provided::NOTHING).unwrap();
+    assert!(resumed.proposed().is_empty());
+    assert_eq!(resumed.propose(), pending[1]);
+    assert_eq!(resumed.propose(), pending[2]);
+    // then the run goes on as the uninterrupted one, with the same points fantasized
+    assert_eq!(resumed.propose(), bo.propose());
+    assert_eq!(bytes(&resumed), bytes(&bo));
+    for x in &pending[1..] {
+        bo.receive(x.clone(), Fitness::new(branin(x))).unwrap();
+        resumed.receive(x.clone(), Fitness::new(branin(x))).unwrap();
+    }
+    assert_eq!(resumed.propose(), bo.propose());
+    assert_eq!(bytes(&resumed), bytes(&bo));
+}
+
+#[test]
+fn integer_bayesian_optimization_resumes() {
+    let quadratic = |x: &Integers| {
+        let x: Vec<f64> = x.iter().map(|&v| v as f64).collect();
+        (x[0] - 2.6) * (x[0] - 2.6) + 2.0 * (x[1] + 1.3) * (x[1] + 1.3) + x[2] * x[2]
+    };
+    let integer_bo = || {
+        Bo::builder(Integer::uniform(3, -5..=5).unwrap())
+            .minimize()
+            .seed(2)
+            .build()
+            .unwrap()
+    };
+    resumes(integer_bo, quadratic, 3, 9);
+}

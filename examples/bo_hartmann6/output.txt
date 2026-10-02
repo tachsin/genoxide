@@ -1,0 +1,21 @@
+Hartmann's 6-D function in [0, 1]^6: global minimum -3.322368
+14 points of a Latin hypercube, then 4 points a round by log-EI and the Kriging believer
+round  evaluations          best     f - f*
+    0           14     -0.885455      2.4e0
+    1           18     -0.942238      2.4e0
+    2           22     -0.942238      2.4e0
+    3           26     -1.154749      2.2e0
+    4           30     -1.170522      2.2e0
+    5           34     -1.381891      1.9e0
+    6           38     -1.381891      1.9e0
+    7           42     -1.875810      1.4e0
+    8           46     -2.431634     8.9e-1
+    9           50     -2.756340     5.7e-1
+   10           54     -2.756340     5.7e-1
+   11           58     -2.969910     3.5e-1
+   12           62     -3.241253     8.1e-2
+   13           66     -3.317829     4.5e-3
+   14           70     -3.321314     1.1e-3
+   15           74     -3.322329     3.9e-5
+4 points a round: within 1e-4 of the minimum after 74 evaluations in 15 rounds, 1.4e-3 from its point
+1 point a round:  within 1e-4 of the minimum after 50 evaluations in 36 rounds

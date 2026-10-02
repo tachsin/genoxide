@@ -20,8 +20,11 @@ stage's closure (a fitness program would have to be told its stage), with its ex
 done. Of batch B, the first part (B1): the Gaussian process (`model::gp`, public and documented as
 unstable for one release), `Bo` with EI, log-EI, PI and UCB, the Latin hypercube design and the
 output transform, in Python and the `genoxide` program, with the `bayesian_optimization` example;
-batch BO, `Incremental` for `AsyncEngine`, constrained BO and integer genes (B2) aren't yet, nor
-the later batches. genoxide has
+and the second part (B2): batch BO (Kriging believer, constant liar), `Incremental` for
+`AsyncEngine` (with the extras path: `prepare`, `wants`, `receive_evaluation`), constrained BO by
+the probability of feasibility and integer genes, in Python (not asynchronous: the package has no
+`AsyncEngine`) and the `genoxide` program, with the `bo_hartmann6`, `bo_asynchronous` and
+`bo_constrained` examples. Batch B is done; the later batches aren't yet. genoxide has
 evolutionary and population-based methods (GA, ES, CMA-ES, DE, PSO, local search, NSGA-II and
 the other multi-objective algorithms). This plan adds the other families of a general
 optimization library: local derivative-free methods, gradient-based methods, constrained
@@ -391,6 +394,64 @@ is left for later: with the noise-free default, the best evaluated point is the 
 evaluations, the six-hump camel in [−3, 3] × [−2, 2] 50, Hartmann 3 26, all within 80; Hartmann 6
 reached in 6 runs of 10 within 100 (48), the others in its local minimum −3.2032.
 
+**Batch B's second part (B2), read on 2026-10-02.** Ginsbourger, Le Riche and Carraro (2010), read
+in the authors' preprint (HAL emse-00436126, the folder of papers has none): **verified**, section
+4.2: the Kriging believer (Algorithm 1) adds each chosen point with the kriging mean, the constant
+liar (Algorithm 2) with a fixed lie L, min, mean or max of the observations, "the larger L is, the
+more explorative"; both update the model "without hyperparameter re-estimation", the point and
+its value added to X and Y as if observed, so the best value includes the fantasies; on Branin
+(Table 1), CL[min] gave the best improvement and the believer clustered its points. As
+implemented: the kernel's hyperparameters and the standardization kept, the constant mean
+estimated again by GLS, as the ordinary kriging of the paper does (the believer then leaves the
+mean unchanged, which a unit test checks); the lies from the values the model fits (after the
+output transform). Gardner, Kusner, Xu, Weinberger and Cunningham (2014), read: **verified**,
+section 3.1: the expected constrained improvement EIC = PF × EI, with the best the lowest feasible
+value; section 3.2: independent constraints, PF the product of the univariate normal
+probabilities. The paper doesn't say what to do before a feasible point: maximizing PF alone is
+the plan's rule (Gelbart et al. 2014, not in the folder, not read). Garrido-Merchán and
+Hernández-Lobato (2020), read: **verified**, section 3.2, eq. 7: k′(x, x′) = k(T(x), T(x′)), T
+rounding the integer genes to the nearest integer; the paper doesn't say how the acquisition is
+maximized. Schonlau, Welch and Jones (1998): not in the folder, not read. Gramacy et al. (2016),
+read: **verified**, section 1: the toy problem, f = x₁ + x₂ on [0, 1]², c₁ = 3/2 − x₁ − 2x₂ −
+½ sin(2π(x₁² − 2x₂)), c₂ = x₁² + x₂² − 3/2, minima x_A ≈ (0.1954, 0.4044), f ≈ 0.5998, c₁ active,
+x_B ≈ (0.7197, 0.1411), x_C = (0, 0.75). The extracted text loses the π: c₁(x_A) ≈ 0, as the paper
+says, holds with it and not without. `tests/reference/gramacy_toy.py` solves c₁ = 0 with the
+Lagrange condition in mpmath: f* = 0.59978805201006756 at (0.19512268347, 0.40466536854), and a
+grid scan confirms it's global.
+
+As implemented, and where it differs from the design notes above: **the fantasy** is a setting
+(`bo::Fantasy`, `bo::Lie`), the Kriging believer by default: over 20 seeds, batches of 4 to
+f* + 1e-3 reached Branin in a median of 34 evaluations with the believer and the lowest lie (42 the
+mean, 54 the highest), Hartmann 3 in 30 (30, 40, 40), Hartmann 6 within 200 in 13 runs of 20
+(13, 12, 11); but under an `AsyncEngine` with 4 workers, where every proposal has 3 points
+fantasized, the lowest lie reached Hartmann 3 to f* + 1e-4 in 2 runs of 5 within 120 evaluations,
+the believer in 5 of 5 (39 to 76). The constraints' models take their mean at a fantasized point
+whatever the fantasy, and a fantasized point counts toward the best if its fantasized constraints
+are met. The random streams of the first point of a batch are those of a single point, so a batch
+of 1 gives B1's runs to the bit. **Asynchronous proposals**: the design first, then random points
+until a result has a valid score, then the model with the pending points fantasized; a proposal
+derives its streams from its index; a generation is `initial_points` evaluations. A checkpoint
+holds the pending points, and a new run of the engine (`Incremental::prepare`) proposes them
+again first, without counting them as new proposals, so a resumed run draws what an uninterrupted
+one does (tested). **Constraints**: from `Provided::inequalities` (`Constrained`, the CEC 2006 and
+engineering problems), a GP per constraint on its standardized values (an invalid evaluation's at
+the worst), EI × PF, log-EI + ln PF, ln PI + ln PF; UCB with constraints is an error (a bound can
+be negative); without values, the search ignores the violation as in B1. Equalities aren't
+supported, as `Constrained` has none yet: two inequalities with a tolerance do. **Integer genes**:
+`Bo` is generic over a sealed `bo::Space`, `Real` (the default type) and `Integer`, rather than a
+second type, as `Ga` is generic over its representation; the model sees only lattice points, which
+is the rounding inside the kernel, and the acquisition, constant between integers, is maximized
+on the lattice: every point of a lattice of at most `raw_samples` points, else the raw samples and
+a hill climb of ±1 steps in one gene from the best of them and the best point, not CMA-ES as the
+notes say, since the acquisition is exactly a function of the lattice. A lattice evaluated to its
+last point finishes the run. **The `genoxide` program**: `asynchronous = true` runs the
+`AsyncEngine`, rather than `workers` > 1 as 2.11 says, since batches use the workers too; a fitness
+program with `constraints = m` and no gradient writes the value and the m values. The B2 examples'
+results: `bo_hartmann6`, 4 points a round to within 1e-4 in 15 rounds and 74 evaluations, one a
+round in 36 and 50 (13 and 12 runs of 20, the others at −3.2032); `bo_constrained`, within 1e-5 in
+21 evaluations (all 20 seeds within 39); `bo_asynchronous`, every run of 25 within 1e-4 in 38 to 61
+evaluations, in about half the time of batches of 4.
+
 ### 1.6 Surrogate-assisted evolution, multi-fidelity, hybrids
 
 Brief and later: each needs the GP (batch B) and a design settled on real use.
@@ -647,7 +708,8 @@ returns the largest relative error per gene, for users' tests.
 - **Bayesian optimization** asks the initial design as generation 0, then q points per
   generation (`batch(q)`, default 1). It implements `Incremental` as well: `propose` chooses a
   point with the pending ones fantasized (Kriging believer), so `AsyncEngine` keeps every worker
-  busy on slow evaluations; reproducible with one worker, like the steady-state GA.
+  busy on slow evaluations; reproducible with one worker, like the steady-state GA. (Implemented
+  in batch B; see 1.5.)
 
 Usage, as the rest of genoxide:
 
@@ -1046,7 +1108,7 @@ a batch isn't done until every example reaches its optimum on the three platform
 | A1 | `linalg` (Cholesky, triangular solves, QR, the eigendecomposition moved from CMA-ES) with the dependency check of 2.8 (done, in-crate, #373: products, Cholesky with jitter, triangular solves and the eigendecomposition; QR, LDLᵀ and Bunch-Kaufman come with their first users); `Algorithm::is_finished` and `StopReason::Converged`; `Restarts` for local methods; Nelder-Mead (Gao-Han, 1965 option, speculative asks) | | `nelder_mead`, `nelder_mead_himmelblau` |
 | A2 | The extras of 2.3 (`Provided`, `Wanted`, `Extras`, `Evaluations`, `prepare`, `tell_evaluations`) in `Engine`; `Differentiable`, `gradient::Gradients`, finite differences, `gradient::check`; analytic gradients for the smooth problems; Moré-Thuente; L-BFGS-B | A1 | `lbfgsb`, `lbfgsb_bounds`, `polish` |
 | A3 | Momentum, Nesterov, Adam and AdamW (moved from D1); MMA and GCMMA, with supplied constraint values and Jacobians in `Extras` (the supplied half of batch C's constraint Jacobians; finite differences of constraints stay in C); `Continuation` and the `Continue` trait (2.12); the scale requirements of 2.13 for A2's and A3's methods, with the allocation test and the benchmarks | A2 | `adam`, `mma`, `continuation` |
-| B | B1 (done): `model::gp` (kernels, hyperparameters by L-BFGS-B), portable `erf`/`erfc`/`erfcx` in `math`; `Bo` with EI, log-EI, UCB, PI; Latin hypercube; the output transform. B2: batch BO (Kriging believer, constant liar); `Incremental` for `AsyncEngine`; `Constrained` values (`constraint::Constraints`) and constrained BO; integer genes | A2 | B1: `bayesian_optimization`; B2: `bo_hartmann6`, `bo_asynchronous`, `bo_constrained` |
+| B | B1 (done): `model::gp` (kernels, hyperparameters by L-BFGS-B), portable `erf`/`erfc`/`erfcx` in `math`; `Bo` with EI, log-EI, UCB, PI; Latin hypercube; the output transform. B2 (done): batch BO (Kriging believer, constant liar); `Incremental` for `AsyncEngine`; constrained BO from the values of `Constrained` and the test problems (`problems::Constraints` not moved to `constraint`, which nothing needed yet); integer genes | A2 | B1: `bayesian_optimization`; B2: `bo_hartmann6`, `bo_asynchronous`, `bo_constrained` |
 | C | Constraint Jacobians in `Extras` (supplied or by finite differences); the dense QP (Goldfarb-Idnani); SQP; the augmented Lagrangian (L-BFGS-B inner); `provides()` for CEC 2006 and the engineering problems; the Hock-Schittkowski selection | A2, B's `Constrained` | `sqp`, `sqp_welded_beam`, `augmented_lagrangian` |
 | D1 | BFGS, nonlinear CG with Hager-Zhang, trust-region Newton (Steihaug-CG and exact), Levenberg-Marquardt with `LeastSquares`; optional `dual` feature; MGH test set | A2 | `conjugate_gradient`, `trust_region`, `levenberg_marquardt`, `dual_numbers` |
 | D2 | BOBYQA, COBYLA, compass search / GPS, MADS with the progressive barrier, Powell's method (optional); basin hopping | A1, C's constraint values | `bobyqa`, `cobyla`, `mads` |

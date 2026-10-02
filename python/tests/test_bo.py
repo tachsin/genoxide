@@ -271,3 +271,136 @@ def test_wrong_model_settings_are_value_errors(arguments, message):
     model = gx.model.gp.GaussianProcess.fit(gx.Real((0, 1), length=2), [[0.1, 0.2]], [1.0])
     with pytest.raises(ValueError, match="genes"):
         model.predict([[0.5]])
+
+
+# ---- batches, constraints and integer genomes ----------------------------------------------------
+
+
+def test_a_batch_runs_as_in_rust_and_the_same_in_parallel():
+    # the bo_hartmann6 example: 4 points a round, 15 rounds to within 1e-4
+    problem = gx.problems.Hartmann6()
+    bo = gx.Bo(problem.genome, batch=4, objective="minimize", seed=3)
+    target = problem.optimum.value + 1e-4
+    result = bo.run(problem, target=target, evaluations=200, parallel=True)
+    assert (result.evaluations, result.generations) == (74, 15)
+    assert result.best_fitness == -3.322329435896455
+    again = bo.run(problem, target=target, evaluations=200)
+    assert again.best_fitness == result.best_fitness
+    assert np.array_equal(again.best_genome, result.best_genome)
+
+
+def test_the_fantasies_and_the_batch_change_during_a_run():
+    problem = gx.problems.Branin()
+    seen = []
+
+    def control(running, progress):
+        seen.append((running.batch, running.fantasy, running.constraints))
+        running.batch = 2
+        running.fantasy = "liar-max"
+
+    bo = gx.Bo(problem.genome, batch=3, fantasy="liar-mean", objective="minimize", seed=1)
+    result = bo.run(problem, generations=3, control=control)
+    assert seen[0] == (3, "liar-mean", 0)
+    assert seen[1] == (2, "liar-max", 0)
+    # the design of 6, then 2 a round: the control runs after generation 0 already
+    assert result.evaluations == 6 + 2 + 2 + 2
+    for fantasy in ("believer", "liar-min", "liar-mean", "liar-max"):
+        bo = gx.Bo(problem.genome, batch=4, fantasy=fantasy, objective="minimize", seed=2)
+        assert bo.run(problem, generations=10).best_fitness < 0.397887 + 0.05
+
+
+def toy(x):
+    """Gramacy et al.'s (2016) toy problem: x1 + x2 and its two constraints' values."""
+    wave = gx.math.sin(2.0 * math.pi * (x[0] * x[0] - 2.0 * x[1]))
+    return x[0] + x[1], np.array(
+        [1.5 - x[0] - 2.0 * x[1] - 0.5 * wave, x[0] * x[0] + x[1] * x[1] - 1.5]
+    )
+
+
+def test_constrained_bayesian_optimization_reaches_the_feasible_minimum():
+    # the bo_constrained example: 21 evaluations to within 1e-5 of 0.5997880520100676
+    minimum = 0.5997880520100676
+    probabilities = []
+
+    def control(running, progress):
+        if running.model is not None:
+            points = progress.population
+            probabilities.append(running.probability_of_feasibility_at(points))
+            assert running.constraints == 2
+
+    bo = gx.Bo(gx.Real((0.0, 1.0), length=2), objective="minimize", seed=1)
+    result = bo.run(toy, constraints=2, target=minimum + 1e-5, evaluations=60, control=control)
+    assert result.evaluations == 21
+    assert result.best_fitness - minimum <= 1e-5
+    assert np.all(toy(result.best_genome)[1] <= 0.0)
+    # at the points evaluated, about 0 or 1: the models interpolate the values
+    assert np.all((probabilities[-1] < 0.5) | (probabilities[-1] > 0.5))
+    # in parallel, the same run
+    parallel = bo.run(toy, constraints=2, target=minimum + 1e-5, evaluations=60, parallel=True)
+    assert np.array_equal(parallel.best_genome, result.best_genome)
+    # a test problem gives its constraints' values in Rust
+    g24 = gx.problems.cec2006.G24()
+    bo = gx.Bo(g24.genome, objective="minimize", seed=1)
+    result = bo.run(g24, target=g24.optimum.value + 1e-4, evaluations=60)
+    assert result.stop_reason == "target"
+
+
+def test_wrong_constraints_are_errors():
+    bo = gx.Bo(gx.Real((0.0, 1.0), length=2), objective="minimize", seed=1)
+    with pytest.raises(ValueError, match="2 constraint values, for 3"):
+        bo.run(toy, constraints=3, evaluations=10)
+    with pytest.raises(TypeError, match="value, constraint values"):
+        bo.run(lambda x: float(x[0]), constraints=1, evaluations=10)
+    with pytest.raises(ValueError, match="batch=False"):
+        bo.run(toy, constraints=2, batch=True, evaluations=10)
+    with pytest.raises(ValueError, match="own constraints"):
+        bo.run(gx.problems.cec2006.G24(), constraints=2, evaluations=10)
+    ucb = gx.Bo(gx.Real((0.0, 1.0), length=2), acquisition=gx.UpperConfidenceBound(2.0))
+    with pytest.raises(ValueError, match="upper confidence bound"):
+        ucb.run(toy, constraints=2, evaluations=10)
+
+
+def test_integer_genes_are_searched_on_their_lattice():
+    def quadratic(x):
+        return float((x[0] - 2.6) ** 2 + 2 * (x[1] + 1.3) ** 2 + (x[2] - 0.4) ** 2)
+
+    integer = gx.Integer((-10, 10), length=3)
+    bo = gx.Bo(integer, initial_genomes=[[0, 0, 0]], objective="minimize", seed=1)
+    calls = []
+
+    def recorded(x):
+        calls.append(tuple(int(gene) for gene in x))
+        return quadratic(x)
+
+    # the integer minimum, (3, -1, 0): 0.16 + 0.18 + 0.16
+    result = bo.run(recorded, target=0.5, evaluations=60)
+    assert result.stop_reason == "target"
+    assert list(result.best_genome) == [3, -1, 0]
+    assert calls[0] == (0, 0, 0)
+    assert len(set(calls)) == len(calls)
+    with pytest.raises(ValueError, match="whole numbers"):
+        gx.Bo(integer, initial_genomes=[[0.5, 0, 0]]).run(quadratic, evaluations=10)
+
+
+def test_a_checkpoint_resumes_a_constrained_batch(tmp_path):
+    space = gx.Real((0.0, 1.0), length=2)
+    bo = gx.Bo(space, batch=2, objective="minimize", seed=4)
+    whole = bo.run(toy, constraints=2, evaluations=20)
+    path = tmp_path / "bo.ckpt"
+    bo.run(toy, constraints=2, evaluations=12, checkpoint=path, checkpoint_every=1)
+    resumed = bo.run(toy, constraints=2, evaluations=20, resume=path)
+    assert resumed.best_fitness == whole.best_fitness
+    assert np.array_equal(resumed.best_genome, whole.best_genome)
+
+
+@pytest.mark.parametrize(
+    "settings, message",
+    [
+        ({"batch": 0}, "batch"),
+        ({"fantasy": "liar"}, "fantasy"),
+    ],
+)
+def test_wrong_batch_settings_are_value_errors(settings, message):
+    bo = gx.Bo(gx.Real((0, 1), length=2), **settings)
+    with pytest.raises(ValueError, match=message):
+        bo.run(lambda x: float(np.sum(x)), evaluations=10)

@@ -4,7 +4,7 @@
 //!
 //! **Unstable for one release.** This module is public from genoxide 0.13 so that a Gaussian
 //! process can be fitted and queried on its own, but its API and the bits of its fits may still
-//! change in 0.14, as the batch and constrained Bayesian optimization of that release use it.
+//! change in 0.14, as the surrogate-assisted methods planned after it use it.
 //!
 //! A [`GaussianProcess`] models a function `f` of the genes of a [`Real`] genome as
 //! `f(x) ~ GP(m, σ_f² k(x, x′))` (Rasmussen and Williams, 2006, eq. 2.37), observed with
@@ -264,17 +264,53 @@ pub(crate) struct Scaling {
 
 impl Scaling {
     pub(crate) fn new(real: &Real) -> Self {
-        let bounds = real.bounds();
-        let variable = real.variable_genes().to_vec();
-        let lower: Vec<f64> = variable.iter().map(|&i| *bounds[i].start()).collect();
-        let upper: Vec<f64> = variable.iter().map(|&i| *bounds[i].end()).collect();
+        let bounds: Vec<(f64, f64)> = real
+            .bounds()
+            .iter()
+            .map(|range| (*range.start(), *range.end()))
+            .collect();
+        Self::from_bounds(&bounds)
+    }
+
+    // the map of genes with the bounds `(lower, upper)`, one pair per gene: the genes whose bounds
+    // differ are the model's dimensions
+    pub(crate) fn from_bounds(bounds: &[(f64, f64)]) -> Self {
+        let variable: Vec<usize> = (0..bounds.len())
+            .filter(|&i| bounds[i].0 < bounds[i].1)
+            .collect();
+        let lower: Vec<f64> = variable.iter().map(|&i| bounds[i].0).collect();
+        let upper: Vec<f64> = variable.iter().map(|&i| bounds[i].1).collect();
         let width = lower.iter().zip(&upper).map(|(l, u)| u - l).collect();
         Self {
-            template: bounds.iter().map(|range| *range.start()).collect(),
+            template: bounds.iter().map(|&(lower, _)| lower).collect(),
             variable,
             lower,
             upper,
             width,
+        }
+    }
+
+    // the genes of the model's dimensions
+    pub(crate) fn variable(&self) -> &[usize] {
+        &self.variable
+    }
+
+    // the unit-cube coordinates of the genes that `gene` gives by index
+    pub(crate) fn to_unit_by(&self, gene: impl Fn(usize) -> f64, unit: &mut [f64]) {
+        for (k, &i) in self.variable.iter().enumerate() {
+            unit[k] = (gene(i) - self.lower[k]) / self.width[k];
+        }
+    }
+
+    // the value of the model's dimension `k` at the unit-cube coordinate `u`, in its bounds: the
+    // ends map to the bounds exactly
+    pub(crate) fn gene_at(&self, k: usize, u: f64) -> f64 {
+        if u >= 1.0 {
+            self.upper[k]
+        } else if u <= 0.0 {
+            self.lower[k]
+        } else {
+            (self.lower[k] + u * self.width[k]).clamp(self.lower[k], self.upper[k])
         }
     }
 
@@ -298,14 +334,7 @@ impl Scaling {
     pub(crate) fn to_genome(&self, unit: &[f64]) -> Reals {
         let mut genome = self.template.clone();
         for (k, &i) in self.variable.iter().enumerate() {
-            let u = unit[k];
-            genome[i] = if u >= 1.0 {
-                self.upper[k]
-            } else if u <= 0.0 {
-                self.lower[k]
-            } else {
-                (self.lower[k] + u * self.width[k]).clamp(self.lower[k], self.upper[k])
-            };
+            genome[i] = self.gene_at(k, unit[k]);
         }
         Reals::from(genome)
     }
@@ -351,6 +380,8 @@ pub struct GaussianProcess {
     // the points in the unit cube, count × dims, and the standardization of the values
     x: Vec<f64>,
     count: usize,
+    // the standardized values
+    y: Vec<f64>,
     y_mean: f64,
     y_scale: f64,
     // the hyperparameters in the scaled units, and their logarithms (the fitted parameters)
@@ -547,6 +578,55 @@ impl GaussianProcess {
         (self.y_mean, self.y_scale)
     }
 
+    // the standardized values the model was fitted to, in order
+    pub(crate) fn targets(&self) -> &[f64] {
+        &self.y
+    }
+
+    // The model with the points `units` (unit-cube coordinates, a row of `dims` per point) added
+    // with the standardized `values`, as if they had been observed: the kernel's hyperparameters
+    // and the standardization kept, the constant mean estimated again (its generalized least
+    // squares estimate, as at every fit), K_y factored again. None if no jitter factors it.
+    pub(crate) fn with_points(&self, units: &[f64], values: &[f64]) -> Option<GaussianProcess> {
+        let dims = self.scaling.dims();
+        let mut x = self.x.clone();
+        x.extend_from_slice(units);
+        let mut y = self.y.clone();
+        y.extend_from_slice(values);
+        let count = y.len();
+        debug_assert_eq!(x.len(), count * dims);
+        let data = Data {
+            x: &x,
+            y: &y,
+            count,
+            dims,
+            kernel: self.kernel,
+            noise: Noise::Fixed(self.noise),
+        };
+        let mut workspace = Workspace::new(count);
+        let jitter = data.factor(&self.length_scales, self.signal, self.noise, &mut workspace)?;
+        let (mean, log_likelihood) = data.solve(&mut workspace, None);
+        let Workspace { l, b, .. } = workspace;
+        Some(GaussianProcess {
+            kernel: self.kernel,
+            scaling: self.scaling.clone(),
+            x,
+            count,
+            y,
+            y_mean: self.y_mean,
+            y_scale: self.y_scale,
+            mean,
+            length_scales: self.length_scales.clone(),
+            signal: self.signal,
+            noise: self.noise,
+            log: self.log.clone(),
+            jitter,
+            factor: l,
+            alpha: b,
+            log_likelihood,
+        })
+    }
+
     // fits the model to the unit-cube points `x` (count × dims) and `values`, all finite, from
     // the warm start `warm` (the logarithms of an earlier fit's hyperparameters) or the fixed
     // first start
@@ -579,8 +659,10 @@ impl GaussianProcess {
         let Some(jitter) = data.factor(&length_scales, signal, noise, &mut workspace) else {
             return Err(Error::InvalidSetting {
                 setting: "values",
-                reason: "the kernel matrix of the points doesn't factor, even with a jitter of                          its diagonal's scale"
-                    .to_string(),
+                reason:
+                    "the kernel matrix of the points doesn't factor, even with a jitter of its \
+                         diagonal's scale"
+                        .to_string(),
             });
         };
         let (mean, log_likelihood) = data.solve(&mut workspace, None);
@@ -590,6 +672,7 @@ impl GaussianProcess {
             scaling,
             x,
             count,
+            y,
             y_mean,
             y_scale,
             mean,
@@ -1101,6 +1184,7 @@ impl GaussianProcessBuilder {
             scaling,
             x,
             count,
+            y,
             y_mean,
             y_scale,
             mean,

@@ -79,8 +79,8 @@ jobs:
       # every examples/<name>/main.rs, which Cargo finds as the example <name>, printing what its
       # output.txt has. They are built once, then run as many at a time as the runner has cores:
       # most are single-threaded, and the ones that use rayon give the same results on any number
-      # of threads. The asynchronous example's numbers depend on the machine (its thread count and
-      # how long each evaluation takes): its output is compared with every number replaced by #.
+      # of threads. The asynchronous examples' numbers depend on the machine (its thread count and
+      # how long each evaluation takes): their output is compared with every number replaced by #.
       # Every example is checked, and the step fails at the end if any differs.
       - run: cargo build --release --examples
       - run: |
@@ -101,7 +101,7 @@ jobs:
             if [ "$(cat "actual/$example.status")" != 0 ]; then
               echo "::error::$example exited with status $(cat "actual/$example.status")"
               failed="$failed $example"
-            elif [ "$example" = asynchronous ]; then
+            elif [ "$example" = asynchronous ] || [ "$example" = bo_asynchronous ]; then
               diff <(numbers "examples/$example/output.txt") <(numbers "actual/$example.txt") \
                 || failed="$failed $example"
             else

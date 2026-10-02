@@ -84,6 +84,18 @@ name = "mma"
 path = "examples/mma/main.rs"
 required-features = ["parallel"]
 
+# the points of a batch evaluated in parallel
+[[example]]
+name = "bo_hartmann6"
+path = "examples/bo_hartmann6/main.rs"
+required-features = ["parallel"]
+
+# the contrast's batches evaluated in parallel
+[[example]]
+name = "bo_asynchronous"
+path = "examples/bo_asynchronous/main.rs"
+required-features = ["parallel"]
+
 [[bin]]
 name = "genoxide"
 required-features = ["cli"]

@@ -48,6 +48,13 @@ pub trait Settings<A>: Send + Sync + 'static {
         let _ = (algorithm, points);
         Err("the algorithm has no acquisition function".to_string())
     }
+
+    /// The probability of feasibility at `points`, a point per row, for the algorithms that
+    /// model constraints.
+    fn feasibility(&self, algorithm: &A, points: ArrayView2<'_, f64>) -> Result<Vec<f64>> {
+        let _ = (algorithm, points);
+        Err("the algorithm has no model of the constraints".to_string())
+    }
 }
 
 fn unknown(name: &str) -> String {
@@ -448,12 +455,12 @@ where
     }
 }
 
-/// Bayesian optimization's acquisition function, which can change, its model and its
-/// acquisition's values, for a plot.
+/// Bayesian optimization's acquisition function, batch and fantasy, which can change, its model
+/// and its acquisition's values and probability of feasibility, for a plot.
 pub struct BoSettings;
 
-impl Settings<Bo> for BoSettings {
-    fn get(&self, bo: &Bo, name: &str) -> Result<Value> {
+impl<R: bo::Space> Settings<Bo<R>> for BoSettings {
+    fn get(&self, bo: &Bo<R>, name: &str) -> Result<Value> {
         match name {
             "acquisition" => Ok(match bo.acquisition() {
                 bo::Acquisition::ExpectedImprovement => json!({"type": "expected_improvement"}),
@@ -473,49 +480,83 @@ impl Settings<Bo> for BoSettings {
                 }
             }),
             "initial_points" => Ok(json!(bo.initial_points())),
+            "batch" => Ok(json!(bo.batch())),
+            "fantasy" => Ok(json!(match bo.fantasy() {
+                bo::Fantasy::KrigingBeliever => "believer",
+                bo::Fantasy::ConstantLiar(bo::Lie::Min) => "liar-min",
+                bo::Fantasy::ConstantLiar(bo::Lie::Mean) => "liar-mean",
+                bo::Fantasy::ConstantLiar(bo::Lie::Max) => "liar-max",
+                fantasy => {
+                    return Err(format!("a fantasy the package doesn't know: {fantasy:?}"));
+                }
+            })),
+            "constraints" => Ok(json!(bo.constraints())),
             _ => Err(unknown(name)),
         }
     }
 
-    fn set(&self, bo: &mut Bo, name: &str, value: &str) -> Result<()> {
+    fn set(&self, bo: &mut Bo<R>, name: &str, value: &str) -> Result<()> {
         match name {
             "acquisition" => {
                 let acquisition: config::Acquisition = parse(name, value)?;
                 setting(bo.set_acquisition(crate::model::acquisition(acquisition)))
             }
+            "batch" => setting(bo.set_batch(parse(name, value)?)),
+            "fantasy" => {
+                let fantasy: config::BoFantasy = parse(name, value)?;
+                bo.set_fantasy(crate::run::bo_fantasy(fantasy));
+                Ok(())
+            }
             _ => Err(unknown(name)),
         }
     }
 
-    fn model(&self, bo: &Bo) -> Option<PyGaussianProcess> {
-        let genes = bo.real().genome_len();
+    fn model(&self, bo: &Bo<R>) -> Option<PyGaussianProcess> {
+        let genes = bo.representation().genome_len();
         bo.model()
             .map(|model| PyGaussianProcess::new(model.clone(), genes))
     }
 
-    fn acquisition(&self, bo: &Bo, points: ArrayView2<'_, f64>) -> Result<Vec<f64>> {
-        let genes = bo.real().genome_len();
-        if points.ncols() != genes {
-            return Err(format!(
-                "points is a point per row, a value per gene of the genome's {genes}, not of                  shape ({}, {})",
-                points.nrows(),
-                points.ncols()
-            ));
-        }
-        let mut point = vec![0.0; genes];
-        let mut values = Vec::with_capacity(points.nrows());
-        for row in points.rows() {
-            for (x, &value) in point.iter_mut().zip(row.iter()) {
-                *x = value;
-            }
-            match bo.acquisition_at(&point) {
-                Some(value) => values.push(value),
-                None => return Err("no model yet: the first point after the initial design                      has its model"
-                    .to_string()),
-            }
-        }
-        Ok(values)
+    fn acquisition(&self, bo: &Bo<R>, points: ArrayView2<'_, f64>) -> Result<Vec<f64>> {
+        at_points(bo, points, |bo, point| bo.acquisition_at(point))
     }
+
+    fn feasibility(&self, bo: &Bo<R>, points: ArrayView2<'_, f64>) -> Result<Vec<f64>> {
+        at_points(bo, points, |bo, point| {
+            bo.probability_of_feasibility_at(point)
+        })
+    }
+}
+
+// `f` of the model at `points`, a point per row: an error without a model
+fn at_points<R: bo::Space>(
+    bo: &Bo<R>,
+    points: ArrayView2<'_, f64>,
+    f: impl Fn(&Bo<R>, &[f64]) -> Option<f64>,
+) -> Result<Vec<f64>> {
+    let genes = bo.representation().genome_len();
+    if points.ncols() != genes {
+        return Err(format!(
+            "points is a point per row, a value per gene of the genome's {genes}, not of shape              ({}, {})",
+            points.nrows(),
+            points.ncols()
+        ));
+    }
+    let mut point = vec![0.0; genes];
+    let mut values = Vec::with_capacity(points.nrows());
+    for row in points.rows() {
+        for (x, &value) in point.iter_mut().zip(row.iter()) {
+            *x = value;
+        }
+        match f(bo, &point) {
+            Some(value) => values.push(value),
+            None => {
+                return Err("no model yet: the first point after the initial design has its                             model"
+                    .to_string());
+            }
+        }
+    }
+    Ok(values)
 }
 
 /// Where the algorithm is while the control runs, and its settings.
@@ -570,6 +611,7 @@ trait AnySlot: Send + Sync {
     fn reevaluate(&self) -> PyResult<()>;
     fn model(&self) -> PyResult<Option<PyGaussianProcess>>;
     fn acquisition(&self, points: ArrayView2<'_, f64>) -> PyResult<Vec<f64>>;
+    fn feasibility(&self, points: ArrayView2<'_, f64>) -> PyResult<Vec<f64>>;
 }
 
 impl<A, S> AnySlot for Slot<A, S>
@@ -596,6 +638,10 @@ where
 
     fn acquisition(&self, points: ArrayView2<'_, f64>) -> PyResult<Vec<f64>> {
         self.with(|algorithm, settings| settings.acquisition(algorithm, points))
+    }
+
+    fn feasibility(&self, points: ArrayView2<'_, f64>) -> PyResult<Vec<f64>> {
+        self.with(|algorithm, settings| settings.feasibility(algorithm, points))
     }
 }
 
@@ -645,6 +691,16 @@ impl Running {
         points: PyReadonlyArray2<'py, f64>,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
         let values = self.slot.acquisition(points.as_array())?;
+        Ok(PyArray1::from_vec(py, values))
+    }
+
+    /// The probability of feasibility at `points`, a point per row.
+    fn feasibility<'py>(
+        &self,
+        py: Python<'py>,
+        points: PyReadonlyArray2<'py, f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let values = self.slot.feasibility(points.as_array())?;
         Ok(PyArray1::from_vec(py, values))
     }
 }
