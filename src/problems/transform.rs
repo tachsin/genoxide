@@ -70,8 +70,8 @@ fn moved_optimum(
 /// [`evaluate_with`](FitnessFunction::evaluate_with) gives it at `x − o`: the gradient, the
 /// constraints' values and their Jacobian, unchanged, since a shift moves the function without
 /// turning or stretching it. A shifted smooth function keeps its analytic gradient, and a shifted
-/// constrained problem gives [`Mma`](crate::algorithm::Mma) and [`Bo`](crate::algorithm::Bo) its
-/// constraints' values.
+/// constrained problem gives its constraints' values to [`Bo`](crate::algorithm::Bo) (and, with
+/// their Jacobian, to [`Mma`](crate::algorithm::Mma)).
 ///
 /// ```
 /// use genoxide::genome::Representation;
@@ -222,8 +222,8 @@ impl<P: Problem<Representation = Real>> Problem for Shifted<P> {
 /// [`evaluate_with`](FitnessFunction::evaluate_with) gives it by the chain rule: the gradient
 /// `Mᵀ ∇f(c + M (x − c))`, the constraints' values at `c + M (x − c)`, and their Jacobian `J M`,
 /// each row (a constraint's gradient) turned as the gradient is. A rotated smooth function keeps
-/// its analytic gradient, and a rotated constrained problem gives [`Mma`](crate::algorithm::Mma)
-/// and [`Bo`](crate::algorithm::Bo) its constraints' values.
+/// its analytic gradient, and a rotated constrained problem gives its constraints' values to
+/// [`Bo`](crate::algorithm::Bo) (and, with their Jacobian, to [`Mma`](crate::algorithm::Mma)).
 ///
 /// Rotating a shifted problem gives CEC 2005's shifted rotated functions, `f((x − o) M)`, e.g. its
 /// F10, the shifted rotated Rastrigin, whose rotation turns about the shifted optimum:
@@ -369,12 +369,12 @@ impl<P: Problem<Representation = Real>> FitnessFunction<Reals> for Rotated<P> {
     fn evaluate_with(&self, x: &Reals, extras: &mut Extras<'_>) -> P::Output {
         let n = self.center.len();
         let (gradient, inequalities, jacobian) = extras.buffers();
-        // the wrapped problem's derivatives, in the rotated coordinates
-        let mut turned_gradient = gradient.as_ref().map(|gradient| {
+        // the wrapped problem's derivatives at c + M (x − c), in its own coordinates
+        let mut wrapped_gradient = gradient.as_ref().map(|gradient| {
             assert_eq!(gradient.len(), n, "a gradient has a value per gene");
             vec![0.0; n]
         });
-        let mut turned_jacobian = jacobian.as_ref().map(|jacobian| {
+        let mut wrapped_jacobian = jacobian.as_ref().map(|jacobian| {
             assert_eq!(
                 jacobian.len() % n.max(1),
                 0,
@@ -385,18 +385,18 @@ impl<P: Problem<Representation = Real>> FitnessFunction<Reals> for Rotated<P> {
         let output = self.problem.evaluate_with(
             &self.rotated(x),
             &mut Extras::new(
-                turned_gradient.as_deref_mut(),
+                wrapped_gradient.as_deref_mut(),
                 inequalities,
-                turned_jacobian.as_deref_mut(),
+                wrapped_jacobian.as_deref_mut(),
             ),
         );
-        if let (Some(gradient), Some(turned)) = (gradient, &turned_gradient) {
-            self.turn_back(turned, gradient);
+        if let (Some(gradient), Some(wrapped)) = (gradient, &wrapped_gradient) {
+            self.turn_back(wrapped, gradient);
         }
-        if let (Some(jacobian), Some(turned)) = (jacobian, &turned_jacobian) {
+        if let (Some(jacobian), Some(wrapped)) = (jacobian, &wrapped_jacobian) {
             let rows = jacobian.chunks_exact_mut(n.max(1));
-            for (row, turned) in rows.zip(turned.chunks_exact(n.max(1))) {
-                self.turn_back(turned, row);
+            for (row, wrapped) in rows.zip(wrapped.chunks_exact(n.max(1))) {
+                self.turn_back(wrapped, row);
             }
         }
         output

@@ -207,7 +207,15 @@ as (1, …, 1) (it's (−1, …, −1)) and its table I drops the square of f13'
 report prints Schaffer F7 with sin for BBOB's sin²; Katsuura's minima include the bounds ±5, where a
 PSO that stops particles at the bounds lands on them; at G06's minimum, shifted, rounding in x − o
 leaves an active constraint violated by 6e-14. The minima are proven from the formulas (every term
-at least 0), but the noisy quartic's, which isn't known.
+at least 0), but the noisy quartic's, which isn't known. Gradients (#416): all but the step
+function, the non-continuous Rastrigin (flat steps), Katsuura (kinks 2⁻³³ apart) and the noisy
+quartic (noise that jumps between any two genomes) supply their analytic gradient, 0 for the
+kinked term at the cones and cusps of measure 0 (different powers, HappyCat, HGBat, Schaffer F7);
+Büche-Rastrigin is differentiable at 0 despite T_osz, its terms being O(x²) there. Weierstrass's
+is checked on its partial sums: the computed phase 2π 3ᵏ (x + 0.5) of its highest terms rounds by
+2·10⁻⁶ rad, which no differences of the function resolve. `Shifted` passes the wrapped problem's
+extras on at `x − o`; `Rotated` its gradient as `Mᵀ ∇f`, its constraint values, and its
+Jacobian as `J M`.
 
 **Hand-computed test values (VC):** Rosenbrock (−1.2, 1) = 24.2; Powell (3, −1, 0, 1) = 215;
 Goldstein-Price (0, −1) = 3 and its three local minima's values from the paper; Beale (3, 0.5) =

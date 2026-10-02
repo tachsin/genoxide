@@ -106,8 +106,9 @@
 //! The [`Shifted`] and [`Rotated`] wrappers pass on what the wrapped problem provides: its
 //! gradient (at `x − o` for a shift, and `Mᵀ ∇f(c + M (x − c))` for a rotation, by the chain
 //! rule), and a constrained problem's constraint values and their Jacobian (the rows times `M`
-//! for a rotation), so that a shifted or rotated [`G06`](cec2006::G06) still gives
-//! [`Mma`](crate::algorithm::Mma) and [`Bo`](crate::algorithm::Bo) its constraints' values.
+//! for a rotation): a shifted or rotated [`G06`](cec2006::G06) still gives its constraints'
+//! values to [`Bo`](crate::algorithm::Bo), and a problem that gives their Jacobian too, to
+//! [`Mma`](crate::algorithm::Mma).
 //!
 //! Two submodules hold constrained problems, whose fitness is `(score, violation)`:
 //!
