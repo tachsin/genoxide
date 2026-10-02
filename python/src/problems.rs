@@ -3,7 +3,7 @@
 //! evaluated in Rust.
 
 use crate::run::{WithObjectives, with_objectives};
-use genoxide::engine::{FitnessFunction, IntoFitness};
+use genoxide::engine::{Extras, FitnessFunction, IntoFitness, Provided};
 use genoxide::genome::{Binary, Bits, Integer, Integers, Real, Reals, Representation};
 use genoxide::multi::problems::{self as multi, DynMultiProblem, MultiProblem, try_boxed};
 use genoxide::multi::{IntoScores, MultiFitnessFunction, Scores};
@@ -1812,6 +1812,15 @@ impl FitnessFunction<Reals> for Wrapped {
 
     fn evaluate(&self, genome: &Reals) -> Fitness {
         self.0.evaluate(genome)
+    }
+
+    // the wrapped problem's gradient and constraint values, which the wrappers pass on
+    fn provides(&self) -> Provided {
+        self.0.provides()
+    }
+
+    fn evaluate_with(&self, genome: &Reals, extras: &mut Extras<'_>) -> Fitness {
+        self.0.evaluate_with(genome, extras)
     }
 }
 

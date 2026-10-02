@@ -355,6 +355,11 @@ def test_wrong_constraints_are_errors():
         bo.run(toy, constraints=2, batch=True, evaluations=10)
     with pytest.raises(ValueError, match="own constraints"):
         bo.run(gx.problems.cec2006.G24(), constraints=2, evaluations=10)
+    # and so does a shifted or rotated one: the wrappers pass the values on
+    g24 = gx.problems.cec2006.G24()
+    for wrapped in [gx.problems.Shifted(g24, seed=1), gx.problems.Rotated(g24, seed=1)]:
+        with pytest.raises(ValueError, match="own constraints"):
+            bo.run(wrapped, constraints=2, evaluations=10)
     ucb = gx.Bo(gx.Real((0.0, 1.0), length=2), acquisition=gx.UpperConfidenceBound(2.0))
     with pytest.raises(ValueError, match="upper confidence bound"):
         ucb.run(toy, constraints=2, evaluations=10)
