@@ -6,7 +6,7 @@ reference: "Liang, J. J., Runarsson, T. P., Mezura-Montes, E., Clerc, M., Sugant
 reference_url: "https://github.com/P-N-Suganthan/CEC2006"
 optimum: "−1.90515525853479 (best known)"
 languages: [rust, python]
-order: 112
+order: 132
 family: "CEC 2006"
 tab: g16
 ---

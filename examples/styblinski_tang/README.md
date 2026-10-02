@@ -6,7 +6,7 @@ reference: "Styblinski, M. A. and Tang, T.-S. (1990). Experiments in nonconvex o
 reference_url: "https://doi.org/10.1016/0893-6080(90)90029-K"
 optimum: "−1174.98 in 30 dimensions (−39.1662 n, at xᵢ ≈ −2.9035)"
 languages: [rust, python]
-order: 52
+order: 62
 trace_note: "Recorded from another run: CMA-ES with IPOP restarts in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 

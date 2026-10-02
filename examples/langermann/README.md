@@ -6,7 +6,7 @@ reference: "Bersini, H., Dorigo, M., Langerman, S., Seront, G. and Gambardella, 
 reference_url: "https://doi.org/10.1109/ICEC.1996.542670"
 optimum: "−4.15581 at (2.79340, 1.59723) (best known)"
 languages: [rust, python]
-order: 75
+order: 85
 ---
 
 # Langermann

@@ -50,7 +50,27 @@ PROBLEMS = [
     gx.problems.Langermann,
     gx.problems.ShekelFoxholes,
     gx.problems.Kowalik,
+    gx.problems.SumOfDifferentPowers,
+    gx.problems.Step,
+    gx.problems.Quartic,
+    gx.problems.Penalized1,
+    gx.problems.Penalized2,
+    gx.problems.HighConditionedElliptic,
+    gx.problems.BentCigar,
+    gx.problems.Discus,
+    gx.problems.DifferentPowers,
+    gx.problems.BucheRastrigin,
+    gx.problems.NonContinuousRastrigin,
+    gx.problems.Weierstrass,
+    gx.problems.Katsuura,
+    gx.problems.HappyCat,
+    gx.problems.HgBat,
+    gx.problems.SchafferF7,
+    gx.problems.RotatedHyperEllipsoid,
 ]
+
+# the wrappers, which make an instance of another problem
+WRAPPERS = [gx.problems.Shifted, gx.problems.Rotated]
 
 # the problems whose minimum is known numerically, not proven
 NUMERICAL = {
@@ -204,7 +224,7 @@ def test_the_classes_are_the_rust_registry():
     assert set(names[len(two) :]) <= set(three)
     assert three == gx._genoxide.multi_problem_names(3)
     assert gx._genoxide.multi_problem_names(5)[0] == "WaterResourcePlanning"
-    classes = PROBLEMS + MULTI_PROBLEMS + BINARY_PROBLEMS
+    classes = PROBLEMS + MULTI_PROBLEMS + BINARY_PROBLEMS + WRAPPERS
     assert sorted(cls.__name__ for cls in classes) == sorted(
         name for name in gx.problems.__all__ if name not in ("Problem", "MultiProblem", "Optimum")
     )
@@ -328,6 +348,104 @@ def test_values_of_the_functions_of_batch_10():
     assert gx.problems.Kowalik().genome == gx.Real((-5.0, 5.0), length=4)
 
 
+def test_values_of_the_functions_of_batch_10b():
+    assert gx.problems.SumOfDifferentPowers(3)([1, -1, 0.5]) == 2.0625
+    # the cube [-0.5, 0.5) is flat at 0
+    assert gx.problems.Step(3)([0.49, -0.5, 1.5]) == 4
+    assert gx.problems.Step(3)([0.49, -0.5, 0.0]) == 0
+    assert gx.problems.Quartic(3)([1, 1, 1]) == 6
+    # the noise is in [0, 1), and the same for the same genome; no known minimum
+    noisy = gx.problems.Quartic(3, noisy=True)
+    assert 6 <= noisy([1, 1, 1]) < 7
+    assert noisy([1, 1, 1]) == noisy([1, 1, 1])
+    assert noisy.optimum is None
+    assert list(gx.problems.Penalized1(3).optimum.solutions[0]) == [-1, -1, -1]
+    assert gx.problems.Penalized1(1)([11]) == pytest.approx(9 * math.pi + 100)
+    assert gx.problems.Penalized2(2)([6, 1]) == pytest.approx(102.5)
+    assert gx.problems.HighConditionedElliptic(3)([0, 0, 1]) == 1e6
+    assert gx.problems.BentCigar(3)([1, 1, 1]) == 1 + 2e6
+    assert gx.problems.Discus(3)([1, 1, 1]) == 1e6 + 2
+    assert gx.problems.DifferentPowers(3)([0, 0, -0.5]) == pytest.approx(0.125)
+    assert gx.problems.BucheRastrigin(2)([1, 0]) == pytest.approx(100)
+    assert gx.problems.BucheRastrigin(2)([-1, 0]) == pytest.approx(1)
+    assert gx.problems.NonContinuousRastrigin(1)([0.7]) == pytest.approx(20.25)
+    assert gx.problems.Weierstrass(1)([0.5]) == pytest.approx(4 * (1 - 0.5**21))
+    assert gx.problems.Katsuura(1)([0.25]) == pytest.approx(10 * 1.25**10 - 10)
+    assert gx.problems.Katsuura(2)([0.5, -1.5]) == 0
+    assert gx.problems.HappyCat(2)([1, 1]) == 2
+    assert gx.problems.HgBat(2)([1, -1]) == 3
+    assert list(gx.problems.HappyCat(2).optimum.solutions[0]) == [-1, -1]
+    assert gx.problems.SchafferF7(2)([1, 0]) == pytest.approx((1 + math.sin(50) ** 2) ** 2)
+    # Σⱼ (n − j + 1) xⱼ²: not rotated, despite its name
+    assert gx.problems.RotatedHyperEllipsoid(3)([1, 0, 0]) == 3
+    assert gx.problems.RotatedHyperEllipsoid(3)([0, 0, 1]) == 1
+    assert gx.problems.Weierstrass().genome == gx.Real((-0.5, 0.5), length=30)
+    assert gx.problems.RotatedHyperEllipsoid(2).genome == gx.Real((-65.536, 65.536), length=2)
+
+
+def test_shifted_and_rotated_problems():
+    shifted = gx.problems.Shifted(gx.problems.Rastrigin(5), seed=1)
+    assert shifted.name == "Rastrigin"
+    assert shifted.genome == gx.Real((-5.12, 5.12), length=5)
+    assert shifted.reference == gx.problems.Rastrigin().reference
+    # the minimum, moved to the shift, in the middle 80% of the box
+    optimum = shifted.optimum
+    assert optimum.value == 0 and optimum.proven
+    assert np.array_equal(optimum.solutions[0], shifted.shift)
+    assert np.all(np.abs(shifted.shift) <= 0.8 * 5.12)
+    assert shifted(shifted.shift) == 0
+    x = np.array([0.5, -1.0, 2.0, 0.0, 1.5])
+    assert shifted(x) == gx.problems.Rastrigin(5)(x - shifted.shift)
+    # the same seed, the same shift, as in Rust; another, another
+    expected = [46.23653733062747, 24.878588135984046]
+    assert np.array_equal(gx.problems.Shifted(gx.problems.Sphere(2), 1).shift, expected)
+    other = gx.problems.Shifted(gx.problems.Rastrigin(5), 2)
+    assert not np.array_equal(other.shift, shifted.shift)
+    # CEC 2005's F10: rotated about the shifted minimum
+    rotated = gx.problems.Rotated(shifted, seed=1)
+    matrix = rotated.matrix
+    assert matrix.shape == (5, 5)
+    assert np.allclose(matrix @ matrix.T, np.eye(5), atol=1e-14)
+    assert np.array_equal(rotated.center, shifted.shift)
+    assert np.array_equal(rotated.optimum.solutions[0], shifted.shift)
+    y = shifted.shift + matrix @ (x - shifted.shift)
+    assert rotated(x) == pytest.approx(shifted(y), rel=1e-12)
+    expected = [-0.9735519448992744, 0.22846577551756006, -0.2284657755175601, -0.9735519448992744]
+    assert np.array_equal(gx.problems.Rotated(gx.problems.Sphere(2), 1).matrix.ravel(), expected)
+    # constrained problems shift too, with their violation: at G06's minimum, both constraints
+    # are active, and x − o rounds to a point outside one of them by 6e-14
+    g06 = gx.problems.Shifted(gx.problems.cec2006.G06(), seed=3)
+    score, violation = g06(g06.optimum.solutions[0])
+    assert score == pytest.approx(g06.optimum.value) and violation < 1e-12
+    # a native run, the same as a run with Python calls
+    cmaes = gx.Cmaes(rotated.genome, objective="minimize", seed=2)
+    native = cmaes.run(rotated, generations=40)
+    python = cmaes.run(lambda x: rotated(x), generations=40)
+    assert native.best_fitness == python.best_fitness
+    assert np.array_equal(native.best_genome, python.best_genome)
+
+
+@pytest.mark.parametrize(
+    "problem, message",
+    [
+        (
+            gx.problems.Shifted(lambda x: 0.0, seed=1),
+            "Shifted.problem is a single-objective problem of genoxide.problems",
+        ),
+        (gx.problems.Rotated(gx.problems.Sphere(2), seed=-1), "Rotated.seed is at least 0, not -1"),
+        (gx.problems.Shifted(gx.problems.Zdt1(), seed=1), "Shifted.problem is a single-objective"),
+        (
+            gx.problems.Rotated(gx.problems.engineering.GearTrain(), seed=1),
+            "Rotated wraps a single-objective problem on real genomes",
+        ),
+        (gx.problems.Quartic(3, noisy=1), "Quartic.noisy is True or False, not 1"),
+    ],
+)
+def test_wrong_wrappers_are_errors(problem, message):
+    with pytest.raises(ValueError, match=message):
+        problem.genome
+
+
 def test_sizes():
     assert gx.problems.Rastrigin().dimensions == 30
     assert gx.problems.Michalewicz().dimensions == 10
@@ -348,6 +466,12 @@ def test_sizes():
         (gx.problems.Trid(1), "Trid.dimensions is at least 2, not 1"),
         (gx.problems.Powell(2), "Powell.dimensions is at least 4, not 2"),
         (gx.problems.Powell(6), "Powell.dimensions is a multiple of 4, not 6"),
+        (gx.problems.BentCigar(1), "BentCigar.dimensions is at least 2, not 1"),
+        (gx.problems.SchafferF7(1), "SchafferF7.dimensions is at least 2, not 1"),
+        (
+            gx.problems.Shifted(gx.problems.Sphere(0), seed=1),
+            "Sphere.dimensions is at least 1, not 0",
+        ),
         (gx.problems.Sphere(2.0), "Sphere.dimensions is a whole number"),
         (gx.problems.Sphere(2**40), "Sphere.dimensions is at most 16777216, not 1099511627776"),
     ],

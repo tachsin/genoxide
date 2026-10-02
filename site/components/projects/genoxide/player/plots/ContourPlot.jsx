@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { categorical, formatValue, linear, resolveColor, ticks } from "../chart-kit";
 import { Axes, Legend, Marker, PlotBox, TipRows, Tooltip, nearest, pointerIn } from "../chart-parts";
-import { FUNCTIONS, contourLegend, gridImage, isoline, sample } from "../contour";
+import { FUNCTIONS, contourLegend, gridImage, isoline, rotated, sample } from "../contour";
 
 const GRID = 140;
 const LEVELS = [0.12, 0.24, 0.36, 0.48, 0.6, 0.72, 0.84];
@@ -14,7 +14,8 @@ const LEVELS = [0.12, 0.24, 0.36, 0.48, 0.6, 0.72, 0.84];
  * `compact` (a panel of a grid) leaves the legend to the grid. Optionally,
  * `problem.labels` names the axes and the field (`{ x, y, f }`: a function
  * of more than 2 variables is drawn as a slice or a projection), and
- * `problem.minima_label` the minima, when they aren't proven global.
+ * `problem.minima_label` the minima, when they aren't proven global, and `problem.rotation`
+ * (`{ matrix, center }`) a function rotated as genoxide's `problems::Rotated` rotates it.
  * A local method's frames can add `state.simplex` (its vertices, drawn as a
  * polygon: Nelder-Mead's triangle) and `state.ends` (where its runs before
  * converged), and `problem.population_label` names the points (e.g. "simplex").
@@ -24,7 +25,11 @@ export default function ContourPlot({ trace, frame, dark, compact = false }) {
   const [image, setImage] = useState(null);
   const clip = `clip${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const problem = trace.problem ?? {};
-  const f = FUNCTIONS[problem.function] ?? null;
+  const rotationKey = JSON.stringify(problem.rotation ?? null);
+  const f = useMemo(
+    () => rotated(FUNCTIONS[problem.function] ?? null, JSON.parse(rotationKey)),
+    [problem.function, rotationKey],
+  );
   const bounds = problem.bounds ?? [
     [-5, 5],
     [-5, 5],

@@ -6,7 +6,7 @@ reference: "Zitzler, E., Deb, K. and Thiele, L. (2000). Comparison of multiobjec
 reference_url: https://doi.org/10.1162/106365600568202
 optimum: "31 points f₂ = 10 / f₁ for f₁ = 1, 2, …, 31; hypervolume 323.15 (reference point (34.1, 11))"
 languages: [rust, python]
-order: 134
+order: 154
 family: ZDT
 ---
 

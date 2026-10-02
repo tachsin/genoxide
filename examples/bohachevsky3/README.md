@@ -6,7 +6,7 @@ reference: "Bohachevsky, I. O., Johnson, M. E. and Stein, M. L. (1986). Generali
 reference_url: "https://doi.org/10.1080/00401706.1986.10488128"
 optimum: "0 at (0, 0)"
 languages: [rust, python]
-order: 68
+order: 78
 family: Bohachevsky
 tab: Bohachevsky 3
 ---

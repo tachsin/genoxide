@@ -1,0 +1,15 @@
+Rotated hyper-ellipsoid in 30 dimensions, 300000 evaluations at most
+Rotated hyper-ellipsoid: evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES         3262     4410     5362     6160     7140   8.7e-9
+sep-CMA-ES     2142     2772     3556     4354     4886   9.6e-9
+DE            13500    18100    23100    27100    31900   7.9e-9
+PSO           10960    16320    20280    24160    27520   9.4e-9
+GA            44250   138965        -        -        -   1.1e-3
+Rotated by an orthogonal matrix (seed 1): evaluations until the error is at most
+algorithm         1     1e-2     1e-4     1e-6     1e-8     best
+CMA-ES         3430     4536     5348     6314     7294   8.8e-9
+sep-CMA-ES     3920     6342     8540    10668    12180   9.5e-9
+DE            18300    30500    41100    50500    59000   9.9e-9
+PSO           25120    42640    57360    79760    96600   1.0e-8
+GA                -        -        -        -        -    4.2e0

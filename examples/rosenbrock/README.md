@@ -6,7 +6,7 @@ reference: "Rosenbrock, H. H. (1960). An automatic method for finding the greate
 reference_url: "https://doi.org/10.1093/comjnl/3.3.175"
 optimum: "0 (at (1, …, 1))"
 languages: [rust, python]
-order: 50
+order: 60
 trace_note: "Recorded from another run: CMA-ES in 2 dimensions, so that the population can be drawn on the function's contour."
 ---
 

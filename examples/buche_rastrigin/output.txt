@@ -1,0 +1,8 @@
+Büche-Rastrigin in 10 dimensions, 10 seeds, 100000 evaluations at most per run
+algorithm         at min  evaluations  median error
+CMA-ES              0/10            -         1.8e1
+CMA-ES with IPOP    0/10            -         6.0e0
+DE                 10/10        66650        9.4e-9
+PSO                 0/10            -         7.5e0
+GA                  0/10            -        2.2e-4
+evaluations: the median of the runs that reach the minimum

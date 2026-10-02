@@ -1,0 +1,8 @@
+Schaffer F7 in 10 dimensions, 10 seeds, 100000 evaluations at most per run
+algorithm         at min  evaluations  median error
+CMA-ES              0/10            -        1.0e-1
+CMA-ES with IPOP   10/10        24360        8.7e-9
+DE                 10/10        58450        8.8e-9
+PSO                 1/10        25000        7.7e-5
+GA                  0/10            -        2.4e-3
+evaluations: the median of the runs that reach the minimum

@@ -6,7 +6,7 @@ reference: "Kowalik, J. S. and Osborne, M. R. (1968). Methods for Unconstrained 
 reference_url: "https://doi.org/10.1109/4235.771163"
 optimum: "3.07486e-4 at (0.19283, 0.19084, 0.12312, 0.13577) (best known)"
 languages: [rust, python]
-order: 76
+order: 86
 ---
 
 # Kowalik

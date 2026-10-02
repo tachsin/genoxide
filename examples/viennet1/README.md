@@ -6,7 +6,7 @@ reference: "Viennet, R., Fonteix, C. and Marc, I. (1996). Multicriteria optimiza
 reference_url: https://doi.org/10.1080/00207729608929211
 optimum: "the image of the triangle with corners (0, 1), (0, −1) and (1, 0); hypervolume about 33.52 (reference point (4.4, 5.4, 4.2))"
 languages: [rust, python]
-order: 162
+order: 182
 family: Viennet
 ---
 
