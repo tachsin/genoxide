@@ -89,12 +89,14 @@
 //! `Shifted::new(Rastrigin::new(n), seed)` and `Rotated::new(Shifted::new(Rastrigin::new(n), seed), seed)`,
 //! with genoxide's own shift and matrix rather than the report's data files.
 //!
-//! The classic functions but [`Eggholder`], [`Schwefel2_21`] and [`Schwefel2_22`], which aren't
-//! differentiable everywhere, supply their analytic gradient to the algorithms that want one (see
-//! [`gradient`](crate::gradient)): [`FitnessFunction::provides`] says so, and
-//! [`FitnessFunction::evaluate_with`] computes it, with [`math`](crate::math)'s functions. Ackley's
-//! has a cone at the origin, where its gradient is taken as 0, and Schwefel 2.26's second
-//! derivative is unbounded at 0.
+//! The classic functions of the table up to [`Kowalik`] but [`Eggholder`], [`Schwefel2_21`] and
+//! [`Schwefel2_22`], which aren't differentiable everywhere, supply their analytic gradient to the
+//! algorithms that want one (see [`gradient`](crate::gradient)): [`FitnessFunction::provides`]
+//! says so, and [`FitnessFunction::evaluate_with`] computes it, with [`math`](crate::math)'s
+//! functions. Ackley's has a cone at the origin, where its gradient is taken as 0, and Schwefel
+//! 2.26's second derivative is unbounded at 0. The functions after [`Kowalik`], from
+//! [`SumOfDifferentPowers`] on, and the [`Shifted`] and [`Rotated`] wrappers don't supply one
+//! yet: algorithms estimate it by finite differences.
 //!
 //! Two submodules hold constrained problems, whose fitness is `(score, violation)`:
 //!

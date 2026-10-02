@@ -907,7 +907,7 @@ How fitness functions give gradients to gradient-based methods ([L-BFGS-B](#l-bf
 
 - `Differentiable(|x: &Reals, gradient: &mut [f64]| value)` writes the gradient (zeroed, one value per gene) and returns the value; any algorithm takes it as a plain fitness function. `Batch(Differentiable(|xs: &[&Reals], gradients: &mut [f64]| values))`: flat, row-major, a row per genome.
 - A `FitnessFunction` declares it with `fn provides(&self) -> Provided { Provided::GRADIENT }` and writes it in `fn evaluate_with(&self, x, extras: &mut Extras<'_>)` when `extras.gradient()` is `Some` (`genoxide::engine::{Extras, Provided}`); the value must be `evaluate`'s, to the bit.
-- The smooth test problems supply theirs: every classic function in `problems` but `Eggholder`, `Schwefel2_21` and `Schwefel2_22`; `problem.provides().gradient`.
+- The smooth test problems supply theirs: every classic function in `problems` but `Eggholder`, `Schwefel2_21` and `Schwefel2_22`, and not yet the CEC- and BBOB-style ones (`SumOfDifferentPowers` to `RotatedHyperEllipsoid`) or the `Shifted` and `Rotated` wrappers; `problem.provides().gradient`.
 - `gradient::check(&function, &x)?` compares a supplied gradient with central differences: `.largest()` about 1e-10 when right, `.worst_gene()`.
 - An algorithm's `gradient::Gradients` setting: `Auto` (default: supplied if provided, else forward differences, n evaluations per gradient, up to `gradient::AUTO_LIMIT` = 10⁴ genes), `Supplied` (an error at the start of a run without one), `Forward { step: None }`, `Central { step: None }` (2n per gradient, more accurate). Finite differences count towards `Stop::evaluations`.
 - A NaN in a gradient follows the `NanPolicy`: invalid fitness, or `Error::NanFitness`.
