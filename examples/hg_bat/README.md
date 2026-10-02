@@ -29,8 +29,8 @@ gives no other source; it's usually credited to Beyer and Finck too, whose paper
 
 The first term is 0 where ‖x‖² = |Σ xᵢ|, on two spheres through the origin, one of them through
 (−1, …, −1), and rises as a square root away from them: a groove whose floor curves around to the
-minimum, with a gentle slope along it. As on HappyCat, a search falls into the groove at once, then has to follow a
-curving direction with small steps across it and large ones along it.
+minimum, with a gentle slope along it. As on HappyCat, a search falls into the groove at once, then
+has to follow a curving direction with small steps across it and large ones along it.
 
 ## Representation
 
@@ -73,3 +73,16 @@ the target in 2 dimensions either.
 No algorithm reaches the minimum to within 1e-8. SHADE comes closest, with a median error of 0.13;
 PSO ends at 0.20, the genetic algorithm at 0.30, CMA-ES with IPOP restarts at 0.34 and without
 restarts at 0.45. They reach the groove and stall in it, as on HappyCat.
+
+A larger budget doesn't change that. CMA-ES with IPOP restarts from seeds 1 to 5, with 1,000,000
+evaluations each, ten times the page's budget, ends at errors of 0.11 to 0.33 (0.29, 0.11, 0.33,
+0.25 and 0.29). Nelder-Mead started from each of those points, with an initial step of 0.01 of each
+range, converges after 1,347 to 2,021 evaluations at 0.10 to 0.25 (0.25, 0.10, 0.20, 0.15 and 0.15):
+better, but nowhere near the minimum.
+
+That matches the function's record. The CEC 2014 competition's winner, L-SHADE, didn't reach the
+minimum either: on the competition's shifted and rotated HGBat (its F14) in 10 dimensions, with
+100,000 evaluations, its best of 51 runs ended at an error of 4.5·10⁻² and its median at 7.6·10⁻²
+(Tanabe, R. and Fukunaga, A. S. (2014). Improving the search performance of SHADE using linear
+population size reduction. 2014 IEEE Congress on Evolutionary Computation: 1658-1665, table I,
+[doi:10.1109/CEC.2014.6900380](https://doi.org/10.1109/CEC.2014.6900380)).

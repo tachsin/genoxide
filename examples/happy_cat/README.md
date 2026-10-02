@@ -79,3 +79,17 @@ No algorithm reaches the minimum to within 1e-8: that's the function's point. CM
 restarts comes closest, with a median error of 5.4·10⁻³; CMA-ES without restarts ends at 9.4·10⁻²,
 the genetic algorithm at 7.8·10⁻², SHADE at 0.10 and PSO at 0.14. They all reach the groove, and
 stall in it, short of the minimum.
+
+A larger budget doesn't change that. CMA-ES with IPOP restarts from seeds 1 to 5, with 1,000,000
+evaluations each, ten times the page's budget, ends at errors of 8.0·10⁻⁴ to 2.8·10⁻³ (1.9·10⁻³,
+2.8·10⁻³, 8.2·10⁻⁴, 1.2·10⁻³ and 8.0·10⁻⁴). Nelder-Mead started from each of those points, with an
+initial step of 0.01 of each range, converges after 2,584 to 2,735 evaluations without improving
+any of them.
+
+That matches the function's reputation, as Beyer and Finck's title says: "a simple function class
+where well-known direct search algorithms do fail". The CEC 2014 competition's winner, L-SHADE,
+didn't reach the minimum either: on the competition's shifted and rotated HappyCat (its F13) in 10
+dimensions, with 100,000 evaluations, its best of 51 runs ended at an error of 1.6·10⁻² and its
+median at 5.3·10⁻² (Tanabe, R. and Fukunaga, A. S. (2014). Improving the search performance of SHADE
+using linear population size reduction. 2014 IEEE Congress on Evolutionary Computation: 1658-1665,
+table I, [doi:10.1109/CEC.2014.6900380](https://doi.org/10.1109/CEC.2014.6900380)).
