@@ -1016,6 +1016,64 @@ fn an_lbfgsb_saved_between_an_ask_and_its_tell_resumes() {
     assert_eq!(bytes(&resumed), bytes(&lbfgsb));
 }
 
+// Branin's function, for Bayesian optimization
+fn branin(x: &Reals) -> f64 {
+    use genoxide::problems::Branin;
+    Branin.evaluate(x)
+}
+
+fn bo(seed: u64) -> Bo {
+    use genoxide::problems::{Branin, Problem};
+    Bo::builder(Branin.representation())
+        .minimize()
+        .seed(seed)
+        .build()
+        .unwrap()
+}
+
+#[test]
+fn bayesian_optimization_resumes() {
+    // the warm start of the hyperparameters is saved; the model is fitted again on the next ask
+    resumes(|| bo(1), branin, 4, 12);
+    let log = || {
+        use genoxide::problems::{Branin, Problem};
+        Bo::builder(Branin.representation())
+            .output(bo::Output::Log)
+            .acquisition(bo::Acquisition::UpperConfidenceBound { beta: 2.0 })
+            .minimize()
+            .seed(2)
+            .build()
+            .unwrap()
+    };
+    resumes(log, branin, 0, 8);
+}
+
+#[test]
+fn bayesian_optimization_saved_between_an_ask_and_its_tell_resumes() {
+    let mut bo = bo(3);
+    for _ in 0..4 {
+        let fitness: Vec<Fitness> = bo.ask().iter().map(|x| Fitness::new(branin(x))).collect();
+        bo.tell(&fitness).unwrap();
+    }
+    let asked: Vec<Vec<f64>> = bo.ask().iter().map(|x| x.to_vec()).collect();
+    let mut resumed: Bo = checkpoint::load(bytes(&bo).as_slice()).unwrap();
+    let again: Vec<Vec<f64>> = resumed.ask().iter().map(|x| x.to_vec()).collect();
+    assert_eq!(again, asked);
+    let fitness: Vec<Fitness> = asked.iter().map(|x| Fitness::new(branin(&Reals::from(x.clone())))).collect();
+    bo.tell(&fitness).unwrap();
+    resumed.tell(&fitness).unwrap();
+    assert_eq!(bytes(&resumed), bytes(&bo));
+    for _ in 0..3 {
+        let a: Vec<Vec<f64>> = bo.ask().iter().map(|x| x.to_vec()).collect();
+        let b: Vec<Vec<f64>> = resumed.ask().iter().map(|x| x.to_vec()).collect();
+        assert_eq!(a, b);
+        let fitness: Vec<Fitness> = a.iter().map(|x| Fitness::new(branin(&Reals::from(x.clone())))).collect();
+        bo.tell(&fitness).unwrap();
+        resumed.tell(&fitness).unwrap();
+    }
+    assert_eq!(bytes(&resumed), bytes(&bo));
+}
+
 // a continuation: Adam through 3 stages of a smoothed Σ |xᵢ − cᵢ|, its ε shared by an atomic
 mod continuation {
     use super::bytes;

@@ -45,6 +45,7 @@ pub mod open_es;
 pub mod pso;
 pub mod steady;
 
+pub use bo::{Bo, BoBuilder};
 pub use cmaes::{Cmaes, CmaesBuilder, Covariance, Restarts};
 pub use continuation::{Continuation, ContinuationBuilder, Continue, Keep};
 pub use de::{De, DeBuilder};

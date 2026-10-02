@@ -130,6 +130,78 @@ pub fn upper_confidence_bound(mean: f64, sd: f64, beta: f64, objective: Objectiv
     mean + beta.sqrt() * sd
 }
 
+// The functions as Bayesian optimization maximizes them, with their derivatives with respect to
+// the mean and the standard deviation, `[value, ∂/∂μ, ∂/∂σ]`, when minimizing, for σ > 0.
+
+// the expected improvement: ∂EI/∂μ = −Φ(z), ∂EI/∂σ = φ(z)
+pub(crate) fn expected_improvement_derivatives(mean: f64, sd: f64, best: f64) -> [f64; 3] {
+    let z = (best - mean) / sd;
+    let (pdf, cdf) = (normal_pdf(z), normal_cdf(z));
+    [(sd * (pdf + z * cdf)).max(0.0), -cdf, pdf]
+}
+
+// the log expected improvement: ln σ + log_h(z), with log_h′(z) = Φ(z)/h(z), h = φ + zΦ, so
+// ∂/∂μ = −log_h′(z)/σ and ∂/∂σ = (1 − z log_h′(z))/σ
+pub(crate) fn log_expected_improvement_derivatives(mean: f64, sd: f64, best: f64) -> [f64; 3] {
+    let z = (best - mean) / sd;
+    let slope = log_h_derivative(z);
+    [ln(sd) + log_h(z), -slope / sd, (1.0 - z * slope) / sd]
+}
+
+// the logarithm of the probability of improvement by ξ, ln Φ(z), z = (best − μ − ξ)/σ: the same
+// maximizer as Φ(z), and a gradient where Φ underflows; d ln Φ/dz = φ(z)/Φ(z)
+pub(crate) fn log_probability_of_improvement_derivatives(
+    mean: f64,
+    sd: f64,
+    best: f64,
+    xi: f64,
+) -> [f64; 3] {
+    let z = (best - mean - xi) / sd;
+    let (value, slope) = log_normal_cdf(z);
+    [value, -slope / sd, -slope * z / sd]
+}
+
+// the upper confidence bound when minimizing, −μ + √β σ
+pub(crate) fn upper_confidence_bound_derivatives(mean: f64, sd: f64, beta: f64) -> [f64; 3] {
+    let root = beta.sqrt();
+    [-mean + root * sd, -1.0, root]
+}
+
+// log_h′(z) = Φ(z) / (φ(z) + z Φ(z)). Below −1 through the Mills ratio m = Φ/φ =
+// √(π/2) erfcx(−z/√2), as m / (1 + z m), with 1 + z m = 1 − e^(ln(|z| m)) from the same
+// `log1mexp` argument as `log_h`. That difference loses ε z² of relative accuracy, so below −64
+// the asymptotic series −z (1 + 2a − 6a² + 42a³), a = 1/z², from the Mills ratio's series
+// m = (1 − a + 3a² − 15a³ + …)/|z| (Abramowitz and Stegun, 7.1.23), whose next term is about
+// 414a⁴ (both checked against mpmath): within 2e-12 either way at −64.
+fn log_h_derivative(z: f64) -> f64 {
+    if z > -1.0 {
+        let cdf = normal_cdf(z);
+        cdf / (normal_pdf(z) + z * cdf)
+    } else if z > -64.0 {
+        let t = erfcx(-z * FRAC_1_SQRT_2);
+        let mills = SQRT_PI_OVER_2 * t;
+        let x = ln(t * -z) + C2;
+        mills / -exp_m1(x)
+    } else {
+        let a = 1.0 / (z * z);
+        -z * (1.0 + a * (2.0 + a * (-6.0 + 42.0 * a)))
+    }
+}
+
+// ln Φ(z) and φ(z)/Φ(z): below −1 through Φ(z) = erfcx(−z/√2) e^(−z²/2) / 2
+fn log_normal_cdf(z: f64) -> (f64, f64) {
+    if z > -1.0 {
+        let cdf = normal_cdf(z);
+        (ln(cdf), normal_pdf(z) / cdf)
+    } else {
+        let t = erfcx(-z * FRAC_1_SQRT_2);
+        (ln(0.5 * t) - 0.5 * z * z, 1.0 / (SQRT_PI_OVER_2 * t))
+    }
+}
+
+// √(π/2)
+const SQRT_PI_OVER_2: f64 = 1.253_314_137_315_500_3;
+
 // a negative or NaN standard deviation or parameter
 fn invalid(x: f64) -> bool {
     x.is_nan() || x < 0.0
@@ -339,6 +411,93 @@ mod tests {
         assert_eq!(upper_confidence_bound(1.0, 2.0, 4.0, Maximize), 5.0);
         assert_eq!(upper_confidence_bound(1.0, 2.0, 4.0, Minimize), 3.0);
         assert!(upper_confidence_bound(1.0, 2.0, -1.0, Maximize).is_nan());
+    }
+
+    #[test]
+    fn derivatives_match_central_differences_and_the_values() {
+        type Derivatives = fn(f64, f64) -> [f64; 3];
+        let functions: [(&str, Derivatives); 4] = [
+            ("EI", |mean, sd| {
+                expected_improvement_derivatives(mean, sd, 1.0)
+            }),
+            ("log-EI", |mean, sd| {
+                log_expected_improvement_derivatives(mean, sd, 1.0)
+            }),
+            ("log-PI", |mean, sd| {
+                log_probability_of_improvement_derivatives(mean, sd, 1.0, 0.05)
+            }),
+            ("UCB", |mean, sd| {
+                upper_confidence_bound_derivatives(mean, sd, 4.0)
+            }),
+        ];
+        // z from about −60 to 3, in every range of log_h
+        for (name, f) in functions {
+            for (mean, sd) in [
+                (0.5, 0.3),
+                (1.0, 1.0),
+                (1.3, 0.2),
+                (2.2, 0.5),
+                (4.0, 0.1),
+                (7.0, 0.1),
+            ] {
+                let [value, by_mean, by_sd] = f(mean, sd);
+                let h = 1e-6;
+                let numeric_mean = (f(mean + h, sd)[0] - f(mean - h, sd)[0]) / (2.0 * h);
+                let numeric_sd = (f(mean, sd + h)[0] - f(mean, sd - h)[0]) / (2.0 * h);
+                for (analytic, numeric) in [(by_mean, numeric_mean), (by_sd, numeric_sd)] {
+                    assert!(
+                        (analytic - numeric).abs() <= 1e-6 * analytic.abs().max(1.0),
+                        "{name} at μ = {mean}, σ = {sd} ({value}): {analytic} against {numeric}"
+                    );
+                }
+            }
+        }
+        // the values are the public functions', minimizing
+        for (mean, sd) in [(0.5, 0.3), (2.2, 0.5), (40.0, 0.5)] {
+            let objective = Minimize;
+            let ei = expected_improvement(mean, sd, 1.0, objective);
+            assert_eq!(expected_improvement_derivatives(mean, sd, 1.0)[0], ei);
+            let log_ei = log_expected_improvement(mean, sd, 1.0, objective);
+            assert_eq!(
+                log_expected_improvement_derivatives(mean, sd, 1.0)[0],
+                log_ei
+            );
+            let pi = probability_of_improvement(mean, sd, 1.0, 0.05, objective);
+            let log_pi = log_probability_of_improvement_derivatives(mean, sd, 1.0, 0.05)[0];
+            if pi > 0.0 {
+                assert!((log_pi - ln(pi)).abs() <= 1e-12 * log_pi.abs().max(1.0));
+            } else {
+                // where the probability underflows, its logarithm stays finite
+                assert!(log_pi.is_finite() && log_pi < -700.0);
+            }
+            let ucb = upper_confidence_bound(mean, sd, 4.0, objective);
+            assert_eq!(upper_confidence_bound_derivatives(mean, sd, 4.0)[0], ucb);
+        }
+        // log_h′(z) = Φ(z) / (φ(z) + z Φ(z)) in each range, against mpmath (to 60 digits,
+        // rounded): within 4e-12, relative, at either side of the switch to the series at −64
+        let reference = [
+            (-0.5, 1.5598731483480797),
+            (-1.5, 2.2795806941564463),
+            (-10.0, 10.194383033412553),
+            (-63.9, 63.93127594805792),
+            (-64.1, 64.13117850553884),
+            (-100.0, 100.01999400419587),
+            (-1000.0, 1000.001999994),
+            (-1e6, 1000000.000002),
+        ];
+        for (z, expected) in reference {
+            let slope = log_h_derivative(z);
+            assert!(
+                (slope - expected).abs() <= 4e-12 * expected,
+                "z = {z}: {slope} against {expected}"
+            );
+        }
+        // far below the best, where the expected improvement underflows: finite slopes
+        for mean in [1e3, 1e9, 1e150] {
+            let [value, by_mean, by_sd] = log_expected_improvement_derivatives(mean, 1.0, 0.0);
+            assert!(value.is_finite() && by_mean.is_finite() && by_sd.is_finite());
+            assert!(by_mean < 0.0 && by_sd > 0.0);
+        }
     }
 
     #[test]
