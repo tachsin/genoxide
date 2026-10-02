@@ -1,7 +1,7 @@
 ---
 title: DC1-DTLZ3 with 3 objectives
 category: multi-objective
-summary: Minimize three objectives of DTLZ3 subject to a constraint on the first variable, whose Pareto front is two bands of the unit sphere, with NSGA-III and SMS-EMOA; NSGA-III reaches it in 13 runs of 20, and comes within 2% in the rest.
+summary: Minimize three objectives of DTLZ3 subject to a constraint on the first variable, whose Pareto front is two bands of the unit sphere, with NSGA-III and SMS-EMOA; NSGA-III reaches it in every run of 20.
 reference: "Li, K., Chen, R., Fu, G. and Yao, X. (2019). Two-archive evolutionary algorithm for constrained multiobjective optimization. IEEE Transactions on Evolutionary Computation 23(2): 303-315."
 reference_url: https://doi.org/10.1109/TEVC.2018.2855411
 optimum: "two bands of the unit sphere's octant, f₃ in [0, sin(π/18)] or [sin(5π/18), sin(7π/18)]; ideal point (0, 0, 0), nadir point (1, 1, sin(7π/18)) = (1, 1, 0.9397); hypervolume 0.6529 (normalized objectives, reference point (1.1, 1.1, 1.1))"
@@ -39,9 +39,9 @@ A `Real` genome of 12 genes in [0, 1]. The problem is genoxide's `Dc1Dtlz3`, who
 
 ## Algorithm
 
-Two runs, with a population of 92 for 2,000 generations each:
+Two runs, with a population of 92 for 4,000 generations each:
 
-- NSGA-III (Deb and Jain, 2014; Jain and Deb, 2014, IEEE Transactions on Evolutionary Computation 18(4): 577-601 and 602-622) with the settings that the C-TAEA paper gives its C-NSGA-III (supplement, tables 3 and 4): the 91 reference directions of Das and Dennis's method with 12 divisions and a population of 92, simulated binary crossover with η = 30 at a rate of 1, and polynomial mutation with η = 20 at a rate of 1/n per gene, for 2,000 generations (the supplement gives no budget for the DC-DTLZ problems; 2,000 on DTLZ3, whose local fronts take longer);
+- NSGA-III (Deb and Jain, 2014; Jain and Deb, 2014, IEEE Transactions on Evolutionary Computation 18(4): 577-601 and 602-622) with the settings that the C-TAEA paper gives its C-NSGA-III (supplement, tables 3 and 4): the 91 reference directions of Das and Dennis's method with 12 divisions and a population of 92, simulated binary crossover with η = 30 at a rate of 1, and polynomial mutation with η = 20 at a rate of 1/n per gene, for 4,000 generations (the supplement gives no budget for the DC-DTLZ problems; DTLZ3's local fronts take longer than DTLZ1's, and with 2,000, as on DC2-DTLZ3 and DC3-DTLZ3, 13 runs of 20 reach the target here and the rest come within 2% of it);
 - SMS-EMOA (Beume, Naujoks and Emmerich, 2007, European Journal of Operational Research 181(3): 1653-1669), which keeps the solutions that add the most hypervolume, with the same operators and as many children a generation as the population.
 
 ## Output
@@ -58,4 +58,4 @@ The page plays the runs back side by side, each population as the problem scores
 
 The target: every solution feasible, and 99% of the hypervolume of the sample of 100 points of the front, about what a front of 92 solutions spread like it has.
 
-NSGA-III's run with seed 1 ends with 92 solutions, 92 feasible, IGD+ 0.0187, hypervolume 0.6201, 98.9% of the sample's; SMS-EMOA's with 92 solutions, 92 feasible, IGD+ 0.0505, hypervolume 0.5275, 84.1% of the sample's. Over seeds 1 to 20, NSGA-III ends with IGD+ from 0.0161 to 0.0197 and 98.3% to 99.7% of the sample's hypervolume, 13 runs reaching the target, and SMS-EMOA with IGD+ from 0.0478 to 0.0593 and 78.5% to 84.3% of the sample's hypervolume, no run reaching the target. NSGA-III reaches the target in 13 runs and comes within 2% of it in the rest: the directions that point into the gap between the bands spend solutions on its edges. SMS-EMOA, whose hypervolume selection favours the upper band, leaves the lower one thin. The C-TAEA paper's C-NSGA-III ends with a median IGD of 0.272 (its table 3), and C-TAEA with 0.147.
+NSGA-III's run with seed 1 ends with 92 solutions, 92 feasible, IGD+ 0.0170, hypervolume 0.6236, 99.4% of the sample's; SMS-EMOA's with 92 solutions, 92 feasible, IGD+ 0.0507, hypervolume 0.5268, 84.0% of the sample's. Over seeds 1 to 20, NSGA-III ends with IGD+ from 0.0156 to 0.0174 and 99.2% to 99.7% of the sample's hypervolume, every run reaching the target, and SMS-EMOA with IGD+ from 0.0501 to 0.0583 and 79.4% to 84.3% of the sample's hypervolume, no run reaching the target. NSGA-III needs the 4,000 generations: after 2,000, 13 runs reach the target and the rest are within 2% of it, the directions that point into the gap between the bands spending solutions on its edges. SMS-EMOA, whose hypervolume selection favours the upper band, leaves the lower one thin. The C-TAEA paper's C-NSGA-III ends with a median IGD of 0.272 (its table 3), and C-TAEA with 0.147.

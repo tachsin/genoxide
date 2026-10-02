@@ -2,7 +2,7 @@
 first variable, whose front is two bands of DTLZ's, with NSGA-III and SMS-EMOA.
 
 From genoxide's problems.Dc1Dtlz3; run evaluates it in Rust. Runs NSGA-III with the settings of the
-C-TAEA paper's C-NSGA-III and SMS-EMOA, a population of 92 for 2,000 generations each, with
+C-TAEA paper's C-NSGA-III and SMS-EMOA, a population of 92 for 4,000 generations each, with
 constraint dominance. Prints each final front's size, how many of its solutions are feasible, their
 IGD+ to 2,000 points of the optimal front and their hypervolume, with the objectives normalized by
 the front's ideal and nadir points, as a share of that of a sample of the front with at least as
@@ -74,7 +74,7 @@ algorithm = gx.Nsga3(
     mutation=gx.PolynomialMutation(20, rate=rate),
     seed=1,
 )
-run("NSGA-III", algorithm, problem, 2_000)
+run("NSGA-III", algorithm, problem, 4_000)
 # SMS-EMOA, which keeps the solutions that add the most hypervolume
 algorithm = gx.SmsEmoa(
     problem.genome,
@@ -84,7 +84,7 @@ algorithm = gx.SmsEmoa(
     mutation=gx.PolynomialMutation(20, rate=rate),
     seed=1,
 )
-run("SMS-EMOA", algorithm, problem, 2_000)
+run("SMS-EMOA", algorithm, problem, 4_000)
 whole = normalized(problem.optimal_front(3_000))
 print(
     f"the whole front: hypervolume {gx.indicators.hypervolume(whole, REFERENCE):.4f}; "

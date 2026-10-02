@@ -2,7 +2,7 @@
 //! first variable, whose front is two bands of DTLZ's, with NSGA-III and SMS-EMOA.
 //!
 //! From genoxide's `multi::problems::Dc1Dtlz3`. Runs NSGA-III with the settings of the C-TAEA
-//! paper's C-NSGA-III and SMS-EMOA, a population of 92 for 2,000 generations each, with constraint
+//! paper's C-NSGA-III and SMS-EMOA, a population of 92 for 4,000 generations each, with constraint
 //! dominance. Prints each final front's size, how many of its solutions are feasible, their IGD+ to
 //! 2,000 points of the optimal front and their hypervolume, with the objectives normalized by the
 //! front's ideal and nadir points, as a share of that of a sample of the front with at least as
@@ -48,7 +48,7 @@ fn main() -> Result<()> {
     .seed(1)
     .build()?;
     run(
-        &problem, "NSGA-III", algorithm, problem, 2_000, &sample, &mut trace,
+        &problem, "NSGA-III", algorithm, problem, 4_000, &sample, &mut trace,
     )?;
     // SMS-EMOA, which keeps the solutions that add the most hypervolume
     let algorithm = SmsEmoa::builder(problem.representation(), [Minimize; 3])
@@ -58,7 +58,7 @@ fn main() -> Result<()> {
         .seed(1)
         .build()?;
     run(
-        &problem, "SMS-EMOA", algorithm, problem, 2_000, &sample, &mut trace,
+        &problem, "SMS-EMOA", algorithm, problem, 4_000, &sample, &mut trace,
     )?;
     let whole = normalized(&problem, &problem.optimal_front(3_000).expect("known"));
     println!(
