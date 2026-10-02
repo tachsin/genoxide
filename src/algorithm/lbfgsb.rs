@@ -964,6 +964,46 @@ impl Algorithm for Lbfgsb {
 }
 
 impl Lbfgsb {
+    /// Minimizes `f` in the box of `real` from `start` with at most `max_evaluations` evaluations,
+    /// driving the search by hand with the gradient `f` writes: the inner solver of the Gaussian
+    /// processes' hyperparameters and of Bayesian optimization's acquisition functions. `f` writes
+    /// the gradient into its second argument (zeroed) and returns the value; a value or gradient
+    /// that isn't finite is a failed trial, which the line search steps back from.
+    ///
+    /// Returns the best point and its value, or `None` if no point had a finite value. No random
+    /// number is drawn, so the result depends only on `start` and `f`.
+    pub(crate) fn minimize_with(
+        real: Real,
+        start: Reals,
+        max_evaluations: u64,
+        mut f: impl FnMut(&[f64], &mut [f64]) -> f64,
+    ) -> Option<(Reals, f64)> {
+        let n = start.len();
+        let mut lbfgsb = Lbfgsb::builder(real)
+            .gradients(Gradients::Supplied)
+            .initial_genome(start)
+            .minimize()
+            .seed(0)
+            .build()
+            .ok()?;
+        let mut gradient = vec![0.0; n];
+        while lbfgsb.evaluations < max_evaluations && !lbfgsb.is_finished() {
+            let candidates = lbfgsb.ask();
+            let Some(x) = candidates.get(0) else { break };
+            gradient.fill(0.0);
+            let value = f(x, &mut gradient);
+            let fitness = if value.is_finite() {
+                Fitness::new(value)
+            } else {
+                Fitness::invalid()
+            };
+            lbfgsb.receive(&[fitness], Some(&gradient)).ok()?;
+        }
+        let best = lbfgsb.best.take()?;
+        let value = best.fitness()?.score()?;
+        value.is_finite().then(|| (best.into_genome(), value))
+    }
+
     // the gradients of this run: a stencil for finite differences; an ask under way is asked
     // again
     fn set_resolved(&mut self, resolved: Gradients) -> Result<()> {

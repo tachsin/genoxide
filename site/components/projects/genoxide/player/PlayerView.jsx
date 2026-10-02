@@ -21,6 +21,7 @@ const PLOTS = {
   timeline: lazy(() => import("./plots/TimelinePlot")),
   grid: lazy(() => import("./plots/GridPlot")),
   cart_poles: lazy(() => import("./plots/CartPolesPlot")),
+  surrogate: lazy(() => import("./plots/SurrogatePlot")),
 };
 
 const TITLES = {
@@ -37,6 +38,7 @@ const TITLES = {
   surface: "The network's output",
   timeline: "Evaluations over time",
   cart_poles: "The best network at the controls",
+  surrogate: "The model and the point it chose",
 };
 
 // the titles of a grid, by the kind of its panels

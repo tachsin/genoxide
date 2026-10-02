@@ -1,10 +1,11 @@
 //! Asynchronous evaluation: every worker gets a new genome as soon as it's done.
 
 use super::{
-    Checkpoint, FitnessFunction, Info, InfoStore, IntoFitness, NanPolicy, Outcome, Progress, Stop,
-    StopReason, checkpoint, trace, validate_checkpoint,
+    BatchExtras, Checkpoint, Evaluations, Extras, FitnessFunction, Info, InfoStore, IntoFitness,
+    NanPolicy, Outcome, Progress, Stop, StopReason, Wanted, checkpoint, trace, validate_checkpoint,
 };
 use crate::algorithm::Incremental;
+use crate::genome::Genome;
 use crate::observer::{Observer, Snapshot};
 use crate::{Error, Fitness, Individual, Result};
 use std::any::Any;
@@ -47,6 +48,11 @@ pub const MAX_WORKERS: usize = 4096;
 /// [`Engine`](super::Engine): for the population, the individuals discarded since the last
 /// generation and the best.
 ///
+/// An algorithm that [wants](Incremental::wants) extras, such as the values of the constraints
+/// for a [`Bo`](crate::algorithm::Bo) with constraints, gets them from the fitness function's
+/// [`evaluate_with`](FitnessFunction::evaluate_with), each worker with buffers of its own, through
+/// [`receive_evaluation`](Incremental::receive_evaluation).
+///
 /// ```
 /// use genoxide::prelude::*;
 ///
@@ -77,12 +83,99 @@ pub struct AsyncEngine<'o, A: Incremental, F> {
     infos: InfoStore<A::Genome>,
 }
 
-// a finished evaluation: the genome and its fitness with its info, or the panic of the fitness
-// function
+// a finished evaluation: the genome and its fitness with its info and extras, or the panic of
+// the fitness function
 type Done<G> = (
     G,
-    std::result::Result<(Result<Fitness>, Option<Info>), Box<dyn Any + Send>>,
+    std::result::Result<(Result<Fitness>, Option<Info>, Rows), Box<dyn Any + Send>>,
 );
+
+// the extras of one evaluation, as wanted: empty for one not wanted
+#[derive(Default)]
+struct Rows {
+    gradient: Vec<f64>,
+    inequalities: Vec<f64>,
+    jacobian: Vec<f64>,
+}
+
+impl Rows {
+    // buffers for a genome of `genes` genes with `constraints` inequality constraints
+    fn new(wanted: Wanted, genes: usize, constraints: usize) -> Self {
+        let length = |wanted: bool, length: usize| vec![0.0; if wanted { length } else { 0 }];
+        Self {
+            gradient: length(wanted.gradient, genes),
+            inequalities: length(wanted.inequalities, constraints),
+            jacobian: length(wanted.constraint_jacobian, constraints * genes),
+        }
+    }
+
+    // whether a wanted extra has a NaN
+    fn has_nan(&self) -> bool {
+        [&self.gradient, &self.inequalities, &self.jacobian]
+            .iter()
+            .any(|row| row.iter().any(|value| value.is_nan()))
+    }
+}
+
+// evaluates `genome` with the `wanted` extras of `constraints` inequality constraints
+fn evaluate_with<G: Genome, F: FitnessFunction<G>>(
+    fitness: &F,
+    genome: &G,
+    wanted: Wanted,
+    constraints: usize,
+) -> (Result<Fitness>, Option<Info>, Rows) {
+    if wanted.is_empty() {
+        let (result, info) = if fitness.is_batch() {
+            batch_of_one(fitness.evaluate_batch(&[genome]))
+        } else {
+            fitness.evaluate(genome).into_evaluation()
+        };
+        return (result, info, Rows::default());
+    }
+    let genes = genome.len();
+    let mut rows = Rows::new(wanted, genes, constraints);
+    let Rows {
+        gradient,
+        inequalities,
+        jacobian,
+    } = &mut rows;
+    let (result, info) = if fitness.is_batch() {
+        let mut extras = BatchExtras::new(
+            wanted.gradient.then_some(gradient.as_mut_slice()),
+            wanted.inequalities.then_some(inequalities.as_mut_slice()),
+            wanted
+                .constraint_jacobian
+                .then_some(jacobian.as_mut_slice()),
+            genes,
+            constraints,
+        );
+        batch_of_one(fitness.evaluate_batch_with(&[genome], &mut extras))
+    } else {
+        let mut extras = Extras::new(
+            wanted.gradient.then_some(gradient.as_mut_slice()),
+            wanted.inequalities.then_some(inequalities.as_mut_slice()),
+            wanted
+                .constraint_jacobian
+                .then_some(jacobian.as_mut_slice()),
+        );
+        fitness.evaluate_with(genome, &mut extras).into_evaluation()
+    };
+    (result, info, rows)
+}
+
+// the score of a batch of one, which must give one score
+fn batch_of_one<T: IntoFitness>(mut scores: Vec<T>) -> (Result<Fitness>, Option<Info>) {
+    match (scores.pop(), scores.len()) {
+        (Some(score), 0) => score.into_evaluation(),
+        (score, rest) => {
+            let count = Error::FitnessCount {
+                expected: 1,
+                got: rest + usize::from(score.is_some()),
+            };
+            (Err(count), None)
+        }
+    }
+}
 
 impl<'o, A, F> AsyncEngine<'o, A, F>
 where
@@ -176,8 +269,11 @@ where
     ///   [`Error::InvalidFitness`] for a negative constraint violation.
     /// - [`Error::FitnessCount`] if a [`Batch`](super::Batch) doesn't return one score for one
     ///   genome.
-    /// - The errors of the algorithm's [`receive`](Incremental::receive) and of the checkpoint
-    ///   closure.
+    /// - [`Error::InvalidSetting`] if the algorithm wants an extra that the fitness function
+    ///   doesn't [provide](FitnessFunction::provides).
+    /// - The errors of the algorithm's [`prepare`](Incremental::prepare), its
+    ///   [`receive`](Incremental::receive) or
+    ///   [`receive_evaluation`](Incremental::receive_evaluation), and of the checkpoint closure.
     ///
     /// The run stops at the first error, once the evaluations in flight are done. If the algorithm
     /// has run before and a stop condition is already met, or its limit of evaluations was
@@ -207,6 +303,19 @@ where
             });
         }
         validate_checkpoint(&self.checkpoint)?;
+        let provided = self.fitness.provides();
+        self.algorithm.prepare(provided)?;
+        let wanted = self.algorithm.wants();
+        if let Some(missing) = wanted.missing_from(provided) {
+            return Err(Error::InvalidSetting {
+                setting: "fitness",
+                reason: format!(
+                    "the algorithm wants the {missing}, which the fitness function doesn't \
+                     provide: supply them, e.g. with `Constrained`"
+                ),
+            });
+        }
+        let constraints = provided.inequalities;
         let _span = trace::run::<A>();
         let Self {
             algorithm,
@@ -233,6 +342,7 @@ where
             notified: None,
             discarded: Vec::new(),
             infos,
+            wanted,
         };
         // a run that continues: its stop condition may already be met, or its budget of
         // evaluations spent before the initial population was complete
@@ -280,21 +390,7 @@ where
                         };
                         let Ok(genome) = job else { return };
                         let evaluated = panic::catch_unwind(AssertUnwindSafe(|| {
-                            if !fitness.is_batch() {
-                                return fitness.evaluate(&genome).into_evaluation();
-                            }
-                            // a batch of one, which must give one score
-                            let mut scores = fitness.evaluate_batch(&[&genome]);
-                            match (scores.pop(), scores.len()) {
-                                (Some(score), 0) => score.into_evaluation(),
-                                (score, rest) => {
-                                    let count = Error::FitnessCount {
-                                        expected: 1,
-                                        got: rest + usize::from(score.is_some()),
-                                    };
-                                    (Err(count), None)
-                                }
-                            }
+                            evaluate_with(fitness, &genome, wanted, constraints)
                         }));
                         if done.send((genome, evaluated)).is_err() {
                             return;
@@ -329,14 +425,14 @@ where
                 if panicked.is_some() || failure.is_some() {
                     continue;
                 }
-                let (fitness, info) = match evaluated {
+                let (fitness, info, rows) = match evaluated {
                     Ok(evaluation) => evaluation,
                     Err(payload) => {
                         panicked = Some(payload);
                         continue;
                     }
                 };
-                if let Err(error) = driver.accept(genome, fitness, info) {
+                if let Err(error) = driver.accept(genome, fitness, info, &rows) {
                     failure = Some(error);
                     continue;
                 }
@@ -390,6 +486,8 @@ struct Driver<'a, 'o, A: Incremental> {
     // the info of the population, the discarded individuals, the best and the results since the
     // last notification
     infos: &'a mut InfoStore<A::Genome>,
+    // the extras the algorithm wants of each evaluation
+    wanted: Wanted,
 }
 
 impl<A: Incremental> Driver<'_, '_, A> {
@@ -407,20 +505,49 @@ impl<A: Incremental> Driver<'_, '_, A> {
         }
     }
 
-    // gives a result to the algorithm, after the NaN policy, and keeps its info
+    // gives a result and its extras to the algorithm, after the NaN policy (a NaN in an extra
+    // makes the whole evaluation invalid, or an error), and keeps its info
     fn accept(
         &mut self,
         genome: A::Genome,
         fitness: Result<Fitness>,
         info: Option<Info>,
+        rows: &Rows,
     ) -> Result<()> {
+        let fitness = match fitness {
+            Ok(fitness) if fitness.is_valid() && rows.has_nan() => Err(Error::NanFitness),
+            result => result,
+        };
         let fitness = match fitness {
             Ok(fitness) => fitness,
             Err(Error::NanFitness) if self.nan_policy == NanPolicy::Invalid => Fitness::invalid(),
             Err(error) => return Err(error),
         };
         let info = info.map(|info| (genome.clone(), info));
-        if let Some(individual) = self.algorithm.receive(genome, fitness)?
+        let discarded = if self.wanted.is_empty() {
+            self.algorithm.receive(genome, fitness)?
+        } else {
+            let fitness = [fitness];
+            let wanted = self.wanted;
+            let genes = genome.len();
+            let constraints = if wanted.inequalities {
+                rows.inequalities.len()
+            } else {
+                rows.jacobian.len() / genes.max(1)
+            };
+            let evaluation = Evaluations::with_extras(
+                &fitness,
+                wanted.gradient.then_some(rows.gradient.as_slice()),
+                wanted.inequalities.then_some(rows.inequalities.as_slice()),
+                wanted
+                    .constraint_jacobian
+                    .then_some(rows.jacobian.as_slice()),
+                genes,
+                constraints,
+            )?;
+            self.algorithm.receive_evaluation(genome, &evaluation)?
+        };
+        if let Some(individual) = discarded
             && !self.observers.is_empty()
         {
             self.discarded.push(individual);

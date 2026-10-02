@@ -128,8 +128,8 @@ pub struct Fitness {
     /// per gene on each line.
     #[serde(default)]
     pub gradient: bool,
-    /// The number of inequality constraints g(x) <= 0 whose values, then Jacobian, the program
-    /// writes after the gradient.
+    /// The number of inequality constraints g(x) <= 0 whose values the program writes after the
+    /// value (then, with `gradient`, after the gradient, and their Jacobian).
     #[serde(default)]
     pub constraints: usize,
 }
@@ -228,6 +228,7 @@ pub enum Algorithm {
         /// Random restarts after convergence; none if unset.
         restarts: Option<u64>,
     },
+    Bo(Bo),
     NelderMead {
         seed: Option<u64>,
         #[serde(default, deserialize_with = "nelder_mead_coefficients")]
@@ -310,6 +311,8 @@ named! {
     de_control: Option<DeControl> = "control";
     de_restarts: Option<DeRestarts> = "restarts";
     nelder_mead_coefficients: Option<NelderMeadCoefficients> = "coefficients";
+    bo_acquisition: Option<BoAcquisition> = "acquisition";
+    bo_noise: Option<BoNoise> = "noise";
     first_order_step: Option<FirstOrderStep> = "step";
 }
 
@@ -438,6 +441,98 @@ pub enum DeRestartsName {
 pub struct OnStagnation {
     pub tolerance: f64,
     pub patience: u64,
+}
+
+/// Bayesian optimization's acquisition function: `"log-ei"`, `"ei"`, `{ type = "pi", xi }` or
+/// `{ type = "ucb", beta }`.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(
+    untagged,
+    expecting = "\"log-ei\", \"ei\", { type = \"pi\", xi } or { type = \"ucb\", beta }"
+)]
+pub enum BoAcquisition {
+    Named(BoAcquisitionName),
+    Table(BoAcquisitionTable),
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BoAcquisitionName {
+    LogEi,
+    Ei,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum BoAcquisitionTable {
+    Pi { xi: f64 },
+    Ucb { beta: f64 },
+}
+
+/// The kernel of Bayesian optimization's Gaussian process.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Kernel {
+    Matern52,
+    SquaredExponential,
+}
+
+/// The noise of Bayesian optimization's Gaussian process: a fixed variance, a fraction of the
+/// values' variance, or `{ learned = <least> }`.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(
+    untagged,
+    expecting = "a fixed variance (a number) or { learned = <least variance> }"
+)]
+pub enum BoNoise {
+    Fixed(f64),
+    Learned { learned: f64 },
+}
+
+/// Bayesian optimization, on a real or an integer genome.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Bo {
+    pub seed: Option<u64>,
+    /// The points of the initial design; 2(n + 1) if unset.
+    pub initial_points: Option<usize>,
+    #[serde(default, deserialize_with = "bo_acquisition")]
+    pub acquisition: Option<BoAcquisition>,
+    pub kernel: Option<Kernel>,
+    #[serde(default, deserialize_with = "bo_noise")]
+    pub noise: Option<BoNoise>,
+    pub output: Option<BoOutput>,
+    pub raw_samples: Option<usize>,
+    pub acquisition_starts: Option<usize>,
+    pub hyperparameter_starts: Option<usize>,
+    /// The points of each generation after the initial design; 1 if unset.
+    pub batch: Option<usize>,
+    /// What a point not evaluated yet is taken to be worth; the Kriging believer if unset.
+    pub fantasy: Option<BoFantasy>,
+    /// An asynchronous run: each worker gets a new point as soon as it's done, chosen with the
+    /// points still being evaluated fantasized. Off if unset: a generation of `batch` points at a
+    /// time.
+    #[serde(default)]
+    pub asynchronous: bool,
+}
+
+/// What Bayesian optimization takes a point not evaluated yet to be worth: `"believer"`,
+/// `"liar-min"`, `"liar-mean"` or `"liar-max"`.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BoFantasy {
+    Believer,
+    LiarMin,
+    LiarMean,
+    LiarMax,
+}
+
+/// What Bayesian optimization's model fits: `"standardize"` or `"log"`.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BoOutput {
+    Standardize,
+    Log,
 }
 
 /// MMA's method: `"mma"` or `"gcmma"`.

@@ -30,6 +30,7 @@ CATEGORIES = {
     "integer",
     "continuous",
     "local",
+    "bayesian",
     "multi-objective",
     "constrained",
     "neuroevolution",

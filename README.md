@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/crates/l/genoxide.svg)](#license)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-16_libraries-ce422b)](https://tachsin.gr/projects/genoxide/benchmarks)
 
-**Optimization for Rust and Python: genetic algorithms, evolution strategies, CMA-ES, differential evolution, particle swarms, genetic programming, multi-objective optimization, local search and gradient-based methods (L-BFGS-B, Adam, MMA) in one library. A seed gives the same results, to the bit, on every platform and thread count.**
+**Optimization for Rust and Python: genetic algorithms, evolution strategies, CMA-ES, differential evolution, particle swarms, genetic programming, multi-objective optimization, local search, gradient-based methods (L-BFGS-B, Adam, MMA) and Bayesian optimization in one library. A seed gives the same results, to the bit, on every platform and thread count.**
 
 ## Install
 
@@ -48,6 +48,7 @@ fn main() -> genoxide::Result<()> {
 - **Evolution strategies, CMA-ES, differential evolution, particle swarms:** with IPOP and BIPOP restarts, JADE, SHADE and L-SHADE.
 - **Local search:** hill climbing, simulated annealing, tabu search, iterated local search, and the Nelder-Mead simplex method with random restarts.
 - **Gradient-based:** L-BFGS-B for smooth functions with bounds, from a few variables to millions, and gradient descent, momentum, Nesterov, Adam and AdamW with learning-rate schedules, with gradients supplied or by finite differences; MMA and GCMMA, the method of moving asymptotes, for millions of variables with few constraints, from supplied gradients and constraint Jacobians. Continuation runs any of them through stages of one problem, a smooth version first and sharper ones after, with the optimizer's state kept between stages.
+- **Bayesian optimization:** for expensive functions, where tens to a few hundred evaluations must do: a Gaussian process with a Matérn or squared exponential kernel, its hyperparameters by maximum likelihood, and the log expected improvement, expected improvement, probability of improvement or confidence bound, maximized by L-BFGS-B with their gradients; a log transform for values that span orders of magnitude. Batches of points evaluated in parallel (the Kriging believer and the constant liar), asynchronous evaluation, constraints modeled one by one (the probability of feasibility) and integer genes. The Gaussian process can be fitted and queried on its own.
 - **Genetic programming:** strongly typed trees of your own primitives, evolved into programs and formulas, with subtree and one-point crossover, subtree, point, hoist, shrink and constant mutation, bloat control, and fast evaluation over data.
 - **Neuroevolution:** multilayer perceptrons and recurrent networks whose weights evolve, NEAT, which evolves networks' structure too, and pole-balancing control tasks for them to solve.
 - **Multi-objective:** NSGA-II, NSGA-III, SPEA2, MOEA/D and SMS-EMOA, with quality indicators.

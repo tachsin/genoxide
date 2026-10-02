@@ -4,6 +4,7 @@
 //! use genoxide::prelude::*;
 //! ```
 
+pub use crate::algorithm::bo::{self, Bo};
 pub use crate::algorithm::cmaes::{self, Cmaes};
 pub use crate::algorithm::continuation::{self, Continuation, Continue};
 pub use crate::algorithm::de::{self, De};
