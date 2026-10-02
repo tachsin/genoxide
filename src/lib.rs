@@ -108,6 +108,7 @@ pub mod gradient;
 pub mod individual;
 pub(crate) mod linalg;
 pub mod math;
+pub mod model;
 pub mod multi;
 pub mod neat;
 pub mod nn;
