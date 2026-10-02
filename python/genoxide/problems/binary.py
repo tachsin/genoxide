@@ -355,7 +355,9 @@ _SIMPLE = (
     "uncorrelated_similar_weights",
 )
 
-KnapsackClass = Union[KnapsackClassName, Spanner, MultipleStronglyCorrelated, ProfitCeiling, Circle]
+KnapsackClass = Union[
+    KnapsackClassName, Spanner, MultipleStronglyCorrelated, ProfitCeiling, Circle
+]
 """An instance class: a name, or one of the classes with parameters."""
 
 
