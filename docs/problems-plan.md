@@ -127,12 +127,42 @@ exact suites need their data files, which is a separate decision.
 
 | Problem | Original | Optimum | Status |
 |---|---|---|---|
-| OneMax | folklore; analyzed by Mühlenbein, H. (1992). How genetic algorithms really work: mutation and hillclimbing. PPSN II | n at 1ⁿ | U (no single origin) |
-| LeadingOnes | Rudolph, G. (1997). *Convergence Properties of Evolutionary Algorithms.* Kovač, Hamburg | n at 1ⁿ | U |
-| Deceptive trap (k bits per block) | Ackley (1987); Deb, K. and Goldberg, D. E. (1993). Analyzing deception in trap functions. FOGA 2: 93-108 | n at 1ⁿ (attractor 0ⁿ) | U |
-| Royal road R1, R2 | Mitchell, M., Forrest, S. and Holland, J. H. (1992). The royal road for genetic algorithms. Proc. 1st ECAL: 245-254; Forrest and Mitchell (1993), FOGA 2 | 64 at 1⁶⁴ | U |
-| NK landscapes | Kauffman, S. A. and Weinberger, E. D. (1989). The NK model of rugged fitness landscapes and its application to maturation of the immune response. *J. Theor. Biol.* 141(2): 211-245. doi:10.1016/S0022-5193(89)80019-0 | instance-specific; exact by dynamic programming for adjacent neighborhoods | U |
-| 0/1 knapsack instance classes | Pisinger, D. (2005). Where are the hard knapsack problems? *Computers & Operations Research* 32(9): 2271-2284. doi:10.1016/j.cor.2004.03.002 | from the generated instance (dynamic programming in the test) | U |
+| OneMax | folklore (no single origin); Droste, S., Jansen, T. and Wegener, I. (2002). On the analysis of the (1+1) evolutionary algorithm. *TCS* 276(1-2): 51-81. doi:10.1016/S0304-3975(01)00182-7, Definition 9; Ackley (1987, section 3.3.1) tests ten times it; Mühlenbein (1992), PPSN II, analyzes it (unread) | n at 1ⁿ | **VO** (Droste et al.) |
+| LeadingOnes | Droste et al. (2002), Definition 16 and Theorem 17, from Rudolph, G. (1997). *Convergence Properties of Evolutionary Algorithms.* Kovač, Hamburg (unread), whom they credit | n at 1ⁿ | **VO** (Droste et al.) |
+| Deceptive trap (k bits per block) | Deb, K. and Goldberg, D. E. (1993). Analyzing deception in trap functions. FOGA 2: 93-108. doi:10.1016/B978-0-08-094832-4.50012-X, equation 1; after Ackley, D. H. (1987). *A Connectionist Machine for Genetic Hillclimbing.* Kluwer. doi:10.1007/978-1-4613-1997-9, section 3.3.3 | blocks × b at 1ⁿ (attractor 0ⁿ) | **VO** (both); the sum over blocks isn't written out in either |
+| Royal road R1, R2 | R2: Mitchell, M., Forrest, S. and Holland, J. H. (1992). The royal road for genetic algorithms. Proc. 1st ECAL: 245-254, Figure 1; R1: Mitchell, M., Holland, J. H. and Forrest, S. (1994). When will a genetic algorithm outperform hill climbing? NIPS 6: 51-58, Figure 1; Forrest and Mitchell (1993), FOGA 2 (unread) | 64 (R1), 256 (R2) at 1⁶⁴ | **VO** |
+| NK landscapes | Kauffman, S. A. and Weinberger, E. D. (1989). The NK model of rugged fitness landscapes and its application to maturation of the immune response. *J. Theor. Biol.* 141(2): 211-245. doi:10.1016/S0022-5193(89)80019-0 | instance-specific: exact by dynamic programming (adjacent neighborhoods) or exhaustive search (N up to about 25) | **VO** |
+| 0/1 knapsack instance classes | Pisinger, D. (2005). Where are the hard knapsack problems? *Computers & Operations Research* 32(9): 2271-2284. doi:10.1016/j.cor.2004.03.002 | instance-specific: exact by dynamic programming | **VO** (the classes; the generator's random numbers are genoxide's) |
+
+**Checked in batch 12** (the binary and combinatorial problems, `problems::binary`). Read: Droste,
+Jansen and Wegener (2002): ONEMAX as the linear function with all weights 1 (Definition 9, and the
+Θ(n log n) of Lemma 10), LEADINGONES as `Σᵢ Πⱼ≤ᵢ xⱼ` (Definition 16, from Rudolph's 1997 example,
+which they credit) and its Θ(n²), at most e n² (Theorem 17); Rudolph's book and Mühlenbein (1992)
+weren't available. Ackley (1987): "One Max" is 10 times the number of ones (section 3.3.1), and his
+"Trap" (section 3.3.3) is `(8n/z)(z − c)` for c ≤ z = ⌊3n/4⌋, else `(10n/(n − z))(c − z)`, which is
+Deb and Goldberg's equation 1 with a = 8n, b = 10n. Deb and Goldberg (1993), rendered pages:
+equation 1, Theorem 1 (full deception iff every order-(ℓ − 1) schema is misleading), inequality 16
+(`r ≥ (2 − 1/(ℓ − z)) / (2 − 1/z)`) and eq. 20 (`r_min = (ℓ − 1)/(2ℓ − 3)` at z = ℓ − 1). genoxide's
+default a = k − 1, b = k, z = k − 1 has r = (k − 1)/k ≥ r_min, fully deceptive for k ≥ 3, checked by
+averaging over every schema of a block. The paper says Ackley's traps are "fully deceptive only for
+ℓ < 7"; by its own inequality 16, and by enumerating the schemas, only those of 3 and 4 bits are
+(5 and 6 aren't); its conclusion that none of Ackley's sizes (8 to 20) is fully deceptive stands.
+The concatenated form, blocks of k adjacent bits summed, isn't written out in the paper. Mitchell,
+Forrest and Holland (1992): Figure 1's 15 schemas, c_s = order(s), the optimum 256, and Table 1 (GA
+mean 590, median 542 generations over 50 runs, with population 128, single-point crossover 0.7,
+mutation 0.005 and sigma scaling); Mitchell, Holland and Forrest (1994): Figure 1's R1, Table 1
+(RMHC mean 6,179 and median 5,775 evaluations, GA 61,334 and 54,208) and equation 1 (E(8, 8) ≈
+6,549). Kauffman and Weinberger (1989): two states per site, contributions uniform on (0, 1) for
+the 2^(K+1) combinations, W the mean (equation 1), K/2 flanking neighbors on each side on a circle
+(Table 1) or K random ones (Table 2); genoxide gives an odd K one more neighbor after the site.
+Pisinger (2005), rendered pages: the classes of section 3 (uncorrelated, weakly, strongly, inverse
+strongly and almost strongly correlated, subset sum, similar weights) and 3.3 (span(v, m) with
+⌈2p/m⌉ and ⌈2w/m⌉, mstr(k₁, k₂, d), pceil(d) = d⌈w/d⌉, circle(d) = d √(4R² − (w − 2R)²)), and the
+capacity of eq. 5; the paper doesn't say how "p ≥ 1" is kept in the weakly correlated class
+(genoxide narrows the interval) or how the circle's profits are rounded (genoxide rounds down,
+exactly). The optima: NK by dynamic programming over the circle (adjacent) or exhaustive search in
+Gray code order, checked against brute force; the knapsack by Bellman's recursion, checked against
+brute force for every class. DOIs checked with Crossref.
 
 **Pitfalls to settle per function when implementing:** Schwefel's numbering (1.2, 2.21, 2.22,
 2.26, and the shifted 418.9829 n form); Ackley's bounds; Griewank's divisor and domain; the
@@ -941,7 +971,7 @@ the papers report. No front file from another project is used.
 
 | Group | Core problems | Optional | Verified in the original (or its standard report) | Unverified or secondary only |
 |---|---|---|---|---|
-| Single objective, unconstrained | 59 continuous (18 scalable unimodal, 21 scalable multimodal, 20 fixed-dimension) | 6 binary and combinatorial; whole CEC/BBOB suites | Goldstein-Price; the CEC 2005 and BBOB forms; citations of Rosenbrock, Griewank, Rastrigin (1991), Styblinski-Tang | most: the originals are books and reports that aren't online; the common forms are secondary (Yao, Liu and Lin 1999; CEC 2005) |
+| Single objective, unconstrained | 59 continuous (18 scalable unimodal, 21 scalable multimodal, 20 fixed-dimension) | 6 binary and combinatorial (done in batch 12); whole CEC/BBOB suites | Goldstein-Price; the CEC 2005 and BBOB forms; citations of Rosenbrock, Griewank, Rastrigin (1991), Styblinski-Tang; the 6 binary and combinatorial problems | most: the originals are books and reports that aren't online; the common forms are secondary (Yao, Liu and Lin 1999; CEC 2005) |
 | Single objective, constrained (CEC 2006) | 24 | | all 24 (the September 2006 report) | g17's better value, g22's claimed better value, g04's variant, the "max" origins |
 | Multi objective, unconstrained | 25 (SCH1, SCH2, FON, KUR, POL, VNT1-3, ZDT5, DTLZ5-7, scaled DTLZ1/2, convex DTLZ2, inverted DTLZ1, WFG1-9) | MaF1-15, UF1-10, Deb's 1999 problems | ZDT5, DTLZ5-7, WFG (batch 4), scaled/convex/inverted DTLZ (batch 8) | Kursawe, Poloni, Viennet, SCH2's formula; FON secondary |
 | Multi objective, constrained | 45 (CONSTR, SRN, TNK, BNH, OSY, CTP1-8, C-DTLZ ×6, MW1-14, DAS-CMOP1-9, DTLZ8-9) | LIR-CMOP1-14, CF1-10, DC-DTLZ ×6, Viennet 4 / MOP-C | CONSTR, SRN, TNK (as NSGA-II restates them), CTP1-8 (the paper, its KanGAL report and Deb's book; g, n and bounds from the authors' code), C-DTLZ, MW, DAS-CMOP, DTLZ8-9, and the optional LIR-CMOP, CF, DC-DTLZ | BNH, OSY; DC2/DC3 parameters |
@@ -1292,7 +1322,7 @@ page); a comparison belongs on the problems' own pages.
 | 10a | done | Remaining low-dimensional and classic scalable functions (section 1.1's "Checked in batch 10a") | Beale, Booth, Matyas, Bohachevsky 1-3, Three-hump camel, Dixon-Price, Trid, Powell, Langermann, Shekel's foxholes, Kowalik, Schwefel 2.21, Schwefel 2.22 (15) | an example per function: `beale`, `booth`, `matyas`, `bohachevsky1` to `bohachevsky3`, `three_hump_camel`, `langermann`, `shekel_foxholes` and `kowalik` (30 seeds each of CMA-ES with and without IPOP, DE, PSO or a GA), `dixon_price` (CMA-ES with IPOP, DE and PSO in 5 and 10 dimensions), and `schwefel_2_21`, `schwefel_2_22`, `trid` and `powell` (CMA-ES, sep-CMA-ES, DE, PSO and a GA to errors of 1 … 1e-8) |
 | 10b | done | CEC and BBOB-style functions, and the shift / rotation wrappers (section 1.1's "Checked in batch 10b") | `Shifted<P>`, `Rotated<P>`; Sum of different powers, Step, Quartic (deterministic: without noise, or with noise seeded from the genome, since fitness functions must be deterministic), Penalized 1 and 2, High-conditioned elliptic, Bent cigar, Discus, Büche-Rastrigin, Non-continuous Rastrigin, Weierstrass, Katsuura, HappyCat, HGBat, Schaffer F7, Rotated hyper-ellipsoid, BBOB different powers (17; the shifted and rotated Rastrigin of CEC 2005 and BBOB are the wrappers around `Rastrigin`) | an example per function: `sum_of_different_powers`, `step`, `quartic` (with and without noise), `rotated_hyper_ellipsoid`, `high_conditioned_elliptic`, `bent_cigar`, `discus` and `different_powers` (CMA-ES, sep-CMA-ES, DE, PSO and a GA to errors of 1 … 1e-8, as they are and shifted and rotated, or rotated), and `schaffer_f7`, `penalized1`, `penalized2`, `buche_rastrigin`, `non_continuous_rastrigin`, `weierstrass`, `katsuura`, `happy_cat` and `hg_bat` (10 seeds each of CMA-ES with and without IPOP, DE, PSO and a GA) |
 | 11 | done | Advanced constrained multi-objective suites (sections 1.3's and 1.4's "Checked in batch 11") | DAS-CMOP1-9 (with the 16 difficulty triplets as a parameter), DC-DTLZ (DC1-DC3 on DTLZ1/DTLZ3), DTLZ8, DTLZ9 (17) | an example per problem: `das_cmop1` to `das_cmop3` (MOEA/D-DE, and NSGA-II with the paper's settings), `das_cmop4` to `das_cmop6` (NSGA-II, the paper's settings and η = 5), `das_cmop7`, `das_cmop8` (NSGA-II and NSGA-III), `das_cmop9` (MOEA/D-DE, at its 300 weights' limit, and NSGA-II), `dc1_dtlz1_3obj`, `dc1_dtlz3_3obj` (NSGA-III and SMS-EMOA), `dc2_dtlz1_3obj`, `dc2_dtlz3_3obj`, `dc3_dtlz1_3obj`, `dc3_dtlz3_3obj` (NSGA-III with constrained dominance, and without the constraints, or the one on g), `dtlz8_3obj`, `dtlz9_3obj` (NSGA-II for the report's 500 generations, and SMS-EMOA) |
-| 12 |  | Binary and combinatorial problems | OneMax, LeadingOnes, deceptive trap, royal road, NK landscapes (seeded), 0/1 knapsack (generated instance classes) (6) | an example per problem; `one_max` and `knapsack` switch to the problems |
+| 12 | done | Binary and combinatorial problems (`problems::binary`, section 1.1's "Checked in batch 12") | OneMax, LeadingOnes, deceptive trap, royal road R1 and R2, NK landscapes (seeded), 0/1 knapsack (Pisinger's generated instance classes) (6) | an example per problem: `one_max` (switched to `binary::OneMax`; GA), `leading_ones` (the (1+1) EA), `deceptive_trap` (GA with two-point crossover, against uniform crossover and hill climbing), `royal_road_r1` (random-mutation hill climbing against a GA, Table 1), `royal_road_r2` (GA with the 1992 settings), `nk_landscape` (iterated local search against exhaustive search, and a GA), `knapsack` (switched to an uncorrelated instance of 50 items; GA with Deb's rules against dynamic programming, and a strongly correlated instance as a contrast) |
 | 13 (optional) |  | Competition suites whose definitions are long | LIR-CMOP1-14, CEC 2009 UF1-UF10 and CF1-CF10, MaF1-MaF15, Deb's 1999 two-objective problems, Van Veldhuizen's constrained problems; the deferred engineering problems (section 1.5) once their originals are read | none; used by the benchmark suite |
 
 Order rationale: batch 1 builds the machinery with the functions everyone starts with; batch 2
