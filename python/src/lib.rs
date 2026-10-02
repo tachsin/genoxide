@@ -33,6 +33,8 @@ fn _genoxide(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<model::PyGaussianProcess>()?;
     module.add_function(wrap_pyfunction!(run::das_dennis, module)?)?;
     module.add_function(wrap_pyfunction!(problems::problem_info, module)?)?;
+    module.add_function(wrap_pyfunction!(problems::problem_optimum, module)?)?;
+    module.add_function(wrap_pyfunction!(problems::nk_tables, module)?)?;
     module.add_function(wrap_pyfunction!(problems::evaluate, module)?)?;
     module.add_function(wrap_pyfunction!(problems::constraints, module)?)?;
     module.add_function(wrap_pyfunction!(problems::optimal_front, module)?)?;

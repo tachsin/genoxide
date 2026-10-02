@@ -31,6 +31,11 @@ python examples/tsp_berlin52/main.py
 | Example | Category | Languages | Interactive run |
 |---|---|---|---|
 | [OneMax](one_max/) | binary | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/one-max) |
+| [LeadingOnes](leading_ones/) | binary | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/leading-ones) |
+| [Deceptive trap](deceptive_trap/) | binary | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/deceptive-trap) |
+| [Royal road R1](royal_road_r1/) | binary | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/royal-road-r1) |
+| [Royal road R2](royal_road_r2/) | binary | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/royal-road-r2) |
+| [NK landscape](nk_landscape/) | binary | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/nk-landscape) |
 | [0/1 knapsack](knapsack/) | constrained | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/knapsack) |
 | [N-Queens 8×8](n_queens_8/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/n-queens-8) |
 | [N-Queens 16×16](n_queens_16/) | permutation | Rust, Python | [tachsin.gr](https://tachsin.gr/projects/genoxide/examples/n-queens-16) |

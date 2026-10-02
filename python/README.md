@@ -48,7 +48,8 @@ print(result.best_genome, result.best_fitness)
 More in [examples/](https://github.com/tachsin/genoxide/tree/main/examples), each the same program in Python and Rust
 (`python examples/<name>/main.py` in the repository), on the [docs site](https://tachsin.github.io/genoxide/examples/), and
 played back with charts made for each problem on [tachsin.gr](https://tachsin.gr/projects/genoxide/examples):
-- OneMax, a knapsack with a constraint, and N-Queens
+- OneMax, LeadingOnes, the deceptive trap, the royal roads, an NK landscape, a knapsack with a
+  constraint, and N-Queens
 - the travelling salesman (TSPLIB berlin52) and job shop scheduling (ft06)
 - Rastrigin with CMA-ES and L-SHADE, and the pressure vessel and welded beam designs with constraints
 - the gear train design, an integer problem
@@ -279,6 +280,27 @@ objectives), `CarSideImpact()`, `RocketInjector()`, `VehicleCrashworthiness()` a
 `ideal_point`, and for two objectives their `nadir_point`. `DiscBrake` and `SpeedReducer` round
 their integer gene, and `design(x)` gives the rounded design.
 
+`gx.problems.binary` has problems of bit strings, all maximized: `OneMax(bits)`,
+`LeadingOnes(bits)`, the deceptive `Trap(blocks, k)` (with any `a`, `b` and `z`), the royal roads
+`RoyalRoad.r1()` and `RoyalRoad.r2()`, `NkLandscape(n, k, neighborhood, seed)` and the 0/1
+`Knapsack(items, instance_class, seed=...)` of Pisinger's generated classes (`KnapsackItems(weights,
+profits, capacity)` for given items). The NK landscapes and the knapsacks are drawn from their seed,
+the same as in Rust, and compute their `optimum` exactly, by dynamic programming or exhaustive
+search.
+
+```python
+problem = gx.problems.binary.Knapsack(50, "uncorrelated", seed=1)
+ga = gx.Ga(
+    problem.genome,
+    population_size=200,
+    select=gx.Tournament(3),
+    crossover=gx.UniformCrossover(),
+    mutation=gx.BitFlip(rate=1 / 50),
+    seed=1,
+)
+result = ga.run(problem, target=problem.optimum.value, generations=2_000)
+print(result.best_fitness, result.violation, problem.capacity)
+```
 
 ```python
 problem = gx.problems.engineering.WeldedBeam()

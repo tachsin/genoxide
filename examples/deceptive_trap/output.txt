@@ -1,0 +1,24 @@
+Deceptive trap: 10 blocks of 4 bits, maximum 40
+a GA with two-point crossover, from seed 1
+generation  best  median  blocks of ones in the best
+         0    23      13   2
+         1    30      16   4
+         2    30      19   4
+         3    34      20   7
+         4    34      22   7
+         5    34      24   7
+         6    34      25   7
+         7    36      25   7
+         8    36      26   7
+         9    38      27   8
+        10    38      28   8
+        11    38      28   8
+        12    38      29   8
+        13    38      30   8
+        14    39      30   9
+        15    40      31  10
+40 after 15 generations and 14687 evaluations
+
+seeds 1 to 20, two-point crossover: 20 of 20 reach 40, after a median of 15.0 generations
+contrast, uniform crossover: 0 of 20 reach it in 300 generations; a median of 3.0 blocks of ones
+contrast, hill climbing (10000 evaluations): a median best of 31.0, with 1.0 blocks of ones

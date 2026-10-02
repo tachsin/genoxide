@@ -1,0 +1,16 @@
+Royal road R2: 8 blocks of 8 bits and the levels above, maximum 256
+a GA with single-point crossover, from seed 1
+generation  best
+         0    16
+         6    40
+        10    48
+        12    64
+        20    72
+        26    80
+        52   136
+        69   256
+256 after 69 generations and 4767 evaluations
+
+GA, seeds 1 to 50: 50 reach 256; mean 661, median 478 generations
+  (the paper's GA, 50 runs: mean 590, median 542)
+hill climbing, seeds 1 to 200: 200 reach 256; mean 6793, median 6144 evaluations

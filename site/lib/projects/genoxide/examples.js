@@ -263,6 +263,8 @@ const FAMILY_SUMMARIES = {
   Penalized: "Yao, Liu and Lin's two penalized functions: a grid of shallow wells over the box, and a steep wall near its bounds.",
   Schaffer: "One variable and two objectives, from the paper of the first multi-objective genetic algorithm, VEGA.",
   Viennet: "Three objectives of two variables, with curved and split Pareto fronts.",
+  "Royal road":
+    "Blocks of ones that score only when complete, alone (R1) or with their pairs, quadruples and whole (R2): plateaus that a genetic algorithm was meant to cross by crossover.",
   "N-Queens":
     "N queens on an N×N chessboard with no two in a row, a column or a diagonal: the usual 8×8 board and larger ones, solved by the same search.",
 };

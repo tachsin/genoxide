@@ -1,7 +1,8 @@
 """OneMax: find the bit string with the most ones.
 
 The "hello world" of genetic algorithms: a binary genome, tournament selection, uniform crossover
-and bit-flip mutation, with the best count printed every 50 generations.
+and bit-flip mutation, with the best count printed every 50 generations. The function is
+genoxide's problems.binary.OneMax, which run evaluates in Rust.
 
 With ``GENOXIDE_TRACE=<file>``, it also writes a trace of its run for the plot on the example's
 page, with trace.py.
@@ -15,8 +16,9 @@ from trace import Trace
 
 LEN = 500
 
+problem = gx.problems.binary.OneMax(LEN)
 ga = gx.Ga(
-    gx.Binary(LEN),
+    problem.genome,
     population_size=100,
     select=gx.Tournament(3),
     crossover=gx.UniformCrossover(),
@@ -36,7 +38,9 @@ def progress(progress):
 
 
 print("generation  best")
-result = ga.run(lambda bits: bits.sum(), target=LEN, generations=10_000, on_generation=progress)
+result = ga.run(
+    problem, target=problem.optimum.value, generations=10_000, on_generation=progress
+)
 print(
     f"\n{result.best_fitness:.0f} ones after {result.generations} generations and "
     f"{result.evaluations} evaluations (the optimum: {LEN})"

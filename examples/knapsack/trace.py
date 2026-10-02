@@ -11,10 +11,11 @@ import os
 class Trace:
     """Records the run through ``on_generation`` when ``GENOXIDE_TRACE`` is set."""
 
-    def __init__(self, items, capacity, optimum):
+    def __init__(self, knapsack, optimum):
         self.path = os.environ.get("GENOXIDE_TRACE")
         self.frames = Frames(200)
-        self.items, self.capacity, self.optimum = items, capacity, optimum
+        self.items = list(zip(knapsack.weights.tolist(), knapsack.profits.tolist()))
+        self.capacity, self.optimum = knapsack.capacity, optimum
 
     @property
     def on_generation(self):

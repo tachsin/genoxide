@@ -289,8 +289,36 @@ fn minimized(name: &str, run: &config::Run) -> Result<()> {
     Ok(())
 }
 
-// a test problem runs with its objectives, minimized, and a genome of its type and dimensions
+// a binary test problem is maximized, the algorithms' default: minimizing it would optimize the
+// wrong way without a warning
+fn maximized(name: &str, run: &config::Run) -> Result<()> {
+    if run.objectives.contains(&config::Objective::Minimize) {
+        return Err(format!(
+            "{name} maximizes its objective: pass objective=\"maximize\" (the problem's objective)"
+        ));
+    }
+    Ok(())
+}
+
+// a test problem runs with its objectives, and a genome of its type and dimensions
 fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
+    if let problems::Problem::Binary(problem) = problem {
+        let name = problem.name();
+        if run.objectives.len() != 1 {
+            return Err(format!(
+                "{name} has one objective: use a single-objective algorithm"
+            ));
+        }
+        maximized(name, run)?;
+        let bits = problem.binary().genome_len();
+        return match &run.genome {
+            config::Genome::Binary { length } if *length == bits => Ok(()),
+            config::Genome::Binary { length } => Err(format!(
+                "{name} has {bits} bits, but the genome has {length}"
+            )),
+            _ => Err(format!("{name} needs a Binary genome")),
+        };
+    }
     if let problems::Problem::Integer(problem) = problem {
         let name = problem.name();
         if run.objectives.len() != 1 {
@@ -314,7 +342,7 @@ fn check_problem(problem: &problems::Problem, run: &config::Run) -> Result<()> {
             (problem.name(), 1, problem.real().genome_len(), false)
         }
         // checked above
-        problems::Problem::Integer(_) => return Ok(()),
+        problems::Problem::Integer(_) | problems::Problem::Binary(_) => return Ok(()),
         problems::Problem::Multi(config) => {
             let (name, dimensions, binary) = problems::name_and_dimensions(*config);
             (name, config.objectives(), dimensions, binary)
@@ -1827,6 +1855,7 @@ where
     let problem = match &context.problem {
         Some(problems::Problem::Single(problem)) => Some(Native::Real(problem.as_ref())),
         Some(problems::Problem::Integer(problem)) => Some(Native::Integer(problem.as_ref())),
+        Some(problems::Problem::Binary(problem)) => Some(Native::Binary(problem.as_ref())),
         _ => match &context.tree {
             Some(tree) => Some(Native::Tree(tree)),
             None => context.balance.as_ref().map(Native::Balance),

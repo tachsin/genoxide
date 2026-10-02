@@ -1,3 +1,7 @@
-items [0, 1, 2, 3, 5, 10, 11, 12, 13, 14, 16, 17, 19]
-value 625, weight 395 of 400
-after 6588 evaluations; the optimum is 625
+50 uncorrelated items (R = 1000, seed 1): total weight 25397, capacity 12572
+items [0, 2, 5, 6, 7, 10, 14, 15, 16, 17, 18, 19, 21, 22, 26, 28, 29, 30, 31, 32, 33, 34, 36, 37, 39, 40, 43, 45, 46, 47, 48, 49]
+value 20849, weight 12551 of 12572
+after 6864 evaluations; the optimum, by dynamic programming, is 20849
+
+seeds 1 to 20: 20 reach 20849, after a median of 6936.0 evaluations
+contrast, 50 strongly correlated items (seed 1): 2 of 20 reach its optimum, 16020

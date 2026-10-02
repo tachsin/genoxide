@@ -41,7 +41,8 @@ def test_the_module_docstring_example_runs():
 
 
 def test_the_submodule_docstring_examples_run():
-    modules = (gx.problems, gx.problems.cec2006, gx.problems.engineering, gx.neat)
+    modules = (gx.problems, gx.problems.binary, gx.problems.cec2006, gx.problems.engineering)
+    modules += (gx.neat,)
     modules += (gx.gp, gx.gp.regression, gx.gp.regression.problems, gx.gp.boolean)
     for module in modules + (gx.problems.multi_engineering, gx.indicators, gx.model.gp):
         # later examples use what earlier ones define

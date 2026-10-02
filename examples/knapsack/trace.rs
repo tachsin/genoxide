@@ -3,22 +3,36 @@
 //! and median values as what they miss of the optimum, for a log axis. The Python example writes
 //! the same file.
 
-use crate::{CAPACITY, ITEMS, optimum};
 use genoxide::observer::Snapshot;
 use genoxide::prelude::*;
+use genoxide::problems::binary::Knapsack;
 use serde_json::{Value, json};
 
 pub struct Trace {
     path: Option<String>,
     frames: Frames,
+    items: Vec<Value>,
+    capacity: u64,
+    optimum: f64,
 }
 
 impl Trace {
     // a trace for the file that GENOXIDE_TRACE names, or nothing to record if it isn't set
-    pub fn from_env() -> Self {
+    pub fn from_env(knapsack: &Knapsack, optimum: f64) -> Self {
         let path = std::env::var("GENOXIDE_TRACE").ok();
         let frames = Frames::new(200);
-        Self { path, frames }
+        let items = knapsack.weights().iter().zip(knapsack.profits());
+        let items = items
+            .map(|(weight, value)| json!({ "weight": weight, "value": value }))
+            .collect();
+        let capacity = knapsack.capacity();
+        Self {
+            path,
+            frames,
+            items,
+            capacity,
+            optimum,
+        }
     }
 
     // records a generation: the best selection so far
@@ -33,10 +47,6 @@ impl Trace {
     // writes the trace, if there's one
     pub fn write(self) {
         let Some(path) = self.path else { return };
-        let items: Vec<Value> = ITEMS
-            .iter()
-            .map(|&(weight, value)| json!({ "weight": weight, "value": value }))
-            .collect();
         let settings = json!({
             "format": 1,
             "example": "knapsack",
@@ -46,12 +56,12 @@ impl Trace {
             "log_y": true,
             "optimum": 0.0,
             "plot": "knapsack",
-            "problem": { "capacity": CAPACITY, "items": items },
+            "problem": { "capacity": self.capacity, "items": self.items },
         });
         write(
             &path,
             settings,
-            errors(self.frames.into_vec(), f64::from(optimum())),
+            errors(self.frames.into_vec(), self.optimum),
         );
     }
 }
