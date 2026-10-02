@@ -1,7 +1,7 @@
 ---
 title: DAS-CMOP1
 category: multi-objective
-summary: Minimize two objectives over 30 variables subject to 11 constraints of adjustable difficulty, whose Pareto front is pieces of a concave curve, with NSGA-II; neither run reaches it, as the paper's NSGA-II doesn't.
+summary: Minimize two objectives over 30 variables subject to 11 constraints of adjustable difficulty, whose Pareto front is pieces of a concave curve, with MOEA/D-DE, which reaches it in every run of 20, and NSGA-II, which doesn't, as the paper's doesn't.
 reference: "Fan, Z., Li, W., Cai, X., Li, H., Wei, C., Zhang, Q., Deb, K. and Goodman, E. (2020). Difficulty adjustable and scalable constrained multiobjective test problem toolkit. Evolutionary Computation 28(3): 339-378."
 reference_url: https://doi.org/10.1162/evco_a_00259
 optimum: "for the difficulty triplet (0, 0.5, 0.5), two pieces of the curve f₂ = 1.5 − (f₁ − 0.5)²; ideal point (0.5, 0.5), nadir point (1.5, 1.5); hypervolume 0.4706 (normalized objectives, reference point (1.1, 1.1))"
@@ -36,7 +36,7 @@ The front depends on the triplet, and the paper samples it rather than writing i
 
 ## What makes it hard
 
-The linked variables first. A solution on the front at x₁ has every other variable at sin(0.5πx₁): to move along the front, all 29 of them have to move together, by the same amount. Simulated binary crossover and polynomial mutation change each variable on its own, so a population that has settled on one value of x₁ stays there: any other x₁ costs 29 (Δ sin)² in g. The paper's MOEA/D-CDP uses differential evolution, whose steps are differences between solutions of the population, along the front once the population lies near it; genoxide's multi-objective algorithms don't have it. Then the constraints: the band of g between 0.5 and e is feasible, a thin shell above the front, and the ellipses block parts of it.
+The linked variables first. A solution on the front at x₁ has every other variable at sin(0.5πx₁): to move along the front, all 29 of them have to move together, by the same amount. Simulated binary crossover and polynomial mutation change each variable on its own, so a population that has settled on one value of x₁ stays there: any other x₁ costs 29 (Δ sin)² in g. Differential evolution moves them together: its steps are differences between solutions of the population, along the front once the population lies near it. The paper's MOEA/D-CDP uses it, and so does MOEA/D-DE here. Then the constraints: the band of g between 0.5 and e is feasible, a thin shell above the front, and the ellipses block parts of it.
 
 ## Representation
 
@@ -46,18 +46,20 @@ Solutions compare by constrained dominance, the rule of the NSGA-II paper and th
 
 ## Algorithm
 
-NSGA-II (Deb, Pratap, Agarwal and Meyarivan, 2002, IEEE Transactions on Evolutionary Computation 6(2): 182-197) with the paper's settings: a population of 300 for 1,000 generations, 300,000 evaluations (section 7.1), simulated binary crossover with η = 20 at a rate of 0.9, and polynomial mutation at a rate of 1/30 per gene, twice:
+Two runs, each with the paper's population of 300 for 1,000 generations, 300,000 evaluations (section 7.1), and polynomial mutation with η = 20 at a rate of 1/30 per gene:
 
-- with η = 20 for the mutation, the paper's;
-- with η = 5, whose steps are larger: the median step is about 3% of the range with η = 20 and about 11% with η = 5.
+- MOEA/D with differential evolution, MOEA/D-DE (Li and Zhang, 2009, IEEE Transactions on Evolutionary Computation 13(2): 284-302): a subproblem for each of 300 weight vectors spread evenly on the line w₁ + w₂ = 1, each the weighted Tchebycheff distance to the ideal point, with the paper's 30 neighbours (0.1 N) and at most 2 replacements per child; a child is its subproblem's solution moved by F = 0.5 times the difference of two parents, every gene (CR = 1), the parents from the neighbourhood with probability δ = 0.2;
+- NSGA-II (Deb, Pratap, Agarwal and Meyarivan, 2002, IEEE Transactions on Evolutionary Computation 6(2): 182-197) with the paper's settings, simulated binary crossover with η = 20 at a rate of 0.9, as the contrast.
 
-With either, the population finds the band of feasible g and settles on a short stretch of the front's x₁, or behind an ellipse.
+Both compare solutions by constrained dominance. Differential evolution moves the linked variables together, which simulated binary crossover can't.
+
+δ = 0.2, where the paper and Li and Zhang use 0.9, keeps the population spread. While no solution is feasible, constrained dominance ranks solutions by their violation alone, and that pulls the whole population to one stretch of x₁: with seed 1 and δ = 0.9, 80% of the population has x₁ between 0.27 and 0.41 after 10 generations. Parents from the whole population, most of the time, spread it again once it is feasible; parents from the neighbourhood, nine times in ten, mostly can't, as the neighbourhood's solutions are all at that x₁. Over seeds 1 to 20, δ = 0.9 reaches the target in 18 runs of 20 (IGD+ from 0.0008 to 0.0015 and 98.4% to 99.8% of the sample's hypervolume).
 
 ## Output
 
-A line per run: the size of its final front, how many of its solutions are feasible, and the front's IGD+ and hypervolume. Then the hypervolume of the whole optimal front.
+A line per run: the size of its final front, how many of its solutions are feasible, the front's IGD+ and hypervolume, and the hypervolume as a share of that of a sample of 300 points of the optimal front, as many as the population. Then the hypervolumes of the whole optimal front and of the sample.
 
-Both indicators use the objectives normalized by the front's ideal and nadir points, so that the front spans [0, 1] in each. IGD+ (Ishibuchi et al., 2015, EMO 2015, LNCS 9019: 110-125) averages, over 500 points of the optimal front from genoxide's `optimal_front`, the distance to the nearest point of the found front, counting only the objectives in which the found point is worse. Smaller is better, and 0 means the found front covers the optimal one. The hypervolume (Zitzler and Thiele, 1999, IEEE Transactions on Evolutionary Computation 3(4): 257-271) is the area the front dominates up to the reference point (1.1, 1.1). Larger is better; the whole front's is computed from 20,000 of its points. Only feasible solutions count.
+Both indicators use the objectives normalized by the front's ideal and nadir points, so that the front spans [0, 1] in each. IGD+ (Ishibuchi et al., 2015, EMO 2015, LNCS 9019: 110-125) averages, over 500 points of the optimal front from genoxide's `optimal_front`, the distance to the nearest point of the found front, counting only the objectives in which the found point is worse. Smaller is better, and 0 means the found front covers the optimal one. The hypervolume (Zitzler and Thiele, 1999, IEEE Transactions on Evolutionary Computation 3(4): 257-271) is the area the front dominates up to the reference point (1.1, 1.1). Larger is better; the whole front's is computed from 20,000 of its points, and the sample's is what a front of 300 points reaches. Only feasible solutions count.
 
 The page plays both runs back over the grey feasible region, sampled from genomes with x₁ evenly spread and every distance variable at one value, swept; hollow points are infeasible solutions of the populations (at most 100 a frame), and the line is the optimal front, in its pieces.
 
@@ -65,8 +67,8 @@ The page plays both runs back over the grey feasible region, sampled from genome
 
 ## Good results
 
-The target: an IGD+ of at most 0.01 in normalized objectives, with every solution feasible.
+The target: every solution feasible, and 99% of the hypervolume of the sample of 300 points of the front, about what a front of 300 solutions spread like it has.
 
-With the paper's settings, the run with seed 1 ends with 218 solutions, 218 feasible, IGD+ 0.6811, hypervolume 0.0214. With η = 5, 219 solutions, 219 feasible, IGD+ 0.7354, hypervolume 0.0000. Over seeds 1 to 20, with η = 20, IGD+ from 0.6638 to 0.7556; with η = 5, from 0.6414 to 0.7663.
+MOEA/D-DE's run with seed 1 ends with 164 solutions, 164 feasible, IGD+ 0.0010, hypervolume 0.4681, 99.6% of the sample's; NSGA-II's with 218 solutions, 218 feasible, IGD+ 0.6811, hypervolume 0.0214, 4.5% of the sample's. Over seeds 1 to 20, MOEA/D-DE ends with IGD+ from 0.0008 to 0.0010 and 99.3% to 99.8% of the sample's hypervolume, every run reaching the target, and NSGA-II with IGD+ from 0.6638 to 0.7556 and 0.0% to 6.1% of the sample's hypervolume, no run reaching it: NSGA-II converges to a short stretch of the front, or of the band above it, and stays there, for the reasons above.
 
-No run reaches the front: every one converges to a short stretch of it, or of the band above it, and stays there, for the reasons above. On DAS-CMOP1 with the paper's triplets, NSGA-II-CDP ends with a mean IGD from 0.28 to 0.71 (its table 4; 0.370 with the first triplet, (0.25, 0, 0)), where MOEA/D-CDP, with differential evolution, has 0.0013 with that triplet. Reaching the front takes a variation that moves the linked variables together, such as differential evolution.
+On DAS-CMOP1 with the paper's triplets, NSGA-II-CDP ends with a mean IGD from 0.28 to 0.71 (its table 4; 0.370 with the first triplet, (0.25, 0, 0)), where MOEA/D-CDP, with differential evolution, has 0.0013 with that triplet.
