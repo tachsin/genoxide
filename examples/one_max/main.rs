@@ -1,7 +1,8 @@
 //! OneMax: find the bit string with the most ones.
 //!
 //! The "hello world" of genetic algorithms: a binary genome, tournament selection, uniform
-//! crossover and bit-flip mutation, with the best count printed every 50 generations.
+//! crossover and bit-flip mutation, with the best count printed every 50 generations. The function
+//! is genoxide's `problems::binary::OneMax`.
 //!
 //! With `GENOXIDE_TRACE=<file>`, it also writes a trace of its run for the plot on the example's
 //! page, with `trace.rs`.
@@ -13,11 +14,15 @@
 mod trace;
 
 use genoxide::prelude::*;
+use genoxide::problems::Problem;
+use genoxide::problems::binary::OneMax;
 
 const LEN: usize = 500;
 
 fn main() -> Result<()> {
-    let ga = Ga::builder(Binary::new(LEN)?)
+    let problem = OneMax::new(LEN);
+    let optimum = problem.optimum().expect("known").value();
+    let ga = Ga::builder(problem.representation())
         .population_size(100)
         .select(Tournament::new(3)?)
         .crossover(UniformCrossover::new())
@@ -28,8 +33,8 @@ fn main() -> Result<()> {
     // with GENOXIDE_TRACE=<file>, a trace of the run for the plot on the example's page
     let mut trace = trace::Trace::from_env();
     println!("generation  best");
-    let outcome = Engine::new(ga, |genome: &Bits| genome.count_ones() as f64)
-        .stop_when(Stop::target(LEN as f64).or(Stop::generations(10_000)))
+    let outcome = Engine::new(ga, problem)
+        .stop_when(Stop::target(optimum).or(Stop::generations(10_000)))
         .on_generation(|snapshot| {
             let progress = snapshot.progress();
             if progress.generation() % 50 == 0 {

@@ -1,0 +1,17 @@
+Royal road R1: 8 blocks of 8 bits, maximum 64
+random-mutation hill climbing from seed 1
+R1  evaluations
+ 8          451
+16          625
+24          638
+32         1615
+40         1656
+48         1837
+56         3717
+64        10101
+64 after 10101 evaluations
+
+RMHC, seeds 1 to 200: 200 reach 64; mean 6793, median 6144 evaluations
+  (the paper's 200 runs: mean 6179, median 5775)
+GA, seeds 1 to 50: 50 reach 64; mean 34303, median 30996 evaluations
+  (the paper's GA, 200 runs: mean 61334, median 54208)

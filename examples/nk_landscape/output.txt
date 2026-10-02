@@ -1,0 +1,25 @@
+NK landscape: N = 20, K = 4, random neighbors, drawn from seed 1
+the optimum, over all 2^20 strings: 0.742541 at 10101011100001100010
+iterated local search from seed 1
+evaluations  best
+          1  0.495078
+          3  0.543267
+          7  0.556021
+          8  0.617134
+         18  0.619018
+         20  0.625517
+         21  0.650122
+         31  0.691331
+         32  0.701480
+         46  0.723895
+        171  0.735152
+        907  0.736484
+        927  0.742541
+0.742541 after 927 evaluations, at 10101011100001100010
+
+landscape  optimum   ILS reaches  median evaluations  GA reaches
+        1  0.742541        20/20              1952.0       20/20
+        2  0.768337        20/20              2909.5        5/20
+        3  0.811498        20/20              3209.0       19/20
+        4  0.787638        20/20              1109.0       20/20
+        5  0.777704        20/20              4910.0        6/20

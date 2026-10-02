@@ -2,8 +2,8 @@
 title: OneMax
 category: binary
 summary: Find the bit string with the most ones, the "hello world" of genetic algorithms.
-reference: "Ackley, D. H. (1987). A Connectionist Machine for Genetic Hillclimbing. Kluwer Academic Publishers."
-reference_url: https://doi.org/10.1007/978-1-4613-1997-9
+reference: "Droste, S., Jansen, T. and Wegener, I. (2002). On the analysis of the (1+1) evolutionary algorithm. Theoretical Computer Science 276(1-2): 51-81."
+reference_url: https://doi.org/10.1016/S0304-3975(01)00182-7
 optimum: "500 (all ones)"
 languages: [rust, python]
 order: 10
@@ -13,9 +13,12 @@ order: 10
 
 ## The problem
 
-OneMax scores a bit string by the number of its ones. Ackley (1987) used it as one of the test
-functions of his genetic hill climber. The string 10110010 scores 4. Here the strings have 500 bits,
-so the best score is 500, for the string of all ones.
+OneMax scores a bit string by the number of its ones, `Σ xᵢ`: Droste, Jansen and Wegener (2002,
+Definition 9) define it as the linear function whose weights are all 1. It has no single origin;
+Ackley (1987, *A Connectionist Machine for Genetic Hillclimbing*, section 3.3.1) tested his genetic
+hill climber on a "One Max" that scores ten times the number of ones. The string 10110010 scores 4.
+Here the strings have 500 bits, so the best score is 500, for the string of all ones. The function
+is genoxide's `problems::binary::OneMax`.
 
 ## What makes it hard
 
@@ -26,8 +29,7 @@ flips, so there are no local optima. What the problem measures is how fast an al
 The slow part is the end. At a flip rate of 1/500 per bit, a mutation flips a given zero with
 probability 0.2%, and it can flip a one at the same time. For the (1+1) evolutionary algorithm,
 which keeps one string and flips each bit with probability 1/n, the expected number of evaluations
-is of the order of n log n (Droste, Jansen and Wegener, 2002, Theoretical Computer Science 276(1-2):
-51-81).
+is of the order of n log n (Droste et al., 2002, Lemma 10).
 
 ## Representation
 

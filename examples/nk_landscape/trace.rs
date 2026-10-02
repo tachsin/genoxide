@@ -1,47 +1,46 @@
 //! The trace of the run for the plot on the example's page, written to the file that
-//! `GENOXIDE_TRACE` names: the best selection so far, in at most 200 generations, with the best
-//! and median values as what they miss of the optimum, for a log axis. The Python example writes
-//! the same file.
+//! `GENOXIDE_TRACE` names: the string of the search, in at most 32 steps. The Python example writes the same
+//! file.
 
 use genoxide::observer::Snapshot;
 use genoxide::prelude::*;
-use genoxide::problems::binary::Knapsack;
 use serde_json::{Value, json};
 
 pub struct Trace {
     path: Option<String>,
     frames: Frames,
-    items: Vec<Value>,
-    capacity: u64,
+    length: usize,
     optimum: f64,
 }
 
 impl Trace {
     // a trace for the file that GENOXIDE_TRACE names, or nothing to record if it isn't set
-    pub fn from_env(knapsack: &Knapsack, optimum: f64) -> Self {
+    pub fn from_env(length: usize, optimum: f64) -> Self {
         let path = std::env::var("GENOXIDE_TRACE").ok();
-        let frames = Frames::new(200);
-        let items = knapsack.weights().iter().zip(knapsack.profits());
-        let items = items
-            .map(|(weight, value)| json!({ "weight": weight, "value": value }))
-            .collect();
-        let capacity = knapsack.capacity();
+        let frames = Frames::new(32);
         Self {
             path,
             frames,
-            items,
-            capacity,
+            length,
             optimum,
         }
     }
 
-    // records a generation: the best selection so far
+    // records a step: the current string
     pub fn record(&mut self, snapshot: &Snapshot<'_, Bits>) {
         if self.path.is_none() {
             return;
         }
-        let best: Vec<u8> = snapshot.best().genome().iter().map(u8::from).collect();
-        self.frames.push(frame(snapshot, json!({ "best": best })));
+        let bits = |genome: &Bits| {
+            genome
+                .iter()
+                .map(|one| if one { '1' } else { '0' })
+                .collect()
+        };
+        let rows = snapshot.population().iter().take(16);
+        let rows: Vec<String> = rows.map(|row| bits(row.genome())).collect();
+        self.frames
+            .push(frame(snapshot, json!({ "population": rows })));
     }
 
     // writes the trace, if there's one
@@ -49,34 +48,17 @@ impl Trace {
         let Some(path) = self.path else { return };
         let settings = json!({
             "format": 1,
-            "example": "knapsack",
+            "example": "nk_landscape",
             "objective": "maximize",
-            "x_label": "generations",
-            "y_label": "value missing from the optimum",
-            "log_y": true,
-            "optimum": 0.0,
-            "plot": "knapsack",
-            "problem": { "capacity": self.capacity, "items": self.items },
+            "x_label": "evaluations",
+            "y_label": "fitness W",
+            "log_y": false,
+            "optimum": self.optimum,
+            "plot": "bits",
+            "problem": { "length": self.length },
         });
-        write(
-            &path,
-            settings,
-            errors(self.frames.into_vec(), self.optimum),
-        );
+        write(&path, settings, self.frames.into_vec());
     }
-}
-
-// the frames with their best and median scores as the value missing from the optimum, clamped at
-// 0: an overweight selection can be worth more
-fn errors(mut frames: Vec<Value>, optimum: f64) -> Vec<Value> {
-    for frame in &mut frames {
-        for key in ["best", "median"] {
-            if let Some(score) = frame[key].as_f64() {
-                frame[key] = json!((optimum - score).max(0.0));
-            }
-        }
-    }
-    frames
 }
 
 // ---- the same in every example's trace ---------------------------------------------------------

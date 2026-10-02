@@ -1,7 +1,6 @@
 """The trace of the run for the plot on the example's page, written to the file that
-``GENOXIDE_TRACE`` names: the best selection so far, in at most 200 generations, with the best
-and median values as what they miss of the optimum, for a log axis. The Rust example writes the
-same file."""
+``GENOXIDE_TRACE`` names: the first 16 strings of the population, in at most 32 generations. The Rust example writes the same
+file."""
 
 import json
 import math
@@ -11,11 +10,10 @@ import os
 class Trace:
     """Records the run through ``on_generation`` when ``GENOXIDE_TRACE`` is set."""
 
-    def __init__(self, knapsack, optimum):
+    def __init__(self, length, optimum):
         self.path = os.environ.get("GENOXIDE_TRACE")
-        self.frames = Frames(200)
-        self.items = list(zip(knapsack.weights.tolist(), knapsack.profits.tolist()))
-        self.capacity, self.optimum = knapsack.capacity, optimum
+        self.frames = Frames(32)
+        self.length, self.optimum = length, optimum
 
     @property
     def on_generation(self):
@@ -23,38 +21,26 @@ class Trace:
         return self.record if self.path else None
 
     def record(self, progress):
-        """Records a generation: the best selection so far."""
+        """Records a generation: the first 16 strings of the population."""
         if self.path:
-            self.frames.push(frame(progress, {"best": progress.best_genome.astype(int).tolist()}))
+            rows = ["".join("1" if one else "0" for one in row) for row in progress.population[:16]]
+            self.frames.push(frame(progress, {"population": rows}))
 
     def write(self):
         """Writes the trace, if there's one."""
         if self.path:
             settings = {
                 "format": 1,
-                "example": "knapsack",
+                "example": "deceptive_trap",
                 "objective": "maximize",
                 "x_label": "generations",
-                "y_label": "value missing from the optimum",
-                "log_y": True,
-                "optimum": 0.0,
-                "plot": "knapsack",
-                "problem": {
-                    "capacity": self.capacity,
-                    "items": [{"weight": weight, "value": value} for weight, value in self.items],
-                },
+                "y_label": "score",
+                "log_y": False,
+                "optimum": float(self.optimum),
+                "plot": "bits",
+                "problem": {"length": self.length},
             }
-            write(self.path, settings, errors(self.frames.to_list(), float(self.optimum)))
-
-
-def errors(frames, optimum):
-    """The frames with their best and median scores as the value missing from the optimum,
-    clamped at 0: an overweight selection can be worth more."""
-    for frame in frames:
-        for key in ("best", "median"):
-            if frame[key] is not None:
-                frame[key] = max(optimum - frame[key], 0.0)
-    return frames
+            write(self.path, settings, self.frames.to_list())
 
 
 # ---- the same in every example's trace ----------------------------------------------------------

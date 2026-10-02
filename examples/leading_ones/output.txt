@@ -1,0 +1,16 @@
+LeadingOnes of 100 bits, the (1+1) EA from seed 1
+leading ones  evaluations
+          10          291
+          20          414
+          30          947
+          40         1332
+          50         1927
+          60         2102
+          70         3313
+          80         3525
+          90         3952
+         100         4452
+100 leading ones after 4452 evaluations (the optimum: 100)
+
+seeds 1 to 100: 100 reach the optimum, after 5332 evaluations on average
+(fewest 3503, median 5312.5, most 7802); n² = 10000
