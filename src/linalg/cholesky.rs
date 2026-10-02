@@ -220,6 +220,7 @@ fn factor_diagonal(
     for j in k0..k1 {
         let d = w[j * n + j];
         if !(d > 0.0 && d < f64::INFINITY) {
+            std::hint::cold_path();
             return Err(NotPositiveDefinite { column: j });
         }
         let ljj = d.sqrt();

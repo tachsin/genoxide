@@ -53,6 +53,7 @@ pub fn ln(x: f64) -> f64 {
     // one comparison for the common case, positive, normal and finite x (whose bits are from
     // those of f64::MIN_POSITIVE up to those of infinity), and fdlibm's special cases otherwise
     if x.to_bits().wrapping_sub(MIN_POSITIVE_BITS) >= INFINITY_BITS - MIN_POSITIVE_BITS {
+        std::hint::cold_path();
         if x.is_nan() || x < 0.0 {
             return f64::NAN;
         }
@@ -132,6 +133,7 @@ pub fn exp(x: f64) -> f64 {
     let high = high & 0x7fff_ffff;
     if high >= 0x4086_2e42 {
         // |x| >= 709.78...
+        std::hint::cold_path();
         if x.is_nan() {
             return x;
         }

@@ -513,6 +513,7 @@ fn mirror(x: f64, low: f64, high: f64) -> f64 {
         x
     };
     if mirrored.is_nan() {
+        std::hint::cold_path();
         low
     } else {
         mirrored.clamp(low, high)

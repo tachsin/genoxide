@@ -793,6 +793,7 @@ fn projected_gradient(x: &[f64], g: &[f64], lower: &[f64], upper: &[f64]) -> f64
     for i in 0..x.len() {
         let moved = (x[i] - g[i]).clamp(lower[i], upper[i]) - x[i];
         if moved.is_nan() {
+            std::hint::cold_path();
             return f64::NAN;
         }
         largest = largest.max(moved.abs());
