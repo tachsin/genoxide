@@ -1505,12 +1505,15 @@ impl<R: Space> Incremental for Bo<R> {
     /// added with a [`Fantasy`] value (random points until a result has a valid score). Once
     /// every point of an integer lattice is evaluated or being evaluated, the best point again.
     fn propose(&mut self) -> R::Genome {
+        // a point proposed again isn't a new proposal: a resumed run's later proposals draw the
+        // random numbers that an uninterrupted run's do
         let genome = if self.requeued.is_empty() {
-            self.next_proposal()
+            let genome = self.next_proposal();
+            self.proposals += 1;
+            genome
         } else {
             self.requeued.remove(0)
         };
-        self.proposals += 1;
         self.proposed.push(genome.clone());
         genome
     }

@@ -247,7 +247,7 @@ fn portable_run<A: Algorithm<Genome = Reals>>(algorithm: A) -> Vec<f64> {
 
 // the same for the methods that need a constraint's values and the gradients: Rosenbrock's
 // function, with the genes' sum at most 1
-fn portable_constrained_run(algorithm: Mma) -> Vec<f64> {
+fn portable_constrained_run<A: Algorithm<Genome = Reals>>(algorithm: A) -> Vec<f64> {
     let rosenbrock = Constrained::differentiable(
         1,
         |x: &Reals, gradient: &mut [f64], g: &mut [f64], jacobian: &mut [f64]| {
@@ -428,8 +428,31 @@ fn portable_runs() {
                 .build()
                 .unwrap(),
         ),
+        // batches: the points after the first, chosen with the earlier ones fantasized
+        portable_run(
+            Bo::builder(real())
+                .batch(3)
+                .fantasy(bo::Fantasy::KrigingBeliever)
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
+        portable_run(
+            Bo::builder(real())
+                .batch(2)
+                .fantasy(bo::Fantasy::ConstantLiar(bo::Lie::Mean))
+                .acquisition(bo::Acquisition::ExpectedImprovement)
+                .minimize()
+                .seed(1)
+                .build()
+                .unwrap(),
+        ),
+        // a model per constraint, the probability of feasibility
+        portable_constrained_run(Bo::builder(real()).minimize().seed(1).build().unwrap()),
     ];
-    let expected: [[f64; 4]; 16] = [
+
+    let expected: [[f64; 4]; 19] = [
         // L-SHADE
         [
             0.5886518163542276,
@@ -541,10 +564,55 @@ fn portable_runs() {
             0.7794047534046049,
             0.6827343441068123,
         ],
+        // Bayesian optimization in batches of 3, the Kriging believer
+        [
+            0.5850147650315565,
+            0.4831239937078218,
+            0.17793827600675627,
+            -0.01072745023849997,
+        ],
+        // Bayesian optimization in batches of 2, EI, the constant liar with the mean
+        [
+            -0.8772643061279055,
+            1.5450479136340656,
+            2.0635451232757465,
+            4.5196908819175645,
+        ],
+        // constrained Bayesian optimization, the genes' sum at most 1
+        [
+            0.6539353361599387,
+            0.41472093863190285,
+            0.10930157616421621,
+            -0.17840095840143988,
+        ],
     ];
     for (run, expected) in runs.iter().zip(expected) {
         assert_eq!(run[..], expected, "{run:?}");
     }
+    // Bayesian optimization of integer genes: the last 4 points of 30 generations
+    let quadratic = |x: &Integers| {
+        let x: Vec<f64> = x.iter().map(|&v| v as f64).collect();
+        let (a, b) = (x[1] - x[0] * x[0] / 8.0, 3.0 - x[0]);
+        10.0 * a * a + b * b + 0.5 * (x[2] - x[3]) * (x[2] + 1.0)
+    };
+    let integer = Bo::builder(Integer::uniform(4, -12..=12).unwrap())
+        .minimize()
+        .seed(1)
+        .build()
+        .unwrap();
+    let mut engine = Engine::new(integer, quadratic).stop_when(Stop::generations(30));
+    engine.run().unwrap();
+    let points: Vec<Vec<i64>> = engine.algorithm().population().as_slice()[36..]
+        .iter()
+        .map(|individual| individual.genome().to_vec())
+        .collect();
+    let expected = [
+        [6, 4, -2, -12],
+        [8, 8, -5, -12],
+        [7, 6, -5, -12],
+        [3, 1, -5, -12],
+    ];
+    assert_eq!(points, expected, "{points:?}");
 }
 
 #[test]
