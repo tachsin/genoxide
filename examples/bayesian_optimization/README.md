@@ -77,7 +77,7 @@ improvement that chose the next point, and a curve of the best value's distance 
 ## Good results
 
 A good result is within 1e-4 of a global minimum, 0.397887, in tens of evaluations. The first
-point the model chose, the 7th evaluation, is already 2.5 above it; the 16th is 0.043 above it,
+point the model chose, the 7th evaluation, is 2.5 above it; the 16th is 0.043 above it,
 near (π, 2.275), and from there the search visits all three basins, the 24th within 1.3e-3 of
 (−π, 12.275), the 29th within 9.6e-5 of (3π, 2.475). The model of the 30 evaluations has its
 lowest mean at (9.422974, 2.475867), 0.397917, and the function there is 0.397909, 2.1e-5 above

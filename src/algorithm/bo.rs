@@ -385,8 +385,12 @@ impl Bo {
                 .derive(generation)
                 .next_u64(),
         };
-        let model =
+        let fitted =
             GaussianProcess::fit_unit(settings, scaling.clone(), x, &targets, self.warm.as_deref());
+        // a kernel matrix that doesn't factor, even with jitter: a random point instead
+        let Ok(model) = fitted else {
+            return self.random_point(generation);
+        };
         self.warm = Some(model.log_parameters().to_vec());
         // the best point evaluated, by the model's values: the incumbent, and a start
         let mut incumbent: Option<usize> = None;
@@ -953,7 +957,7 @@ mod tests {
             starts: 3,
             seed: 1,
         };
-        let model = GaussianProcess::fit_unit(settings, scaling, x, &values, None);
+        let model = GaussianProcess::fit_unit(settings, scaling, x, &values, None).unwrap();
         let (mean, scale) = model.standardization();
         let best = values.iter().fold(f64::INFINITY, |a, &b| a.min(b));
         (model, (best - mean) / scale)

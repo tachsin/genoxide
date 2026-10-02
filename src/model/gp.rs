@@ -56,7 +56,7 @@
 //! [`fit`](GaussianProcessBuilder::fit) maximizes the log marginal likelihood (eq. 2.30 and 5.8)
 //! `ln p(y | X, θ) = −½ (y − m)ᵀ K_y⁻¹ (y − m) − ½ ln |K_y| − (n/2) ln 2π`, `K_y = σ_f² K + σ_n² I`,
 //! over the logarithms of the length scales, of `σ_f²` and of `σ_n²`, with genoxide's
-//! [`Lbfgsb`](crate::algorithm::Lbfgsb) and the analytic gradient of eq. 5.9,
+//! [`Lbfgsb`] and the analytic gradient of eq. 5.9,
 //! `∂/∂θⱼ ln p = ½ tr((ααᵀ − K_y⁻¹) ∂K_y/∂θⱼ)`, `α = K_y⁻¹(y − m)`. The search runs from
 //! [several starts](GaussianProcessBuilder::starts): the first from fixed values (length scales of
 //! 0.5 of each range, `σ_f²` the values' variance, a learned `σ_n²` 1e-4 of it or its least), the
@@ -556,7 +556,7 @@ impl GaussianProcess {
         x: Vec<f64>,
         values: &[f64],
         warm: Option<&[f64]>,
-    ) -> GaussianProcess {
+    ) -> Result<GaussianProcess> {
         let count = values.len();
         let (y_mean, y_scale, y) = standardize(values);
         let dims = scaling.dims();
@@ -574,14 +574,18 @@ impl GaussianProcess {
         let log = best.unwrap_or(first);
         let (length_scales, signal, noise) = unpack(&log, dims, settings.noise);
         let mut workspace = Workspace::new(count);
-        // the box's parameters always factor with jitter up to the diagonal's scale, a
-        // positive definite K_y + (σ_f² + σ_n²) I
-        let jitter = data
-            .factor(&length_scales, signal, noise, &mut workspace)
-            .unwrap_or(f64::NAN);
+        // the box's parameters factor with jitter up to the diagonal's scale, a positive definite
+        // K_y + (σ_f² + σ_n²) I, unless rounding breaks even that
+        let Some(jitter) = data.factor(&length_scales, signal, noise, &mut workspace) else {
+            return Err(Error::InvalidSetting {
+                setting: "values",
+                reason: "the kernel matrix of the points doesn't factor, even with a jitter of                          its diagonal's scale"
+                    .to_string(),
+            });
+        };
         let (mean, log_likelihood) = data.solve(&mut workspace, None);
         let Workspace { l, b, .. } = workspace;
-        GaussianProcess {
+        Ok(GaussianProcess {
             kernel: settings.kernel,
             scaling,
             x,
@@ -597,7 +601,7 @@ impl GaussianProcess {
             factor: l,
             alpha: b,
             log_likelihood,
-        }
+        })
     }
 }
 
@@ -1022,9 +1026,7 @@ impl GaussianProcessBuilder {
             seed: self.seed,
         };
         match &self.hyperparameters {
-            None => Ok(GaussianProcess::fit_unit(
-                settings, scaling, x, values, None,
-            )),
+            None => GaussianProcess::fit_unit(settings, scaling, x, values, None),
             Some(h) => self.with_hyperparameters(h, settings, scaling, x, values),
         }
     }
