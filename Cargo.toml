@@ -96,10 +96,15 @@ name = "bo_asynchronous"
 path = "examples/bo_asynchronous/main.rs"
 required-features = ["parallel"]
 
-# slow evaluations, evaluated in parallel for the same results sooner
+# slow evaluations (Weierstrass), or up to half a million per run (Katsuura), evaluated in parallel
 [[example]]
 name = "weierstrass"
 path = "examples/weierstrass/main.rs"
+required-features = ["parallel"]
+
+[[example]]
+name = "katsuura"
+path = "examples/katsuura/main.rs"
 required-features = ["parallel"]
 
 [[bin]]
