@@ -152,6 +152,8 @@ pub enum Algorithm {
         initial_genome: Option<Vec<f64>>,
         seed: Option<u64>,
     },
+    /// Bayesian optimization.
+    Bo(Bo),
     NelderMead {
         coefficients: Option<NelderMeadCoefficients>,
         /// The size of the first simplex, as a fraction of each gene's range.
@@ -590,6 +592,76 @@ pub enum GradientSource {
     Supplied,
     Forward,
     Central,
+}
+
+/// An acquisition function of Bayesian optimization.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Acquisition {
+    ExpectedImprovement,
+    LogExpectedImprovement,
+    ProbabilityOfImprovement { xi: f64 },
+    UpperConfidenceBound { beta: f64 },
+}
+
+/// The kernel of a Gaussian process.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KernelName {
+    Matern52,
+    SquaredExponential,
+}
+
+/// The noise of a Gaussian process: a fixed variance, or learned from a least one, as fractions
+/// of the values' variance.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NoiseConfig {
+    Fixed { variance: f64 },
+    Learned { min: f64 },
+}
+
+/// Bayesian optimization's settings, for a Real or an Integer genome.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Bo {
+    /// The points of the initial design.
+    pub initial_points: Option<usize>,
+    /// Genomes evaluated first, in the initial design.
+    pub initial_genomes: Option<Vec<Vec<f64>>>,
+    pub acquisition: Option<Acquisition>,
+    pub kernel: Option<KernelName>,
+    pub noise: Option<NoiseConfig>,
+    pub output: Option<BoOutput>,
+    /// The random points at which the acquisition is evaluated before its maximization.
+    pub raw_samples: Option<usize>,
+    pub acquisition_starts: Option<usize>,
+    pub hyperparameter_starts: Option<usize>,
+    /// The points of each generation after the initial design.
+    pub batch: Option<usize>,
+    pub fantasy: Option<BoFantasy>,
+    pub seed: Option<u64>,
+}
+
+/// What Bayesian optimization takes a point not evaluated yet to be worth.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub enum BoFantasy {
+    #[serde(rename = "believer")]
+    Believer,
+    #[serde(rename = "liar-min")]
+    LiarMin,
+    #[serde(rename = "liar-mean")]
+    LiarMean,
+    #[serde(rename = "liar-max")]
+    LiarMax,
+}
+
+/// What the model of Bayesian optimization fits.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BoOutput {
+    Standardize,
+    Log,
 }
 
 /// Nelder-Mead's coefficients: `"adaptive"` (Gao and Han's), `"standard"` (Nelder and Mead's) or

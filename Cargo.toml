@@ -9,14 +9,14 @@ exclude = ["benchmarks", "examples/gpu"]
 
 [workspace.package]
 # genoxide's version, which the Python package has as well: release-plz bumps it here
-version = "0.12.0"
+version = "0.13.0"
 
 [package]
 name = "genoxide"
 version.workspace = true
 edition = "2024"
 rust-version = "1.88"
-description = "Optimization for Rust and Python: genetic algorithms, CMA-ES, differential evolution, multi-objective, genetic programming, L-BFGS-B, Adam, MMA and more, reproducible on every platform"
+description = "Optimization for Rust and Python: genetic algorithms, CMA-ES, differential evolution, multi-objective, genetic programming, L-BFGS-B, Adam, MMA, Bayesian optimization and more, reproducible on every platform"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tachsin/genoxide"
 readme = "README.md"
@@ -82,6 +82,18 @@ required-features = ["parallel"]
 [[example]]
 name = "mma"
 path = "examples/mma/main.rs"
+required-features = ["parallel"]
+
+# the points of a batch evaluated in parallel
+[[example]]
+name = "bo_hartmann6"
+path = "examples/bo_hartmann6/main.rs"
+required-features = ["parallel"]
+
+# the contrast's batches evaluated in parallel
+[[example]]
+name = "bo_asynchronous"
+path = "examples/bo_asynchronous/main.rs"
 required-features = ["parallel"]
 
 [[bin]]

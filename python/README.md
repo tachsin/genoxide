@@ -10,6 +10,7 @@ The algorithms of [genoxide](https://github.com/tachsin/genoxide), a Rust librar
 - L-BFGS-B for smooth functions with a gradient, yours, finite differences or the test problems' own
 - first-order gradient methods for up to millions of parameters: gradient descent, momentum, Nesterov, Adam and AdamW
 - MMA and GCMMA, the method of moving asymptotes, for millions of variables with few constraints, from gradients
+- Bayesian optimization for expensive functions, in batches evaluated in parallel, with constraints and on integer genes, with Gaussian processes (`gx.model.gp`) you can also fit on their own
 - continuation: a gradient method through stages of one problem, its state kept between them
 - differential evolution, evolution strategies, CMA-ES and particle swarm optimization
 - NEAT, OpenAI's evolution strategy, neural networks and pole-balancing tasks, for neuroevolution
@@ -114,6 +115,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | Yes / no choices (subsets) | `Binary` | `Ga` with `UniformCrossover()` or `PointCrossover(points)`, and `BitFlip` |
 | An order (tours, sequencing) | `Permutation` | `LocalSearch`, which often beats a GA on permutations; `Ga` with `OrderCrossover()` (sequences) or `EdgeRecombinationCrossover()` (tours) |
 | Reals in ranges | `Real` | `Cmaes`; `De`; `Es`; `Ga` with `SimulatedBinaryCrossover(eta)` and `PolynomialMutation(eta)`; `Lbfgsb` for a local minimum of a smooth function, any number of genes; `NelderMead` for a local minimum in a few dimensions |
+| An expensive function of a few reals or integers (tens to a few hundred evaluations) | `Real`, `Integer` | `Bo`, Bayesian optimization, up to about 10 to 20 genes |
 | A smooth function of many reals, with its gradient | `Real` | `FirstOrder` (Adam, momentum, Nesterov), up to millions of genes |
 | Smooth, with gradients: very many reals (up to millions), few inequality constraints | `Real` | `Mma`; `method="gcmma"` to converge from any start |
 | A neural network's weights | `Real`, from `network.representation(bounds)` | `Cmaes` up to a few hundred weights; `OpenEs` for thousands and more |
@@ -131,6 +133,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 - `FirstOrder` steps along the gradient of a smooth function by a step rule, without a line search: `step="adam"` (Kingma and Ba's, the default), `"adamw"` (with decoupled weight decay), `"momentum"`, `"nesterov"` or `"gradient"`. One gradient per generation, from `run(..., gradient=...)` as for `Lbfgsb`, from a problem of `genoxide.problems` in Rust, or by finite differences (`n` more evaluations per generation, up to 10,000 genes). Memory and work per step are linear in the genes, for up to millions of them. It stops with the stop reason `"converged"` when the gradient vanishes; a `control` lowers the learning rate over the run (a schedule), which Adam needs to settle on the minimum.
 - `Mma`, Svanberg's method of moving asymptotes, uses the gradient of the score and of each inequality constraint `g(x) <= 0`: the gradient as for `Lbfgsb` (no finite differences), and with `run(f, gradient=True, constraints=m)`, `f` returns `(value, gradient, g, jacobian)`, `g` the constraints' values and `jacobian` an array of a row per constraint. An iteration is one evaluation and a few passes over the genes, with no matrix of them: for up to millions of genes and up to a few hundred constraints. It stops on its own once it has converged (the stop reason `"converged"`). `method="gcmma"` converges from any start, at the cost of more evaluations; `constraint_cost` must exceed the constraints' multipliers.
 - `Continuation` runs `FirstOrder`, `Lbfgsb` or `Mma` through stages of one problem, a smooth version first and sharper ones after (a smoothing that shrinks, a p-norm's p that grows, a penalty raised): `on_stage(index)` sets the stage's parameters for the fitness function, and the method goes on from its point with its state (Adam's averages, MMA's asymptotes; `keep="point"` keeps only the point). A stage ends when the method converges or after `generations`; the run, after the last stage.
+- `Bo`, Bayesian optimization, is for expensive functions, where each evaluation counts: a Gaussian process (`gx.model.gp`) models the function from every evaluation, and an acquisition function of its posterior chooses the next point, one per generation after an initial design of `2(n + 1)` points. The log expected improvement by default; `"ei"`, `gx.ProbabilityOfImprovement(xi)` and `gx.UpperConfidenceBound(beta)` (whose `beta` a `control` can change). `output="log"` models the logarithm of the values, for objectives that span orders of magnitude. `batch=q` evaluates q points a generation, in parallel with `run(..., parallel=True)`, each chosen after the ones before it are added to the model with a `fantasy` value (`"believer"`, or the constant liar `"liar-min"`, `"liar-mean"`, `"liar-max"`). `run(f, constraints=m)` with `f` returning `(value, g)` models each constraint's values and weighs the acquisition by the probability of feasibility; the test problems with constraints give theirs. On an `Integer` genome, the genes are rounded inside the model and the acquisition is maximized on the lattice. The model's fit costs O(N^3) for N evaluations: up to a few hundred evaluations, in up to about 10 to 20 genes. A running `Bo` gives its `model`, `acquisition_at(points)` and `probability_of_feasibility_at(points)` to a `control`, e.g. for a plot.
 - `Islands` of `Ga`s or `De`s evolve apart and exchange their best: more diverse than one large population, and often faster on multimodal problems.
 
 ## Algorithms
@@ -146,6 +149,7 @@ An exception in the fitness function stops the run, and `run` raises it. So does
 | `Neat` | its networks | `inputs`, `outputs` (needed), `population_size` (150), `compatibility` (`(1.0, 1.0, 0.4, 3.0)`: c1, c2, c3, threshold), `weight_mutation` (`(0.8, 0.1)`: rate, replace), `weight_deviations` (`(1.0, 1.0)`), `structural_mutation` (`(0.03, 0.05)`: add node, add connection), `reproduction` (`(0.25, 0.001, 0.75)`), `selection` (`(5, 0.2)`: elitism size, survival), `stagnation` (15), `activation` (`"steep_sigmoid"`), `feed_forward` (True), `initial` (`"fully_connected"`; `"unconnected"`), `sharing` (`"normalized"`; `"raw"`, the paper's) |
 | `Pso` | real | `population_size` (needed), `ring` (neighbors on each side) |
 | `NelderMead` | real | `coefficients` (`"adaptive"`, Gao and Han's; `"standard"`; `(reflection, expansion, contraction, shrink)`), `initial_step` (0.1 of each range) or `initial_step_absolute` (a distance), `tolerance` (1e-9 of the initial step), `restarts` (none; random restarts), `speculative` (False), `initial_genome` (a random point) |
+| `Bo` | real, integer | `initial_points` (2(n + 1)), `initial_genomes` (none), `acquisition` (`"log-ei"`; `"ei"`, `ProbabilityOfImprovement(xi)`, `UpperConfidenceBound(beta)`), `kernel` (`"matern52"`; `"squared_exponential"`), `noise` (0: the model interpolates; a fixed fraction of the values' variance, or `gx.model.gp.Learned(min)`), `output` (`"standardize"`; `"log"`), `raw_samples` (1000), `acquisition_starts` (10), `hyperparameter_starts` (5), `batch` (1), `fantasy` (`"believer"`; `"liar-min"`, `"liar-mean"`, `"liar-max"`) |
 | `Lbfgsb` | real | `memory` (10), `gradients` (`"auto"`; `"supplied"`, `"forward"`, `"central"`), `difference_step` (√ε forward, ε^(1/3) central), `gradient_tolerance` (1e-5), `function_tolerance` (2.2e-9), `max_line_search` (20), `restarts` (none; random restarts), `initial_genome` (a random point) |
 | `Continuation` | real | `algorithm` (a `FirstOrder`, `Lbfgsb` or `Mma`), `stages`, `on_stage` (needed), `generations` (none: each stage to convergence), `keep` (`"state"`; `"point"`), `on_stage_finished` (none); `Lbfgsb(keep_pairs=True)` keeps its pairs between stages; the result's `stages` |
 | `Mma` | real | `method` (`"mma"`; `"gcmma"`), `asymptote_initial` (0.5 of each range), `asymptote_decrease` (0.7), `asymptote_increase` (1.2), `move_limit` (0.5 of each range), `constraint_cost` (1000), `kkt_tolerance` (1e-9), `step_tolerance` (1e-10 of each range), `restoration` (True), `parallel_sums` (False), `initial_genome` (a random point); `run(f, gradient=True, constraints=m, ...)` |
@@ -590,6 +594,27 @@ print(result.stop_reason, [s.generations for s in result.stages])  # converged [
 assert np.allclose(result.best_genome, target, atol=1e-6)
 ```
 
+`Bo` spends tens of evaluations where the others spend thousands. Its model is a Gaussian process of `gx.model.gp`, which can also be fitted on its own: here to the run's evaluations, its mean minimized by `Lbfgsb` with its gradient to polish the best point, for one evaluation more:
+
+```python
+problem = gx.problems.Branin()
+evaluated = {}
+
+def keep(progress):
+    evaluated["points"], evaluated["values"] = progress.population, progress.scores
+
+bo = gx.Bo(problem.genome, objective="minimize", seed=1)
+result = bo.run(problem, evaluations=30, on_generation=keep)
+model = gx.model.gp.GaussianProcess.fit(problem.genome, evaluated["points"], evaluated["values"])
+polish = gx.Lbfgsb(problem.genome, initial_genome=result.best_genome, objective="minimize")
+polished = polish.run(
+    lambda x: model.predict(x)[0][0],
+    gradient=lambda x: model.predict_with_gradient(x)[2],
+    evaluations=1_000,
+)
+print(result.best_fitness, problem(polished.best_genome))  # 0.397984 0.397909, the minimum 0.397887
+```
+
 ## Progress
 
 `run(..., on_generation=callback)` calls `callback` after every generation, the initial population (generation 0) included. It runs on the thread that called `run`. It gets a read-only object:
@@ -619,6 +644,7 @@ result = ga.run(lambda bits: bits.sum(), generations=1_000, on_generation=report
 | `Pso` | `RunningPso` | `inertia`, `acceleration` (`(cognitive, social)`) |
 | `LocalSearch` | `RunningLocalSearch` | `neighbor`, `neighbors` |
 | `NelderMead` | `RunningNelderMead` | none: its steps follow from its simplex. It reads `converged`, `size` (of the simplex, a fraction of each range), `iterations` and `restart_count` |
+| `Bo` | `RunningBo` | `acquisition` (e.g. `UpperConfidenceBound(beta)` with `beta` on a schedule), `batch`, `fantasy`. It reads `initial_points`, `constraints`, `model` (the `gx.model.gp.GaussianProcess` that chose the last point, None in generation 0), `acquisition_at(points)` and `probability_of_feasibility_at(points)` |
 | `Lbfgsb` | `RunningLbfgsb` | `memory`. It reads `pairs`, `converged` (the criterion), `projected_gradient`, `iterations`, `gradients` (the source in use), `gradient_evaluations` and `stencil_evaluations` (the cost of finite differences), `skipped_pairs`, `memory_resets` and `restart_count` |
 | `Mma` | `RunningMma` | none: its steps follow from its approximations. It reads `converged` (`"kkt"`, `"step"` or None), `iterations`, `inner_iterations`, `multipliers` and `kkt_residual` |
 | `Continuation` | the wrapped method's | as the wrapped method |
@@ -772,6 +798,9 @@ Some names differ:
 | `Lbfgsb(gradients="central", difference_step=h)` | `.gradients(Gradients::Central { step: Some(h) })` |
 | `Lbfgsb.run(f, gradient=g)`, `gradient=True` | `Differentiable(\|x, gradient\| ...)` |
 | `Mma(method="gcmma")` | `.method(mma::Method::Gcmma)` |
+| `Bo(acquisition=gx.UpperConfidenceBound(beta))`, `Bo(output="log")`, `Bo(noise=gx.model.gp.Learned(1e-6))` | `.acquisition(bo::Acquisition::UpperConfidenceBound { beta })`, `.output(bo::Output::Log)`, `.noise(model::gp::Noise::Learned { min: 1e-6 })` |
+| `Bo(batch=4, fantasy="liar-min")`, `bo.run(f, constraints=2)` | `.batch(4).fantasy(bo::Fantasy::ConstantLiar(bo::Lie::Min))`, `Constrained::new(2, f)` |
+| `gx.model.gp.GaussianProcess.fit(genome, points, values)`, `model.predict(points)` | `GaussianProcess::builder(real).fit(&points, &values)?`, `model.predict(&x)` |
 | `Mma.run(f, gradient=True, constraints=m)`, `f` returning `(value, gradient, g, jacobian)` | `Constrained::differentiable(m, \|x, gradient, g, jacobian\| value)` |
 | `Continuation(method, stages=n, on_stage=f, generations=g, keep="point")`, `result.stages` | `Continuation::builder(method).stages(n).on_stage(\|stage, _\| ...).generations(g).keep(Keep::Point)`, `continuation.stages()` |
 | `FirstOrder(step="adam", learning_rate=a)`, `FirstOrder(step="nesterov", learning_rate=a, momentum=m)`, `FirstOrder(step="adamw", learning_rate=a, weight_decay=w)` | `.step(first_order::Step::adam(a))`, `.step(first_order::Step::nesterov(a, m))`, `.step(first_order::Step::adamw(a, w))` |

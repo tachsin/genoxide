@@ -1,6 +1,6 @@
 # genoxide
 
-> Optimization for Rust and Python, in one library: genetic algorithms, evolution strategies, CMA-ES, differential evolution, particle swarms, local search, Nelder-Mead, genetic programming, neuroevolution, multi-objective optimization (NSGA-II, NSGA-III, MOEA/D, SPEA2, SMS-EMOA) and gradient-based methods (L-BFGS-B, Adam and momentum, MMA and GCMMA, and continuation in stages). A seed gives the same results, to the bit, on every platform and thread count. Invalid settings are errors, not panics. Each method is checked against its source paper.
+> Optimization for Rust and Python, in one library: genetic algorithms, evolution strategies, CMA-ES, differential evolution, particle swarms, local search, Nelder-Mead, genetic programming, neuroevolution, multi-objective optimization (NSGA-II, NSGA-III, MOEA/D, SPEA2, SMS-EMOA) gradient-based methods (L-BFGS-B, Adam and momentum, MMA and GCMMA, and continuation in stages) and Bayesian optimization with Gaussian processes, for expensive functions (in batches or asynchronously, with constraints, on real or integer genes). A seed gives the same results, to the bit, on every platform and thread count. Invalid settings are errors, not panics. Each method is checked against its source paper.
 
 Install: `cargo add genoxide` (Rust), `pip install genoxide` (Python), or `cargo install genoxide --features cli` for a program that runs an optimization described in TOML with any program as the fitness function. genoxide is pre-1.0: check the version and use the guide below, which matches the latest release.
 

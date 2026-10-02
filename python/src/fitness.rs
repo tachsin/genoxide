@@ -68,7 +68,8 @@ pub struct Shared {
     // what the genomes need to become Python objects
     context: GenomeContext,
     // the number of inequality constraints whose values and Jacobian a function with
-    // `gradient=True` returns after its gradient (MMA)
+    // `gradient=True` returns after its gradient (MMA), or whose values a function without a
+    // gradient returns after its value (Bayesian optimization)
     constraints: usize,
 }
 
@@ -97,7 +98,8 @@ impl Shared {
 
     /// A function with `gradient=True` that returns `(value, gradient, g, jacobian)`: the values
     /// of `constraints` inequality constraints `gᵢ(x) <= 0` and their Jacobian after the gradient,
-    /// its score `(value, Σ max(0, gᵢ))`. Nothing for 0 constraints.
+    /// its score `(value, Σ max(0, gᵢ))`; without a gradient, `(value, g)`. Nothing for 0
+    /// constraints.
     pub fn with_constraints(self, constraints: usize) -> Self {
         Self {
             constraints,
@@ -323,7 +325,8 @@ impl Shared {
         match (&self.gradient, self.constraints) {
             (Gradient::Combined, 0) => value_without_gradient,
             (Gradient::Combined, _) => value_without_derivatives,
-            _ => value,
+            (_, 0) => value,
+            _ => value_without_values,
         }
     }
 
@@ -419,6 +422,49 @@ fn value_without_gradient(result: &Bound<'_, PyAny>) -> PyResult<Value> {
 // a function with constraints called where they aren't wanted
 fn value_without_derivatives(result: &Bound<'_, PyAny>) -> PyResult<Value> {
     with_constraints(result, None, None)
+}
+
+// the score of `(value, g)`, `(value, Σ max(0, gᵢ))`: a function with constraints, without a
+// gradient, called where their values aren't wanted
+fn value_without_values(result: &Bound<'_, PyAny>) -> PyResult<Value> {
+    with_values(result, None, None)
+}
+
+// what a function with constraints and without a gradient returns: `(value, g)`, `g` a float64
+// array the Python package makes. With `values`, the number of constraints is checked and they're
+// written into it. The score is `(value, Σ max(0, gᵢ))`, as `genoxide::constraint::Constrained`
+// gives it.
+fn with_values(
+    result: &Bound<'_, PyAny>,
+    constraints: Option<usize>,
+    values: Option<&mut [f64]>,
+) -> PyResult<Value> {
+    let pair = result
+        .cast::<PyTuple>()
+        .ok()
+        .filter(|tuple| tuple.len() == 2)
+        .ok_or_else(|| {
+            PyTypeError::new_err(format!(
+                "with constraints, the fitness function returns a tuple (value, constraint values), not {}",
+                type_name(result)
+            ))
+        })?;
+    let value: f64 = pair.get_item(0)?.extract()?;
+    let g: PyReadonlyArray1<'_, f64> = pair.get_item(1)?.extract()?;
+    let g = g.as_array();
+    if let Some(constraints) = constraints
+        && g.len() != constraints
+    {
+        return Err(PyValueError::new_err(format!(
+            "the fitness function returns {} constraint values, for {constraints} constraints",
+            g.len()
+        )));
+    }
+    if let Some(values) = values {
+        copy("the constraint values", values, g)?;
+    }
+    let violation = g.iter().map(|&g| at_most(g, 0.0)).sum();
+    Ok(Value::Constrained(value, violation))
 }
 
 // what a function with `gradient=True` and constraints returns: `(value, gradient, g, jacobian)`,
@@ -728,9 +774,14 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
         match self.problem {
             Some(Native::Real(problem)) => problem.provides(),
             Some(_) => Provided::NOTHING,
-            None if self.shared.constraints > 0 => Provided::GRADIENT
-                .with_inequalities(self.shared.constraints)
-                .with_constraint_jacobian(),
+            None if self.shared.constraints > 0 && self.shared.provides_gradient() => {
+                Provided::GRADIENT
+                    .with_inequalities(self.shared.constraints)
+                    .with_constraint_jacobian()
+            }
+            None if self.shared.constraints > 0 => {
+                Provided::NOTHING.with_inequalities(self.shared.constraints)
+            }
             None if self.shared.provides_gradient() => Provided::GRADIENT,
             None => Provided::NOTHING,
         }
@@ -751,10 +802,18 @@ impl<G: PyGenome> FitnessFunction<G> for Single<'_> {
             None => {}
         }
         // the derivatives and constraints wanted, the gradient among them or not
-        if shared.constraints > 0 {
+        if shared.constraints > 0 && shared.provides_gradient() {
             return Python::attach(|py| {
                 shared.call_genome(py, genome, |result| {
                     with_constraints(result, Some(shared.constraints), Some(&mut *extras))
+                })
+            })
+            .unwrap_or(Value::Invalid);
+        }
+        if shared.constraints > 0 {
+            return Python::attach(|py| {
+                shared.call_genome(py, genome, |result| {
+                    with_values(result, Some(shared.constraints), extras.inequalities())
                 })
             })
             .unwrap_or(Value::Invalid);

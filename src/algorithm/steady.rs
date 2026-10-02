@@ -1,7 +1,7 @@
 //! A steady-state genetic algorithm that takes results one at a time and in any order, for
 //! asynchronous evaluation.
 
-use crate::engine::GenomeHashing;
+use crate::engine::{Evaluations, GenomeHashing, Provided, Wanted};
 use crate::genome::{Genome, Representation};
 use crate::operator::{Crossover, Mutate, Select};
 use crate::rng::Chance;
@@ -53,6 +53,54 @@ pub trait Incremental {
 
     /// The number of evaluations when the best individual so far was received.
     fn best_evaluation(&self) -> u64;
+
+    /// Called by the [`AsyncEngine`](crate::engine::AsyncEngine) once at the start of each run,
+    /// with what the fitness function [provides](crate::engine::FitnessFunction::provides)
+    /// besides the fitness, as [`Algorithm::prepare`](super::Algorithm::prepare). Nothing by
+    /// default.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`](crate::Error::InvalidSetting) for an extra the algorithm needs
+    /// and the fitness function doesn't provide, with the fix in the reason.
+    #[inline]
+    fn prepare(&mut self, provided: Provided) -> Result<()> {
+        let _ = provided;
+        Ok(())
+    }
+
+    /// What the evaluations of the next [proposed](Incremental::propose) genome want besides the
+    /// fitness, such as the values of the constraints. Nothing by default: the engine then
+    /// evaluates as it would without extras.
+    #[inline]
+    fn wants(&self) -> Wanted {
+        Wanted::NOTHING
+    }
+
+    /// The fitness of a genome and the [wanted](Incremental::wants) extras of its evaluation, a
+    /// single one: what the [`AsyncEngine`](crate::engine::AsyncEngine) gives an algorithm that
+    /// wants extras, instead of [`receive`](Incremental::receive). By default,
+    /// `receive(genome, evaluation.fitness()[0])`.
+    ///
+    /// # Errors
+    ///
+    /// As [`receive`](Incremental::receive), and
+    /// [`Error::FitnessCount`](crate::Error::FitnessCount) for an evaluation without exactly one
+    /// fitness.
+    #[inline]
+    fn receive_evaluation(
+        &mut self,
+        genome: Self::Genome,
+        evaluation: &Evaluations<'_>,
+    ) -> Result<Option<Individual<Self::Genome>>> {
+        match evaluation.fitness() {
+            [fitness] => self.receive(genome, *fitness),
+            other => Err(crate::Error::FitnessCount {
+                expected: 1,
+                got: other.len(),
+            }),
+        }
+    }
 }
 
 /// A steady-state genetic algorithm for asynchronous evaluation, from

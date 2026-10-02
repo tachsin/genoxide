@@ -11,6 +11,7 @@ use genoxide::checkpoint;
 use genoxide::engine::asynchronous::MAX_WORKERS;
 use genoxide::genome::Representation;
 use genoxide::gradient::Gradients;
+use genoxide::model::gp;
 use genoxide::multi::MultiObjectiveAlgorithm;
 use genoxide::observer::Report;
 use genoxide::operator::{Crossover, Mutate};
@@ -75,13 +76,6 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
     let directory = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let gradient = run.fitness.gradient;
     let constraints = run.fitness.constraints;
-    if constraints > 0 && !gradient {
-        return Err(
-            "`fitness.constraints` needs `fitness.gradient = true`: the program writes the \
-             constraints' values and Jacobian after the gradient"
-                .to_string(),
-        );
-    }
     let command = match (run.fitness.command, run.fitness.builtin) {
         (Some(command), None) if !command.is_empty() => command,
         (None, Some(name)) => {
@@ -101,6 +95,12 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
                 ));
             }
             let builtin = crate::builtin::constraints_of(&name);
+            if constraints > 0 && !gradient {
+                return Err(format!(
+                    "`fitness.constraints`: the built-in fitness `{name}` writes its \
+                     constraints' values with its gradient: set `fitness.gradient = true`"
+                ));
+            }
             if gradient && constraints != builtin {
                 return Err(format!(
                     "`fitness.constraints`: the built-in fitness `{name}` writes {builtin} \
@@ -240,13 +240,17 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
         config::Genome::Integer { length, bounds } => {
             let bounds = bounds.per_gene(length)?;
             let integer = setting(Integer::new(bounds.map(|[low, high]| low..=high)))?;
-            with_operators(
-                integer,
-                run.algorithm,
-                &context,
-                |crossover| ListCrossover::new(crossover, "integer"),
-                integer_mutation,
-            )
+            match run.algorithm {
+                // Bayesian optimization on the integer lattice
+                config::Algorithm::Bo(settings) => bayesian(integer, settings, &context),
+                algorithm => with_operators(
+                    integer,
+                    algorithm,
+                    &context,
+                    |crossover| ListCrossover::new(crossover, "integer"),
+                    integer_mutation,
+                ),
+            }
         }
         config::Genome::Real { length, bounds } => {
             let bounds = bounds.per_gene(length)?;
@@ -260,6 +264,96 @@ pub fn run(run: config::Run, path: &Path, options: Options) -> Result<Value> {
             OrderCrossovers::new,
             OrderMutation::new,
         ),
+    }
+}
+
+// Bayesian optimization on a real or an integer genome: a generation of `batch` points evaluated
+// in parallel, or an asynchronous run
+fn bayesian<R>(representation: R, settings: config::Bo, context: &Context) -> Result<Value>
+where
+    R: bo::Space + Serialize + DeserializeOwned,
+    R::Genome: Genes + Serialize + DeserializeOwned + Send + Sync,
+{
+    let config::Bo {
+        seed,
+        initial_points,
+        acquisition,
+        kernel,
+        noise,
+        output,
+        raw_samples,
+        acquisition_starts,
+        hyperparameter_starts,
+        batch,
+        fantasy,
+        asynchronous: run_asynchronously,
+    } = settings;
+    let mut builder = Bo::builder(representation).objective(context.single_objective()?);
+    if let Some(seed) = seed {
+        builder = builder.seed(seed);
+    }
+    if let Some(points) = initial_points {
+        builder = builder.initial_points(points);
+    }
+    if let Some(acquisition) = acquisition {
+        builder = builder.acquisition(match acquisition {
+            config::BoAcquisition::Named(config::BoAcquisitionName::LogEi) => {
+                bo::Acquisition::LogExpectedImprovement
+            }
+            config::BoAcquisition::Named(config::BoAcquisitionName::Ei) => {
+                bo::Acquisition::ExpectedImprovement
+            }
+            config::BoAcquisition::Table(config::BoAcquisitionTable::Pi { xi }) => {
+                bo::Acquisition::ProbabilityOfImprovement { xi }
+            }
+            config::BoAcquisition::Table(config::BoAcquisitionTable::Ucb { beta }) => {
+                bo::Acquisition::UpperConfidenceBound { beta }
+            }
+        });
+    }
+    if let Some(kernel) = kernel {
+        builder = builder.kernel(match kernel {
+            config::Kernel::Matern52 => gp::Kernel::Matern52,
+            config::Kernel::SquaredExponential => gp::Kernel::SquaredExponential,
+        });
+    }
+    if let Some(noise) = noise {
+        builder = builder.noise(match noise {
+            config::BoNoise::Fixed(variance) => gp::Noise::Fixed(variance),
+            config::BoNoise::Learned { learned } => gp::Noise::Learned { min: learned },
+        });
+    }
+    if let Some(output) = output {
+        builder = builder.output(match output {
+            config::BoOutput::Standardize => bo::Output::Standardize,
+            config::BoOutput::Log => bo::Output::Log,
+        });
+    }
+    if let Some(samples) = raw_samples {
+        builder = builder.raw_samples(samples);
+    }
+    if let Some(starts) = acquisition_starts {
+        builder = builder.acquisition_starts(starts);
+    }
+    if let Some(starts) = hyperparameter_starts {
+        builder = builder.hyperparameter_starts(starts);
+    }
+    if let Some(batch) = batch {
+        builder = builder.batch(batch);
+    }
+    if let Some(fantasy) = fantasy {
+        builder = builder.fantasy(match fantasy {
+            config::BoFantasy::Believer => bo::Fantasy::KrigingBeliever,
+            config::BoFantasy::LiarMin => bo::Fantasy::ConstantLiar(bo::Lie::Min),
+            config::BoFantasy::LiarMean => bo::Fantasy::ConstantLiar(bo::Lie::Mean),
+            config::BoFantasy::LiarMax => bo::Fantasy::ConstantLiar(bo::Lie::Max),
+        });
+    }
+    let bo = setting(builder.build())?;
+    if run_asynchronously {
+        asynchronous(bo, context)
+    } else {
+        generational(bo, context)
     }
 }
 
@@ -594,6 +688,7 @@ fn real_algorithm(real: Real, algorithm: config::Algorithm, context: &Context) -
             }
             generational(setting(builder.build())?, context)
         }
+        config::Algorithm::Bo(settings) => bayesian(real, settings, context),
         config::Algorithm::NelderMead {
             seed,
             coefficients,
@@ -777,6 +872,7 @@ where
         config::Algorithm::NelderMead { .. } => {
             Err("`nelder-mead` needs a real genome".to_string())
         }
+        config::Algorithm::Bo(_) => Err("`bo` needs a real or an integer genome".to_string()),
         config::Algorithm::Lbfgsb { .. } => Err("`lbfgsb` needs a real genome".to_string()),
         config::Algorithm::Mma { .. } => Err("`mma` needs a real genome".to_string()),
         config::Algorithm::FirstOrder { .. } => {

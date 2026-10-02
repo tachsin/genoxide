@@ -187,6 +187,67 @@ impl Real {
     pub(crate) fn variable_genes(&self) -> &[usize] {
         &self.variable
     }
+
+    /// `n` genomes of a Latin hypercube sample (McKay, Beckman and Conover, 1979): each gene's
+    /// range is cut into `n` equal strata, and every stratum of every gene holds exactly one of the
+    /// genomes, at a uniform random point inside it. The strata of the genes are matched by an
+    /// independent random permutation per gene. The genomes cover each gene's range far more
+    /// evenly than `n` random genomes do, which is why it's the usual initial design of a surrogate
+    /// model; it's also a starting population for any algorithm, through `initial_genomes`.
+    ///
+    /// A gene whose bounds are equal takes its single value. The random numbers are drawn gene by
+    /// gene: the permutation (Fisher-Yates, from the last stratum down), then a uniform number per
+    /// genome, so a seed gives the same sample on every platform.
+    ///
+    /// ```
+    /// use genoxide::prelude::*;
+    ///
+    /// let real = Real::uniform(3, 0.0..=1.0)?;
+    /// let sample = real.latin_hypercube(10, &mut StreamRng::seed_from_u64(1))?;
+    /// // every tenth of every gene's range holds exactly one genome
+    /// for gene in 0..3 {
+    ///     let mut strata: Vec<usize> = sample.iter().map(|x| (x[gene] * 10.0) as usize).collect();
+    ///     strata.sort();
+    ///     assert_eq!(strata, (0..10).collect::<Vec<_>>());
+    /// }
+    /// # Ok::<(), genoxide::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSetting`] for `n` of 0 or above 2^24.
+    pub fn latin_hypercube(&self, n: usize, rng: &mut StreamRng) -> Result<Vec<Reals>> {
+        if n == 0 {
+            return Err(Error::InvalidSetting {
+                setting: "n",
+                reason: "a Latin hypercube needs at least 1 genome".to_string(),
+            });
+        }
+        crate::operator::check_size("n", n)?;
+        let mut genomes = vec![Vec::with_capacity(self.bounds.len()); n];
+        let mut strata: Vec<usize> = Vec::with_capacity(n);
+        for range in &self.bounds {
+            let (low, high) = (*range.start(), *range.end());
+            if low == high {
+                for genome in &mut genomes {
+                    genome.push(low);
+                }
+                continue;
+            }
+            strata.clear();
+            strata.extend(0..n);
+            for last in (1..n).rev() {
+                let other = rng.below(last + 1);
+                strata.swap(last, other);
+            }
+            let width = high - low;
+            for (genome, &stratum) in genomes.iter_mut().zip(&strata) {
+                let u = (stratum as f64 + rng.unit_f64()) / n as f64;
+                genome.push((low + u * width).clamp(low, high));
+            }
+        }
+        Ok(genomes.into_iter().map(Reals::from).collect())
+    }
 }
 
 // a uniformly random value in `range`, which is finite
