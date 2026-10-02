@@ -2,7 +2,7 @@
 //! position variables and its distance function, whose front is patches of DTLZ's, with NSGA-III.
 //!
 //! From genoxide's `multi::problems::Dc3Dtlz3`. Runs NSGA-III with the settings of the C-TAEA
-//! paper's C-NSGA-III, a population of 92 for 1,000 generations, twice: with constraint dominance,
+//! paper's C-NSGA-III, a population of 92 for 2,000 generations, twice: with constraint dominance,
 //! and without the constraint on the distance function. Prints each final front's size, how many of
 //! its solutions are feasible, their IGD+ to 2,000 points of the optimal front and their
 //! hypervolume, with the objectives normalized by the front's ideal and nadir points, as a share of
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
     .seed(1)
     .build()?;
     run(
-        &problem, "NSGA-III", algorithm, problem, 1_000, &sample, &mut trace,
+        &problem, "NSGA-III", algorithm, problem, 2_000, &sample, &mut trace,
     )?;
     // the same without the constraint on g, whose solutions the problem then scores
     let algorithm = Nsga3::builder(
@@ -68,7 +68,7 @@ fn main() -> Result<()> {
         "NSGA-III, no constraint on g",
         algorithm,
         |x: &Reals| without_g(&problem, x),
-        1_000,
+        2_000,
         &sample,
         &mut trace,
     )?;

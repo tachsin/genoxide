@@ -2,7 +2,7 @@
 distance function, which leave almost nothing but the front feasible, with NSGA-III.
 
 From genoxide's problems.Dc2Dtlz3; run evaluates it in Rust. Runs NSGA-III with the settings of the
-C-TAEA paper's C-NSGA-III, a population of 92 for 1,000 generations, twice: with constraint
+C-TAEA paper's C-NSGA-III, a population of 92 for 2,000 generations, twice: with constraint
 dominance, and on DTLZ3 without the constraints. Prints each final front's size, how many of its
 solutions are feasible, their IGD+ to 2,000 points of the optimal front and their hypervolume, with
 the objectives normalized by the front's ideal and nadir points, as a share of that of a sample of
@@ -75,7 +75,7 @@ algorithm = gx.Nsga3(
     mutation=gx.PolynomialMutation(20, rate=rate),
     seed=1,
 )
-run("NSGA-III", algorithm, problem, 1_000)
+run("NSGA-III", algorithm, problem, 2_000)
 # the same on DTLZ3, without the constraints, whose solutions the problem then scores
 algorithm = gx.Nsga3(
     problem.genome,
@@ -87,7 +87,7 @@ algorithm = gx.Nsga3(
     mutation=gx.PolynomialMutation(20, rate=rate),
     seed=1,
 )
-run("NSGA-III, unconstrained", algorithm, gx.problems.Dtlz3(variables=problem.dimensions), 1_000)
+run("NSGA-III, unconstrained", algorithm, gx.problems.Dtlz3(variables=problem.dimensions), 2_000)
 whole = normalized(problem.optimal_front(3_000))
 print(
     f"the whole front: hypervolume {gx.indicators.hypervolume(whole, REFERENCE):.4f}; "

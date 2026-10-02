@@ -439,8 +439,8 @@ whole plane but, derived and checked against random feasible points for M = 3 an
 u = 1 − 2t − s (a point with two unequal larger objectives is dominated by the lesser); ideal 0,
 nadir (3/4, …, 3/4, 1). DTLZ9 prints no mean (its objectives are sums, up to ⌈n/M⌉). Examples:
 NSGA-II for the report's 500 generations fails on both (DTLZ9: IGD+ 3.4 to 4.8), SMS-EMOA for
-20,000 generations reaches 99.5% to 100.7% (DTLZ8) and 98.6% (DTLZ9, IGD+ 0.0025, the sample's
-own) of a population-sized sample's hypervolume: the weakly dominated surfaces next to the line
+20,000 generations reaches 99.5% to 100.7% (DTLZ8) and 99.8% to 99.9% (DTLZ9, IGD+ 0.0025, the
+sample's own) of a population-sized sample's hypervolume: the weakly dominated surfaces next to the line
 and the curve are what NSGA-II keeps and hypervolume selection drops.
 
 - **Erratum (DTLZ1):** the report's text says the Pareto set is x_M = 0; it is x_M = 0.5 (the
@@ -766,8 +766,8 @@ M + 9 stay assumed; the strict ">" is read as ≥. Table 2 gives DC1 a feasible 
 arccos(b)/π for b = 0.95, where the text and EMOC have b = 0.5 (a third): genoxide follows the
 text. Fronts derived (DTLZ's front where the position variables are feasible; DC2's whole),
 agreeing with EMOC's samples (mean distances at most 0.011 both ways). Examples (NSGA-III with
-C-NSGA-III's settings, 1,000 generations): constrained dominance reaches DC1 (DC1-DTLZ3 within
-2% of the target) and stalls on DC2 (at the violation's local minima, no feasible solution in
+C-NSGA-III's settings, 1,000 generations on DTLZ1, 2,000 on DTLZ3): constrained dominance reaches
+DC1 (DC1-DTLZ3 in 13 of 20 runs, within 2% of the target in the rest) and stalls on DC2 (at the violation's local minima, no feasible solution in
 20/20) and DC3 (in a band of g), as the paper's C-NSGA-III does; solving without the constraints
 (DC2) or without the one on g (DC3) reaches the front.
 
