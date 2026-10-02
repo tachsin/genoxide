@@ -52,8 +52,9 @@ fn moved_optimum(
 ///
 /// The shift moves the first solution of the wrapped problem's optimum (the center of the box if
 /// the optimum isn't known) to a point drawn uniformly from the middle 80% of each gene's range:
-/// the CEC 2005, 2013, 2014 and 2017 suites draw their shifted optima from [−80, 80]ⁿ in
-/// [−100, 100]ⁿ, and BBOB from [−4, 4]ⁿ in [−5, 5]ⁿ. The bounds are the wrapped problem's.
+/// the CEC 2013, 2014 and 2017 suites draw their shifted optima from [−80, 80]ⁿ in
+/// [−100, 100]ⁿ, and BBOB from [−4, 4]ⁿ in [−5, 5]ⁿ (CEC 2005's data files spread theirs over
+/// about 90% of each range). The bounds are the wrapped problem's.
 ///
 /// The optimum keeps its value, and its solutions are shifted (those that the shift moves out of
 /// the box are dropped). That holds when the wrapped problem's minimum is its minimum over all of
