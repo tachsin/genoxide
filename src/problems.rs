@@ -22,7 +22,7 @@
 //!
 //! # The problems
 //!
-//! All are minimized. The classic functions are unconstrained, on [`Real`] genomes. `n` is the
+//! The classic functions are minimized and unconstrained, on [`Real`] genomes. `n` is the
 //! number of dimensions.
 //!
 //! | Problem | n (default) | Bounds | Minimum |
@@ -128,6 +128,12 @@
 //! [`evaluate_with`](FitnessFunction::evaluate_with) writes them. Their gradients aren't given:
 //! [`Constrained::differentiable`](crate::constraint::Constrained::differentiable) adds them.
 //!
+//! [`binary`] holds problems of bit strings, on [`Binary`](crate::genome::Binary) genomes and
+//! maximized: OneMax, LeadingOnes, the deceptive trap, the royal roads R1 and R2, NK landscapes
+//! and the 0/1 knapsack with Pisinger's generated instance classes. The NK landscapes and the
+//! knapsack instances are drawn from a seed, and their optimum is computed exactly, by dynamic
+//! programming or exhaustive search.
+//!
 //! [`control`] holds control tasks instead of functions: the cart-pole and the double pole, with
 //! and without velocities, driven by a [`Policy`](control::Policy) such as a neural network of
 //! [`nn`](crate::nn), for neuroevolution.
@@ -174,6 +180,7 @@
 //!
 //! [`Engine`]: crate::Engine
 
+pub mod binary;
 pub mod cec2006;
 mod classic;
 pub mod control;
