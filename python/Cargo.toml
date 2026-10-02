@@ -3,7 +3,7 @@ name = "genoxide-python"
 # genoxide's version, from the workspace
 version.workspace = true
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.95"
 description = "Python bindings of genoxide"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tachsin/genoxide"
