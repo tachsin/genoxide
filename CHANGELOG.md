@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.1](https://github.com/tachsin/genoxide/compare/v0.12.0...v0.12.1) - 2026-10-02
+
+### <!-- 0 -->Added
+
+- *(bo)* Bayesian optimization with a Gaussian process model, log-EI and a Latin hypercube design ([#382](https://github.com/tachsin/genoxide/pull/382))
+- *(bo)* batch, asynchronous, constrained and integer Bayesian optimization, completing batch B ([#415](https://github.com/tachsin/genoxide/pull/415))
+
+### <!-- 4 -->Documentation
+
+- correct citations found in an audit of every reference ([#412](https://github.com/tachsin/genoxide/pull/412))
+
 ## [0.12.0](https://github.com/tachsin/genoxide/compare/v0.11.0...v0.12.0) - 2026-10-01
 
 ### <!-- 0 -->Added
